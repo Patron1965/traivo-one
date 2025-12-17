@@ -6,6 +6,7 @@ import {
   insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema 
 } from "@shared/schema";
 import { z } from "zod";
+import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 
 const DEFAULT_TENANT_ID = "default-tenant";
 
@@ -18,6 +19,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  await setupAuth(app);
+  registerAuthRoutes(app);
   
   await ensureDefaultTenant();
 

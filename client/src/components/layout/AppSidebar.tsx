@@ -12,7 +12,8 @@ import {
   SidebarHeader,
   SidebarFooter,
 } from "@/components/ui/sidebar";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { useAuth } from "@/hooks/use-auth";
 
 const navigationItems = [
   { title: "Veckoplanering", url: "/", icon: Calendar },
@@ -25,6 +26,38 @@ const navigationItems = [
 const settingsItems = [
   { title: "Inställningar", url: "/settings", icon: Settings },
 ];
+
+function UserFooter() {
+  const { user } = useAuth();
+  
+  const displayName = user?.firstName && user?.lastName 
+    ? `${user.firstName} ${user.lastName}`
+    : user?.email || "Användare";
+  
+  const initials = user?.firstName && user?.lastName
+    ? `${user.firstName[0]}${user.lastName[0]}`
+    : user?.email?.[0]?.toUpperCase() || "U";
+
+  return (
+    <div className="flex items-center gap-3">
+      <Avatar>
+        {user?.profileImageUrl && <AvatarImage src={user.profileImageUrl} alt={displayName} />}
+        <AvatarFallback>{initials}</AvatarFallback>
+      </Avatar>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate" data-testid="text-user-name">{displayName}</p>
+        <p className="text-xs text-muted-foreground">Planerare</p>
+      </div>
+      <a 
+        href="/api/logout"
+        className="p-2 rounded-md hover-elevate active-elevate-2"
+        data-testid="button-logout"
+      >
+        <LogOut className="h-4 w-4 text-muted-foreground" />
+      </a>
+    </div>
+  );
+}
 
 export function AppSidebar() {
   const [location] = useLocation();
@@ -82,22 +115,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="p-4">
-        <div className="flex items-center gap-3">
-          <Avatar>
-            <AvatarFallback>AA</AvatarFallback>
-          </Avatar>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">Anna Andersson</p>
-            <p className="text-xs text-muted-foreground">Planerare</p>
-          </div>
-          <button 
-            className="p-2 rounded-md hover-elevate active-elevate-2"
-            data-testid="button-logout"
-            onClick={() => console.log("Logout clicked")}
-          >
-            <LogOut className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </div>
+        <UserFooter />
       </SidebarFooter>
     </Sidebar>
   );
