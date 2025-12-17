@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,59 +8,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { 
   MapPin, Clock, Phone, Navigation, Key, Car, Info, 
-  Play, CheckCircle, Camera, ArrowLeft, ChevronRight 
+  Play, CheckCircle, Camera, ArrowLeft, ChevronRight, Loader2 
 } from "lucide-react";
-
-// todo: remove mock functionality
-const mockTodayJobs = [
-  { 
-    id: "1", 
-    title: "Akut - Vattenläckage", 
-    objectName: "Huvudbrunn - Norrtull",
-    address: "Norrtullsgatan 5, Stockholm",
-    customerPhone: "+46701234567",
-    scheduledTime: "07:00",
-    estimatedDuration: 60,
-    priority: "urgent",
-    status: "scheduled",
-    accessInfo: {
-      gateCode: "5678",
-      parking: "Gatuparkering, 100m till objekt",
-      specialInstructions: "Ring före besök",
-    },
-  },
-  { 
-    id: "2", 
-    title: "Årlig service", 
-    objectName: "Brunn 1 - Skogsbacken",
-    address: "Skogsbacken 12, Stockholm",
-    customerPhone: "+46701111111",
-    scheduledTime: "09:00",
-    estimatedDuration: 120,
-    priority: "normal",
-    status: "scheduled",
-    accessInfo: {
-      gateCode: "1234",
-      parking: "På gården",
-      keyLocation: "Under mattan",
-    },
-  },
-  { 
-    id: "3", 
-    title: "Reparation pump", 
-    objectName: "Pump Station",
-    address: "Skogsbacken 14, Stockholm",
-    customerPhone: "+46701111111",
-    scheduledTime: "12:00",
-    estimatedDuration: 90,
-    priority: "high",
-    status: "scheduled",
-    accessInfo: {
-      gateCode: "1234",
-      parking: "Baksidan",
-    },
-  },
-];
+import { startOfDay, endOfDay } from "date-fns";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { WorkOrder, ServiceObject, Customer } from "@shared/schema";
 
 const priorityColors: Record<string, string> = {
   urgent: "bg-red-500",
@@ -72,11 +26,13 @@ type View = "list" | "detail" | "completion";
 
 interface MobileFieldAppProps {
   initialView?: View;
+  resourceId?: string;
 }
 
-export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
+export function MobileFieldApp({ initialView = "list", resourceId }: MobileFieldAppProps) {
+  const { toast } = useToast();
   const [view, setView] = useState<View>(initialView);
-  const [selectedJob, setSelectedJob] = useState(mockTodayJobs[0]);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobStarted, setJobStarted] = useState(false);
   const [completionData, setCompletionData] = useState({
     setupTime: "",
@@ -84,14 +40,83 @@ export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
     notes: "",
   });
 
-  const handleSelectJob = (job: typeof mockTodayJobs[0]) => {
-    setSelectedJob(job);
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
+    queryKey: ["/api/work-orders"],
+  });
+
+  const { data: objects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
+  });
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+  });
+
+  const objectMap = new Map(objects.map(o => [o.id, o]));
+  const customerMap = new Map(customers.map(c => [c.id, c]));
+
+  const today = new Date();
+  const todayStart = startOfDay(today);
+  const todayEnd = endOfDay(today);
+
+  const todayJobs = workOrders.filter(wo => {
+    if (!wo.scheduledDate) return false;
+    if (resourceId && wo.resourceId !== resourceId) return false;
+    const scheduled = new Date(wo.scheduledDate);
+    return scheduled >= todayStart && scheduled <= todayEnd;
+  }).sort((a, b) => {
+    const timeA = a.scheduledStartTime || "00:00";
+    const timeB = b.scheduledStartTime || "00:00";
+    return timeA.localeCompare(timeB);
+  });
+
+  const selectedJob = selectedJobId ? workOrders.find(wo => wo.id === selectedJobId) : null;
+  const selectedObject = selectedJob ? objectMap.get(selectedJob.objectId) : null;
+  const selectedCustomer = selectedJob ? customerMap.get(selectedJob.customerId) : null;
+
+  const completeJobMutation = useMutation({
+    mutationFn: async (data: { id: string; setupTime: number; setupReason: string; notes: string }) => {
+      await apiRequest("PATCH", `/api/work-orders/${data.id}`, {
+        status: "completed",
+        completedAt: new Date().toISOString(),
+        notes: data.notes,
+      });
+      
+      if (data.setupTime > 0) {
+        const job = workOrders.find(wo => wo.id === data.id);
+        if (job) {
+          await apiRequest("POST", "/api/setup-logs", {
+            workOrderId: data.id,
+            objectId: job.objectId,
+            resourceId: job.resourceId || null,
+            category: data.setupReason || "other",
+            durationMinutes: data.setupTime,
+            notes: data.notes,
+          });
+        }
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/setup-logs"] });
+      toast({ title: "Jobb slutfört", description: "Arbetsordern har markerats som slutförd." });
+      setJobStarted(false);
+      setView("list");
+      setSelectedJobId(null);
+      setCompletionData({ setupTime: "", setupReason: "", notes: "" });
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte slutföra jobbet.", variant: "destructive" });
+    },
+  });
+
+  const handleSelectJob = (jobId: string) => {
+    setSelectedJobId(jobId);
     setView("detail");
   };
 
   const handleStartJob = () => {
     setJobStarted(true);
-    console.log("Job started:", selectedJob.title, "at", new Date().toISOString());
   };
 
   const handleCompleteJob = () => {
@@ -99,52 +124,76 @@ export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
   };
 
   const handleSubmitCompletion = () => {
-    console.log("Job completed:", selectedJob.title, completionData);
-    setJobStarted(false);
-    setView("list");
-    setCompletionData({ setupTime: "", setupReason: "", notes: "" });
+    if (!selectedJobId) return;
+    completeJobMutation.mutate({
+      id: selectedJobId,
+      setupTime: parseInt(completionData.setupTime) || 0,
+      setupReason: completionData.setupReason,
+      notes: completionData.notes,
+    });
   };
+
+  const isLoading = workOrdersLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   if (view === "list") {
     return (
       <div className="flex flex-col h-full bg-background">
         <div className="p-4 border-b">
           <h1 className="text-lg font-semibold">Dagens jobb</h1>
-          <p className="text-sm text-muted-foreground">3 jobb planerade</p>
+          <p className="text-sm text-muted-foreground">{todayJobs.length} jobb planerade</p>
         </div>
         <div className="flex-1 overflow-auto p-4 space-y-3">
-          {mockTodayJobs.map((job) => (
-            <Card 
-              key={job.id} 
-              className="hover-elevate active-elevate-2 cursor-pointer"
-              onClick={() => handleSelectJob(job)}
-              data-testid={`mobile-job-${job.id}`}
-            >
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className={`w-1 h-full min-h-[60px] rounded-full ${priorityColors[job.priority]}`} />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-2 mb-1">
-                      <h3 className="font-medium text-sm truncate">{job.title}</h3>
-                      <Badge variant="outline" className="shrink-0">{job.scheduledTime}</Badge>
+          {todayJobs.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              Inga jobb schemalagda för idag
+            </div>
+          ) : (
+            todayJobs.map((job) => {
+              const obj = objectMap.get(job.objectId);
+              return (
+                <Card 
+                  key={job.id} 
+                  className="hover-elevate active-elevate-2 cursor-pointer"
+                  onClick={() => handleSelectJob(job.id)}
+                  data-testid={`mobile-job-${job.id}`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-1 h-full min-h-[60px] rounded-full ${priorityColors[job.priority]}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <h3 className="font-medium text-sm truncate">{job.title}</h3>
+                          <Badge variant="outline" className="shrink-0">{job.scheduledStartTime || "TBD"}</Badge>
+                        </div>
+                        <p className="text-sm text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</p>
+                        {obj?.address && (
+                          <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+                            <MapPin className="h-3 w-3" />
+                            <span className="truncate">{obj.address}, {obj.city}</span>
+                          </div>
+                        )}
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
                     </div>
-                    <p className="text-sm text-muted-foreground truncate">{job.objectName}</p>
-                    <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
-                      <MapPin className="h-3 w-3" />
-                      <span className="truncate">{job.address}</span>
-                    </div>
-                  </div>
-                  <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0" />
-                </div>
-              </CardContent>
-            </Card>
-          ))}
+                  </CardContent>
+                </Card>
+              );
+            })
+          )}
         </div>
       </div>
     );
   }
 
-  if (view === "completion") {
+  if (view === "completion" && selectedJob) {
     return (
       <div className="flex flex-col h-full bg-background">
         <div className="p-4 border-b flex items-center gap-3">
@@ -156,7 +205,7 @@ export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
         <div className="flex-1 overflow-auto p-4 space-y-6">
           <div>
             <h2 className="text-sm font-medium mb-2">{selectedJob.title}</h2>
-            <p className="text-sm text-muted-foreground">{selectedJob.objectName}</p>
+            <p className="text-sm text-muted-foreground">{selectedObject?.name || "Okänt objekt"}</p>
           </div>
 
           <div className="space-y-4">
@@ -208,8 +257,17 @@ export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
           </div>
         </div>
         <div className="p-4 border-t">
-          <Button className="w-full h-14 text-lg" onClick={handleSubmitCompletion} data-testid="button-submit-completion">
-            <CheckCircle className="h-5 w-5 mr-2" />
+          <Button 
+            className="w-full h-14 text-lg" 
+            onClick={handleSubmitCompletion} 
+            disabled={completeJobMutation.isPending}
+            data-testid="button-submit-completion"
+          >
+            {completeJobMutation.isPending ? (
+              <Loader2 className="h-5 w-5 mr-2 animate-spin" />
+            ) : (
+              <CheckCircle className="h-5 w-5 mr-2" />
+            )}
             Slutför jobb
           </Button>
         </div>
@@ -217,10 +275,25 @@ export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
     );
   }
 
+  if (!selectedJob) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <p className="text-muted-foreground">Inget jobb valt</p>
+      </div>
+    );
+  }
+
+  const accessInfo = (selectedObject?.accessInfo || {}) as {
+    gateCode?: string;
+    keyLocation?: string;
+    parking?: string;
+    specialInstructions?: string;
+  };
+
   return (
     <div className="flex flex-col h-full bg-background">
       <div className="p-4 border-b flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => setView("list")} data-testid="button-back">
+        <Button variant="ghost" size="icon" onClick={() => { setView("list"); setSelectedJobId(null); }} data-testid="button-back">
           <ArrowLeft className="h-5 w-5" />
         </Button>
         <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
@@ -231,39 +304,45 @@ export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
           <Card>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="font-semibold">{selectedJob.objectName}</h2>
-                <Badge>{selectedJob.scheduledTime}</Badge>
+                <h2 className="font-semibold">{selectedObject?.name || "Okänt objekt"}</h2>
+                <Badge>{selectedJob.scheduledStartTime || "TBD"}</Badge>
               </div>
               
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <MapPin className="h-4 w-4" />
-                <span>{selectedJob.address}</span>
-              </div>
+              {selectedObject?.address && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <MapPin className="h-4 w-4" />
+                  <span>{selectedObject.address}, {selectedObject.city}</span>
+                </div>
+              )}
 
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Clock className="h-4 w-4" />
-                <span>Beräknad tid: {selectedJob.estimatedDuration} min</span>
+                <span>Beräknad tid: {selectedJob.estimatedDuration || 0} min</span>
               </div>
 
               <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => console.log("Call:", selectedJob.customerPhone)}
-                  data-testid="button-call"
-                >
-                  <Phone className="h-4 w-4 mr-2" />
-                  Ring
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => console.log("Navigate to:", selectedJob.address)}
-                  data-testid="button-navigate"
-                >
-                  <Navigation className="h-4 w-4 mr-2" />
-                  Navigera
-                </Button>
+                {selectedCustomer?.phone && (
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => window.open(`tel:${selectedCustomer.phone}`)}
+                    data-testid="button-call"
+                  >
+                    <Phone className="h-4 w-4 mr-2" />
+                    Ring
+                  </Button>
+                )}
+                {selectedObject?.address && (
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => window.open(`https://maps.google.com?q=${encodeURIComponent(selectedObject.address + ", " + selectedObject.city)}`)}
+                    data-testid="button-navigate"
+                  >
+                    <Navigation className="h-4 w-4 mr-2" />
+                    Navigera
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
@@ -275,34 +354,37 @@ export function MobileFieldApp({ initialView = "list" }: MobileFieldAppProps) {
                 Åtkomstinformation
               </h3>
               <div className="space-y-3">
-                {selectedJob.accessInfo.gateCode && (
+                {accessInfo.gateCode && (
                   <div className="flex items-center justify-between p-3 bg-muted rounded-md">
                     <div className="flex items-center gap-2">
                       <Key className="h-4 w-4 text-muted-foreground" />
                       <span className="text-sm">Grindkod</span>
                     </div>
-                    <span className="font-mono text-lg font-semibold">{selectedJob.accessInfo.gateCode}</span>
+                    <span className="font-mono text-lg font-semibold">{accessInfo.gateCode}</span>
                   </div>
                 )}
-                {selectedJob.accessInfo.parking && (
+                {accessInfo.parking && (
                   <div className="flex items-center gap-3 p-3 bg-muted rounded-md">
                     <Car className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="text-sm">{selectedJob.accessInfo.parking}</span>
+                    <span className="text-sm">{accessInfo.parking}</span>
                   </div>
                 )}
-                {selectedJob.accessInfo.keyLocation && (
+                {accessInfo.keyLocation && (
                   <div className="flex items-center gap-3 p-3 bg-muted rounded-md">
                     <Key className="h-4 w-4 text-muted-foreground shrink-0" />
-                    <span className="text-sm">{selectedJob.accessInfo.keyLocation}</span>
+                    <span className="text-sm">{accessInfo.keyLocation}</span>
                   </div>
                 )}
-                {selectedJob.accessInfo.specialInstructions && (
+                {accessInfo.specialInstructions && (
                   <div className="p-3 bg-orange-100 dark:bg-orange-950 border border-orange-300 dark:border-orange-800 rounded-md">
                     <div className="flex items-center gap-2 text-orange-700 dark:text-orange-300">
                       <Info className="h-4 w-4 shrink-0" />
-                      <span className="text-sm font-medium">{selectedJob.accessInfo.specialInstructions}</span>
+                      <span className="text-sm font-medium">{accessInfo.specialInstructions}</span>
                     </div>
                   </div>
+                )}
+                {!accessInfo.gateCode && !accessInfo.parking && !accessInfo.keyLocation && !accessInfo.specialInstructions && (
+                  <p className="text-sm text-muted-foreground">Ingen åtkomstinformation registrerad</p>
                 )}
               </div>
             </CardContent>

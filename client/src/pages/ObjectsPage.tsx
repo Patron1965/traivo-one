@@ -1,76 +1,49 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { ObjectCard } from "@/components/ObjectCard";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Filter } from "lucide-react";
-
-// todo: remove mock functionality
-const mockObjects = [
-  {
-    id: "1",
-    name: "Brunn 1 - Skogsbacken",
-    objectNumber: "OBJ-001",
-    objectType: "well",
-    customerName: "Villa Skogsbacken AB",
-    address: "Skogsbacken 12, Stockholm",
-    avgSetupTime: 12,
-    lastServiceDate: "2024-11-15",
-    status: "active" as const,
-  },
-  {
-    id: "2",
-    name: "Pump Station - Skogsbacken",
-    objectNumber: "OBJ-002",
-    objectType: "station",
-    customerName: "Villa Skogsbacken AB",
-    address: "Skogsbacken 12, Stockholm",
-    avgSetupTime: 18,
-    lastServiceDate: "2024-10-20",
-    status: "active" as const,
-  },
-  {
-    id: "3",
-    name: "Huvudbrunn - Norrtull",
-    objectNumber: "OBJ-003",
-    objectType: "well",
-    customerName: "Fastighets AB Norrtull",
-    address: "Norrtullsgatan 5, Stockholm",
-    avgSetupTime: 22,
-    lastServiceDate: "2024-09-05",
-    status: "active" as const,
-  },
-  {
-    id: "4",
-    name: "Privatbrunn - Täby",
-    objectNumber: "OBJ-004",
-    objectType: "well",
-    customerName: "Lars Larsson",
-    address: "Björkvägen 3, Täby",
-    avgSetupTime: 8,
-    lastServiceDate: "2024-12-01",
-    status: "active" as const,
-  },
-];
+import { Search, Plus, Filter, Loader2 } from "lucide-react";
+import type { ServiceObject } from "@shared/schema";
 
 export default function ObjectsPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
 
-  const filteredObjects = mockObjects.filter(obj => {
+  const { data: objects = [], isLoading } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
+  });
+
+  const { data: customers = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/customers"],
+  });
+
+  const customerMap = new Map(customers.map(c => [c.id, c.name]));
+
+  const filteredObjects = objects.filter(obj => {
+    const customerName = customerMap.get(obj.customerId) || "";
     const matchesSearch = obj.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         obj.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         obj.objectNumber.toLowerCase().includes(searchQuery.toLowerCase());
+                         customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (obj.objectNumber || "").toLowerCase().includes(searchQuery.toLowerCase());
     const matchesType = typeFilter === "all" || obj.objectType === typeFilter;
     return matchesSearch && matchesType;
   });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Objekt</h1>
-          <p className="text-sm text-muted-foreground">{mockObjects.length} objekt registrerade</p>
+          <p className="text-sm text-muted-foreground">{objects.length} objekt registrerade</p>
         </div>
         <Button onClick={() => console.log("Add object clicked")} data-testid="button-add-object">
           <Plus className="h-4 w-4 mr-2" />
@@ -107,13 +80,21 @@ export default function ObjectsPage() {
         {filteredObjects.map((obj) => (
           <ObjectCard 
             key={obj.id} 
-            {...obj} 
+            id={obj.id}
+            name={obj.name}
+            objectNumber={obj.objectNumber || ""}
+            objectType={obj.objectType}
+            customerName={customerMap.get(obj.customerId) || "Okänd kund"}
+            address={`${obj.address || ""}, ${obj.city || ""}`}
+            avgSetupTime={obj.avgSetupTime || 0}
+            lastServiceDate={obj.lastServiceDate ? new Date(obj.lastServiceDate).toLocaleDateString("sv-SE") : undefined}
+            status={obj.status as "active" | "inactive"}
             onClick={() => console.log("Object clicked:", obj.name)}
           />
         ))}
       </div>
 
-      {filteredObjects.length === 0 && (
+      {filteredObjects.length === 0 && !isLoading && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">Inga objekt hittades</p>
         </div>

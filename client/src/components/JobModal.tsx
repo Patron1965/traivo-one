@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -7,30 +8,12 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon } from "lucide-react";
+import { CalendarIcon, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
-
-// todo: remove mock functionality
-const mockCustomers = [
-  { id: "1", name: "Villa Skogsbacken AB" },
-  { id: "2", name: "Fastighets AB Norrtull" },
-  { id: "3", name: "Lars Larsson (privat)" },
-];
-
-// todo: remove mock functionality
-const mockObjects = [
-  { id: "1", name: "Brunn 1 - Skogsbacken", customerId: "1" },
-  { id: "2", name: "Pump Station - Skogsbacken", customerId: "1" },
-  { id: "3", name: "Huvudbrunn - Norrtull", customerId: "2" },
-  { id: "4", name: "Privatbrunn - Täby", customerId: "3" },
-];
-
-// todo: remove mock functionality
-const mockResources = [
-  { id: "1", name: "Bengt Bengtsson" },
-  { id: "2", name: "Carina Carlsson" },
-];
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
+import type { Customer, ServiceObject, Resource } from "@shared/schema";
 
 interface JobModalProps {
   open: boolean;
@@ -51,6 +34,7 @@ interface JobFormData {
 }
 
 export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
+  const { toast } = useToast();
   const [formData, setFormData] = useState<JobFormData>({
     title: "",
     description: "",
@@ -63,14 +47,48 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     scheduledDate: undefined,
   });
 
-  const filteredObjects = mockObjects.filter(o => 
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+  });
+
+  const { data: objects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
+  });
+
+  const { data: resources = [] } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
+  });
+
+  const filteredObjects = objects.filter(o => 
     !formData.customerId || o.customerId === formData.customerId
   );
 
-  const handleSubmit = () => {
-    console.log("Job form submitted:", formData);
-    onSubmit?.(formData);
-    onClose();
+  const createWorkOrderMutation = useMutation({
+    mutationFn: async (data: {
+      title: string;
+      description: string;
+      customerId: string;
+      objectId: string;
+      orderType: string;
+      priority: string;
+      estimatedDuration: number;
+      resourceId: string | null;
+      scheduledDate: Date | null;
+      status: string;
+    }) => {
+      return apiRequest("POST", "/api/work-orders", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({ title: "Jobb skapat", description: "Arbetsordern har skapats." });
+      handleClose();
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte skapa jobbet.", variant: "destructive" });
+    },
+  });
+
+  const handleClose = () => {
     setFormData({
       title: "",
       description: "",
@@ -82,10 +100,33 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       resourceId: "",
       scheduledDate: undefined,
     });
+    onClose();
+  };
+
+  const handleSubmit = () => {
+    if (!formData.title || !formData.customerId || !formData.objectId) {
+      toast({ title: "Fel", description: "Fyll i titel, kund och objekt.", variant: "destructive" });
+      return;
+    }
+
+    createWorkOrderMutation.mutate({
+      title: formData.title,
+      description: formData.description,
+      customerId: formData.customerId,
+      objectId: formData.objectId,
+      orderType: formData.orderType,
+      priority: formData.priority,
+      estimatedDuration: parseInt(formData.estimatedDuration) || 60,
+      resourceId: formData.resourceId || null,
+      scheduledDate: formData.scheduledDate || null,
+      status: formData.resourceId && formData.scheduledDate ? "scheduled" : "draft",
+    });
+
+    onSubmit?.(formData);
   };
 
   return (
-    <Dialog open={open} onOpenChange={onClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Nytt jobb</DialogTitle>
@@ -115,7 +156,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   <SelectValue placeholder="Välj kund" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockCustomers.map(c => (
+                  {customers.map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -199,7 +240,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                   <SelectValue placeholder="Välj tekniker" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockResources.map(r => (
+                  {resources.map(r => (
                     <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -240,10 +281,15 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} data-testid="button-cancel">
+          <Button variant="outline" onClick={handleClose} data-testid="button-cancel">
             Avbryt
           </Button>
-          <Button onClick={handleSubmit} data-testid="button-save-job">
+          <Button 
+            onClick={handleSubmit} 
+            disabled={createWorkOrderMutation.isPending}
+            data-testid="button-save-job"
+          >
+            {createWorkOrderMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Spara jobb
           </Button>
         </DialogFooter>

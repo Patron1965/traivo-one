@@ -1,26 +1,13 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle } from "lucide-react";
-import { format, addDays, startOfWeek } from "date-fns";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2 } from "lucide-react";
+import { format, addDays, startOfWeek, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
-
-// todo: remove mock functionality
-const mockResources = [
-  { id: "1", name: "Bengt Bengtsson", initials: "BB", weeklyHours: 40 },
-  { id: "2", name: "Carina Carlsson", initials: "CC", weeklyHours: 40 },
-];
-
-// todo: remove mock functionality
-const mockWorkOrders = [
-  { id: "1", title: "Årlig service", objectName: "Brunn 1 - Skogsbacken", resourceId: "1", dayIndex: 0, startHour: 8, duration: 2, priority: "normal", status: "scheduled" },
-  { id: "2", title: "Reparation pump", objectName: "Pump Station", resourceId: "1", dayIndex: 1, startHour: 10, duration: 1.5, priority: "high", status: "scheduled" },
-  { id: "3", title: "Akut - Vattenläckage", objectName: "Huvudbrunn - Norrtull", resourceId: "2", dayIndex: 0, startHour: 7, duration: 1, priority: "urgent", status: "scheduled" },
-  { id: "4", title: "Filterinstallation", objectName: "Privatbrunn - Täby", resourceId: "2", dayIndex: 2, startHour: 9, duration: 3, priority: "normal", status: "scheduled" },
-  { id: "5", title: "Kvartalsservice", objectName: "Brunn 2 - Vallentuna", resourceId: "1", dayIndex: 3, startHour: 8, duration: 2.5, priority: "low", status: "draft" },
-];
+import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
 
 const priorityColors: Record<string, string> = {
   urgent: "border-l-4 border-l-red-500",
@@ -46,23 +33,50 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
 
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
 
+  const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
+  });
+
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
+    queryKey: ["/api/work-orders"],
+  });
+
+  const { data: objects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
+  });
+
+  const objectMap = new Map(objects.map(o => [o.id, o]));
+
   const goToPreviousWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
   const goToNextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
   const goToToday = () => setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
 
-  const getJobsForResourceAndDay = (resourceId: string, dayIndex: number) => {
-    return mockWorkOrders.filter(job => job.resourceId === resourceId && job.dayIndex === dayIndex);
+  const getJobsForResourceAndDay = (resourceId: string, day: Date) => {
+    return workOrders.filter(job => {
+      if (job.resourceId !== resourceId || !job.scheduledDate) return false;
+      return isSameDay(new Date(job.scheduledDate), day);
+    });
   };
 
-  const getResourceDayHours = (resourceId: string, dayIndex: number) => {
-    const jobs = getJobsForResourceAndDay(resourceId, dayIndex);
-    return jobs.reduce((total, job) => total + job.duration, 0);
+  const getResourceDayHours = (resourceId: string, day: Date) => {
+    const jobs = getJobsForResourceAndDay(resourceId, day);
+    return jobs.reduce((total, job) => total + (job.estimatedDuration || 0) / 60, 0);
   };
 
   const handleJobClick = (jobId: string) => {
     setSelectedJob(jobId);
     onSelectJob?.(jobId);
   };
+
+  const isLoading = resourcesLoading || workOrdersLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -81,7 +95,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
             Vecka {format(currentWeekStart, "w", { locale: sv })} - {format(currentWeekStart, "MMMM yyyy", { locale: sv })}
           </span>
         </div>
-        <Button onClick={() => { onAddJob?.(); console.log("Add job clicked"); }} data-testid="button-add-job">
+        <Button onClick={() => { onAddJob?.(); }} data-testid="button-add-job">
           <Plus className="h-4 w-4 mr-2" />
           Nytt jobb
         </Button>
@@ -99,55 +113,64 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
             ))}
           </div>
 
-          {mockResources.map((resource) => (
-            <div key={resource.id} className="grid grid-cols-[200px_repeat(5,1fr)] border-b">
-              <div className="p-3 border-r flex items-center gap-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback className="text-xs">{resource.initials}</AvatarFallback>
-                </Avatar>
-                <div className="min-w-0">
-                  <div className="text-sm font-medium truncate">{resource.name}</div>
-                  <div className="text-xs text-muted-foreground">{resource.weeklyHours}h/vecka</div>
-                </div>
-              </div>
-              {weekDays.map((_, dayIndex) => {
-                const jobs = getJobsForResourceAndDay(resource.id, dayIndex);
-                const dayHours = getResourceDayHours(resource.id, dayIndex);
-                const isOverbooked = dayHours > 8;
-
-                return (
-                  <div key={dayIndex} className="p-2 border-r last:border-r-0 min-h-[120px] bg-muted/30">
-                    {isOverbooked && (
-                      <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        <span>{dayHours}h (överbokning)</span>
-                      </div>
-                    )}
-                    <div className="space-y-1">
-                      {jobs.map((job) => (
-                        <Card
-                          key={job.id}
-                          className={`p-2 cursor-pointer hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
-                          onClick={() => handleJobClick(job.id)}
-                          data-testid={`job-card-${job.id}`}
-                        >
-                          <div className="flex items-start justify-between gap-1">
-                            <div className="min-w-0 flex-1">
-                              <div className="text-xs font-medium truncate">{job.title}</div>
-                              <div className="text-xs text-muted-foreground truncate">{job.objectName}</div>
-                            </div>
-                            <Badge variant={statusBadgeVariant[job.status]} className="text-[10px] shrink-0">
-                              {job.duration}h
-                            </Badge>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })}
+          {resources.length === 0 ? (
+            <div className="p-8 text-center text-muted-foreground">
+              Inga resurser registrerade. Lägg till resurser för att börja planera.
             </div>
-          ))}
+          ) : (
+            resources.map((resource) => (
+              <div key={resource.id} className="grid grid-cols-[200px_repeat(5,1fr)] border-b">
+                <div className="p-3 border-r flex items-center gap-3">
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback className="text-xs">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{resource.name}</div>
+                    <div className="text-xs text-muted-foreground">{resource.weeklyHours || 40}h/vecka</div>
+                  </div>
+                </div>
+                {weekDays.map((day, dayIndex) => {
+                  const jobs = getJobsForResourceAndDay(resource.id, day);
+                  const dayHours = getResourceDayHours(resource.id, day);
+                  const isOverbooked = dayHours > 8;
+
+                  return (
+                    <div key={dayIndex} className="p-2 border-r last:border-r-0 min-h-[120px] bg-muted/30">
+                      {isOverbooked && (
+                        <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>{dayHours.toFixed(1)}h (överbokning)</span>
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        {jobs.map((job) => {
+                          const obj = objectMap.get(job.objectId);
+                          return (
+                            <Card
+                              key={job.id}
+                              className={`p-2 cursor-pointer hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
+                              onClick={() => handleJobClick(job.id)}
+                              data-testid={`job-card-${job.id}`}
+                            >
+                              <div className="flex items-start justify-between gap-1">
+                                <div className="min-w-0 flex-1">
+                                  <div className="text-xs font-medium truncate">{job.title}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</div>
+                                </div>
+                                <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px] shrink-0">
+                                  {((job.estimatedDuration || 0) / 60).toFixed(1)}h
+                                </Badge>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -171,7 +194,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
           </div>
         </div>
         <div className="text-xs text-muted-foreground">
-          Klicka på ett jobb för att visa detaljer
+          {workOrders.length} jobb totalt
         </div>
       </div>
     </div>

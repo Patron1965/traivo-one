@@ -1,61 +1,119 @@
+import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Clock, TrendingUp, TrendingDown, Users, Briefcase, AlertCircle, Lightbulb, ArrowUpRight, ArrowDownRight } from "lucide-react";
-
-// todo: remove mock functionality
-const mockStats = {
-  totalJobs: 24,
-  completedJobs: 18,
-  plannedHours: 42,
-  actualHours: 38,
-  totalSetupTime: 156,
-  avgSetupTime: 13,
-  setupTimeChange: -12,
-};
-
-// todo: remove mock functionality
-const mockResourceUtilization = [
-  { name: "Bengt B.", planned: 40, actual: 36, utilization: 90 },
-  { name: "Carina C.", planned: 40, actual: 42, utilization: 105 },
-];
-
-// todo: remove mock functionality
-const mockSetupTimeBreakdown = [
-  { reason: "Grindåtkomst", minutes: 48, percentage: 31 },
-  { reason: "Parkering", minutes: 42, percentage: 27 },
-  { reason: "Väntan på kund", minutes: 35, percentage: 22 },
-  { reason: "Nyckelhämtning", minutes: 18, percentage: 12 },
-  { reason: "Övrigt", minutes: 13, percentage: 8 },
-];
-
-// todo: remove mock functionality
-const mockInsights = [
-  { type: "suggestion", message: "Samla nordliga jobb på måndag och tisdag för att spara ~2.5 timmar körtid per vecka." },
-  { type: "warning", message: "Objekt OBJ-003 har 3x högre ställtid än genomsnittet. Uppdatera åtkomstinformation?" },
-  { type: "success", message: "Ställtiden minskade med 12% jämfört med förra veckan!" },
-];
-
-const insightIcons = {
-  suggestion: Lightbulb,
-  warning: AlertCircle,
-  success: TrendingUp,
-};
-
-const insightColors = {
-  suggestion: "border-blue-500 bg-blue-50 dark:bg-blue-950",
-  warning: "border-orange-500 bg-orange-50 dark:bg-orange-950",
-  success: "border-green-500 bg-green-50 dark:bg-green-950",
-};
+import { Clock, TrendingUp, Users, Briefcase, AlertCircle, Lightbulb, ArrowUpRight, ArrowDownRight, Loader2 } from "lucide-react";
+import type { Resource, WorkOrder, ServiceObject, SetupTimeLog } from "@shared/schema";
 
 export function Dashboard() {
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
+    queryKey: ["/api/work-orders"],
+  });
+
+  const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"],
+  });
+
+  const { data: objects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
+  });
+
+  const { data: setupLogs = [], isLoading: setupLogsLoading } = useQuery<SetupTimeLog[]>({
+    queryKey: ["/api/setup-logs"],
+  });
+
+  const objectMap = new Map(objects.map(o => [o.id, o]));
+
+  const completedJobs = workOrders.filter(wo => wo.status === "completed").length;
+  const totalJobs = workOrders.length;
+  const plannedHours = workOrders.reduce((sum, wo) => sum + (wo.estimatedDuration || 0), 0) / 60;
+  const actualHours = workOrders.filter(wo => wo.actualDuration).reduce((sum, wo) => sum + (wo.actualDuration || 0), 0) / 60;
+  
+  const totalSetupTime = setupLogs.reduce((sum, log) => sum + (log.durationMinutes || 0), 0);
+  const avgSetupTime = setupLogs.length > 0 ? Math.round(totalSetupTime / setupLogs.length) : 0;
+
+  const resourceUtilization = resources.map(r => {
+    const resourceJobs = workOrders.filter(wo => wo.resourceId === r.id);
+    const hoursPlanned = resourceJobs.reduce((sum, wo) => sum + (wo.estimatedDuration || 0), 0) / 60;
+    return {
+      name: r.name.split(" ").map(n => n[0] + ".").join(" ").slice(0, -1),
+      planned: r.weeklyHours || 40,
+      actual: hoursPlanned,
+      utilization: r.weeklyHours ? Math.round((hoursPlanned / r.weeklyHours) * 100) : 0,
+    };
+  });
+
+  const categoryLabels: Record<string, string> = {
+    gate_access: "Grindåtkomst",
+    parking: "Parkering",
+    waiting_customer: "Väntan på kund",
+    key_issue: "Nyckelhämtning",
+    other: "Övrigt",
+  };
+
+  const categoryMinutes = setupLogs.reduce((acc, log) => {
+    const cat = log.category || "other";
+    acc[cat] = (acc[cat] || 0) + (log.durationMinutes || 0);
+    return acc;
+  }, {} as Record<string, number>);
+
+  const setupTimeBreakdown = Object.entries(categoryMinutes)
+    .map(([category, minutes]) => ({
+      reason: categoryLabels[category] || category,
+      minutes,
+      percentage: totalSetupTime > 0 ? Math.round((minutes / totalSetupTime) * 100) : 0,
+    }))
+    .sort((a, b) => b.minutes - a.minutes);
+
+  if (setupTimeBreakdown.length === 0) {
+    setupTimeBreakdown.push(
+      { reason: "Grindåtkomst", minutes: 0, percentage: 0 },
+      { reason: "Parkering", minutes: 0, percentage: 0 },
+      { reason: "Väntan på kund", minutes: 0, percentage: 0 },
+      { reason: "Nyckelhämtning", minutes: 0, percentage: 0 },
+      { reason: "Övrigt", minutes: 0, percentage: 0 },
+    );
+  }
+
+  const highSetupObjects = objects.filter(o => (o.avgSetupTime || 0) > 20);
+  
+  const insights = [
+    { type: "suggestion", message: "Samla nordliga jobb på måndag och tisdag för att spara ~2.5 timmar körtid per vecka." },
+    { type: highSetupObjects.length > 0 ? "warning" : "success", message: highSetupObjects.length > 0
+      ? `${highSetupObjects.length} objekt med hög ställtid (>20 min) - uppdatera med bättre åtkomstinfo.`
+      : "Alla objekt har rimlig ställtid." },
+    { type: "success", message: `${setupLogs.length} ställtidsloggar registrerade med snitt ${avgSetupTime} min.` },
+  ];
+
+  const insightIcons = {
+    suggestion: Lightbulb,
+    warning: AlertCircle,
+    success: TrendingUp,
+  };
+
+  const insightColors = {
+    suggestion: "border-blue-500 bg-blue-50 dark:bg-blue-950",
+    warning: "border-orange-500 bg-orange-50 dark:bg-orange-950",
+    success: "border-green-500 bg-green-50 dark:bg-green-950",
+  };
+
+  const isLoading = workOrdersLoading || resourcesLoading || setupLogsLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Vecka 50 - December 2024</p>
+          <p className="text-sm text-muted-foreground">Översikt - {new Date().toLocaleDateString("sv-SE", { month: "long", year: "numeric" })}</p>
         </div>
         <Button variant="outline" data-testid="button-export">
           Exportera rapport
@@ -64,30 +122,29 @@ export function Dashboard() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <StatCard 
-          title="Jobb slutförda" 
-          value={`${mockStats.completedJobs}/${mockStats.totalJobs}`}
-          subtitle={`${Math.round((mockStats.completedJobs / mockStats.totalJobs) * 100)}% klart`}
+          title="Jobb totalt" 
+          value={`${completedJobs}/${totalJobs}`}
+          subtitle={totalJobs > 0 ? `${Math.round((completedJobs / totalJobs) * 100)}% klart` : "Inga jobb"}
           icon={Briefcase}
         />
         <StatCard 
-          title="Arbetade timmar" 
-          value={`${mockStats.actualHours}h`}
-          subtitle={`av ${mockStats.plannedHours}h planerat`}
+          title="Planerade timmar" 
+          value={`${plannedHours.toFixed(1)}h`}
+          subtitle={`${actualHours.toFixed(1)}h utfört`}
           icon={Clock}
-          trend={mockStats.actualHours < mockStats.plannedHours ? "positive" : "negative"}
+          trend={actualHours < plannedHours ? "positive" : "negative"}
         />
         <StatCard 
           title="Total ställtid" 
-          value={`${mockStats.totalSetupTime} min`}
-          subtitle={`Snitt ${mockStats.avgSetupTime} min/jobb`}
+          value={`${totalSetupTime} min`}
+          subtitle={`Snitt ${avgSetupTime} min/jobb`}
           icon={Clock}
         />
         <StatCard 
-          title="Ställtidsförändring" 
-          value={`${mockStats.setupTimeChange}%`}
-          subtitle="vs förra veckan"
-          icon={mockStats.setupTimeChange < 0 ? TrendingDown : TrendingUp}
-          trend={mockStats.setupTimeChange < 0 ? "positive" : "negative"}
+          title="Resurser" 
+          value={`${resources.length}`}
+          subtitle={`${resources.filter(r => r.status === "active").length} aktiva`}
+          icon={Users}
         />
       </div>
 
@@ -100,23 +157,27 @@ export function Dashboard() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {mockResourceUtilization.map((resource) => (
-              <div key={resource.name} className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="font-medium">{resource.name}</span>
-                  <span className="text-muted-foreground">
-                    {resource.actual}h / {resource.planned}h
-                    {resource.utilization > 100 && (
-                      <Badge variant="destructive" className="ml-2 text-[10px]">Överbokning</Badge>
-                    )}
-                  </span>
+            {resourceUtilization.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Inga resurser registrerade</p>
+            ) : (
+              resourceUtilization.map((resource) => (
+                <div key={resource.name} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium">{resource.name}</span>
+                    <span className="text-muted-foreground">
+                      {resource.actual.toFixed(1)}h / {resource.planned}h
+                      {resource.utilization > 100 && (
+                        <Badge variant="destructive" className="ml-2 text-[10px]">Överbokning</Badge>
+                      )}
+                    </span>
+                  </div>
+                  <Progress 
+                    value={Math.min(resource.utilization, 100)} 
+                    className={resource.utilization > 100 ? "[&>div]:bg-red-500" : ""}
+                  />
                 </div>
-                <Progress 
-                  value={Math.min(resource.utilization, 100)} 
-                  className={resource.utilization > 100 ? "[&>div]:bg-red-500" : ""}
-                />
-              </div>
-            ))}
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -129,7 +190,7 @@ export function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {mockSetupTimeBreakdown.map((item) => (
+              {setupTimeBreakdown.map((item) => (
                 <div key={item.reason} className="flex items-center gap-3">
                   <div className="w-28 text-sm text-muted-foreground truncate">{item.reason}</div>
                   <div className="flex-1">
@@ -157,7 +218,7 @@ export function Dashboard() {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {mockInsights.map((insight, index) => {
+            {insights.map((insight, index) => {
               const Icon = insightIcons[insight.type as keyof typeof insightIcons];
               return (
                 <div 

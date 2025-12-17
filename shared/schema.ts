@@ -1,18 +1,184 @@
-import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { sql, relations } from "drizzle-orm";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const tenants = pgTable("tenants", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  orgNumber: text("org_number"),
+  contactEmail: text("contact_email"),
+  contactPhone: text("contact_phone"),
+  settings: jsonb("settings").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  email: text("email"),
+  firstName: text("first_name"),
+  lastName: text("last_name"),
+  phone: text("phone"),
+  role: text("role").default("planner").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const customers = pgTable("customers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  customerNumber: text("customer_number"),
+  contactPerson: text("contact_person"),
+  email: text("email"),
+  phone: text("phone"),
+  address: text("address"),
+  city: text("city"),
+  postalCode: text("postal_code"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export const objects = pgTable("objects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  name: text("name").notNull(),
+  objectNumber: text("object_number"),
+  objectType: text("object_type").default("well").notNull(),
+  address: text("address"),
+  city: text("city"),
+  postalCode: text("postal_code"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  accessInfo: jsonb("access_info").default({}),
+  avgSetupTime: integer("avg_setup_time").default(0),
+  status: text("status").default("active").notNull(),
+  notes: text("notes"),
+  lastServiceDate: timestamp("last_service_date"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const resources = pgTable("resources", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  userId: varchar("user_id").references(() => users.id),
+  name: text("name").notNull(),
+  initials: text("initials"),
+  resourceType: text("resource_type").default("person").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  homeLocation: text("home_location"),
+  weeklyHours: integer("weekly_hours").default(40),
+  competencies: text("competencies").array().default([]),
+  availability: jsonb("availability").default({}),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const workOrders = pgTable("work_orders", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  title: text("title").notNull(),
+  description: text("description"),
+  orderType: text("order_type").default("service").notNull(),
+  priority: text("priority").default("normal").notNull(),
+  status: text("status").default("draft").notNull(),
+  scheduledDate: timestamp("scheduled_date"),
+  scheduledStartTime: text("scheduled_start_time"),
+  estimatedDuration: integer("estimated_duration").default(60),
+  actualDuration: integer("actual_duration"),
+  setupTime: integer("setup_time"),
+  setupReason: text("setup_reason"),
+  completedAt: timestamp("completed_at"),
+  notes: text("notes"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+export const setupTimeLogs = pgTable("setup_time_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  setupMinutes: integer("setup_minutes").notNull(),
+  reason: text("reason"),
+  gateAccessTime: integer("gate_access_time"),
+  parkingTime: integer("parking_time"),
+  walkTime: integer("walk_time"),
+  otherTime: integer("other_time"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const tenantsRelations = relations(tenants, ({ many }) => ({
+  users: many(users),
+  customers: many(customers),
+  objects: many(objects),
+  resources: many(resources),
+  workOrders: many(workOrders),
+}));
+
+export const usersRelations = relations(users, ({ one }) => ({
+  tenant: one(tenants, { fields: [users.tenantId], references: [tenants.id] }),
+}));
+
+export const customersRelations = relations(customers, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [customers.tenantId], references: [tenants.id] }),
+  objects: many(objects),
+  workOrders: many(workOrders),
+}));
+
+export const objectsRelations = relations(objects, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [objects.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [objects.customerId], references: [customers.id] }),
+  workOrders: many(workOrders),
+}));
+
+export const resourcesRelations = relations(resources, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [resources.tenantId], references: [tenants.id] }),
+  user: one(users, { fields: [resources.userId], references: [users.id] }),
+  workOrders: many(workOrders),
+}));
+
+export const workOrdersRelations = relations(workOrders, ({ one }) => ({
+  tenant: one(tenants, { fields: [workOrders.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [workOrders.customerId], references: [customers.id] }),
+  object: one(objects, { fields: [workOrders.objectId], references: [objects.id] }),
+  resource: one(resources, { fields: [workOrders.resourceId], references: [resources.id] }),
+}));
+
+export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
+export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
+export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true });
+export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
+export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
+export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });
+
+export type Tenant = typeof tenants.$inferSelect;
+export type InsertTenant = z.infer<typeof insertTenantSchema>;
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type Customer = typeof customers.$inferSelect;
+export type InsertCustomer = z.infer<typeof insertCustomerSchema>;
+export type ServiceObject = typeof objects.$inferSelect;
+export type InsertObject = z.infer<typeof insertObjectSchema>;
+export type Resource = typeof resources.$inferSelect;
+export type InsertResource = z.infer<typeof insertResourceSchema>;
+export type WorkOrder = typeof workOrders.$inferSelect;
+export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
+export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;
+export type InsertSetupTimeLog = z.infer<typeof insertSetupTimeLogSchema>;
