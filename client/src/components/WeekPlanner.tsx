@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,8 @@ import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2 } from "lucide-
 import { format, addDays, startOfWeek, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const priorityColors: Record<string, string> = {
   urgent: "border-l-4 border-l-red-500",
@@ -30,6 +32,8 @@ interface WeekPlannerProps {
 export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
+  const [dragOverCell, setDragOverCell] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
 
@@ -43,6 +47,26 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects"],
+  });
+
+  const updateWorkOrderMutation = useMutation({
+    mutationFn: async ({ id, resourceId, scheduledDate }: { id: string; resourceId: string; scheduledDate: string }) => {
+      return apiRequest("PATCH", `/api/work-orders/${id}`, { resourceId, scheduledDate });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({
+        title: "Jobb flyttat",
+        description: "Jobbet har schemalagts om.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Fel",
+        description: "Kunde inte flytta jobbet.",
+        variant: "destructive",
+      });
+    },
   });
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
@@ -66,6 +90,43 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const handleJobClick = (jobId: string) => {
     setSelectedJob(jobId);
     onSelectJob?.(jobId);
+  };
+
+  const handleDragStart = (e: React.DragEvent, jobId: string) => {
+    e.dataTransfer.setData("jobId", jobId);
+    e.dataTransfer.effectAllowed = "move";
+  };
+
+  const handleDragOver = (e: React.DragEvent, cellId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    setDragOverCell(cellId);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverCell(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, resourceId: string, day: Date) => {
+    e.preventDefault();
+    setDragOverCell(null);
+    
+    const jobId = e.dataTransfer.getData("jobId");
+    if (!jobId) return;
+
+    const job = workOrders.find(j => j.id === jobId);
+    if (!job) return;
+
+    const isSameResourceAndDay = job.resourceId === resourceId && 
+      job.scheduledDate && isSameDay(new Date(job.scheduledDate), day);
+    
+    if (isSameResourceAndDay) return;
+
+    updateWorkOrderMutation.mutate({
+      id: jobId,
+      resourceId,
+      scheduledDate: format(day, "yyyy-MM-dd"),
+    });
   };
 
   const isLoading = resourcesLoading || workOrdersLoading;
@@ -133,9 +194,20 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                   const jobs = getJobsForResourceAndDay(resource.id, day);
                   const dayHours = getResourceDayHours(resource.id, day);
                   const isOverbooked = dayHours > 8;
+                  const cellId = `${resource.id}-${dayIndex}`;
+                  const isDragOver = dragOverCell === cellId;
 
                   return (
-                    <div key={dayIndex} className="p-2 border-r last:border-r-0 min-h-[120px] bg-muted/30">
+                    <div 
+                      key={dayIndex} 
+                      className={`p-2 border-r last:border-r-0 min-h-[120px] transition-colors ${
+                        isDragOver ? "bg-primary/10" : "bg-muted/30"
+                      }`}
+                      onDragOver={(e) => handleDragOver(e, cellId)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, resource.id, day)}
+                      data-testid={`drop-zone-${resource.id}-${format(day, "yyyy-MM-dd")}`}
+                    >
                       {isOverbooked && (
                         <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
                           <AlertTriangle className="h-3 w-3" />
@@ -148,7 +220,9 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                           return (
                             <Card
                               key={job.id}
-                              className={`p-2 cursor-pointer hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, job.id)}
+                              className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
                               onClick={() => handleJobClick(job.id)}
                               data-testid={`job-card-${job.id}`}
                             >
@@ -194,7 +268,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
           </div>
         </div>
         <div className="text-xs text-muted-foreground">
-          {workOrders.length} jobb totalt
+          {workOrders.length} jobb totalt | Dra jobb för att flytta
         </div>
       </div>
     </div>
