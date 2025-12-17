@@ -7,6 +7,20 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import multer from "multer";
+import Papa from "papaparse";
+
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Endast CSV-filer är tillåtna'));
+    }
+  }
+});
 
 const DEFAULT_TENANT_ID = "default-tenant";
 
@@ -280,6 +294,231 @@ export async function registerRoutes(
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch setup time logs" });
+    }
+  });
+
+  // Import endpoints
+  app.post("/api/import/customers", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+      
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors });
+      }
+      
+      const imported: string[] = [];
+      const errors: string[] = [];
+      
+      for (const row of result.data as Record<string, string>[]) {
+        try {
+          const customerData = {
+            tenantId: DEFAULT_TENANT_ID,
+            name: row.name || row.namn || row.Namn || "",
+            customerNumber: row.customerNumber || row.kundnummer || row.Kundnummer || null,
+            contactPerson: row.contactPerson || row.kontaktperson || row.Kontaktperson || null,
+            email: row.email || row.epost || row.Epost || null,
+            phone: row.phone || row.telefon || row.Telefon || null,
+            address: row.address || row.adress || row.Adress || null,
+            city: row.city || row.stad || row.Stad || null,
+            postalCode: row.postalCode || row.postnummer || row.Postnummer || null,
+          };
+          
+          if (!customerData.name) {
+            errors.push(`Rad saknar namn`);
+            continue;
+          }
+          
+          await storage.createCustomer(customerData);
+          imported.push(customerData.name);
+        } catch (err) {
+          errors.push(`Kunde inte importera: ${row.name || row.namn || "okänd"}`);
+        }
+      }
+      
+      res.json({ imported: imported.length, errors });
+    } catch (error) {
+      console.error("Import error:", error);
+      res.status(500).json({ error: "Import misslyckades" });
+    }
+  });
+
+  app.post("/api/import/resources", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+      
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors });
+      }
+      
+      const imported: string[] = [];
+      const errors: string[] = [];
+      
+      for (const row of result.data as Record<string, string>[]) {
+        try {
+          const resourceData = {
+            tenantId: DEFAULT_TENANT_ID,
+            name: row.name || row.namn || row.Namn || "",
+            initials: row.initials || row.initialer || row.Initialer || null,
+            phone: row.phone || row.telefon || row.Telefon || null,
+            email: row.email || row.epost || row.Epost || null,
+            homeLocation: row.homeLocation || row.hemort || row.Hemort || null,
+            weeklyHours: row.weeklyHours ? parseInt(row.weeklyHours) : (row.timmar ? parseInt(row.timmar) : 40),
+            competencies: row.competencies || row.kompetenser ? 
+              (row.competencies || row.kompetenser || "").split(",").map((s: string) => s.trim()) : [],
+          };
+          
+          if (!resourceData.name) {
+            errors.push(`Rad saknar namn`);
+            continue;
+          }
+          
+          await storage.createResource(resourceData);
+          imported.push(resourceData.name);
+        } catch (err) {
+          errors.push(`Kunde inte importera: ${row.name || row.namn || "okänd"}`);
+        }
+      }
+      
+      res.json({ imported: imported.length, errors });
+    } catch (error) {
+      console.error("Import error:", error);
+      res.status(500).json({ error: "Import misslyckades" });
+    }
+  });
+
+  app.post("/api/import/objects", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+      
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+      
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors });
+      }
+      
+      // First, get all customers to map names to IDs
+      const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+      const customerMap = new Map(customers.map(c => [c.name.toLowerCase(), c.id]));
+      
+      // Track created objects by objectNumber for parent lookups
+      const objectNumberMap = new Map<string, string>();
+      
+      const imported: string[] = [];
+      const errors: string[] = [];
+      
+      // Sort by objectLevel to ensure parents are created first
+      const rows = (result.data as Record<string, string>[]).sort((a, b) => {
+        const levelA = parseInt(a.objectLevel || a.nivå || a.Nivå || "1");
+        const levelB = parseInt(b.objectLevel || b.nivå || b.Nivå || "1");
+        return levelA - levelB;
+      });
+      
+      for (const row of rows) {
+        try {
+          const customerName = row.customer || row.kund || row.Kund || "";
+          const customerId = customerMap.get(customerName.toLowerCase());
+          
+          if (!customerId) {
+            errors.push(`Kund "${customerName}" hittades inte för objekt "${row.name || row.namn}"`);
+            continue;
+          }
+          
+          const parentNumber = row.parentNumber || row.förälder || row.Förälder || null;
+          let parentId = null;
+          if (parentNumber) {
+            parentId = objectNumberMap.get(parentNumber) || null;
+          }
+          
+          const objectData = {
+            tenantId: DEFAULT_TENANT_ID,
+            customerId,
+            parentId,
+            name: row.name || row.namn || row.Namn || "",
+            objectNumber: row.objectNumber || row.objektnummer || row.Objektnummer || null,
+            objectType: row.objectType || row.typ || row.Typ || "fastighet",
+            objectLevel: parseInt(row.objectLevel || row.nivå || row.Nivå || "1"),
+            address: row.address || row.adress || row.Adress || null,
+            city: row.city || row.stad || row.Stad || null,
+            postalCode: row.postalCode || row.postnummer || row.Postnummer || null,
+            latitude: row.latitude || row.lat ? parseFloat(row.latitude || row.lat) : null,
+            longitude: row.longitude || row.lng || row.lon ? parseFloat(row.longitude || row.lng || row.lon) : null,
+            accessType: row.accessType || row.tillgång || row.Tillgång || "open",
+            accessCode: row.accessCode || row.portkod || row.Portkod || null,
+            keyNumber: row.keyNumber || row.nyckelnummer || row.Nyckelnummer || null,
+            containerCount: row.containerCount || row.kärl ? parseInt(row.containerCount || row.kärl || "0") : 0,
+            containerCountK2: row.containerCountK2 || row.k2 ? parseInt(row.containerCountK2 || row.k2 || "0") : 0,
+            containerCountK3: row.containerCountK3 || row.k3 ? parseInt(row.containerCountK3 || row.k3 || "0") : 0,
+            containerCountK4: row.containerCountK4 || row.k4 ? parseInt(row.containerCountK4 || row.k4 || "0") : 0,
+          };
+          
+          if (!objectData.name) {
+            errors.push(`Rad saknar namn`);
+            continue;
+          }
+          
+          const createdObject = await storage.createObject(objectData);
+          
+          // Store mapping for parent lookups
+          if (objectData.objectNumber) {
+            objectNumberMap.set(objectData.objectNumber, createdObject.id);
+          }
+          
+          imported.push(objectData.name);
+        } catch (err) {
+          console.error("Object import error:", err);
+          errors.push(`Kunde inte importera: ${row.name || row.namn || "okänd"}`);
+        }
+      }
+      
+      res.json({ imported: imported.length, errors });
+    } catch (error) {
+      console.error("Import error:", error);
+      res.status(500).json({ error: "Import misslyckades" });
+    }
+  });
+
+  // Delete all data (for re-import)
+  app.delete("/api/import/clear/:type", async (req, res) => {
+    try {
+      const { type } = req.params;
+      
+      if (type === "customers") {
+        const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+        for (const c of customers) {
+          await storage.deleteCustomer(c.id);
+        }
+        res.json({ deleted: customers.length });
+      } else if (type === "resources") {
+        const resources = await storage.getResources(DEFAULT_TENANT_ID);
+        for (const r of resources) {
+          await storage.deleteResource(r.id);
+        }
+        res.json({ deleted: resources.length });
+      } else if (type === "objects") {
+        const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+        for (const o of objects) {
+          await storage.deleteObject(o.id);
+        }
+        res.json({ deleted: objects.length });
+      } else {
+        res.status(400).json({ error: "Okänd typ" });
+      }
+    } catch (error) {
+      console.error("Clear error:", error);
+      res.status(500).json({ error: "Kunde inte rensa data" });
     }
   });
 

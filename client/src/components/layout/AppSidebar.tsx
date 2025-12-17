@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -24,6 +24,7 @@ const navigationItems = [
 ];
 
 const settingsItems = [
+  { title: "Importera data", url: "/import", icon: Upload },
   { title: "Inställningar", url: "/settings", icon: Settings },
 ];
 

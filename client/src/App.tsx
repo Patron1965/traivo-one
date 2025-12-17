@@ -14,6 +14,7 @@ import ObjectsPage from "@/pages/ObjectsPage";
 import ResourcesPage from "@/pages/ResourcesPage";
 import DashboardPage from "@/pages/DashboardPage";
 import SettingsPage from "@/pages/SettingsPage";
+import ImportPage from "@/pages/ImportPage";
 import LandingPage from "@/pages/LandingPage";
 import { Loader2 } from "lucide-react";
 
@@ -25,6 +26,7 @@ function Router() {
       <Route path="/objects" component={ObjectsPage} />
       <Route path="/resources" component={ResourcesPage} />
       <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/import" component={ImportPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
