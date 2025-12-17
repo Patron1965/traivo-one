@@ -236,10 +236,17 @@ export async function registerRoutes(
   app.patch("/api/work-orders/:id", async (req, res) => {
     try {
       const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      
+      // Convert scheduledDate string to Date object if present
+      if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {
+        updateData.scheduledDate = new Date(updateData.scheduledDate + 'T00:00:00');
+      }
+      
       const workOrder = await storage.updateWorkOrder(req.params.id, updateData);
       if (!workOrder) return res.status(404).json({ error: "Work order not found" });
       res.json(workOrder);
     } catch (error) {
+      console.error("Failed to update work order:", error);
       res.status(500).json({ error: "Failed to update work order" });
     }
   });
