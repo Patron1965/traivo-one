@@ -160,6 +160,7 @@ export async function seedDatabase() {
       objectType: "rum",
       objectLevel: 3,
       containerCount: 4,
+      containerCountK2: 1,
       status: "active",
     },
     {
@@ -171,6 +172,7 @@ export async function seedDatabase() {
       objectType: "rum",
       objectLevel: 3,
       containerCount: 4,
+      containerCountK2: 1,
       status: "active",
     },
     {
@@ -193,6 +195,7 @@ export async function seedDatabase() {
       objectType: "uj_hushallsavfall",
       objectLevel: 3,
       containerCount: 2,
+      containerCountK3: 1,
       status: "active",
     },
     {
@@ -204,6 +207,7 @@ export async function seedDatabase() {
       objectType: "rum",
       objectLevel: 3,
       containerCount: 4,
+      containerCountK2: 2,
       status: "active",
     },
     {
@@ -215,6 +219,7 @@ export async function seedDatabase() {
       objectType: "uj_hushallsavfall",
       objectLevel: 3,
       containerCount: 2,
+      containerCountK3: 2,
       status: "active",
     },
     {
@@ -226,6 +231,7 @@ export async function seedDatabase() {
       objectType: "rum",
       objectLevel: 3,
       containerCount: 6,
+      containerCountK2: 2,
       status: "active",
     },
     {
@@ -248,6 +254,7 @@ export async function seedDatabase() {
       objectType: "atervinning",
       objectLevel: 3,
       containerCount: 8,
+      containerCountK4: 4,
       status: "active",
     },
   ]);

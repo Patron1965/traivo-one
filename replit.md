@@ -3,12 +3,20 @@
 ## Overview
 Nordic Routing is an AI-driven planning platform designed to optimize "ställtid" (setup time) for field service companies in the Nordic market. The platform targets the 15-25% of workday lost to setup inefficiencies (gate access, parking, finding keys).
 
-**Design Partner:** Kinab AB (well-service company)
+**Design Partner:** Kinab AB (avfallshantering/sophämtning)
 **Goal:** Prove value through measurable savings before scaling to commercial multi-tenant SaaS
 
+## Kinab Business Domain
+Kinab arbetar med avfallshantering och sophämtning. Viktiga termer:
+- **Objekt:** Hierarkiskt uppbyggt (Område → Fastighet/Adress → Rum/Delobjekt)
+- **Objekttyper:** omrade, fastighet, serviceboende, rum, soprum, kok, uj_hushallsavfall, matafall, atervinning
+- **Tillgångstyper:** öppet (open), kod (code), nyckel/bricka (key), personligt möte (meeting)
+- **Kärltyper:** K1 (standard), K2 (pant), K3 (matavfall), K4 (övrigt)
+- **Kunder:** Bostadsbolag (Telgebostäder), Serviceboenden (äldreboenden)
+
 ## Current State
-- **Phase:** Frontend Prototype Development
-- **Status:** Functional UI prototype with mock data
+- **Phase:** Functional Prototype with Real Data
+- **Status:** Database connected, API working, frontend showing real Kinab data
 - **Stack:** React + TypeScript + Vite + Express + PostgreSQL + Drizzle ORM
 
 ## Project Structure
@@ -17,19 +25,17 @@ client/src/
 ├── components/
 │   ├── layout/
 │   │   └── AppSidebar.tsx       # Main navigation sidebar
-│   ├── examples/                 # Component examples for testing
 │   ├── WeekPlanner.tsx          # Drag-drop weekly scheduling view
 │   ├── ObjectCard.tsx           # Object display with setup time info
 │   ├── RouteMap.tsx             # Route optimization view
-│   ├── Dashboard.tsx            # Analytics and KPIs
+│   ├── Dashboard.tsx            # Analytics and KPIs (uses real setup logs)
 │   ├── MobileFieldApp.tsx       # Field technician mobile interface
-│   ├── ResourceList.tsx         # Resource/technician management
 │   ├── JobModal.tsx             # Create/edit job modal
 │   └── ThemeToggle.tsx          # Light/dark theme toggle
 ├── pages/
 │   ├── WeekPlannerPage.tsx      # Main planning view
 │   ├── RoutesPage.tsx           # Route optimization
-│   ├── ObjectsPage.tsx          # Object management
+│   ├── ObjectsPage.tsx          # Hierarchical object management
 │   ├── ResourcesPage.tsx        # Resource management
 │   ├── DashboardPage.tsx        # Analytics dashboard
 │   └── SettingsPage.tsx         # User/company settings
@@ -37,42 +43,46 @@ client/src/
 
 server/
 ├── index.ts                      # Express server entry
-├── routes.ts                     # API routes (to be implemented)
-├── storage.ts                    # Storage interface
-└── db.ts                         # Database connection
+├── routes.ts                     # Full CRUD API routes
+├── storage.ts                    # Database storage interface
+├── db.ts                         # PostgreSQL connection
+└── seed.ts                       # Kinab test data
 
 shared/
-└── schema.ts                     # Drizzle schema (to be implemented)
+└── schema.ts                     # Drizzle schema with hierarchical objects
 ```
 
-## Key Features (Prototype)
-1. **Veckoplanering (Week Planner):** Drag-drop scheduling with priority colors
-2. **Ruttplanering (Route Map):** Route optimization with drive time visualization
-3. **Objekt (Objects):** Customer objects with setup time tracking
-4. **Resurser (Resources):** Technician management with competencies
-5. **Dashboard:** KPIs, setup time analysis, AI insights
-6. **Mobile Field App:** Technician interface with access info display
+## Database Schema
+- **tenants:** Multi-tenant support
+- **customers:** Telgebostäder, Serviceboenden
+- **objects:** Hierarchical (parentId), with accessType, accessCode, containerCounts
+- **resources:** Technicians with competencies
+- **work_orders:** Jobs with scheduling
+- **setup_time_logs:** Ställtidsloggning per jobb
 
-## Database Schema (Planned)
-- tenants, users, customers, objects, resources, work_orders
-- Analytics tables: setup_time_logs, route_logs
-- Full migration files ready for deployment
+## Key Features
+1. **Veckoplanering:** Drag-drop scheduling with priority colors
+2. **Objekt:** Hierarchical tree view (Område → Fastighet → Rum)
+3. **Resurser:** Technician management with competencies
+4. **Dashboard:** Real analytics from setup_time_logs
+5. **Mobile Field App:** Access info, job completion, ställtidsrapportering
+6. **Ruttplanering:** Route visualization (placeholder for Google Maps)
 
 ## User Preferences
-- **Language:** Swedish (sv) for UI, documentation in Swedish/English
+- **Language:** Swedish (sv) for UI
 - **Design:** Clean, professional Nordic aesthetic
 - **Theme:** Dark/light mode support
-- **Font:** Inter for UI, JetBrains Mono for code/numbers
+- **Font:** Inter for UI
 
 ## Recent Changes
-- 2024-12-17: Created all frontend prototype components
-- 2024-12-17: Implemented sidebar navigation with Shadcn
-- 2024-12-17: Added mock data for testing UI flows
-- 2024-12-17: Set up all pages with routing
+- 2024-12-17: Updated to Kinab's actual business domain (avfallshantering)
+- 2024-12-17: Implemented hierarchical object structure (Område → Fastighet → Rum)
+- 2024-12-17: Added Telgebostäder and Serviceboenden as customers
+- 2024-12-17: Setup time logging from MobileFieldApp to database
+- 2024-12-17: Dashboard uses real setup_time_logs data
 
 ## Next Steps
-1. User review and approval of frontend prototype
-2. Implement database schema with Drizzle migrations
-3. Connect frontend to real backend APIs
-4. Implement authentication with Replit Auth
-5. Add Google Maps integration for route visualization
+1. Review and adjust data model based on Kinab feedback
+2. Implement Google Maps integration for route visualization
+3. Add authentication with Replit Auth
+4. Import real Kinab object data

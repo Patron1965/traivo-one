@@ -48,7 +48,7 @@ export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
-  parentId: varchar("parent_id"),
+  parentId: varchar("parent_id").references((): any => objects.id),
   name: text("name").notNull(),
   objectNumber: text("object_number"),
   objectType: text("object_type").default("omrade").notNull(),
@@ -152,6 +152,8 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
 export const objectsRelations = relations(objects, ({ one, many }) => ({
   tenant: one(tenants, { fields: [objects.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [objects.customerId], references: [customers.id] }),
+  parent: one(objects, { fields: [objects.parentId], references: [objects.id], relationName: "objectHierarchy" }),
+  children: many(objects, { relationName: "objectHierarchy" }),
   workOrders: many(workOrders),
 }));
 
