@@ -1,0 +1,117 @@
+Här är en rak beskrivning av grundproblematiken för bolag som Kinab, Swoosh m.fl., och varför de inte är nöjda med sina system idag.
+
+1. Planeringen speglar inte hur de faktiskt jobbar
+De jobbar i verkligheten med:
+Veckoplanering, inte bara dag-för-dag.
+Flexibel arbetstid (ex. “har jag gjort 40h till torsdag är veckan klar”).
+Uppdrag som beror på:
+Geografi
+Avtal
+Typ av objekt
+Akuta behov
+Dagens system:
+Har ofta enkel dagplanering, utan vettig veckologik.
+Förstår inte flexibel arbetstid – systemet “tänker” måndag–fredag 8–17, inte “40 timmar per vecka”.
+Är dåliga på att ta hänsyn till alla villkor samtidigt (avtal, geografi, tidsfönster, restid, resurser).
+Konsekvens:
+Planerare måste ändå “räkna i huvudet” eller i Excel.
+Systemen används mer som blockkalender än som verkligt planeringsstöd.
+Mycket tid går åt till att rätta systemets förslag eller hoppa över dem helt.
+2. Ruttoptimeringen är för grund eller saknas i praktiken
+Verksamheten:
+Lever på att åka smart: rätt ordning, rätt område, rätt dag.
+Reskostnad och tid i bil är en stor del av kalkylen.
+Dagens system:
+Har antingen ingen ruttlogik alls.
+Eller erbjuder “teoretisk” ruttoptimering som:
+Inte tar hänsyn till verkliga begränsningar (åtkomst, öppettider, parkeringssituation, hur jobbet faktiskt går till).
+Är för krånglig att använda i vardagen.
+Konsekvens:
+Ruttning hamnar i huvudet på enstaka nyckelpersoner, inte i systemet.
+När någon slutar eller är sjuk tappar man kvalitet.
+Mats (Kinab) har letat system i flera år just för att detta inte är löst på ett sätt som funkar i verkligheten.
+3. Systemen är fragmenterade – data sitter i öar
+Typisk situation:
+Ett system för order/felanmälan.
+Ett system för planering/”kalender”.
+Ett system för tidrapport.
+Ett system för fakturering/ekonomi.
+Plus Excel, papper, sms och muntlig info.
+Problem:
+Objektdata (vad, var, åtkomstinfo) ligger inte samlat.
+Resursdata (vem kan vad, hur mycket har de jobbat denna vecka) är inte kopplat till planeringsbilden.
+Avtal och prislogik ligger ofta i ekonomisystemet, inte i planeringslogiken.
+Konsekvens:
+Dubbelskrivning och felrisk.
+Svårt att få en enkel vy: “Vad ska vi göra, var och när, och vad tjänar vi på det?”
+Mycket av verksamhetslogiken sitter i personers huvuden, inte i systemen.
+4. Objektet är inte navet – men borde vara det
+Verkligheten:
+Allt kretsar kring objekt:
+Brunn, fastighet, anläggning, station, etc.
+På varje objekt finns:
+Historik
+Avtal
+Återkommande uppdrag
+Speciella åtkomstregler
+Dagens system:
+Är ofta order- eller kundcentrerade.
+Saknar bra “objektskort” där man ser:
+Vad som gjorts.
+Vad som ska göras.
+Vad det har kostat.
+Konsekvens:
+Svårt att optimera på objekt/område.
+Svårt att förklara för kund varför kostnader ser ut som de gör.
+Man tappar möjligheten att styra verksamheten på rätt nivå (objekt/område istället för enstaka uppdrag).
+5. Svag koppling mellan drift och ekonomi
+Verksamheten behöver veta:
+Tjänar vi pengar på den här kunden, den här rutten, det här området?
+Vilka uppdrag eller objekt är “svarta hål” tids- och kostnadsmässigt?
+Dagens system:
+Fokuserar ofta på att få fram en faktura – inte på att förstå lönsamhet per:
+Objekt
+Rutt
+Område
+Resurs
+Tider registreras, men är svåra att knyta ihop med resa, material och pris på ett överskådligt sätt.
+Konsekvens:
+De ser intäkter, men inte tydligt var pengarna läcker ut.
+Prisjusteringar och avtalsförhandlingar sker mer på magkänsla än på fakta.
+6. Fältappar och verkligheten ute på jobb
+Ute på fältet:
+Förarna/teknikerna behöver snabbt se:
+Nästa jobb, adress, objektinfo, åtkomst, särskilda instruktioner.
+De behöver enkelt kunna:
+Starta/stoppa jobb.
+Rapportera tid, material, noteringar, bilder.
+Dagens appar:
+Är ofta tungrodda, långsamma eller dåligt anpassade till hur jobbet utförs i verkligheten.
+Saknar tydlig koppling till ruttlogiken och veckoplaneringen.
+Konsekvens:
+Dålig återrapportering eller stor variation i kvalitet.
+Planerarna litar inte fullt ut på datan.
+Man är missnöjd både på kontoret och ute på fältet.
+7. Systemen är för stela – verkligheten är dynamisk
+Verkligheten:
+Planen spricker varje dag:
+Akuta jobb.
+Kunder som ändrar sig.
+Sjukdom, trafik, väder.
+Planeraren sitter och gör ad hoc-ändringar hela tiden.
+Dagens system:
+Klarar inte dynamisk omplanering särskilt bra.
+Ger sällan bra förslag när planen spricker – det blir manuellt pussel igen.
+Konsekvens:
+Mycket stress i planeringsrollen.
+Känslan: “Systemet är mest i vägen, vi jobbar runt det.”
+8. Varför de inte är nöjda – kokat till kärnan
+För bolag som Kinab, Swoosh m.fl. kokar missnöjet med dagens system ner till:
+
+Systemen speglar inte hur de faktiskt arbetar (veckologik, flexibilitet, objektfokus).
+Ruttoptimering är antingen obefintlig eller för teoretisk för att fungera i vardagen.
+Data är splittrad – de får inte en samlad bild av drift + ekonomi + geografi.
+De måste lägga mycket “hjärnkraft” och manuellt jobb ovanpå systemen.
+De upplever att:
+De jobbar runt sina system, inte med dem.
+Leverantörerna fokuserar på rapporter, tid och fakturering – men inte på kärnproblemet: att varje dag få rätt uppdrag på rätt resurs, i rätt ordning, med så lite dödtid som möjligt.
