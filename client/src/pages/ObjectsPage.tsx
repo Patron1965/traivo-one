@@ -14,7 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Search, Plus, Filter, Loader2, ChevronRight, Building2, MapPin, Trash2, 
-  Map, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
+  Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
@@ -574,7 +574,7 @@ export default function ObjectsPage() {
             Lista
           </TabsTrigger>
           <TabsTrigger value="map" className="gap-2" data-testid="tab-map">
-            <Map className="h-4 w-4" />
+            <MapIcon className="h-4 w-4" />
             Karta
           </TabsTrigger>
         </TabsList>
