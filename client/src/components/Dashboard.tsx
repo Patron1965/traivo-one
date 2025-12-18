@@ -560,7 +560,7 @@ export function Dashboard() {
                 <AlertCircle className="h-4 w-4 text-orange-500" />
                 Risker och förseningar
               </CardTitle>
-              <Link href="/week-planner">
+              <Link href="/">
                 <Button variant="ghost" size="sm">
                   Till planeringen
                   <ChevronRight className="h-4 w-4 ml-1" />
