@@ -139,12 +139,42 @@ export const setupTimeLogs = pgTable("setup_time_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const procurements = pgTable("procurements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id),
+  title: text("title").notNull(),
+  referenceNumber: text("reference_number"),
+  description: text("description"),
+  status: text("status").default("draft").notNull(),
+  deadline: timestamp("deadline"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  estimatedValue: integer("estimated_value"),
+  objectIds: text("object_ids").array().default([]),
+  containerCountTotal: integer("container_count_total").default(0),
+  estimatedHoursPerWeek: integer("estimated_hours_per_week"),
+  notes: text("notes"),
+  metadata: jsonb("metadata").default({}),
+  submittedAt: timestamp("submitted_at"),
+  wonAt: timestamp("won_at"),
+  lostAt: timestamp("lost_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
 export const tenantsRelations = relations(tenants, ({ many }) => ({
   users: many(users),
   customers: many(customers),
   objects: many(objects),
   resources: many(resources),
   workOrders: many(workOrders),
+  procurements: many(procurements),
+}));
+
+export const procurementsRelations = relations(procurements, ({ one }) => ({
+  tenant: one(tenants, { fields: [procurements.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [procurements.customerId], references: [customers.id] }),
 }));
 
 
@@ -182,6 +212,7 @@ export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, c
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
 export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });
+export const insertProcurementSchema = createInsertSchema(procurements).omit({ id: true, createdAt: true });
 
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
@@ -197,3 +228,5 @@ export type WorkOrder = typeof workOrders.$inferSelect;
 export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
 export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;
 export type InsertSetupTimeLog = z.infer<typeof insertSetupTimeLogSchema>;
+export type Procurement = typeof procurements.$inferSelect;
+export type InsertProcurement = z.infer<typeof insertProcurementSchema>;

@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
-  insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema 
+  insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema 
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
@@ -294,6 +294,58 @@ export async function registerRoutes(
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch setup time logs" });
+    }
+  });
+
+  app.get("/api/procurements", async (req, res) => {
+    try {
+      const procurements = await storage.getProcurements(DEFAULT_TENANT_ID);
+      res.json(procurements);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch procurements" });
+    }
+  });
+
+  app.get("/api/procurements/:id", async (req, res) => {
+    try {
+      const procurement = await storage.getProcurement(req.params.id);
+      if (!procurement) return res.status(404).json({ error: "Procurement not found" });
+      res.json(procurement);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch procurement" });
+    }
+  });
+
+  app.post("/api/procurements", async (req, res) => {
+    try {
+      const data = insertProcurementSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const procurement = await storage.createProcurement(data);
+      res.status(201).json(procurement);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create procurement" });
+    }
+  });
+
+  app.patch("/api/procurements/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const procurement = await storage.updateProcurement(req.params.id, updateData);
+      if (!procurement) return res.status(404).json({ error: "Procurement not found" });
+      res.json(procurement);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update procurement" });
+    }
+  });
+
+  app.delete("/api/procurements/:id", async (req, res) => {
+    try {
+      await storage.deleteProcurement(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete procurement" });
     }
   });
 

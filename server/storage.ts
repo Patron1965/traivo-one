@@ -6,7 +6,8 @@ import {
   type Resource, type InsertResource,
   type WorkOrder, type InsertWorkOrder,
   type SetupTimeLog, type InsertSetupTimeLog,
-  users, tenants, customers, objects, resources, workOrders, setupTimeLogs
+  type Procurement, type InsertProcurement,
+  users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, isNull, desc, gte, lte } from "drizzle-orm";
@@ -48,6 +49,12 @@ export interface IStorage {
   
   createSetupTimeLog(log: InsertSetupTimeLog): Promise<SetupTimeLog>;
   getSetupTimeLogs(tenantId: string, objectId?: string): Promise<SetupTimeLog[]>;
+  
+  getProcurements(tenantId: string): Promise<Procurement[]>;
+  getProcurement(id: string): Promise<Procurement | undefined>;
+  createProcurement(procurement: InsertProcurement): Promise<Procurement>;
+  updateProcurement(id: string, procurement: Partial<InsertProcurement>): Promise<Procurement | undefined>;
+  deleteProcurement(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -207,6 +214,29 @@ export class DatabaseStorage implements IStorage {
       ).orderBy(desc(setupTimeLogs.createdAt));
     }
     return db.select().from(setupTimeLogs).where(eq(setupTimeLogs.tenantId, tenantId)).orderBy(desc(setupTimeLogs.createdAt));
+  }
+
+  async getProcurements(tenantId: string): Promise<Procurement[]> {
+    return db.select().from(procurements).where(and(eq(procurements.tenantId, tenantId), isNull(procurements.deletedAt))).orderBy(desc(procurements.createdAt));
+  }
+
+  async getProcurement(id: string): Promise<Procurement | undefined> {
+    const [procurement] = await db.select().from(procurements).where(and(eq(procurements.id, id), isNull(procurements.deletedAt)));
+    return procurement || undefined;
+  }
+
+  async createProcurement(insertProcurement: InsertProcurement): Promise<Procurement> {
+    const [procurement] = await db.insert(procurements).values(insertProcurement).returning();
+    return procurement;
+  }
+
+  async updateProcurement(id: string, data: Partial<InsertProcurement>): Promise<Procurement | undefined> {
+    const [procurement] = await db.update(procurements).set(data).where(eq(procurements.id, id)).returning();
+    return procurement || undefined;
+  }
+
+  async deleteProcurement(id: string): Promise<void> {
+    await db.update(procurements).set({ deletedAt: new Date() }).where(eq(procurements.id, id));
   }
 }
 
