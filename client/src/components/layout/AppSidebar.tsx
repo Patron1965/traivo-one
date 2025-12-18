@@ -13,6 +13,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 
 const navigationItems = [
@@ -50,13 +51,20 @@ function UserFooter() {
         <p className="text-sm font-medium truncate" data-testid="text-user-name">{displayName}</p>
         <p className="text-xs text-muted-foreground">Planerare</p>
       </div>
-      <a 
-        href="/api/logout"
-        className="p-2 rounded-md hover-elevate active-elevate-2"
-        data-testid="button-logout"
-      >
-        <LogOut className="h-4 w-4 text-muted-foreground" />
-      </a>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <a 
+            href="/api/logout"
+            className="p-2 rounded-md hover-elevate active-elevate-2"
+            data-testid="button-logout"
+          >
+            <LogOut className="h-4 w-4 text-muted-foreground" />
+          </a>
+        </TooltipTrigger>
+        <TooltipContent side="top">
+          <p>Logga ut</p>
+        </TooltipContent>
+      </Tooltip>
     </div>
   );
 }
@@ -85,7 +93,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url}>
+                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
                     <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
@@ -103,7 +111,7 @@ export function AppSidebar() {
             <SidebarMenu>
               {settingsItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url}>
+                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
                     <Link href={item.url} data-testid={`nav-${item.url.replace("/", "")}`}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>

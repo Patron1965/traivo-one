@@ -10,6 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Filter, Inbox, ChevronDown, ChevronUp } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrder, ServiceObject, Customer } from "@shared/schema";
@@ -516,25 +517,42 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
             </div>
           </ScrollArea>
         </CollapsibleContent>
-        <CollapsibleTrigger asChild>
-          <Button variant="ghost" size="icon" className="h-full rounded-none border-r w-6" data-testid="button-toggle-unscheduled">
-            {showUnscheduled ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          </Button>
-        </CollapsibleTrigger>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-full rounded-none border-r w-6" data-testid="button-toggle-unscheduled">
+                {showUnscheduled ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </Button>
+            </CollapsibleTrigger>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{showUnscheduled ? "Dölj oplanerade" : "Visa oplanerade"}</p>
+          </TooltipContent>
+        </Tooltip>
       </Collapsible>
 
       <div className="flex flex-col flex-1">
         <div className="flex items-center justify-between gap-4 p-4 border-b flex-wrap">
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => navigate("prev")} data-testid="button-prev">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={() => navigate("prev")} data-testid="button-prev">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Föregående</p></TooltipContent>
+            </Tooltip>
             <Button variant="outline" size="sm" onClick={goToToday} data-testid="button-today">
               Idag
             </Button>
-            <Button variant="outline" size="icon" onClick={() => navigate("next")} data-testid="button-next">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" size="icon" onClick={() => navigate("next")} data-testid="button-next">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Nästa</p></TooltipContent>
+            </Tooltip>
             <span className="text-sm font-medium ml-2 capitalize" data-testid="text-date-label">
               {getHeaderLabel()}
             </span>
