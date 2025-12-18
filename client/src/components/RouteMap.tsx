@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2 } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3 } from "lucide-react";
 import { format, startOfDay, endOfDay, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
@@ -40,6 +41,13 @@ const getSetupTimeColor = (minutes: number) => {
   return "#ef4444";
 };
 
+const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
+  open: { label: "Öppen", icon: DoorOpen },
+  code: { label: "Kod", icon: Keyboard },
+  key: { label: "Nyckel", icon: Key },
+  meeting: { label: "Möte", icon: Users },
+};
+
 interface MapFitBoundsProps {
   positions: [number, number][];
 }
@@ -64,7 +72,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isOptimizing, setIsOptimizing] = useState(false);
-  const [showComparison, setShowComparison] = useState(false);
+  const [optimizedJobs, setOptimizedJobs] = useState<WorkOrder[] | null>(null);
   const [highlightedJob, setHighlightedJob] = useState<string | null>(null);
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
@@ -85,9 +93,8 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const dayEnd = endOfDay(selectedDate);
 
   const activeResource = selectedResource || (resources.length > 0 ? resources[0].id : "");
-  const activeResourceData = resources.find(r => r.id === activeResource);
 
-  const todayJobs = workOrders.filter(wo => {
+  const originalJobs = workOrders.filter(wo => {
     if (!wo.scheduledDate || wo.resourceId !== activeResource) return false;
     const scheduled = new Date(wo.scheduledDate);
     return scheduled >= dayStart && scheduled <= dayEnd;
@@ -97,28 +104,14 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     return timeA.localeCompare(timeB);
   });
 
-  const jobPositions: [number, number][] = todayJobs
-    .map(job => {
-      const obj = objectMap.get(job.objectId);
-      if (obj?.latitude && obj?.longitude) {
-        return [obj.latitude, obj.longitude] as [number, number];
-      }
-      return null;
-    })
-    .filter((p): p is [number, number] => p !== null);
+  const displayJobs = optimizedJobs || originalJobs;
 
-  const totalSetupTime = todayJobs.reduce((sum, job) => {
-    const obj = objectMap.get(job.objectId);
-    return sum + (obj?.avgSetupTime || 0);
-  }, 0);
-  const totalWorkTime = todayJobs.reduce((sum, job) => sum + (job.estimatedDuration || 0), 0);
-
-  const calculateTotalDistance = () => {
-    if (jobPositions.length < 2) return 0;
+  const calculateDistance = (positions: [number, number][]) => {
+    if (positions.length < 2) return 0;
     let total = 0;
-    for (let i = 0; i < jobPositions.length - 1; i++) {
-      const [lat1, lon1] = jobPositions[i];
-      const [lat2, lon2] = jobPositions[i + 1];
+    for (let i = 0; i < positions.length - 1; i++) {
+      const [lat1, lon1] = positions[i];
+      const [lat2, lon2] = positions[i + 1];
       const R = 6371;
       const dLat = (lat2 - lat1) * Math.PI / 180;
       const dLon = (lon2 - lon1) * Math.PI / 180;
@@ -131,15 +124,94 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     return total;
   };
 
-  const totalDistance = calculateTotalDistance();
+  const getJobPositions = (jobs: WorkOrder[]) => {
+    return jobs
+      .map(job => {
+        const obj = objectMap.get(job.objectId);
+        if (obj?.latitude && obj?.longitude) {
+          return [obj.latitude, obj.longitude] as [number, number];
+        }
+        return null;
+      })
+      .filter((p): p is [number, number] => p !== null);
+  };
+
+  const calculateSetupTime = (jobs: WorkOrder[]) => {
+    let total = 0;
+    let prevAccessType: string | null = null;
+    
+    for (const job of jobs) {
+      const obj = objectMap.get(job.objectId);
+      const accessType = obj?.accessType || "open";
+      const baseSetupTime = obj?.avgSetupTime || 0;
+      
+      if (prevAccessType === accessType && accessType !== "open") {
+        total += Math.round(baseSetupTime * 0.5);
+      } else {
+        total += baseSetupTime;
+      }
+      prevAccessType = accessType;
+    }
+    return total;
+  };
+
+  const jobPositions = getJobPositions(displayJobs);
+  const originalPositions = getJobPositions(originalJobs);
+
+  const totalSetupTime = calculateSetupTime(displayJobs);
+  const originalSetupTime = calculateSetupTime(originalJobs);
+  const totalWorkTime = displayJobs.reduce((sum, job) => sum + (job.estimatedDuration || 0), 0);
+  const totalDistance = calculateDistance(jobPositions);
+  const originalDistance = calculateDistance(originalPositions);
   const estimatedDriveTime = Math.round(totalDistance * 2);
+
+  const accessTypeGroups = useMemo(() => {
+    const groups: Record<string, number> = {};
+    displayJobs.forEach(job => {
+      const obj = objectMap.get(job.objectId);
+      const accessType = obj?.accessType || "open";
+      groups[accessType] = (groups[accessType] || 0) + 1;
+    });
+    return groups;
+  }, [displayJobs, objectMap]);
+
+  const totalDayTime = totalWorkTime + totalSetupTime + estimatedDriveTime;
+  const efficiencyPercent = totalDayTime > 0 ? Math.round((totalWorkTime / totalDayTime) * 100) : 0;
+
+  const optimizeByAccessType = (jobs: WorkOrder[]): WorkOrder[] => {
+    const jobsWithAccess = jobs.map(job => {
+      const obj = objectMap.get(job.objectId);
+      return { job, accessType: obj?.accessType || "open", obj };
+    });
+
+    const accessOrder = ["open", "code", "key", "meeting"];
+    
+    jobsWithAccess.sort((a, b) => {
+      const orderA = accessOrder.indexOf(a.accessType);
+      const orderB = accessOrder.indexOf(b.accessType);
+      if (orderA !== orderB) return orderA - orderB;
+      
+      if (a.obj?.latitude && a.obj?.longitude && b.obj?.latitude && b.obj?.longitude) {
+        return a.obj.latitude - b.obj.latitude;
+      }
+      return 0;
+    });
+
+    return jobsWithAccess.map(j => j.job);
+  };
 
   const handleOptimize = async () => {
     setIsOptimizing(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
+    const optimized = optimizeByAccessType(originalJobs);
+    setOptimizedJobs(optimized);
     setIsOptimizing(false);
-    setShowComparison(true);
     onOptimize?.();
+  };
+
+  const handleResetOptimization = () => {
+    setOptimizedJobs(null);
   };
 
   const isLoading = resourcesLoading || workOrdersLoading;
@@ -156,14 +228,20 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     ? jobPositions[0] 
     : [59.196, 17.626];
 
+  const savedSetupTime = optimizedJobs ? originalSetupTime - totalSetupTime : 0;
+  const savedDistance = optimizedJobs ? originalDistance - totalDistance : 0;
+
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full">
-      <div className="w-full lg:w-96 flex flex-col gap-4">
+      <div className="w-full lg:w-[420px] flex flex-col gap-4 overflow-auto">
         <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <CardTitle className="text-base">Rutt</CardTitle>
-              <Select value={activeResource} onValueChange={setSelectedResource}>
+              <CardTitle className="text-base flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" />
+                Ruttstatistik
+              </CardTitle>
+              <Select value={activeResource} onValueChange={(v) => { setSelectedResource(v); setOptimizedJobs(null); }}>
                 <SelectTrigger className="w-[160px]" data-testid="select-resource">
                   <SelectValue placeholder="Välj tekniker" />
                 </SelectTrigger>
@@ -178,10 +256,10 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => setSelectedDate(addDays(selectedDate, -1))}
+                onClick={() => { setSelectedDate(addDays(selectedDate, -1)); setOptimizedJobs(null); }}
                 data-testid="button-prev-day"
               >
-                Igår
+                Föregående
               </Button>
               <span className="text-sm font-medium flex-1 text-center">
                 {format(selectedDate, "EEEE d/M", { locale: sv })}
@@ -189,61 +267,116 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => setSelectedDate(addDays(selectedDate, 1))}
+                onClick={() => { setSelectedDate(addDays(selectedDate, 1)); setOptimizedJobs(null); }}
                 data-testid="button-next-day"
               >
-                Imorgon
+                Nästa
               </Button>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-2 text-center">
+            <div className="grid grid-cols-4 gap-2 text-center">
               <div className="p-2 bg-muted rounded-md">
-                <div className="text-lg font-semibold">{todayJobs.length}</div>
-                <div className="text-xs text-muted-foreground">Jobb</div>
+                <div className="text-lg font-semibold">{displayJobs.length}</div>
+                <div className="text-[10px] text-muted-foreground">Jobb</div>
               </div>
               <div className="p-2 bg-muted rounded-md">
-                <div className="text-lg font-semibold">{totalDistance.toFixed(1)} km</div>
-                <div className="text-xs text-muted-foreground">Sträcka</div>
+                <div className="text-lg font-semibold">{totalDistance.toFixed(1)}</div>
+                <div className="text-[10px] text-muted-foreground">km</div>
               </div>
               <div className="p-2 bg-muted rounded-md">
                 <div className="text-lg font-semibold">{estimatedDriveTime}</div>
-                <div className="text-xs text-muted-foreground">min körning</div>
+                <div className="text-[10px] text-muted-foreground">min kör</div>
               </div>
               <div className="p-2 bg-muted rounded-md">
                 <div className="text-lg font-semibold">{totalSetupTime}</div>
-                <div className="text-xs text-muted-foreground">min ställtid</div>
+                <div className="text-[10px] text-muted-foreground">min ställ</div>
               </div>
             </div>
 
-            <Button 
-              className="w-full" 
-              onClick={handleOptimize}
-              disabled={isOptimizing || todayJobs.length === 0}
-              data-testid="button-optimize-route"
-            >
-              {isOptimizing ? (
-                <>
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  Optimerar...
-                </>
-              ) : (
-                <>
-                  <Zap className="h-4 w-4 mr-2" />
-                  Optimera rutt
-                </>
-              )}
-            </Button>
+            <div className="space-y-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">Effektivitet (arbete / total tid)</span>
+                <span className="font-medium">{efficiencyPercent}%</span>
+              </div>
+              <Progress value={efficiencyPercent} className="h-2" />
+              <div className="flex gap-2 text-[10px] text-muted-foreground justify-center">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                  Arbete {totalWorkTime}m
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-orange-500"></span>
+                  Ställtid {totalSetupTime}m
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-gray-400"></span>
+                  Körning {estimatedDriveTime}m
+                </span>
+              </div>
+            </div>
 
-            {showComparison && (
+            <div className="space-y-2">
+              <div className="text-xs font-medium">Tillgångstyper</div>
+              <div className="flex flex-wrap gap-2">
+                {Object.entries(accessTypeGroups).map(([type, count]) => {
+                  const config = accessTypeLabels[type] || { label: type, icon: DoorOpen };
+                  const Icon = config.icon;
+                  return (
+                    <Badge key={type} variant="secondary" className="text-xs gap-1">
+                      <Icon className="h-3 w-3" />
+                      {config.label}: {count}
+                    </Badge>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button 
+                className="flex-1" 
+                onClick={handleOptimize}
+                disabled={isOptimizing || displayJobs.length === 0 || optimizedJobs !== null}
+                data-testid="button-optimize-route"
+              >
+                {isOptimizing ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Optimerar...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Optimera ställtid
+                  </>
+                )}
+              </Button>
+              {optimizedJobs && (
+                <Button variant="outline" onClick={handleResetOptimization} data-testid="button-reset-optimization">
+                  Återställ
+                </Button>
+              )}
+            </div>
+
+            {optimizedJobs && (
               <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md">
-                <div className="text-sm font-medium text-green-700 dark:text-green-300 mb-1">
-                  Optimerad rutt sparar:
+                <div className="text-sm font-medium text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
+                  <TrendingDown className="h-4 w-4" />
+                  Optimering genomförd
                 </div>
-                <div className="flex items-center gap-4 text-xs text-green-600 dark:text-green-400">
-                  <span>{(totalDistance * 0.2).toFixed(1)} km</span>
-                  <span>{Math.round(estimatedDriveTime * 0.15)} min körtid</span>
+                <div className="space-y-1 text-xs text-green-600 dark:text-green-400">
+                  <div className="flex justify-between">
+                    <span>Sparad ställtid:</span>
+                    <span className="font-medium">{savedSetupTime} min</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Kortare sträcka:</span>
+                    <span className="font-medium">{savedDistance.toFixed(1)} km</span>
+                  </div>
                 </div>
+                <p className="text-[10px] text-green-600 dark:text-green-400 mt-2">
+                  Jobb grupperade efter tillgångstyp för att minimera omställningar
+                </p>
               </div>
             )}
           </CardContent>
@@ -253,20 +386,26 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Route className="h-4 w-4" />
-              Jobbordning
+              Jobbordning {optimizedJobs && <Badge variant="secondary" className="text-[10px]">Optimerad</Badge>}
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            {todayJobs.length === 0 ? (
+            {displayJobs.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
                 Inga jobb schemalagda för {format(selectedDate, "d MMMM", { locale: sv })}
               </div>
             ) : (
-              <div className="divide-y max-h-[400px] overflow-auto">
-                {todayJobs.map((job, index) => {
+              <div className="divide-y max-h-[350px] overflow-auto">
+                {displayJobs.map((job, index) => {
                   const obj = objectMap.get(job.objectId);
                   const setupTime = obj?.avgSetupTime || 0;
+                  const accessType = obj?.accessType || "open";
                   const hasCoords = obj?.latitude && obj?.longitude;
+                  const prevJob = index > 0 ? displayJobs[index - 1] : null;
+                  const prevObj = prevJob ? objectMap.get(prevJob.objectId) : null;
+                  const sameAccessAsPrev = prevObj?.accessType === accessType && accessType !== "open";
+                  const effectiveSetupTime = sameAccessAsPrev ? Math.round(setupTime * 0.5) : setupTime;
+                  const AccessIcon = accessTypeLabels[accessType]?.icon || DoorOpen;
 
                   return (
                     <div key={job.id}>
@@ -281,7 +420,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                           <GripVertical className="h-4 w-4 text-muted-foreground cursor-grab" />
                           <div 
                             className="flex h-6 w-6 items-center justify-center rounded-full text-white text-xs font-medium"
-                            style={{ backgroundColor: getSetupTimeColor(setupTime) }}
+                            style={{ backgroundColor: getSetupTimeColor(effectiveSetupTime) }}
                           >
                             {index + 1}
                           </div>
@@ -289,7 +428,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{job.title}</div>
                           <div className="text-xs text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</div>
-                          <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground flex-wrap">
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
                             {job.scheduledStartTime && (
                               <span className="flex items-center gap-1">
                                 <Clock className="h-3 w-3" />
@@ -297,6 +436,10 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                               </span>
                             )}
                             <span>{job.estimatedDuration || 0} min</span>
+                            <span className="flex items-center gap-1">
+                              <AccessIcon className="h-3 w-3" />
+                              {accessTypeLabels[accessType]?.label || accessType}
+                            </span>
                             {!hasCoords && (
                               <Badge variant="outline" className="text-[10px] text-orange-600">
                                 Saknar koordinater
@@ -304,9 +447,14 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                             )}
                           </div>
                         </div>
-                        <SetupTimeBadge minutes={setupTime} />
+                        <div className="flex flex-col items-end gap-1">
+                          <SetupTimeBadge minutes={effectiveSetupTime} />
+                          {sameAccessAsPrev && (
+                            <span className="text-[9px] text-green-600 dark:text-green-400">-50%</span>
+                          )}
+                        </div>
                       </div>
-                      {index < todayJobs.length - 1 && (
+                      {index < displayJobs.length - 1 && (
                         <div className="flex items-center justify-center gap-2 py-1.5 text-xs text-muted-foreground bg-muted/50">
                           <Car className="h-3 w-3" />
                           <ArrowRight className="h-3 w-3" />
@@ -322,7 +470,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
       </div>
 
       <Card className="flex-1 min-h-[400px] overflow-hidden">
-        <CardContent className="p-0 h-full">
+        <CardContent className="p-0 h-full relative">
           <MapContainer
             center={defaultCenter}
             zoom={13}
@@ -339,14 +487,14 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
             {jobPositions.length > 1 && (
               <Polyline 
                 positions={jobPositions} 
-                color="#3b82f6" 
+                color={optimizedJobs ? "#22c55e" : "#3b82f6"} 
                 weight={3}
                 opacity={0.7}
-                dashArray="10, 10"
+                dashArray={optimizedJobs ? undefined : "10, 10"}
               />
             )}
             
-            {todayJobs.map((job, index) => {
+            {displayJobs.map((job, index) => {
               const obj = objectMap.get(job.objectId);
               if (!obj?.latitude || !obj?.longitude) return null;
               
@@ -370,6 +518,9 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                       <div className="text-sm text-gray-600">{obj.name}</div>
                       <div className="text-sm text-gray-600">{obj.address}</div>
                       <div className="text-sm mt-1">
+                        <span className="font-medium">Tillgång:</span> {accessTypeLabels[obj.accessType || "open"]?.label}
+                      </div>
+                      <div className="text-sm">
                         <span className="font-medium">Ställtid:</span> {setupTime} min
                       </div>
                       <div className="text-sm">
