@@ -50,6 +50,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, endOfWeek, addDays, isWithinInterval, parseISO } from "date-fns";
@@ -445,54 +446,74 @@ export default function ResourcesPage() {
                         <Badge variant={resource.status === "active" ? "secondary" : "outline"}>
                           {resource.status === "active" ? "Aktiv" : "Inaktiv"}
                         </Badge>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openScheduleDialog(resource);
-                          }}
-                          data-testid={`button-schedule-resource-${resource.id}`}
-                        >
-                          <Calendar className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openAvailabilityDialog(resource);
-                          }}
-                          data-testid={`button-availability-resource-${resource.id}`}
-                        >
-                          <CalendarOff className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openEditDialog(resource);
-                          }}
-                          data-testid={`button-edit-resource-${resource.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDeleteDialog(resource);
-                          }}
-                          data-testid={`button-delete-resource-${resource.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openScheduleDialog(resource);
+                              }}
+                              data-testid={`button-schedule-resource-${resource.id}`}
+                            >
+                              <Calendar className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Visa schema</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openAvailabilityDialog(resource);
+                              }}
+                              data-testid={`button-availability-resource-${resource.id}`}
+                            >
+                              <CalendarOff className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Ange frånvaro</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEditDialog(resource);
+                              }}
+                              data-testid={`button-edit-resource-${resource.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Redigera</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openDeleteDialog(resource);
+                              }}
+                              data-testid={`button-delete-resource-${resource.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Ta bort</p></TooltipContent>
+                        </Tooltip>
                       </div>
                     </div>
 

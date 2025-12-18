@@ -452,29 +452,59 @@ export default function ObjectsPage() {
 
             {isEditing ? (
               <>
-                <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); saveQuickEdit(); }} data-testid="button-save-edit">
-                  <Check className="h-4 w-4 text-green-600" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingObject(null); setEditField(null); }} data-testid="button-cancel-edit">
-                  <X className="h-4 w-4 text-red-600" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); saveQuickEdit(); }} data-testid="button-save-edit">
+                      <Check className="h-4 w-4 text-green-600" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Spara</p></TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); setEditingObject(null); setEditField(null); }} data-testid="button-cancel-edit">
+                      <X className="h-4 w-4 text-red-600" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Avbryt</p></TooltipContent>
+                </Tooltip>
               </>
             ) : (
               <>
                 {obj.accessType && obj.accessType !== "open" && (
-                  <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "accessCode"); }} title="Redigera kod" data-testid={`button-edit-code-${obj.id}`}>
-                    <Keyboard className="h-4 w-4" />
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "accessCode"); }} data-testid={`button-edit-code-${obj.id}`}>
+                        <Keyboard className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent><p>Redigera kod</p></TooltipContent>
+                  </Tooltip>
                 )}
-                <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "avgSetupTime"); }} title="Redigera ställtid" data-testid={`button-edit-setup-${obj.id}`}>
-                  <Edit2 className="h-4 w-4" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleCopyObject(obj); }} data-testid={`button-copy-${obj.id}`}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-                <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); showHistory(obj); }} data-testid={`button-history-${obj.id}`}>
-                  <Clock className="h-4 w-4" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "avgSetupTime"); }} data-testid={`button-edit-setup-${obj.id}`}>
+                      <Edit2 className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Redigera ställtid</p></TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleCopyObject(obj); }} data-testid={`button-copy-${obj.id}`}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Kopiera</p></TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); showHistory(obj); }} data-testid={`button-history-${obj.id}`}>
+                      <Clock className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent><p>Visa historik</p></TooltipContent>
+                </Tooltip>
               </>
             )}
           </div>
