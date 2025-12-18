@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Slider } from "@/components/ui/slider";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Search, Plus, Filter, Loader2, ChevronRight, Building2, MapPin, Trash2, 
@@ -368,40 +369,64 @@ export default function ObjectsPage() {
                 {objectTypeLabels[obj.objectType] || obj.objectType}
               </Badge>
               {obj.accessType && obj.accessType !== "open" && (
-                <Badge variant="outline" className="text-xs gap-1">
-                  <AccessIcon className="h-3 w-3" />
-                  {isEditing && editField === "accessCode" ? (
-                    <Input 
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="h-5 w-16 text-xs px-1"
-                      onClick={(e) => e.stopPropagation()}
-                      data-testid="input-quick-edit-code"
-                    />
-                  ) : (
-                    <span>{obj.accessCode || obj.keyNumber || accessTypeLabels[obj.accessType]?.label}</span>
-                  )}
-                </Badge>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="text-xs gap-1 cursor-help">
+                      <AccessIcon className="h-3 w-3" />
+                      {isEditing && editField === "accessCode" ? (
+                        <Input 
+                          value={editValue}
+                          onChange={(e) => setEditValue(e.target.value)}
+                          className="h-5 w-16 text-xs px-1"
+                          onClick={(e) => e.stopPropagation()}
+                          data-testid="input-quick-edit-code"
+                        />
+                      ) : (
+                        <span>{obj.accessCode || obj.keyNumber || accessTypeLabels[obj.accessType]?.label}</span>
+                      )}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Tillgång: {accessTypeLabels[obj.accessType]?.label}
+                    {obj.accessCode && ` - Kod: ${obj.accessCode}`}
+                    {obj.keyNumber && ` - Nyckel: ${obj.keyNumber}`}
+                  </TooltipContent>
+                </Tooltip>
               )}
             </div>
             <div className="flex items-center gap-4 text-xs text-muted-foreground mt-1 flex-wrap">
               {obj.address && (
-                <span className="flex items-center gap-1">
-                  <MapPin className="h-3 w-3" />
-                  {obj.address}, {obj.city}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-help">
+                      <MapPin className="h-3 w-3" />
+                      {obj.address}, {obj.city}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Adress</TooltipContent>
+                </Tooltip>
               )}
               {level === 0 && (
-                <span className="flex items-center gap-1">
-                  <Building2 className="h-3 w-3" />
-                  {customerName}
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-help">
+                      <Building2 className="h-3 w-3" />
+                      {customerName}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Kund</TooltipContent>
+                </Tooltip>
               )}
               {(obj.containerCount || 0) > 0 && (
-                <span className="flex items-center gap-1">
-                  <Trash2 className="h-3 w-3" />
-                  {obj.containerCount} kärl
-                </span>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 cursor-help">
+                      <Trash2 className="h-3 w-3" />
+                      {obj.containerCount} kärl
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Antal kärl (K1)</TooltipContent>
+                </Tooltip>
               )}
             </div>
           </div>
