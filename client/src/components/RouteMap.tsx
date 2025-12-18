@@ -47,12 +47,10 @@ interface MapFitBoundsProps {
 function MapFitBounds({ positions }: MapFitBoundsProps) {
   const map = useMap();
   
-  useMemo(() => {
-    if (positions.length > 0) {
-      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-      map.fitBounds(bounds, { padding: [50, 50] });
-    }
-  }, [positions, map]);
+  if (positions.length > 0) {
+    const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
+    map.fitBounds(bounds, { padding: [50, 50] });
+  }
   
   return null;
 }
