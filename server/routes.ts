@@ -542,6 +542,99 @@ export async function registerRoutes(
     }
   });
 
+  // Tenant settings
+  app.get("/api/tenant/settings", async (req, res) => {
+    try {
+      const tenant = await storage.getTenant(DEFAULT_TENANT_ID);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings || {} });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch settings" });
+    }
+  });
+
+  app.patch("/api/tenant/settings", async (req, res) => {
+    try {
+      const tenant = await storage.updateTenantSettings(DEFAULT_TENANT_ID, req.body);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update settings" });
+    }
+  });
+
+  // Export data as CSV
+  app.get("/api/export/:type", async (req, res) => {
+    try {
+      const { type } = req.params;
+      let data: Record<string, unknown>[] = [];
+      let headers: string[] = [];
+
+      if (type === "customers") {
+        const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+        headers = ["namn", "kundnummer", "kontaktperson", "epost", "telefon", "adress", "stad", "postnummer"];
+        data = customers.map(c => ({
+          namn: c.name,
+          kundnummer: c.customerNumber || "",
+          kontaktperson: c.contactPerson || "",
+          epost: c.email || "",
+          telefon: c.phone || "",
+          adress: c.address || "",
+          stad: c.city || "",
+          postnummer: c.postalCode || "",
+        }));
+      } else if (type === "resources") {
+        const resources = await storage.getResources(DEFAULT_TENANT_ID);
+        headers = ["namn", "initialer", "telefon", "epost", "hemort", "timmar", "kompetenser"];
+        data = resources.map(r => ({
+          namn: r.name,
+          initialer: r.initials || "",
+          telefon: r.phone || "",
+          epost: r.email || "",
+          hemort: r.homeLocation || "",
+          timmar: r.weeklyHours || 40,
+          kompetenser: (r.competencies || []).join(", "),
+        }));
+      } else if (type === "objects") {
+        const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+        const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+        const customerMap = new Map(customers.map(c => [c.id, c.name]));
+        
+        headers = ["namn", "objektnummer", "typ", "nivå", "kund", "adress", "stad", "tillgång", "tillgångskod", "kärl"];
+        data = objects.map(o => ({
+          namn: o.name,
+          objektnummer: o.objectNumber || "",
+          typ: o.objectType,
+          nivå: o.objectLevel,
+          kund: customerMap.get(o.customerId) || "",
+          adress: o.address || "",
+          stad: o.city || "",
+          tillgång: o.accessType || "open",
+          tillgångskod: o.accessCode || "",
+          kärl: o.containerCount || 0,
+        }));
+      } else {
+        return res.status(400).json({ error: "Okänd exporttyp" });
+      }
+
+      const csv = [
+        headers.join(","),
+        ...data.map(row => headers.map(h => `"${(row[h] ?? "").toString().replace(/"/g, '""')}"`).join(","))
+      ].join("\n");
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename=${type}_export.csv`);
+      res.send("\ufeff" + csv);
+    } catch (error) {
+      console.error("Export error:", error);
+      res.status(500).json({ error: "Export misslyckades" });
+    }
+  });
+
   // Delete all data (for re-import)
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {
