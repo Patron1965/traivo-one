@@ -4,8 +4,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2 } from "lucide-react";
-import { format, addDays, startOfWeek, isSameDay } from "date-fns";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { format, addDays, startOfWeek, startOfMonth, endOfMonth, isSameDay, isSameMonth, getDaysInMonth, addMonths } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -29,12 +30,29 @@ interface WeekPlannerProps {
   onSelectJob?: (jobId: string) => void;
 }
 
+type ViewMode = "day" | "week" | "month";
+
 export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const [currentDate, setCurrentDate] = useState(new Date());
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
   const [dragOverCell, setDragOverCell] = useState<string | null>(null);
   const { toast } = useToast();
 
+  const getVisibleDates = (): Date[] => {
+    if (viewMode === "day") {
+      return [currentDate];
+    } else if (viewMode === "week") {
+      return Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
+    } else {
+      const monthStart = startOfMonth(currentDate);
+      const daysInMonth = getDaysInMonth(currentDate);
+      return Array.from({ length: daysInMonth }, (_, i) => addDays(monthStart, i));
+    }
+  };
+
+  const visibleDates = getVisibleDates();
   const weekDays = Array.from({ length: 5 }, (_, i) => addDays(currentWeekStart, i));
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
@@ -71,9 +89,44 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
 
-  const goToPreviousWeek = () => setCurrentWeekStart(addDays(currentWeekStart, -7));
-  const goToNextWeek = () => setCurrentWeekStart(addDays(currentWeekStart, 7));
-  const goToToday = () => setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
+  const navigate = (direction: "prev" | "next") => {
+    if (viewMode === "day") {
+      const newDate = addDays(currentDate, direction === "next" ? 1 : -1);
+      setCurrentDate(newDate);
+      setCurrentWeekStart(startOfWeek(newDate, { weekStartsOn: 1 }));
+    } else if (viewMode === "week") {
+      const newWeekStart = addDays(currentWeekStart, direction === "next" ? 7 : -7);
+      setCurrentWeekStart(newWeekStart);
+      setCurrentDate(newWeekStart);
+    } else {
+      const newDate = addMonths(currentDate, direction === "next" ? 1 : -1);
+      setCurrentDate(newDate);
+      setCurrentWeekStart(startOfWeek(newDate, { weekStartsOn: 1 }));
+    }
+  };
+
+  const handleViewModeChange = (newMode: ViewMode) => {
+    if (newMode === "week") {
+      setCurrentWeekStart(startOfWeek(currentDate, { weekStartsOn: 1 }));
+    }
+    setViewMode(newMode);
+  };
+
+  const goToToday = () => {
+    const today = new Date();
+    setCurrentDate(today);
+    setCurrentWeekStart(startOfWeek(today, { weekStartsOn: 1 }));
+  };
+
+  const getHeaderLabel = () => {
+    if (viewMode === "day") {
+      return format(currentDate, "EEEE d MMMM yyyy", { locale: sv });
+    } else if (viewMode === "week") {
+      return `Vecka ${format(currentWeekStart, "w", { locale: sv })} - ${format(currentWeekStart, "MMMM yyyy", { locale: sv })}`;
+    } else {
+      return format(currentDate, "MMMM yyyy", { locale: sv });
+    }
+  };
 
   const getJobsForResourceAndDay = (resourceId: string, day: Date) => {
     return workOrders.filter(job => {
@@ -143,110 +196,173 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-4 p-4 border-b flex-wrap">
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" onClick={goToPreviousWeek} data-testid="button-prev-week">
+          <Button variant="outline" size="icon" onClick={() => navigate("prev")} data-testid="button-prev">
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <Button variant="outline" size="sm" onClick={goToToday} data-testid="button-today">
             Idag
           </Button>
-          <Button variant="outline" size="icon" onClick={goToNextWeek} data-testid="button-next-week">
+          <Button variant="outline" size="icon" onClick={() => navigate("next")} data-testid="button-next">
             <ChevronRight className="h-4 w-4" />
           </Button>
-          <span className="text-sm font-medium ml-2">
-            Vecka {format(currentWeekStart, "w", { locale: sv })} - {format(currentWeekStart, "MMMM yyyy", { locale: sv })}
+          <span className="text-sm font-medium ml-2 capitalize" data-testid="text-date-label">
+            {getHeaderLabel()}
           </span>
         </div>
-        <Button onClick={() => { onAddJob?.(); }} data-testid="button-add-job">
-          <Plus className="h-4 w-4 mr-2" />
-          Nytt jobb
-        </Button>
+        <div className="flex items-center gap-3">
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && handleViewModeChange(v as ViewMode)} data-testid="toggle-view-mode">
+            <ToggleGroupItem value="day" aria-label="Dagvy" data-testid="toggle-day">
+              <CalendarDays className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Dag</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem value="week" aria-label="Veckovy" data-testid="toggle-week">
+              <CalendarRange className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Vecka</span>
+            </ToggleGroupItem>
+            <ToggleGroupItem value="month" aria-label="Månadsvy" data-testid="toggle-month">
+              <Calendar className="h-4 w-4 mr-1" />
+              <span className="hidden sm:inline">Månad</span>
+            </ToggleGroupItem>
+          </ToggleGroup>
+          <Button onClick={() => { onAddJob?.(); }} data-testid="button-add-job">
+            <Plus className="h-4 w-4 mr-2" />
+            Nytt jobb
+          </Button>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        <div className="min-w-[800px]">
-          <div className="grid grid-cols-[200px_repeat(5,1fr)] border-b sticky top-0 bg-background z-10">
-            <div className="p-3 font-medium text-sm text-muted-foreground border-r">Resurser</div>
-            {weekDays.map((day, i) => (
-              <div key={i} className="p-3 text-center border-r last:border-r-0">
-                <div className="text-xs text-muted-foreground uppercase">{format(day, "EEE", { locale: sv })}</div>
-                <div className="text-lg font-semibold">{format(day, "d")}</div>
+      {viewMode === "month" ? (
+        <div className="flex-1 overflow-auto p-4">
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {["Mån", "Tis", "Ons", "Tor", "Fre", "Lör", "Sön"].map((day) => (
+              <div key={day} className="text-center text-xs text-muted-foreground font-medium py-2">
+                {day}
               </div>
             ))}
           </div>
-
-          {resources.length === 0 ? (
-            <div className="p-8 text-center text-muted-foreground">
-              Inga resurser registrerade. Lägg till resurser för att börja planera.
-            </div>
-          ) : (
-            resources.map((resource) => (
-              <div key={resource.id} className="grid grid-cols-[200px_repeat(5,1fr)] border-b">
-                <div className="p-3 border-r flex items-center gap-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarFallback className="text-xs">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                  </Avatar>
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{resource.name}</div>
-                    <div className="text-xs text-muted-foreground">{resource.weeklyHours || 40}h/vecka</div>
+          <div className="grid grid-cols-7 gap-1">
+            {(() => {
+              const monthStart = startOfMonth(currentDate);
+              const startDay = monthStart.getDay() || 7;
+              const emptyCells = startDay - 1;
+              const daysInCurrentMonth = getDaysInMonth(currentDate);
+              const cells = [];
+              
+              for (let i = 0; i < emptyCells; i++) {
+                cells.push(<div key={`empty-${i}`} className="min-h-[80px]" />);
+              }
+              
+              for (let d = 1; d <= daysInCurrentMonth; d++) {
+                const day = new Date(currentDate.getFullYear(), currentDate.getMonth(), d);
+                const dayJobs = workOrders.filter(j => j.scheduledDate && isSameDay(new Date(j.scheduledDate), day));
+                const isToday = isSameDay(day, new Date());
+                
+                cells.push(
+                  <div 
+                    key={d} 
+                    className={`min-h-[80px] p-2 rounded-md border ${isToday ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}
+                  >
+                    <div className={`text-sm font-medium mb-1 ${isToday ? "text-primary" : ""}`}>{d}</div>
+                    {dayJobs.length > 0 && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {dayJobs.length} jobb
+                      </Badge>
+                    )}
                   </div>
-                </div>
-                {weekDays.map((day, dayIndex) => {
-                  const jobs = getJobsForResourceAndDay(resource.id, day);
-                  const dayHours = getResourceDayHours(resource.id, day);
-                  const isOverbooked = dayHours > 8;
-                  const cellId = `${resource.id}-${dayIndex}`;
-                  const isDragOver = dragOverCell === cellId;
-
-                  return (
-                    <div 
-                      key={dayIndex} 
-                      className={`p-2 border-r last:border-r-0 min-h-[120px] transition-colors ${
-                        isDragOver ? "bg-primary/10" : "bg-muted/30"
-                      }`}
-                      onDragOver={(e) => handleDragOver(e, cellId)}
-                      onDragLeave={handleDragLeave}
-                      onDrop={(e) => handleDrop(e, resource.id, day)}
-                      data-testid={`drop-zone-${resource.id}-${format(day, "yyyy-MM-dd")}`}
-                    >
-                      {isOverbooked && (
-                        <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          <span>{dayHours.toFixed(1)}h (överbokning)</span>
-                        </div>
-                      )}
-                      <div className="space-y-1">
-                        {jobs.map((job) => {
-                          const obj = objectMap.get(job.objectId);
-                          return (
-                            <Card
-                              key={job.id}
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, job.id)}
-                              className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
-                              onClick={() => handleJobClick(job.id)}
-                              data-testid={`job-card-${job.id}`}
-                            >
-                              <div className="flex items-start justify-between gap-1">
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-xs font-medium truncate">{job.title}</div>
-                                  <div className="text-xs text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</div>
-                                </div>
-                                <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px] shrink-0">
-                                  {((job.estimatedDuration || 0) / 60).toFixed(1)}h
-                                </Badge>
-                              </div>
-                            </Card>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ))
-          )}
+                );
+              }
+              
+              return cells;
+            })()}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div className="flex-1 overflow-auto">
+          <div className={`${viewMode === "day" ? "min-w-[400px]" : "min-w-[800px]"}`}>
+            <div className={`grid ${viewMode === "day" ? "grid-cols-[200px_1fr]" : "grid-cols-[200px_repeat(5,1fr)]"} border-b sticky top-0 bg-background z-10`}>
+              <div className="p-3 font-medium text-sm text-muted-foreground border-r">Resurser</div>
+              {visibleDates.map((day, i) => (
+                <div key={i} className="p-3 text-center border-r last:border-r-0">
+                  <div className="text-xs text-muted-foreground uppercase">{format(day, "EEE", { locale: sv })}</div>
+                  <div className="text-lg font-semibold">{format(day, "d")}</div>
+                </div>
+              ))}
+            </div>
+
+            {resources.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                Inga resurser registrerade. Lägg till resurser för att börja planera.
+              </div>
+            ) : (
+              resources.map((resource) => (
+                <div key={resource.id} className={`grid ${viewMode === "day" ? "grid-cols-[200px_1fr]" : "grid-cols-[200px_repeat(5,1fr)]"} border-b`}>
+                  <div className="p-3 border-r flex items-center gap-3">
+                    <Avatar className="h-8 w-8">
+                      <AvatarFallback className="text-xs">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium truncate">{resource.name}</div>
+                      <div className="text-xs text-muted-foreground">{resource.weeklyHours || 40}h/vecka</div>
+                    </div>
+                  </div>
+                  {visibleDates.map((day, dayIndex) => {
+                    const jobs = getJobsForResourceAndDay(resource.id, day);
+                    const dayHours = getResourceDayHours(resource.id, day);
+                    const isOverbooked = dayHours > 8;
+                    const cellId = `${resource.id}-${dayIndex}`;
+                    const isDragOver = dragOverCell === cellId;
+
+                    return (
+                      <div 
+                        key={dayIndex} 
+                        className={`p-2 border-r last:border-r-0 ${viewMode === "day" ? "min-h-[200px]" : "min-h-[120px]"} transition-colors ${
+                          isDragOver ? "bg-primary/10" : "bg-muted/30"
+                        }`}
+                        onDragOver={(e) => handleDragOver(e, cellId)}
+                        onDragLeave={handleDragLeave}
+                        onDrop={(e) => handleDrop(e, resource.id, day)}
+                        data-testid={`drop-zone-${resource.id}-${format(day, "yyyy-MM-dd")}`}
+                      >
+                        {isOverbooked && (
+                          <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            <span>{dayHours.toFixed(1)}h (överbokning)</span>
+                          </div>
+                        )}
+                        <div className="space-y-1">
+                          {jobs.map((job) => {
+                            const obj = objectMap.get(job.objectId);
+                            return (
+                              <Card
+                                key={job.id}
+                                draggable
+                                onDragStart={(e) => handleDragStart(e, job.id)}
+                                className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
+                                onClick={() => handleJobClick(job.id)}
+                                data-testid={`job-card-${job.id}`}
+                              >
+                                <div className="flex items-start justify-between gap-1">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-xs font-medium truncate">{job.title}</div>
+                                    <div className="text-xs text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</div>
+                                  </div>
+                                  <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px] shrink-0">
+                                    {((job.estimatedDuration || 0) / 60).toFixed(1)}h
+                                  </Badge>
+                                </div>
+                              </Card>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="p-3 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-4 text-xs">
