@@ -57,10 +57,12 @@ interface MapFitBoundsProps {
 function MapFitBounds({ positions }: MapFitBoundsProps) {
   const map = useMap();
   
-  if (positions.length > 0) {
-    const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
-    map.fitBounds(bounds, { padding: [50, 50] });
-  }
+  useEffect(() => {
+    if (positions.length > 0) {
+      const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }, [map, positions.length]);
   
   return null;
 }
@@ -100,7 +102,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     queryKey: ["/api/objects"],
   });
 
-  const objectMap = new Map(objects.map(o => [o.id, o]));
+  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
 
   const activeResource = selectedResource || (resources.length > 0 ? resources[0].id : "");
 
@@ -235,8 +237,8 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     return total;
   };
 
-  const jobPositions = getJobPositions(displayJobs);
-  const originalPositions = getJobPositions(originalJobs);
+  const jobPositions = useMemo(() => getJobPositions(displayJobs), [displayJobs, objectMap]);
+  const originalPositions = useMemo(() => getJobPositions(originalJobs), [originalJobs, objectMap]);
 
   const totalSetupTime = calculateSetupTime(displayJobs);
   const originalSetupTime = calculateSetupTime(originalJobs);
