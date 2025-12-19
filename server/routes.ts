@@ -1127,6 +1127,12 @@ export async function registerRoutes(
           await storage.deleteObject(o.id);
         }
         res.json({ deleted: objects.length });
+      } else if (type === "work-orders") {
+        const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+        for (const wo of workOrders) {
+          await storage.deleteWorkOrder(wo.id);
+        }
+        res.json({ deleted: workOrders.length });
       } else {
         res.status(400).json({ error: "Okänd typ" });
       }
