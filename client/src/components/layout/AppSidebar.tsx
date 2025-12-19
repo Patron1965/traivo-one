@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -18,6 +18,7 @@ import { useAuth } from "@/hooks/use-auth";
 
 const navigationItems = [
   { title: "Veckoplanering", url: "/", icon: Calendar },
+  { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
   { title: "Ruttplanering", url: "/routes", icon: Map },
   { title: "Objekt", url: "/objects", icon: Building2 },
   { title: "Resurser", url: "/resources", icon: Users },

@@ -5,15 +5,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3, MapPinned, Send, CheckCircle } from "lucide-react";
+import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Sparkles } from "lucide-react";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { Link } from "wouter";
 
 const createNumberedIcon = (number: number, color: string) => {
   return L.divIcon({
@@ -68,7 +69,6 @@ function MapFitBounds({ positions }: MapFitBoundsProps) {
 }
 
 interface RouteMapProps {
-  onOptimize?: () => void;
   onNavigate?: (jobId: string) => void;
 }
 
@@ -78,16 +78,12 @@ interface RouteData {
   geometry: GeoJSON.LineString | null;
 }
 
-export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
+export function RouteMap({ onNavigate }: RouteMapProps) {
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
-  const [isOptimizing, setIsOptimizing] = useState(false);
-  const [optimizedJobs, setOptimizedJobs] = useState<WorkOrder[] | null>(null);
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
-  const [isSending, setIsSending] = useState(false);
-  const [isSent, setIsSent] = useState(false);
   const { toast } = useToast();
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
@@ -121,7 +117,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
 
   const { start: periodStart, end: periodEnd } = getDateRange();
 
-  const originalJobs = workOrders.filter(wo => {
+  const displayJobs = workOrders.filter(wo => {
     if (!wo.scheduledDate || wo.resourceId !== activeResource) return false;
     const scheduled = new Date(wo.scheduledDate);
     return scheduled >= periodStart && scheduled <= periodEnd;
@@ -135,8 +131,6 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     const timeB = b.scheduledStartTime || "00:00";
     return timeA.localeCompare(timeB);
   });
-
-  const displayJobs = optimizedJobs || originalJobs;
 
   const getJobPositions = (jobs: WorkOrder[]) => {
     return jobs
@@ -183,7 +177,6 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
 
   // Fetch route when jobs or their order changes
   const jobsKey = displayJobs.map(j => j.id).join(",");
-  const isOptimized = optimizedJobs !== null;
   useEffect(() => {
     const positions = getJobPositions(displayJobs);
     if (positions.length >= 2) {
@@ -195,7 +188,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     } else {
       setRouteData(null);
     }
-  }, [jobsKey, isOptimized]);
+  }, [jobsKey]);
 
   const calculateDistance = (positions: [number, number][]) => {
     // Use route data if available, otherwise fallback to Haversine
@@ -238,13 +231,10 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   };
 
   const jobPositions = useMemo(() => getJobPositions(displayJobs), [displayJobs, objectMap]);
-  const originalPositions = useMemo(() => getJobPositions(originalJobs), [originalJobs, objectMap]);
 
   const totalSetupTime = calculateSetupTime(displayJobs);
-  const originalSetupTime = calculateSetupTime(originalJobs);
   const totalWorkTime = displayJobs.reduce((sum, job) => sum + (job.estimatedDuration || 0), 0);
   const totalDistance = routeData?.distance ?? calculateDistance(jobPositions);
-  const originalDistance = calculateDistance(originalPositions);
   const estimatedDriveTime = routeData?.duration ?? Math.round(totalDistance * 2);
 
   const accessTypeGroups = useMemo(() => {
@@ -260,90 +250,6 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const totalDayTime = totalWorkTime + totalSetupTime + estimatedDriveTime;
   const efficiencyPercent = totalDayTime > 0 ? Math.round((totalWorkTime / totalDayTime) * 100) : 0;
 
-  const optimizeByAccessType = (jobs: WorkOrder[]): WorkOrder[] => {
-    const jobsWithAccess = jobs.map(job => {
-      const obj = objectMap.get(job.objectId);
-      return { job, accessType: obj?.accessType || "open", obj };
-    });
-
-    const accessOrder = ["open", "code", "key", "meeting"];
-    
-    jobsWithAccess.sort((a, b) => {
-      const orderA = accessOrder.indexOf(a.accessType);
-      const orderB = accessOrder.indexOf(b.accessType);
-      if (orderA !== orderB) return orderA - orderB;
-      
-      if (a.obj?.latitude && a.obj?.longitude && b.obj?.latitude && b.obj?.longitude) {
-        return a.obj.latitude - b.obj.latitude;
-      }
-      return 0;
-    });
-
-    return jobsWithAccess.map(j => j.job);
-  };
-
-  const handleOptimize = async () => {
-    setIsOptimizing(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
-    const optimized = optimizeByAccessType(originalJobs);
-    setOptimizedJobs(optimized);
-    setIsOptimizing(false);
-    onOptimize?.();
-  };
-
-  const handleResetOptimization = () => {
-    setOptimizedJobs(null);
-    setIsSent(false);
-  };
-
-  const handleSendToDriver = async () => {
-    if (!optimizedJobs || !activeResource) return;
-    
-    setIsSending(true);
-    try {
-      const selectedResourceData = resources.find(r => r.id === activeResource);
-      
-      // Update each work order with new scheduled start times based on optimized order
-      let currentTime = new Date(selectedDate);
-      currentTime.setHours(7, 0, 0, 0); // Start at 07:00
-      
-      for (let i = 0; i < optimizedJobs.length; i++) {
-        const job = optimizedJobs[i];
-        const startTime = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
-        
-        await apiRequest("PATCH", `/api/work-orders/${job.id}`, {
-          scheduledStartTime: startTime,
-          resourceId: activeResource,
-        });
-        
-        // Add job duration + estimated travel time for next job
-        const jobDuration = job.estimatedDuration || 30;
-        const obj = objectMap.get(job.objectId);
-        const setupTime = obj?.avgSetupTime || 10;
-        currentTime = new Date(currentTime.getTime() + (jobDuration + setupTime + 10) * 60000);
-      }
-      
-      // Invalidate work orders cache
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      
-      setIsSent(true);
-      toast({
-        title: "Rutt skickad",
-        description: `Optimerad rutt har skickats till ${selectedResourceData?.name || "chauffören"}`,
-      });
-    } catch (error) {
-      console.error("Failed to send route:", error);
-      toast({
-        title: "Kunde inte skicka rutt",
-        description: "Något gick fel vid uppdatering av jobben.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSending(false);
-    }
-  };
-
   const isLoading = resourcesLoading || workOrdersLoading;
 
   if (isLoading) {
@@ -358,9 +264,6 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     ? jobPositions[0] 
     : [59.196, 17.626];
 
-  const savedSetupTime = optimizedJobs ? originalSetupTime - totalSetupTime : 0;
-  const savedDistance = optimizedJobs ? originalDistance - totalDistance : 0;
-
   return (
     <div className="flex flex-col lg:flex-row gap-4 h-full">
       <div className="w-full lg:w-[420px] flex flex-col gap-4 overflow-auto">
@@ -371,7 +274,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                 <BarChart3 className="h-4 w-4" />
                 Ruttstatistik
               </CardTitle>
-              <Select value={activeResource} onValueChange={(v) => { setSelectedResource(v); setOptimizedJobs(null); }}>
+              <Select value={activeResource} onValueChange={setSelectedResource}>
                 <SelectTrigger className="w-[160px]" data-testid="select-resource">
                   <SelectValue placeholder="Välj tekniker" />
                 </SelectTrigger>
@@ -388,7 +291,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                   variant={viewMode === "day" ? "default" : "ghost"}
                   size="sm"
                   className="rounded-r-none"
-                  onClick={() => { setViewMode("day"); setOptimizedJobs(null); }}
+                  onClick={() => setViewMode("day")}
                   data-testid="button-view-day"
                 >
                   Dag
@@ -397,7 +300,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                   variant={viewMode === "week" ? "default" : "ghost"}
                   size="sm"
                   className="rounded-l-none"
-                  onClick={() => { setViewMode("week"); setOptimizedJobs(null); }}
+                  onClick={() => setViewMode("week")}
                   data-testid="button-view-week"
                 >
                   Vecka
@@ -408,7 +311,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => { setSelectedDate(addDays(selectedDate, viewMode === "week" ? -7 : -1)); setOptimizedJobs(null); }}
+                onClick={() => setSelectedDate(addDays(selectedDate, viewMode === "week" ? -7 : -1))}
                 data-testid="button-prev-period"
               >
                 Föregående
@@ -422,7 +325,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => { setSelectedDate(addDays(selectedDate, viewMode === "week" ? 7 : 1)); setOptimizedJobs(null); }}
+                onClick={() => setSelectedDate(addDays(selectedDate, viewMode === "week" ? 7 : 1))}
                 data-testid="button-next-period"
               >
                 Nästa
@@ -492,81 +395,17 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
               </div>
             </div>
 
-            <div className="flex gap-2">
-              <Button 
-                className="flex-1" 
-                onClick={handleOptimize}
-                disabled={isOptimizing || displayJobs.length === 0 || optimizedJobs !== null}
-                data-testid="button-optimize-route"
-              >
-                {isOptimizing ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Optimerar...
-                  </>
-                ) : (
-                  <>
-                    <Zap className="h-4 w-4 mr-2" />
-                    Optimera rutt
-                  </>
-                )}
-              </Button>
-              {optimizedJobs && (
-                <Button variant="outline" onClick={handleResetOptimization} data-testid="button-reset-optimization">
-                  Återställ
-                </Button>
-              )}
-            </div>
-
-            {optimizedJobs && (
-              <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md">
-                <div className="text-sm font-medium text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
-                  {isSent ? <CheckCircle className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
-                  {isSent ? "Rutt skickad" : "Optimering genomförd"}
-                </div>
-                <div className="space-y-1 text-xs text-green-600 dark:text-green-400">
-                  <div className="flex justify-between">
-                    <span>Sparad ställtid:</span>
-                    <span className="font-medium">{savedSetupTime} min</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Kortare sträcka:</span>
-                    <span className="font-medium">{savedDistance.toFixed(1)} km</span>
-                  </div>
-                </div>
-                <p className="text-[10px] text-green-600 dark:text-green-400 mt-2">
-                  Rutten har optimerats för effektivare körning
-                </p>
-                
-                {!isSent && (
-                  <Button 
-                    className="w-full mt-3" 
-                    onClick={handleSendToDriver}
-                    disabled={isSending}
-                    data-testid="button-send-to-driver"
-                  >
-                    {isSending ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Skickar...
-                      </>
-                    ) : (
-                      <>
-                        <Send className="h-4 w-4 mr-2" />
-                        Skicka till {resources.find(r => r.id === activeResource)?.name || "chaufför"}
-                      </>
-                    )}
-                  </Button>
-                )}
-                
-                {isSent && (
-                  <div className="flex items-center justify-center gap-2 mt-3 text-sm text-green-700 dark:text-green-300">
-                    <CheckCircle className="h-4 w-4" />
-                    Rutten har uppdaterats i systemet
-                  </div>
-                )}
-              </div>
-            )}
+            <Button 
+              className="w-full" 
+              variant="outline"
+              asChild
+              data-testid="button-go-to-optimization"
+            >
+              <Link href="/optimization">
+                <Sparkles className="h-4 w-4 mr-2" />
+                Inför Optimering
+              </Link>
+            </Button>
           </CardContent>
         </Card>
 
@@ -574,7 +413,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Route className="h-4 w-4" />
-              Jobbordning {optimizedJobs && <Badge variant="secondary" className="text-[10px]">Optimerad</Badge>}
+              Jobbordning
             </CardTitle>
           </CardHeader>
           <CardContent className="p-0">
@@ -676,14 +515,14 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
             {routeData?.geometry && routeData.geometry.coordinates ? (
               <Polyline 
                 positions={routeData.geometry.coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
-                color={optimizedJobs ? "#22c55e" : "#3b82f6"} 
+                color="#3b82f6"
                 weight={4}
                 opacity={0.8}
               />
             ) : jobPositions.length > 1 && (
               <Polyline 
                 positions={jobPositions} 
-                color={optimizedJobs ? "#22c55e" : "#3b82f6"} 
+                color="#3b82f6"
                 weight={3}
                 opacity={0.7}
                 dashArray="10, 10"

@@ -16,6 +16,7 @@ import DashboardPage from "@/pages/DashboardPage";
 import SettingsPage from "@/pages/SettingsPage";
 import ImportPage from "@/pages/ImportPage";
 import ProcurementsPage from "@/pages/ProcurementsPage";
+import OptimizationPrepPage from "@/pages/OptimizationPrepPage";
 import LandingPage from "@/pages/LandingPage";
 import { Loader2 } from "lucide-react";
 
@@ -24,6 +25,7 @@ function Router() {
     <Switch>
       <Route path="/" component={WeekPlannerPage} />
       <Route path="/routes" component={RoutesPage} />
+      <Route path="/optimization" component={OptimizationPrepPage} />
       <Route path="/objects" component={ObjectsPage} />
       <Route path="/resources" component={ResourcesPage} />
       <Route path="/procurements" component={ProcurementsPage} />

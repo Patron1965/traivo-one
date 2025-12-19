@@ -34,7 +34,8 @@ client/src/
 │   └── ThemeToggle.tsx          # Light/dark theme toggle
 ├── pages/
 │   ├── WeekPlannerPage.tsx      # Main planning view
-│   ├── RoutesPage.tsx           # Route optimization
+│   ├── OptimizationPrepPage.tsx # Weekly optimization preparation
+│   ├── RoutesPage.tsx           # Route visualization
 │   ├── ObjectsPage.tsx          # Hierarchical object management
 │   ├── ResourcesPage.tsx        # Resource management
 │   ├── DashboardPage.tsx        # Analytics dashboard
@@ -62,11 +63,18 @@ shared/
 
 ## Key Features
 1. **Veckoplanering:** Drag-drop scheduling with priority colors
-2. **Objekt:** Hierarchical tree view (Område → Fastighet → Rum)
-3. **Resurser:** Technician management with competencies
-4. **Dashboard:** Real analytics from setup_time_logs
-5. **Mobile Field App:** Access info, job completion, ställtidsrapportering
-6. **Ruttplanering:** Route visualization (placeholder for Google Maps)
+2. **Inför Optimering:** Weekly optimization preparation with data validation (prepared for external Nordic Routing API integration)
+3. **Ruttplanering:** Route visualization with OpenRouteService
+4. **Objekt:** Hierarchical tree view (Område → Fastighet → Rum)
+5. **Resurser:** Technician management with competencies
+6. **Dashboard:** Real analytics from setup_time_logs
+7. **Mobile Field App:** Access info, job completion, ställtidsrapportering
+
+## Architecture Decision: External Optimization
+- Route optimization is handled by external Nordic Routing optimization service (separate Replit)
+- "Inför Optimering" page prepares and validates data before sending to external API
+- DataClean service (separate Replit) handles data validation and geocoding
+- This app focuses on visualization, scheduling, and field service workflow
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
@@ -75,6 +83,9 @@ shared/
 - **Font:** Inter for UI
 
 ## Recent Changes
+- 2024-12-19: Added "Inför Optimering" page for weekly optimization preparation
+- 2024-12-19: Removed local optimization logic from RouteMap (external API integration)
+- 2024-12-19: Landing page updated to "Optimera din Fältservice"
 - 2024-12-17: Updated to Kinab's actual business domain (avfallshantering)
 - 2024-12-17: Implemented hierarchical object structure (Område → Fastighet → Rum)
 - 2024-12-17: Added Telgebostäder and Serviceboenden as customers
@@ -82,7 +93,7 @@ shared/
 - 2024-12-17: Dashboard uses real setup_time_logs data
 
 ## Next Steps
-1. Review and adjust data model based on Kinab feedback
-2. Implement Google Maps integration for route visualization
-3. Add authentication with Replit Auth
+1. Integrate with external Nordic Routing optimization API
+2. Integrate with DataClean service for data validation
+3. Review and adjust data model based on Kinab feedback
 4. Import real Kinab object data
