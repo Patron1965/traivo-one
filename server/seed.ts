@@ -492,5 +492,3 @@ export async function seedDatabase() {
   console.log("Created work orders");
   console.log("Database seeding complete!");
 }
-
-seedDatabase().catch(console.error);
