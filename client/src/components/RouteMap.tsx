@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3, MapPinned } from "lucide-react";
+import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3, MapPinned, Send, CheckCircle } from "lucide-react";
 import { format, startOfDay, endOfDay, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, GeoJSON } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
 const createNumberedIcon = (number: number, color: string) => {
@@ -84,6 +84,8 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const [highlightedJob, setHighlightedJob] = useState<string | null>(null);
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [isSent, setIsSent] = useState(false);
   const { toast } = useToast();
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
@@ -272,6 +274,54 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
 
   const handleResetOptimization = () => {
     setOptimizedJobs(null);
+    setIsSent(false);
+  };
+
+  const handleSendToDriver = async () => {
+    if (!optimizedJobs || !activeResource) return;
+    
+    setIsSending(true);
+    try {
+      const selectedResourceData = resources.find(r => r.id === activeResource);
+      
+      // Update each work order with new scheduled start times based on optimized order
+      let currentTime = new Date(selectedDate);
+      currentTime.setHours(7, 0, 0, 0); // Start at 07:00
+      
+      for (let i = 0; i < optimizedJobs.length; i++) {
+        const job = optimizedJobs[i];
+        const startTime = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
+        
+        await apiRequest("PATCH", `/api/work-orders/${job.id}`, {
+          scheduledStartTime: startTime,
+          resourceId: activeResource,
+        });
+        
+        // Add job duration + estimated travel time for next job
+        const jobDuration = job.estimatedDuration || 30;
+        const obj = objectMap.get(job.objectId);
+        const setupTime = obj?.avgSetupTime || 10;
+        currentTime = new Date(currentTime.getTime() + (jobDuration + setupTime + 10) * 60000);
+      }
+      
+      // Invalidate work orders cache
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      
+      setIsSent(true);
+      toast({
+        title: "Rutt skickad",
+        description: `Optimerad rutt har skickats till ${selectedResourceData?.name || "chauffören"}`,
+      });
+    } catch (error) {
+      console.error("Failed to send route:", error);
+      toast({
+        title: "Kunde inte skicka rutt",
+        description: "Något gick fel vid uppdatering av jobben.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
   };
 
   const isLoading = resourcesLoading || workOrdersLoading;
@@ -426,8 +476,8 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
             {optimizedJobs && (
               <div className="p-3 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded-md">
                 <div className="text-sm font-medium text-green-700 dark:text-green-300 mb-2 flex items-center gap-2">
-                  <TrendingDown className="h-4 w-4" />
-                  Optimering genomförd
+                  {isSent ? <CheckCircle className="h-4 w-4" /> : <TrendingDown className="h-4 w-4" />}
+                  {isSent ? "Rutt skickad" : "Optimering genomförd"}
                 </div>
                 <div className="space-y-1 text-xs text-green-600 dark:text-green-400">
                   <div className="flex justify-between">
@@ -442,6 +492,34 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                 <p className="text-[10px] text-green-600 dark:text-green-400 mt-2">
                   Jobb grupperade efter tillgångstyp för att minimera omställningar
                 </p>
+                
+                {!isSent && (
+                  <Button 
+                    className="w-full mt-3" 
+                    onClick={handleSendToDriver}
+                    disabled={isSending}
+                    data-testid="button-send-to-driver"
+                  >
+                    {isSending ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Skickar...
+                      </>
+                    ) : (
+                      <>
+                        <Send className="h-4 w-4 mr-2" />
+                        Skicka till {resources.find(r => r.id === activeResource)?.name || "chaufför"}
+                      </>
+                    )}
+                  </Button>
+                )}
+                
+                {isSent && (
+                  <div className="flex items-center justify-center gap-2 mt-3 text-sm text-green-700 dark:text-green-300">
+                    <CheckCircle className="h-4 w-4" />
+                    Rutten har uppdaterats i systemet
+                  </div>
+                )}
               </div>
             )}
           </CardContent>
