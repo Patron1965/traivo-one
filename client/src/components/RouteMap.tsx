@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3, MapPinned, Send, CheckCircle } from "lucide-react";
-import { format, startOfDay, endOfDay, addDays } from "date-fns";
+import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, GeoJSON } from "react-leaflet";
 import L from "leaflet";
@@ -79,6 +79,7 @@ interface RouteData {
 export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
+  const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizedJobs, setOptimizedJobs] = useState<WorkOrder[] | null>(null);
   const [highlightedJob, setHighlightedJob] = useState<string | null>(null);
@@ -102,16 +103,33 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
 
-  const dayStart = startOfDay(selectedDate);
-  const dayEnd = endOfDay(selectedDate);
-
   const activeResource = selectedResource || (resources.length > 0 ? resources[0].id : "");
+
+  const getDateRange = () => {
+    if (viewMode === "week") {
+      return {
+        start: startOfWeek(selectedDate, { weekStartsOn: 1 }),
+        end: endOfWeek(selectedDate, { weekStartsOn: 1 }),
+      };
+    }
+    return {
+      start: startOfDay(selectedDate),
+      end: endOfDay(selectedDate),
+    };
+  };
+
+  const { start: periodStart, end: periodEnd } = getDateRange();
 
   const originalJobs = workOrders.filter(wo => {
     if (!wo.scheduledDate || wo.resourceId !== activeResource) return false;
     const scheduled = new Date(wo.scheduledDate);
-    return scheduled >= dayStart && scheduled <= dayEnd;
+    return scheduled >= periodStart && scheduled <= periodEnd;
   }).sort((a, b) => {
+    const dateA = new Date(a.scheduledDate || 0);
+    const dateB = new Date(b.scheduledDate || 0);
+    if (dateA.getTime() !== dateB.getTime()) {
+      return dateA.getTime() - dateB.getTime();
+    }
     const timeA = a.scheduledStartTime || "00:00";
     const timeB = b.scheduledStartTime || "00:00";
     return timeA.localeCompare(timeB);
@@ -363,22 +381,47 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
               </Select>
             </div>
             <div className="flex items-center gap-2 mt-2">
+              <div className="flex border rounded-md">
+                <Button 
+                  variant={viewMode === "day" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-r-none"
+                  onClick={() => { setViewMode("day"); setOptimizedJobs(null); }}
+                  data-testid="button-view-day"
+                >
+                  Dag
+                </Button>
+                <Button 
+                  variant={viewMode === "week" ? "default" : "ghost"}
+                  size="sm"
+                  className="rounded-l-none"
+                  onClick={() => { setViewMode("week"); setOptimizedJobs(null); }}
+                  data-testid="button-view-week"
+                >
+                  Vecka
+                </Button>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 mt-2">
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => { setSelectedDate(addDays(selectedDate, -1)); setOptimizedJobs(null); }}
-                data-testid="button-prev-day"
+                onClick={() => { setSelectedDate(addDays(selectedDate, viewMode === "week" ? -7 : -1)); setOptimizedJobs(null); }}
+                data-testid="button-prev-period"
               >
                 Föregående
               </Button>
               <span className="text-sm font-medium flex-1 text-center">
-                {format(selectedDate, "EEEE d/M", { locale: sv })}
+                {viewMode === "week" 
+                  ? `v${format(selectedDate, "w", { locale: sv })} (${format(periodStart, "d/M")} - ${format(periodEnd, "d/M")})`
+                  : format(selectedDate, "EEEE d/M", { locale: sv })
+                }
               </span>
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={() => { setSelectedDate(addDays(selectedDate, 1)); setOptimizedJobs(null); }}
-                data-testid="button-next-day"
+                onClick={() => { setSelectedDate(addDays(selectedDate, viewMode === "week" ? 7 : 1)); setOptimizedJobs(null); }}
+                data-testid="button-next-period"
               >
                 Nästa
               </Button>
@@ -535,7 +578,10 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
           <CardContent className="p-0">
             {displayJobs.length === 0 ? (
               <div className="p-4 text-center text-sm text-muted-foreground">
-                Inga jobb schemalagda för {format(selectedDate, "d MMMM", { locale: sv })}
+                Inga jobb schemalagda för {viewMode === "week" 
+                  ? `vecka ${format(selectedDate, "w", { locale: sv })}`
+                  : format(selectedDate, "d MMMM", { locale: sv })
+                }
               </div>
             ) : (
               <div className="divide-y max-h-[350px] overflow-auto">
