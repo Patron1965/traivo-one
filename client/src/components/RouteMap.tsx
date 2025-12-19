@@ -601,7 +601,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                   return (
                     <div key={job.id}>
                       <div 
-                        className="p-3 flex items-start gap-3 cursor-pointer transition-colors hover:bg-muted/50"
+                        className="p-3 flex items-start gap-3 cursor-pointer"
                         onClick={() => { onNavigate?.(job.id); }}
                         data-testid={`route-job-${job.id}`}
                       >
