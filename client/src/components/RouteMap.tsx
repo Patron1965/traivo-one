@@ -462,7 +462,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                 ) : (
                   <>
                     <Zap className="h-4 w-4 mr-2" />
-                    Optimera ställtid
+                    Optimera rutt
                   </>
                 )}
               </Button>
@@ -490,7 +490,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                   </div>
                 </div>
                 <p className="text-[10px] text-green-600 dark:text-green-400 mt-2">
-                  Jobb grupperade efter tillgångstyp för att minimera omställningar
+                  Rutten har optimerats för effektivare körning
                 </p>
                 
                 {!isSent && (
