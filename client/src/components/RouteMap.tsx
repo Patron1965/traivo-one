@@ -180,8 +180,9 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     }
   };
 
-  // Fetch route when jobs change
+  // Fetch route when jobs or their order changes
   const jobsKey = displayJobs.map(j => j.id).join(",");
+  const isOptimized = optimizedJobs !== null;
   useEffect(() => {
     const positions = getJobPositions(displayJobs);
     if (positions.length >= 2) {
@@ -193,7 +194,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
     } else {
       setRouteData(null);
     }
-  }, [jobsKey]);
+  }, [jobsKey, isOptimized]);
 
   const calculateDistance = (positions: [number, number][]) => {
     // Use route data if available, otherwise fallback to Haversine
