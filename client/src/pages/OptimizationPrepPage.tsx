@@ -18,11 +18,18 @@ import {
   Send,
   RefreshCw,
   FileCheck,
-  Loader2
+  Loader2,
+  Building2,
+  Key,
+  Keyboard,
+  DoorOpen,
+  Users,
+  Package,
+  PieChart
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isWithinInterval, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
+import type { WorkOrder, Resource, ServiceObject, Customer } from "@shared/schema";
 
 type OptimizationStatus = "idle" | "validating" | "ready" | "sending" | "optimizing" | "completed" | "error";
 
@@ -52,6 +59,10 @@ export default function OptimizationPrepPage() {
 
   const { data: objects = [], isLoading: loadingObjects } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects"],
+  });
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
   });
 
   const weekOrders = useMemo(() => {
@@ -137,6 +148,57 @@ export default function OptimizationPrepPage() {
     if (warnings > 0) return { status: "warning", message: "Data kan förbättras men optimering är möjlig" };
     return { status: "ok", message: "All data är redo för optimering" };
   }, [validationResults]);
+
+  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
+  const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
+
+  const customerDistribution = useMemo(() => {
+    const dist: Record<string, { name: string; count: number; hours: number }> = {};
+    weekOrders.forEach(order => {
+      const obj = objectMap.get(order.objectId);
+      const customer = obj ? customerMap.get(obj.customerId) : null;
+      const custId = customer?.id || "unknown";
+      const custName = customer?.name || (obj ? "Okänd kund" : "Saknar objekt");
+      if (!dist[custId]) {
+        dist[custId] = { name: custName, count: 0, hours: 0 };
+      }
+      dist[custId].count += 1;
+      dist[custId].hours += (order.estimatedDuration || 60) / 60;
+    });
+    return Object.values(dist).sort((a, b) => b.count - a.count);
+  }, [weekOrders, objectMap, customerMap]);
+
+  const accessTypeDistribution = useMemo(() => {
+    const dist: Record<string, number> = {};
+    weekOrders.forEach(order => {
+      const obj = objectMap.get(order.objectId);
+      const accessType = obj?.accessType || "open";
+      dist[accessType] = (dist[accessType] || 0) + 1;
+    });
+    return dist;
+  }, [weekOrders, objectMap]);
+
+  const containerSummary = useMemo(() => {
+    let k1 = 0, k2 = 0, k3 = 0, k4 = 0;
+    const uniqueObjects = new Set(weekOrders.map(o => o.objectId));
+    uniqueObjects.forEach(objId => {
+      const obj = objectMap.get(objId);
+      if (obj) {
+        k1 += obj.containerCount || 0;
+        k2 += obj.containerCountK2 || 0;
+        k3 += obj.containerCountK3 || 0;
+        k4 += obj.containerCountK4 || 0;
+      }
+    });
+    return { k1, k2, k3, k4, total: k1 + k2 + k3 + k4 };
+  }, [weekOrders, objectMap]);
+
+  const accessTypeLabels: Record<string, { label: string; icon: typeof Key; color: string }> = {
+    open: { label: "Öppen", icon: DoorOpen, color: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400" },
+    code: { label: "Kod", icon: Keyboard, color: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400" },
+    key: { label: "Nyckel", icon: Key, color: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400" },
+    meeting: { label: "Möte", icon: Users, color: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400" },
+  };
 
   const handlePreviousWeek = () => setSelectedWeek(prev => subWeeks(prev, 1));
   const handleNextWeek = () => setSelectedWeek(prev => addWeeks(prev, 1));
@@ -266,6 +328,115 @@ export default function OptimizationPrepPage() {
               </div>
             )}
             <p className="text-sm text-muted-foreground">beräknad tid</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-base">Fördelning per kund</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            ) : customerDistribution.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Inga jobb denna vecka</p>
+            ) : (
+              <div className="space-y-3">
+                {customerDistribution.map((cust, idx) => {
+                  const maxCount = Math.max(customerDistribution[0]?.count || 1, 1);
+                  const percent = Math.min((cust.count / maxCount) * 100, 100);
+                  return (
+                    <div key={idx} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium truncate max-w-[180px]">{cust.name}</span>
+                        <span className="text-muted-foreground">
+                          {cust.count} jobb ({cust.hours.toFixed(1)}h)
+                        </span>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary rounded-full transition-all"
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-2">
+                <PieChart className="h-4 w-4 text-muted-foreground" />
+                <CardTitle className="text-base">Tillgångstyper & Kärl</CardTitle>
+              </div>
+              {containerSummary.total > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  <Package className="h-3 w-3 mr-1" />
+                  {containerSummary.total} kärl totalt
+                </Badge>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(accessTypeDistribution).length === 0 ? (
+                <p className="text-sm text-muted-foreground">Inga jobb denna vecka</p>
+              ) : (
+                Object.entries(accessTypeDistribution).map(([type, count]) => {
+                  if (count === 0) return null;
+                  const config = accessTypeLabels[type] || { 
+                    label: type.charAt(0).toUpperCase() + type.slice(1), 
+                    icon: DoorOpen, 
+                    color: "bg-muted text-foreground" 
+                  };
+                  const Icon = config.icon;
+                  return (
+                    <div 
+                      key={type} 
+                      className={`flex items-center gap-2 px-3 py-2 rounded-md ${config.color}`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span className="text-sm font-medium">{config.label}</span>
+                      <span className="text-sm font-bold">{count}</span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {containerSummary.total > 0 && (
+              <>
+                <Separator />
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="text-lg font-semibold">{containerSummary.k1}</div>
+                    <div className="text-[10px] text-muted-foreground">K1 Standard</div>
+                  </div>
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="text-lg font-semibold">{containerSummary.k2}</div>
+                    <div className="text-[10px] text-muted-foreground">K2 Pant</div>
+                  </div>
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="text-lg font-semibold">{containerSummary.k3}</div>
+                    <div className="text-[10px] text-muted-foreground">K3 Mat</div>
+                  </div>
+                  <div className="p-2 bg-muted rounded-md">
+                    <div className="text-lg font-semibold">{containerSummary.k4}</div>
+                    <div className="text-[10px] text-muted-foreground">K4 Övrigt</div>
+                  </div>
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Sparkles } from "lucide-react";
+import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Sparkles, Package, Eye, EyeOff, Palette } from "lucide-react";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
@@ -44,6 +44,16 @@ const getSetupTimeColor = (minutes: number) => {
   return "#ef4444";
 };
 
+const getAccessTypeColor = (accessType: string) => {
+  switch (accessType) {
+    case "open": return "#22c55e"; // green
+    case "code": return "#3b82f6"; // blue
+    case "key": return "#f97316"; // orange
+    case "meeting": return "#a855f7"; // purple
+    default: return "#6b7280"; // gray
+  }
+};
+
 const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
   open: { label: "Öppen", icon: DoorOpen },
   code: { label: "Kod", icon: Keyboard },
@@ -78,12 +88,16 @@ interface RouteData {
   geometry: GeoJSON.LineString | null;
 }
 
+type ColorMode = "setupTime" | "accessType";
+
 export function RouteMap({ onNavigate }: RouteMapProps) {
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+  const [colorMode, setColorMode] = useState<ColorMode>("accessType");
+  const [showAccessCodes, setShowAccessCodes] = useState(false);
   const { toast } = useToast();
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
@@ -395,6 +409,36 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
               </div>
             </div>
 
+            <div className="flex flex-wrap gap-2">
+              <Button 
+                size="sm" 
+                variant={colorMode === "accessType" ? "default" : "outline"}
+                onClick={() => setColorMode("accessType")}
+                data-testid="button-color-access"
+              >
+                <Palette className="h-3 w-3 mr-1" />
+                Tillgång
+              </Button>
+              <Button 
+                size="sm" 
+                variant={colorMode === "setupTime" ? "default" : "outline"}
+                onClick={() => setColorMode("setupTime")}
+                data-testid="button-color-setup"
+              >
+                <Clock className="h-3 w-3 mr-1" />
+                Ställtid
+              </Button>
+              <Button 
+                size="sm" 
+                variant={showAccessCodes ? "default" : "outline"}
+                onClick={() => setShowAccessCodes(!showAccessCodes)}
+                data-testid="button-toggle-codes"
+              >
+                {showAccessCodes ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
+                Koder
+              </Button>
+            </div>
+
             <Button 
               className="w-full" 
               variant="outline"
@@ -534,29 +578,65 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
               if (!obj?.latitude || !obj?.longitude) return null;
               
               const setupTime = obj?.avgSetupTime || 0;
+              const accessType = obj?.accessType || "open";
+              const markerColor = colorMode === "accessType" 
+                ? getAccessTypeColor(accessType) 
+                : getSetupTimeColor(setupTime);
+              
+              const totalContainers = (obj.containerCount || 0) + 
+                (obj.containerCountK2 || 0) + 
+                (obj.containerCountK3 || 0) + 
+                (obj.containerCountK4 || 0);
               
               return (
                 <Marker
                   key={job.id}
                   position={[obj.latitude, obj.longitude]}
-                  icon={createNumberedIcon(index + 1, getSetupTimeColor(setupTime))}
+                  icon={createNumberedIcon(index + 1, markerColor)}
                   eventHandlers={{
                     click: () => onNavigate?.(job.id),
                   }}
                 >
                   <Popup>
-                    <div className="p-1">
-                      <div className="font-medium">{job.title}</div>
+                    <div className="p-1 min-w-[200px]">
+                      <div className="font-medium text-base">{job.title}</div>
                       <div className="text-sm text-gray-600">{obj.name}</div>
                       <div className="text-sm text-gray-600">{obj.address}</div>
-                      <div className="text-sm mt-1">
-                        <span className="font-medium">Tillgång:</span> {accessTypeLabels[obj.accessType || "open"]?.label}
-                      </div>
-                      <div className="text-sm">
-                        <span className="font-medium">Ställtid:</span> {setupTime} min
-                      </div>
-                      <div className="text-sm">
-                        <span className="font-medium">Arbetstid:</span> {job.estimatedDuration} min
+                      
+                      <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
+                        <div className="text-sm flex items-center gap-2">
+                          <span className="font-medium">Tillgång:</span>
+                          <span className="flex items-center gap-1">
+                            {accessTypeLabels[accessType]?.label || accessType}
+                            {showAccessCodes && obj.accessCode && (
+                              <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-mono">
+                                {obj.accessCode}
+                              </span>
+                            )}
+                            {showAccessCodes && obj.keyNumber && (
+                              <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-mono">
+                                Nyckel: {obj.keyNumber}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <div className="text-sm">
+                          <span className="font-medium">Ställtid:</span> {setupTime} min
+                        </div>
+                        <div className="text-sm">
+                          <span className="font-medium">Arbetstid:</span> {job.estimatedDuration} min
+                        </div>
+                        
+                        {totalContainers > 0 && (
+                          <div className="text-sm pt-1 border-t border-gray-200 mt-1">
+                            <span className="font-medium">Kärl:</span>{" "}
+                            {obj.containerCount ? `K1: ${obj.containerCount}` : ""}
+                            {obj.containerCountK2 ? ` K2: ${obj.containerCountK2}` : ""}
+                            {obj.containerCountK3 ? ` K3: ${obj.containerCountK3}` : ""}
+                            {obj.containerCountK4 ? ` K4: ${obj.containerCountK4}` : ""}
+                            <span className="text-gray-500 ml-1">({totalContainers} st)</span>
+                          </div>
+                        )}
                       </div>
                     </div>
                   </Popup>
@@ -566,19 +646,43 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
           </MapContainer>
           
           <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-md shadow-md p-3 space-y-1.5 z-[1000]">
-            <div className="text-xs font-medium">Ställtid</div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-3 h-3 rounded-full bg-green-500"></span>
-              <span>&lt;10 min</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-3 h-3 rounded-full bg-orange-500"></span>
-              <span>10-20 min</span>
-            </div>
-            <div className="flex items-center gap-2 text-xs">
-              <span className="w-3 h-3 rounded-full bg-red-500"></span>
-              <span>&gt;20 min</span>
-            </div>
+            {colorMode === "setupTime" ? (
+              <>
+                <div className="text-xs font-medium">Ställtid</div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                  <span>&lt;10 min</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+                  <span>10-20 min</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-red-500"></span>
+                  <span>&gt;20 min</span>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="text-xs font-medium">Tillgångstyp</div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-green-500"></span>
+                  <span>Öppen</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-blue-500"></span>
+                  <span>Kod</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-orange-500"></span>
+                  <span>Nyckel</span>
+                </div>
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="w-3 h-3 rounded-full bg-purple-500"></span>
+                  <span>Möte</span>
+                </div>
+              </>
+            )}
           </div>
         </CardContent>
       </Card>
