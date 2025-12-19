@@ -569,7 +569,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
           </CardContent>
         </Card>
 
-        <Card className="flex-1 overflow-hidden">
+        <Card className="flex-1">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium flex items-center gap-2">
               <Route className="h-4 w-4" />
