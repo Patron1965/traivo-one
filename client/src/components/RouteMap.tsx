@@ -1,17 +1,19 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3 } from "lucide-react";
+import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3, MapPinned } from "lucide-react";
 import { format, startOfDay, endOfDay, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, GeoJSON } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const createNumberedIcon = (number: number, color: string) => {
   return L.divIcon({
@@ -68,12 +70,21 @@ interface RouteMapProps {
   onNavigate?: (jobId: string) => void;
 }
 
+interface RouteData {
+  distance: number; // km
+  duration: number; // minutes
+  geometry: GeoJSON.LineString | null;
+}
+
 export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizedJobs, setOptimizedJobs] = useState<WorkOrder[] | null>(null);
   const [highlightedJob, setHighlightedJob] = useState<string | null>(null);
+  const [routeData, setRouteData] = useState<RouteData | null>(null);
+  const [isLoadingRoute, setIsLoadingRoute] = useState(false);
+  const { toast } = useToast();
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
@@ -106,7 +117,68 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
 
   const displayJobs = optimizedJobs || originalJobs;
 
+  const getJobPositions = (jobs: WorkOrder[]) => {
+    return jobs
+      .map(job => {
+        const obj = objectMap.get(job.objectId);
+        if (obj?.latitude && obj?.longitude) {
+          return [obj.latitude, obj.longitude] as [number, number];
+        }
+        return null;
+      })
+      .filter((p): p is [number, number] => p !== null);
+  };
+
+  const fetchRouteFromORS = async (positions: [number, number][]): Promise<RouteData | null> => {
+    if (positions.length < 2) return null;
+    
+    try {
+      // ORS expects [lon, lat] format, we have [lat, lon]
+      const coordinates = positions.map(([lat, lon]) => [lon, lat]);
+      
+      const response = await apiRequest("POST", "/api/routes/directions", { coordinates });
+      const data = await response.json();
+      
+      if (data && data.features && data.features.length > 0) {
+        const feature = data.features[0];
+        const props = feature.properties?.summary || {};
+        return {
+          distance: (props.distance || 0) / 1000, // meters to km
+          duration: Math.round((props.duration || 0) / 60), // seconds to minutes
+          geometry: feature.geometry as GeoJSON.LineString,
+        };
+      }
+      return null;
+    } catch (error) {
+      console.error("Failed to fetch route:", error);
+      toast({
+        title: "Kunde inte beräkna rutt",
+        description: "Ruttberäkning misslyckades. Visar uppskattade tider.",
+        variant: "destructive",
+      });
+      return null;
+    }
+  };
+
+  // Fetch route when jobs change
+  const jobsKey = displayJobs.map(j => j.id).join(",");
+  useEffect(() => {
+    const positions = getJobPositions(displayJobs);
+    if (positions.length >= 2) {
+      setIsLoadingRoute(true);
+      fetchRouteFromORS(positions).then(data => {
+        setRouteData(data);
+        setIsLoadingRoute(false);
+      });
+    } else {
+      setRouteData(null);
+    }
+  }, [jobsKey]);
+
   const calculateDistance = (positions: [number, number][]) => {
+    // Use route data if available, otherwise fallback to Haversine
+    if (routeData) return routeData.distance;
+    
     if (positions.length < 2) return 0;
     let total = 0;
     for (let i = 0; i < positions.length - 1; i++) {
@@ -122,18 +194,6 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
       total += R * c;
     }
     return total;
-  };
-
-  const getJobPositions = (jobs: WorkOrder[]) => {
-    return jobs
-      .map(job => {
-        const obj = objectMap.get(job.objectId);
-        if (obj?.latitude && obj?.longitude) {
-          return [obj.latitude, obj.longitude] as [number, number];
-        }
-        return null;
-      })
-      .filter((p): p is [number, number] => p !== null);
   };
 
   const calculateSetupTime = (jobs: WorkOrder[]) => {
@@ -161,9 +221,9 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const totalSetupTime = calculateSetupTime(displayJobs);
   const originalSetupTime = calculateSetupTime(originalJobs);
   const totalWorkTime = displayJobs.reduce((sum, job) => sum + (job.estimatedDuration || 0), 0);
-  const totalDistance = calculateDistance(jobPositions);
+  const totalDistance = routeData?.distance ?? calculateDistance(jobPositions);
   const originalDistance = calculateDistance(originalPositions);
-  const estimatedDriveTime = Math.round(totalDistance * 2);
+  const estimatedDriveTime = routeData?.duration ?? Math.round(totalDistance * 2);
 
   const accessTypeGroups = useMemo(() => {
     const groups: Record<string, number> = {};
@@ -285,8 +345,13 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                 <div className="text-[10px] text-muted-foreground">km</div>
               </div>
               <div className="p-2 bg-muted rounded-md">
-                <div className="text-lg font-semibold">{estimatedDriveTime}</div>
-                <div className="text-[10px] text-muted-foreground">min kör</div>
+                <div className="text-lg font-semibold flex items-center gap-1">
+                  {isLoadingRoute ? <Loader2 className="h-4 w-4 animate-spin" /> : estimatedDriveTime}
+                </div>
+                <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  {routeData ? <MapPinned className="h-3 w-3" /> : null}
+                  min kör
+                </div>
               </div>
               <div className="p-2 bg-muted rounded-md">
                 <div className="text-lg font-semibold">{totalSetupTime}</div>
@@ -484,13 +549,27 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
             
             {jobPositions.length > 0 && <MapFitBounds positions={jobPositions} />}
             
-            {jobPositions.length > 1 && (
+            {routeData?.geometry ? (
+              <GeoJSON 
+                key={jobsKey + (optimizedJobs ? "-optimized" : "")}
+                data={{
+                  type: "Feature",
+                  properties: {},
+                  geometry: routeData.geometry,
+                } as GeoJSON.Feature}
+                style={{
+                  color: optimizedJobs ? "#22c55e" : "#3b82f6",
+                  weight: 4,
+                  opacity: 0.8,
+                }}
+              />
+            ) : jobPositions.length > 1 && (
               <Polyline 
                 positions={jobPositions} 
                 color={optimizedJobs ? "#22c55e" : "#3b82f6"} 
                 weight={3}
                 opacity={0.7}
-                dashArray={optimizedJobs ? undefined : "10, 10"}
+                dashArray="10, 10"
               />
             )}
             

@@ -635,6 +635,82 @@ export async function registerRoutes(
     }
   });
 
+  // OpenRouteService proxy for route optimization
+  app.post("/api/routes/directions", async (req, res) => {
+    try {
+      const { coordinates } = req.body;
+      
+      if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 2) {
+        return res.status(400).json({ error: "At least 2 coordinates required" });
+      }
+
+      const apiKey = process.env.OPENROUTESERVICE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "OpenRouteService API key not configured" });
+      }
+
+      const response = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": apiKey,
+        },
+        body: JSON.stringify({
+          coordinates: coordinates,
+          instructions: false,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("OpenRouteService error:", errorText);
+        return res.status(response.status).json({ error: "Route calculation failed" });
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Route directions error:", error);
+      res.status(500).json({ error: "Failed to calculate route" });
+    }
+  });
+
+  // OpenRouteService route optimization (TSP)
+  app.post("/api/routes/optimize", async (req, res) => {
+    try {
+      const { jobs, vehicles } = req.body;
+      
+      const apiKey = process.env.OPENROUTESERVICE_API_KEY;
+      if (!apiKey) {
+        return res.status(500).json({ error: "OpenRouteService API key not configured" });
+      }
+
+      const response = await fetch("https://api.openrouteservice.org/optimization", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": apiKey,
+        },
+        body: JSON.stringify({
+          jobs,
+          vehicles,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("OpenRouteService optimization error:", errorText);
+        return res.status(response.status).json({ error: "Route optimization failed" });
+      }
+
+      const data = await response.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Route optimization error:", error);
+      res.status(500).json({ error: "Failed to optimize route" });
+    }
+  });
+
   // Delete all data (for re-import)
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {
