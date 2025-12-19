@@ -82,7 +82,6 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [optimizedJobs, setOptimizedJobs] = useState<WorkOrder[] | null>(null);
-  const [highlightedJob, setHighlightedJob] = useState<string | null>(null);
   const [routeData, setRouteData] = useState<RouteData | null>(null);
   const [isLoadingRoute, setIsLoadingRoute] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -600,10 +599,8 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                   return (
                     <div key={job.id}>
                       <div 
-                        className={`p-3 flex items-start gap-3 cursor-pointer transition-colors ${highlightedJob === job.id ? "bg-muted" : "hover:bg-muted/50"}`}
+                        className="p-3 flex items-start gap-3 cursor-pointer transition-colors hover:bg-muted/50"
                         onClick={() => { onNavigate?.(job.id); }}
-                        onMouseEnter={() => setHighlightedJob(job.id)}
-                        onMouseLeave={() => setHighlightedJob(null)}
                         data-testid={`route-job-${job.id}`}
                       >
                         <div className="flex items-center gap-2">
@@ -696,17 +693,14 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
               if (!obj?.latitude || !obj?.longitude) return null;
               
               const setupTime = obj?.avgSetupTime || 0;
-              const isHighlighted = highlightedJob === job.id;
               
               return (
                 <Marker
                   key={job.id}
                   position={[obj.latitude, obj.longitude]}
-                  icon={createNumberedIcon(index + 1, isHighlighted ? "#3b82f6" : getSetupTimeColor(setupTime))}
+                  icon={createNumberedIcon(index + 1, getSetupTimeColor(setupTime))}
                   eventHandlers={{
                     click: () => onNavigate?.(job.id),
-                    mouseover: () => setHighlightedJob(job.id),
-                    mouseout: () => setHighlightedJob(null),
                   }}
                 >
                   <Popup>
