@@ -600,7 +600,7 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
                   return (
                     <div key={job.id}>
                       <div 
-                        className={`p-3 flex items-start gap-3 hover-elevate cursor-pointer transition-colors ${highlightedJob === job.id ? "bg-primary/10" : ""}`}
+                        className={`p-3 flex items-start gap-3 cursor-pointer transition-colors ${highlightedJob === job.id ? "bg-muted" : "hover:bg-muted/50"}`}
                         onClick={() => { onNavigate?.(job.id); }}
                         onMouseEnter={() => setHighlightedJob(job.id)}
                         onMouseLeave={() => setHighlightedJob(null)}
