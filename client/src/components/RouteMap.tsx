@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { MapPin, Clock, Car, Zap, ArrowRight, Route, Navigation, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, TrendingDown, BarChart3, MapPinned, Send, CheckCircle } from "lucide-react";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, GeoJSON } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
@@ -674,19 +674,12 @@ export function RouteMap({ onOptimize, onNavigate }: RouteMapProps) {
             
             {jobPositions.length > 0 && <MapFitBounds positions={jobPositions} />}
             
-            {routeData?.geometry ? (
-              <GeoJSON 
-                key={jobsKey + (optimizedJobs ? "-optimized" : "")}
-                data={{
-                  type: "Feature",
-                  properties: {},
-                  geometry: routeData.geometry,
-                } as GeoJSON.Feature}
-                style={{
-                  color: optimizedJobs ? "#22c55e" : "#3b82f6",
-                  weight: 4,
-                  opacity: 0.8,
-                }}
+            {routeData?.geometry && routeData.geometry.coordinates ? (
+              <Polyline 
+                positions={routeData.geometry.coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
+                color={optimizedJobs ? "#22c55e" : "#3b82f6"} 
+                weight={4}
+                opacity={0.8}
               />
             ) : jobPositions.length > 1 && (
               <Polyline 
