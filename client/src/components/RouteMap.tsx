@@ -400,7 +400,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                   const config = accessTypeLabels[type] || { label: type, icon: DoorOpen };
                   const Icon = config.icon;
                   return (
-                    <Badge key={type} variant="secondary" className="text-xs gap-1">
+                    <Badge key={type} variant="secondary" className="text-xs gap-1 no-default-hover-elevate">
                       <Icon className="h-3 w-3" />
                       {config.label}: {count}
                     </Badge>
@@ -513,7 +513,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                               {accessTypeLabels[accessType]?.label || accessType}
                             </span>
                             {!hasCoords && (
-                              <Badge variant="outline" className="text-[10px] text-orange-600">
+                              <Badge variant="outline" className="text-[10px] text-orange-600 no-default-hover-elevate">
                                 Saknar koordinater
                               </Badge>
                             )}
