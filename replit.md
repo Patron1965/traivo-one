@@ -69,6 +69,28 @@ shared/
 5. **Resurser:** Technician management with competencies
 6. **Dashboard:** Real analytics from setup_time_logs
 7. **Mobile Field App:** Access info, job completion, ställtidsrapportering
+8. **Modus 2.0 Import:** Direct import from Modus 2.0 CSV exports (semicolon-separated)
+
+## Modus 2.0 Import System
+Located at `/import` page. Supports importing:
+- **Objekt:** Two-pass import (create objects, then update parent relationships). Auto-creates customers from unique Kund values.
+- **Uppgifter (Tasks):** Links to objects by Modus ID. Auto-creates resources from Team field.
+- **Händelser (Events):** Analyzes task events to calculate setup time statistics.
+
+API Endpoints:
+- `POST /api/import/modus/objects` - Import objects CSV
+- `POST /api/import/modus/tasks` - Import tasks CSV  
+- `POST /api/import/modus/events` - Analyze events CSV for setup times
+
+Field Mappings (Modus → Nordic Routing):
+- `Id` → objectNumber (prefixed with MODUS-)
+- `Namn` → name
+- `Typ` → objectType (mapped to system types)
+- `Parent` → parentId (second pass)
+- `Kund` → customerId (auto-created)
+- `Latitud/Longitud` → coordinates (validated for Sweden bounds 55-70°N, 10-25°E)
+- `Metadata - Nyckel eller kod` → accessType + accessCode/keyNumber
+- `Metadata - Antal` → containerCount
 
 ## Architecture Decision: External Optimization
 - Route optimization is handled by external Nordic Routing optimization service (separate Replit)
@@ -83,6 +105,8 @@ shared/
 - **Font:** Inter for UI
 
 ## Recent Changes
+- 2024-12-19: Added Modus 2.0 Import system (objects, tasks, events analysis)
+- 2024-12-19: Increased upload limit to 50MB for large Modus exports
 - 2024-12-19: Added "Inför Optimering" page for weekly optimization preparation
 - 2024-12-19: Removed local optimization logic from RouteMap (external API integration)
 - 2024-12-19: Landing page updated to "Optimera din Fältservice"
@@ -93,7 +117,7 @@ shared/
 - 2024-12-17: Dashboard uses real setup_time_logs data
 
 ## Next Steps
-1. Integrate with external Nordic Routing optimization API
-2. Integrate with DataClean service for data validation
-3. Review and adjust data model based on Kinab feedback
-4. Import real Kinab object data
+1. Import real Kinab object data from Modus 2.0
+2. Integrate with external Nordic Routing optimization API
+3. Integrate with DataClean service for data validation
+4. Review and adjust data model based on Kinab feedback

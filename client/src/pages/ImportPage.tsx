@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
-  Loader2, Download, Eye, X, FileUp, Check
+  Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -17,10 +17,33 @@ import Papa from "papaparse";
 import type { Customer, Resource, ServiceObject } from "@shared/schema";
 
 type ImportType = "customers" | "resources" | "objects";
+type ModusImportType = "objects" | "tasks" | "events";
 
 interface ImportResult {
   imported: number;
   errors: string[];
+}
+
+interface ModusObjectResult {
+  imported: number;
+  parentsUpdated: number;
+  customersCreated: number;
+  skipped: number;
+  errors: string[];
+  totalRows: number;
+}
+
+interface ModusEventsResult {
+  totalEvents: number;
+  uniqueTasks: number;
+  calculatedSetupTimes: number;
+  averageSetupTime: number;
+  setupTimeDistribution: {
+    under5min: number;
+    "5to15min": number;
+    "15to30min": number;
+    over30min: number;
+  };
 }
 
 interface ParsedRow {
@@ -85,8 +108,16 @@ export default function ImportPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  
+  const [modusUploading, setModusUploading] = useState<ModusImportType | null>(null);
+  const [modusResults, setModusResults] = useState<{
+    objects: ModusObjectResult | null;
+    tasks: ImportResult | null;
+    events: ModusEventsResult | null;
+  }>({ objects: null, tasks: null, events: null });
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
+  const { data: workOrders = [] } = useQuery<{ id: string }[]>({ queryKey: ["/api/work-orders"] });
   const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
   const { data: objects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
 
@@ -256,6 +287,52 @@ export default function ImportPage() {
   const confirmImport = () => {
     if (selectedFile) {
       importMutation.mutate({ type: previewType, file: selectedFile });
+    }
+  };
+
+  const handleModusUpload = async (type: ModusImportType, file: File) => {
+    setModusUploading(type);
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    try {
+      const response = await fetch(`/api/import/modus/${type}`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Import misslyckades");
+      }
+      
+      const result = await response.json();
+      setModusResults(prev => ({ ...prev, [type]: result }));
+      
+      if (type === "events") {
+        toast({
+          title: "Analys klar",
+          description: `Analyserade ${(result as ModusEventsResult).totalEvents} händelser`,
+        });
+      } else {
+        toast({
+          title: "Import klar",
+          description: `${(result as ImportResult).imported} poster importerade`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      }
+    } catch (error) {
+      toast({
+        title: "Import misslyckades",
+        description: error instanceof Error ? error.message : "Okänt fel",
+        variant: "destructive",
+      });
+    } finally {
+      setModusUploading(null);
     }
   };
 
@@ -447,6 +524,225 @@ export default function ImportPage() {
             <li><strong>Resurser</strong> - Kan importeras när som helst</li>
             <li><strong>Objekt sist</strong> - Kräver att kunder redan finns i systemet</li>
           </ol>
+        </CardContent>
+      </Card>
+
+      <Card className="border-blue-200 dark:border-blue-800">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileSpreadsheet className="h-5 w-5 text-blue-600" />
+            Modus 2.0 Import
+          </CardTitle>
+          <CardDescription>
+            Importera data direkt från Modus 2.0 CSV-exporter (semikolon-separerade)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 bg-muted/50 rounded-lg">
+            <div className="text-center">
+              <div className="text-lg font-bold">{customers.length}</div>
+              <div className="text-xs text-muted-foreground">Kunder</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold">{objects.length}</div>
+              <div className="text-xs text-muted-foreground">Objekt</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold">{resources.length}</div>
+              <div className="text-xs text-muted-foreground">Resurser</div>
+            </div>
+            <div className="text-center">
+              <div className="text-lg font-bold">{workOrders.length}</div>
+              <div className="text-xs text-muted-foreground">Uppgifter</div>
+            </div>
+          </div>
+          
+          <div className="grid md:grid-cols-3 gap-4">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  1. Objekt
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Importerar objekt-hierarkin och skapar automatiskt kunder
+                </p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  id="modus-objects"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleModusUpload("objects", file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={modusUploading !== null}
+                  onClick={() => document.getElementById("modus-objects")?.click()}
+                  data-testid="button-modus-objects"
+                >
+                  {modusUploading === "objects" ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Välj objekt.csv
+                </Button>
+                {modusResults.objects && (
+                  <div className="text-xs space-y-1 pt-2 border-t">
+                    <div className="flex items-center gap-1 text-green-600">
+                      <CheckCircle className="h-3 w-3" />
+                      {modusResults.objects.imported} objekt
+                    </div>
+                    <div className="text-muted-foreground">
+                      {modusResults.objects.customersCreated} kunder skapade
+                    </div>
+                    <div className="text-muted-foreground">
+                      {modusResults.objects.parentsUpdated} hierarkiska kopplingar
+                    </div>
+                    {modusResults.objects.errors.length > 0 && (
+                      <div className="text-orange-600">
+                        {modusResults.objects.errors.length} varningar
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Truck className="h-4 w-4" />
+                  2. Uppgifter
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Importerar arbetsordrar och schemaläggning
+                </p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  id="modus-tasks"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleModusUpload("tasks", file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={modusUploading !== null}
+                  onClick={() => document.getElementById("modus-tasks")?.click()}
+                  data-testid="button-modus-tasks"
+                >
+                  {modusUploading === "tasks" ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Välj uppgifter.csv
+                </Button>
+                {modusResults.tasks && (
+                  <div className="text-xs space-y-1 pt-2 border-t">
+                    <div className="flex items-center gap-1 text-green-600">
+                      <CheckCircle className="h-3 w-3" />
+                      {modusResults.tasks.imported} uppgifter
+                    </div>
+                    {modusResults.tasks.errors.length > 0 && (
+                      <div className="text-orange-600">
+                        {modusResults.tasks.errors.length} varningar
+                      </div>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Clock className="h-4 w-4" />
+                  3. Händelser (analys)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <p className="text-xs text-muted-foreground">
+                  Analyserar händelser för arbetstidsstatistik
+                </p>
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  id="modus-events"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleModusUpload("events", file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  disabled={modusUploading !== null}
+                  onClick={() => document.getElementById("modus-events")?.click()}
+                  data-testid="button-modus-events"
+                >
+                  {modusUploading === "events" ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Välj händelser.csv
+                </Button>
+                {modusResults.events && (
+                  <div className="text-xs space-y-1 pt-2 border-t">
+                    <div className="flex items-center gap-1 text-blue-600">
+                      <CheckCircle className="h-3 w-3" />
+                      {modusResults.events.totalEvents} händelser
+                    </div>
+                    <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded text-center">
+                      <div className="text-lg font-bold text-blue-600">
+                        {modusResults.events.averageSetupTime} min
+                      </div>
+                      <div className="text-muted-foreground">snitt arbetstid</div>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <Badge variant="secondary" className="text-xs no-default-hover-elevate">
+                        {"<"}5: {modusResults.events.setupTimeDistribution.under5min}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs no-default-hover-elevate">
+                        5-15: {modusResults.events.setupTimeDistribution["5to15min"]}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs no-default-hover-elevate">
+                        15-30: {modusResults.events.setupTimeDistribution["15to30min"]}
+                      </Badge>
+                      <Badge variant="secondary" className="text-xs no-default-hover-elevate">
+                        {">"}30: {modusResults.events.setupTimeDistribution.over30min}
+                      </Badge>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+          
+          <div className="text-xs text-muted-foreground bg-muted/50 p-3 rounded">
+            <strong>Tips:</strong> Modus 2.0 exporterar CSV med semikolon (;) som separator. 
+            Importen hanterar detta automatiskt. Importera objekt först, sedan uppgifter, och sist händelser för analys.
+          </div>
         </CardContent>
       </Card>
 

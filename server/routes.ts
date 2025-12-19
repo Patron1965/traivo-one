@@ -12,7 +12,7 @@ import Papa from "papaparse";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit for large Modus exports
   fileFilter: (req, file, cb) => {
     if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
       cb(null, true);
@@ -708,6 +708,399 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Route optimization error:", error);
       res.status(500).json({ error: "Failed to optimize route" });
+    }
+  });
+
+  // Modus 2.0 Import - Objects (semicolon-separated)
+  app.post("/api/import/modus/objects", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+      
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        delimiter: ";", // Modus uses semicolon
+      });
+      
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      }
+
+      // Get existing customers or create them from unique Kund values
+      const customerNames = new Set<string>();
+      for (const row of result.data as Record<string, string>[]) {
+        const kundName = row["Kund"];
+        if (kundName) {
+          // Extract customer name without the ID in parentheses
+          const match = kundName.match(/^(.+?)\s*\(\d+\)$/);
+          const cleanName = match ? match[1].trim() : kundName.trim();
+          if (cleanName) customerNames.add(cleanName);
+        }
+      }
+
+      // Create customers that don't exist
+      const existingCustomers = await storage.getCustomers(DEFAULT_TENANT_ID);
+      const customerMap = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c.id]));
+      
+      for (const name of Array.from(customerNames)) {
+        if (!customerMap.has(name.toLowerCase())) {
+          const newCustomer = await storage.createCustomer({
+            tenantId: DEFAULT_TENANT_ID,
+            name: name,
+          });
+          customerMap.set(name.toLowerCase(), newCustomer.id);
+        }
+      }
+
+      // Track created objects by Modus ID for parent lookups
+      const modusIdMap = new Map<string, string>();
+      
+      const imported: string[] = [];
+      const errors: string[] = [];
+      const skipped: string[] = [];
+      
+      // First pass: create all objects without parents
+      for (const row of result.data as Record<string, string>[]) {
+        try {
+          const modusId = row["Id"];
+          const name = row["Namn"] || "";
+          const typ = row["Typ"] || "Område";
+          const parent = row["Parent"] || "";
+          const kundRaw = row["Kund"] || "";
+          
+          if (!name || !modusId) {
+            skipped.push(`Rad utan namn eller ID`);
+            continue;
+          }
+          
+          // Extract customer name
+          const kundMatch = kundRaw.match(/^(.+?)\s*\(\d+\)$/);
+          const kundName = kundMatch ? kundMatch[1].trim() : kundRaw.trim();
+          const customerId = customerMap.get(kundName.toLowerCase());
+          
+          if (!customerId) {
+            errors.push(`Kund "${kundName}" hittades inte för "${name}"`);
+            continue;
+          }
+          
+          // Parse coordinates
+          let latitude = row["Latitud"] ? parseFloat(row["Latitud"].replace(",", ".")) : null;
+          let longitude = row["Longitud"] ? parseFloat(row["Longitud"].replace(",", ".")) : null;
+          
+          // Validate coordinates (Sweden approximate bounds)
+          if (latitude && (latitude < 55 || latitude > 70)) latitude = null;
+          if (longitude && (longitude < 10 || longitude > 25)) longitude = null;
+          
+          // Map object type
+          let objectType = "omrade";
+          const typLower = typ.toLowerCase();
+          if (typLower.includes("fastighet") || typLower.includes("adress")) objectType = "fastighet";
+          else if (typLower.includes("rum") || typLower.includes("soprum")) objectType = "rum";
+          else if (typLower.includes("kök")) objectType = "kok";
+          else if (typLower.includes("matavfall")) objectType = "matafall";
+          else if (typLower.includes("återvinning")) objectType = "atervinning";
+          else if (typLower.includes("uj") || typLower.includes("hushåll")) objectType = "uj_hushallsavfall";
+          else if (typLower.includes("serviceboende") || typLower.includes("boende")) objectType = "serviceboende";
+          
+          // Determine access type from metadata
+          let accessType = "open";
+          let accessCode = null;
+          let keyNumber = null;
+          const nyckelEllerKod = row["Metadata - Nyckel eller kod"] || "";
+          if (nyckelEllerKod) {
+            if (nyckelEllerKod.toLowerCase().includes("nyckel")) {
+              accessType = "key";
+              keyNumber = nyckelEllerKod;
+            } else if (/^\d+$/.test(nyckelEllerKod.trim())) {
+              accessType = "code";
+              accessCode = nyckelEllerKod.trim();
+            } else {
+              accessType = "code";
+              accessCode = nyckelEllerKod;
+            }
+          }
+          
+          // Parse container counts
+          const antalStr = row["Metadata - Antal"] || "0";
+          const containerCount = parseInt(antalStr.replace(/\D/g, "") || "0");
+          
+          // Parse description for contact info
+          const beskrivning = row["Beskrivning"] || "";
+          let accessInfo = {};
+          if (beskrivning) {
+            const lines = beskrivning.split("\n");
+            if (lines.length >= 2) {
+              accessInfo = {
+                contactPerson: lines[1]?.trim() || null,
+                phone: lines[2]?.trim() || null,
+                email: lines[3]?.trim() || null,
+              };
+            }
+          }
+          
+          // Determine object level
+          let objectLevel = 1;
+          if (parent) objectLevel = 2;
+          if (objectType === "rum" || objectType === "soprum" || objectType === "kok" || 
+              objectType === "matafall" || objectType === "atervinning") objectLevel = 3;
+          
+          const objectData = {
+            tenantId: DEFAULT_TENANT_ID,
+            customerId,
+            parentId: null as string | null,
+            name,
+            objectNumber: `MODUS-${modusId}`,
+            objectType,
+            objectLevel,
+            address: row["Adress 1"] || null,
+            city: row["Ort"] || null,
+            postalCode: row["Postnummer"] || null,
+            latitude,
+            longitude,
+            accessType,
+            accessCode,
+            keyNumber,
+            accessInfo,
+            containerCount,
+          };
+          
+          const createdObject = await storage.createObject(objectData);
+          modusIdMap.set(modusId, createdObject.id);
+          imported.push(name);
+        } catch (err) {
+          console.error("Modus object import error:", err);
+          errors.push(`Fel vid import av "${row["Namn"] || "okänd"}": ${err}`);
+        }
+      }
+      
+      // Second pass: update parent references
+      let parentsUpdated = 0;
+      for (const row of result.data as Record<string, string>[]) {
+        const modusId = row["Id"];
+        const parentModusId = row["Parent"];
+        
+        if (modusId && parentModusId) {
+          const objectId = modusIdMap.get(modusId);
+          const parentId = modusIdMap.get(parentModusId);
+          
+          if (objectId && parentId) {
+            await storage.updateObject(objectId, { parentId });
+            parentsUpdated++;
+          }
+        }
+      }
+      
+      res.json({ 
+        imported: imported.length, 
+        parentsUpdated,
+        customersCreated: customerNames.size,
+        skipped: skipped.length,
+        errors: errors.slice(0, 20),
+        totalRows: (result.data as unknown[]).length,
+      });
+    } catch (error) {
+      console.error("Modus import error:", error);
+      res.status(500).json({ error: "Modus import misslyckades", details: String(error) });
+    }
+  });
+
+  // Modus 2.0 Import - Tasks (uppgifter)
+  app.post("/api/import/modus/tasks", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+      
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        delimiter: ";",
+      });
+      
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      }
+
+      // Get existing objects and customers
+      const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+      const objectMap = new Map(objects.map(o => [o.objectNumber, o]));
+      
+      const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+      const customerMap = new Map(customers.map(c => [c.name.toLowerCase(), c.id]));
+      
+      // Get or create resources from Team field
+      const resources = await storage.getResources(DEFAULT_TENANT_ID);
+      const resourceMap = new Map(resources.map(r => [r.name.toLowerCase(), r.id]));
+      
+      const imported: string[] = [];
+      const errors: string[] = [];
+      
+      for (const row of result.data as Record<string, string>[]) {
+        try {
+          const uppgiftsId = row["Uppgifts Id"];
+          const objekt = row["Objekt"];
+          const kundRaw = row["Kund"] || "";
+          const uppgiftsnamn = row["Uppgiftsnamn"] || "";
+          const uppgiftstyp = row["Uppgiftstyp"] || "";
+          const status = row["Status"] || "draft";
+          const varaktighet = row["Varaktighet"] || "60";
+          const team = row["Team"] || "";
+          const planeradDagOTid = row["Planerad dag o tid"] || "";
+          
+          if (!uppgiftsId || !uppgiftsnamn) continue;
+          
+          // Find object by Modus ID
+          const objectNumber = `MODUS-${objekt}`;
+          const object = objectMap.get(objectNumber);
+          if (!object) {
+            errors.push(`Objekt ${objekt} hittades inte för uppgift ${uppgiftsId}`);
+            continue;
+          }
+          
+          // Find or create resource
+          let resourceId = null;
+          if (team) {
+            resourceId = resourceMap.get(team.toLowerCase());
+            if (!resourceId) {
+              const newResource = await storage.createResource({
+                tenantId: DEFAULT_TENANT_ID,
+                name: team,
+                initials: team.substring(0, 3).toUpperCase(),
+              });
+              resourceId = newResource.id;
+              resourceMap.set(team.toLowerCase(), resourceId);
+            }
+          }
+          
+          // Parse scheduled date
+          let scheduledDate = null;
+          let scheduledStartTime = null;
+          if (planeradDagOTid) {
+            const dt = new Date(planeradDagOTid);
+            if (!isNaN(dt.getTime())) {
+              scheduledDate = dt;
+              scheduledStartTime = `${dt.getHours().toString().padStart(2, '0')}:${dt.getMinutes().toString().padStart(2, '0')}`;
+            }
+          }
+          
+          // Map status
+          let mappedStatus = "draft";
+          if (status === "done") mappedStatus = "completed";
+          else if (status === "in_progress") mappedStatus = "in_progress";
+          else if (status === "not_started" || status === "scheduled") mappedStatus = "scheduled";
+          
+          const workOrderData = {
+            tenantId: DEFAULT_TENANT_ID,
+            customerId: object.customerId,
+            objectId: object.id,
+            resourceId,
+            title: uppgiftsnamn,
+            description: `Modus ID: ${uppgiftsId}, Typ: ${uppgiftstyp}`,
+            orderType: uppgiftstyp.toLowerCase().includes("tvätt") ? "karlttvatt" : 
+                       uppgiftstyp.toLowerCase().includes("rum") ? "rumstvatt" : "hamtning",
+            priority: "normal",
+            status: mappedStatus,
+            scheduledDate,
+            scheduledStartTime,
+            estimatedDuration: parseInt(varaktighet) || 60,
+            metadata: { modusId: uppgiftsId },
+          };
+          
+          await storage.createWorkOrder(workOrderData);
+          imported.push(uppgiftsnamn);
+        } catch (err) {
+          errors.push(`Fel vid import av uppgift: ${err}`);
+        }
+      }
+      
+      res.json({ 
+        imported: imported.length, 
+        errors: errors.slice(0, 20),
+        totalRows: (result.data as unknown[]).length,
+      });
+    } catch (error) {
+      console.error("Modus tasks import error:", error);
+      res.status(500).json({ error: "Modus tasks import misslyckades" });
+    }
+  });
+
+  // Modus 2.0 Import - Task Events (for setup time analysis)
+  app.post("/api/import/modus/events", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+      
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        delimiter: ";",
+      });
+      
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      }
+
+      // Group events by Uppgifts Id to calculate setup times
+      const eventsByTask = new Map<string, Array<{ type: string; time: Date }>>();
+      
+      for (const row of result.data as Record<string, string>[]) {
+        const uppgiftsId = row["Uppgifts Id"];
+        const eventTyp = row["Event Typ"];
+        const tid = row["Tid"];
+        
+        if (!uppgiftsId || !tid) continue;
+        
+        const time = new Date(tid);
+        if (isNaN(time.getTime())) continue;
+        
+        if (!eventsByTask.has(uppgiftsId)) {
+          eventsByTask.set(uppgiftsId, []);
+        }
+        eventsByTask.get(uppgiftsId)!.push({ type: eventTyp, time });
+      }
+      
+      // Calculate setup times (time between in_progress events on same task)
+      // This approximates setup time as the gap between consecutive task starts
+      const setupTimes: Array<{ taskId: string; minutes: number }> = [];
+      
+      for (const [taskId, events] of Array.from(eventsByTask)) {
+        // Sort by time
+        events.sort((a: { type: string; time: Date }, b: { type: string; time: Date }) => a.time.getTime() - b.time.getTime());
+        
+        // Find in_progress -> done pairs
+        for (let i = 0; i < events.length - 1; i++) {
+          if (events[i].type === "in_progress" && events[i + 1].type === "done") {
+            const duration = (events[i + 1].time.getTime() - events[i].time.getTime()) / (1000 * 60);
+            if (duration > 0 && duration < 240) { // Max 4 hours
+              setupTimes.push({ taskId, minutes: Math.round(duration) });
+            }
+          }
+        }
+      }
+      
+      res.json({ 
+        totalEvents: (result.data as unknown[]).length,
+        uniqueTasks: eventsByTask.size,
+        calculatedSetupTimes: setupTimes.length,
+        averageSetupTime: setupTimes.length > 0 
+          ? Math.round(setupTimes.reduce((sum, s) => sum + s.minutes, 0) / setupTimes.length) 
+          : 0,
+        setupTimeDistribution: {
+          under5min: setupTimes.filter(s => s.minutes < 5).length,
+          "5to15min": setupTimes.filter(s => s.minutes >= 5 && s.minutes < 15).length,
+          "15to30min": setupTimes.filter(s => s.minutes >= 15 && s.minutes < 30).length,
+          over30min: setupTimes.filter(s => s.minutes >= 30).length,
+        },
+      });
+    } catch (error) {
+      console.error("Modus events import error:", error);
+      res.status(500).json({ error: "Modus events import misslyckades" });
     }
   });
 
