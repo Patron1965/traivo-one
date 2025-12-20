@@ -206,7 +206,12 @@ export async function registerRoutes(
 
   app.get("/api/work-orders", async (req, res) => {
     try {
-      const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const includeUnscheduled = req.query.includeUnscheduled === 'true';
+      const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
+      
+      const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID, startDate, endDate, includeUnscheduled, limit);
       res.json(workOrders);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch work orders" });

@@ -10,7 +10,7 @@ import {
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, isNull, desc, gte, lte } from "drizzle-orm";
+import { eq, and, or, isNull, desc, gte, lte } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -40,7 +40,7 @@ export interface IStorage {
   updateResource(id: string, resource: Partial<InsertResource>): Promise<Resource | undefined>;
   deleteResource(id: string): Promise<void>;
   
-  getWorkOrders(tenantId: string): Promise<WorkOrder[]>;
+  getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrder[]>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
   getWorkOrdersByResource(resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkOrder[]>;
   getWorkOrdersByDate(tenantId: string, date: Date): Promise<WorkOrder[]>;
@@ -162,8 +162,30 @@ export class DatabaseStorage implements IStorage {
     await db.update(resources).set({ deletedAt: new Date() }).where(eq(resources.id, id));
   }
 
-  async getWorkOrders(tenantId: string): Promise<WorkOrder[]> {
-    return db.select().from(workOrders).where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt))).orderBy(desc(workOrders.scheduledDate));
+  async getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrder[]> {
+    const conditions = [eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)];
+    
+    if (startDate && endDate) {
+      if (includeUnscheduled) {
+        conditions.push(
+          or(
+            isNull(workOrders.scheduledDate),
+            and(gte(workOrders.scheduledDate, startDate), lte(workOrders.scheduledDate, endDate))
+          )!
+        );
+      } else {
+        conditions.push(gte(workOrders.scheduledDate, startDate));
+        conditions.push(lte(workOrders.scheduledDate, endDate));
+      }
+    }
+    
+    let query = db.select().from(workOrders).where(and(...conditions)).orderBy(desc(workOrders.scheduledDate));
+    
+    if (limit) {
+      query = query.limit(limit) as typeof query;
+    }
+    
+    return query;
   }
 
   async getWorkOrder(id: string): Promise<WorkOrder | undefined> {

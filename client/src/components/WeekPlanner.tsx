@@ -75,8 +75,22 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     queryKey: ["/api/resources"],
   });
 
+  const dateRange = useMemo(() => {
+    const firstDate = visibleDates[0];
+    const lastDate = visibleDates[visibleDates.length - 1];
+    const startDate = format(addDays(firstDate, -7), "yyyy-MM-dd");
+    const endDate = format(addDays(lastDate, 7), "yyyy-MM-dd");
+    return { startDate, endDate };
+  }, [visibleDates]);
+
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
-    queryKey: ["/api/work-orders"],
+    queryKey: ["/api/work-orders", dateRange.startDate, dateRange.endDate],
+    queryFn: async () => {
+      const url = `/api/work-orders?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}&includeUnscheduled=true&limit=500`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch work orders");
+      return res.json();
+    },
   });
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({
@@ -102,7 +116,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     },
     onSuccess: () => {
       console.log("MUTATION SUCCESS - invalidating queries");
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"], exact: false });
       toast({
         title: "Jobb uppdaterat",
         description: "Jobbet har schemalagts.",
