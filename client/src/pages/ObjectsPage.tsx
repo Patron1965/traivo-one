@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { Slider } from "@/components/ui/slider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { 
-  Search, Plus, Filter, Loader2, ChevronRight, Building2, MapPin, Trash2, 
+  Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3
 } from "lucide-react";
@@ -84,9 +84,12 @@ function MapFitBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
+const PAGE_SIZE = 100;
+
 export default function ObjectsPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
   const [accessFilter, setAccessFilter] = useState("all");
   const [customerFilter, setCustomerFilter] = useState("all");
@@ -103,11 +106,25 @@ export default function ObjectsPage() {
   const [csvData, setCsvData] = useState("");
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyObject, setHistoryObject] = useState<ServiceObject | null>(null);
+  const [currentPage, setCurrentPage] = useState(0);
 
-  const { data: objects = [], isLoading } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
+  // Debounce search for server-side filtering
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+      setCurrentPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
+    queryKey: ["/api/objects", { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE, search: debouncedSearch }],
     staleTime: 60000,
   });
+
+  const objects = objectsData?.objects || [];
+  const totalObjects = objectsData?.total || 0;
+  const totalPages = Math.ceil(totalObjects / PAGE_SIZE);
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -116,6 +133,7 @@ export default function ObjectsPage() {
 
   const { data: setupLogs = [] } = useQuery<SetupTimeLog[]>({
     queryKey: ["/api/setup-time-logs"],
+    staleTime: 60000,
   });
 
   const updateObjectMutation = useMutation({
@@ -123,7 +141,7 @@ export default function ObjectsPage() {
       return apiRequest("PATCH", `/api/objects/${id}`, data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
       toast({ title: "Objekt uppdaterat" });
       setEditingObject(null);
       setEditField(null);
@@ -138,7 +156,7 @@ export default function ObjectsPage() {
       return apiRequest("POST", "/api/objects", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
       toast({ title: "Objekt skapat" });
       setCopyDialogOpen(false);
       setObjectToCopy(null);
@@ -167,21 +185,15 @@ export default function ObjectsPage() {
 
   const filteredObjects = useMemo(() => {
     return objects.filter(obj => {
-      const customerName = customerMap.get(obj.customerId) || "";
-      const matchesSearch = 
-        obj.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (obj.objectNumber || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (obj.address || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (obj.city || "").toLowerCase().includes(searchQuery.toLowerCase());
+      // Server already filtered by search, so just apply local filters
       const matchesType = typeFilter === "all" || obj.objectType === typeFilter;
       const matchesAccess = accessFilter === "all" || obj.accessType === accessFilter;
       const matchesCustomer = customerFilter === "all" || obj.customerId === customerFilter;
       const setupTime = obj.avgSetupTime || 0;
       const matchesSetupTime = setupTime >= setupTimeRange[0] && setupTime <= setupTimeRange[1];
-      return matchesSearch && matchesType && matchesAccess && matchesCustomer && matchesSetupTime;
+      return matchesType && matchesAccess && matchesCustomer && matchesSetupTime;
     });
-  }, [objects, searchQuery, typeFilter, accessFilter, customerFilter, setupTimeRange, customerMap]);
+  }, [objects, typeFilter, accessFilter, customerFilter, setupTimeRange]);
 
   const filteredTopLevel = filteredObjects.filter(obj => !obj.parentId);
 
@@ -296,7 +308,7 @@ export default function ObjectsPage() {
       }
     }
     
-    queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
     toast({ 
       title: "Import klar", 
       description: `${successCount} objekt importerade${errorCount > 0 ? `, ${errorCount} misslyckades` : ""}` 
@@ -702,6 +714,40 @@ export default function ObjectsPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between gap-4 mt-4 px-2">
+          <div className="text-sm text-muted-foreground">
+            Visar {currentPage * PAGE_SIZE + 1}-{Math.min((currentPage + 1) * PAGE_SIZE, totalObjects)} av {totalObjects.toLocaleString("sv-SE")} objekt
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 0}
+              onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+              data-testid="button-prev-page"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Föregående
+            </Button>
+            <span className="text-sm px-2">
+              Sida {currentPage + 1} av {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages - 1}
+              onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+              data-testid="button-next-page"
+            >
+              Nästa
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Dialog open={copyDialogOpen} onOpenChange={setCopyDialogOpen}>
         <DialogContent>

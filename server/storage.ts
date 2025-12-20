@@ -28,6 +28,7 @@ export interface IStorage {
   deleteCustomer(id: string): Promise<void>;
   
   getObjects(tenantId: string): Promise<ServiceObject[]>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ objects: ServiceObject[]; total: number }>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectsByCustomer(customerId: string): Promise<ServiceObject[]>;
   createObject(object: InsertObject): Promise<ServiceObject>;
@@ -114,6 +115,36 @@ export class DatabaseStorage implements IStorage {
 
   async getObjects(tenantId: string): Promise<ServiceObject[]> {
     return db.select().from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+  }
+
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ objects: ServiceObject[]; total: number }> {
+    const { sql, count } = await import("drizzle-orm");
+    
+    let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
+    
+    if (search && search.trim()) {
+      const searchTerm = `%${search.toLowerCase()}%`;
+      whereConditions = and(
+        whereConditions,
+        or(
+          sql`LOWER(${objects.name}) LIKE ${searchTerm}`,
+          sql`LOWER(${objects.objectNumber}) LIKE ${searchTerm}`,
+          sql`LOWER(${objects.address}) LIKE ${searchTerm}`
+        )
+      );
+    }
+    
+    const [countResult] = await db.select({ count: count() }).from(objects).where(whereConditions);
+    const total = countResult?.count || 0;
+    
+    const objectsList = await db.select()
+      .from(objects)
+      .where(whereConditions)
+      .orderBy(objects.name)
+      .limit(limit)
+      .offset(offset);
+    
+    return { objects: objectsList, total };
   }
 
   async getObject(id: string): Promise<ServiceObject | undefined> {
