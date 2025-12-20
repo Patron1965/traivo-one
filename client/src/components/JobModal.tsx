@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,9 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { CalendarIcon, Loader2 } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { CalendarIcon, Loader2, ChevronsUpDown, Check } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { Customer, ServiceObject, Resource } from "@shared/schema";
@@ -46,22 +48,51 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     resourceId: "",
     scheduledDate: undefined,
   });
+  const [objectSearch, setObjectSearch] = useState("");
+  const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
+  const [selectedObjectName, setSelectedObjectName] = useState("");
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 
-  const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
+  const debouncedSearch = useMemo(() => {
+    let timeoutId: NodeJS.Timeout;
+    return (value: string) => {
+      clearTimeout(timeoutId);
+      return new Promise<string>((resolve) => {
+        timeoutId = setTimeout(() => resolve(value), 300);
+      });
+    };
+  }, []);
+
+  const objectSearchParams = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("limit", "20");
+    if (objectSearch.length >= 2) {
+      params.set("search", objectSearch);
+    }
+    if (formData.customerId) {
+      params.set("customerId", formData.customerId);
+    }
+    return params.toString();
+  }, [objectSearch, formData.customerId]);
+
+  const { data: objectsResponse, isLoading: objectsLoading } = useQuery<{ objects: ServiceObject[], total: number }>({
+    queryKey: ["/api/objects", objectSearchParams],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects?${objectSearchParams}`);
+      if (!res.ok) throw new Error("Failed to fetch objects");
+      return res.json();
+    },
+    enabled: objectPopoverOpen,
   });
+
+  const objects = objectsResponse?.objects || [];
 
   const { data: resources = [] } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
   });
-
-  const filteredObjects = objects.filter(o => 
-    !formData.customerId || o.customerId === formData.customerId
-  );
 
   const createWorkOrderMutation = useMutation({
     mutationFn: async (data: {
@@ -100,6 +131,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       resourceId: "",
       scheduledDate: undefined,
     });
+    setObjectSearch("");
+    setSelectedObjectName("");
     onClose();
   };
 
@@ -165,19 +198,72 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
 
             <div className="space-y-2">
               <Label>Objekt</Label>
-              <Select 
-                value={formData.objectId} 
-                onValueChange={(v) => setFormData({...formData, objectId: v})}
-              >
-                <SelectTrigger data-testid="select-object">
-                  <SelectValue placeholder="Välj objekt" />
-                </SelectTrigger>
-                <SelectContent>
-                  {filteredObjects.map(o => (
-                    <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={objectPopoverOpen} onOpenChange={setObjectPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={objectPopoverOpen}
+                    className="w-full justify-between font-normal"
+                    data-testid="select-object"
+                  >
+                    {selectedObjectName || "Sök objekt..."}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[300px] p-0" align="start">
+                  <Command shouldFilter={false}>
+                    <CommandInput 
+                      placeholder="Skriv för att söka..." 
+                      value={objectSearch}
+                      onValueChange={setObjectSearch}
+                    />
+                    <CommandList>
+                      {objectsLoading && (
+                        <div className="flex items-center justify-center py-6">
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        </div>
+                      )}
+                      {!objectsLoading && objects.length === 0 && objectSearch.length >= 2 && (
+                        <CommandEmpty>Inga objekt hittades</CommandEmpty>
+                      )}
+                      {!objectsLoading && objects.length === 0 && objectSearch.length < 2 && (
+                        <div className="py-4 text-center text-sm text-muted-foreground">
+                          Skriv minst 2 tecken för att söka
+                        </div>
+                      )}
+                      {objects.length > 0 && (
+                        <CommandGroup>
+                          {objects.map((obj) => (
+                            <CommandItem
+                              key={obj.id}
+                              value={obj.id}
+                              onSelect={() => {
+                                setFormData({...formData, objectId: obj.id});
+                                setSelectedObjectName(obj.name);
+                                setObjectPopoverOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-4 w-4",
+                                  formData.objectId === obj.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col">
+                                <span>{obj.name}</span>
+                                {obj.address && (
+                                  <span className="text-xs text-muted-foreground">{obj.address}</span>
+                                )}
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 

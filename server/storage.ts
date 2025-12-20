@@ -28,7 +28,7 @@ export interface IStorage {
   deleteCustomer(id: string): Promise<void>;
   
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string): Promise<{ objects: ServiceObject[]; total: number }>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectsByCustomer(customerId: string): Promise<ServiceObject[]>;
   createObject(object: InsertObject): Promise<ServiceObject>;
@@ -117,10 +117,14 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
+    
+    if (customerId) {
+      whereConditions = and(whereConditions, eq(objects.customerId, customerId));
+    }
     
     if (search && search.trim()) {
       const searchTerm = `%${search.toLowerCase()}%`;

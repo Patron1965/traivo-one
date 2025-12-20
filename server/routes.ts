@@ -96,10 +96,11 @@ export async function registerRoutes(
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
       const search = req.query.search as string || "";
+      const customerId = req.query.customerId as string || undefined;
       
       // If paginated request
-      if (req.query.limit || req.query.offset || req.query.search) {
-        const result = await storage.getObjectsPaginated(DEFAULT_TENANT_ID, limit, offset, search);
+      if (req.query.limit || req.query.offset || req.query.search || req.query.customerId) {
+        const result = await storage.getObjectsPaginated(DEFAULT_TENANT_ID, limit, offset, search, customerId);
         res.json(result);
       } else {
         // Legacy: return all objects (for backward compatibility)
