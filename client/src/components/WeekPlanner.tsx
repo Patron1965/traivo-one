@@ -76,12 +76,11 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   });
 
   const dateRange = useMemo(() => {
-    const firstDate = visibleDates[0];
-    const lastDate = visibleDates[visibleDates.length - 1];
-    const startDate = format(addDays(firstDate, -7), "yyyy-MM-dd");
-    const endDate = format(addDays(lastDate, 7), "yyyy-MM-dd");
+    const monthStart = startOfMonth(currentDate);
+    const startDate = format(addDays(monthStart, -14), "yyyy-MM-dd");
+    const endDate = format(addDays(monthStart, 45), "yyyy-MM-dd");
     return { startDate, endDate };
-  }, [visibleDates]);
+  }, [currentDate.getFullYear(), currentDate.getMonth()]);
 
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
     queryKey: ["/api/work-orders", dateRange.startDate, dateRange.endDate],
@@ -91,6 +90,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       if (!res.ok) throw new Error("Failed to fetch work orders");
       return res.json();
     },
+    staleTime: 60000,
   });
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({
