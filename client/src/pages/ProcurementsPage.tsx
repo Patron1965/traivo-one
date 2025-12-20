@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -77,8 +77,45 @@ export default function ProcurementsPage() {
     queryKey: ["/api/customers"],
   });
 
-  const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
+  const [objectSearch, setObjectSearch] = useState("");
+  const [debouncedObjectSearch, setDebouncedObjectSearch] = useState("");
+
+  // Debounce object search
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedObjectSearch(objectSearch), 300);
+    return () => clearTimeout(timer);
+  }, [objectSearch]);
+
+  // Only fetch objects with search (paginated)
+  const { data: objectSearchResults = [], isLoading: loadingObjects } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects", { search: debouncedObjectSearch, limit: 50 }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (debouncedObjectSearch) params.set("search", debouncedObjectSearch);
+      params.set("limit", "50");
+      const res = await fetch(`/api/objects?${params}`);
+      return res.json();
+    },
+    enabled: showObjectsDialog,
+  });
+
+  // Fetch selected objects by searching for each ID individually (batch approach)
+  const { data: selectedObjects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects/selected", selectedObjectIds.join(",")],
+    queryFn: async () => {
+      if (selectedObjectIds.length === 0) return [];
+      // Fetch objects by IDs - use search with each name
+      const results: ServiceObject[] = [];
+      // For efficiency, fetch in a single larger request with search matching IDs
+      const params = new URLSearchParams();
+      params.set("limit", "200");
+      const res = await fetch(`/api/objects?${params}`);
+      const all = await res.json();
+      // Filter to only selected IDs
+      return all.filter((o: ServiceObject) => selectedObjectIds.includes(o.id));
+    },
+    enabled: showObjectsDialog && selectedObjectIds.length > 0,
+    staleTime: 60000, // Cache for 1 minute
   });
 
   const createMutation = useMutation({
@@ -207,7 +244,7 @@ export default function ProcurementsPage() {
     if (!selectedProcurement) return;
     
     const totalContainers = selectedObjectIds.reduce((sum, id) => {
-      const obj = objects.find(o => o.id === id);
+      const obj = objectMapForCalc.get(id);
       if (!obj) return sum;
       return sum + (obj.containerCount || 0) + (obj.containerCountK2 || 0) + 
              (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
@@ -222,9 +259,21 @@ export default function ProcurementsPage() {
     });
   };
 
-  const getObjectById = (id: string) => objects.find(o => o.id === id);
+  // Combine search results with selected objects for display (show all, not just top-level)
+  const displayObjects = useMemo(() => {
+    const combined = new Map<string, ServiceObject>();
+    selectedObjects.forEach(o => combined.set(o.id, o));
+    objectSearchResults.forEach(o => combined.set(o.id, o));
+    return Array.from(combined.values());
+  }, [selectedObjects, objectSearchResults]);
 
-  const topLevelObjects = objects.filter(o => !o.parentId || o.objectLevel === 1);
+  // Combined object map for accurate container calculations
+  const objectMapForCalc = useMemo(() => {
+    const map = new Map<string, ServiceObject>();
+    selectedObjects.forEach(o => map.set(o.id, o));
+    objectSearchResults.forEach(o => map.set(o.id, o));
+    return map;
+  }, [selectedObjects, objectSearchResults]);
 
   if (isLoading) {
     return (
@@ -750,26 +799,44 @@ export default function ProcurementsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={showObjectsDialog} onOpenChange={setShowObjectsDialog}>
+      <Dialog open={showObjectsDialog} onOpenChange={(open) => {
+        setShowObjectsDialog(open);
+        if (!open) setObjectSearch("");
+      }}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Koppla objekt till upphandling</DialogTitle>
           </DialogHeader>
           <div className="py-4">
-            <p className="text-sm text-muted-foreground mb-4">
-              Välj vilka objekt (områden, fastigheter) som ingår i denna upphandling.
-            </p>
+            <div className="relative mb-4">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök objekt..."
+                value={objectSearch}
+                onChange={(e) => setObjectSearch(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-objects"
+              />
+            </div>
             <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-2">
-                {topLevelObjects.map((obj) => {
-                  const isSelected = selectedObjectIds.includes(obj.id);
-                  const children = objects.filter(o => o.parentId === obj.id);
-                  const containerTotal = (obj.containerCount || 0) + (obj.containerCountK2 || 0) + 
-                                        (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
-                  
-                  return (
-                    <div key={obj.id} className="space-y-1">
+              {loadingObjects ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : displayObjects.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8">
+                  {objectSearch ? "Inga objekt matchar sökningen" : "Sök för att hitta objekt"}
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {displayObjects.map((obj) => {
+                    const isSelected = selectedObjectIds.includes(obj.id);
+                    const containerTotal = (obj.containerCount || 0) + (obj.containerCountK2 || 0) + 
+                                          (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);
+                    
+                    return (
                       <div 
+                        key={obj.id}
                         className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
                         onClick={() => {
                           if (isSelected) {
@@ -791,7 +858,7 @@ export default function ProcurementsPage() {
                           data-testid={`checkbox-object-${obj.id}`}
                         />
                         <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="font-medium">{obj.name}</span>
                             <Badge variant="outline" className="text-xs">
                               {objectTypeLabels[obj.objectType] || obj.objectType}
@@ -805,59 +872,16 @@ export default function ProcurementsPage() {
                           <span className="text-sm text-muted-foreground">{containerTotal} kärl</span>
                         )}
                       </div>
-                      {children.length > 0 && (
-                        <div className="ml-8 space-y-1">
-                          {children.map((child) => {
-                            const childSelected = selectedObjectIds.includes(child.id);
-                            const childContainers = (child.containerCount || 0) + (child.containerCountK2 || 0) + 
-                                                   (child.containerCountK3 || 0) + (child.containerCountK4 || 0);
-                            return (
-                              <div 
-                                key={child.id}
-                                className="flex items-center gap-3 p-2 rounded-md hover-elevate cursor-pointer"
-                                onClick={() => {
-                                  if (childSelected) {
-                                    setSelectedObjectIds(selectedObjectIds.filter(id => id !== child.id));
-                                  } else {
-                                    setSelectedObjectIds([...selectedObjectIds, child.id]);
-                                  }
-                                }}
-                              >
-                                <Checkbox 
-                                  checked={childSelected}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedObjectIds([...selectedObjectIds, child.id]);
-                                    } else {
-                                      setSelectedObjectIds(selectedObjectIds.filter(id => id !== child.id));
-                                    }
-                                  }}
-                                  data-testid={`checkbox-object-${child.id}`}
-                                />
-                                <div className="flex-1">
-                                  <span>{child.name}</span>
-                                  <Badge variant="outline" className="ml-2 text-xs">
-                                    {objectTypeLabels[child.objectType] || child.objectType}
-                                  </Badge>
-                                </div>
-                                {childContainers > 0 && (
-                                  <span className="text-sm text-muted-foreground">{childContainers} kärl</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </ScrollArea>
             <div className="mt-4 pt-4 border-t">
               <p className="text-sm text-muted-foreground">
                 Valda: {selectedObjectIds.length} objekt, totalt {
                   selectedObjectIds.reduce((sum, id) => {
-                    const obj = getObjectById(id);
+                    const obj = objectMapForCalc.get(id);
                     if (!obj) return sum;
                     return sum + (obj.containerCount || 0) + (obj.containerCountK2 || 0) + 
                            (obj.containerCountK3 || 0) + (obj.containerCountK4 || 0);

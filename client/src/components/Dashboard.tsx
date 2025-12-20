@@ -190,6 +190,7 @@ export function Dashboard() {
     const resourceJobs = workOrders.filter(wo => wo.resourceId === r.id);
     const hoursPlanned = resourceJobs.reduce((sum, wo) => sum + (wo.estimatedDuration || 0), 0) / 60;
     return {
+      id: r.id,
       name: r.name.split(" ").map(n => n[0] + ".").join(" ").slice(0, -1),
       fullName: r.name,
       planned: r.weeklyHours || 40,
@@ -495,7 +496,7 @@ export function Dashboard() {
               <p className="text-sm text-muted-foreground">Inga resurser registrerade</p>
             ) : (
               resourceUtilization.map((resource) => (
-                <div key={resource.name} className="space-y-2">
+                <div key={resource.id} className="space-y-2">
                   <div className="flex items-center justify-between gap-2 text-sm">
                     <Tooltip>
                       <TooltipTrigger asChild>
