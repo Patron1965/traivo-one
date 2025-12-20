@@ -97,6 +97,17 @@ export async function registerRoutes(
       const offset = parseInt(req.query.offset as string) || 0;
       const search = req.query.search as string || "";
       const customerId = req.query.customerId as string || undefined;
+      const ids = req.query.ids as string || undefined;
+      
+      // If requesting specific IDs - batch fetch
+      if (ids) {
+        const idArray = ids.split(",").filter(id => id.trim());
+        if (idArray.length > 0) {
+          const objects = await storage.getObjectsByIds(DEFAULT_TENANT_ID, idArray);
+          res.json(objects);
+          return;
+        }
+      }
       
       // If paginated request
       if (req.query.limit || req.query.offset || req.query.search || req.query.customerId) {

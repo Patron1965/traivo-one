@@ -29,6 +29,7 @@ export interface IStorage {
   
   getObjects(tenantId: string): Promise<ServiceObject[]>;
   getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectsByCustomer(customerId: string): Promise<ServiceObject[]>;
   createObject(object: InsertObject): Promise<ServiceObject>;
@@ -149,6 +150,18 @@ export class DatabaseStorage implements IStorage {
       .offset(offset);
     
     return { objects: objectsList, total };
+  }
+
+  async getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]> {
+    if (ids.length === 0) return [];
+    const { inArray } = await import("drizzle-orm");
+    return db.select()
+      .from(objects)
+      .where(and(
+        eq(objects.tenantId, tenantId),
+        isNull(objects.deletedAt),
+        inArray(objects.id, ids)
+      ));
   }
 
   async getObject(id: string): Promise<ServiceObject | undefined> {

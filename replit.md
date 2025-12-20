@@ -105,6 +105,9 @@ Field Mappings (Modus → Nordic Routing):
 - **Font:** Inter for UI
 
 ## Recent Changes
+- 2024-12-20: Added useObjectsByIds/useObjectSearch hooks for lazy object loading
+- 2024-12-20: Optimized MobileFieldApp, Dashboard, OptimizationPrepPage, RouteMap, ProcurementsPage with lazy loading
+- 2024-12-20: All components now use ID-based object fetching instead of loading all objects
 - 2024-12-19: Added Modus 2.0 Import system (objects, tasks, events analysis)
 - 2024-12-19: Increased upload limit to 50MB for large Modus exports
 - 2024-12-19: Added "Inför Optimering" page for weekly optimization preparation
@@ -115,6 +118,34 @@ Field Mappings (Modus → Nordic Routing):
 - 2024-12-17: Added Telgebostäder and Serviceboenden as customers
 - 2024-12-17: Setup time logging from MobileFieldApp to database
 - 2024-12-17: Dashboard uses real setup_time_logs data
+
+## Optimization Patterns
+### Lazy Object Loading
+Components should NOT load all objects at once. Use the shared hooks in `client/src/hooks/useObjectSearch.ts`:
+
+- **useObjectsByIds(objectIds)**: Fetch objects by specific IDs (for components that know which objects they need)
+- **useObjectSearch({ selectedIds, enabled })**: For searchable dropdowns with debounced search
+
+**Standard pattern for components:**
+```typescript
+// 1. Collect object IDs from workOrders/setupLogs/etc
+const objectIdsNeeded = useMemo(() => {
+  return workOrders.map(wo => wo.objectId).filter(Boolean);
+}, [workOrders]);
+
+// 2. Fetch only needed objects
+const { data: objects = [] } = useObjectsByIds(objectIdsNeeded);
+
+// 3. Create objectMap for lookups
+const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
+```
+
+**Components using this pattern:**
+- MobileFieldApp (today's jobs only)
+- Dashboard (setupLogs/workOrders references only)
+- OptimizationPrepPage (week's jobs only)
+- RouteMap (visible period only)
+- ProcurementsPage (searchable dropdown)
 
 ## Development Checklists
 

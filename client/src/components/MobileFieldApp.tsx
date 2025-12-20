@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import {
 import { startOfDay, endOfDay } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import type { WorkOrderWithObject, ServiceObject, Customer } from "@shared/schema";
 
 const priorityColors: Record<string, string> = {
@@ -44,17 +45,30 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
     queryKey: ["/api/work-orders"],
   });
 
-  // objektMap behövs för accessInfo (som inte finns i WorkOrderWithObject)
-  const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
-  });
-
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 
-  const objectMap = new Map(objects.map(o => [o.id, o]));
-  const customerMap = new Map(customers.map(c => [c.id, c]));
+  // Endast hämta objekt som refereras i dagens arbetsordrar (för accessInfo)
+  const objectIdsNeeded = useMemo(() => {
+    const today = new Date();
+    const todayStart = startOfDay(today);
+    const todayEnd = endOfDay(today);
+    return workOrders
+      .filter(wo => {
+        if (!wo.scheduledDate) return false;
+        if (resourceId && wo.resourceId !== resourceId) return false;
+        const scheduled = new Date(wo.scheduledDate);
+        return scheduled >= todayStart && scheduled <= todayEnd;
+      })
+      .map(wo => wo.objectId)
+      .filter(Boolean);
+  }, [workOrders, resourceId]);
+
+  const { data: objects = [] } = useObjectsByIds(objectIdsNeeded);
+  
+  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
+  const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
   const today = new Date();
   const todayStart = startOfDay(today);

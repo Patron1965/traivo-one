@@ -18,6 +18,7 @@ import {
 } from "recharts";
 import { format, subDays, startOfDay, isBefore } from "date-fns";
 import { sv } from "date-fns/locale";
+import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import type { Resource, ServiceObject, SetupTimeLog, Customer, WorkOrderWithObject } from "@shared/schema";
 
 export function Dashboard() {
@@ -29,10 +30,6 @@ export function Dashboard() {
     queryKey: ["/api/resources"],
   });
 
-  const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
-  });
-
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
@@ -41,9 +38,18 @@ export function Dashboard() {
     queryKey: ["/api/setup-logs"],
   });
 
-  // objectMap behövs fortfarande för setupLogs-analys (de har bara objectId)
-  const objectMap = new Map(objects.map(o => [o.id, o]));
-  const customerMap = new Map(customers.map(c => [c.id, c.name]));
+  // Endast hämta objekt som refereras i setupLogs och workOrders (för analys)
+  const objectIdsNeeded = useMemo(() => {
+    const ids = new Set<string>();
+    setupLogs.forEach(log => { if (log.objectId) ids.add(log.objectId); });
+    workOrders.forEach(wo => { if (wo.objectId) ids.add(wo.objectId); });
+    return Array.from(ids);
+  }, [setupLogs, workOrders]);
+
+  const { data: objects = [] } = useObjectsByIds(objectIdsNeeded);
+  
+  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
+  const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c.name])), [customers]);
 
   const completedJobs = workOrders.filter(wo => wo.status === "completed").length;
   const totalJobs = workOrders.length;

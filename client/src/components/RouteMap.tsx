@@ -11,6 +11,7 @@ import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import type { Resource, WorkOrderWithObject, ServiceObject } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -108,13 +109,6 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
     queryKey: ["/api/work-orders"],
   });
 
-  // objektMap behövs för accessType, avgSetupTime, koordinater (som inte finns i WorkOrderWithObject)
-  const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
-  });
-
-  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
-
   const activeResource = selectedResource || (resources.length > 0 ? resources[0].id : "");
 
   const getDateRange = () => {
@@ -131,6 +125,22 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
   };
 
   const { start: periodStart, end: periodEnd } = getDateRange();
+
+  // Hämta endast objekt som visas i aktuell period
+  const displayJobObjectIds = useMemo(() => {
+    return workOrders
+      .filter(wo => {
+        if (!wo.scheduledDate || wo.resourceId !== activeResource) return false;
+        const scheduled = new Date(wo.scheduledDate);
+        return scheduled >= periodStart && scheduled <= periodEnd;
+      })
+      .map(wo => wo.objectId)
+      .filter(Boolean);
+  }, [workOrders, activeResource, periodStart, periodEnd]);
+
+  const { data: objects = [] } = useObjectsByIds(displayJobObjectIds);
+  
+  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
 
   const displayJobs = workOrders.filter(wo => {
     if (!wo.scheduledDate || wo.resourceId !== activeResource) return false;

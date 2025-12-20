@@ -99,23 +99,18 @@ export default function ProcurementsPage() {
     enabled: showObjectsDialog,
   });
 
-  // Fetch selected objects by searching for each ID individually (batch approach)
+  // Fetch selected objects by IDs (batch approach with dedicated endpoint)
   const { data: selectedObjects = [] } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects/selected", selectedObjectIds.join(",")],
     queryFn: async () => {
       if (selectedObjectIds.length === 0) return [];
-      // Fetch objects by IDs - use search with each name
-      const results: ServiceObject[] = [];
-      // For efficiency, fetch in a single larger request with search matching IDs
       const params = new URLSearchParams();
-      params.set("limit", "200");
+      params.set("ids", selectedObjectIds.join(","));
       const res = await fetch(`/api/objects?${params}`);
-      const all = await res.json();
-      // Filter to only selected IDs
-      return all.filter((o: ServiceObject) => selectedObjectIds.includes(o.id));
+      return res.json();
     },
     enabled: showObjectsDialog && selectedObjectIds.length > 0,
-    staleTime: 60000, // Cache for 1 minute
+    staleTime: 60000,
   });
 
   const createMutation = useMutation({

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isWithinInterval, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
+import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import type { WorkOrderWithObject, Resource, ServiceObject, Customer } from "@shared/schema";
 
 type OptimizationStatus = "idle" | "validating" | "ready" | "sending" | "optimizing" | "completed" | "error";
@@ -57,13 +58,25 @@ export default function OptimizationPrepPage() {
     queryKey: ["/api/resources"],
   });
 
-  const { data: objects = [], isLoading: loadingObjects } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
-  });
-
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
+
+  // Hämta endast objekt som refereras i veckans arbetsordrar
+  const weekOrderObjectIds = useMemo(() => {
+    return workOrders
+      .filter(order => {
+        if (!order.scheduledDate) return false;
+        const orderDate = typeof order.scheduledDate === 'string' 
+          ? parseISO(order.scheduledDate) 
+          : order.scheduledDate;
+        return isWithinInterval(orderDate, { start: selectedWeek, end: weekEnd });
+      })
+      .map(o => o.objectId)
+      .filter(Boolean);
+  }, [workOrders, selectedWeek, weekEnd]);
+
+  const { data: objects = [], isLoading: loadingObjects } = useObjectsByIds(weekOrderObjectIds);
 
   const weekOrders = useMemo(() => {
     return workOrders.filter(order => {
