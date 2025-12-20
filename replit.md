@@ -116,6 +116,29 @@ Field Mappings (Modus → Nordic Routing):
 - 2024-12-17: Setup time logging from MobileFieldApp to database
 - 2024-12-17: Dashboard uses real setup_time_logs data
 
+## Development Checklists
+
+### Adding a New Page
+When creating a new page, ALWAYS complete these steps:
+1. Create the page component in `client/src/pages/NewPage.tsx`
+2. Import it in `client/src/App.tsx`
+3. Add Route in the Router function: `<Route path="/new-page" component={NewPage} />`
+4. Add sidebar navigation in `client/src/components/layout/AppSidebar.tsx`
+
+### Current Routes (App.tsx)
+| Path | Component | Description |
+|------|-----------|-------------|
+| `/` | WeekPlannerPage | Huvudvy - veckoplanering |
+| `/planner` | WeekPlannerPage | Alias för veckoplanering |
+| `/routes` | RoutesPage | Ruttvisualisering |
+| `/optimization` | OptimizationPrepPage | Inför optimering |
+| `/objects` | ObjectsPage | Objekthantering |
+| `/resources` | ResourcesPage | Resurshantering |
+| `/procurements` | ProcurementsPage | Inköp |
+| `/dashboard` | DashboardPage | Analys |
+| `/import` | ImportPage | Modus 2.0 import |
+| `/settings` | SettingsPage | Inställningar |
+
 ## Next Steps
 1. Import real Kinab object data from Modus 2.0
 2. Integrate with external Nordic Routing optimization API

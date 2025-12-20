@@ -24,6 +24,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={WeekPlannerPage} />
+      <Route path="/planner" component={WeekPlannerPage} />
       <Route path="/routes" component={RoutesPage} />
       <Route path="/optimization" component={OptimizationPrepPage} />
       <Route path="/objects" component={ObjectsPage} />
