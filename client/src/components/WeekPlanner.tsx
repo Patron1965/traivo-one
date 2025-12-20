@@ -112,7 +112,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         payload.scheduledStartTime = scheduledStartTime;
       }
       const response = await apiRequest("PATCH", `/api/work-orders/${id}`, payload);
-      return response;
+      return response.json() as Promise<WorkOrder>;
     },
     onMutate: async ({ id, resourceId, scheduledDate }) => {
       await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
@@ -122,12 +122,19 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         if (!old) return old;
         return old.map(job => 
           job.id === id 
-            ? { ...job, resourceId, scheduledDate: new Date(scheduledDate), status: "scheduled" as const }
+            ? { ...job, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), status: "scheduled" as const }
             : job
         );
       });
       
       return { previousData };
+    },
+    onSuccess: (updatedWorkOrder, variables) => {
+      console.log("MUTATION SUCCESS:", variables.id, "server response:", updatedWorkOrder);
+      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+        if (!old) return old;
+        return old.map(job => job.id === variables.id ? updatedWorkOrder : job);
+      });
     },
     onError: (error, _variables, context) => {
       console.error("MUTATION ERROR:", error);
@@ -139,9 +146,6 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         description: "Kunde inte uppdatera jobbet.",
         variant: "destructive",
       });
-    },
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"], exact: false });
     },
   });
 
