@@ -118,7 +118,19 @@ export default function ObjectsPage() {
   }, [searchQuery]);
 
   const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", { limit: PAGE_SIZE, offset: currentPage * PAGE_SIZE, search: debouncedSearch }],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        limit: PAGE_SIZE.toString(),
+        offset: (currentPage * PAGE_SIZE).toString(),
+      });
+      if (debouncedSearch) {
+        params.append("search", debouncedSearch);
+      }
+      const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch objects");
+      return res.json();
+    },
     staleTime: 60000,
   });
 
