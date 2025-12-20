@@ -85,7 +85,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       if (!res.ok) throw new Error("Failed to fetch objects");
       return res.json();
     },
-    enabled: objectPopoverOpen,
+    enabled: objectPopoverOpen && objectSearch.length >= 2,
   });
 
   const objects = objectsResponse?.objects || [];
@@ -183,7 +183,11 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               <Label>Kund</Label>
               <Select 
                 value={formData.customerId} 
-                onValueChange={(v) => setFormData({...formData, customerId: v, objectId: ""})}
+                onValueChange={(v) => {
+                  setFormData({...formData, customerId: v, objectId: ""});
+                  setSelectedObjectName("");
+                  setObjectSearch("");
+                }}
               >
                 <SelectTrigger data-testid="select-customer">
                   <SelectValue placeholder="Välj kund" />
