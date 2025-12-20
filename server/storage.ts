@@ -4,7 +4,7 @@ import {
   type Customer, type InsertCustomer,
   type ServiceObject, type InsertObject,
   type Resource, type InsertResource,
-  type WorkOrder, type InsertWorkOrder,
+  type WorkOrder, type InsertWorkOrder, type WorkOrderWithObject,
   type SetupTimeLog, type InsertSetupTimeLog,
   type Procurement, type InsertProcurement,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements
@@ -41,7 +41,7 @@ export interface IStorage {
   updateResource(id: string, resource: Partial<InsertResource>): Promise<Resource | undefined>;
   deleteResource(id: string): Promise<void>;
   
-  getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrder[]>;
+  getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
   getWorkOrdersByResource(resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkOrder[]>;
   getWorkOrdersByDate(tenantId: string, date: Date): Promise<WorkOrder[]>;
@@ -197,7 +197,7 @@ export class DatabaseStorage implements IStorage {
     await db.update(resources).set({ deletedAt: new Date() }).where(eq(resources.id, id));
   }
 
-  async getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrder[]> {
+  async getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]> {
     const conditions = [eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)];
     
     if (startDate && endDate) {
@@ -214,7 +214,35 @@ export class DatabaseStorage implements IStorage {
       }
     }
     
-    let query = db.select().from(workOrders).where(and(...conditions)).orderBy(desc(workOrders.scheduledDate));
+    let query = db.select({
+      id: workOrders.id,
+      tenantId: workOrders.tenantId,
+      customerId: workOrders.customerId,
+      objectId: workOrders.objectId,
+      resourceId: workOrders.resourceId,
+      title: workOrders.title,
+      description: workOrders.description,
+      orderType: workOrders.orderType,
+      priority: workOrders.priority,
+      status: workOrders.status,
+      scheduledDate: workOrders.scheduledDate,
+      scheduledStartTime: workOrders.scheduledStartTime,
+      estimatedDuration: workOrders.estimatedDuration,
+      actualDuration: workOrders.actualDuration,
+      setupTime: workOrders.setupTime,
+      setupReason: workOrders.setupReason,
+      completedAt: workOrders.completedAt,
+      notes: workOrders.notes,
+      metadata: workOrders.metadata,
+      createdAt: workOrders.createdAt,
+      deletedAt: workOrders.deletedAt,
+      objectName: objects.name,
+      objectAddress: objects.address,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .where(and(...conditions))
+    .orderBy(desc(workOrders.scheduledDate));
     
     if (limit) {
       query = query.limit(limit) as typeof query;

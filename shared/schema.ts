@@ -226,6 +226,10 @@ export type Resource = typeof resources.$inferSelect;
 export type InsertResource = z.infer<typeof insertResourceSchema>;
 export type WorkOrder = typeof workOrders.$inferSelect;
 export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
+export type WorkOrderWithObject = WorkOrder & {
+  objectName: string | null;
+  objectAddress: string | null;
+};
 export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;
 export type InsertSetupTimeLog = z.infer<typeof insertSetupTimeLogSchema>;
 export type Procurement = typeof procurements.$inferSelect;

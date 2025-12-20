@@ -13,7 +13,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrder, ServiceObject, Customer } from "@shared/schema";
+import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -82,7 +82,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     return { startDate, endDate };
   }, [currentDate.getFullYear(), currentDate.getMonth()]);
 
-  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
       const url = `/api/work-orders?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}&includeUnscheduled=true&limit=500`;
@@ -91,10 +91,6 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       return res.json();
     },
     staleTime: 60000,
-  });
-
-  const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({
@@ -112,13 +108,13 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         payload.scheduledStartTime = scheduledStartTime;
       }
       const response = await apiRequest("PATCH", `/api/work-orders/${id}`, payload);
-      return response.json() as Promise<WorkOrder>;
+      return response.json() as Promise<WorkOrderWithObject>;
     },
     onMutate: async ({ id, resourceId, scheduledDate }) => {
       await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
-      const previousData = queryClient.getQueryData<WorkOrder[]>(workOrdersQueryKey);
+      const previousData = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey);
       
-      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+      queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, (old) => {
         if (!old) return old;
         return old.map(job => 
           job.id === id 
@@ -131,9 +127,9 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     },
     onSuccess: (updatedWorkOrder, variables) => {
       console.log("MUTATION SUCCESS:", variables.id, "server response:", updatedWorkOrder);
-      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+      queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, (old) => {
         if (!old) return old;
-        return old.map(job => job.id === variables.id ? updatedWorkOrder : job);
+        return old.map(job => job.id === variables.id ? { ...job, ...updatedWorkOrder } : job);
       });
     },
     onError: (error, _variables, context) => {
@@ -157,13 +153,13 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         scheduledStartTime: null,
         status: "draft",
       });
-      return response.json() as Promise<WorkOrder>;
+      return response.json() as Promise<WorkOrderWithObject>;
     },
     onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
-      const previousData = queryClient.getQueryData<WorkOrder[]>(workOrdersQueryKey);
+      const previousData = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey);
       
-      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+      queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, (old) => {
         if (!old) return old;
         return old.map(job => 
           job.id === id 
@@ -175,9 +171,9 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       return { previousData };
     },
     onSuccess: (updatedWorkOrder, id) => {
-      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+      queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, (old) => {
         if (!old) return old;
-        return old.map(job => job.id === id ? updatedWorkOrder : job);
+        return old.map(job => job.id === id ? { ...job, ...updatedWorkOrder } : job);
       });
       toast({
         title: "Avschemalagt",
@@ -197,7 +193,6 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     },
   });
 
-  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
   const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
@@ -232,7 +227,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   }, [scheduledJobs, filterCustomer, filterPriority]);
 
   const resourceDayJobMap = useMemo(() => {
-    const map: Record<string, Record<string, WorkOrder[]>> = {};
+    const map: Record<string, Record<string, WorkOrderWithObject[]>> = {};
     const hoursMap: Record<string, Record<string, number>> = {};
     
     for (const job of filteredScheduledJobs) {
@@ -390,8 +385,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     unscheduleWorkOrderMutation.mutate(jobId);
   };
 
-  const renderJobCard = (job: WorkOrder, compact = false) => {
-    const obj = objectMap.get(job.objectId);
+  const renderJobCard = (job: WorkOrderWithObject, compact = false) => {
     return (
       <Card
         key={job.id}
@@ -404,7 +398,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         <div className="flex items-start justify-between gap-1">
           <div className="min-w-0 flex-1">
             <div className="text-xs font-medium truncate">{job.title}</div>
-            <div className="text-xs text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</div>
+            <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
             {!compact && job.scheduledStartTime && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                 <Clock className="h-3 w-3" />
@@ -674,7 +668,6 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                 </div>
               ) : (
                 unscheduledJobs.map((job) => {
-                  const obj = objectMap.get(job.objectId);
                   const customer = customerMap.get(job.customerId);
                   return (
                     <Card
@@ -687,7 +680,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                     >
                       <div className="space-y-1">
                         <div className="text-sm font-medium">{job.title}</div>
-                        <div className="text-xs text-muted-foreground">{obj?.name || "Okänt objekt"}</div>
+                        <div className="text-xs text-muted-foreground">{job.objectName || "Okänt objekt"}</div>
                         {customer && (
                           <div className="text-xs text-muted-foreground">{customer.name}</div>
                         )}
