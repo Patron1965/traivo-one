@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -144,6 +144,54 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       toast({
         title: "Fel",
         description: "Kunde inte uppdatera jobbet.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unscheduleWorkOrderMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const response = await apiRequest("PATCH", `/api/work-orders/${id}`, {
+        resourceId: null,
+        scheduledDate: null,
+        scheduledStartTime: null,
+        status: "draft",
+      });
+      return response.json() as Promise<WorkOrder>;
+    },
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
+      const previousData = queryClient.getQueryData<WorkOrder[]>(workOrdersQueryKey);
+      
+      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+        if (!old) return old;
+        return old.map(job => 
+          job.id === id 
+            ? { ...job, resourceId: null, scheduledDate: null, scheduledStartTime: null, status: "draft" as const }
+            : job
+        );
+      });
+      
+      return { previousData };
+    },
+    onSuccess: (updatedWorkOrder, id) => {
+      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+        if (!old) return old;
+        return old.map(job => job.id === id ? updatedWorkOrder : job);
+      });
+      toast({
+        title: "Avschemalagt",
+        description: "Jobbet flyttades tillbaka till oschemalagda.",
+      });
+    },
+    onError: (error, _id, context) => {
+      console.error("UNSCHEDULE ERROR:", error);
+      if (context?.previousData) {
+        queryClient.setQueryData(workOrdersQueryKey, context.previousData);
+      }
+      toast({
+        title: "Fel",
+        description: "Kunde inte avschemalägg jobbet.",
         variant: "destructive",
       });
     },
@@ -337,6 +385,11 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     );
   }
 
+  const handleUnschedule = (e: { stopPropagation: () => void }, jobId: string) => {
+    e.stopPropagation();
+    unscheduleWorkOrderMutation.mutate(jobId);
+  };
+
   const renderJobCard = (job: WorkOrder, compact = false) => {
     const obj = objectMap.get(job.objectId);
     return (
@@ -344,7 +397,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         key={job.id}
         draggable
         onDragStart={(e) => handleDragStart(e, job.id)}
-        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
+        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} group`}
         onClick={() => handleJobClick(job.id)}
         data-testid={`job-card-${job.id}`}
       >
@@ -359,9 +412,25 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
               </div>
             )}
           </div>
-          <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px] shrink-0">
-            {((job.estimatedDuration || 0) / 60).toFixed(1)}h
-          </Badge>
+          <div className="flex items-center gap-1 shrink-0">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  size="icon" 
+                  variant="ghost" 
+                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  onClick={(e) => handleUnschedule(e, job.id)}
+                  data-testid={`button-unschedule-${job.id}`}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Avschemalägg</TooltipContent>
+            </Tooltip>
+            <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px]">
+              {((job.estimatedDuration || 0) / 60).toFixed(1)}h
+            </Badge>
+          </div>
         </div>
       </Card>
     );
