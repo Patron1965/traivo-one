@@ -251,9 +251,9 @@ export async function registerRoutes(
     try {
       const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
       
-      // Convert scheduledDate string to Date object if present
+      // Convert scheduledDate string to Date object if present (use UTC to prevent timezone shift)
       if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {
-        updateData.scheduledDate = new Date(updateData.scheduledDate + 'T00:00:00');
+        updateData.scheduledDate = new Date(updateData.scheduledDate + 'T12:00:00Z');
       }
       
       const workOrder = await storage.updateWorkOrder(req.params.id, updateData);

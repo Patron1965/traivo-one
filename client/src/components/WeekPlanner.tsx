@@ -141,7 +141,10 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     for (const job of filteredScheduledJobs) {
       if (!job.resourceId || !job.scheduledDate) continue;
       const resourceId = job.resourceId;
-      const dayKey = job.scheduledDate.split("T")[0];
+      const dateStr = typeof job.scheduledDate === 'string' 
+        ? job.scheduledDate 
+        : (job.scheduledDate as Date).toISOString();
+      const dayKey = dateStr.split("T")[0];
       
       if (!map[resourceId]) {
         map[resourceId] = {};
