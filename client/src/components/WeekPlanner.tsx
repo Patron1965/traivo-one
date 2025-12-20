@@ -7,7 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Filter, Inbox, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -535,11 +535,36 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     <div className="flex h-full">
       <Collapsible open={showUnscheduled} onOpenChange={setShowUnscheduled} className="flex">
         <CollapsibleContent className="w-[280px] border-r bg-muted/20 flex flex-col">
-          <div className="p-3 border-b flex items-center justify-between gap-2">
+          <div className="p-3 border-b space-y-3">
             <div className="flex items-center gap-2">
               <Inbox className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Oschemalagda</span>
               <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}</Badge>
+            </div>
+            <div className="space-y-2">
+              <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-customer">
+                  <SelectValue placeholder="Alla kunder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla kunder</SelectItem>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filterPriority} onValueChange={setFilterPriority}>
+                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-priority">
+                  <SelectValue placeholder="Alla prioriteter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla prioriteter</SelectItem>
+                  <SelectItem value="urgent">Akut</SelectItem>
+                  <SelectItem value="high">Hög</SelectItem>
+                  <SelectItem value="normal">Normal</SelectItem>
+                  <SelectItem value="low">Låg</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <ScrollArea className="flex-1 p-2">
@@ -624,32 +649,6 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
             </span>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-muted-foreground" />
-              <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-                <SelectTrigger className="w-[150px]" data-testid="select-filter-customer">
-                  <SelectValue placeholder="Alla kunder" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla kunder</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-[120px]" data-testid="select-filter-priority">
-                  <SelectValue placeholder="Prioritet" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla</SelectItem>
-                  <SelectItem value="urgent">Akut</SelectItem>
-                  <SelectItem value="high">Hög</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="low">Låg</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
             <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && handleViewModeChange(v as ViewMode)} data-testid="toggle-view-mode">
               <ToggleGroupItem value="day" aria-label="Dagvy" data-testid="toggle-day">
                 <CalendarDays className="h-4 w-4 mr-1" />
