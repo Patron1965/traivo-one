@@ -91,20 +91,25 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
 
   const updateWorkOrderMutation = useMutation({
     mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => {
+      console.log("MUTATION START:", { id, resourceId, scheduledDate, scheduledStartTime });
       const payload: Record<string, unknown> = { resourceId, scheduledDate, status: "scheduled" };
       if (scheduledStartTime) {
         payload.scheduledStartTime = scheduledStartTime;
       }
-      return apiRequest("PATCH", `/api/work-orders/${id}`, payload);
+      const response = await apiRequest("PATCH", `/api/work-orders/${id}`, payload);
+      console.log("MUTATION RESPONSE:", response.status);
+      return response;
     },
     onSuccess: () => {
+      console.log("MUTATION SUCCESS - invalidating queries");
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({
         title: "Jobb uppdaterat",
         description: "Jobbet har schemalagts.",
       });
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("MUTATION ERROR:", error);
       toast({
         title: "Fel",
         description: "Kunde inte uppdatera jobbet.",
@@ -250,18 +255,26 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     setDragOverCell(null);
     
     const jobId = e.dataTransfer.getData("jobId");
+    console.log("DROP: jobId =", jobId, "isPending =", updateWorkOrderMutation.isPending);
     if (!jobId) return;
 
     const job = workOrders.find(j => j.id === jobId);
-    if (!job) return;
+    if (!job) {
+      console.log("DROP: job not found");
+      return;
+    }
 
     const isSameResourceAndDay = job.resourceId === resourceId && 
       job.scheduledDate && isSameDay(new Date(job.scheduledDate), day);
     
-    if (isSameResourceAndDay && !hour) return;
+    if (isSameResourceAndDay && !hour) {
+      console.log("DROP: same resource and day, skipping");
+      return;
+    }
 
     const scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
 
+    console.log("DROP: calling mutate for", jobId, "to", resourceId, format(day, "yyyy-MM-dd"));
     updateWorkOrderMutation.mutate({
       id: jobId,
       resourceId,
