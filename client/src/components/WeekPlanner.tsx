@@ -135,10 +135,23 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
-  const unscheduledJobs = useMemo(
-    () => workOrders.filter(job => !job.scheduledDate || !job.resourceId),
-    [workOrders]
-  );
+  const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+  
+  const unscheduledJobs = useMemo(() => {
+    const jobs = workOrders.filter(job => !job.scheduledDate || !job.resourceId);
+    
+    const filtered = jobs.filter(job => {
+      if (filterCustomer !== "all" && job.customerId !== filterCustomer) return false;
+      if (filterPriority !== "all" && job.priority !== filterPriority) return false;
+      return true;
+    });
+    
+    return filtered.sort((a, b) => {
+      const aPriority = priorityOrder[a.priority] ?? 99;
+      const bPriority = priorityOrder[b.priority] ?? 99;
+      return aPriority - bPriority;
+    });
+  }, [workOrders, filterCustomer, filterPriority]);
   
   const scheduledJobs = useMemo(
     () => workOrders.filter(job => job.scheduledDate && job.resourceId),
