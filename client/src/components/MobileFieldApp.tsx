@@ -13,7 +13,7 @@ import {
 import { startOfDay, endOfDay } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { WorkOrder, ServiceObject, Customer } from "@shared/schema";
+import type { WorkOrderWithObject, ServiceObject, Customer } from "@shared/schema";
 
 const priorityColors: Record<string, string> = {
   urgent: "bg-red-500",
@@ -40,10 +40,11 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
     notes: "",
   });
 
-  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
   });
 
+  // objektMap behövs för accessInfo (som inte finns i WorkOrderWithObject)
   const { data: objects = [] } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects"],
   });
@@ -173,11 +174,11 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
                           <h3 className="font-medium text-sm truncate">{job.title}</h3>
                           <Badge variant="outline" className="shrink-0">{job.scheduledStartTime || "TBD"}</Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</p>
-                        {obj?.address && (
+                        <p className="text-sm text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</p>
+                        {job.objectAddress && (
                           <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
                             <MapPin className="h-3 w-3" />
-                            <span className="truncate">{obj.address}, {obj.city}</span>
+                            <span className="truncate">{job.objectAddress}{obj?.city ? `, ${obj.city}` : ""}</span>
                           </div>
                         )}
                       </div>
@@ -205,7 +206,7 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
         <div className="flex-1 overflow-auto p-4 space-y-6">
           <div>
             <h2 className="text-sm font-medium mb-2">{selectedJob.title}</h2>
-            <p className="text-sm text-muted-foreground">{selectedObject?.name || "Okänt objekt"}</p>
+            <p className="text-sm text-muted-foreground">{selectedJob.objectName || "Okänt objekt"}</p>
           </div>
 
           <div className="space-y-4">
@@ -304,14 +305,14 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
           <Card>
             <CardContent className="p-4 space-y-3">
               <div className="flex items-center justify-between gap-2">
-                <h2 className="font-semibold">{selectedObject?.name || "Okänt objekt"}</h2>
+                <h2 className="font-semibold">{selectedJob.objectName || "Okänt objekt"}</h2>
                 <Badge>{selectedJob.scheduledStartTime || "TBD"}</Badge>
               </div>
               
-              {selectedObject?.address && (
+              {selectedJob.objectAddress && (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <MapPin className="h-4 w-4" />
-                  <span>{selectedObject.address}, {selectedObject.city}</span>
+                  <span>{selectedJob.objectAddress}{selectedObject?.city ? `, ${selectedObject.city}` : ""}</span>
                 </div>
               )}
 

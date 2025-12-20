@@ -11,7 +11,7 @@ import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Resource, WorkOrder, ServiceObject } from "@shared/schema";
+import type { Resource, WorkOrderWithObject, ServiceObject } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
@@ -104,10 +104,11 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
     queryKey: ["/api/resources"],
   });
 
-  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
   });
 
+  // objektMap behövs för accessType, avgSetupTime, koordinater (som inte finns i WorkOrderWithObject)
   const { data: objects = [] } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects"],
   });
@@ -146,7 +147,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
     return timeA.localeCompare(timeB);
   });
 
-  const getJobPositions = (jobs: WorkOrder[]) => {
+  const getJobPositions = (jobs: WorkOrderWithObject[]) => {
     return jobs
       .map(job => {
         const obj = objectMap.get(job.objectId);
@@ -225,7 +226,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
     return total;
   };
 
-  const calculateSetupTime = (jobs: WorkOrder[]) => {
+  const calculateSetupTime = (jobs: WorkOrderWithObject[]) => {
     let total = 0;
     let prevAccessType: string | null = null;
     
@@ -499,7 +500,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="text-sm font-medium truncate">{job.title}</div>
-                          <div className="text-xs text-muted-foreground truncate">{obj?.name || "Okänt objekt"}</div>
+                          <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
                           <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground flex-wrap">
                             {job.scheduledStartTime && (
                               <span className="flex items-center gap-1">

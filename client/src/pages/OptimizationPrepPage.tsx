@@ -29,7 +29,7 @@ import {
 } from "lucide-react";
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isWithinInterval, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { WorkOrder, Resource, ServiceObject, Customer } from "@shared/schema";
+import type { WorkOrderWithObject, Resource, ServiceObject, Customer } from "@shared/schema";
 
 type OptimizationStatus = "idle" | "validating" | "ready" | "sending" | "optimizing" | "completed" | "error";
 
@@ -49,7 +49,7 @@ export default function OptimizationPrepPage() {
   const weekEnd = endOfWeek(selectedWeek, { weekStartsOn: 1 });
   const weekNumber = format(selectedWeek, "w", { locale: sv });
 
-  const { data: workOrders = [], isLoading: loadingOrders } = useQuery<WorkOrder[]>({
+  const { data: workOrders = [], isLoading: loadingOrders } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
   });
 

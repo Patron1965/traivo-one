@@ -18,10 +18,10 @@ import {
 } from "recharts";
 import { format, subDays, startOfDay, isBefore } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrder, ServiceObject, SetupTimeLog, Customer } from "@shared/schema";
+import type { Resource, ServiceObject, SetupTimeLog, Customer, WorkOrderWithObject } from "@shared/schema";
 
 export function Dashboard() {
-  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
+  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
   });
 
@@ -41,6 +41,7 @@ export function Dashboard() {
     queryKey: ["/api/setup-logs"],
   });
 
+  // objectMap behövs fortfarande för setupLogs-analys (de har bara objectId)
   const objectMap = new Map(objects.map(o => [o.id, o]));
   const customerMap = new Map(customers.map(c => [c.id, c.name]));
 
@@ -153,8 +154,7 @@ export function Dashboard() {
     const today = new Date();
     const risks: { 
       type: "overdue" | "high_setup" | "upcoming"; 
-      workOrder: WorkOrder; 
-      object?: ServiceObject;
+      workOrder: WorkOrderWithObject; 
       reason: string;
     }[] = [];
     
@@ -168,7 +168,6 @@ export function Dashboard() {
           risks.push({
             type: "overdue",
             workOrder: wo,
-            object: obj,
             reason: `Försenad sedan ${format(scheduled, "d MMM", { locale: sv })}`,
           });
         }
@@ -179,7 +178,6 @@ export function Dashboard() {
         risks.push({
           type: "high_setup",
           workOrder: wo,
-          object: obj,
           reason: `Hög ställtid (${obj.avgSetupTime} min)`,
         });
       }
@@ -587,7 +585,7 @@ export function Dashboard() {
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-sm">{risk.workOrder.title}</div>
                     <div className="text-xs text-muted-foreground">
-                      {risk.object?.name} - {risk.reason}
+                      {risk.workOrder.objectName || "Okänt objekt"} - {risk.reason}
                     </div>
                   </div>
                   <Badge variant={risk.type === "overdue" ? "destructive" : "secondary"}>
