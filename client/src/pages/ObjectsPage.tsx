@@ -106,10 +106,12 @@ export default function ObjectsPage() {
 
   const { data: objects = [], isLoading } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects"],
+    staleTime: 60000,
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+    staleTime: 60000,
   });
 
   const { data: setupLogs = [] } = useQuery<SetupTimeLog[]>({
