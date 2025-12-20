@@ -103,32 +103,45 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
 
   const dragOverCellRef = useRef<string | null>(null);
 
+  const workOrdersQueryKey = ["/api/work-orders", dateRange.startDate, dateRange.endDate];
+  
   const updateWorkOrderMutation = useMutation({
     mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => {
-      console.log("MUTATION START:", { id, resourceId, scheduledDate, scheduledStartTime });
       const payload: Record<string, unknown> = { resourceId, scheduledDate, status: "scheduled" };
       if (scheduledStartTime) {
         payload.scheduledStartTime = scheduledStartTime;
       }
       const response = await apiRequest("PATCH", `/api/work-orders/${id}`, payload);
-      console.log("MUTATION RESPONSE:", response.status);
       return response;
     },
-    onSuccess: () => {
-      console.log("MUTATION SUCCESS - invalidating queries");
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"], exact: false });
-      toast({
-        title: "Jobb uppdaterat",
-        description: "Jobbet har schemalagts.",
+    onMutate: async ({ id, resourceId, scheduledDate }) => {
+      await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
+      const previousData = queryClient.getQueryData<WorkOrder[]>(workOrdersQueryKey);
+      
+      queryClient.setQueryData<WorkOrder[]>(workOrdersQueryKey, (old) => {
+        if (!old) return old;
+        return old.map(job => 
+          job.id === id 
+            ? { ...job, resourceId, scheduledDate: new Date(scheduledDate), status: "scheduled" as const }
+            : job
+        );
       });
+      
+      return { previousData };
     },
-    onError: (error) => {
+    onError: (error, _variables, context) => {
       console.error("MUTATION ERROR:", error);
+      if (context?.previousData) {
+        queryClient.setQueryData(workOrdersQueryKey, context.previousData);
+      }
       toast({
         title: "Fel",
         description: "Kunde inte uppdatera jobbet.",
         variant: "destructive",
       });
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"], exact: false });
     },
   });
 

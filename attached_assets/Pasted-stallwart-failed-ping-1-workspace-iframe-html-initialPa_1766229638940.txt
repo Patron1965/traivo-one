@@ -1,0 +1,26 @@
+stallwart: failed ping 1
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'ambient-light-sensor'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'battery'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'execution-while-not-rendered'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'execution-while-out-of-viewport'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'layout-animations'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'legacy-image-formats'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'navigation-override'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'oversized-images'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'publickey-credentials'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'speaker-selection'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'unoptimized-images'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Unrecognized feature: 'unsized-media'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Allow attribute will take precedence over 'allowfullscreen'.Förstå den här varningen
+workspace_iframe.html?initialPath=%2Fplanner&id=%3Argk%3A:32 Allow attribute will take precedence over 'allowpaymentrequest'.Förstå den här varningen
+stallwart.build.js:1 stallwart: failed ping 1
+injected.js:37 DROP: jobId = 72df03fb-8c24-43c7-ad1e-ae5da9f25de8 isPending = false
+injected.js:37 DROP: calling mutate for 72df03fb-8c24-43c7-ad1e-ae5da9f25de8 to 7e1098ce-dc26-4864-b605-7f8310a5d4ba 2025-12-15
+injected.js:37 MUTATION START: Object
+injected.js:37 MUTATION RESPONSE: 200
+injected.js:37 MUTATION SUCCESS - invalidating queries
+injected.js:37 DROP: jobId = ddfa7b25-867c-4dd7-be29-3262816a0e55 isPending = false
+injected.js:37 DROP: calling mutate for ddfa7b25-867c-4dd7-be29-3262816a0e55 to 7c1ac3c2-23db-4967-b8eb-818d5d580271 2025-12-15
+injected.js:37 MUTATION START: Object
+injected.js:37 MUTATION RESPONSE: 200
+injected.js:37 MUTATION SUCCESS - invalidating queries
