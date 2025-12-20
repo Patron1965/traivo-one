@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,7 +59,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const { toast } = useToast();
 
-  const getVisibleDates = (): Date[] => {
+  const visibleDates = useMemo((): Date[] => {
     if (viewMode === "day") {
       return [currentDate];
     } else if (viewMode === "week") {
@@ -69,9 +69,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       const daysInMonth = getDaysInMonth(currentDate);
       return Array.from({ length: daysInMonth }, (_, i) => addDays(monthStart, i));
     }
-  };
-
-  const visibleDates = getVisibleDates();
+  }, [viewMode, currentDate, currentWeekStart]);
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
@@ -88,6 +86,8 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
+
+  const dragOverCellRef = useRef<string | null>(null);
 
   const updateWorkOrderMutation = useMutation({
     mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => {
@@ -113,17 +113,50 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     },
   });
 
-  const objectMap = new Map(objects.map(o => [o.id, o]));
-  const customerMap = new Map(customers.map(c => [c.id, c]));
+  const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
+  const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
-  const unscheduledJobs = workOrders.filter(job => !job.scheduledDate || !job.resourceId);
-  const scheduledJobs = workOrders.filter(job => job.scheduledDate && job.resourceId);
+  const unscheduledJobs = useMemo(
+    () => workOrders.filter(job => !job.scheduledDate || !job.resourceId),
+    [workOrders]
+  );
+  
+  const scheduledJobs = useMemo(
+    () => workOrders.filter(job => job.scheduledDate && job.resourceId),
+    [workOrders]
+  );
 
-  const filteredScheduledJobs = scheduledJobs.filter(job => {
-    if (filterCustomer !== "all" && job.customerId !== filterCustomer) return false;
-    if (filterPriority !== "all" && job.priority !== filterPriority) return false;
-    return true;
-  });
+  const filteredScheduledJobs = useMemo(() => {
+    return scheduledJobs.filter(job => {
+      if (filterCustomer !== "all" && job.customerId !== filterCustomer) return false;
+      if (filterPriority !== "all" && job.priority !== filterPriority) return false;
+      return true;
+    });
+  }, [scheduledJobs, filterCustomer, filterPriority]);
+
+  const resourceDayJobMap = useMemo(() => {
+    const map: Record<string, Record<string, WorkOrder[]>> = {};
+    const hoursMap: Record<string, Record<string, number>> = {};
+    
+    for (const job of filteredScheduledJobs) {
+      if (!job.resourceId || !job.scheduledDate) continue;
+      const resourceId = job.resourceId;
+      const dayKey = job.scheduledDate.split("T")[0];
+      
+      if (!map[resourceId]) {
+        map[resourceId] = {};
+        hoursMap[resourceId] = {};
+      }
+      if (!map[resourceId][dayKey]) {
+        map[resourceId][dayKey] = [];
+        hoursMap[resourceId][dayKey] = 0;
+      }
+      map[resourceId][dayKey].push(job);
+      hoursMap[resourceId][dayKey] += (job.estimatedDuration || 0) / 60;
+    }
+    
+    return { jobs: map, hours: hoursMap };
+  }, [filteredScheduledJobs]);
 
   const navigate = (direction: "prev" | "next") => {
     if (viewMode === "day") {
@@ -170,44 +203,47 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     }
   };
 
-  const getJobsForResourceAndDay = (resourceId: string, day: Date) => {
-    return filteredScheduledJobs.filter(job => {
-      if (job.resourceId !== resourceId || !job.scheduledDate) return false;
-      return isSameDay(new Date(job.scheduledDate), day);
-    });
-  };
+  const getJobsForResourceAndDay = useCallback((resourceId: string, day: Date) => {
+    const dayKey = format(day, "yyyy-MM-dd");
+    return resourceDayJobMap.jobs[resourceId]?.[dayKey] || [];
+  }, [resourceDayJobMap]);
 
-  const getResourceDayHours = (resourceId: string, day: Date) => {
-    const jobs = getJobsForResourceAndDay(resourceId, day);
-    return jobs.reduce((total, job) => total + (job.estimatedDuration || 0) / 60, 0);
-  };
+  const getResourceDayHours = useCallback((resourceId: string, day: Date) => {
+    const dayKey = format(day, "yyyy-MM-dd");
+    return resourceDayJobMap.hours[resourceId]?.[dayKey] || 0;
+  }, [resourceDayJobMap]);
 
-  const getCapacityPercentage = (hours: number) => {
+  const getCapacityPercentage = useCallback((hours: number) => {
     return Math.min((hours / HOURS_IN_DAY) * 100, 100);
-  };
+  }, []);
 
-  const handleJobClick = (jobId: string) => {
+  const handleJobClick = useCallback((jobId: string) => {
     setSelectedJob(jobId);
     onSelectJob?.(jobId);
-  };
+  }, [onSelectJob]);
 
-  const handleDragStart = (e: React.DragEvent, jobId: string) => {
+  const handleDragStart = useCallback((e: React.DragEvent, jobId: string) => {
     e.dataTransfer.setData("jobId", jobId);
     e.dataTransfer.effectAllowed = "move";
-  };
+  }, []);
 
-  const handleDragOver = (e: React.DragEvent, cellId: string) => {
+  const handleDragOver = useCallback((e: React.DragEvent, cellId: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
-    setDragOverCell(cellId);
-  };
+    if (dragOverCellRef.current !== cellId) {
+      dragOverCellRef.current = cellId;
+      setDragOverCell(cellId);
+    }
+  }, []);
 
-  const handleDragLeave = () => {
+  const handleDragLeave = useCallback(() => {
+    dragOverCellRef.current = null;
     setDragOverCell(null);
-  };
+  }, []);
 
-  const handleDrop = (e: React.DragEvent, resourceId: string, day: Date, hour?: number) => {
+  const handleDrop = useCallback((e: React.DragEvent, resourceId: string, day: Date, hour?: number) => {
     e.preventDefault();
+    dragOverCellRef.current = null;
     setDragOverCell(null);
     
     const jobId = e.dataTransfer.getData("jobId");
@@ -229,7 +265,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       scheduledDate: format(day, "yyyy-MM-dd"),
       scheduledStartTime,
     });
-  };
+  }, [workOrders, updateWorkOrderMutation]);
 
   const isLoading = resourcesLoading || workOrdersLoading;
 
