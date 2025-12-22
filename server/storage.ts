@@ -23,11 +23,12 @@ import {
   type Team, type InsertTeam,
   type TeamMember, type InsertTeamMember,
   type PlanningParameter, type InsertPlanningParameter,
+  type Cluster, type InsertCluster,
   type OrderStatus,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
-  vehicleSchedule, subscriptions, teams, teamMembers, planningParameters
+  vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
@@ -145,6 +146,25 @@ export interface IStorage {
   
   // Recalculate work order totals from lines
   recalculateWorkOrderTotals(workOrderId: string): Promise<WorkOrder | undefined>;
+  
+  // Clusters - navet i verksamheten
+  getClusters(tenantId: string): Promise<Cluster[]>;
+  getCluster(id: string): Promise<Cluster | undefined>;
+  getClusterWithStats(id: string): Promise<Cluster & { 
+    objectCount: number; 
+    activeOrders: number; 
+    monthlyValue: number;
+    avgSetupTime: number;
+  } | undefined>;
+  createCluster(cluster: InsertCluster): Promise<Cluster>;
+  updateCluster(id: string, cluster: Partial<InsertCluster>): Promise<Cluster | undefined>;
+  deleteCluster(id: string): Promise<void>;
+  
+  // Cluster aggregations
+  getClusterObjects(clusterId: string): Promise<ServiceObject[]>;
+  getClusterWorkOrders(clusterId: string, options?: { startDate?: Date; endDate?: Date }): Promise<WorkOrder[]>;
+  getClusterSubscriptions(clusterId: string): Promise<Subscription[]>;
+  updateClusterCaches(clusterId: string): Promise<Cluster | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -343,6 +363,7 @@ export class DatabaseStorage implements IStorage {
       tenantId: workOrders.tenantId,
       customerId: workOrders.customerId,
       objectId: workOrders.objectId,
+      clusterId: workOrders.clusterId,
       resourceId: workOrders.resourceId,
       teamId: workOrders.teamId,
       title: workOrders.title,
@@ -1100,6 +1121,108 @@ export class DatabaseStorage implements IStorage {
 
   async deletePlanningParameter(id: string): Promise<void> {
     await db.delete(planningParameters).where(eq(planningParameters.id, id));
+  }
+
+  // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
+  async getClusters(tenantId: string): Promise<Cluster[]> {
+    return db.select().from(clusters).where(and(eq(clusters.tenantId, tenantId), isNull(clusters.deletedAt)));
+  }
+
+  async getCluster(id: string): Promise<Cluster | undefined> {
+    const [cluster] = await db.select().from(clusters).where(and(eq(clusters.id, id), isNull(clusters.deletedAt)));
+    return cluster || undefined;
+  }
+
+  async getClusterWithStats(id: string): Promise<Cluster & { 
+    objectCount: number; 
+    activeOrders: number; 
+    monthlyValue: number;
+    avgSetupTime: number;
+  } | undefined> {
+    const cluster = await this.getCluster(id);
+    if (!cluster) return undefined;
+
+    // Count objects in cluster
+    const objectsInCluster = await db.select().from(objects)
+      .where(and(eq(objects.clusterId, id), isNull(objects.deletedAt)));
+    
+    // Count active orders (not completed or invoiced)
+    const activeOrdersList = await db.select().from(workOrders)
+      .where(and(
+        eq(workOrders.clusterId, id),
+        isNull(workOrders.deletedAt),
+        or(
+          eq(workOrders.orderStatus, 'skapad'),
+          eq(workOrders.orderStatus, 'planerad_pre'),
+          eq(workOrders.orderStatus, 'planerad_resurs'),
+          eq(workOrders.orderStatus, 'planerad_las')
+        )
+      ));
+    
+    // Sum monthly value from subscriptions
+    const subs = await db.select().from(subscriptions)
+      .where(and(eq(subscriptions.clusterId, id), isNull(subscriptions.deletedAt), eq(subscriptions.status, 'active')));
+    const monthlyValue = subs.reduce((sum, s) => sum + (s.cachedMonthlyValue || 0), 0);
+    
+    // Calculate average setup time from logs
+    const setupLogs = await db.select().from(setupTimeLogs)
+      .where(sql`${setupTimeLogs.objectId} IN (SELECT id FROM objects WHERE cluster_id = ${id})`);
+    const avgSetupTime = setupLogs.length > 0 
+      ? Math.round(setupLogs.reduce((sum, l) => sum + l.durationMinutes, 0) / setupLogs.length)
+      : 0;
+
+    return {
+      ...cluster,
+      objectCount: objectsInCluster.length,
+      activeOrders: activeOrdersList.length,
+      monthlyValue,
+      avgSetupTime
+    };
+  }
+
+  async createCluster(cluster: InsertCluster): Promise<Cluster> {
+    const [result] = await db.insert(clusters).values(cluster).returning();
+    return result;
+  }
+
+  async updateCluster(id: string, data: Partial<InsertCluster>): Promise<Cluster | undefined> {
+    const [result] = await db.update(clusters).set(data).where(eq(clusters.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteCluster(id: string): Promise<void> {
+    await db.update(clusters).set({ deletedAt: new Date() }).where(eq(clusters.id, id));
+  }
+
+  async getClusterObjects(clusterId: string): Promise<ServiceObject[]> {
+    return db.select().from(objects).where(and(eq(objects.clusterId, clusterId), isNull(objects.deletedAt)));
+  }
+
+  async getClusterWorkOrders(clusterId: string, options?: { startDate?: Date; endDate?: Date }): Promise<WorkOrder[]> {
+    const conditions = [eq(workOrders.clusterId, clusterId), isNull(workOrders.deletedAt)];
+    if (options?.startDate) {
+      conditions.push(gte(workOrders.scheduledDate, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(workOrders.scheduledDate, options.endDate));
+    }
+    return db.select().from(workOrders).where(and(...conditions));
+  }
+
+  async getClusterSubscriptions(clusterId: string): Promise<Subscription[]> {
+    return db.select().from(subscriptions).where(and(eq(subscriptions.clusterId, clusterId), isNull(subscriptions.deletedAt)));
+  }
+
+  async updateClusterCaches(clusterId: string): Promise<Cluster | undefined> {
+    const stats = await this.getClusterWithStats(clusterId);
+    if (!stats) return undefined;
+    
+    return this.updateCluster(clusterId, {
+      cachedObjectCount: stats.objectCount,
+      cachedActiveOrders: stats.activeOrders,
+      cachedMonthlyValue: stats.monthlyValue,
+      cachedAvgSetupTime: stats.avgSetupTime
+    });
   }
 }
 

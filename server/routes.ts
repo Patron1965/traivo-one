@@ -8,7 +8,7 @@ import {
   insertWorkOrderLineSchema, insertSimulationScenarioSchema, ORDER_STATUSES, type OrderStatus,
   insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema,
   insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema,
-  insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema
+  insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertClusterSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
@@ -2277,6 +2277,104 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete resource equipment" });
+    }
+  });
+
+  // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
+  app.get("/api/clusters", async (req, res) => {
+    try {
+      const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
+      res.json(clusters);
+    } catch (error) {
+      console.error("Failed to fetch clusters:", error);
+      res.status(500).json({ error: "Kunde inte hämta kluster" });
+    }
+  });
+
+  app.get("/api/clusters/:id", async (req, res) => {
+    try {
+      const cluster = await storage.getClusterWithStats(req.params.id);
+      if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
+      res.json(cluster);
+    } catch (error) {
+      console.error("Failed to fetch cluster:", error);
+      res.status(500).json({ error: "Kunde inte hämta kluster" });
+    }
+  });
+
+  app.post("/api/clusters", async (req, res) => {
+    try {
+      const data = insertClusterSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const cluster = await storage.createCluster(data);
+      res.status(201).json(cluster);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create cluster:", error);
+      res.status(500).json({ error: "Kunde inte skapa kluster" });
+    }
+  });
+
+  app.patch("/api/clusters/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const cluster = await storage.updateCluster(req.params.id, updateData);
+      if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
+      res.json(cluster);
+    } catch (error) {
+      console.error("Failed to update cluster:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera kluster" });
+    }
+  });
+
+  app.delete("/api/clusters/:id", async (req, res) => {
+    try {
+      await storage.deleteCluster(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete cluster:", error);
+      res.status(500).json({ error: "Kunde inte ta bort kluster" });
+    }
+  });
+
+  // Cluster aggregations - "snöret"
+  app.get("/api/clusters/:id/objects", async (req, res) => {
+    try {
+      const objects = await storage.getClusterObjects(req.params.id);
+      res.json(objects);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta objekt i kluster" });
+    }
+  });
+
+  app.get("/api/clusters/:id/work-orders", async (req, res) => {
+    try {
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const workOrders = await storage.getClusterWorkOrders(req.params.id, { startDate, endDate });
+      res.json(workOrders);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta ordrar i kluster" });
+    }
+  });
+
+  app.get("/api/clusters/:id/subscriptions", async (req, res) => {
+    try {
+      const subscriptions = await storage.getClusterSubscriptions(req.params.id);
+      res.json(subscriptions);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta abonnemang i kluster" });
+    }
+  });
+
+  app.post("/api/clusters/:id/refresh-cache", async (req, res) => {
+    try {
+      const cluster = await storage.updateClusterCaches(req.params.id);
+      if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
+      res.json(cluster);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte uppdatera klustercache" });
     }
   });
 
