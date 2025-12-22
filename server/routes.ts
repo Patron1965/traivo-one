@@ -2405,6 +2405,96 @@ export async function registerRoutes(
     }
   });
 
+  // AI Auto-Schedule - automatisk schemaläggning av oschemalagda ordrar
+  app.post("/api/ai/auto-schedule", async (req, res) => {
+    try {
+      const { aiEnhancedSchedule } = await import("./ai-planner");
+      const { weekStart, weekEnd } = req.body;
+      
+      const [workOrders, resources, clusters] = await Promise.all([
+        storage.getWorkOrders(DEFAULT_TENANT_ID),
+        storage.getResources(DEFAULT_TENANT_ID),
+        storage.getClusters(DEFAULT_TENANT_ID),
+      ]);
+      
+      const result = await aiEnhancedSchedule({
+        workOrders,
+        resources,
+        clusters,
+        weekStart: weekStart || new Date().toISOString().split("T")[0],
+        weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("AI Auto-Schedule error:", error);
+      res.status(500).json({ error: "Kunde inte generera automatisk schemaläggning" });
+    }
+  });
+
+  // Route optimization per day
+  app.post("/api/ai/optimize-routes", async (req, res) => {
+    try {
+      const { optimizeDayRoutes } = await import("./route-optimizer");
+      const { date } = req.body;
+      
+      if (!date) {
+        return res.status(400).json({ error: "date krävs" });
+      }
+      
+      const [workOrders, resources, objects] = await Promise.all([
+        storage.getWorkOrders(DEFAULT_TENANT_ID),
+        storage.getResources(DEFAULT_TENANT_ID),
+        storage.getObjects(DEFAULT_TENANT_ID),
+      ]);
+      
+      const result = await optimizeDayRoutes(date, workOrders, resources, objects);
+      res.json(result);
+    } catch (error) {
+      console.error("Route optimization error:", error);
+      res.status(500).json({ error: "Kunde inte optimera rutter" });
+    }
+  });
+
+  // Apply auto-schedule assignments
+  app.post("/api/ai/auto-schedule/apply", async (req, res) => {
+    try {
+      const { assignments } = req.body as { assignments: Array<{
+        workOrderId: string;
+        resourceId: string;
+        scheduledDate: string;
+      }> };
+      
+      if (!Array.isArray(assignments)) {
+        return res.status(400).json({ error: "assignments måste vara en array" });
+      }
+      
+      const results = await Promise.all(
+        assignments.map(async (a) => {
+          try {
+            const updated = await storage.updateWorkOrder(a.workOrderId, {
+              resourceId: a.resourceId,
+              scheduledDate: new Date(a.scheduledDate + "T12:00:00Z"),
+            });
+            return { workOrderId: a.workOrderId, success: !!updated };
+          } catch (err) {
+            return { workOrderId: a.workOrderId, success: false, error: String(err) };
+          }
+        })
+      );
+      
+      const successCount = results.filter(r => r.success).length;
+      res.json({ 
+        applied: successCount, 
+        total: assignments.length,
+        results 
+      });
+    } catch (error) {
+      console.error("Apply auto-schedule error:", error);
+      res.status(500).json({ error: "Kunde inte tillämpa schemaläggning" });
+    }
+  });
+
   // Delete all data (for re-import)
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {
