@@ -126,17 +126,25 @@ export default function OrderStockPage() {
   });
 
   const updateOrderInCache = async (workOrderId: string) => {
+    console.log("updateOrderInCache called with:", workOrderId);
     const response = await fetch(`/api/work-orders/${workOrderId}`);
-    if (!response.ok) return;
+    if (!response.ok) {
+      console.log("Failed to fetch work order:", response.status);
+      return;
+    }
     const updatedOrder: WorkOrder = await response.json();
+    console.log("Fetched updated order:", updatedOrder.cachedValue, updatedOrder.cachedProductionMinutes);
     
     queryClient.setQueriesData<OrderStockResponse>(
       { queryKey: ["/api/order-stock"] },
       (oldData) => {
+        console.log("setQueriesData called, oldData:", oldData ? "exists" : "null");
         if (!oldData) return oldData;
+        const newOrders = oldData.orders.map(o => o.id === workOrderId ? updatedOrder : o);
+        console.log("Updated order in list");
         return {
           ...oldData,
-          orders: oldData.orders.map(o => o.id === workOrderId ? updatedOrder : o)
+          orders: newOrders
         };
       }
     );
