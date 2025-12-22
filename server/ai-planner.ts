@@ -881,3 +881,216 @@ export function analyzeSetupTimeLogs(
     recommendedUpdates
   };
 }
+
+// --- Prediktiv Planering ---
+
+export interface VolumeForecast {
+  clusterId: string;
+  clusterName: string;
+  weekNumber: number;
+  year: number;
+  predictedOrders: number;
+  predictedMinutes: number;
+  historicalAverage: number;
+  trend: "increasing" | "decreasing" | "stable";
+  confidence: number;
+  suggestedResources: number;
+}
+
+export interface PredictivePlanningResult {
+  forecasts: VolumeForecast[];
+  recommendations: PredictiveRecommendation[];
+  summary: string;
+  dataQuality: "high" | "medium" | "low";
+  weeksAnalyzed: number;
+}
+
+export interface PredictiveRecommendation {
+  id: string;
+  type: "capacity_warning" | "resource_suggestion" | "trend_alert" | "optimization";
+  severity: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  clusterId?: string;
+  clusterName?: string;
+  actionable: boolean;
+}
+
+interface OrderHistoryData {
+  weekNumber: number;
+  year: number;
+  clusterId: string;
+  orderCount: number;
+  totalMinutes: number;
+}
+
+function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+}
+
+export async function generatePredictivePlanning(
+  workOrders: WorkOrder[],
+  clusters: Cluster[],
+  resources: Resource[],
+  weeksAhead: number = 4
+): Promise<PredictivePlanningResult> {
+  const clusterMap = new Map(clusters.map(c => [c.id, c]));
+  
+  // Analysera historisk data per kluster och vecka
+  const historyByClusterWeek = new Map<string, OrderHistoryData[]>();
+  
+  workOrders.forEach(order => {
+    if (!order.scheduledDate || !order.clusterId) return;
+    const date = order.scheduledDate instanceof Date ? order.scheduledDate : new Date(order.scheduledDate);
+    const week = getWeekNumber(date);
+    const year = date.getFullYear();
+    const key = `${order.clusterId}-${year}-${week}`;
+    
+    if (!historyByClusterWeek.has(order.clusterId)) {
+      historyByClusterWeek.set(order.clusterId, []);
+    }
+    
+    const existing = historyByClusterWeek.get(order.clusterId)!.find(
+      h => h.weekNumber === week && h.year === year
+    );
+    
+    if (existing) {
+      existing.orderCount++;
+      existing.totalMinutes += order.estimatedDuration || 60;
+    } else {
+      historyByClusterWeek.get(order.clusterId)!.push({
+        weekNumber: week,
+        year,
+        clusterId: order.clusterId,
+        orderCount: 1,
+        totalMinutes: order.estimatedDuration || 60
+      });
+    }
+  });
+  
+  // Generera prognoser
+  const forecasts: VolumeForecast[] = [];
+  const recommendations: PredictiveRecommendation[] = [];
+  const now = new Date();
+  const currentWeek = getWeekNumber(now);
+  const currentYear = now.getFullYear();
+  
+  clusters.forEach(cluster => {
+    const history = historyByClusterWeek.get(cluster.id) || [];
+    if (history.length < 2) return;
+    
+    // Beräkna historiskt snitt och trend
+    const sortedHistory = history.sort((a, b) => 
+      (a.year * 100 + a.weekNumber) - (b.year * 100 + b.weekNumber)
+    );
+    
+    const avgOrders = sortedHistory.reduce((sum, h) => sum + h.orderCount, 0) / sortedHistory.length;
+    const avgMinutes = sortedHistory.reduce((sum, h) => sum + h.totalMinutes, 0) / sortedHistory.length;
+    
+    // Enkel trendanalys - jämför senaste med tidigare
+    const recentHalf = sortedHistory.slice(-Math.ceil(sortedHistory.length / 2));
+    const olderHalf = sortedHistory.slice(0, Math.floor(sortedHistory.length / 2));
+    
+    const recentAvg = recentHalf.reduce((sum, h) => sum + h.orderCount, 0) / (recentHalf.length || 1);
+    const olderAvg = olderHalf.reduce((sum, h) => sum + h.orderCount, 0) / (olderHalf.length || 1);
+    
+    let trend: "increasing" | "decreasing" | "stable" = "stable";
+    const trendPercent = olderAvg > 0 ? ((recentAvg - olderAvg) / olderAvg) * 100 : 0;
+    if (trendPercent > 10) trend = "increasing";
+    else if (trendPercent < -10) trend = "decreasing";
+    
+    // Confidence baserat på datamängd
+    const confidence = Math.min(95, 50 + (sortedHistory.length * 5));
+    
+    // Prognos för kommande veckor
+    for (let i = 1; i <= weeksAhead; i++) {
+      let targetWeek = currentWeek + i;
+      let targetYear = currentYear;
+      if (targetWeek > 52) {
+        targetWeek -= 52;
+        targetYear++;
+      }
+      
+      // Justera prognos baserat på trend
+      const trendAdjustment = trend === "increasing" ? 1.05 : trend === "decreasing" ? 0.95 : 1.0;
+      const predictedOrders = Math.round(avgOrders * Math.pow(trendAdjustment, i));
+      const predictedMinutes = Math.round(avgMinutes * Math.pow(trendAdjustment, i));
+      
+      // Föreslå antal resurser (8h = 480 min per resurs)
+      const suggestedResources = Math.ceil(predictedMinutes / (480 * 5)); // 5 dagar
+      
+      forecasts.push({
+        clusterId: cluster.id,
+        clusterName: cluster.name,
+        weekNumber: targetWeek,
+        year: targetYear,
+        predictedOrders,
+        predictedMinutes,
+        historicalAverage: Math.round(avgOrders),
+        trend,
+        confidence,
+        suggestedResources: Math.max(1, suggestedResources)
+      });
+    }
+    
+    // Generera rekommendationer
+    if (trend === "increasing" && trendPercent > 20) {
+      recommendations.push({
+        id: `trend-${cluster.id}`,
+        type: "trend_alert",
+        severity: "medium",
+        title: `Ökande volym i ${cluster.name}`,
+        description: `Ordervolymen ökar med ${Math.round(trendPercent)}%. Överväg att allokera fler resurser.`,
+        clusterId: cluster.id,
+        clusterName: cluster.name,
+        actionable: true
+      });
+    }
+    
+    // Varning för kapacitetsbrist
+    const latestForecast = forecasts.filter(f => f.clusterId === cluster.id).slice(-1)[0];
+    if (latestForecast && cluster.postalCodes && cluster.postalCodes.length > 0) {
+      const matchingResources = resources.filter(r => 
+        r.serviceArea?.some(area => cluster.postalCodes?.includes(area)) ?? false
+      );
+      
+      if (matchingResources.length < latestForecast.suggestedResources) {
+        recommendations.push({
+          id: `capacity-${cluster.id}`,
+          type: "capacity_warning",
+          severity: "high",
+          title: `Resursbrist i ${cluster.name}`,
+          description: `Prognos kräver ${latestForecast.suggestedResources} resurser, men endast ${matchingResources.length} finns tillgängliga.`,
+          clusterId: cluster.id,
+          clusterName: cluster.name,
+          actionable: true
+        });
+      }
+    }
+  });
+  
+  // Datakvalietet baserat på mängden historik
+  const totalWeeksData = Array.from(historyByClusterWeek.values()).reduce(
+    (sum, h) => sum + h.length, 0
+  );
+  const dataQuality = totalWeeksData > 50 ? "high" : totalWeeksData > 20 ? "medium" : "low";
+  
+  return {
+    forecasts: forecasts.sort((a, b) => 
+      (a.year * 100 + a.weekNumber) - (b.year * 100 + b.weekNumber)
+    ),
+    recommendations: recommendations.sort((a, b) => {
+      const severityOrder = { high: 0, medium: 1, low: 2 };
+      return severityOrder[a.severity] - severityOrder[b.severity];
+    }),
+    summary: forecasts.length > 0
+      ? `Genererade ${forecasts.length} prognoser för ${clusters.length} kluster. ${recommendations.length} rekommendationer.`
+      : "Otillräcklig historisk data för prognoser. Minst 2 veckors data per kluster krävs.",
+    dataQuality,
+    weeksAnalyzed: totalWeeksData
+  };
+}

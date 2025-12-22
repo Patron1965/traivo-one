@@ -2586,6 +2586,32 @@ export async function registerRoutes(
     }
   });
 
+  // AI Predictive Planning
+  app.get("/api/ai/predictive-planning", async (req, res) => {
+    try {
+      const weeksAhead = parseInt(req.query.weeksAhead as string) || 4;
+      
+      const { generatePredictivePlanning } = await import("./ai-planner");
+      const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID, undefined, undefined, true, 5000);
+      const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
+      const resources = await storage.getResources(DEFAULT_TENANT_ID);
+      
+      const validClusters = clusters.filter(c => c.postalCodes && c.postalCodes.length > 0);
+      
+      const result = await generatePredictivePlanning(
+        workOrders, 
+        validClusters.length > 0 ? validClusters : clusters, 
+        resources, 
+        Math.min(weeksAhead, 12)
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Predictive planning error:", error);
+      res.status(500).json({ error: "Kunde inte generera prognoser" });
+    }
+  });
+
   // Delete all data (for re-import)
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {
