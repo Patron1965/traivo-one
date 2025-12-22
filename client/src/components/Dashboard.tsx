@@ -9,12 +9,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { 
   Clock, TrendingUp, Users, Briefcase, AlertCircle, Lightbulb, 
   ArrowUpRight, ArrowDownRight, Loader2, MapPin, Building2, AlertTriangle,
-  ChevronRight, Calendar
+  ChevronRight, Calendar, CircleDollarSign, Package, Target
 } from "lucide-react";
 import { Link } from "wouter";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
-  BarChart, Bar, Tooltip as RechartsTooltip, Legend
+  BarChart, Bar, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell
 } from "recharts";
 import { format, subDays, startOfDay, isBefore } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -58,6 +58,66 @@ export function Dashboard() {
   
   const totalSetupTime = setupLogs.reduce((sum, log) => sum + (log.durationMinutes || 0), 0);
   const avgSetupTime = setupLogs.length > 0 ? Math.round(totalSetupTime / setupLogs.length) : 0;
+
+  // Order value KPIs
+  const totalOrderValue = workOrders.reduce((sum, wo) => sum + (wo.cachedValue || 0), 0);
+  const totalOrderCost = workOrders.reduce((sum, wo) => sum + (wo.cachedCost || 0), 0);
+  const totalMargin = totalOrderValue - totalOrderCost;
+  const marginPercent = totalOrderValue > 0 ? Math.round((totalMargin / totalOrderValue) * 100) : 0;
+  const avgOrderValue = totalJobs > 0 ? Math.round(totalOrderValue / totalJobs) : 0;
+
+  // Order status distribution
+  const orderStatusDistribution = useMemo(() => {
+    const statusLabels: Record<string, string> = {
+      skapad: "Skapad",
+      planerad_pre: "Preliminär",
+      planerad_resurs: "Resurs tilldelad",
+      planerad_las: "Låst",
+      utford: "Utförd",
+      fakturerad: "Fakturerad"
+    };
+    const statusCounts: Record<string, number> = {};
+    workOrders.forEach(wo => {
+      const status = wo.orderStatus || 'skapad';
+      statusCounts[status] = (statusCounts[status] || 0) + 1;
+    });
+    return Object.entries(statusCounts).map(([status, count]) => ({
+      name: statusLabels[status] || status,
+      value: count,
+      status
+    }));
+  }, [workOrders]);
+
+  // Top customers by order value
+  const topCustomersByValue = useMemo(() => {
+    const customerValues = new Map<string, { value: number; count: number }>();
+    workOrders.forEach(wo => {
+      if (!wo.customerId) return;
+      const existing = customerValues.get(wo.customerId) || { value: 0, count: 0 };
+      customerValues.set(wo.customerId, {
+        value: existing.value + (wo.cachedValue || 0),
+        count: existing.count + 1
+      });
+    });
+    return Array.from(customerValues.entries())
+      .map(([customerId, data]) => ({
+        customerId,
+        name: customerMap.get(customerId) || "Okänd kund",
+        value: data.value,
+        count: data.count
+      }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 5);
+  }, [workOrders, customerMap]);
+
+  const STATUS_COLORS_CHART = [
+    "hsl(var(--muted-foreground))",
+    "hsl(210 70% 50%)",
+    "hsl(240 70% 50%)",
+    "hsl(30 90% 50%)",
+    "hsl(140 70% 45%)",
+    "hsl(280 70% 50%)"
+  ];
 
   // Ställtidstrend - senaste 14 dagarna
   const setupTimeTrend = useMemo(() => {
@@ -320,12 +380,25 @@ export function Dashboard() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
         <StatCard 
-          title="Jobb totalt" 
-          value={`${completedJobs}/${totalJobs}`}
-          subtitle={totalJobs > 0 ? `${Math.round((completedJobs / totalJobs) * 100)}% klart` : "Inga jobb"}
-          icon={Briefcase}
+          title="Ordrar totalt" 
+          value={`${totalJobs.toLocaleString("sv-SE")}`}
+          subtitle={`${completedJobs} utförda`}
+          icon={Package}
+        />
+        <StatCard 
+          title="Totalt ordervärde" 
+          value={`${(totalOrderValue / 1000).toFixed(0)}k kr`}
+          subtitle={`Snitt ${avgOrderValue.toLocaleString("sv-SE")} kr/order`}
+          icon={CircleDollarSign}
+        />
+        <StatCard 
+          title="Marginal" 
+          value={`${marginPercent}%`}
+          subtitle={`${(totalMargin / 1000).toFixed(0)}k kr totalt`}
+          icon={Target}
+          trend={marginPercent > 20 ? "positive" : marginPercent < 10 ? "negative" : undefined}
         />
         <StatCard 
           title="Planerade timmar" 
@@ -335,7 +408,7 @@ export function Dashboard() {
           trend={actualHours < plannedHours ? "positive" : "negative"}
         />
         <StatCard 
-          title="Total ställtid" 
+          title="Ställtid" 
           value={`${totalSetupTime} min`}
           subtitle={`Snitt ${avgSetupTime} min/jobb`}
           icon={Clock}
@@ -488,7 +561,86 @@ export function Dashboard() {
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Orderstatusfördelning */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Package className="h-4 w-4" />
+              Orderstatusfördelning
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="h-[200px]">
+              {orderStatusDistribution.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Ingen orderdata</p>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={orderStatusDistribution}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={50}
+                      outerRadius={80}
+                      paddingAngle={2}
+                      dataKey="value"
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      labelLine={false}
+                    >
+                      {orderStatusDistribution.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={STATUS_COLORS_CHART[index % STATUS_COLORS_CHART.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip 
+                      contentStyle={{ 
+                        backgroundColor: 'hsl(var(--card))', 
+                        border: '1px solid hsl(var(--border))',
+                        borderRadius: '6px',
+                      }}
+                      formatter={(value: number) => [`${value} ordrar`]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Top kunder efter ordervärde */}
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Building2 className="h-4 w-4" />
+              Top 5 kunder efter ordervärde
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[200px]">
+              {topCustomersByValue.length === 0 ? (
+                <p className="text-sm text-muted-foreground">Ingen orderdata</p>
+              ) : (
+                <div className="space-y-3">
+                  {topCustomersByValue.map((item, index) => (
+                    <div key={item.customerId} className="flex items-center gap-3">
+                      <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-sm truncate">{item.name}</div>
+                        <div className="text-xs text-muted-foreground">{item.count} ordrar</div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="text-sm font-medium">{(item.value / 1000).toFixed(0)}k kr</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          </CardContent>
+        </Card>
+
         {/* Resursbeläggning */}
         <Card>
           <CardHeader>

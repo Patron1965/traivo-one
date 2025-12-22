@@ -115,6 +115,7 @@ export interface IStorage {
     endDate?: Date;
     page?: number;
     pageSize?: number;
+    search?: string;
   }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }>;
   
   // Price Resolution
@@ -573,6 +574,7 @@ export class DatabaseStorage implements IStorage {
     endDate?: Date;
     page?: number;
     pageSize?: number;
+    search?: string;
   }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }> {
     // Base conditions (tenant, not deleted, simulated filter)
     let baseConditions = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
@@ -600,10 +602,21 @@ export class DatabaseStorage implements IStorage {
       paginatedConditions = and(dateFilteredConditions, eq(workOrders.orderStatus, options.orderStatus));
     }
     
-    // Get total count for current view (with status filter if applied)
+    // Search filter - searches across order title, customer name, and object name
+    let searchConditions = paginatedConditions;
+    if (options?.search && options.search.trim()) {
+      const searchTerm = `%${options.search.trim().toLowerCase()}%`;
+      searchConditions = and(paginatedConditions, or(
+        sql`lower(${workOrders.title}) LIKE ${searchTerm}`,
+        sql`${workOrders.customerId} IN (SELECT id FROM ${customers} WHERE lower(name) LIKE ${searchTerm})`,
+        sql`${workOrders.objectId} IN (SELECT id FROM ${objects} WHERE lower(name) LIKE ${searchTerm})`
+      ));
+    }
+    
+    // Get total count for current view (with status and search filters)
     const countResult = await db.select({ count: sql<number>`count(*)::int` })
       .from(workOrders)
-      .where(paginatedConditions);
+      .where(searchConditions);
     const total = countResult[0]?.count || 0;
     
     // Get status counts (with date filters but without orderStatus filter for tab badges)
@@ -641,7 +654,7 @@ export class DatabaseStorage implements IStorage {
     const offset = (page - 1) * pageSize;
     
     const orders = await db.select().from(workOrders)
-      .where(paginatedConditions)
+      .where(searchConditions)
       .orderBy(desc(workOrders.createdAt))
       .limit(pageSize)
       .offset(offset);

@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
@@ -33,7 +33,8 @@ import {
   Plus,
   Trash2,
   FileText,
-  Loader2
+  Loader2,
+  Download
 } from "lucide-react";
 
 type OrderStatus = 'skapad' | 'planerad_pre' | 'planerad_resurs' | 'planerad_las' | 'utford' | 'fakturerad';
@@ -91,7 +92,17 @@ export default function OrderStockPage() {
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Debounce search term (300ms delay)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm);
+      setCurrentPage(1);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showLinesDialog, setShowLinesDialog] = useState(false);
@@ -100,12 +111,13 @@ export default function OrderStockPage() {
   const [lineQuantity, setLineQuantity] = useState(1);
 
   const { data: orderStockData, isLoading: ordersLoading } = useQuery<OrderStockResponse>({
-    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage }],
+    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (includeSimulated) params.set("includeSimulated", "true");
       if (selectedScenario) params.set("scenarioId", selectedScenario);
       if (statusFilter !== "all") params.set("orderStatus", statusFilter);
+      if (debouncedSearch) params.set("search", debouncedSearch);
       params.set("page", currentPage.toString());
       params.set("pageSize", ORDERS_PER_PAGE.toString());
       const response = await fetch(`/api/order-stock?${params.toString()}`);
@@ -135,7 +147,7 @@ export default function OrderStockPage() {
     enabled: !!selectedOrderForLines?.id
   });
 
-  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage }];
+  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch }];
   
   const updateOrderInCache = async (workOrderId: string) => {
     const response = await fetch(`/api/work-orders/${workOrderId}`);
@@ -249,29 +261,65 @@ export default function OrderStockPage() {
     }
   };
 
-  // Client-side search filter on current page of orders (server handles pagination)
-  const displayOrders = useMemo(() => {
-    if (!orderStockData?.orders) return [];
-    if (!searchTerm) return orderStockData.orders;
-    const searchLower = searchTerm.toLowerCase();
-    return orderStockData.orders.filter(order => {
-      const customer = customerMap.get(order.customerId);
-      const object = objectMap.get(order.objectId);
-      return (
-        order.title?.toLowerCase().includes(searchLower) ||
-        customer?.name?.toLowerCase().includes(searchLower) ||
-        object?.name?.toLowerCase().includes(searchLower)
-      );
-    });
-  }, [orderStockData?.orders, searchTerm, customerMap, objectMap]);
+  // Server-side search - orders already filtered
+  const displayOrders = orderStockData?.orders || [];
 
   // Use server-side pagination info
   const totalPages = orderStockData?.pagination?.totalPages || 1;
   const totalOrders = orderStockData?.pagination?.total || 0;
 
-  // Reset page when filter changes
+  // Search input handler (debounce handles page reset)
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
+  };
+
+  // Export to CSV
+  const handleExportCSV = async () => {
+    const params = new URLSearchParams();
+    if (includeSimulated) params.set("includeSimulated", "true");
+    if (selectedScenario) params.set("scenarioId", selectedScenario);
+    if (statusFilter !== "all") params.set("orderStatus", statusFilter);
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    params.set("page", "1");
+    params.set("pageSize", "10000");
+    
+    try {
+      const response = await fetch(`/api/order-stock?${params.toString()}`);
+      const data: OrderStockResponse = await response.json();
+      
+      const headers = ["Titel", "Kund", "Objekt", "Status", "Värde", "Kostnad", "Produktionstid (min)", "Planerat datum"];
+      const rows = data.orders.map(order => {
+        const customer = customerMap.get(order.customerId);
+        const object = objectMap.get(order.objectId);
+        return [
+          order.title || "",
+          customer?.name || "",
+          object?.name || "",
+          STATUS_LABELS[(order.orderStatus || 'skapad') as OrderStatus],
+          order.cachedValue?.toString() || "0",
+          order.cachedCost?.toString() || "0",
+          order.cachedProductionMinutes?.toString() || "0",
+          order.scheduledDate ? new Date(order.scheduledDate).toLocaleDateString("sv-SE") : ""
+        ];
+      });
+      
+      const csvContent = [
+        headers.join(";"),
+        ...rows.map(row => row.map(cell => `"${cell.replace(/"/g, '""')}"`).join(";"))
+      ].join("\n");
+      
+      const blob = new Blob(["\ufeff" + csvContent], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `orderstock-${new Date().toISOString().split("T")[0]}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      
+      toast({ title: `Exporterade ${data.orders.length} ordrar` });
+    } catch (error) {
+      toast({ title: "Kunde inte exportera", variant: "destructive" });
+    }
   };
 
   const handleStatusFilterChange = (status: OrderStatus | "all") => {
@@ -349,6 +397,11 @@ export default function OrderStockPage() {
               </SelectContent>
             </Select>
           )}
+          
+          <Button variant="outline" onClick={handleExportCSV} className="gap-2" data-testid="button-export-csv">
+            <Download className="h-4 w-4" />
+            Exportera CSV
+          </Button>
         </div>
       </div>
 

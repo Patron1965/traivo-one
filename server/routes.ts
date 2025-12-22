@@ -320,6 +320,7 @@ export async function registerRoutes(
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
       const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 50;
+      const search = req.query.search as string | undefined;
       
       const { orders, total, byStatus, aggregates } = await storage.getOrderStock(DEFAULT_TENANT_ID, {
         includeSimulated,
@@ -328,7 +329,8 @@ export async function registerRoutes(
         startDate,
         endDate,
         page,
-        pageSize
+        pageSize,
+        search
       });
       
       // Summary with SQL-aggregated values from entire filtered dataset
