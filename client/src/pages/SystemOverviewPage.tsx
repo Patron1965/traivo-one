@@ -167,14 +167,19 @@ export default function SystemOverviewPage() {
       doc.setFont("helvetica", "normal");
       const summary = [
         "Nordic Routing är en AI-driven planeringsplattform som utvecklas i samarbete",
-        "med Kinab AB. Målet är att skapa ett unikt system som optimerar fältservice-",
-        "effektivitet - och som sedan kan erbjudas till alla företag inom service-",
-        "verksamhet i Norden.",
+        "med Kinab AB. Målet är att skapa ett unikt system som optimerar hela fält-",
+        "serviceverksamheten - och som sedan kan erbjudas till alla företag inom",
+        "serviceverksamhet i Norden.",
         "",
         "Genom att först bevisa värde med Kinab som design partner bygger vi grunden",
-        "för en kommersiell multi-tenant SaaS-plattform. Plattformen riktar sig mot",
-        "de 15-25% av arbetsdagen som går förlorad till ineffektivitet i setup",
-        "(portåtkomst, parkering, hitta nycklar).",
+        "för en kommersiell multi-tenant SaaS-plattform.",
+        "",
+        "AI-driven optimering omfattar:",
+        "• Ruttplanering - kortare körsträckor, bättre sekvensering",
+        "• Resursplanering - optimal bemanning, kompetensmatching",
+        "• Ekonomistyrning - kostnadsoptimering, marginalförbättring",
+        "• Produktivitet - högre utnyttjandegrad, färre tomkörningar",
+        "• Prediktiv analys - prognoser, kapacitetsplanering",
       ];
       summary.forEach(line => {
         doc.text(line, 14, yPos);
@@ -294,19 +299,29 @@ export default function SystemOverviewPage() {
         <CardContent className="space-y-4">
           <p className="text-muted-foreground">
             Nordic Routing är en AI-driven planeringsplattform som utvecklas i samarbete med Kinab AB. 
-            Målet är att skapa ett unikt system som optimerar fältserviceeffektivitet - och som sedan 
-            kan erbjudas till alla företag inom serviceverksamhet i Norden.
+            Målet är att skapa ett unikt system som optimerar hela fältserviceverksamheten - och som 
+            sedan kan erbjudas till alla företag inom serviceverksamhet i Norden.
           </p>
           <p className="text-muted-foreground">
             Genom att först bevisa värde med Kinab som design partner bygger vi grunden för en 
-            kommersiell multi-tenant SaaS-plattform. Plattformen riktar sig mot de 15-25% av 
-            arbetsdagen som går förlorad till ineffektivitet i setup (portåtkomst, parkering, hitta nycklar).
+            kommersiell multi-tenant SaaS-plattform.
           </p>
+          <div className="space-y-2">
+            <p className="text-sm font-medium">AI-driven optimering omfattar:</p>
+            <ul className="text-sm text-muted-foreground grid gap-1 md:grid-cols-2">
+              <li>Ruttplanering - kortare körsträckor, bättre sekvensering</li>
+              <li>Resursplanering - optimal bemanning, kompetensmatching</li>
+              <li>Ekonomistyrning - kostnadsoptimering, marginalförbättring</li>
+              <li>Produktivitet - högre utnyttjandegrad, färre tomkörningar</li>
+              <li>Prediktiv analys - prognoser, kapacitetsplanering</li>
+              <li>Ställtidsoptimering - reducerad setup-tid per uppdrag</li>
+            </ul>
+          </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">Design Partner: Kinab AB</Badge>
-            <Badge variant="secondary">Avfallshantering & Sophämtning</Badge>
-            <Badge variant="secondary">Funktionell Prototyp</Badge>
             <Badge variant="secondary">Multi-tenant SaaS</Badge>
+            <Badge variant="secondary">AI-optimering</Badge>
+            <Badge variant="secondary">Nordic Market</Badge>
           </div>
         </CardContent>
       </Card>
