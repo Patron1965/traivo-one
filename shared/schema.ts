@@ -196,7 +196,9 @@ export const workOrderLines = pgTable("work_order_lines", {
   isOptional: boolean("is_optional").default(false),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_work_order_lines_work_order_id").on(table.workOrderId)
+]);
 
 export const setupTimeLogs = pgTable("setup_time_logs", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
