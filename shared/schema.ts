@@ -188,6 +188,8 @@ export const workOrderLines = pgTable("work_order_lines", {
   resolvedProductionMinutes: integer("resolved_production_minutes").default(0),
   // Vilken prislista som användes
   priceListIdUsed: varchar("price_list_id_used").references(() => priceLists.id),
+  // Priskälla (rabattbrev, kundunik, generell, listprice)
+  priceSource: varchar("price_source"),
   // Ev rabatt i procent
   discountPercent: integer("discount_percent").default(0),
   // Valfri rad (kan tas bort utan att påverka ordern)

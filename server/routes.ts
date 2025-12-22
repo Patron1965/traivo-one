@@ -407,6 +407,7 @@ export async function registerRoutes(
         resolvedCost: priceInfo.cost,
         resolvedProductionMinutes: priceInfo.productionMinutes,
         priceListIdUsed: priceInfo.priceListId,
+        priceSource: priceInfo.source,
         isOptional,
         notes
       });
@@ -416,7 +417,7 @@ export async function registerRoutes(
       // Recalculate work order totals
       await storage.recalculateWorkOrderTotals(req.params.workOrderId);
       
-      res.status(201).json({ ...line, priceSource: priceInfo.source });
+      res.status(201).json(line);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
