@@ -553,17 +553,24 @@ export default function OrderStockPage() {
             </Button>
             <Button
               onClick={() => {
+                console.log('Bekräfta clicked', { selectedOrder, isPending: statusMutation.isPending });
                 if (selectedOrder) {
                   const nextStatus = getNextStatus((selectedOrder.orderStatus || 'skapad') as OrderStatus);
+                  console.log('Next status:', nextStatus, 'from current:', selectedOrder.orderStatus);
                   if (nextStatus) {
+                    console.log('Calling mutation with:', { orderId: selectedOrder.id, status: nextStatus });
                     statusMutation.mutate({ orderId: selectedOrder.id, status: nextStatus });
+                  } else {
+                    console.log('No next status available - order might be at final status');
                   }
+                } else {
+                  console.log('No selected order!');
                 }
               }}
               disabled={statusMutation.isPending}
               data-testid="button-confirm-status-change"
             >
-              Bekräfta
+              {statusMutation.isPending ? 'Sparar...' : 'Bekräfta'}
             </Button>
           </DialogFooter>
         </DialogContent>
