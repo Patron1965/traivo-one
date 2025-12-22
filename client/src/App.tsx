@@ -35,6 +35,7 @@ function Router() {
     <Switch>
       <Route path="/" component={WeekPlannerPage} />
       <Route path="/planner" component={WeekPlannerPage} />
+      <Route path="/week-planner" component={WeekPlannerPage} />
       <Route path="/clusters" component={ClustersPage} />
       <Route path="/clusters/:id" component={ClusterDetailPage} />
       <Route path="/routes" component={RoutesPage} />
