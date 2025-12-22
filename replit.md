@@ -57,18 +57,38 @@ shared/
 ```
 
 ## Database Schema
+
+### Core Tables
 - **tenants:** Multi-tenant support
 - **customers:** Telgebostäder, Serviceboenden
 - **objects:** Hierarchical (parentId), with accessType, accessCode, containerCounts
 - **resources:** Technicians with competencies, homeLocation, weeklyHours
+
+### Order Management
 - **work_orders:** Jobs with orderStatus flow (skapad→planerad_pre→planerad_resurs→planerad_las→utford→fakturerad), cached totals (value/cost/productionMinutes), simulation flags
 - **work_order_lines:** Order line items with resolved prices from hierarchy
 - **setup_time_logs:** Ställtidsloggning per jobb
+- **simulation_scenarios:** Test scenarios for order simulation without affecting live data
+
+### Pricing System
 - **articles:** Articles/services with articleNumber, productionTime, cost, listPrice, articleType
 - **price_lists:** Pricing hierarchy (general → customer → discount letter) with priority
 - **price_list_articles:** Junction table linking articles to price lists with custom prices
 - **resource_articles:** Tidsverk - which articles a resource can perform with efficiencyFactor
-- **simulation_scenarios:** Test scenarios for order simulation without affecting live data
+
+### Fleet Management (Modus Integration)
+- **vehicles:** Fleet management with service tracking (registrationNumber, vehicleType, fuelType, capacityTons, nextServiceDate)
+- **equipment:** Tools and machinery (inventoryNumber, equipmentType, manufacturer, model)
+- **resource_vehicles:** Link resources to vehicles with date ranges
+- **resource_equipment:** Link resources to equipment with date ranges
+- **resource_availability:** Scheduling (availableFrom/Until, working hours, vacation, sick leave)
+- **vehicle_schedule:** Vehicle availability (service, repair)
+
+### Teams & Planning
+- **teams:** Groups of resources with leaders, geographic areas, project codes
+- **team_members:** Link resources to teams with roles
+- **subscriptions:** Recurring services with periodicity (vecka, varannan_vecka, manad, kvartal, halvar, ar)
+- **planning_parameters:** SLA levels, time slots, weekday restrictions, advance notification
 
 ## Key Features
 1. **Veckoplanering:** Drag-drop scheduling with priority colors
@@ -76,12 +96,13 @@ shared/
 3. **Ruttplanering:** Route visualization with OpenRouteService
 4. **Objekt:** Hierarchical tree view (Område → Fastighet → Rum)
 5. **Resurser:** Technician management with competencies and tidsverk (article assignments)
-6. **Artiklar:** Article/service management with production times and costs
-7. **Prislistor:** Three-tier pricing hierarchy (general → customer → discount letter)
-8. **Orderstock:** Order management with status flow, price resolution, simulation mode
-9. **Dashboard:** Real analytics from setup_time_logs
-10. **Mobile Field App:** Access info, job completion, ställtidsrapportering
-11. **Modus 2.0 Import:** Direct import from Modus 2.0 CSV exports (semicolon-separated)
+6. **Fordon och Utrustning:** Fleet management with vehicles, equipment, and service tracking
+7. **Artiklar:** Article/service management with production times and costs
+8. **Prislistor:** Three-tier pricing hierarchy (general → customer → discount letter)
+9. **Orderstock:** Order management with status flow, price resolution, simulation mode
+10. **Dashboard:** Real analytics from setup_time_logs
+11. **Mobile Field App:** Access info, job completion, ställtidsrapportering
+12. **Modus 2.0 Import:** Direct import from Modus 2.0 CSV exports (semicolon-separated)
 
 ## Modus 2.0 Import System
 Located at `/import` page. Supports importing:
@@ -117,6 +138,10 @@ Field Mappings (Modus → Nordic Routing):
 - **Font:** Inter for UI
 
 ## Recent Changes
+- 2024-12-22: **Phase 3 Modus Fleet Management** - Added VehiclesPage for fleet and equipment management
+- 2024-12-22: Added 10 new database tables: vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability, vehicleSchedule, subscriptions, teams, teamMembers, planningParameters
+- 2024-12-22: Added CRUD API routes for all fleet management tables
+- 2024-12-22: VehiclesPage uses react-hook-form with shadcn Form components
 - 2024-12-22: **Phase 2 Order Management** - Added OrderStockPage with status workflow, simulation mode, price resolution
 - 2024-12-22: Added orderStatus flow (skapad→planerad_pre→planerad_resurs→planerad_las→utford→fakturerad) with sequential validation
 - 2024-12-22: Added work_order_lines table for order line items with automatic price resolution from hierarchy
@@ -189,6 +214,10 @@ When creating a new page, ALWAYS complete these steps:
 | `/optimization` | OptimizationPrepPage | Inför optimering |
 | `/objects` | ObjectsPage | Objekthantering |
 | `/resources` | ResourcesPage | Resurshantering |
+| `/vehicles` | VehiclesPage | Fordon och utrustning |
+| `/articles` | ArticlesPage | Artikelhantering |
+| `/price-lists` | PriceListsPage | Prislistor |
+| `/order-stock` | OrderStockPage | Orderstock |
 | `/procurements` | ProcurementsPage | Inköp |
 | `/dashboard` | DashboardPage | Analys |
 | `/import` | ImportPage | Modus 2.0 import |

@@ -5,7 +5,10 @@ import {
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
   insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema,
   insertArticleSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema,
-  insertWorkOrderLineSchema, insertSimulationScenarioSchema, ORDER_STATUSES, type OrderStatus
+  insertWorkOrderLineSchema, insertSimulationScenarioSchema, ORDER_STATUSES, type OrderStatus,
+  insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema,
+  insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema,
+  insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
@@ -1644,6 +1647,524 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete resource article" });
+    }
+  });
+
+  // ============== VEHICLES ==============
+  app.get("/api/vehicles", async (req, res) => {
+    try {
+      const vehicles = await storage.getVehicles(DEFAULT_TENANT_ID);
+      res.json(vehicles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vehicles" });
+    }
+  });
+
+  app.get("/api/vehicles/:id", async (req, res) => {
+    try {
+      const vehicle = await storage.getVehicle(req.params.id);
+      if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
+      res.json(vehicle);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vehicle" });
+    }
+  });
+
+  app.post("/api/vehicles", async (req, res) => {
+    try {
+      const data = insertVehicleSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const vehicle = await storage.createVehicle(data);
+      res.status(201).json(vehicle);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create vehicle" });
+    }
+  });
+
+  app.patch("/api/vehicles/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const vehicle = await storage.updateVehicle(req.params.id, updateData);
+      if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
+      res.json(vehicle);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update vehicle" });
+    }
+  });
+
+  app.delete("/api/vehicles/:id", async (req, res) => {
+    try {
+      await storage.deleteVehicle(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete vehicle" });
+    }
+  });
+
+  // ============== EQUIPMENT ==============
+  app.get("/api/equipment", async (req, res) => {
+    try {
+      const equipment = await storage.getEquipment(DEFAULT_TENANT_ID);
+      res.json(equipment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch equipment" });
+    }
+  });
+
+  app.get("/api/equipment/:id", async (req, res) => {
+    try {
+      const equipment = await storage.getEquipmentById(req.params.id);
+      if (!equipment) return res.status(404).json({ error: "Equipment not found" });
+      res.json(equipment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch equipment" });
+    }
+  });
+
+  app.post("/api/equipment", async (req, res) => {
+    try {
+      const data = insertEquipmentSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const equipment = await storage.createEquipment(data);
+      res.status(201).json(equipment);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create equipment" });
+    }
+  });
+
+  app.patch("/api/equipment/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const equipment = await storage.updateEquipment(req.params.id, updateData);
+      if (!equipment) return res.status(404).json({ error: "Equipment not found" });
+      res.json(equipment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update equipment" });
+    }
+  });
+
+  app.delete("/api/equipment/:id", async (req, res) => {
+    try {
+      await storage.deleteEquipment(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete equipment" });
+    }
+  });
+
+  // ============== RESOURCE AVAILABILITY ==============
+  app.get("/api/resource-availability/:resourceId", async (req, res) => {
+    try {
+      const availability = await storage.getResourceAvailability(req.params.resourceId);
+      res.json(availability);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch resource availability" });
+    }
+  });
+
+  app.get("/api/resource-availability-item/:id", async (req, res) => {
+    try {
+      const item = await storage.getResourceAvailabilityById(req.params.id);
+      if (!item) return res.status(404).json({ error: "Resource availability not found" });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch resource availability" });
+    }
+  });
+
+  app.post("/api/resource-availability/:resourceId", async (req, res) => {
+    try {
+      const data = insertResourceAvailabilitySchema.parse({ 
+        ...req.body, 
+        tenantId: DEFAULT_TENANT_ID, 
+        resourceId: req.params.resourceId 
+      });
+      const item = await storage.createResourceAvailability(data);
+      res.status(201).json(item);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create resource availability" });
+    }
+  });
+
+  app.patch("/api/resource-availability-item/:id", async (req, res) => {
+    try {
+      const { tenantId, id, resourceId, createdAt, ...updateData } = req.body;
+      const item = await storage.updateResourceAvailability(req.params.id, updateData);
+      if (!item) return res.status(404).json({ error: "Resource availability not found" });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update resource availability" });
+    }
+  });
+
+  app.delete("/api/resource-availability-item/:id", async (req, res) => {
+    try {
+      await storage.deleteResourceAvailability(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete resource availability" });
+    }
+  });
+
+  // ============== VEHICLE SCHEDULE ==============
+  app.get("/api/vehicle-schedule/:vehicleId", async (req, res) => {
+    try {
+      const schedule = await storage.getVehicleSchedule(req.params.vehicleId);
+      res.json(schedule);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vehicle schedule" });
+    }
+  });
+
+  app.get("/api/vehicle-schedule-item/:id", async (req, res) => {
+    try {
+      const item = await storage.getVehicleScheduleById(req.params.id);
+      if (!item) return res.status(404).json({ error: "Vehicle schedule not found" });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch vehicle schedule" });
+    }
+  });
+
+  app.post("/api/vehicle-schedule/:vehicleId", async (req, res) => {
+    try {
+      const data = insertVehicleScheduleSchema.parse({ 
+        ...req.body, 
+        tenantId: DEFAULT_TENANT_ID, 
+        vehicleId: req.params.vehicleId 
+      });
+      const item = await storage.createVehicleSchedule(data);
+      res.status(201).json(item);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create vehicle schedule" });
+    }
+  });
+
+  app.patch("/api/vehicle-schedule-item/:id", async (req, res) => {
+    try {
+      const { tenantId, id, vehicleId, createdAt, ...updateData } = req.body;
+      const item = await storage.updateVehicleSchedule(req.params.id, updateData);
+      if (!item) return res.status(404).json({ error: "Vehicle schedule not found" });
+      res.json(item);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update vehicle schedule" });
+    }
+  });
+
+  app.delete("/api/vehicle-schedule-item/:id", async (req, res) => {
+    try {
+      await storage.deleteVehicleSchedule(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete vehicle schedule" });
+    }
+  });
+
+  // ============== SUBSCRIPTIONS ==============
+  app.get("/api/subscriptions", async (req, res) => {
+    try {
+      const subscriptions = await storage.getSubscriptions(DEFAULT_TENANT_ID);
+      res.json(subscriptions);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch subscriptions" });
+    }
+  });
+
+  app.get("/api/subscriptions/:id", async (req, res) => {
+    try {
+      const subscription = await storage.getSubscription(req.params.id);
+      if (!subscription) return res.status(404).json({ error: "Subscription not found" });
+      res.json(subscription);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch subscription" });
+    }
+  });
+
+  app.post("/api/subscriptions", async (req, res) => {
+    try {
+      const data = insertSubscriptionSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const subscription = await storage.createSubscription(data);
+      res.status(201).json(subscription);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create subscription" });
+    }
+  });
+
+  app.patch("/api/subscriptions/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const subscription = await storage.updateSubscription(req.params.id, updateData);
+      if (!subscription) return res.status(404).json({ error: "Subscription not found" });
+      res.json(subscription);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update subscription" });
+    }
+  });
+
+  app.delete("/api/subscriptions/:id", async (req, res) => {
+    try {
+      await storage.deleteSubscription(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete subscription" });
+    }
+  });
+
+  // ============== TEAMS ==============
+  app.get("/api/teams", async (req, res) => {
+    try {
+      const teams = await storage.getTeams(DEFAULT_TENANT_ID);
+      res.json(teams);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch teams" });
+    }
+  });
+
+  app.get("/api/teams/:id", async (req, res) => {
+    try {
+      const team = await storage.getTeam(req.params.id);
+      if (!team) return res.status(404).json({ error: "Team not found" });
+      res.json(team);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch team" });
+    }
+  });
+
+  app.post("/api/teams", async (req, res) => {
+    try {
+      const data = insertTeamSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const team = await storage.createTeam(data);
+      res.status(201).json(team);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create team" });
+    }
+  });
+
+  app.patch("/api/teams/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const team = await storage.updateTeam(req.params.id, updateData);
+      if (!team) return res.status(404).json({ error: "Team not found" });
+      res.json(team);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update team" });
+    }
+  });
+
+  app.delete("/api/teams/:id", async (req, res) => {
+    try {
+      await storage.deleteTeam(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete team" });
+    }
+  });
+
+  // ============== TEAM MEMBERS ==============
+  app.get("/api/team-members/:teamId", async (req, res) => {
+    try {
+      const members = await storage.getTeamMembers(req.params.teamId);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  app.get("/api/team-member/:id", async (req, res) => {
+    try {
+      const member = await storage.getTeamMember(req.params.id);
+      if (!member) return res.status(404).json({ error: "Team member not found" });
+      res.json(member);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch team member" });
+    }
+  });
+
+  app.post("/api/team-members/:teamId", async (req, res) => {
+    try {
+      const data = insertTeamMemberSchema.parse({ ...req.body, teamId: req.params.teamId });
+      const member = await storage.createTeamMember(data);
+      res.status(201).json(member);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create team member" });
+    }
+  });
+
+  app.patch("/api/team-member/:id", async (req, res) => {
+    try {
+      const { id, teamId, resourceId, createdAt, ...updateData } = req.body;
+      const member = await storage.updateTeamMember(req.params.id, updateData);
+      if (!member) return res.status(404).json({ error: "Team member not found" });
+      res.json(member);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update team member" });
+    }
+  });
+
+  app.delete("/api/team-member/:id", async (req, res) => {
+    try {
+      await storage.deleteTeamMember(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete team member" });
+    }
+  });
+
+  // ============== PLANNING PARAMETERS ==============
+  app.get("/api/planning-parameters", async (req, res) => {
+    try {
+      const params = await storage.getPlanningParameters(DEFAULT_TENANT_ID);
+      res.json(params);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch planning parameters" });
+    }
+  });
+
+  app.get("/api/planning-parameters/:id", async (req, res) => {
+    try {
+      const param = await storage.getPlanningParameter(req.params.id);
+      if (!param) return res.status(404).json({ error: "Planning parameter not found" });
+      res.json(param);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch planning parameter" });
+    }
+  });
+
+  app.post("/api/planning-parameters", async (req, res) => {
+    try {
+      const data = insertPlanningParameterSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const param = await storage.createPlanningParameter(data);
+      res.status(201).json(param);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create planning parameter" });
+    }
+  });
+
+  app.patch("/api/planning-parameters/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, ...updateData } = req.body;
+      const param = await storage.updatePlanningParameter(req.params.id, updateData);
+      if (!param) return res.status(404).json({ error: "Planning parameter not found" });
+      res.json(param);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update planning parameter" });
+    }
+  });
+
+  app.delete("/api/planning-parameters/:id", async (req, res) => {
+    try {
+      await storage.deletePlanningParameter(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete planning parameter" });
+    }
+  });
+
+  // ============== RESOURCE VEHICLES ==============
+  app.get("/api/resources/:resourceId/vehicles", async (req, res) => {
+    try {
+      const resourceVehicles = await storage.getResourceVehicles(req.params.resourceId);
+      res.json(resourceVehicles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch resource vehicles" });
+    }
+  });
+
+  app.post("/api/resources/:resourceId/vehicles", async (req, res) => {
+    try {
+      const data = insertResourceVehicleSchema.parse({ ...req.body, resourceId: req.params.resourceId });
+      const rv = await storage.createResourceVehicle(data);
+      res.status(201).json(rv);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create resource vehicle" });
+    }
+  });
+
+  app.patch("/api/resource-vehicles/:id", async (req, res) => {
+    try {
+      const { id, resourceId, vehicleId, createdAt, ...updateData } = req.body;
+      const rv = await storage.updateResourceVehicle(req.params.id, updateData);
+      if (!rv) return res.status(404).json({ error: "Resource vehicle not found" });
+      res.json(rv);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update resource vehicle" });
+    }
+  });
+
+  app.delete("/api/resource-vehicles/:id", async (req, res) => {
+    try {
+      await storage.deleteResourceVehicle(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete resource vehicle" });
+    }
+  });
+
+  // ============== RESOURCE EQUIPMENT ==============
+  app.get("/api/resources/:resourceId/equipment", async (req, res) => {
+    try {
+      const resourceEquipment = await storage.getResourceEquipment(req.params.resourceId);
+      res.json(resourceEquipment);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch resource equipment" });
+    }
+  });
+
+  app.post("/api/resources/:resourceId/equipment", async (req, res) => {
+    try {
+      const data = insertResourceEquipmentSchema.parse({ ...req.body, resourceId: req.params.resourceId });
+      const re = await storage.createResourceEquipment(data);
+      res.status(201).json(re);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create resource equipment" });
+    }
+  });
+
+  app.patch("/api/resource-equipment/:id", async (req, res) => {
+    try {
+      const { id, resourceId, equipmentId, createdAt, ...updateData } = req.body;
+      const re = await storage.updateResourceEquipment(req.params.id, updateData);
+      if (!re) return res.status(404).json({ error: "Resource equipment not found" });
+      res.json(re);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update resource equipment" });
+    }
+  });
+
+  app.delete("/api/resource-equipment/:id", async (req, res) => {
+    try {
+      await storage.deleteResourceEquipment(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete resource equipment" });
     }
   });
 

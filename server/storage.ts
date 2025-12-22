@@ -13,9 +13,21 @@ import {
   type ResourceArticle, type InsertResourceArticle,
   type WorkOrderLine, type InsertWorkOrderLine,
   type SimulationScenario, type InsertSimulationScenario,
+  type Vehicle, type InsertVehicle,
+  type Equipment, type InsertEquipment,
+  type ResourceVehicle, type InsertResourceVehicle,
+  type ResourceEquipment, type InsertResourceEquipment,
+  type ResourceAvailability, type InsertResourceAvailability,
+  type VehicleSchedule, type InsertVehicleSchedule,
+  type Subscription, type InsertSubscription,
+  type Team, type InsertTeam,
+  type TeamMember, type InsertTeamMember,
+  type PlanningParameter, type InsertPlanningParameter,
   type OrderStatus,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
-  articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios
+  articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
+  vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
+  vehicleSchedule, subscriptions, teams, teamMembers, planningParameters
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
@@ -822,6 +834,246 @@ export class DatabaseStorage implements IStorage {
     }).where(eq(workOrders.id, workOrderId)).returning();
     
     return wo || undefined;
+  }
+
+  // ============== VEHICLES ==============
+  async getVehicles(tenantId: string): Promise<Vehicle[]> {
+    return db.select().from(vehicles).where(and(eq(vehicles.tenantId, tenantId), isNull(vehicles.deletedAt)));
+  }
+
+  async getVehicle(id: string): Promise<Vehicle | undefined> {
+    const [vehicle] = await db.select().from(vehicles).where(and(eq(vehicles.id, id), isNull(vehicles.deletedAt)));
+    return vehicle || undefined;
+  }
+
+  async createVehicle(vehicle: InsertVehicle): Promise<Vehicle> {
+    const [v] = await db.insert(vehicles).values(vehicle).returning();
+    return v;
+  }
+
+  async updateVehicle(id: string, data: Partial<InsertVehicle>): Promise<Vehicle | undefined> {
+    const [v] = await db.update(vehicles).set(data).where(eq(vehicles.id, id)).returning();
+    return v || undefined;
+  }
+
+  async deleteVehicle(id: string): Promise<void> {
+    await db.update(vehicles).set({ deletedAt: new Date() }).where(eq(vehicles.id, id));
+  }
+
+  // ============== EQUIPMENT ==============
+  async getEquipment(tenantId: string): Promise<Equipment[]> {
+    return db.select().from(equipment).where(and(eq(equipment.tenantId, tenantId), isNull(equipment.deletedAt)));
+  }
+
+  async getEquipmentById(id: string): Promise<Equipment | undefined> {
+    const [eq_item] = await db.select().from(equipment).where(and(eq(equipment.id, id), isNull(equipment.deletedAt)));
+    return eq_item || undefined;
+  }
+
+  async createEquipment(eq_data: InsertEquipment): Promise<Equipment> {
+    const [e] = await db.insert(equipment).values(eq_data).returning();
+    return e;
+  }
+
+  async updateEquipment(id: string, data: Partial<InsertEquipment>): Promise<Equipment | undefined> {
+    const [e] = await db.update(equipment).set(data).where(eq(equipment.id, id)).returning();
+    return e || undefined;
+  }
+
+  async deleteEquipment(id: string): Promise<void> {
+    await db.update(equipment).set({ deletedAt: new Date() }).where(eq(equipment.id, id));
+  }
+
+  // ============== RESOURCE VEHICLES ==============
+  async getResourceVehicles(resourceId: string): Promise<ResourceVehicle[]> {
+    return db.select().from(resourceVehicles).where(eq(resourceVehicles.resourceId, resourceId));
+  }
+
+  async getResourceVehicle(id: string): Promise<ResourceVehicle | undefined> {
+    const [rv] = await db.select().from(resourceVehicles).where(eq(resourceVehicles.id, id));
+    return rv || undefined;
+  }
+
+  async createResourceVehicle(rv: InsertResourceVehicle): Promise<ResourceVehicle> {
+    const [result] = await db.insert(resourceVehicles).values(rv).returning();
+    return result;
+  }
+
+  async updateResourceVehicle(id: string, data: Partial<InsertResourceVehicle>): Promise<ResourceVehicle | undefined> {
+    const [result] = await db.update(resourceVehicles).set(data).where(eq(resourceVehicles.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteResourceVehicle(id: string): Promise<void> {
+    await db.delete(resourceVehicles).where(eq(resourceVehicles.id, id));
+  }
+
+  // ============== RESOURCE EQUIPMENT ==============
+  async getResourceEquipment(resourceId: string): Promise<ResourceEquipment[]> {
+    return db.select().from(resourceEquipment).where(eq(resourceEquipment.resourceId, resourceId));
+  }
+
+  async getResourceEquipmentById(id: string): Promise<ResourceEquipment | undefined> {
+    const [re] = await db.select().from(resourceEquipment).where(eq(resourceEquipment.id, id));
+    return re || undefined;
+  }
+
+  async createResourceEquipment(re: InsertResourceEquipment): Promise<ResourceEquipment> {
+    const [result] = await db.insert(resourceEquipment).values(re).returning();
+    return result;
+  }
+
+  async updateResourceEquipment(id: string, data: Partial<InsertResourceEquipment>): Promise<ResourceEquipment | undefined> {
+    const [result] = await db.update(resourceEquipment).set(data).where(eq(resourceEquipment.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteResourceEquipment(id: string): Promise<void> {
+    await db.delete(resourceEquipment).where(eq(resourceEquipment.id, id));
+  }
+
+  // ============== RESOURCE AVAILABILITY ==============
+  async getResourceAvailability(resourceId: string): Promise<ResourceAvailability[]> {
+    return db.select().from(resourceAvailability).where(eq(resourceAvailability.resourceId, resourceId));
+  }
+
+  async getResourceAvailabilityById(id: string): Promise<ResourceAvailability | undefined> {
+    const [ra] = await db.select().from(resourceAvailability).where(eq(resourceAvailability.id, id));
+    return ra || undefined;
+  }
+
+  async createResourceAvailability(ra: InsertResourceAvailability): Promise<ResourceAvailability> {
+    const [result] = await db.insert(resourceAvailability).values(ra).returning();
+    return result;
+  }
+
+  async updateResourceAvailability(id: string, data: Partial<InsertResourceAvailability>): Promise<ResourceAvailability | undefined> {
+    const [result] = await db.update(resourceAvailability).set(data).where(eq(resourceAvailability.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteResourceAvailability(id: string): Promise<void> {
+    await db.delete(resourceAvailability).where(eq(resourceAvailability.id, id));
+  }
+
+  // ============== VEHICLE SCHEDULE ==============
+  async getVehicleSchedule(vehicleId: string): Promise<VehicleSchedule[]> {
+    return db.select().from(vehicleSchedule).where(eq(vehicleSchedule.vehicleId, vehicleId));
+  }
+
+  async getVehicleScheduleById(id: string): Promise<VehicleSchedule | undefined> {
+    const [vs] = await db.select().from(vehicleSchedule).where(eq(vehicleSchedule.id, id));
+    return vs || undefined;
+  }
+
+  async createVehicleSchedule(vs: InsertVehicleSchedule): Promise<VehicleSchedule> {
+    const [result] = await db.insert(vehicleSchedule).values(vs).returning();
+    return result;
+  }
+
+  async updateVehicleSchedule(id: string, data: Partial<InsertVehicleSchedule>): Promise<VehicleSchedule | undefined> {
+    const [result] = await db.update(vehicleSchedule).set(data).where(eq(vehicleSchedule.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteVehicleSchedule(id: string): Promise<void> {
+    await db.delete(vehicleSchedule).where(eq(vehicleSchedule.id, id));
+  }
+
+  // ============== SUBSCRIPTIONS ==============
+  async getSubscriptions(tenantId: string): Promise<Subscription[]> {
+    return db.select().from(subscriptions).where(and(eq(subscriptions.tenantId, tenantId), isNull(subscriptions.deletedAt)));
+  }
+
+  async getSubscription(id: string): Promise<Subscription | undefined> {
+    const [sub] = await db.select().from(subscriptions).where(and(eq(subscriptions.id, id), isNull(subscriptions.deletedAt)));
+    return sub || undefined;
+  }
+
+  async createSubscription(sub: InsertSubscription): Promise<Subscription> {
+    const [result] = await db.insert(subscriptions).values(sub).returning();
+    return result;
+  }
+
+  async updateSubscription(id: string, data: Partial<InsertSubscription>): Promise<Subscription | undefined> {
+    const [result] = await db.update(subscriptions).set(data).where(eq(subscriptions.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteSubscription(id: string): Promise<void> {
+    await db.update(subscriptions).set({ deletedAt: new Date() }).where(eq(subscriptions.id, id));
+  }
+
+  // ============== TEAMS ==============
+  async getTeams(tenantId: string): Promise<Team[]> {
+    return db.select().from(teams).where(and(eq(teams.tenantId, tenantId), isNull(teams.deletedAt)));
+  }
+
+  async getTeam(id: string): Promise<Team | undefined> {
+    const [team] = await db.select().from(teams).where(and(eq(teams.id, id), isNull(teams.deletedAt)));
+    return team || undefined;
+  }
+
+  async createTeam(team: InsertTeam): Promise<Team> {
+    const [result] = await db.insert(teams).values(team).returning();
+    return result;
+  }
+
+  async updateTeam(id: string, data: Partial<InsertTeam>): Promise<Team | undefined> {
+    const [result] = await db.update(teams).set(data).where(eq(teams.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteTeam(id: string): Promise<void> {
+    await db.update(teams).set({ deletedAt: new Date() }).where(eq(teams.id, id));
+  }
+
+  // ============== TEAM MEMBERS ==============
+  async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+    return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId));
+  }
+
+  async getTeamMember(id: string): Promise<TeamMember | undefined> {
+    const [tm] = await db.select().from(teamMembers).where(eq(teamMembers.id, id));
+    return tm || undefined;
+  }
+
+  async createTeamMember(tm: InsertTeamMember): Promise<TeamMember> {
+    const [result] = await db.insert(teamMembers).values(tm).returning();
+    return result;
+  }
+
+  async updateTeamMember(id: string, data: Partial<InsertTeamMember>): Promise<TeamMember | undefined> {
+    const [result] = await db.update(teamMembers).set(data).where(eq(teamMembers.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteTeamMember(id: string): Promise<void> {
+    await db.delete(teamMembers).where(eq(teamMembers.id, id));
+  }
+
+  // ============== PLANNING PARAMETERS ==============
+  async getPlanningParameters(tenantId: string): Promise<PlanningParameter[]> {
+    return db.select().from(planningParameters).where(eq(planningParameters.tenantId, tenantId));
+  }
+
+  async getPlanningParameter(id: string): Promise<PlanningParameter | undefined> {
+    const [pp] = await db.select().from(planningParameters).where(eq(planningParameters.id, id));
+    return pp || undefined;
+  }
+
+  async createPlanningParameter(pp: InsertPlanningParameter): Promise<PlanningParameter> {
+    const [result] = await db.insert(planningParameters).values(pp).returning();
+    return result;
+  }
+
+  async updatePlanningParameter(id: string, data: Partial<InsertPlanningParameter>): Promise<PlanningParameter | undefined> {
+    const [result] = await db.update(planningParameters).set(data).where(eq(planningParameters.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deletePlanningParameter(id: string): Promise<void> {
+    await db.delete(planningParameters).where(eq(planningParameters.id, id));
   }
 }
 

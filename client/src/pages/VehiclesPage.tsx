@@ -1,0 +1,911 @@
+import { useState, useMemo, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Separator } from "@/components/ui/separator";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Plus,
+  Search,
+  Loader2,
+  Pencil,
+  Trash2,
+  Truck,
+  Car,
+  Wrench,
+  Fuel,
+  AlertTriangle,
+  CheckCircle,
+  Settings,
+} from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient, apiRequest } from "@/lib/queryClient";
+import { format, differenceInDays } from "date-fns";
+import { sv } from "date-fns/locale";
+import type { Vehicle, Equipment } from "@shared/schema";
+
+const vehicleTypeOptions = [
+  { value: "bil", label: "Personbil", icon: Car },
+  { value: "lastbil", label: "Lastbil", icon: Truck },
+  { value: "minibuss", label: "Minibuss", icon: Truck },
+  { value: "slamsugare", label: "Slamsugare", icon: Truck },
+  { value: "kranfordon", label: "Kranfordon", icon: Truck },
+];
+
+const fuelTypeOptions = [
+  { value: "diesel", label: "Diesel" },
+  { value: "bensin", label: "Bensin" },
+  { value: "el", label: "El" },
+  { value: "hybrid", label: "Hybrid" },
+  { value: "hvo", label: "HVO" },
+];
+
+const equipmentTypeOptions = [
+  { value: "verktyg", label: "Verktyg" },
+  { value: "maskin", label: "Maskin" },
+  { value: "fordonsutrustning", label: "Fordonsutrustning" },
+  { value: "sakerhet", label: "Säkerhetsutrustning" },
+];
+
+const vehicleFormSchema = z.object({
+  registrationNumber: z.string().min(1, "Registreringsnummer krävs"),
+  name: z.string().min(1, "Namn krävs"),
+  vehicleType: z.string().default("bil"),
+  capacityTons: z.string().optional(),
+  capacityVolume: z.string().optional(),
+  costCenter: z.string().optional(),
+  fuelType: z.string().default("diesel"),
+  serviceIntervalDays: z.coerce.number().default(90),
+  notes: z.string().optional(),
+  status: z.string().default("active"),
+});
+
+const equipmentFormSchema = z.object({
+  name: z.string().min(1, "Namn krävs"),
+  inventoryNumber: z.string().optional(),
+  equipmentType: z.string().default("verktyg"),
+  manufacturer: z.string().optional(),
+  model: z.string().optional(),
+  costCenter: z.string().optional(),
+  notes: z.string().optional(),
+  status: z.string().default("active"),
+});
+
+type VehicleFormValues = z.infer<typeof vehicleFormSchema>;
+type EquipmentFormValues = z.infer<typeof equipmentFormSchema>;
+
+export default function VehiclesPage() {
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState("vehicles");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [vehicleDialogOpen, setVehicleDialogOpen] = useState(false);
+  const [equipmentDialogOpen, setEquipmentDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
+  const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(null);
+  const [itemToDelete, setItemToDelete] = useState<{ type: "vehicle" | "equipment"; id: string; name: string } | null>(null);
+
+  const vehicleForm = useForm<VehicleFormValues>({
+    resolver: zodResolver(vehicleFormSchema),
+    defaultValues: {
+      registrationNumber: "",
+      name: "",
+      vehicleType: "bil",
+      capacityTons: "",
+      capacityVolume: "",
+      costCenter: "",
+      fuelType: "diesel",
+      serviceIntervalDays: 90,
+      notes: "",
+      status: "active",
+    },
+  });
+
+  const equipmentForm = useForm<EquipmentFormValues>({
+    resolver: zodResolver(equipmentFormSchema),
+    defaultValues: {
+      name: "",
+      inventoryNumber: "",
+      equipmentType: "verktyg",
+      manufacturer: "",
+      model: "",
+      costCenter: "",
+      notes: "",
+      status: "active",
+    },
+  });
+
+  const { data: vehicles = [], isLoading: loadingVehicles } = useQuery<Vehicle[]>({
+    queryKey: ["/api/vehicles"],
+  });
+
+  const { data: equipment = [], isLoading: loadingEquipment } = useQuery<Equipment[]>({
+    queryKey: ["/api/equipment"],
+  });
+
+  const createVehicleMutation = useMutation({
+    mutationFn: (data: VehicleFormValues) => {
+      const payload = {
+        ...data,
+        capacityTons: data.capacityTons ? parseFloat(data.capacityTons) : null,
+        capacityVolume: data.capacityVolume ? parseFloat(data.capacityVolume) : null,
+        tenantId: "default-tenant",
+      };
+      return apiRequest("POST", "/api/vehicles", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      setVehicleDialogOpen(false);
+      vehicleForm.reset();
+      toast({ title: "Fordon skapat", description: "Fordonet har lagts till." });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte skapa fordon.", variant: "destructive" }),
+  });
+
+  const updateVehicleMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: VehicleFormValues }) => {
+      const payload = {
+        ...data,
+        capacityTons: data.capacityTons ? parseFloat(data.capacityTons) : null,
+        capacityVolume: data.capacityVolume ? parseFloat(data.capacityVolume) : null,
+      };
+      return apiRequest("PATCH", `/api/vehicles/${id}`, payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      setVehicleDialogOpen(false);
+      setEditingVehicle(null);
+      vehicleForm.reset();
+      toast({ title: "Fordon uppdaterat" });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte uppdatera fordon.", variant: "destructive" }),
+  });
+
+  const deleteVehicleMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/vehicles/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/vehicles"] });
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
+      toast({ title: "Fordon borttaget" });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte ta bort fordon.", variant: "destructive" }),
+  });
+
+  const createEquipmentMutation = useMutation({
+    mutationFn: (data: EquipmentFormValues) => {
+      const payload = {
+        ...data,
+        tenantId: "default-tenant",
+      };
+      return apiRequest("POST", "/api/equipment", payload);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      setEquipmentDialogOpen(false);
+      equipmentForm.reset();
+      toast({ title: "Utrustning skapad", description: "Utrustningen har lagts till." });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte skapa utrustning.", variant: "destructive" }),
+  });
+
+  const updateEquipmentMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: EquipmentFormValues }) =>
+      apiRequest("PATCH", `/api/equipment/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      setEquipmentDialogOpen(false);
+      setEditingEquipment(null);
+      equipmentForm.reset();
+      toast({ title: "Utrustning uppdaterad" });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte uppdatera utrustning.", variant: "destructive" }),
+  });
+
+  const deleteEquipmentMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/equipment/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/equipment"] });
+      setDeleteDialogOpen(false);
+      setItemToDelete(null);
+      toast({ title: "Utrustning borttagen" });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte ta bort utrustning.", variant: "destructive" }),
+  });
+
+  const filteredVehicles = useMemo(() => {
+    if (!searchQuery) return vehicles;
+    const query = searchQuery.toLowerCase();
+    return vehicles.filter(
+      (v) =>
+        v.name.toLowerCase().includes(query) ||
+        v.registrationNumber.toLowerCase().includes(query)
+    );
+  }, [vehicles, searchQuery]);
+
+  const filteredEquipment = useMemo(() => {
+    if (!searchQuery) return equipment;
+    const query = searchQuery.toLowerCase();
+    return equipment.filter(
+      (e) =>
+        e.name.toLowerCase().includes(query) ||
+        (e.inventoryNumber && e.inventoryNumber.toLowerCase().includes(query))
+    );
+  }, [equipment, searchQuery]);
+
+  const handleEditVehicle = (vehicle: Vehicle) => {
+    setEditingVehicle(vehicle);
+    vehicleForm.reset({
+      registrationNumber: vehicle.registrationNumber,
+      name: vehicle.name,
+      vehicleType: vehicle.vehicleType,
+      capacityTons: vehicle.capacityTons?.toString() || "",
+      capacityVolume: vehicle.capacityVolume?.toString() || "",
+      costCenter: vehicle.costCenter || "",
+      fuelType: vehicle.fuelType || "diesel",
+      serviceIntervalDays: vehicle.serviceIntervalDays || 90,
+      notes: vehicle.notes || "",
+      status: vehicle.status,
+    });
+    setVehicleDialogOpen(true);
+  };
+
+  const handleEditEquipment = (eq: Equipment) => {
+    setEditingEquipment(eq);
+    equipmentForm.reset({
+      name: eq.name,
+      inventoryNumber: eq.inventoryNumber || "",
+      equipmentType: eq.equipmentType,
+      manufacturer: eq.manufacturer || "",
+      model: eq.model || "",
+      costCenter: eq.costCenter || "",
+      notes: eq.notes || "",
+      status: eq.status,
+    });
+    setEquipmentDialogOpen(true);
+  };
+
+  const onSubmitVehicle = (data: VehicleFormValues) => {
+    if (editingVehicle) {
+      updateVehicleMutation.mutate({ id: editingVehicle.id, data });
+    } else {
+      createVehicleMutation.mutate(data);
+    }
+  };
+
+  const onSubmitEquipment = (data: EquipmentFormValues) => {
+    if (editingEquipment) {
+      updateEquipmentMutation.mutate({ id: editingEquipment.id, data });
+    } else {
+      createEquipmentMutation.mutate(data);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!itemToDelete) return;
+    if (itemToDelete.type === "vehicle") {
+      deleteVehicleMutation.mutate(itemToDelete.id);
+    } else {
+      deleteEquipmentMutation.mutate(itemToDelete.id);
+    }
+  };
+
+  const getServiceStatus = (vehicle: Vehicle) => {
+    if (!vehicle.nextServiceDate) return { status: "unknown", label: "Okänt" };
+    const nextService = new Date(vehicle.nextServiceDate);
+    const today = new Date();
+    const daysUntil = differenceInDays(nextService, today);
+
+    if (daysUntil < 0) return { status: "overdue", label: `${Math.abs(daysUntil)} dagar försenad` };
+    if (daysUntil <= 14) return { status: "soon", label: `${daysUntil} dagar kvar` };
+    return { status: "ok", label: format(nextService, "d MMM yyyy", { locale: sv }) };
+  };
+
+  const isLoading = loadingVehicles || loadingEquipment;
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold">Fordonspark och Utrustning</h1>
+          <p className="text-muted-foreground">
+            Hantera fordon, maskiner och verktyg
+          </p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Sök..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-9 w-[200px]"
+              data-testid="input-search"
+            />
+          </div>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList>
+          <TabsTrigger value="vehicles" data-testid="tab-vehicles">
+            <Truck className="h-4 w-4 mr-2" />
+            Fordon ({vehicles.length})
+          </TabsTrigger>
+          <TabsTrigger value="equipment" data-testid="tab-equipment">
+            <Wrench className="h-4 w-4 mr-2" />
+            Utrustning ({equipment.length})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="vehicles" className="mt-4">
+          <div className="flex justify-end mb-4">
+            <Button
+              onClick={() => {
+                setEditingVehicle(null);
+                vehicleForm.reset();
+                setVehicleDialogOpen(true);
+              }}
+              data-testid="button-add-vehicle"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Lägg till fordon
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredVehicles.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Truck className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Inga fordon registrerade</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredVehicles.map((vehicle) => {
+                const TypeIcon = vehicleTypeOptions.find((t) => t.value === vehicle.vehicleType)?.icon || Truck;
+                const serviceStatus = getServiceStatus(vehicle);
+
+                return (
+                  <Card key={vehicle.id} className="overflow-visible" data-testid={`card-vehicle-${vehicle.id}`}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-md bg-primary/10">
+                            <TypeIcon className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <CardTitle className="text-base">{vehicle.name}</CardTitle>
+                            <p className="text-sm text-muted-foreground font-mono">
+                              {vehicle.registrationNumber}
+                            </p>
+                          </div>
+                        </div>
+                        <Badge variant={vehicle.status === "active" ? "default" : "secondary"}>
+                          {vehicle.status === "active" ? "Aktiv" : "Inaktiv"}
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Fuel className="h-3 w-3" />
+                          {fuelTypeOptions.find((f) => f.value === vehicle.fuelType)?.label || vehicle.fuelType}
+                        </div>
+                        {vehicle.capacityTons && (
+                          <div className="text-muted-foreground">{vehicle.capacityTons} ton</div>
+                        )}
+                      </div>
+
+                      <Separator />
+
+                      <div className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <Settings className="h-3 w-3" />
+                          <span>Nästa service:</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {serviceStatus.status === "overdue" && (
+                            <AlertTriangle className="h-3 w-3 text-red-500" />
+                          )}
+                          {serviceStatus.status === "soon" && (
+                            <AlertTriangle className="h-3 w-3 text-orange-500" />
+                          )}
+                          {serviceStatus.status === "ok" && (
+                            <CheckCircle className="h-3 w-3 text-green-500" />
+                          )}
+                          <span
+                            className={
+                              serviceStatus.status === "overdue"
+                                ? "text-red-500"
+                                : serviceStatus.status === "soon"
+                                ? "text-orange-500"
+                                : ""
+                            }
+                          >
+                            {serviceStatus.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEditVehicle(vehicle)}
+                          data-testid={`button-edit-vehicle-${vehicle.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            setItemToDelete({ type: "vehicle", id: vehicle.id, name: vehicle.name });
+                            setDeleteDialogOpen(true);
+                          }}
+                          data-testid={`button-delete-vehicle-${vehicle.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </TabsContent>
+
+        <TabsContent value="equipment" className="mt-4">
+          <div className="flex justify-end mb-4">
+            <Button
+              onClick={() => {
+                setEditingEquipment(null);
+                equipmentForm.reset();
+                setEquipmentDialogOpen(true);
+              }}
+              data-testid="button-add-equipment"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Lägg till utrustning
+            </Button>
+          </div>
+
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : filteredEquipment.length === 0 ? (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Wrench className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Ingen utrustning registrerad</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredEquipment.map((eq) => (
+                <Card key={eq.id} className="overflow-visible" data-testid={`card-equipment-${eq.id}`}>
+                  <CardHeader className="pb-2">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <CardTitle className="text-base">{eq.name}</CardTitle>
+                        {eq.inventoryNumber && (
+                          <p className="text-sm text-muted-foreground font-mono">
+                            {eq.inventoryNumber}
+                          </p>
+                        )}
+                      </div>
+                      <Badge variant={eq.status === "active" ? "default" : "secondary"}>
+                        {eq.status === "active" ? "Aktiv" : "Inaktiv"}
+                      </Badge>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <div className="text-sm text-muted-foreground">
+                      {equipmentTypeOptions.find((t) => t.value === eq.equipmentType)?.label || eq.equipmentType}
+                    </div>
+                    {(eq.manufacturer || eq.model) && (
+                      <div className="text-sm">
+                        {eq.manufacturer} {eq.model}
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2 pt-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEditEquipment(eq)}
+                        data-testid={`button-edit-equipment-${eq.id}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          setItemToDelete({ type: "equipment", id: eq.id, name: eq.name });
+                          setDeleteDialogOpen(true);
+                        }}
+                        data-testid={`button-delete-equipment-${eq.id}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+      </Tabs>
+
+      {/* Vehicle Dialog */}
+      <Dialog open={vehicleDialogOpen} onOpenChange={setVehicleDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingVehicle ? "Redigera fordon" : "Lägg till fordon"}</DialogTitle>
+            <DialogDescription>
+              {editingVehicle ? "Uppdatera fordonets uppgifter" : "Registrera ett nytt fordon"}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...vehicleForm}>
+            <form onSubmit={vehicleForm.handleSubmit(onSubmitVehicle)} className="space-y-4">
+              <FormField
+                control={vehicleForm.control}
+                name="registrationNumber"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Registreringsnummer</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        onChange={(e) => field.onChange(e.target.value.toUpperCase())}
+                        placeholder="ABC123"
+                        data-testid="input-reg-number"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={vehicleForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Namn/Beskrivning</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Sopbil 1" data-testid="input-vehicle-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={vehicleForm.control}
+                  name="vehicleType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fordonstyp</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-vehicle-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {vehicleTypeOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={vehicleForm.control}
+                  name="fuelType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Drivmedel</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-fuel-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {fuelTypeOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={vehicleForm.control}
+                  name="capacityTons"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kapacitet (ton)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="0.1"
+                          placeholder="3.5"
+                          data-testid="input-capacity-tons"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={vehicleForm.control}
+                  name="costCenter"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Kostnadsställe</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="KS-001" data-testid="input-cost-center" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={vehicleForm.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-vehicle-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="active">Aktiv</SelectItem>
+                        <SelectItem value="inactive">Inaktiv</SelectItem>
+                        <SelectItem value="service">I service</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setVehicleDialogOpen(false)}>
+                  Avbryt
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createVehicleMutation.isPending || updateVehicleMutation.isPending}
+                  data-testid="button-save-vehicle"
+                >
+                  {(createVehicleMutation.isPending || updateVehicleMutation.isPending) && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  {editingVehicle ? "Uppdatera" : "Lägg till"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Equipment Dialog */}
+      <Dialog open={equipmentDialogOpen} onOpenChange={setEquipmentDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{editingEquipment ? "Redigera utrustning" : "Lägg till utrustning"}</DialogTitle>
+            <DialogDescription>
+              {editingEquipment ? "Uppdatera utrustningens uppgifter" : "Registrera ny utrustning"}
+            </DialogDescription>
+          </DialogHeader>
+          <Form {...equipmentForm}>
+            <form onSubmit={equipmentForm.handleSubmit(onSubmitEquipment)} className="space-y-4">
+              <FormField
+                control={equipmentForm.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Namn</FormLabel>
+                    <FormControl>
+                      <Input {...field} placeholder="Högtryckstvätt" data-testid="input-equipment-name" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={equipmentForm.control}
+                  name="inventoryNumber"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Inventarienummer</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="INV-001" data-testid="input-inventory-number" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={equipmentForm.control}
+                  name="equipmentType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Typ</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-equipment-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {equipmentTypeOptions.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={equipmentForm.control}
+                  name="manufacturer"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Tillverkare</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="Kärcher" data-testid="input-manufacturer" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={equipmentForm.control}
+                  name="model"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Modell</FormLabel>
+                      <FormControl>
+                        <Input {...field} placeholder="K5" data-testid="input-model" />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <FormField
+                control={equipmentForm.control}
+                name="status"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Status</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-equipment-status">
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="active">Aktiv</SelectItem>
+                        <SelectItem value="inactive">Inaktiv</SelectItem>
+                        <SelectItem value="repair">Reparation</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEquipmentDialogOpen(false)}>
+                  Avbryt
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createEquipmentMutation.isPending || updateEquipmentMutation.isPending}
+                  data-testid="button-save-equipment"
+                >
+                  {(createEquipmentMutation.isPending || updateEquipmentMutation.isPending) && (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  )}
+                  {editingEquipment ? "Uppdatera" : "Lägg till"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Bekräfta borttagning</AlertDialogTitle>
+            <AlertDialogDescription>
+              Är du säker på att du vill ta bort {itemToDelete?.type === "vehicle" ? "fordonet" : "utrustningen"}{" "}
+              <strong>{itemToDelete?.name}</strong>? Detta går inte att ångra.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground"
+              data-testid="button-confirm-delete"
+            >
+              Ta bort
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}

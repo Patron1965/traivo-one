@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -19,6 +19,7 @@ import { useAuth } from "@/hooks/use-auth";
 const grunddataItems = [
   { title: "Objekt", url: "/objects", icon: Building2 },
   { title: "Resurser", url: "/resources", icon: Users },
+  { title: "Fordon", url: "/vehicles", icon: Truck },
   { title: "Artiklar", url: "/articles", icon: Package },
   { title: "Prislistor", url: "/price-lists", icon: Receipt },
 ];

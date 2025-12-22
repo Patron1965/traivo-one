@@ -271,6 +271,237 @@ export const priceListArticles = pgTable("price_list_articles", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Fordon - kopplade till resurser
+export const vehicles = pgTable("vehicles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Registreringsnummer
+  registrationNumber: text("registration_number").notNull(),
+  name: text("name").notNull(),
+  // Fordonstyp: bil, lastbil, minibuss, etc.
+  vehicleType: text("vehicle_type").default("bil").notNull(),
+  // Kapacitet i ton
+  capacityTons: real("capacity_tons"),
+  // Volym i kubikmeter
+  capacityVolume: real("capacity_volume"),
+  // Koppling till kostnadsställe i ekonomisystem
+  costCenter: text("cost_center"),
+  // Service-intervall i dagar
+  serviceIntervalDays: integer("service_interval_days").default(90),
+  // Senaste service
+  lastServiceDate: timestamp("last_service_date"),
+  // Nästa planerade service
+  nextServiceDate: timestamp("next_service_date"),
+  // Mätarställning vid senaste service
+  mileageAtLastService: integer("mileage_at_last_service"),
+  // Aktuell mätarställning
+  currentMileage: integer("current_mileage"),
+  // Drivmedel: diesel, bensin, el, hybrid
+  fuelType: text("fuel_type").default("diesel"),
+  // Försäkringsnummer
+  insuranceNumber: text("insurance_number"),
+  // Besiktningsdatum
+  inspectionDate: timestamp("inspection_date"),
+  notes: text("notes"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+// Utrustning - verktyg och maskiner
+export const equipment = pgTable("equipment", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  // Inventarienummer
+  inventoryNumber: text("inventory_number"),
+  // Typ: verktyg, maskin, fordonsutrustning, säkerhet
+  equipmentType: text("equipment_type").default("verktyg").notNull(),
+  // Tillverkare
+  manufacturer: text("manufacturer"),
+  // Modell
+  model: text("model"),
+  // Inköpsdatum
+  purchaseDate: timestamp("purchase_date"),
+  // Inköpspris
+  purchasePrice: integer("purchase_price"),
+  // Garantidatum
+  warrantyUntil: timestamp("warranty_until"),
+  // Senaste inspektion/service
+  lastInspectionDate: timestamp("last_inspection_date"),
+  // Koppling till kostnadsställe
+  costCenter: text("cost_center"),
+  notes: text("notes"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+// Koppling resurs <-> fordon (vilka fordon en resurs kan/får köra)
+export const resourceVehicles = pgTable("resource_vehicles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  vehicleId: varchar("vehicle_id").references(() => vehicles.id).notNull(),
+  // Primärt fordon för resursen
+  isPrimary: boolean("is_primary").default(false),
+  // Giltigt från/till
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Koppling resurs <-> utrustning
+export const resourceEquipment = pgTable("resource_equipment", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  equipmentId: varchar("equipment_id").references(() => equipment.id).notNull(),
+  // Tilldelad från/till
+  assignedFrom: timestamp("assigned_from"),
+  assignedTo: timestamp("assigned_to"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Tillgänglighetsschema för resurser (arbetstider, ledighet, semester, etc.)
+export const resourceAvailability = pgTable("resource_availability", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  // Typ: arbetstid, semester, sjuk, utbildning, rast, service, annat
+  availabilityType: text("availability_type").notNull(),
+  // Datum
+  date: timestamp("date").notNull(),
+  // Starttid (för arbetstid/rast)
+  startTime: text("start_time"),
+  // Sluttid
+  endTime: text("end_time"),
+  // Heldag (t.ex. semester)
+  isFullDay: boolean("is_full_day").default(false),
+  // Tillgänglig eller ej tillgänglig
+  isAvailable: boolean("is_available").default(true),
+  // Återkommande: once, weekly, daily
+  recurrence: text("recurrence").default("once"),
+  // Notering
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_resource_availability_resource_date").on(table.resourceId, table.date)
+]);
+
+// Fordonsschema (när fordon är tillgängliga/i service)
+export const vehicleSchedule = pgTable("vehicle_schedule", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  vehicleId: varchar("vehicle_id").references(() => vehicles.id).notNull(),
+  // Typ: tillganglig, service, reparation, besiktning
+  scheduleType: text("schedule_type").notNull(),
+  date: timestamp("date").notNull(),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  isFullDay: boolean("is_full_day").default(false),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Abonnemang - periodiska tjänster
+export const subscriptions = pgTable("subscriptions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Artiklar som ingår i abonnemanget (JSON array av article IDs med kvantitet)
+  articleIds: jsonb("article_ids").default([]),
+  // Periodicitet: vecka, varannan_vecka, manad, kvartal, halvar, ar
+  periodicity: text("periodicity").default("manad").notNull(),
+  // Specifik veckodag (0=söndag, 1=måndag, etc.)
+  preferredWeekday: integer("preferred_weekday"),
+  // Specifik dag i månaden (1-31)
+  preferredDayOfMonth: integer("preferred_day_of_month"),
+  // Föredragen tid på dagen
+  preferredTimeSlot: text("preferred_time_slot"),
+  // Startdatum
+  startDate: timestamp("start_date").notNull(),
+  // Slutdatum (null = tillsvidare)
+  endDate: timestamp("end_date"),
+  // Senast genererad order
+  lastGeneratedDate: timestamp("last_generated_date"),
+  // Nästa planerade generering
+  nextGenerationDate: timestamp("next_generation_date"),
+  // Generera ordrar automatiskt
+  autoGenerate: boolean("auto_generate").default(true),
+  // Dagar i förväg att generera ordrar
+  generateDaysAhead: integer("generate_days_ahead").default(14),
+  // Prislista för abonnemanget
+  priceListId: varchar("price_list_id").references(() => priceLists.id),
+  // Cachade värden
+  cachedMonthlyValue: integer("cached_monthly_value").default(0),
+  notes: text("notes"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_subscriptions_customer").on(table.customerId),
+  index("idx_subscriptions_object").on(table.objectId),
+  index("idx_subscriptions_next_gen").on(table.nextGenerationDate)
+]);
+
+// Team - grupper av resurser
+export const teams = pgTable("teams", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Teamleadare
+  leaderId: varchar("leader_id").references(() => resources.id),
+  // Geografiskt område (postnummer)
+  serviceArea: text("service_area").array().default([]),
+  // Koppling till projekt i ekonomisystem
+  projectCode: text("project_code"),
+  color: text("color").default("#3B82F6"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+// Koppling team <-> resurser
+export const teamMembers = pgTable("team_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  teamId: varchar("team_id").references(() => teams.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  // Roll: medlem, ledare, vikarie
+  role: text("role").default("medlem"),
+  // Giltigt från/till
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Planeringsparametrar per objekt (SLA, tidsfönster, etc.)
+export const planningParameters = pgTable("planning_parameters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Kan kopplas till kund, objekt eller vara generell
+  customerId: varchar("customer_id").references(() => customers.id),
+  objectId: varchar("object_id").references(() => objects.id),
+  // SLA-nivå: standard, premium, express
+  slaLevel: text("sla_level").default("standard"),
+  // Max antal dagar från begäran till utförande
+  maxDaysToComplete: integer("max_days_to_complete").default(14),
+  // Tidsfönster: morgon, formiddag, eftermiddag, kväll, heldag
+  allowedTimeSlots: text("allowed_time_slots").array().default([]),
+  // Tillåtna veckodagar (1-7)
+  allowedWeekdays: integer("allowed_weekdays").array().default([]),
+  // Kräver avisering i förväg (dagar)
+  advanceNotificationDays: integer("advance_notification_days").default(0),
+  // Kräver bekräftelse
+  requiresConfirmation: boolean("requires_confirmation").default(false),
+  // Prioritetsfaktor (1.0 = normal, högre = högre prio)
+  priorityFactor: real("priority_factor").default(1.0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // Utförare tidsverk - vilka artiklar en utförare kan utföra
 export const resourceArticles = pgTable("resource_articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -341,6 +572,65 @@ export const resourcesRelations = relations(resources, ({ one, many }) => ({
   user: one(users, { fields: [resources.userId], references: [users.id] }),
   workOrders: many(workOrders),
   resourceArticles: many(resourceArticles),
+  resourceVehicles: many(resourceVehicles),
+  resourceEquipment: many(resourceEquipment),
+  availability: many(resourceAvailability),
+  teamMemberships: many(teamMembers),
+}));
+
+export const vehiclesRelations = relations(vehicles, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [vehicles.tenantId], references: [tenants.id] }),
+  resourceVehicles: many(resourceVehicles),
+  schedule: many(vehicleSchedule),
+}));
+
+export const equipmentRelations = relations(equipment, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [equipment.tenantId], references: [tenants.id] }),
+  resourceEquipment: many(resourceEquipment),
+}));
+
+export const resourceVehiclesRelations = relations(resourceVehicles, ({ one }) => ({
+  resource: one(resources, { fields: [resourceVehicles.resourceId], references: [resources.id] }),
+  vehicle: one(vehicles, { fields: [resourceVehicles.vehicleId], references: [vehicles.id] }),
+}));
+
+export const resourceEquipmentRelations = relations(resourceEquipment, ({ one }) => ({
+  resource: one(resources, { fields: [resourceEquipment.resourceId], references: [resources.id] }),
+  equipment: one(equipment, { fields: [resourceEquipment.equipmentId], references: [equipment.id] }),
+}));
+
+export const resourceAvailabilityRelations = relations(resourceAvailability, ({ one }) => ({
+  tenant: one(tenants, { fields: [resourceAvailability.tenantId], references: [tenants.id] }),
+  resource: one(resources, { fields: [resourceAvailability.resourceId], references: [resources.id] }),
+}));
+
+export const vehicleScheduleRelations = relations(vehicleSchedule, ({ one }) => ({
+  tenant: one(tenants, { fields: [vehicleSchedule.tenantId], references: [tenants.id] }),
+  vehicle: one(vehicles, { fields: [vehicleSchedule.vehicleId], references: [vehicles.id] }),
+}));
+
+export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
+  tenant: one(tenants, { fields: [subscriptions.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [subscriptions.customerId], references: [customers.id] }),
+  object: one(objects, { fields: [subscriptions.objectId], references: [objects.id] }),
+  priceList: one(priceLists, { fields: [subscriptions.priceListId], references: [priceLists.id] }),
+}));
+
+export const teamsRelations = relations(teams, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [teams.tenantId], references: [tenants.id] }),
+  leader: one(resources, { fields: [teams.leaderId], references: [resources.id] }),
+  members: many(teamMembers),
+}));
+
+export const teamMembersRelations = relations(teamMembers, ({ one }) => ({
+  team: one(teams, { fields: [teamMembers.teamId], references: [teams.id] }),
+  resource: one(resources, { fields: [teamMembers.resourceId], references: [resources.id] }),
+}));
+
+export const planningParametersRelations = relations(planningParameters, ({ one }) => ({
+  tenant: one(tenants, { fields: [planningParameters.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [planningParameters.customerId], references: [customers.id] }),
+  object: one(objects, { fields: [planningParameters.objectId], references: [objects.id] }),
 }));
 
 export const articlesRelations = relations(articles, ({ one, many }) => ({
@@ -400,6 +690,16 @@ export const insertArticleSchema = createInsertSchema(articles).omit({ id: true,
 export const insertPriceListSchema = createInsertSchema(priceLists).omit({ id: true, createdAt: true });
 export const insertPriceListArticleSchema = createInsertSchema(priceListArticles).omit({ id: true, createdAt: true });
 export const insertResourceArticleSchema = createInsertSchema(resourceArticles).omit({ id: true, createdAt: true });
+export const insertVehicleSchema = createInsertSchema(vehicles).omit({ id: true, createdAt: true });
+export const insertEquipmentSchema = createInsertSchema(equipment).omit({ id: true, createdAt: true });
+export const insertResourceVehicleSchema = createInsertSchema(resourceVehicles).omit({ id: true, createdAt: true });
+export const insertResourceEquipmentSchema = createInsertSchema(resourceEquipment).omit({ id: true, createdAt: true });
+export const insertResourceAvailabilitySchema = createInsertSchema(resourceAvailability).omit({ id: true, createdAt: true });
+export const insertVehicleScheduleSchema = createInsertSchema(vehicleSchedule).omit({ id: true, createdAt: true });
+export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({ id: true, createdAt: true });
+export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, createdAt: true });
+export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({ id: true, createdAt: true });
+export const insertPlanningParameterSchema = createInsertSchema(planningParameters).omit({ id: true, createdAt: true });
 
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
@@ -433,6 +733,26 @@ export type WorkOrderLine = typeof workOrderLines.$inferSelect;
 export type InsertWorkOrderLine = z.infer<typeof insertWorkOrderLineSchema>;
 export type SimulationScenario = typeof simulationScenarios.$inferSelect;
 export type InsertSimulationScenario = z.infer<typeof insertSimulationScenarioSchema>;
+export type Vehicle = typeof vehicles.$inferSelect;
+export type InsertVehicle = z.infer<typeof insertVehicleSchema>;
+export type Equipment = typeof equipment.$inferSelect;
+export type InsertEquipment = z.infer<typeof insertEquipmentSchema>;
+export type ResourceVehicle = typeof resourceVehicles.$inferSelect;
+export type InsertResourceVehicle = z.infer<typeof insertResourceVehicleSchema>;
+export type ResourceEquipment = typeof resourceEquipment.$inferSelect;
+export type InsertResourceEquipment = z.infer<typeof insertResourceEquipmentSchema>;
+export type ResourceAvailability = typeof resourceAvailability.$inferSelect;
+export type InsertResourceAvailability = z.infer<typeof insertResourceAvailabilitySchema>;
+export type VehicleSchedule = typeof vehicleSchedule.$inferSelect;
+export type InsertVehicleSchedule = z.infer<typeof insertVehicleScheduleSchema>;
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = z.infer<typeof insertSubscriptionSchema>;
+export type Team = typeof teams.$inferSelect;
+export type InsertTeam = z.infer<typeof insertTeamSchema>;
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
+export type PlanningParameter = typeof planningParameters.$inferSelect;
+export type InsertPlanningParameter = z.infer<typeof insertPlanningParameterSchema>;
 
 // Order status constants
 export const ORDER_STATUSES = [
