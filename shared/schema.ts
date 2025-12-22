@@ -56,6 +56,8 @@ export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  // Kluster som objektet tillhör - navet i verksamheten
+  clusterId: varchar("cluster_id"),
   parentId: varchar("parent_id").references((): any => objects.id),
   name: text("name").notNull(),
   objectNumber: text("object_number"),
@@ -135,6 +137,8 @@ export const workOrders = pgTable("work_orders", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Kluster som ordern tillhör (ärvs från objekt eller sätts manuellt)
+  clusterId: varchar("cluster_id"),
   resourceId: varchar("resource_id").references(() => resources.id),
   // Team för förplanering (innan specifik resurs är tilldelad)
   teamId: varchar("team_id").references(() => teams.id),
@@ -410,6 +414,8 @@ export const subscriptions = pgTable("subscriptions", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Kluster som abonnemanget tillhör (ärvs från objekt)
+  clusterId: varchar("cluster_id"),
   name: text("name").notNull(),
   description: text("description"),
   // Artiklar som ingår i abonnemanget (JSON array av article IDs med kvantitet)
@@ -448,10 +454,43 @@ export const subscriptions = pgTable("subscriptions", {
   index("idx_subscriptions_next_gen").on(table.nextGenerationDate)
 ]);
 
+// Kluster - kärnan i verksamheten, samlar objekt, team, resurser och flöden
+export const clusters = pgTable("clusters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Geografiskt centrum
+  centerLatitude: real("center_latitude"),
+  centerLongitude: real("center_longitude"),
+  // Geografisk radie i km
+  radiusKm: real("radius_km").default(5),
+  // Postnummerområden som ingår i klustret
+  postalCodes: text("postal_codes").array().default([]),
+  // Ansvarigt team för klustret
+  primaryTeamId: varchar("primary_team_id"),
+  // SLA-nivå för klustret: standard, premium, express
+  slaLevel: text("sla_level").default("standard"),
+  // Planerad servicefrekvens
+  defaultPeriodicity: text("default_periodicity").default("vecka"),
+  // Färgkod för visualisering
+  color: text("color").default("#3B82F6"),
+  // Cachade värden för snabb uppföljning
+  cachedObjectCount: integer("cached_object_count").default(0),
+  cachedActiveOrders: integer("cached_active_orders").default(0),
+  cachedMonthlyValue: integer("cached_monthly_value").default(0),
+  cachedAvgSetupTime: integer("cached_avg_setup_time").default(0),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
 // Team - grupper av resurser
 export const teams = pgTable("teams", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Kluster som teamet primärt ansvarar för
+  clusterId: varchar("cluster_id").references(() => clusters.id),
   name: text("name").notNull(),
   description: text("description"),
   // Teamleadare
@@ -564,6 +603,7 @@ export const customersRelations = relations(customers, ({ one, many }) => ({
 export const objectsRelations = relations(objects, ({ one, many }) => ({
   tenant: one(tenants, { fields: [objects.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [objects.customerId], references: [customers.id] }),
+  cluster: one(clusters, { fields: [objects.clusterId], references: [clusters.id] }),
   parent: one(objects, { fields: [objects.parentId], references: [objects.id], relationName: "objectHierarchy" }),
   children: many(objects, { relationName: "objectHierarchy" }),
   workOrders: many(workOrders),
@@ -615,11 +655,21 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
   tenant: one(tenants, { fields: [subscriptions.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [subscriptions.customerId], references: [customers.id] }),
   object: one(objects, { fields: [subscriptions.objectId], references: [objects.id] }),
+  cluster: one(clusters, { fields: [subscriptions.clusterId], references: [clusters.id] }),
   priceList: one(priceLists, { fields: [subscriptions.priceListId], references: [priceLists.id] }),
+}));
+
+export const clustersRelations = relations(clusters, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [clusters.tenantId], references: [tenants.id] }),
+  objects: many(objects),
+  teams: many(teams),
+  workOrders: many(workOrders),
+  subscriptions: many(subscriptions),
 }));
 
 export const teamsRelations = relations(teams, ({ one, many }) => ({
   tenant: one(tenants, { fields: [teams.tenantId], references: [tenants.id] }),
+  cluster: one(clusters, { fields: [teams.clusterId], references: [clusters.id] }),
   leader: one(resources, { fields: [teams.leaderId], references: [resources.id] }),
   members: many(teamMembers),
 }));
@@ -666,6 +716,7 @@ export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
   tenant: one(tenants, { fields: [workOrders.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [workOrders.customerId], references: [customers.id] }),
   object: one(objects, { fields: [workOrders.objectId], references: [objects.id] }),
+  cluster: one(clusters, { fields: [workOrders.clusterId], references: [clusters.id] }),
   resource: one(resources, { fields: [workOrders.resourceId], references: [resources.id] }),
   team: one(teams, { fields: [workOrders.teamId], references: [teams.id] }),
   simulationScenario: one(simulationScenarios, { fields: [workOrders.simulationScenarioId], references: [simulationScenarios.id] }),
@@ -703,6 +754,7 @@ export const insertSubscriptionSchema = createInsertSchema(subscriptions).omit({
 export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, createdAt: true });
 export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({ id: true, createdAt: true });
 export const insertPlanningParameterSchema = createInsertSchema(planningParameters).omit({ id: true, createdAt: true });
+export const insertClusterSchema = createInsertSchema(clusters).omit({ id: true, createdAt: true });
 
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
@@ -756,6 +808,8 @@ export type TeamMember = typeof teamMembers.$inferSelect;
 export type InsertTeamMember = z.infer<typeof insertTeamMemberSchema>;
 export type PlanningParameter = typeof planningParameters.$inferSelect;
 export type InsertPlanningParameter = z.infer<typeof insertPlanningParameterSchema>;
+export type Cluster = typeof clusters.$inferSelect;
+export type InsertCluster = z.infer<typeof insertClusterSchema>;
 
 // Order status constants
 export const ORDER_STATUSES = [
