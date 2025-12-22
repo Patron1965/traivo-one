@@ -39,6 +39,7 @@ export interface IStorage {
   
   getTenant(id: string): Promise<Tenant | undefined>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
+  ensureTenant(id: string, defaultData: Omit<InsertTenant, 'id'>): Promise<Tenant>;
   updateTenantSettings(id: string, settings: Record<string, unknown>): Promise<Tenant | undefined>;
   
   getCustomers(tenantId: string): Promise<Customer[]>;
@@ -169,6 +170,30 @@ export class DatabaseStorage implements IStorage {
 
   async createTenant(insertTenant: InsertTenant): Promise<Tenant> {
     const [tenant] = await db.insert(tenants).values(insertTenant).returning();
+    return tenant;
+  }
+
+  async ensureTenant(id: string, defaultData: Omit<InsertTenant, 'id'>): Promise<Tenant> {
+    // Try to get existing tenant first
+    let tenant = await this.getTenant(id);
+    if (tenant) return tenant;
+    
+    // Use upsert with onConflictDoNothing to handle race conditions
+    const [newTenant] = await db.insert(tenants)
+      .values({ ...defaultData, id } as InsertTenant)
+      .onConflictDoNothing({ target: tenants.id })
+      .returning();
+    
+    if (newTenant) {
+      console.log("Created tenant:", id);
+      return newTenant;
+    }
+    
+    // Another request created it - fetch it
+    tenant = await this.getTenant(id);
+    if (!tenant) {
+      throw new Error(`Failed to ensure tenant ${id}`);
+    }
     return tenant;
   }
 

@@ -54,6 +54,7 @@ import {
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
+import { QueryErrorState } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, endOfWeek, addDays, isWithinInterval, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -132,7 +133,7 @@ export default function ResourcesPage() {
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
 
-  const { data: resources = [], isLoading } = useQuery<Resource[]>({
+  const { data: resources = [], isLoading, isError, refetch } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
   });
 
@@ -410,6 +411,10 @@ export default function ResourcesPage() {
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
       </div>
     );
+  }
+
+  if (isError) {
+    return <QueryErrorState message="Kunde inte hämta resurser" onRetry={() => refetch()} />;
   }
 
   return (

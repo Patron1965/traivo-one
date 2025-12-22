@@ -30,30 +30,13 @@ const upload = multer({
 const DEFAULT_TENANT_ID = "default-tenant";
 
 async function ensureDefaultTenant() {
-  let tenant = await storage.getTenant(DEFAULT_TENANT_ID);
-  if (!tenant) {
-    // Use db directly to set specific ID for default tenant with upsert to handle race conditions
-    const { db } = await import("./db");
-    const { tenants } = await import("@shared/schema");
-    const { sql } = await import("drizzle-orm");
-    
-    const [newTenant] = await db.insert(tenants).values({
-      id: DEFAULT_TENANT_ID,
-      name: "Kinab AB",
-      orgNumber: "556789-1234",
-      contactEmail: "info@kinab.se",
-      contactPhone: "+46701234567",
-      settings: {},
-    }).onConflictDoNothing({ target: tenants.id }).returning();
-    
-    if (newTenant) {
-      console.log("Created default tenant:", DEFAULT_TENANT_ID);
-      return newTenant;
-    }
-    // Another request created it - fetch it
-    return storage.getTenant(DEFAULT_TENANT_ID);
-  }
-  return tenant;
+  return storage.ensureTenant(DEFAULT_TENANT_ID, {
+    name: "Kinab AB",
+    orgNumber: "556789-1234",
+    contactEmail: "info@kinab.se",
+    contactPhone: "+46701234567",
+    settings: {},
+  });
 }
 
 export async function registerRoutes(
@@ -71,6 +54,7 @@ export async function registerRoutes(
       const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
       res.json(customers);
     } catch (error) {
+      console.error("Failed to fetch customers:", error);
       res.status(500).json({ error: "Failed to fetch customers" });
     }
   });
@@ -81,6 +65,7 @@ export async function registerRoutes(
       if (!customer) return res.status(404).json({ error: "Customer not found" });
       res.json(customer);
     } catch (error) {
+      console.error("Failed to fetch customer:", error);
       res.status(500).json({ error: "Failed to fetch customer" });
     }
   });
@@ -94,6 +79,7 @@ export async function registerRoutes(
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
       }
+      console.error("Failed to create customer:", error);
       res.status(500).json({ error: "Failed to create customer" });
     }
   });
@@ -105,6 +91,7 @@ export async function registerRoutes(
       if (!customer) return res.status(404).json({ error: "Customer not found" });
       res.json(customer);
     } catch (error) {
+      console.error("Failed to update customer:", error);
       res.status(500).json({ error: "Failed to update customer" });
     }
   });
@@ -114,6 +101,7 @@ export async function registerRoutes(
       await storage.deleteCustomer(req.params.id);
       res.status(204).send();
     } catch (error) {
+      console.error("Failed to delete customer:", error);
       res.status(500).json({ error: "Failed to delete customer" });
     }
   });
@@ -146,6 +134,7 @@ export async function registerRoutes(
         res.json(objects);
       }
     } catch (error) {
+      console.error("Failed to fetch objects:", error);
       res.status(500).json({ error: "Failed to fetch objects" });
     }
   });
@@ -156,6 +145,7 @@ export async function registerRoutes(
       if (!object) return res.status(404).json({ error: "Object not found" });
       res.json(object);
     } catch (error) {
+      console.error("Failed to fetch object:", error);
       res.status(500).json({ error: "Failed to fetch object" });
     }
   });
@@ -178,6 +168,7 @@ export async function registerRoutes(
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
       }
+      console.error("Failed to create object:", error);
       res.status(500).json({ error: "Failed to create object" });
     }
   });
@@ -189,6 +180,7 @@ export async function registerRoutes(
       if (!object) return res.status(404).json({ error: "Object not found" });
       res.json(object);
     } catch (error) {
+      console.error("Failed to update object:", error);
       res.status(500).json({ error: "Failed to update object" });
     }
   });
@@ -198,6 +190,7 @@ export async function registerRoutes(
       await storage.deleteObject(req.params.id);
       res.status(204).send();
     } catch (error) {
+      console.error("Failed to delete object:", error);
       res.status(500).json({ error: "Failed to delete object" });
     }
   });
@@ -230,6 +223,7 @@ export async function registerRoutes(
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
       }
+      console.error("Failed to create resource:", error);
       res.status(500).json({ error: "Failed to create resource" });
     }
   });
@@ -241,6 +235,7 @@ export async function registerRoutes(
       if (!resource) return res.status(404).json({ error: "Resource not found" });
       res.json(resource);
     } catch (error) {
+      console.error("Failed to update resource:", error);
       res.status(500).json({ error: "Failed to update resource" });
     }
   });
@@ -250,6 +245,7 @@ export async function registerRoutes(
       await storage.deleteResource(req.params.id);
       res.status(204).send();
     } catch (error) {
+      console.error("Failed to delete resource:", error);
       res.status(500).json({ error: "Failed to delete resource" });
     }
   });
@@ -933,12 +929,18 @@ export async function registerRoutes(
 
   app.patch("/api/tenant/settings", async (req, res) => {
     try {
-      const tenant = await storage.updateTenantSettings(DEFAULT_TENANT_ID, req.body);
+      const settingsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())]));
+      const parseResult = settingsSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors });
+      }
+      const tenant = await storage.updateTenantSettings(DEFAULT_TENANT_ID, parseResult.data);
       if (!tenant) {
         return res.status(404).json({ error: "Tenant not found" });
       }
       res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings });
     } catch (error) {
+      console.error("Failed to update settings:", error);
       res.status(500).json({ error: "Failed to update settings" });
     }
   });
@@ -2058,11 +2060,16 @@ export async function registerRoutes(
 
   app.patch("/api/teams/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
-      const team = await storage.updateTeam(req.params.id, updateData);
+      const updateSchema = insertTeamSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors });
+      }
+      const team = await storage.updateTeam(req.params.id, parseResult.data);
       if (!team) return res.status(404).json({ error: "Team not found" });
       res.json(team);
     } catch (error) {
+      console.error("Failed to update team:", error);
       res.status(500).json({ error: "Failed to update team" });
     }
   });
@@ -2164,11 +2171,16 @@ export async function registerRoutes(
 
   app.patch("/api/planning-parameters/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, ...updateData } = req.body;
-      const param = await storage.updatePlanningParameter(req.params.id, updateData);
+      const updateSchema = insertPlanningParameterSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors });
+      }
+      const param = await storage.updatePlanningParameter(req.params.id, parseResult.data);
       if (!param) return res.status(404).json({ error: "Planning parameter not found" });
       res.json(param);
     } catch (error) {
+      console.error("Failed to update planning parameter:", error);
       res.status(500).json({ error: "Failed to update planning parameter" });
     }
   });
