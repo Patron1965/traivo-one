@@ -3,11 +3,12 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp, Map } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { OptimizedRouteMap } from "./OptimizedRouteMap";
 
 interface PlanningSuggestion {
   id: string;
@@ -43,6 +44,8 @@ interface RouteStop {
   workOrderId: string;
   objectId: string;
   objectName: string;
+  latitude?: number;
+  longitude?: number;
   estimatedDuration: number;
 }
 
@@ -100,6 +103,8 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
   const [autoScheduleResult, setAutoScheduleResult] = useState<AutoScheduleResult | null>(null);
   const [routeResult, setRouteResult] = useState<DayRouteOptimization | null>(null);
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+  const [showMapForRoute, setShowMapForRoute] = useState<string | null>(null);
+  const [mapExpanded, setMapExpanded] = useState(false);
   const [activeTab, setActiveTab] = useState<"auto-schedule" | "routes" | "suggestions">("auto-schedule");
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -540,8 +545,19 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                                   ))}
                                 </div>
                               </div>
-                              <div className="pt-2 text-xs text-muted-foreground">
-                                Total arbetstid: {formatTime(route.totalWorkTime)}
+                              <div className="pt-2 flex items-center justify-between">
+                                <span className="text-xs text-muted-foreground">
+                                  Total arbetstid: {formatTime(route.totalWorkTime)}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setShowMapForRoute(route.resourceId)}
+                                  data-testid={`button-show-map-${route.resourceId}`}
+                                >
+                                  <Map className="h-3 w-3 mr-1" />
+                                  Visa karta
+                                </Button>
                               </div>
                             </div>
                           </CollapsibleContent>
@@ -550,6 +566,24 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                     );
                   })}
                 </div>
+
+                {showMapForRoute && (
+                  <div className="mt-3">
+                    {(() => {
+                      const selectedRoute = routeResult.routes.find(r => r.resourceId === showMapForRoute);
+                      if (!selectedRoute) return null;
+                      return (
+                        <OptimizedRouteMap
+                          stops={selectedRoute.stops}
+                          resourceName={selectedRoute.resourceName}
+                          onClose={() => setShowMapForRoute(null)}
+                          expanded={mapExpanded}
+                          onToggleExpand={() => setMapExpanded(!mapExpanded)}
+                        />
+                      );
+                    })()}
+                  </div>
+                )}
               </div>
             )}
           </>
