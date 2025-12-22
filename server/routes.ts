@@ -2378,6 +2378,33 @@ export async function registerRoutes(
     }
   });
 
+  // AI Planning suggestions
+  app.post("/api/ai/planning-suggestions", async (req, res) => {
+    try {
+      const { generatePlanningSuggestions } = await import("./ai-planner");
+      const { weekStart, weekEnd } = req.body;
+      
+      const [workOrders, resources, clusters] = await Promise.all([
+        storage.getWorkOrders(DEFAULT_TENANT_ID),
+        storage.getResources(DEFAULT_TENANT_ID),
+        storage.getClusters(DEFAULT_TENANT_ID),
+      ]);
+      
+      const suggestions = await generatePlanningSuggestions({
+        workOrders,
+        resources,
+        clusters,
+        weekStart: weekStart || new Date().toISOString().split("T")[0],
+        weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      });
+      
+      res.json(suggestions);
+    } catch (error) {
+      console.error("AI Planning error:", error);
+      res.status(500).json({ error: "Kunde inte generera planeringsförslag" });
+    }
+  });
+
   // Delete all data (for re-import)
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {

@@ -40,9 +40,28 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **Hierarchical Object Structure:** `Område → Fastighet → Rum` (Area → Property → Room) to manage customer locations.
 -   **External Service Integration:** Route optimization is offloaded to a separate, external Unicorn optimization service. Data preparation for this external service is handled internally. A separate DataClean service is used for data validation and geocoding.
 
+## AI Strategy (Core Principle)
+AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas för AI-förbättring:
+
+### Implementerade AI-funktioner
+- **AI Planning Assistant:** Analyserar veckoplanering och ger förslag för att balansera arbetsbelastning, optimera körtid och prioritera akuta ordrar. Tillgänglig via "AI Assistent"-knappen i veckoplaneraren.
+
+### Planerade AI-funktioner
+- **Automatisk klusterbildning:** AI analyserar objekts geografi och servicemönster för att föreslå optimala kluster
+- **Prediktiv schemaläggning:** Lär sig från historik för att föreslå bästa servicetider
+- **Anomali-detektion:** Identifierar avvikande ställtider och kostnadsmönster
+- **Smart ruttoptimering:** Per-kluster daglig optimering med hänsyn till tidsfönster och trafikprognoser
+- **Naturligt språk-gränssnitt:** Fråga systemet på naturligt språk ("Vilka kluster har överbelastade veckor?")
+
+### AI-teknologi
+- **Provider:** OpenAI via Replit AI Integrations (ingen egen API-nyckel krävs)
+- **Modeller:** gpt-4o-mini för snabba analyser, gpt-4o för komplexa beslut
+- **Mönster:** Kontext-driven prompting med strukturerad JSON-output
+
 ## External Dependencies
 -   **PostgreSQL:** Primary database for persistent storage.
 -   **Drizzle ORM:** Used for database interactions.
+-   **OpenAI API:** AI-drivna planeringsförslag via Replit AI Integrations.
 -   **OpenRouteService:** Utilized for route visualization.
 -   **External Unicorn Optimization Service:** A separate, dedicated service for performing route optimization calculations.
 -   **DataClean Service:** An external service for data validation and geocoding.
