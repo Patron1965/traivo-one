@@ -31,6 +31,7 @@ import ClusterDetailPage from "@/pages/ClusterDetailPage";
 import EconomicsDashboardPage from "@/pages/EconomicsDashboardPage";
 import SetupTimeAnalysisPage from "@/pages/SetupTimeAnalysisPage";
 import PredictivePlanningPage from "@/pages/PredictivePlanningPage";
+import MobileFieldPage from "@/pages/MobileFieldPage";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -56,6 +57,7 @@ function Router() {
       <Route path="/economics" component={EconomicsDashboardPage} />
       <Route path="/setup-analysis" component={SetupTimeAnalysisPage} />
       <Route path="/predictive-planning" component={PredictivePlanningPage} />
+      <Route path="/mobile" component={MobileFieldPage} />
       <Route path="/import" component={ImportPage} />
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />
