@@ -19,6 +19,18 @@ interface FeatureSection {
 
 const systemFeatures: FeatureSection[] = [
   {
+    title: "Kluster - Kärnkoncept",
+    icon: MapPin,
+    features: [
+      { name: "Geografiska kluster", description: "Navet i verksamheten - organiserar alla entiteter geografiskt" },
+      { name: "Kartvisualisering", description: "Interaktiv karta med klusterområden och SLA-färgkodning" },
+      { name: "Snöret", description: "Visualiserar flödet: Objekt → Abonnemang → Ordrar → Utförda → Fakturerade" },
+      { name: "SLA-nivåer", description: "Standard, Premium, Enterprise med olika servicekrav" },
+      { name: "Team-tilldelning", description: "Primärt ansvarigt team per kluster" },
+      { name: "Cachad statistik", description: "Objektantal, aktiva ordrar, månadsvärde, snitt ställtid" },
+    ]
+  },
+  {
     title: "Planering & Schemaläggning",
     icon: Calendar,
     features: [
