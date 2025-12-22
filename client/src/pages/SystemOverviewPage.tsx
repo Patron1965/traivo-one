@@ -144,7 +144,7 @@ export default function SystemOverviewPage() {
 
       doc.setFontSize(24);
       doc.setFont("helvetica", "bold");
-      doc.text("Nordic Routing", pageWidth / 2, yPos, { align: "center" });
+      doc.text("Unicorn", pageWidth / 2, yPos, { align: "center" });
       yPos += 10;
       
       doc.setFontSize(14);
@@ -166,7 +166,7 @@ export default function SystemOverviewPage() {
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       const summary = [
-        "Nordic Routing är en AI-driven planeringsplattform som utvecklas i samarbete",
+        "Unicorn är en AI-driven planeringsplattform som utvecklas i samarbete",
         "med Kinab AB. Målet är att skapa ett unikt system som optimerar hela fält-",
         "serviceverksamheten - och som sedan kan erbjudas till alla företag inom",
         "serviceverksamhet i Norden.",
@@ -264,9 +264,9 @@ export default function SystemOverviewPage() {
       doc.setFontSize(8);
       doc.setTextColor(100);
       doc.text(`Genererad: ${new Date().toLocaleString("sv-SE")}`, 14, yPos);
-      doc.text("Nordic Routing - Utvecklad i samarbete med Kinab AB", pageWidth - 14, yPos, { align: "right" });
+      doc.text("Unicorn - Utvecklad i samarbete med Kinab AB", pageWidth - 14, yPos, { align: "right" });
 
-      doc.save("Nordic_Routing_Systemoversikt_Kinab.pdf");
+      doc.save("Unicorn_Systemoversikt_Kinab.pdf");
     } finally {
       setGenerating(false);
     }
@@ -277,7 +277,7 @@ export default function SystemOverviewPage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold">Systemöversikt</h1>
-          <p className="text-muted-foreground">Komplett funktionslista för Nordic Routing</p>
+          <p className="text-muted-foreground">Komplett funktionslista för Unicorn</p>
         </div>
         <Button onClick={generatePDF} disabled={generating} data-testid="button-generate-pdf">
           {generating ? (
@@ -293,12 +293,12 @@ export default function SystemOverviewPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Nordic Routing - AI-driven fältserviceplanering
+            Unicorn - AI-driven fältserviceplanering
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground">
-            Nordic Routing är en AI-driven planeringsplattform som utvecklas i samarbete med Kinab AB. 
+            Unicorn är en AI-driven planeringsplattform som utvecklas i samarbete med Kinab AB. 
             Målet är att skapa ett unikt system som optimerar hela fältserviceverksamheten - och som 
             sedan kan erbjudas till alla företag inom serviceverksamhet i Norden.
           </p>

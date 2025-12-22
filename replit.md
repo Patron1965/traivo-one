@@ -1,10 +1,10 @@
-# Nordic Routing - AI-Driven Field Service Planning Platform
+# Unicorn - AI-Driven Field Service Planning Platform
 
 ## Overview
-Nordic Routing is an AI-driven planning platform designed to optimize "ställtid" (setup time) for field service companies in the Nordic market. The platform targets the 15-25% of workday lost to setup inefficiencies (gate access, parking, finding keys).
+Unicorn is an AI-driven planning platform developed in collaboration with Kinab AB. The platform provides comprehensive optimization for field service companies in the Nordic market, including route optimization, resource planning, economic control, productivity improvements, and predictive analytics.
 
 **Design Partner:** Kinab AB (avfallshantering/sophämtning)
-**Goal:** Prove value through measurable savings before scaling to commercial multi-tenant SaaS
+**Goal:** Prove value with Kinab as design partner, then scale to commercial multi-tenant SaaS for all Nordic service companies
 
 ## Kinab Business Domain
 Kinab arbetar med avfallshantering och sophämtning. Viktiga termer:
@@ -92,7 +92,7 @@ shared/
 
 ## Key Features
 1. **Veckoplanering:** Drag-drop scheduling with priority colors
-2. **Inför Optimering:** Weekly optimization preparation with data validation (prepared for external Nordic Routing API integration)
+2. **Inför Optimering:** Weekly optimization preparation with data validation (prepared for external Unicorn API integration)
 3. **Ruttplanering:** Route visualization with OpenRouteService
 4. **Objekt:** Hierarchical tree view (Område → Fastighet → Rum)
 5. **Resurser:** Technician management with competencies and tidsverk (article assignments)
@@ -115,7 +115,7 @@ API Endpoints:
 - `POST /api/import/modus/tasks` - Import tasks CSV  
 - `POST /api/import/modus/events` - Analyze events CSV for setup times
 
-Field Mappings (Modus → Nordic Routing):
+Field Mappings (Modus → Unicorn):
 - `Id` → objectNumber (prefixed with MODUS-)
 - `Namn` → name
 - `Typ` → objectType (mapped to system types)
@@ -126,7 +126,7 @@ Field Mappings (Modus → Nordic Routing):
 - `Metadata - Antal` → containerCount
 
 ## Architecture Decision: External Optimization
-- Route optimization is handled by external Nordic Routing optimization service (separate Replit)
+- Route optimization is handled by external Unicorn optimization service (separate Replit)
 - "Inför Optimering" page prepares and validates data before sending to external API
 - DataClean service (separate Replit) handles data validation and geocoding
 - This app focuses on visualization, scheduling, and field service workflow
@@ -235,6 +235,6 @@ When creating a new page, ALWAYS complete these steps:
 
 ## Next Steps
 1. Import real Kinab object data from Modus 2.0
-2. Integrate with external Nordic Routing optimization API
+2. Integrate with external Unicorn optimization API
 3. Integrate with DataClean service for data validation
 4. Review and adjust data model based on Kinab feedback

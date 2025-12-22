@@ -8,8 +8,8 @@ export default function LandingPage() {
       <header className="border-b">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Truck className="h-6 w-6 text-primary" />
-            <span className="font-semibold text-lg">Nordic Routing</span>
+            <img src="/kinab-logo.png" alt="Kinab" className="h-8 w-auto" />
+            <span className="font-semibold text-lg">Unicorn</span>
           </div>
           <Button asChild data-testid="button-login">
             <a href="/api/login">Logga in</a>
@@ -84,7 +84,7 @@ export default function LandingPage() {
 
       <footer className="border-t mt-16">
         <div className="container mx-auto px-4 py-8 text-center text-muted-foreground">
-          <p>Nordic Routing - AI-driven fältserviceplanering</p>
+          <p>Unicorn - AI-driven fältserviceplanering</p>
         </div>
       </footer>
     </div>

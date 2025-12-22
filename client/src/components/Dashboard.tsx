@@ -404,7 +404,7 @@ export function Dashboard() {
       };
 
       // SIDA 1 - Sammanfattning
-      yPos = addHeader("Nordic Routing - Månadsrapport");
+      yPos = addHeader("Unicorn - Månadsrapport");
       
       yPos = addSectionTitle("Nyckeltal", yPos);
       
@@ -639,10 +639,10 @@ export function Dashboard() {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(128, 128, 128);
-        doc.text(`Nordic Routing - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+        doc.text(`Unicorn - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
       }
 
-      doc.save(`nordic-routing-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      doc.save(`unicorn-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
       
       toast({
         title: "Rapport exporterad",
