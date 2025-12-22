@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,7 +9,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { 
   Clock, TrendingUp, Users, Briefcase, AlertCircle, Lightbulb, 
   ArrowUpRight, ArrowDownRight, Loader2, MapPin, Building2, AlertTriangle,
-  ChevronRight, Calendar, CircleDollarSign, Package, Target
+  ChevronRight, Calendar, CircleDollarSign, Package, Target, FileText
 } from "lucide-react";
 import { Link } from "wouter";
 import { 
@@ -19,6 +19,9 @@ import {
 import { format, subDays, startOfDay, isBefore } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
+import { useToast } from "@/hooks/use-toast";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import type { Resource, ServiceObject, SetupTimeLog, Customer, WorkOrderWithObject } from "@shared/schema";
 
 export function Dashboard() {
@@ -358,6 +361,307 @@ export function Dashboard() {
     success: "border-green-500 bg-green-50 dark:bg-green-950",
   };
 
+  const { toast } = useToast();
+
+  const handleExportPDF = useCallback(() => {
+    try {
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 15;
+      let yPos = margin;
+
+      const addHeader = (title: string) => {
+        doc.setFillColor(30, 64, 175);
+        doc.rect(0, 0, pageWidth, 25, "F");
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(18);
+        doc.setFont("helvetica", "bold");
+        doc.text(title, margin, 16);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text(`Genererad: ${format(new Date(), "yyyy-MM-dd HH:mm", { locale: sv })}`, pageWidth - margin, 16, { align: "right" });
+        doc.setTextColor(0, 0, 0);
+        return 35;
+      };
+
+      const addSectionTitle = (title: string, y: number) => {
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(30, 64, 175);
+        doc.text(title, margin, y);
+        doc.setTextColor(0, 0, 0);
+        doc.setFont("helvetica", "normal");
+        return y + 8;
+      };
+
+      const checkPageBreak = (neededSpace: number) => {
+        if (yPos + neededSpace > pageHeight - margin) {
+          doc.addPage();
+          yPos = margin;
+        }
+      };
+
+      // SIDA 1 - Sammanfattning
+      yPos = addHeader("Nordic Routing - Månadsrapport");
+      
+      yPos = addSectionTitle("Nyckeltal", yPos);
+      
+      const kpiData = [
+        ["Ordrar totalt", `${totalJobs.toLocaleString("sv-SE")}`, `${completedJobs} utförda`],
+        ["Totalt ordervärde", `${(totalOrderValue / 1000).toFixed(0)}k kr`, `Snitt ${avgOrderValue.toLocaleString("sv-SE")} kr/order`],
+        ["Marginal", `${marginPercent}%`, `${(totalMargin / 1000).toFixed(0)}k kr totalt`],
+        ["Planerade timmar", `${plannedHours.toFixed(1)}h`, `${actualHours.toFixed(1)}h utfört`],
+        ["Total ställtid", `${totalSetupTime} min`, `Snitt ${avgSetupTime} min/jobb`],
+        ["Resurser", `${resources.length}`, `${resources.filter(r => r.status === "active").length} aktiva`],
+      ];
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Mått", "Värde", "Detaljer"]],
+        body: kpiData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+      });
+      
+      yPos = (doc as any).lastAutoTable.finalY + 12;
+
+      // Orderstatusfördelning
+      checkPageBreak(50);
+      yPos = addSectionTitle("Orderstatusfördelning", yPos);
+      
+      const statusData = orderStatusDistribution.map(item => [
+        item.name,
+        item.value.toString(),
+        `${totalJobs > 0 ? ((item.value / totalJobs) * 100).toFixed(1) : 0}%`
+      ]);
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Status", "Antal", "Andel"]],
+        body: statusData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 12;
+
+      // Top kunder
+      checkPageBreak(60);
+      yPos = addSectionTitle("Top 5 kunder efter ordervärde", yPos);
+      
+      const customerData = topCustomersByValue.map((item, idx) => [
+        (idx + 1).toString(),
+        item.name,
+        `${(item.value / 1000).toFixed(0)}k kr`,
+        item.count.toString()
+      ]);
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["#", "Kund", "Ordervärde", "Antal ordrar"]],
+        body: customerData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+      });
+
+      // SIDA 2 - Ställtidsanalys
+      doc.addPage();
+      yPos = addHeader("Ställtidsanalys");
+
+      yPos = addSectionTitle("Ställtid per kategori", yPos);
+      
+      const setupCategoryData = setupTimeBreakdown.map(item => [
+        item.reason,
+        `${item.minutes} min`,
+        `${item.percentage}%`
+      ]);
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Kategori", "Tid", "Andel"]],
+        body: setupCategoryData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 12;
+
+      // Top objekt med hög ställtid
+      checkPageBreak(60);
+      yPos = addSectionTitle("Top 5 objekt med högst ställtid", yPos);
+      
+      const objectData = topSetupTimeObjects.map((item, idx) => [
+        (idx + 1).toString(),
+        item.name,
+        item.customerName || "-",
+        `${item.totalMinutes} min`,
+        item.count.toString()
+      ]);
+      
+      if (objectData.length > 0) {
+        autoTable(doc, {
+          startY: yPos,
+          head: [["#", "Objekt", "Kund", "Total tid", "Besök"]],
+          body: objectData,
+          theme: "striped",
+          headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+          styles: { fontSize: 10 },
+          margin: { left: margin, right: margin },
+        });
+        yPos = (doc as any).lastAutoTable.finalY + 12;
+      }
+
+      // Ställtidstrend
+      checkPageBreak(60);
+      yPos = addSectionTitle("Ställtidstrend (senaste 14 dagarna)", yPos);
+      
+      const trendData = setupTimeTrend.map(item => [
+        item.label,
+        `${item.avgSetupTime} min`,
+        item.count.toString()
+      ]);
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Datum", "Snitt ställtid", "Antal jobb"]],
+        body: trendData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+      });
+
+      // SIDA 3 - Resursbeläggning
+      doc.addPage();
+      yPos = addHeader("Resursbeläggning");
+
+      yPos = addSectionTitle("Beläggning per resurs", yPos);
+      
+      const resourceData = resourceUtilization.map(r => [
+        r.fullName,
+        `${r.actual.toFixed(1)}h`,
+        `${r.planned}h`,
+        `${r.utilization}%`,
+        r.utilization > 100 ? "Överbokning" : r.utilization > 80 ? "Hög" : "Normal"
+      ]);
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Resurs", "Planerat", "Kapacitet", "Beläggning", "Status"]],
+        body: resourceData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.column.index === 4) {
+            const status = data.cell.raw as string;
+            if (status === "Överbokning") {
+              data.cell.styles.textColor = [220, 38, 38];
+              data.cell.styles.fontStyle = "bold";
+            } else if (status === "Hög") {
+              data.cell.styles.textColor = [234, 88, 12];
+            }
+          }
+        }
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 12;
+
+      // Planerat vs faktiskt
+      checkPageBreak(60);
+      yPos = addSectionTitle("Planerat vs Faktiskt (senaste 7 dagarna)", yPos);
+      
+      const pvfData = plannedVsActual.map(item => [
+        item.label,
+        `${item.planned}h`,
+        `${item.actual}h`,
+        `${item.setupTime}h`,
+        item.planned > 0 ? `${((item.actual / item.planned) * 100).toFixed(0)}%` : "-"
+      ]);
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Dag", "Planerat", "Faktiskt", "Ställtid", "Effektivitet"]],
+        body: pvfData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+      });
+
+      yPos = (doc as any).lastAutoTable.finalY + 12;
+
+      // Insikter & rekommendationer
+      checkPageBreak(40);
+      yPos = addSectionTitle("Insikter och rekommendationer", yPos);
+      
+      const insightData = insights.map(i => [
+        i.type === "success" ? "Positiv" : i.type === "warning" ? "Varning" : "Förslag",
+        i.message
+      ]);
+      
+      autoTable(doc, {
+        startY: yPos,
+        head: [["Typ", "Beskrivning"]],
+        body: insightData,
+        theme: "striped",
+        headStyles: { fillColor: [30, 64, 175], textColor: 255 },
+        styles: { fontSize: 10 },
+        margin: { left: margin, right: margin },
+        didParseCell: (data) => {
+          if (data.section === "body" && data.column.index === 0) {
+            const typ = data.cell.raw as string;
+            if (typ === "Varning") {
+              data.cell.styles.textColor = [234, 88, 12];
+            } else if (typ === "Positiv") {
+              data.cell.styles.textColor = [22, 163, 74];
+            } else {
+              data.cell.styles.textColor = [59, 130, 246];
+            }
+          }
+        }
+      });
+
+      // Footer på alla sidor
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setTextColor(128, 128, 128);
+        doc.text(`Nordic Routing - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+      }
+
+      doc.save(`nordic-routing-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      
+      toast({
+        title: "Rapport exporterad",
+        description: `PDF-rapport med ${totalPages} sidor har laddats ner.`,
+      });
+    } catch (error) {
+      console.error("PDF export error:", error);
+      toast({
+        title: "Exportfel",
+        description: "Kunde inte skapa PDF-rapporten. Försök igen.",
+        variant: "destructive",
+      });
+    }
+  }, [
+    totalJobs, completedJobs, totalOrderValue, avgOrderValue, marginPercent, totalMargin,
+    plannedHours, actualHours, totalSetupTime, avgSetupTime, resources,
+    orderStatusDistribution, topCustomersByValue, setupTimeBreakdown,
+    topSetupTimeObjects, setupTimeTrend, resourceUtilization, plannedVsActual, insights, toast
+  ]);
+
   const isLoading = workOrdersLoading || resourcesLoading || setupLogsLoading;
 
   if (isLoading) {
@@ -375,8 +679,9 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Översikt - {format(new Date(), "MMMM yyyy", { locale: sv })}</p>
         </div>
-        <Button variant="outline" data-testid="button-export">
-          Exportera rapport
+        <Button variant="outline" onClick={handleExportPDF} data-testid="button-export">
+          <FileText className="h-4 w-4 mr-2" />
+          Exportera PDF-rapport
         </Button>
       </div>
 
