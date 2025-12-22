@@ -1,0 +1,57 @@
+🔴 HÖG PRIORITET
+1. AI-Optimeringsmotor (Kärnfunktionalitet)
+Trots att systemet positioneras som "AI-driven" saknas själva AI-optimeringen. Utveckla algoritmer för automatisk ruttoptimering, resursallokering och kapacitetsprognoser som löpande förbättrar planering och minskar kostnader.
+
+2. Faktureringsmodul
+Orderflödet går till status "Fakturerad" men ingen fakturahantering finns beskriven. Bygg modul för automatisk fakturagenererering, kreditfakturor, exportintegration till ekonomisystem (Fortnox/Visma) och fakturauppföljning.
+
+3. Kundportal (Självbetjäning)
+Ingen portal för kundkontakt finns idag. Skapa webbportal där bostadsbolag/serviceboenden kan se scheman, beställa extratjänster, rapportera fel och följa upp utförda arbeten - minskar administrativ börda.
+
+4. Mobil Offline-Funktionalitet
+Fältappen verkar sakna offline-stöd vilket är kritiskt vid dålig täckning. Implementera lokal datasynkronisering så tekniker kan arbeta utan uppkoppling och synka data när nätet kommer tillbaka.
+
+5. Ekonomistyrning & Lönsamhetsanalys
+Nämns som mål men saknas helt. Utveckla modul för marginalberäkning per order/kluster/kund, budget vs utfall, lönsamhetsrapporter och kostnadsdrivare-analys för att styra verksamheten ekonomiskt.
+
+🟡 MEDEL PRIORITET
+6. Automatiska Kundnotifikationer
+Inget notifikationssystem finns beskrivet. Bygg SMS/email-system som automatiskt informerar kunder om: kommande besök (dag innan), tekniker på väg (30 min före), utfört arbete (kvitto) och avvikelser.
+
+7. GPS-Spårning i Realtid
+Fordon registreras men ingen realtidsspårning nämns. Integrera GPS-spårning för att se var tekniker befinner sig, upptäcka förseningar tidigt och kunna informera kunder proaktivt.
+
+8. Kvalitets- & Reklamationshantering
+Saknas helt idag. Skapa modul för kundklagomål, reklamationer, avvikelserapporter och uppföljning. Koppla till order för att spåra kvalitetsproblem per tekniker/team/kluster.
+
+9. Dokumenthantering i Fältappen
+Inga funktioner för bilder/protokoll/signaturer nämns. Lägg till möjlighet att ta foton (före/efter), samla kundsignaturer digitalt och skapa automatiska protokoll - viktigt för kvalitetsdokumentation.
+
+10. Lagerhantering (Material & Reservdelar)
+Ingen lagermodul finns. Utveckla system för materialförbrukning per order, lagerplatser i fordon/lager, automatisk påfyllning vid låga nivåer och kostnadsuppföljning per artikel.
+
+11. Avancerad Rapportering & BI
+Nuvarande dashboard verkar grundläggande. Bygg ut med: trendanalyser, jämförelser över tid, team-benchmarking, kundsegmentering, geografiska heatmaps och exporterbara rapporter för ledning.
+
+🟢 LÅG PRIORITET
+12. Multi-Tenant SaaS-Arkitektur
+Nämns som framtidsmål. Bygg om systemet för att stödja flera kunder på samma plattform med separat data, anpassade konfigurationer och självbetjäning för nya kunder.
+
+13. Öppet API för Tredjepartsintegrationer
+Möjliggör att partners och kunder kan bygga egna integrationer. Dokumenterat REST API med autentisering, rate limiting och webhooks för events.
+
+14. Prediktiv Underhållsanalys
+Nämns som mål men ej implementerat. Använd historisk data för att förutse: fordonsbehov, högtrafik-perioder, bemanning-behov och materialkonsumtion - optimerar långsiktig planering.
+
+15. Gamification för Tekniker
+Motivationshöjande element: poäng för punktlighet, effektivitet-badges, team-tävlingar, månadsvinnare. Kan öka produktivitet och engagemang bland fältpersonal.
+
+16. Kundens Mobilapp
+Egen app för slutkunder (serviceboenden/bostadsbolag) för enklare kommunikation, notifikationer och beställningar - komplement till kundportalen.
+
+Sammanfattning
+Kritiska Luckor: AI-optimering (själva kärnlöftet), fakturering och kundportal saknas helt trots att grundfunktionaliteten är solid.
+
+Nästa Steg: Fokusera på de 5 högprioriterade punkterna för att göra systemet produktionsklart och differentiera med verklig AI-driven optimering.
+
+Potential: Med rätt prioriteringar kan Unicorn bli en konkurrensskraftig SaaS-plattform för hela Norden inom fältservicebranschen.
