@@ -107,6 +107,15 @@ export default function ObjectsPage() {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyObject, setHistoryObject] = useState<ServiceObject | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [newObject, setNewObject] = useState({
+    name: "",
+    objectType: "fastighet",
+    accessType: "open",
+    accessCode: "",
+    address: "",
+    customerId: "",
+  });
 
   // Debounce search for server-side filtering
   useEffect(() => {
@@ -172,6 +181,8 @@ export default function ObjectsPage() {
       toast({ title: "Objekt skapat" });
       setCopyDialogOpen(false);
       setObjectToCopy(null);
+      setCreateDialogOpen(false);
+      setNewObject({ name: "", objectType: "fastighet", accessType: "open", accessCode: "", address: "", customerId: "" });
     },
     onError: () => {
       toast({ title: "Fel vid skapande", variant: "destructive" });
@@ -573,7 +584,7 @@ export default function ObjectsPage() {
             <Download className="h-4 w-4 mr-2" />
             Exportera
           </Button>
-          <Button onClick={() => console.log("Add object clicked")} data-testid="button-add-object">
+          <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
             <Plus className="h-4 w-4 mr-2" />
             Lägg till objekt
           </Button>
@@ -877,6 +888,107 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setHistoryDialogOpen(false)}>Stäng</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create object dialog */}
+      <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Skapa nytt objekt</DialogTitle>
+            <DialogDescription>
+              Fyll i uppgifterna för det nya objektet.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Namn</Label>
+              <Input
+                value={newObject.name}
+                onChange={(e) => setNewObject({ ...newObject, name: e.target.value })}
+                placeholder="Objektnamn"
+                data-testid="input-new-object-name"
+              />
+            </div>
+            <div>
+              <Label>Objekttyp</Label>
+              <Select value={newObject.objectType} onValueChange={(v) => setNewObject({ ...newObject, objectType: v })}>
+                <SelectTrigger data-testid="select-new-object-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(objectTypeLabels).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Tillgångstyp</Label>
+              <Select value={newObject.accessType} onValueChange={(v) => setNewObject({ ...newObject, accessType: v })}>
+                <SelectTrigger data-testid="select-new-access-type">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(accessTypeLabels).map(([value, { label }]) => (
+                    <SelectItem key={value} value={value}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {(newObject.accessType === "code" || newObject.accessType === "key") && (
+              <div>
+                <Label>{newObject.accessType === "code" ? "Kod" : "Nyckelnummer"}</Label>
+                <Input
+                  value={newObject.accessCode}
+                  onChange={(e) => setNewObject({ ...newObject, accessCode: e.target.value })}
+                  placeholder={newObject.accessType === "code" ? "Portkod" : "Nyckelnummer"}
+                  data-testid="input-new-access-code"
+                />
+              </div>
+            )}
+            <div>
+              <Label>Adress</Label>
+              <Input
+                value={newObject.address}
+                onChange={(e) => setNewObject({ ...newObject, address: e.target.value })}
+                placeholder="Gatuadress"
+                data-testid="input-new-object-address"
+              />
+            </div>
+            <div>
+              <Label>Kund</Label>
+              <Select value={newObject.customerId || "none"} onValueChange={(v) => setNewObject({ ...newObject, customerId: v === "none" ? "" : v })}>
+                <SelectTrigger data-testid="select-new-customer">
+                  <SelectValue placeholder="Välj kund" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Ingen kund</SelectItem>
+                  {customers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>Avbryt</Button>
+            <Button 
+              onClick={() => createObjectMutation.mutate({
+                name: newObject.name,
+                objectType: newObject.objectType,
+                accessType: newObject.accessType,
+                accessCode: newObject.accessCode || undefined,
+                address: newObject.address || undefined,
+                customerId: newObject.customerId || undefined,
+              })} 
+              disabled={!newObject.name || createObjectMutation.isPending}
+              data-testid="button-create-object"
+            >
+              {createObjectMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Skapa
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
