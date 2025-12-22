@@ -23,12 +23,22 @@ export interface OptimizedRoute {
   optimizationScore: number; // 0-100
   originalOrder: string[];
   optimizedOrder: string[];
+  // Nya fält för besparingsvisning
+  originalDriveTime: number; // minuter före optimering
+  originalDistance: number; // km före optimering
+  timeSaved: number; // minuter sparade
+  distanceSaved: number; // km sparade
+  estimatedFuelSaved: number; // liter bränsle sparade (ca 0.08 l/km)
+  estimatedCostSaved: number; // SEK sparade (bränsle + tid)
 }
 
 export interface DayRouteOptimization {
   date: string;
   routes: OptimizedRoute[];
   totalSavings: number; // minuter sparade
+  totalDistanceSaved: number; // km sparade
+  totalFuelSaved: number; // liter sparade
+  totalCostSaved: number; // SEK sparade
   summary: string;
 }
 
@@ -186,22 +196,32 @@ export async function optimizeResourceDayRoute(
     return null;
   }
   
-  const originalOrder = stops.map(s => s.workOrderId);
+  // Spara originalordningen FÖRE optimering
+  const originalStops = [...stops];
+  const originalOrder = originalStops.map(s => s.workOrderId);
   
   const startCoord = resource?.homeLatitude && resource?.homeLongitude
     ? { lat: resource.homeLatitude, lng: resource.homeLongitude }
     : undefined;
   
-  const originalDistance = calculateTotalDistance(stops, startCoord);
+  // Beräkna originaldistans från den ursprungliga ordningen
+  const originalDistance = calculateTotalDistance(originalStops, startCoord);
+  const originalDriveTime = (originalDistance / 40) * 60; // 40 km/h snitt
   
+  // Optimera och beräkna ny distans
   const optimizedStops = nearestNeighborOptimization(stops, startCoord);
   const optimizedDistance = calculateTotalDistance(optimizedStops, startCoord);
+  const optimizedDriveTime = (optimizedDistance / 40) * 60;
   
   const optimizedOrder = optimizedStops.map(s => s.workOrderId);
   
-  const estimatedDriveTime = (optimizedDistance / 40) * 60;
-  
   const totalWorkTime = optimizedStops.reduce((sum, s) => sum + s.estimatedDuration, 0);
+  
+  // Beräkna besparingar
+  const timeSaved = Math.max(0, originalDriveTime - optimizedDriveTime);
+  const distanceSaved = Math.max(0, originalDistance - optimizedDistance);
+  const fuelSaved = distanceSaved * 0.08; // ca 8 liter/100km för lätt lastbil
+  const costSaved = (fuelSaved * 22) + (timeSaved / 60 * 450); // 22 kr/liter + 450 kr/timme personal
   
   const savingsRatio = originalDistance > 0 
     ? Math.max(0, (originalDistance - optimizedDistance) / originalDistance)
@@ -213,12 +233,18 @@ export async function optimizeResourceDayRoute(
     resourceName,
     date,
     stops: optimizedStops,
-    totalDriveTime: Math.round(estimatedDriveTime),
+    totalDriveTime: Math.round(optimizedDriveTime),
     totalWorkTime,
     totalDistance: Math.round(optimizedDistance * 10) / 10,
     optimizationScore,
     originalOrder,
     optimizedOrder,
+    originalDriveTime: Math.round(originalDriveTime),
+    originalDistance: Math.round(originalDistance * 10) / 10,
+    timeSaved: Math.round(timeSaved),
+    distanceSaved: Math.round(distanceSaved * 10) / 10,
+    estimatedFuelSaved: Math.round(fuelSaved * 10) / 10,
+    estimatedCostSaved: Math.round(costSaved),
   };
 }
 
@@ -242,6 +268,9 @@ export async function optimizeDayRoutes(
   
   const routes: OptimizedRoute[] = [];
   let totalSavings = 0;
+  let totalDistanceSaved = 0;
+  let totalFuelSaved = 0;
+  let totalCostSaved = 0;
   
   for (const resourceId of Array.from(resourcesWithOrders)) {
     const resource = resources.find(r => r.id === resourceId);
@@ -256,21 +285,24 @@ export async function optimizeDayRoutes(
     
     if (route) {
       routes.push(route);
-      
-      const originalDriveTime = (calculateTotalDistance(route.stops) / 40) * 60;
-      const savings = Math.max(0, originalDriveTime - route.totalDriveTime);
-      totalSavings += savings;
+      totalSavings += route.timeSaved;
+      totalDistanceSaved += route.distanceSaved;
+      totalFuelSaved += route.estimatedFuelSaved;
+      totalCostSaved += route.estimatedCostSaved;
     }
   }
   
   const summary = routes.length > 0
-    ? `${routes.length} rutter optimerade. Total körtid: ${routes.reduce((s, r) => s + r.totalDriveTime, 0)} min, ~${totalSavings.toFixed(0)} min sparade.`
+    ? `${routes.length} rutter optimerade. Sparar ${Math.round(totalSavings)} min, ${totalDistanceSaved.toFixed(1)} km och ~${Math.round(totalCostSaved)} kr.`
     : "Inga rutter att optimera för detta datum.";
   
   return {
     date,
     routes,
     totalSavings: Math.round(totalSavings),
+    totalDistanceSaved: Math.round(totalDistanceSaved * 10) / 10,
+    totalFuelSaved: Math.round(totalFuelSaved * 10) / 10,
+    totalCostSaved: Math.round(totalCostSaved),
     summary,
   };
 }

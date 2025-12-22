@@ -55,12 +55,21 @@ interface OptimizedRoute {
   totalWorkTime: number;
   totalDistance: number;
   optimizationScore: number;
+  originalDriveTime: number;
+  originalDistance: number;
+  timeSaved: number;
+  distanceSaved: number;
+  estimatedFuelSaved: number;
+  estimatedCostSaved: number;
 }
 
 interface DayRouteOptimization {
   date: string;
   routes: OptimizedRoute[];
   totalSavings: number;
+  totalDistanceSaved: number;
+  totalFuelSaved: number;
+  totalCostSaved: number;
   summary: string;
 }
 
@@ -436,16 +445,29 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
             {routeResult && routeResult.routes.length > 0 && (
               <div className="space-y-3">
-                <Card className="p-3 bg-muted/50">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm font-medium">Resultat</span>
-                    {routeResult.totalSavings > 0 && (
-                      <Badge variant="secondary" className="bg-green-500/20 text-green-700 dark:text-green-300">
-                        ~{formatTime(routeResult.totalSavings)} sparad
+                <Card className="p-3 bg-green-500/10 border-green-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-medium text-green-700 dark:text-green-300">Optimering klar</span>
+                    {routeResult.totalCostSaved > 0 && (
+                      <Badge className="bg-green-500/20 text-green-700 dark:text-green-300">
+                        ~{routeResult.totalCostSaved} kr sparad
                       </Badge>
                     )}
                   </div>
-                  <p className="text-xs text-muted-foreground">{routeResult.summary}</p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div>
+                      <p className="text-lg font-semibold">{formatTime(routeResult.totalSavings)}</p>
+                      <p className="text-xs text-muted-foreground">tid sparad</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold">{routeResult.totalDistanceSaved} km</p>
+                      <p className="text-xs text-muted-foreground">mindre körning</p>
+                    </div>
+                    <div>
+                      <p className="text-lg font-semibold">{routeResult.totalFuelSaved} L</p>
+                      <p className="text-xs text-muted-foreground">bränsle sparad</p>
+                    </div>
+                  </div>
                 </Card>
 
                 <div className="space-y-2">
@@ -489,18 +511,34 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                             </button>
                           </CollapsibleTrigger>
                           <CollapsibleContent>
-                            <div className="mt-3 pt-3 border-t space-y-2">
-                              <p className="text-xs font-medium">Optimerad körordning:</p>
-                              <div className="space-y-1">
-                                {route.stops.map((stop, idx) => (
-                                  <div key={stop.workOrderId} className="flex items-center gap-2 text-xs">
-                                    <Badge variant="outline" className="h-5 w-5 p-0 flex items-center justify-center shrink-0">
-                                      {idx + 1}
-                                    </Badge>
-                                    <span className="truncate flex-1">{stop.objectName}</span>
-                                    <span className="text-muted-foreground shrink-0">{stop.estimatedDuration} min</span>
+                            <div className="mt-3 pt-3 border-t space-y-3">
+                              {route.timeSaved > 0 && (
+                                <div className="p-2 rounded bg-green-500/10 text-xs">
+                                  <div className="flex items-center justify-between">
+                                    <span>Före: {formatTime(route.originalDriveTime)}, {route.originalDistance} km</span>
+                                    <ArrowRight className="h-3 w-3" />
+                                    <span className="font-medium text-green-700 dark:text-green-300">
+                                      Nu: {formatTime(route.totalDriveTime)}, {route.totalDistance} km
+                                    </span>
                                   </div>
-                                ))}
+                                  <p className="text-green-600 dark:text-green-400 mt-1">
+                                    Sparar {formatTime(route.timeSaved)} och {route.distanceSaved} km (~{route.estimatedCostSaved} kr)
+                                  </p>
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-xs font-medium mb-2">Optimerad körordning:</p>
+                                <div className="space-y-1">
+                                  {route.stops.map((stop, idx) => (
+                                    <div key={stop.workOrderId} className="flex items-center gap-2 text-xs">
+                                      <Badge variant="outline" className="h-5 w-5 p-0 flex items-center justify-center shrink-0">
+                                        {idx + 1}
+                                      </Badge>
+                                      <span className="truncate flex-1">{stop.objectName}</span>
+                                      <span className="text-muted-foreground shrink-0">{stop.estimatedDuration} min</span>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
                               <div className="pt-2 text-xs text-muted-foreground">
                                 Total arbetstid: {formatTime(route.totalWorkTime)}
