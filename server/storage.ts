@@ -7,7 +7,12 @@ import {
   type WorkOrder, type InsertWorkOrder, type WorkOrderWithObject,
   type SetupTimeLog, type InsertSetupTimeLog,
   type Procurement, type InsertProcurement,
-  users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements
+  type Article, type InsertArticle,
+  type PriceList, type InsertPriceList,
+  type PriceListArticle, type InsertPriceListArticle,
+  type ResourceArticle, type InsertResourceArticle,
+  users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
+  articles, priceLists, priceListArticles, resourceArticles
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte } from "drizzle-orm";
@@ -58,6 +63,32 @@ export interface IStorage {
   createProcurement(procurement: InsertProcurement): Promise<Procurement>;
   updateProcurement(id: string, procurement: Partial<InsertProcurement>): Promise<Procurement | undefined>;
   deleteProcurement(id: string): Promise<void>;
+  
+  // Articles
+  getArticles(tenantId: string): Promise<Article[]>;
+  getArticle(id: string): Promise<Article | undefined>;
+  createArticle(article: InsertArticle): Promise<Article>;
+  updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article | undefined>;
+  deleteArticle(id: string): Promise<void>;
+  
+  // Price Lists
+  getPriceLists(tenantId: string): Promise<PriceList[]>;
+  getPriceList(id: string): Promise<PriceList | undefined>;
+  createPriceList(priceList: InsertPriceList): Promise<PriceList>;
+  updatePriceList(id: string, priceList: Partial<InsertPriceList>): Promise<PriceList | undefined>;
+  deletePriceList(id: string): Promise<void>;
+  
+  // Price List Articles
+  getPriceListArticles(priceListId: string): Promise<PriceListArticle[]>;
+  createPriceListArticle(priceListArticle: InsertPriceListArticle): Promise<PriceListArticle>;
+  updatePriceListArticle(id: string, data: Partial<InsertPriceListArticle>): Promise<PriceListArticle | undefined>;
+  deletePriceListArticle(id: string): Promise<void>;
+  
+  // Resource Articles (tidsverk)
+  getResourceArticles(resourceId: string): Promise<ResourceArticle[]>;
+  createResourceArticle(resourceArticle: InsertResourceArticle): Promise<ResourceArticle>;
+  updateResourceArticle(id: string, data: Partial<InsertResourceArticle>): Promise<ResourceArticle | undefined>;
+  deleteResourceArticle(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -341,6 +372,92 @@ export class DatabaseStorage implements IStorage {
 
   async deleteProcurement(id: string): Promise<void> {
     await db.update(procurements).set({ deletedAt: new Date() }).where(eq(procurements.id, id));
+  }
+
+  // Articles
+  async getArticles(tenantId: string): Promise<Article[]> {
+    return db.select().from(articles).where(and(eq(articles.tenantId, tenantId), isNull(articles.deletedAt))).orderBy(articles.articleNumber);
+  }
+
+  async getArticle(id: string): Promise<Article | undefined> {
+    const [article] = await db.select().from(articles).where(and(eq(articles.id, id), isNull(articles.deletedAt)));
+    return article || undefined;
+  }
+
+  async createArticle(insertArticle: InsertArticle): Promise<Article> {
+    const [article] = await db.insert(articles).values(insertArticle).returning();
+    return article;
+  }
+
+  async updateArticle(id: string, data: Partial<InsertArticle>): Promise<Article | undefined> {
+    const [article] = await db.update(articles).set(data).where(eq(articles.id, id)).returning();
+    return article || undefined;
+  }
+
+  async deleteArticle(id: string): Promise<void> {
+    await db.update(articles).set({ deletedAt: new Date() }).where(eq(articles.id, id));
+  }
+
+  // Price Lists
+  async getPriceLists(tenantId: string): Promise<PriceList[]> {
+    return db.select().from(priceLists).where(and(eq(priceLists.tenantId, tenantId), isNull(priceLists.deletedAt))).orderBy(desc(priceLists.priority));
+  }
+
+  async getPriceList(id: string): Promise<PriceList | undefined> {
+    const [priceList] = await db.select().from(priceLists).where(and(eq(priceLists.id, id), isNull(priceLists.deletedAt)));
+    return priceList || undefined;
+  }
+
+  async createPriceList(insertPriceList: InsertPriceList): Promise<PriceList> {
+    const [priceList] = await db.insert(priceLists).values(insertPriceList).returning();
+    return priceList;
+  }
+
+  async updatePriceList(id: string, data: Partial<InsertPriceList>): Promise<PriceList | undefined> {
+    const [priceList] = await db.update(priceLists).set(data).where(eq(priceLists.id, id)).returning();
+    return priceList || undefined;
+  }
+
+  async deletePriceList(id: string): Promise<void> {
+    await db.update(priceLists).set({ deletedAt: new Date() }).where(eq(priceLists.id, id));
+  }
+
+  // Price List Articles
+  async getPriceListArticles(priceListId: string): Promise<PriceListArticle[]> {
+    return db.select().from(priceListArticles).where(eq(priceListArticles.priceListId, priceListId));
+  }
+
+  async createPriceListArticle(insertPriceListArticle: InsertPriceListArticle): Promise<PriceListArticle> {
+    const [pla] = await db.insert(priceListArticles).values(insertPriceListArticle).returning();
+    return pla;
+  }
+
+  async updatePriceListArticle(id: string, data: Partial<InsertPriceListArticle>): Promise<PriceListArticle | undefined> {
+    const [pla] = await db.update(priceListArticles).set(data).where(eq(priceListArticles.id, id)).returning();
+    return pla || undefined;
+  }
+
+  async deletePriceListArticle(id: string): Promise<void> {
+    await db.delete(priceListArticles).where(eq(priceListArticles.id, id));
+  }
+
+  // Resource Articles (tidsverk)
+  async getResourceArticles(resourceId: string): Promise<ResourceArticle[]> {
+    return db.select().from(resourceArticles).where(eq(resourceArticles.resourceId, resourceId));
+  }
+
+  async createResourceArticle(insertResourceArticle: InsertResourceArticle): Promise<ResourceArticle> {
+    const [ra] = await db.insert(resourceArticles).values(insertResourceArticle).returning();
+    return ra;
+  }
+
+  async updateResourceArticle(id: string, data: Partial<InsertResourceArticle>): Promise<ResourceArticle | undefined> {
+    const [ra] = await db.update(resourceArticles).set(data).where(eq(resourceArticles.id, id)).returning();
+    return ra || undefined;
+  }
+
+  async deleteResourceArticle(id: string): Promise<void> {
+    await db.delete(resourceArticles).where(eq(resourceArticles.id, id));
   }
 }
 

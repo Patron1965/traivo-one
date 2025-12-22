@@ -95,9 +95,22 @@ export const resources = pgTable("resources", {
   phone: text("phone"),
   email: text("email"),
   homeLocation: text("home_location"),
+  // GPS-koordinater för utgångsplats
+  homeLatitude: real("home_latitude"),
+  homeLongitude: real("home_longitude"),
   weeklyHours: integer("weekly_hours").default(40),
   competencies: text("competencies").array().default([]),
   availability: jsonb("availability").default({}),
+  // Geografiskt område (postnummer för normalt verksamhetsområde)
+  serviceArea: text("service_area").array().default([]),
+  // Effektivitetsfaktor övergripande (1.0 = normal)
+  efficiencyFactor: real("efficiency_factor").default(1.0),
+  // Körtempo-faktor (1.0 = normal)
+  drivingFactor: real("driving_factor").default(1.0),
+  // Kostnadsställe i ekonomisystem
+  costCenter: text("cost_center"),
+  // Projekt i ekonomisystem
+  projectCode: text("project_code"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -136,6 +149,77 @@ export const setupTimeLogs = pgTable("setup_time_logs", {
   category: text("category").default("other").notNull(),
   durationMinutes: integer("duration_minutes").notNull(),
   notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Artiklar - tjänster, varor, kontroller etc.
+export const articles = pgTable("articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  articleNumber: text("article_number").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // felanmalan, tjanst, kontroll, vara, beroende
+  articleType: text("article_type").default("tjanst").notNull(),
+  // Vilka objekttyper artikeln kan kopplas till (t.ex. ["matavfall", "atervinning"])
+  objectTypes: text("object_types").array().default([]),
+  // Produktionstid i minuter
+  productionTime: integer("production_time").default(0),
+  // Kostnad (intern)
+  cost: integer("cost").default(0),
+  // Listpris (standard)
+  listPrice: integer("list_price").default(0),
+  // För varor: lagerplats
+  stockLocation: text("stock_location"),
+  // För beroende: antal minuter före huvuduppgift
+  dependencyMinutesBefore: integer("dependency_minutes_before"),
+  unit: text("unit").default("st"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+// Prislistor - generella, kundunikt eller rabattbrev
+export const priceLists = pgTable("price_lists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  // generell, kundunik, rabattbrev
+  priceListType: text("price_list_type").default("generell").notNull(),
+  // Om kundunik eller rabattbrev, koppla till kund
+  customerId: varchar("customer_id").references(() => customers.id),
+  // För rabattbrev: procentuell rabatt
+  discountPercent: integer("discount_percent"),
+  // Prioritet (högre = överskrider lägre)
+  priority: integer("priority").default(1),
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
+// Koppling prislista <-> artikel med specifikt pris
+export const priceListArticles = pgTable("price_list_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  priceListId: varchar("price_list_id").references(() => priceLists.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  // Nettopris i denna prislista (överskrider listPrice)
+  price: integer("price").notNull(),
+  // Ev justerad produktionstid för denna prislista
+  productionTime: integer("production_time"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Utförare tidsverk - vilka artiklar en utförare kan utföra
+export const resourceArticles = pgTable("resource_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  // Justerad produktionstid för denna utförare
+  productionTime: integer("production_time"),
+  // Effektivitetsfaktor (1.0 = normal, 0.8 = snabbare, 1.2 = långsammare)
+  efficiencyFactor: real("efficiency_factor").default(1.0),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -196,6 +280,29 @@ export const resourcesRelations = relations(resources, ({ one, many }) => ({
   tenant: one(tenants, { fields: [resources.tenantId], references: [tenants.id] }),
   user: one(users, { fields: [resources.userId], references: [users.id] }),
   workOrders: many(workOrders),
+  resourceArticles: many(resourceArticles),
+}));
+
+export const articlesRelations = relations(articles, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [articles.tenantId], references: [tenants.id] }),
+  priceListArticles: many(priceListArticles),
+  resourceArticles: many(resourceArticles),
+}));
+
+export const priceListsRelations = relations(priceLists, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [priceLists.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [priceLists.customerId], references: [customers.id] }),
+  priceListArticles: many(priceListArticles),
+}));
+
+export const priceListArticlesRelations = relations(priceListArticles, ({ one }) => ({
+  priceList: one(priceLists, { fields: [priceListArticles.priceListId], references: [priceLists.id] }),
+  article: one(articles, { fields: [priceListArticles.articleId], references: [articles.id] }),
+}));
+
+export const resourceArticlesRelations = relations(resourceArticles, ({ one }) => ({
+  resource: one(resources, { fields: [resourceArticles.resourceId], references: [resources.id] }),
+  article: one(articles, { fields: [resourceArticles.articleId], references: [articles.id] }),
 }));
 
 export const workOrdersRelations = relations(workOrders, ({ one }) => ({
@@ -213,6 +320,10 @@ export const insertResourceSchema = createInsertSchema(resources).omit({ id: tru
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
 export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });
 export const insertProcurementSchema = createInsertSchema(procurements).omit({ id: true, createdAt: true });
+export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true });
+export const insertPriceListSchema = createInsertSchema(priceLists).omit({ id: true, createdAt: true });
+export const insertPriceListArticleSchema = createInsertSchema(priceListArticles).omit({ id: true, createdAt: true });
+export const insertResourceArticleSchema = createInsertSchema(resourceArticles).omit({ id: true, createdAt: true });
 
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
@@ -234,3 +345,11 @@ export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;
 export type InsertSetupTimeLog = z.infer<typeof insertSetupTimeLogSchema>;
 export type Procurement = typeof procurements.$inferSelect;
 export type InsertProcurement = z.infer<typeof insertProcurementSchema>;
+export type Article = typeof articles.$inferSelect;
+export type InsertArticle = z.infer<typeof insertArticleSchema>;
+export type PriceList = typeof priceLists.$inferSelect;
+export type InsertPriceList = z.infer<typeof insertPriceListSchema>;
+export type PriceListArticle = typeof priceListArticles.$inferSelect;
+export type InsertPriceListArticle = z.infer<typeof insertPriceListArticleSchema>;
+export type ResourceArticle = typeof resourceArticles.$inferSelect;
+export type InsertResourceArticle = z.infer<typeof insertResourceArticleSchema>;

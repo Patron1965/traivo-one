@@ -3,7 +3,8 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
-  insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema 
+  insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema,
+  insertArticleSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
@@ -1129,6 +1130,198 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Modus events import error:", error);
       res.status(500).json({ error: "Modus events import misslyckades" });
+    }
+  });
+
+  // ============== ARTICLES ==============
+  app.get("/api/articles", async (req, res) => {
+    try {
+      const articles = await storage.getArticles(DEFAULT_TENANT_ID);
+      res.json(articles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch articles" });
+    }
+  });
+
+  app.get("/api/articles/:id", async (req, res) => {
+    try {
+      const article = await storage.getArticle(req.params.id);
+      if (!article) return res.status(404).json({ error: "Article not found" });
+      res.json(article);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch article" });
+    }
+  });
+
+  app.post("/api/articles", async (req, res) => {
+    try {
+      const data = insertArticleSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const article = await storage.createArticle(data);
+      res.status(201).json(article);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create article" });
+    }
+  });
+
+  app.patch("/api/articles/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const article = await storage.updateArticle(req.params.id, updateData);
+      if (!article) return res.status(404).json({ error: "Article not found" });
+      res.json(article);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update article" });
+    }
+  });
+
+  app.delete("/api/articles/:id", async (req, res) => {
+    try {
+      await storage.deleteArticle(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete article" });
+    }
+  });
+
+  // ============== PRICE LISTS ==============
+  app.get("/api/price-lists", async (req, res) => {
+    try {
+      const priceLists = await storage.getPriceLists(DEFAULT_TENANT_ID);
+      res.json(priceLists);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch price lists" });
+    }
+  });
+
+  app.get("/api/price-lists/:id", async (req, res) => {
+    try {
+      const priceList = await storage.getPriceList(req.params.id);
+      if (!priceList) return res.status(404).json({ error: "Price list not found" });
+      res.json(priceList);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch price list" });
+    }
+  });
+
+  app.post("/api/price-lists", async (req, res) => {
+    try {
+      const data = insertPriceListSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const priceList = await storage.createPriceList(data);
+      res.status(201).json(priceList);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create price list" });
+    }
+  });
+
+  app.patch("/api/price-lists/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const priceList = await storage.updatePriceList(req.params.id, updateData);
+      if (!priceList) return res.status(404).json({ error: "Price list not found" });
+      res.json(priceList);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update price list" });
+    }
+  });
+
+  app.delete("/api/price-lists/:id", async (req, res) => {
+    try {
+      await storage.deletePriceList(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete price list" });
+    }
+  });
+
+  // ============== PRICE LIST ARTICLES ==============
+  app.get("/api/price-lists/:priceListId/articles", async (req, res) => {
+    try {
+      const priceListArticles = await storage.getPriceListArticles(req.params.priceListId);
+      res.json(priceListArticles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch price list articles" });
+    }
+  });
+
+  app.post("/api/price-lists/:priceListId/articles", async (req, res) => {
+    try {
+      const data = insertPriceListArticleSchema.parse({ ...req.body, priceListId: req.params.priceListId });
+      const priceListArticle = await storage.createPriceListArticle(data);
+      res.status(201).json(priceListArticle);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create price list article" });
+    }
+  });
+
+  app.patch("/api/price-list-articles/:id", async (req, res) => {
+    try {
+      const { id, priceListId, articleId, createdAt, ...updateData } = req.body;
+      const priceListArticle = await storage.updatePriceListArticle(req.params.id, updateData);
+      if (!priceListArticle) return res.status(404).json({ error: "Price list article not found" });
+      res.json(priceListArticle);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update price list article" });
+    }
+  });
+
+  app.delete("/api/price-list-articles/:id", async (req, res) => {
+    try {
+      await storage.deletePriceListArticle(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete price list article" });
+    }
+  });
+
+  // ============== RESOURCE ARTICLES (TIDSVERK) ==============
+  app.get("/api/resources/:resourceId/articles", async (req, res) => {
+    try {
+      const resourceArticles = await storage.getResourceArticles(req.params.resourceId);
+      res.json(resourceArticles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch resource articles" });
+    }
+  });
+
+  app.post("/api/resources/:resourceId/articles", async (req, res) => {
+    try {
+      const data = insertResourceArticleSchema.parse({ ...req.body, resourceId: req.params.resourceId });
+      const resourceArticle = await storage.createResourceArticle(data);
+      res.status(201).json(resourceArticle);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create resource article" });
+    }
+  });
+
+  app.patch("/api/resource-articles/:id", async (req, res) => {
+    try {
+      const { id, resourceId, articleId, createdAt, ...updateData } = req.body;
+      const resourceArticle = await storage.updateResourceArticle(req.params.id, updateData);
+      if (!resourceArticle) return res.status(404).json({ error: "Resource article not found" });
+      res.json(resourceArticle);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update resource article" });
+    }
+  });
+
+  app.delete("/api/resource-articles/:id", async (req, res) => {
+    try {
+      await storage.deleteResourceArticle(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete resource article" });
     }
   });
 
