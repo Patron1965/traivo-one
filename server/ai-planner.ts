@@ -1094,3 +1094,197 @@ export async function generatePredictivePlanning(
     weeksAnalyzed: totalWeeksData
   };
 }
+
+// --- Automatisk Klusterbildning ---
+
+export interface ClusterSuggestion {
+  id: string;
+  suggestedName: string;
+  postalCodes: string[];
+  centerLatitude: number;
+  centerLongitude: number;
+  radiusKm: number;
+  objectCount: number;
+  estimatedMonthlyOrders: number;
+  rationale: string;
+  color: string;
+}
+
+export interface AutoClusterResult {
+  suggestions: ClusterSuggestion[];
+  unclusteredObjects: { id: string; name: string; postalCode: string }[];
+  summary: string;
+  coverage: number;
+}
+
+interface ObjectGeoData {
+  id: string;
+  name: string;
+  latitude: number | null;
+  longitude: number | null;
+  postalCode: string | null;
+  city: string | null;
+}
+
+const CLUSTER_COLORS = [
+  "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
+  "#06B6D4", "#EC4899", "#84CC16", "#F97316", "#6366F1"
+];
+
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + 
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+    Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function groupByPostalCodePrefix(objects: ObjectGeoData[]): Map<string, ObjectGeoData[]> {
+  const groups = new Map<string, ObjectGeoData[]>();
+  objects.forEach(obj => {
+    if (!obj.postalCode) return;
+    const prefix = obj.postalCode.substring(0, 3);
+    if (!groups.has(prefix)) {
+      groups.set(prefix, []);
+    }
+    groups.get(prefix)!.push(obj);
+  });
+  return groups;
+}
+
+function calculateCenter(objects: ObjectGeoData[]): { lat: number; lng: number } {
+  const validObjects = objects.filter(o => o.latitude && o.longitude);
+  if (validObjects.length === 0) return { lat: 59.3293, lng: 18.0686 };
+  
+  const sumLat = validObjects.reduce((sum, o) => sum + (o.latitude || 0), 0);
+  const sumLng = validObjects.reduce((sum, o) => sum + (o.longitude || 0), 0);
+  return {
+    lat: sumLat / validObjects.length,
+    lng: sumLng / validObjects.length
+  };
+}
+
+function calculateRadius(objects: ObjectGeoData[], center: { lat: number; lng: number }): number {
+  const validObjects = objects.filter(o => o.latitude && o.longitude);
+  if (validObjects.length === 0) return 5;
+  
+  let maxDist = 0;
+  validObjects.forEach(obj => {
+    const dist = haversineDistance(center.lat, center.lng, obj.latitude!, obj.longitude!);
+    if (dist > maxDist) maxDist = dist;
+  });
+  return Math.max(1, Math.ceil(maxDist * 1.1));
+}
+
+export async function generateAutoClusterSuggestions(
+  objects: ServiceObject[],
+  existingClusters: Cluster[],
+  targetClusterSize: number = 50
+): Promise<AutoClusterResult> {
+  const geoObjects: ObjectGeoData[] = objects.map(o => ({
+    id: o.id,
+    name: o.name,
+    latitude: o.latitude,
+    longitude: o.longitude,
+    postalCode: o.postalCode,
+    city: o.city
+  }));
+  
+  const objectsWithPostalCode = geoObjects.filter(o => o.postalCode);
+  const objectsWithoutPostalCode = geoObjects.filter(o => !o.postalCode);
+  
+  const existingPostalCodes = new Set<string>();
+  existingClusters.forEach(c => {
+    (c.postalCodes || []).forEach(pc => existingPostalCodes.add(pc));
+  });
+  
+  const unassignedObjects = objectsWithPostalCode.filter(
+    o => !existingPostalCodes.has(o.postalCode!)
+  );
+  
+  if (unassignedObjects.length === 0) {
+    return {
+      suggestions: [],
+      unclusteredObjects: objectsWithoutPostalCode.map(o => ({
+        id: o.id,
+        name: o.name,
+        postalCode: ""
+      })),
+      summary: "Alla objekt med postnummer är redan tilldelade kluster.",
+      coverage: (objectsWithPostalCode.length / geoObjects.length) * 100
+    };
+  }
+  
+  const postalGroups = groupByPostalCodePrefix(unassignedObjects);
+  const suggestions: ClusterSuggestion[] = [];
+  let colorIndex = 0;
+  
+  postalGroups.forEach((groupObjects, prefix) => {
+    if (groupObjects.length < 3) return;
+    
+    const postalCodes = [...new Set(groupObjects.map(o => o.postalCode!))];
+    const center = calculateCenter(groupObjects);
+    const radius = calculateRadius(groupObjects, center);
+    
+    const cityCount = new Map<string, number>();
+    groupObjects.forEach(o => {
+      if (o.city) {
+        cityCount.set(o.city, (cityCount.get(o.city) || 0) + 1);
+      }
+    });
+    const dominantCity = [...cityCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "Okänd";
+    
+    const suggestedName = `${dominantCity} ${prefix}`;
+    
+    suggestions.push({
+      id: `suggestion-${prefix}-${Date.now()}`,
+      suggestedName,
+      postalCodes,
+      centerLatitude: center.lat,
+      centerLongitude: center.lng,
+      radiusKm: radius,
+      objectCount: groupObjects.length,
+      estimatedMonthlyOrders: Math.round(groupObjects.length * 4),
+      rationale: `${groupObjects.length} objekt i postnummerområde ${prefix}xx. Geografiskt sammanhängande med ${postalCodes.length} unika postnummer.`,
+      color: CLUSTER_COLORS[colorIndex % CLUSTER_COLORS.length]
+    });
+    colorIndex++;
+  });
+  
+  suggestions.sort((a, b) => b.objectCount - a.objectCount);
+  
+  const unassignedWithSmallGroups = unassignedObjects.filter(o => {
+    const prefix = o.postalCode?.substring(0, 3);
+    const group = postalGroups.get(prefix || "");
+    return !group || group.length < 3;
+  });
+  
+  const unclusteredObjects = [
+    ...objectsWithoutPostalCode,
+    ...unassignedWithSmallGroups
+  ].map(o => ({
+    id: o.id,
+    name: o.name,
+    postalCode: o.postalCode || ""
+  }));
+  
+  const assignedCount = suggestions.reduce((sum, s) => sum + s.objectCount, 0);
+  const alreadyAssignedCount = objectsWithPostalCode.length - unassignedObjects.length;
+  const newlyAssignedCount = unassignedObjects.length - unassignedWithSmallGroups.length;
+  const totalAssigned = alreadyAssignedCount + newlyAssignedCount;
+  const coverage = geoObjects.length > 0 
+    ? (totalAssigned / geoObjects.length) * 100
+    : 0;
+  
+  return {
+    suggestions,
+    unclusteredObjects,
+    summary: suggestions.length > 0
+      ? `Föreslår ${suggestions.length} nya kluster baserat på ${assignedCount} objekt. ${unclusteredObjects.length} objekt kvar utan klustertillhörighet.`
+      : "Kunde inte generera klusterförslag. Kontrollera att objekten har korrekta postnummer och koordinater.",
+    coverage: Math.round(coverage)
+  };
+}

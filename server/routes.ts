@@ -2612,6 +2612,80 @@ export async function registerRoutes(
     }
   });
 
+  // AI Auto-Clustering - Föreslå optimala klustergränser
+  app.get("/api/ai/auto-cluster", async (req, res) => {
+    try {
+      const targetSize = parseInt(req.query.targetSize as string) || 50;
+      
+      const { generateAutoClusterSuggestions } = await import("./ai-planner");
+      const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+      const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
+      
+      const result = await generateAutoClusterSuggestions(objects, clusters, targetSize);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Auto-cluster error:", error);
+      res.status(500).json({ error: "Kunde inte generera klusterförslag" });
+    }
+  });
+
+  // Skapa kluster från AI-förslag
+  app.post("/api/ai/auto-cluster/apply", async (req, res) => {
+    try {
+      const { suggestions } = req.body;
+      
+      if (!suggestions || !Array.isArray(suggestions) || suggestions.length === 0) {
+        return res.status(400).json({ error: "Inga förslag att tillämpa" });
+      }
+      
+      const createdClusters = [];
+      const errors: string[] = [];
+      
+      for (const suggestion of suggestions) {
+        if (!suggestion.suggestedName || typeof suggestion.suggestedName !== "string") {
+          errors.push("Saknar eller ogiltigt klusternamn");
+          continue;
+        }
+        if (!Array.isArray(suggestion.postalCodes) || suggestion.postalCodes.length === 0) {
+          errors.push(`${suggestion.suggestedName}: Saknar postnummer`);
+          continue;
+        }
+        
+        try {
+          const cluster = await storage.createCluster({
+            tenantId: DEFAULT_TENANT_ID,
+            name: String(suggestion.suggestedName).trim(),
+            description: String(suggestion.rationale || "").trim() || null,
+            centerLatitude: typeof suggestion.centerLatitude === "number" ? suggestion.centerLatitude : null,
+            centerLongitude: typeof suggestion.centerLongitude === "number" ? suggestion.centerLongitude : null,
+            radiusKm: typeof suggestion.radiusKm === "number" ? suggestion.radiusKm : 5,
+            postalCodes: suggestion.postalCodes.map((pc: unknown) => String(pc)),
+            color: typeof suggestion.color === "string" ? suggestion.color : "#3B82F6",
+            slaLevel: "standard",
+            defaultPeriodicity: "vecka",
+            status: "active"
+          });
+          createdClusters.push(cluster);
+        } catch (err) {
+          errors.push(`${suggestion.suggestedName}: Kunde inte skapa kluster`);
+        }
+      }
+      
+      res.json({ 
+        success: createdClusters.length > 0, 
+        message: errors.length > 0
+          ? `Skapade ${createdClusters.length} kluster. ${errors.length} fel uppstod.`
+          : `Skapade ${createdClusters.length} nya kluster.`,
+        clusters: createdClusters,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error) {
+      console.error("Apply auto-cluster error:", error);
+      res.status(500).json({ error: "Kunde inte skapa kluster" });
+    }
+  });
+
   // Delete all data (for re-import)
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {
