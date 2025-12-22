@@ -129,11 +129,11 @@ export default function OrderStockPage() {
     mutationFn: async ({ workOrderId, articleId, quantity }: { workOrderId: string; articleId: string; quantity: number }) => {
       return apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, { articleId, quantity });
     },
-    onSuccess: () => {
-      refetchLines();
+    onSuccess: async () => {
       toast({ title: "Artikel tillagd" });
       setSelectedArticleId("");
       setLineQuantity(1);
+      await refetchLines();
     },
     onError: () => {
       toast({ title: "Kunde inte lägga till artikel", variant: "destructive" });
@@ -144,9 +144,9 @@ export default function OrderStockPage() {
     mutationFn: async (lineId: string) => {
       return apiRequest("DELETE", `/api/work-order-lines/${lineId}`);
     },
-    onSuccess: () => {
-      refetchLines();
+    onSuccess: async () => {
       toast({ title: "Artikel borttagen" });
+      await refetchLines();
     },
     onError: () => {
       toast({ title: "Kunde inte ta bort artikel", variant: "destructive" });
@@ -553,18 +553,11 @@ export default function OrderStockPage() {
             </Button>
             <Button
               onClick={() => {
-                console.log('Bekräfta clicked', { selectedOrder, isPending: statusMutation.isPending });
                 if (selectedOrder) {
                   const nextStatus = getNextStatus((selectedOrder.orderStatus || 'skapad') as OrderStatus);
-                  console.log('Next status:', nextStatus, 'from current:', selectedOrder.orderStatus);
                   if (nextStatus) {
-                    console.log('Calling mutation with:', { orderId: selectedOrder.id, status: nextStatus });
                     statusMutation.mutate({ orderId: selectedOrder.id, status: nextStatus });
-                  } else {
-                    console.log('No next status available - order might be at final status');
                   }
-                } else {
-                  console.log('No selected order!');
                 }
               }}
               disabled={statusMutation.isPending}
