@@ -9,7 +9,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { 
   Clock, TrendingUp, Users, Briefcase, AlertCircle, Lightbulb, 
   ArrowUpRight, ArrowDownRight, Loader2, MapPin, Building2, AlertTriangle,
-  ChevronRight, Calendar, CircleDollarSign, Package, Target, FileText
+  ChevronRight, Calendar, CircleDollarSign, Package, Target, FileText,
+  Sparkles, Brain, Route, Zap, MessageSquare, BarChart3, Cpu, Shield
 } from "lucide-react";
 import { Link } from "wouter";
 import { 
@@ -1099,6 +1100,124 @@ export function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      {/* AI-möjligheter för framtida utveckling */}
+      <Card className="border-dashed border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Sparkles className="h-4 w-4 text-primary" />
+            AI-möjligheter - Framtida utveckling
+          </CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Potentiella AI-funktioner som kan integreras för att ytterligare optimera er verksamhet
+          </p>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <AICapabilityCard
+              icon={Route}
+              title="Smart ruttoptimering"
+              description="AI analyserar trafikmönster, väder och historisk data för att skapa optimala rutter som sparar 15-25% körtid."
+              impact="Besparingar: 2-4h per dag och resurs"
+              status="planned"
+            />
+            <AICapabilityCard
+              icon={Brain}
+              title="Prediktiv schemaläggning"
+              description="Förutse vilka objekt som behöver service baserat på historiska mönster och säsongsvariationer."
+              impact="Minska akutjobb med 40%"
+              status="planned"
+            />
+            <AICapabilityCard
+              icon={Zap}
+              title="Automatisk ställtidsreducering"
+              description="AI identifierar mönster i ställtidsdata och föreslår åtgärder för att minska väntetider."
+              impact="Reducera ställtid med 30%"
+              status="planned"
+            />
+            <AICapabilityCard
+              icon={MessageSquare}
+              title="AI-assisterad kundkommunikation"
+              description="Automatiska SMS/email med exakta ankomsttider och statusuppdateringar till kunder."
+              impact="Förbättrad kundnöjdhet"
+              status="planned"
+            />
+            <AICapabilityCard
+              icon={BarChart3}
+              title="Intelligent resursallokering"
+              description="AI fördelar resurser baserat på kompetens, geografiskt läge och arbetsbelastning."
+              impact="Jämnare beläggning"
+              status="planned"
+            />
+            <AICapabilityCard
+              icon={Cpu}
+              title="Automatisk datarensning"
+              description="AI validerar och korrigerar adresser, koordinater och kunddata automatiskt."
+              impact="Färre fältfel"
+              status="planned"
+            />
+            <AICapabilityCard
+              icon={Shield}
+              title="Anomalidetektering"
+              description="Upptäck ovanliga mönster i tid, kostnader eller kundklagomål innan de blir problem."
+              impact="Proaktiv problemlösning"
+              status="planned"
+            />
+            <AICapabilityCard
+              icon={TrendingUp}
+              title="Prognos och budgetering"
+              description="AI-baserade prognoser för arbetsbörda, intäkter och kostnader per månad/kvartal."
+              impact="Bättre planering"
+              status="planned"
+            />
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+interface AICapabilityCardProps {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+  impact: string;
+  status: "active" | "planned" | "coming";
+}
+
+function AICapabilityCard({ icon: Icon, title, description, impact, status }: AICapabilityCardProps) {
+  const statusLabels = {
+    active: "Aktiv",
+    planned: "Planerad",
+    coming: "Kommer snart"
+  };
+  
+  const statusColors = {
+    active: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
+    planned: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    coming: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"
+  };
+
+  return (
+    <div className="p-4 rounded-md bg-card border hover-elevate">
+      <div className="flex items-start gap-3">
+        <div className="p-2 rounded-md bg-primary/10">
+          <Icon className="h-5 w-5 text-primary" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <h4 className="font-medium text-sm">{title}</h4>
+            <Badge variant="secondary" className={`text-[10px] ${statusColors[status]}`}>
+              {statusLabels[status]}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mb-2">{description}</p>
+          <div className="flex items-center gap-1 text-xs font-medium text-primary">
+            <Sparkles className="h-3 w-3" />
+            {impact}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
