@@ -128,8 +128,6 @@ export default function OrderStockPage() {
     },
     onSuccess: () => {
       refetchLines();
-      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ title: "Artikel tillagd" });
       setSelectedArticleId("");
       setLineQuantity(1);
@@ -145,8 +143,6 @@ export default function OrderStockPage() {
     },
     onSuccess: () => {
       refetchLines();
-      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ title: "Artikel borttagen" });
     },
     onError: () => {
@@ -207,6 +203,7 @@ export default function OrderStockPage() {
   const handleCloseLinesDialog = () => {
     setShowLinesDialog(false);
     setSelectedOrderForLines(null);
+    queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
   };
 
   const handleAddLine = () => {
