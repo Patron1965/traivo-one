@@ -1,11 +1,21 @@
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import {
   Dialog,
   DialogContent,
@@ -31,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Plus,
   Search,
@@ -46,11 +57,16 @@ import {
   ChevronRight,
   Target,
   Users,
+  List,
+  Map,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import type { Cluster, Team } from "@shared/schema";
 
 const SLA_LEVELS = [
@@ -59,44 +75,94 @@ const SLA_LEVELS = [
   { value: "enterprise", label: "Enterprise", color: "bg-purple-500/20 text-purple-700 dark:text-purple-300" },
 ];
 
-interface ClusterFormData {
-  name: string;
-  description: string;
-  centerLatitude: string;
-  centerLongitude: string;
-  radiusKm: string;
-  postalCodes: string;
-  slaLevel: string;
-  primaryTeamId: string;
-}
-
-const emptyFormData: ClusterFormData = {
-  name: "",
-  description: "",
-  centerLatitude: "",
-  centerLongitude: "",
-  radiusKm: "5",
-  postalCodes: "",
-  slaLevel: "standard",
-  primaryTeamId: "",
+const SLA_COLORS: Record<string, string> = {
+  standard: "#6b7280",
+  premium: "#3b82f6",
+  enterprise: "#a855f7",
 };
 
-interface ClusterWithStats extends Cluster {
-  objectCount: number;
-  activeOrders: number;
-  monthlyValue: number;
-  avgSetupTime: number;
+const clusterFormSchema = z.object({
+  name: z.string().min(1, "Namn krävs"),
+  description: z.string().optional(),
+  centerLatitude: z.string().optional(),
+  centerLongitude: z.string().optional(),
+  radiusKm: z.string().optional(),
+  postalCodes: z.string().optional(),
+  slaLevel: z.string().default("standard"),
+  primaryTeamId: z.string().optional(),
+});
+
+type ClusterFormValues = z.infer<typeof clusterFormSchema>;
+
+const createClusterIcon = (color: string) => {
+  return L.divIcon({
+    className: "custom-cluster-marker",
+    html: `<div style="
+      background-color: ${color};
+      color: white;
+      border-radius: 50%;
+      width: 32px;
+      height: 32px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 14px;
+      border: 3px solid white;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    "><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></div>`,
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+  });
+};
+
+interface MapFitBoundsProps {
+  clusters: Cluster[];
+}
+
+function MapFitBounds({ clusters }: MapFitBoundsProps) {
+  const map = useMap();
+  
+  useEffect(() => {
+    const positions = clusters
+      .filter(c => c.centerLatitude && c.centerLongitude)
+      .map(c => L.latLng(c.centerLatitude!, c.centerLongitude!));
+    
+    if (positions.length > 0) {
+      const bounds = L.latLngBounds(positions);
+      map.fitBounds(bounds, { padding: [50, 50], maxZoom: 11 });
+    } else {
+      map.setView([59.3293, 18.0686], 10);
+    }
+  }, [map, clusters]);
+  
+  return null;
 }
 
 export default function ClustersPage() {
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"list" | "map">("list");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null);
   const [clusterToDelete, setClusterToDelete] = useState<Cluster | null>(null);
-  const [formData, setFormData] = useState<ClusterFormData>(emptyFormData);
+  const [selectedClusterId, setSelectedClusterId] = useState<string | null>(null);
+
+  const form = useForm<ClusterFormValues>({
+    resolver: zodResolver(clusterFormSchema),
+    defaultValues: {
+      name: "",
+      description: "",
+      centerLatitude: "",
+      centerLongitude: "",
+      radiusKm: "5",
+      postalCodes: "",
+      slaLevel: "standard",
+      primaryTeamId: "",
+    },
+  });
 
   const { data: clusters = [], isLoading, error } = useQuery<Cluster[]>({
     queryKey: ["/api/clusters"],
@@ -111,7 +177,7 @@ export default function ClustersPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clusters"] });
       setDialogOpen(false);
-      setFormData(emptyFormData);
+      form.reset();
       toast({ title: "Kluster skapat", description: "Klustret har lagts till" });
     },
     onError: () => {
@@ -126,7 +192,7 @@ export default function ClustersPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/clusters"] });
       setDialogOpen(false);
       setEditingCluster(null);
-      setFormData(emptyFormData);
+      form.reset();
       toast({ title: "Kluster uppdaterat", description: "Ändringar har sparats" });
     },
     onError: () => {
@@ -160,13 +226,22 @@ export default function ClustersPage() {
 
   const handleOpenCreate = () => {
     setEditingCluster(null);
-    setFormData(emptyFormData);
+    form.reset({
+      name: "",
+      description: "",
+      centerLatitude: "",
+      centerLongitude: "",
+      radiusKm: "5",
+      postalCodes: "",
+      slaLevel: "standard",
+      primaryTeamId: "",
+    });
     setDialogOpen(true);
   };
 
   const handleOpenEdit = (cluster: Cluster) => {
     setEditingCluster(cluster);
-    setFormData({
+    form.reset({
       name: cluster.name,
       description: cluster.description || "",
       centerLatitude: cluster.centerLatitude?.toString() || "",
@@ -179,18 +254,18 @@ export default function ClustersPage() {
     setDialogOpen(true);
   };
 
-  const handleSubmit = () => {
+  const onSubmit = (values: ClusterFormValues) => {
     const payload = {
-      name: formData.name,
-      description: formData.description || null,
-      centerLatitude: formData.centerLatitude ? parseFloat(formData.centerLatitude) : null,
-      centerLongitude: formData.centerLongitude ? parseFloat(formData.centerLongitude) : null,
-      radiusKm: formData.radiusKm ? parseFloat(formData.radiusKm) : null,
-      postalCodes: formData.postalCodes
-        ? formData.postalCodes.split(",").map((s) => s.trim()).filter(Boolean)
+      name: values.name,
+      description: values.description || null,
+      centerLatitude: values.centerLatitude ? parseFloat(values.centerLatitude) : null,
+      centerLongitude: values.centerLongitude ? parseFloat(values.centerLongitude) : null,
+      radiusKm: values.radiusKm ? parseFloat(values.radiusKm) : null,
+      postalCodes: values.postalCodes
+        ? values.postalCodes.split(",").map((s) => s.trim()).filter(Boolean)
         : null,
-      slaLevel: formData.slaLevel,
-      primaryTeamId: formData.primaryTeamId || null,
+      slaLevel: values.slaLevel,
+      primaryTeamId: values.primaryTeamId === "none" ? null : values.primaryTeamId || null,
     };
 
     if (editingCluster) {
@@ -219,6 +294,15 @@ export default function ClustersPage() {
     cluster.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const clustersWithCoordinates = useMemo(() => 
+    filteredClusters.filter(c => c.centerLatitude && c.centerLongitude),
+    [filteredClusters]
+  );
+
+  const selectedCluster = selectedClusterId 
+    ? clusters.find(c => c.id === selectedClusterId) 
+    : null;
+
   if (error) {
     return (
       <div className="p-6">
@@ -242,7 +326,7 @@ export default function ClustersPage() {
         </Button>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -253,6 +337,18 @@ export default function ClustersPage() {
             data-testid="input-search-clusters"
           />
         </div>
+        <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "map")}>
+          <TabsList>
+            <TabsTrigger value="list" data-testid="tab-list">
+              <List className="h-4 w-4 mr-1" />
+              Lista
+            </TabsTrigger>
+            <TabsTrigger value="map" data-testid="tab-map">
+              <Map className="h-4 w-4 mr-1" />
+              Karta
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       {isLoading ? (
@@ -273,6 +369,129 @@ export default function ClustersPage() {
             </Button>
           </CardContent>
         </Card>
+      ) : viewMode === "map" ? (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <Card className="overflow-hidden">
+              <CardContent className="p-0 h-[600px]">
+                <MapContainer
+                  center={[59.3293, 18.0686]}
+                  zoom={10}
+                  style={{ height: "100%", width: "100%" }}
+                  scrollWheelZoom={true}
+                >
+                  <TileLayer
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                  />
+                  <MapFitBounds clusters={clustersWithCoordinates} />
+                  {clustersWithCoordinates.map((cluster) => {
+                    const color = SLA_COLORS[cluster.slaLevel || "standard"] || SLA_COLORS.standard;
+                    return (
+                      <div key={cluster.id}>
+                        {cluster.radiusKm && (
+                          <Circle
+                            center={[cluster.centerLatitude!, cluster.centerLongitude!]}
+                            radius={cluster.radiusKm * 1000}
+                            pathOptions={{
+                              color: color,
+                              fillColor: color,
+                              fillOpacity: 0.15,
+                              weight: 2,
+                            }}
+                          />
+                        )}
+                        <Marker
+                          position={[cluster.centerLatitude!, cluster.centerLongitude!]}
+                          icon={createClusterIcon(color)}
+                          eventHandlers={{
+                            click: () => setSelectedClusterId(cluster.id),
+                          }}
+                        >
+                          <Popup>
+                            <div className="min-w-[200px]">
+                              <h3 className="font-semibold">{cluster.name}</h3>
+                              {cluster.description && (
+                                <p className="text-sm text-muted-foreground mt-1">
+                                  {cluster.description}
+                                </p>
+                              )}
+                              <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                                <div>{cluster.cachedObjectCount || 0} objekt</div>
+                                <div>{cluster.cachedActiveOrders || 0} ordrar</div>
+                              </div>
+                              <Button
+                                size="sm"
+                                className="mt-3 w-full"
+                                onClick={() => navigate(`/clusters/${cluster.id}`)}
+                              >
+                                Visa detaljer
+                              </Button>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      </div>
+                    );
+                  })}
+                </MapContainer>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            {filteredClusters.map((cluster) => {
+              const sla = getSlaInfo(cluster.slaLevel);
+              const isSelected = cluster.id === selectedClusterId;
+              return (
+                <Card
+                  key={cluster.id}
+                  className={`cursor-pointer hover-elevate ${isSelected ? "ring-2 ring-primary" : ""}`}
+                  onClick={() => setSelectedClusterId(cluster.id)}
+                  data-testid={`card-cluster-${cluster.id}`}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-medium truncate">{cluster.name}</p>
+                        <div className="flex items-center gap-2 mt-1 text-sm text-muted-foreground">
+                          <span>{cluster.cachedObjectCount || 0} objekt</span>
+                          <span className="text-xs">|</span>
+                          <span>{cluster.cachedActiveOrders || 0} ordrar</span>
+                        </div>
+                      </div>
+                      <Badge className={sla.color} variant="secondary">
+                        {sla.label}
+                      </Badge>
+                    </div>
+                    {isSelected && (
+                      <div className="mt-3 flex gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(cluster);
+                          }}
+                        >
+                          <Pencil className="h-3 w-3 mr-1" />
+                          Redigera
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/clusters/${cluster.id}`);
+                          }}
+                        >
+                          Visa snöret
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredClusters.map((cluster) => {
@@ -406,137 +625,194 @@ export default function ClustersPage() {
                 : "Skapa ett nytt geografiskt kluster"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Namn</Label>
-              <Input
-                id="name"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="t.ex. Södermalm Centrum"
-                data-testid="input-cluster-name"
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Namn</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="t.ex. Södermalm Centrum"
+                        data-testid="input-cluster-name"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="description">Beskrivning</Label>
-              <Textarea
-                id="description"
-                value={formData.description}
-                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                placeholder="Beskriv klustret..."
-                rows={2}
-                data-testid="input-cluster-description"
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Beskrivning</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        {...field}
+                        placeholder="Beskriv klustret..."
+                        rows={2}
+                        data-testid="input-cluster-description"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
               />
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="latitude">Latitud (centrum)</Label>
-                <Input
-                  id="latitude"
-                  type="number"
-                  step="any"
-                  value={formData.centerLatitude}
-                  onChange={(e) => setFormData({ ...formData, centerLatitude: e.target.value })}
-                  placeholder="59.3293"
-                  data-testid="input-cluster-latitude"
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="centerLatitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Latitud (centrum)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="any"
+                          placeholder="59.3293"
+                          data-testid="input-cluster-latitude"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="centerLongitude"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Longitud (centrum)</FormLabel>
+                      <FormControl>
+                        <Input
+                          {...field}
+                          type="number"
+                          step="any"
+                          placeholder="18.0686"
+                          data-testid="input-cluster-longitude"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="longitude">Longitud (centrum)</Label>
-                <Input
-                  id="longitude"
-                  type="number"
-                  step="any"
-                  value={formData.centerLongitude}
-                  onChange={(e) => setFormData({ ...formData, centerLongitude: e.target.value })}
-                  placeholder="18.0686"
-                  data-testid="input-cluster-longitude"
+
+              <FormField
+                control={form.control}
+                name="radiusKm"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Radie (km)</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        type="number"
+                        step="0.1"
+                        placeholder="5"
+                        data-testid="input-cluster-radius"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="postalCodes"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Postnummer (kommaseparerade)</FormLabel>
+                    <FormControl>
+                      <Input
+                        {...field}
+                        placeholder="15131, 15132, 15133"
+                        data-testid="input-cluster-postalcodes"
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="slaLevel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>SLA-nivå</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-cluster-sla">
+                            <SelectValue placeholder="Välj nivå" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {SLA_LEVELS.map((sla) => (
+                            <SelectItem key={sla.value} value={sla.value}>
+                              {sla.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="primaryTeamId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Ansvarigt team</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-cluster-team">
+                            <SelectValue placeholder="Välj team" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">Inget team</SelectItem>
+                          {teams.map((team) => (
+                            <SelectItem key={team.id} value={team.id}>
+                              {team.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="radius">Radie (km)</Label>
-              <Input
-                id="radius"
-                type="number"
-                step="0.1"
-                value={formData.radiusKm}
-                onChange={(e) => setFormData({ ...formData, radiusKm: e.target.value })}
-                placeholder="5"
-                data-testid="input-cluster-radius"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="postalCodes">Postnummer (kommaseparerade)</Label>
-              <Input
-                id="postalCodes"
-                value={formData.postalCodes}
-                onChange={(e) => setFormData({ ...formData, postalCodes: e.target.value })}
-                placeholder="15131, 15132, 15133"
-                data-testid="input-cluster-postalcodes"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>SLA-nivå</Label>
-                <Select
-                  value={formData.slaLevel}
-                  onValueChange={(value) => setFormData({ ...formData, slaLevel: value })}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                  Avbryt
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={createMutation.isPending || updateMutation.isPending}
+                  data-testid="button-save-cluster"
                 >
-                  <SelectTrigger data-testid="select-cluster-sla">
-                    <SelectValue placeholder="Välj nivå" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SLA_LEVELS.map((sla) => (
-                      <SelectItem key={sla.value} value={sla.value}>
-                        {sla.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Ansvarigt team</Label>
-                <Select
-                  value={formData.primaryTeamId}
-                  onValueChange={(value) => setFormData({ ...formData, primaryTeamId: value })}
-                >
-                  <SelectTrigger data-testid="select-cluster-team">
-                    <SelectValue placeholder="Välj team" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Inget team</SelectItem>
-                    {teams.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
-                        {team.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Avbryt
-            </Button>
-            <Button
-              onClick={handleSubmit}
-              disabled={!formData.name || createMutation.isPending || updateMutation.isPending}
-              data-testid="button-save-cluster"
-            >
-              {(createMutation.isPending || updateMutation.isPending) && (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              {editingCluster ? "Spara" : "Skapa"}
-            </Button>
-          </DialogFooter>
+                  {(createMutation.isPending || updateMutation.isPending) && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  {editingCluster ? "Spara" : "Skapa"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </Form>
         </DialogContent>
       </Dialog>
 
