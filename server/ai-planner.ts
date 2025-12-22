@@ -435,6 +435,191 @@ export async function autoScheduleOrders(
   };
 }
 
+// Arbetsobalans-analys - detekterar ojämn arbetsfördelning
+export interface WorkloadWarning {
+  id: string;
+  type: "overload" | "underload" | "imbalance" | "peak";
+  severity: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  affectedResourceId?: string;
+  affectedResourceName?: string;
+  affectedDate?: string;
+  suggestion: string;
+}
+
+export interface WorkloadAnalysis {
+  warnings: WorkloadWarning[];
+  overallBalance: number; // 0-100, 100 = perfekt balans
+  summary: string;
+}
+
+const MAX_HOURS_PER_DAY = 8;
+const MIN_HOURS_PER_DAY = 2;
+const IMBALANCE_THRESHOLD = 0.3; // 30% avvikelse anses som obalans
+
+export function analyzeWorkloadImbalances(context: PlanningContext): WorkloadAnalysis {
+  const warnings: WorkloadWarning[] = [];
+  
+  // Filtrera ordrar till den valda veckoperioden
+  const weekStartDate = new Date(context.weekStart);
+  const weekEndDate = new Date(context.weekEnd);
+  
+  const validOrders = context.workOrders.filter(o => {
+    if (o.status === "fakturerad" || o.status === "utford") return false;
+    if (!o.scheduledDate || !o.resourceId) return false;
+    
+    const orderDate = o.scheduledDate instanceof Date 
+      ? o.scheduledDate 
+      : new Date(String(o.scheduledDate));
+    
+    return orderDate >= weekStartDate && orderDate <= weekEndDate;
+  });
+  
+  // Beräkna belastning per resurs och dag
+  const resourceDayLoad: Record<string, Record<string, number>> = {};
+  const resourceTotalLoad: Record<string, number> = {};
+  const resourceNames: Record<string, string> = {};
+  
+  context.resources.forEach(r => {
+    resourceDayLoad[r.id] = {};
+    resourceTotalLoad[r.id] = 0;
+    resourceNames[r.id] = r.name;
+  });
+  
+  validOrders.forEach(order => {
+    if (!order.resourceId || !resourceDayLoad[order.resourceId]) return;
+    
+    const hours = getOrderDuration(order) / 60;
+    const day = order.scheduledDate instanceof Date 
+      ? order.scheduledDate.toISOString().split("T")[0] 
+      : String(order.scheduledDate);
+    
+    if (!resourceDayLoad[order.resourceId][day]) {
+      resourceDayLoad[order.resourceId][day] = 0;
+    }
+    resourceDayLoad[order.resourceId][day] += hours;
+    resourceTotalLoad[order.resourceId] += hours;
+  });
+  
+  // 1. Hitta överbelastade dagar (> MAX_HOURS_PER_DAY)
+  Object.entries(resourceDayLoad).forEach(([resourceId, days]) => {
+    Object.entries(days).forEach(([day, hours]) => {
+      if (hours > MAX_HOURS_PER_DAY) {
+        warnings.push({
+          id: `overload-${resourceId}-${day}`,
+          type: "overload",
+          severity: hours > MAX_HOURS_PER_DAY + 2 ? "high" : "medium",
+          title: `Överbelastad dag för ${resourceNames[resourceId]}`,
+          description: `${resourceNames[resourceId]} har ${hours.toFixed(1)} timmar schemalagda på ${day}, vilket överskrider maxgränsen på ${MAX_HOURS_PER_DAY}h.`,
+          affectedResourceId: resourceId,
+          affectedResourceName: resourceNames[resourceId],
+          affectedDate: day,
+          suggestion: `Flytta ${(hours - MAX_HOURS_PER_DAY).toFixed(1)}h arbete till en annan dag eller resurs.`
+        });
+      }
+    });
+  });
+  
+  // 2. Hitta underbelastade dagar med arbete (< MIN_HOURS_PER_DAY om det finns arbete)
+  Object.entries(resourceDayLoad).forEach(([resourceId, days]) => {
+    Object.entries(days).forEach(([day, hours]) => {
+      if (hours > 0 && hours < MIN_HOURS_PER_DAY) {
+        warnings.push({
+          id: `underload-${resourceId}-${day}`,
+          type: "underload",
+          severity: "low",
+          title: `Låg beläggning för ${resourceNames[resourceId]}`,
+          description: `${resourceNames[resourceId]} har bara ${hours.toFixed(1)}h schemalagda på ${day}.`,
+          affectedResourceId: resourceId,
+          affectedResourceName: resourceNames[resourceId],
+          affectedDate: day,
+          suggestion: "Överväg att konsolidera arbetet till färre dagar eller tilldela fler ordrar."
+        });
+      }
+    });
+  });
+  
+  // 3. Jämför total belastning mellan resurser
+  const totalLoads = Object.values(resourceTotalLoad);
+  if (totalLoads.length > 1 && totalLoads.some(h => h > 0)) {
+    const avgLoad = totalLoads.reduce((a, b) => a + b, 0) / totalLoads.length;
+    
+    Object.entries(resourceTotalLoad).forEach(([resourceId, hours]) => {
+      if (avgLoad > 0) {
+        const deviation = Math.abs(hours - avgLoad) / avgLoad;
+        if (deviation > IMBALANCE_THRESHOLD && hours > avgLoad) {
+          warnings.push({
+            id: `imbalance-high-${resourceId}`,
+            type: "imbalance",
+            severity: deviation > 0.5 ? "high" : "medium",
+            title: `Ojämn fördelning: ${resourceNames[resourceId]} har för mycket`,
+            description: `${resourceNames[resourceId]} har ${hours.toFixed(1)}h totalt, ${((deviation) * 100).toFixed(0)}% över genomsnittet (${avgLoad.toFixed(1)}h).`,
+            affectedResourceId: resourceId,
+            affectedResourceName: resourceNames[resourceId],
+            suggestion: "Fördela om arbetsordrar till resurser med lägre belastning."
+          });
+        } else if (deviation > IMBALANCE_THRESHOLD && hours < avgLoad) {
+          warnings.push({
+            id: `imbalance-low-${resourceId}`,
+            type: "imbalance",
+            severity: "low",
+            title: `Ojämn fördelning: ${resourceNames[resourceId]} har för lite`,
+            description: `${resourceNames[resourceId]} har ${hours.toFixed(1)}h totalt, ${((deviation) * 100).toFixed(0)}% under genomsnittet (${avgLoad.toFixed(1)}h).`,
+            affectedResourceId: resourceId,
+            affectedResourceName: resourceNames[resourceId],
+            suggestion: "Denna resurs har kapacitet att ta emot fler arbetsordrar."
+          });
+        }
+      }
+    });
+  }
+  
+  // 4. Hitta toppdagar (alla resurser har högt på samma dag)
+  const dayTotals: Record<string, number> = {};
+  Object.values(resourceDayLoad).forEach(days => {
+    Object.entries(days).forEach(([day, hours]) => {
+      if (!dayTotals[day]) dayTotals[day] = 0;
+      dayTotals[day] += hours;
+    });
+  });
+  
+  const avgDayTotal = Object.values(dayTotals).length > 0 
+    ? Object.values(dayTotals).reduce((a, b) => a + b, 0) / Object.values(dayTotals).length 
+    : 0;
+  
+  Object.entries(dayTotals).forEach(([day, hours]) => {
+    if (avgDayTotal > 0 && hours > avgDayTotal * 1.5) {
+      warnings.push({
+        id: `peak-${day}`,
+        type: "peak",
+        severity: "medium",
+        title: `Topptryck på ${day}`,
+        description: `Totalt ${hours.toFixed(1)}h planerat över alla resurser, ${((hours / avgDayTotal - 1) * 100).toFixed(0)}% över snitt.`,
+        affectedDate: day,
+        suggestion: "Överväg att sprida arbete till närliggande dagar för jämnare flöde."
+      });
+    }
+  });
+  
+  // Beräkna övergripande balans (100 = perfekt, 0 = totalt obalanserat)
+  const highWarnings = warnings.filter(w => w.severity === "high").length;
+  const mediumWarnings = warnings.filter(w => w.severity === "medium").length;
+  const lowWarnings = warnings.filter(w => w.severity === "low").length;
+  const overallBalance = Math.max(0, 100 - (highWarnings * 20) - (mediumWarnings * 10) - (lowWarnings * 5));
+  
+  return {
+    warnings: warnings.sort((a, b) => {
+      const severityOrder = { high: 0, medium: 1, low: 2 };
+      return severityOrder[a.severity] - severityOrder[b.severity];
+    }),
+    overallBalance,
+    summary: warnings.length === 0 
+      ? "Planeringen är välbalanserad utan varningar."
+      : `Hittade ${warnings.length} potentiella problem: ${highWarnings} allvarliga, ${mediumWarnings} medel, ${lowWarnings} mindre.`
+  };
+}
+
 // AI-förstärkt schemaläggning - använder GPT för att optimera ytterligare
 export async function aiEnhancedSchedule(
   context: PlanningContext

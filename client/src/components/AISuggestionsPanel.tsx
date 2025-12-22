@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp, Map } from "lucide-react";
+import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp, Map, AlertTriangle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -76,6 +76,24 @@ interface DayRouteOptimization {
   summary: string;
 }
 
+interface WorkloadWarning {
+  id: string;
+  type: "overload" | "underload" | "imbalance" | "peak";
+  severity: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  affectedResourceId?: string;
+  affectedResourceName?: string;
+  affectedDate?: string;
+  suggestion: string;
+}
+
+interface WorkloadAnalysis {
+  warnings: WorkloadWarning[];
+  overallBalance: number;
+  summary: string;
+}
+
 interface AISuggestionsPanelProps {
   weekStart: string;
   weekEnd: string;
@@ -105,7 +123,8 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
   const [showMapForRoute, setShowMapForRoute] = useState<string | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
-  const [activeTab, setActiveTab] = useState<"auto-schedule" | "routes" | "suggestions">("auto-schedule");
+  const [workloadAnalysis, setWorkloadAnalysis] = useState<WorkloadAnalysis | null>(null);
+  const [activeTab, setActiveTab] = useState<"auto-schedule" | "routes" | "suggestions" | "varningar">("auto-schedule");
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
@@ -246,6 +265,32 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
     },
   });
 
+  const workloadMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/ai/workload-analysis", {
+        weekStart,
+        weekEnd,
+      });
+      return response.json();
+    },
+    onSuccess: (data: WorkloadAnalysis) => {
+      setWorkloadAnalysis(data);
+      if (data.warnings.length === 0) {
+        toast({
+          title: "Ingen obalans",
+          description: "Arbetsbelastningen är välbalanserad!",
+        });
+      }
+    },
+    onError: () => {
+      toast({
+        title: "Fel",
+        description: "Kunde inte analysera arbetsbelastning.",
+        variant: "destructive",
+      });
+    },
+  });
+
   const dismissSuggestion = (id: string) => {
     setSuggestions((prev) => prev.filter((s) => s.id !== id));
   };
@@ -307,6 +352,21 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
           >
             <Sparkles className="h-3 w-3 mr-1" />
             Förslag
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === "varningar" ? "default" : "ghost"}
+            onClick={() => setActiveTab("varningar")}
+            className="text-xs"
+            data-testid="tab-varningar"
+          >
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Varningar
+            {workloadAnalysis && workloadAnalysis.warnings.length > 0 && (
+              <Badge variant="destructive" className="ml-1 h-4 px-1 text-xs">
+                {workloadAnalysis.warnings.length}
+              </Badge>
+            )}
           </Button>
         </div>
       </CardHeader>
@@ -704,6 +764,108 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                 </Card>
               );
             })}
+          </>
+        )}
+
+        {activeTab === "varningar" && (
+          <>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => workloadMutation.mutate()}
+              disabled={workloadMutation.isPending}
+              className="w-full"
+              data-testid="button-analyze-workload"
+            >
+              {workloadMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 mr-2" />
+              )}
+              Analysera arbetsbelastning
+            </Button>
+
+            {workloadMutation.isPending && (
+              <div className="text-center py-6">
+                <Loader2 className="h-8 w-8 mx-auto mb-2 animate-spin text-orange-500" />
+                <p className="text-sm text-muted-foreground">Analyserar balans...</p>
+              </div>
+            )}
+
+            {!workloadMutation.isPending && !workloadAnalysis && (
+              <div className="text-center py-6 text-muted-foreground">
+                <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Klicka för att hitta obalanser i planeringen</p>
+              </div>
+            )}
+
+            {workloadAnalysis && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between p-2 rounded bg-muted/50">
+                  <span className="text-sm font-medium">Balanspoäng</span>
+                  <div className="flex items-center gap-2">
+                    <Progress value={workloadAnalysis.overallBalance} className="w-16 h-2" />
+                    <span className={`text-sm font-bold ${
+                      workloadAnalysis.overallBalance >= 80 ? "text-green-600 dark:text-green-400" :
+                      workloadAnalysis.overallBalance >= 50 ? "text-yellow-600 dark:text-yellow-400" :
+                      "text-red-600 dark:text-red-400"
+                    }`}>
+                      {workloadAnalysis.overallBalance}%
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-xs text-muted-foreground">{workloadAnalysis.summary}</p>
+
+                {workloadAnalysis.warnings.length === 0 ? (
+                  <div className="text-center py-4 text-green-600 dark:text-green-400">
+                    <Check className="h-8 w-8 mx-auto mb-2" />
+                    <p className="text-sm font-medium">Planeringen är välbalanserad!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {workloadAnalysis.warnings.map((warning) => (
+                      <Card key={warning.id} className="p-3" data-testid={`warning-${warning.id}`}>
+                        <div className="space-y-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Badge 
+                                variant={warning.severity === "high" ? "destructive" : "outline"}
+                                className="text-xs"
+                              >
+                                {warning.severity === "high" ? "Allvarlig" : 
+                                 warning.severity === "medium" ? "Medel" : "Mindre"}
+                              </Badge>
+                              <Badge variant="secondary" className="text-xs">
+                                {warning.type === "overload" ? "Överbelastning" :
+                                 warning.type === "underload" ? "Underbelastning" :
+                                 warning.type === "imbalance" ? "Obalans" : "Topptryck"}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          <div>
+                            <h4 className="font-medium text-sm">{warning.title}</h4>
+                            <p className="text-xs text-muted-foreground mt-1">{warning.description}</p>
+                          </div>
+
+                          {warning.affectedDate && (
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                              <Calendar className="h-3 w-3" />
+                              {warning.affectedDate}
+                            </div>
+                          )}
+
+                          <div className="p-2 rounded bg-blue-500/10 text-xs text-blue-700 dark:text-blue-300">
+                            <strong>Förslag:</strong> {warning.suggestion}
+                          </div>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </>
         )}
       </CardContent>
