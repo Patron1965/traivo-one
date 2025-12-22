@@ -31,6 +31,28 @@ const DEFAULT_TENANT_ID = "default-tenant";
 
 async function ensureDefaultTenant() {
   let tenant = await storage.getTenant(DEFAULT_TENANT_ID);
+  if (!tenant) {
+    // Use db directly to set specific ID for default tenant with upsert to handle race conditions
+    const { db } = await import("./db");
+    const { tenants } = await import("@shared/schema");
+    const { sql } = await import("drizzle-orm");
+    
+    const [newTenant] = await db.insert(tenants).values({
+      id: DEFAULT_TENANT_ID,
+      name: "Kinab AB",
+      orgNumber: "556789-1234",
+      contactEmail: "info@kinab.se",
+      contactPhone: "+46701234567",
+      settings: {},
+    }).onConflictDoNothing({ target: tenants.id }).returning();
+    
+    if (newTenant) {
+      console.log("Created default tenant:", DEFAULT_TENANT_ID);
+      return newTenant;
+    }
+    // Another request created it - fetch it
+    return storage.getTenant(DEFAULT_TENANT_ID);
+  }
   return tenant;
 }
 

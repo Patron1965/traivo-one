@@ -149,7 +149,7 @@ export default function ResourcesPage() {
   });
 
   const { data: resourceArticles = [] } = useQuery<ResourceArticle[]>({
-    queryKey: [`/api/resources/${tidsverkResource?.id}/articles`],
+    queryKey: ['/api/resources', tidsverkResource?.id, 'articles'],
     enabled: !!tidsverkResource,
   });
 
@@ -250,7 +250,7 @@ export default function ResourcesPage() {
       });
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/resources/${variables.resourceId}/articles`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
       toast({ title: "Tidsverk tillagt" });
       setSelectedArticleId("");
       setEfficiencyFactor(1.0);
@@ -266,7 +266,7 @@ export default function ResourcesPage() {
       return apiRequest("DELETE", `/api/resource-articles/${data.id}`);
     },
     onSuccess: (_, variables) => {
-      queryClient.invalidateQueries({ queryKey: [`/api/resources/${variables.resourceId}/articles`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
       toast({ title: "Tidsverk borttaget" });
     },
     onError: () => {
