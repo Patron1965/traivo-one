@@ -33,6 +33,7 @@ import SetupTimeAnalysisPage from "@/pages/SetupTimeAnalysisPage";
 import PredictivePlanningPage from "@/pages/PredictivePlanningPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
 import AutoClusterPage from "@/pages/AutoClusterPage";
+import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -60,6 +61,7 @@ function Router() {
       <Route path="/predictive-planning" component={PredictivePlanningPage} />
       <Route path="/mobile" component={MobileFieldPage} />
       <Route path="/auto-cluster" component={AutoClusterPage} />
+      <Route path="/weather" component={WeatherPlanningPage} />
       <Route path="/import" component={ImportPage} />
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />

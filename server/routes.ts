@@ -2612,6 +2612,48 @@ export async function registerRoutes(
     }
   });
 
+  // Weather forecast for capacity planning
+  app.get("/api/weather/forecast", async (req, res) => {
+    try {
+      const latitude = parseFloat(req.query.latitude as string) || 59.3293;
+      const longitude = parseFloat(req.query.longitude as string) || 18.0686;
+      const days = parseInt(req.query.days as string) || 7;
+      
+      const { fetchWeatherForecast } = await import("./weather-service");
+      const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Weather forecast error:", error);
+      res.status(500).json({ error: "Kunde inte hämta väderprognos" });
+    }
+  });
+
+  // Weather impact for specific cluster
+  app.get("/api/weather/cluster/:clusterId", async (req, res) => {
+    try {
+      const cluster = await storage.getCluster(req.params.clusterId);
+      if (!cluster) {
+        return res.status(404).json({ error: "Kluster hittades inte" });
+      }
+      
+      const latitude = cluster.centerLatitude || 59.3293;
+      const longitude = cluster.centerLongitude || 18.0686;
+      const days = parseInt(req.query.days as string) || 7;
+      
+      const { fetchWeatherForecast } = await import("./weather-service");
+      const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
+      
+      res.json({
+        ...result,
+        location: { ...result.location, name: cluster.name }
+      });
+    } catch (error) {
+      console.error("Cluster weather error:", error);
+      res.status(500).json({ error: "Kunde inte hämta väderprognos för kluster" });
+    }
+  });
+
   // AI Auto-Clustering - Föreslå optimala klustergränser
   app.get("/api/ai/auto-cluster", async (req, res) => {
     try {
