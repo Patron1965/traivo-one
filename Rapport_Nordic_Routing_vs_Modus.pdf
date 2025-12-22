@@ -1,0 +1,838 @@
+%PDF-1.3
+%ºß¬à
+3 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 4 0 R
+>>
+endobj
+4 0 obj
+<<
+/Length 3878
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F2 16 Tf
+18.3999999999999986 TL
+0 g
+56.6929133858267775 771.0238582677164914 Td
+(Rapport: Nya funktioner i Nordic Routing) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 742.6774015748030706 Td
+(Jamforelse med Modus-systemets grunder) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 722.8348818897637784 Td
+(Datum: 2024-12-22) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 666.1419685039369369 Td
+(1. Kluster och Objekt - Objekthierarki) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 634.9608661417322537 Td
+(Modus:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 615.1183464566928478 Td
+(Hierarkisk tradstruktur \(Fastighet - Soprum - Karl\) med metadata som 'faller nedat') Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 581.1025984251967884 Td
+(Nordic Routing - Nytt:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 561.2600787401574962 Td
+(• Samma hierarkiska struktur implementerad \(Omrade - Fastighet - Rum\)) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 541.4175590551180903 Td
+(• Modus 2.0 CSV-import direkt in i systemet) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 521.5750393700786844 Td
+(• Automatisk kundkoppling vid import) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 501.7325196850393354 Td
+(• Tillgangsinformation \(kod, nyckel, oppet\) per objekt) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 481.8899999999999295 Td
+(• Containerrakning \(K1, K2, K3, K4\)) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 439.3703149606298552 Td
+(2. Utforare - Resurser, Team & Fordon) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 408.1892125984251152 Td
+(Modus:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 388.3466929133857661 Td
+(Medarbetare, fordon, tillganglighet, tidsverk, geografiska omraden) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 354.3309448818897067 Td
+(Nordic Routing - Nytt:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 334.4884251968503008 Td
+(• Resurser med kompetenser och hemposition) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 314.6459055118109518 Td
+(• Tidsverk - koppling mellan resurs och artiklar de kan utfora) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 294.8033858267715459 Td
+(• Team - gruppering av resurser med ledare och geografiskt omrade) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 274.9608661417322537 Td
+(• Fordon & Utrustning - komplett fordonshantering med servicesparing) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 255.1183464566928478 Td
+(• Tillganglighetssystem - planering av arbetstid, semester, sjukdom) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 212.5986614173227736 Td
+(3. Ordrar och Orderstock - Utokat statusflode) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 181.4175590551179766 Td
+(Modus:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 161.5750393700786844 Td
+(Skapa order - Planera - Utfor - Fakturera \(4 steg\)) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 127.559291338582625 Td
+(Nordic Routing - Nytt utokat flode \(6 steg\):) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 107.7167716535432191 Td
+(skapad - planerad_pre \(Team\) - planerad_resurs \(Resurs\) - planerad_las \(Last\) - utford - fakturerad) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 73.7010236220471597 Td
+(Nya funktioner:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 53.8585039370077538 Td
+(• Forplanering \(planerad_pre\) - tilldela team innan resurs) Tj
+ET
+endstream
+endobj
+5 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 6 0 R
+>>
+endobj
+6 0 obj
+<<
+/Length 3837
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(• Resursplanering \(planerad_resurs\) - tilldela specifik person) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 765.3545669291338527 Td
+(• Lasning \(planerad_las\) - forhindra andringar innan korning) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 745.5120472440944468 Td
+(• Planeringsdialog - valj team, resurs och datum i samma vy) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 725.6695275590550409 Td
+(• Simuleringsflage - testa scenarier utan att paverka livedata) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 683.1498425196850803 Td
+(4. Nytt: Abonnemangssystem) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 651.9687401574802834 Td
+(Modus:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 632.1262204724408775 Td
+(Ej specificerat) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 598.1104724409448181 Td
+(Nordic Routing - Helt nytt:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 578.2679527559055259 Td
+(• Abonnemangshantering med periodicitet) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 558.42543307086612 Td
+(• Periodicitet: Vecka, varannan vecka, manad, kvartal, halvar, ar) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 538.5829133858267141 Td
+(• Automatisk ordergenerering fran abonnemang) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 518.7403937007873083 Td
+(• Koppling till objekt och kund) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 498.8978740157479592 Td
+(• Start- och slutdatum) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 456.378188976377885 Td
+(5. Nytt: Produktionsstyrning \(SLA\)) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 425.1970866141731449 Td
+(Modus:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 405.3545669291337958 Td
+(Ej specificerat) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 371.3388188976377364 Td
+(Nordic Routing - Helt nytt:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 351.4962992125983874 Td
+(• SLA-nivaer: Standard, Premium, Express) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 331.6537795275589815 Td
+(• Tidsfonster: Morgon, formiddag, eftermiddag, kvall, heldag) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 311.8112598425195756 Td
+(• Veckodagsbegransningar - vilka dagar som ar tillatna) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 291.9687401574802834 Td
+(• Aviseringskrav - antal dagar fore besok) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 272.1262204724408775 Td
+(• Prioritetsfaktor - paverkar optimeringsordning) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 252.2837007874014716 Td
+(• Per kund eller per objekt) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 209.7640157480313974 Td
+(6. Nytt: Prissystem) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 178.5829133858267141 Td
+(Modus:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 158.7403937007873083 Td
+(Prislista per kund) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 124.7246456692912489 Td
+(Nordic Routing - Utokat:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 104.882125984251843 Td
+(• Tre-stegs prislista:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 85.0396062992125508 Td
+(  1. Generell prislista \(baspriser\)) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 65.1970866141731449 Td
+(  2. Kundspecifik prislista) Tj
+ET
+endstream
+endobj
+7 0 obj
+<</Type /Page
+/Parent 1 0 R
+/Resources 2 0 R
+/MediaBox [0 0 595.2799999999999727 841.8899999999999864]
+/Contents 8 0 R
+>>
+endobj
+8 0 obj
+<<
+/Length 3171
+>>
+stream
+0.5670000000000001 w
+0 G
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 785.1970866141732586 Td
+(  3. Rabattbrevspriser) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 765.3545669291338527 Td
+(• Automatisk prisupplosning vid orderrader) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 745.5120472440944468 Td
+(• Artikelhantering med produktionstid och kostnad) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 702.9923622047243725 Td
+(7. Nytt: Forberedelse for AI-optimering) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 671.8112598425196893 Td
+(Modus:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 651.9687401574802834 Td
+(Manuell planering) Tj
+ET
+BT
+/F2 12 Tf
+13.7999999999999989 TL
+0 g
+56.6929133858267775 617.952992125984224 Td
+(Nordic Routing - Forberett for:) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 598.1104724409448181 Td
+(• Infor Optimering-sida - validerar data fore optimering) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 578.2679527559055259 Td
+(• Stalltidsloggning - samlar in data for AI-traning) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 558.42543307086612 Td
+(• Dashboard med analys - visar verklig stalltidsdata) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 538.5829133858267141 Td
+(• Integration med extern Nordic Routing optimerings-API \(kommande\)) Tj
+ET
+BT
+/F2 14 Tf
+16.0999999999999979 TL
+0 g
+56.6929133858267775 481.8899999999999295 Td
+(Sammanfattning) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 447.8742519685038701 Td
+(Funktion                    | Modus    | Nordic Routing) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 428.0317322834645211 Td
+(--------------------------------------------------------) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 408.1892125984251152 Td
+(Objekthierarki              | Ja       | Ja + Import) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 388.3466929133857661 Td
+(Resurser                    | Ja       | Ja + Tidsverk) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 368.5041732283464171 Td
+(Fordon                      | Ja       | Ja + Service) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 348.6616535433070112 Td
+(Team                        | Begransad| Komplett) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 328.8191338582676053 Td
+(Orderflode                  | 4 steg   | 6 steg + Lasning) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 308.9766141732283131 Td
+(Abonnemang                  | Nej      | Nytt) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 289.1340944881889072 Td
+(SLA/Produktionsstyrning     | Nej      | Nytt) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 269.2915748031495013 Td
+(Prislistehierarki           | Enkel    | 3-stegs) Tj
+ET
+BT
+/F1 11 Tf
+12.6499999999999986 TL
+0 g
+56.6929133858267775 249.4490551181102092 Td
+(AI-optimering               | Nej      | Forberett) Tj
+ET
+endstream
+endobj
+1 0 obj
+<</Type /Pages
+/Kids [3 0 R 5 0 R 7 0 R ]
+/Count 3
+>>
+endobj
+9 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+10 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+11 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+12 0 obj
+<<
+/Type /Font
+/BaseFont /Helvetica-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+13 0 obj
+<<
+/Type /Font
+/BaseFont /Courier
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+14 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+15 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-Oblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+16 0 obj
+<<
+/Type /Font
+/BaseFont /Courier-BoldOblique
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+17 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Roman
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+18 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Bold
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+19 0 obj
+<<
+/Type /Font
+/BaseFont /Times-Italic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+20 0 obj
+<<
+/Type /Font
+/BaseFont /Times-BoldItalic
+/Subtype /Type1
+/Encoding /WinAnsiEncoding
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+21 0 obj
+<<
+/Type /Font
+/BaseFont /ZapfDingbats
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+22 0 obj
+<<
+/Type /Font
+/BaseFont /Symbol
+/Subtype /Type1
+/FirstChar 32
+/LastChar 255
+>>
+endobj
+2 0 obj
+<<
+/ProcSet [/PDF /Text /ImageB /ImageC /ImageI]
+/Font <<
+/F1 9 0 R
+/F2 10 0 R
+/F3 11 0 R
+/F4 12 0 R
+/F5 13 0 R
+/F6 14 0 R
+/F7 15 0 R
+/F8 16 0 R
+/F9 17 0 R
+/F10 18 0 R
+/F11 19 0 R
+/F12 20 0 R
+/F13 21 0 R
+/F14 22 0 R
+>>
+/XObject <<
+>>
+>>
+endobj
+23 0 obj
+<<
+/Producer (jsPDF 3.0.4)
+/CreationDate (D:20251222162920-00'00')
+>>
+endobj
+24 0 obj
+<<
+/Type /Catalog
+/Pages 1 0 R
+/OpenAction [3 0 R /FitH null]
+/PageLayout /OneColumn
+>>
+endobj
+xref
+0 25
+0000000000 65535 f 
+0000011468 00000 n 
+0000013301 00000 n 
+0000000015 00000 n 
+0000000152 00000 n 
+0000004082 00000 n 
+0000004219 00000 n 
+0000008108 00000 n 
+0000008245 00000 n 
+0000011537 00000 n 
+0000011662 00000 n 
+0000011793 00000 n 
+0000011927 00000 n 
+0000012065 00000 n 
+0000012189 00000 n 
+0000012318 00000 n 
+0000012450 00000 n 
+0000012586 00000 n 
+0000012714 00000 n 
+0000012841 00000 n 
+0000012970 00000 n 
+0000013103 00000 n 
+0000013205 00000 n 
+0000013553 00000 n 
+0000013639 00000 n 
+trailer
+<<
+/Size 25
+/Root 24 0 R
+/Info 23 0 R
+/ID [ <A3B11DDB19B95E2F5ACAB8959D2AF885> <A3B11DDB19B95E2F5ACAB8959D2AF885> ]
+>>
+startxref
+13743
+%%EOF
