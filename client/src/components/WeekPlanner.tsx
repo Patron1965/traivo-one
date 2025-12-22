@@ -103,7 +103,12 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   
   const updateWorkOrderMutation = useMutation({
     mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => {
-      const payload: Record<string, unknown> = { resourceId, scheduledDate, status: "scheduled" };
+      const payload: Record<string, unknown> = { 
+        resourceId, 
+        scheduledDate, 
+        status: "scheduled",
+        orderStatus: "planerad_resurs"
+      };
       if (scheduledStartTime) {
         payload.scheduledStartTime = scheduledStartTime;
       }
@@ -118,7 +123,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         if (!old) return old;
         return old.map(job => 
           job.id === id 
-            ? { ...job, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), status: "scheduled" as const }
+            ? { ...job, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), status: "scheduled" as const, orderStatus: "planerad_resurs" as const }
             : job
         );
       });
@@ -152,6 +157,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         scheduledDate: null,
         scheduledStartTime: null,
         status: "draft",
+        orderStatus: "skapad",
       });
       return response.json() as Promise<WorkOrderWithObject>;
     },
@@ -163,7 +169,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         if (!old) return old;
         return old.map(job => 
           job.id === id 
-            ? { ...job, resourceId: null, scheduledDate: null, scheduledStartTime: null, status: "draft" as const }
+            ? { ...job, resourceId: null, scheduledDate: null, scheduledStartTime: null, status: "draft" as const, orderStatus: "skapad" as const }
             : job
         );
       });

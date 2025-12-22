@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -79,6 +80,7 @@ const ORDERS_PER_PAGE = 50;
 
 export default function OrderStockPage() {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [includeSimulated, setIncludeSimulated] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
@@ -482,7 +484,20 @@ export default function OrderStockPage() {
                         <FileText className="h-4 w-4" />
                       </Button>
                       
-                      {nextStatus && (
+                      {(status === "skapad" || status === "planerad_pre") && (
+                        <Button
+                          size="sm"
+                          variant="default"
+                          onClick={() => setLocation("/")}
+                          className="gap-1"
+                          data-testid={`button-plan-${order.id}`}
+                        >
+                          <Calendar className="h-4 w-4" />
+                          Planera
+                        </Button>
+                      )}
+                      
+                      {nextStatus && status !== "skapad" && status !== "planerad_pre" && (
                         <Button
                           size="sm"
                           variant="outline"
