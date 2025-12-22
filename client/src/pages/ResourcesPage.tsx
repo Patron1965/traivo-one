@@ -526,23 +526,18 @@ export default function ResourcesPage() {
                         <Badge variant={resource.status === "active" ? "secondary" : "outline"}>
                           {resource.status === "active" ? "Aktiv" : "Inaktiv"}
                         </Badge>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openTidsverkDialog(resource);
-                              }}
-                              data-testid={`button-tidsverk-resource-${resource.id}`}
-                            >
-                              <Wrench className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Hantera tidsverk</p></TooltipContent>
-                        </Tooltip>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openTidsverkDialog(resource);
+                          }}
+                          data-testid={`button-tidsverk-resource-${resource.id}`}
+                        >
+                          <Wrench className="h-4 w-4 mr-1" />
+                          Hantera tidsverk
+                        </Button>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
