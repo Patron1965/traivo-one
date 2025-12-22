@@ -539,14 +539,17 @@ export default function SubscriptionsPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Föredragen dag</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select 
+                        onValueChange={(val) => field.onChange(val === "any" ? "" : val)} 
+                        value={field.value || "any"}
+                      >
                         <FormControl>
                           <SelectTrigger data-testid="select-weekday">
                             <SelectValue placeholder="Valfri" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Valfri</SelectItem>
+                          <SelectItem value="any">Valfri</SelectItem>
                           {weekdayOptions.map((opt) => (
                             <SelectItem key={opt.value} value={opt.value}>
                               {opt.label}
