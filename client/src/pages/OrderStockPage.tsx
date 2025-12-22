@@ -91,7 +91,7 @@ export default function OrderStockPage() {
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
   const [lineQuantity, setLineQuantity] = useState(1);
 
-  const { data: orderStockData, isLoading: ordersLoading, refetch } = useQuery<OrderStockResponse>({
+  const { data: orderStockData, isLoading: ordersLoading } = useQuery<OrderStockResponse>({
     queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter }],
     queryFn: async () => {
       const params = new URLSearchParams();
@@ -127,14 +127,15 @@ export default function OrderStockPage() {
 
   const addLineMutation = useMutation({
     mutationFn: async ({ workOrderId, articleId, quantity }: { workOrderId: string; articleId: string; quantity: number }) => {
-      return apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, { articleId, quantity });
+      await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, { articleId, quantity });
+      return workOrderId;
     },
-    onSuccess: async () => {
+    onSuccess: async (workOrderId) => {
       toast({ title: "Artikel tillagd" });
       setSelectedArticleId("");
       setLineQuantity(1);
-      await refetchLines();
-      await refetch();
+      await queryClient.refetchQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/order-stock"], type: "active" });
     },
     onError: () => {
       toast({ title: "Kunde inte lägga till artikel", variant: "destructive" });
@@ -142,13 +143,14 @@ export default function OrderStockPage() {
   });
 
   const deleteLineMutation = useMutation({
-    mutationFn: async (lineId: string) => {
-      return apiRequest("DELETE", `/api/work-order-lines/${lineId}`);
+    mutationFn: async ({ lineId, workOrderId }: { lineId: string; workOrderId: string }) => {
+      await apiRequest("DELETE", `/api/work-order-lines/${lineId}`);
+      return workOrderId;
     },
-    onSuccess: async () => {
+    onSuccess: async (workOrderId) => {
       toast({ title: "Artikel borttagen" });
-      await refetchLines();
-      await refetch();
+      await queryClient.refetchQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
+      await queryClient.refetchQueries({ queryKey: ["/api/order-stock"], type: "active" });
     },
     onError: () => {
       toast({ title: "Kunde inte ta bort artikel", variant: "destructive" });
@@ -669,7 +671,7 @@ export default function OrderStockPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => deleteLineMutation.mutate(line.id)}
+                          onClick={() => deleteLineMutation.mutate({ lineId: line.id, workOrderId: selectedOrderForLines!.id })}
                           disabled={deleteLineMutation.isPending}
                           data-testid={`button-delete-line-${line.id}`}
                         >
