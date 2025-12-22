@@ -37,7 +37,9 @@ client/src/
 │   ├── OptimizationPrepPage.tsx # Weekly optimization preparation
 │   ├── RoutesPage.tsx           # Route visualization
 │   ├── ObjectsPage.tsx          # Hierarchical object management
-│   ├── ResourcesPage.tsx        # Resource management
+│   ├── ResourcesPage.tsx        # Resource management with tidsverk
+│   ├── ArticlesPage.tsx         # Article management (Modus integration)
+│   ├── PriceListsPage.tsx       # Price list management with hierarchy
 │   ├── DashboardPage.tsx        # Analytics dashboard
 │   └── SettingsPage.tsx         # User/company settings
 └── App.tsx                       # Main app with sidebar layout
@@ -57,19 +59,25 @@ shared/
 - **tenants:** Multi-tenant support
 - **customers:** Telgebostäder, Serviceboenden
 - **objects:** Hierarchical (parentId), with accessType, accessCode, containerCounts
-- **resources:** Technicians with competencies
+- **resources:** Technicians with competencies, homeLocation, weeklyHours
 - **work_orders:** Jobs with scheduling
 - **setup_time_logs:** Ställtidsloggning per jobb
+- **articles:** Articles/services with articleNumber, productionTime, cost, listPrice, articleType
+- **price_lists:** Pricing hierarchy (general → customer → discount letter) with priority
+- **price_list_articles:** Junction table linking articles to price lists with custom prices
+- **resource_articles:** Tidsverk - which articles a resource can perform with efficiencyFactor
 
 ## Key Features
 1. **Veckoplanering:** Drag-drop scheduling with priority colors
 2. **Inför Optimering:** Weekly optimization preparation with data validation (prepared for external Nordic Routing API integration)
 3. **Ruttplanering:** Route visualization with OpenRouteService
 4. **Objekt:** Hierarchical tree view (Område → Fastighet → Rum)
-5. **Resurser:** Technician management with competencies
-6. **Dashboard:** Real analytics from setup_time_logs
-7. **Mobile Field App:** Access info, job completion, ställtidsrapportering
-8. **Modus 2.0 Import:** Direct import from Modus 2.0 CSV exports (semicolon-separated)
+5. **Resurser:** Technician management with competencies and tidsverk (article assignments)
+6. **Artiklar:** Article/service management with production times and costs
+7. **Prislistor:** Three-tier pricing hierarchy (general → customer → discount letter)
+8. **Dashboard:** Real analytics from setup_time_logs
+9. **Mobile Field App:** Access info, job completion, ställtidsrapportering
+10. **Modus 2.0 Import:** Direct import from Modus 2.0 CSV exports (semicolon-separated)
 
 ## Modus 2.0 Import System
 Located at `/import` page. Supports importing:
@@ -105,6 +113,11 @@ Field Mappings (Modus → Nordic Routing):
 - **Font:** Inter for UI
 
 ## Recent Changes
+- 2024-12-22: Added ArticlesPage for article/service management with filtering by type
+- 2024-12-22: Added PriceListsPage with three-tier pricing hierarchy (general → customer → discount)
+- 2024-12-22: Updated ResourcesPage with tidsverk dialog for article assignment per resource
+- 2024-12-22: Added database tables: articles, price_lists, price_list_articles, resource_articles
+- 2024-12-22: Full CRUD API for articles and price lists with nested endpoints
 - 2024-12-20: Added useObjectsByIds/useObjectSearch hooks for lazy object loading
 - 2024-12-20: Optimized MobileFieldApp, Dashboard, OptimizationPrepPage, RouteMap, ProcurementsPage with lazy loading
 - 2024-12-20: All components now use ID-based object fetching instead of loading all objects

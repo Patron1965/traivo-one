@@ -49,13 +49,15 @@ import {
   CalendarOff,
   ChevronDown,
   ChevronUp,
+  Wrench,
+  X,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, endOfWeek, addDays, isWithinInterval, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrder } from "@shared/schema";
+import type { Resource, WorkOrder, Article, ResourceArticle } from "@shared/schema";
 
 const competencyOptions = [
   { value: "karltomning", label: "Kärltömning" },
@@ -120,6 +122,11 @@ export default function ResourcesPage() {
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
   const [formData, setFormData] = useState<ResourceFormData>(emptyFormData);
   const [showFilters, setShowFilters] = useState(false);
+  const [tidsverkDialogOpen, setTidsverkDialogOpen] = useState(false);
+  const [tidsverkResource, setTidsverkResource] = useState<Resource | null>(null);
+  const [selectedArticleId, setSelectedArticleId] = useState<string>("");
+  const [efficiencyFactor, setEfficiencyFactor] = useState<number>(1.0);
+  const [productionTimeOverride, setProductionTimeOverride] = useState<number | null>(null);
 
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
@@ -137,10 +144,29 @@ export default function ResourcesPage() {
     queryKey: ["/api/objects"],
   });
 
+  const { data: articles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles"],
+  });
+
+  const { data: resourceArticles = [] } = useQuery<ResourceArticle[]>({
+    queryKey: [`/api/resources/${tidsverkResource?.id}/articles`],
+    enabled: !!tidsverkResource,
+  });
+
   const objectMap = useMemo(() => 
     new Map(objects.map(o => [o.id, o.name])),
     [objects]
   );
+
+  const articleMap = useMemo(() =>
+    new Map(articles.map(a => [a.id, a])),
+    [articles]
+  );
+
+  const availableArticles = useMemo(() => {
+    const assignedIds = new Set(resourceArticles.map(ra => ra.articleId));
+    return articles.filter(a => !assignedIds.has(a.id) && a.status === "active");
+  }, [articles, resourceArticles]);
 
   const weekWorkOrders = useMemo(() => {
     return allWorkOrders.filter(wo => {
@@ -212,6 +238,39 @@ export default function ResourcesPage() {
     },
     onError: () => {
       toast({ title: "Fel vid borttagning", variant: "destructive" });
+    },
+  });
+
+  const createTidsverkMutation = useMutation({
+    mutationFn: async (data: { resourceId: string; articleId: string; efficiencyFactor: number; productionTime?: number }) => {
+      return apiRequest("POST", `/api/resources/${data.resourceId}/articles`, {
+        articleId: data.articleId,
+        efficiencyFactor: data.efficiencyFactor,
+        productionTime: data.productionTime,
+      });
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/resources/${variables.resourceId}/articles`] });
+      toast({ title: "Tidsverk tillagt" });
+      setSelectedArticleId("");
+      setEfficiencyFactor(1.0);
+      setProductionTimeOverride(null);
+    },
+    onError: () => {
+      toast({ title: "Kunde inte lägga till tidsverk", variant: "destructive" });
+    },
+  });
+
+  const deleteTidsverkMutation = useMutation({
+    mutationFn: async (data: { id: string; resourceId: string }) => {
+      return apiRequest("DELETE", `/api/resource-articles/${data.id}`);
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: [`/api/resources/${variables.resourceId}/articles`] });
+      toast({ title: "Tidsverk borttaget" });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte ta bort tidsverk", variant: "destructive" });
     },
   });
 
@@ -301,6 +360,27 @@ export default function ResourcesPage() {
         data: { availability: formData.availability },
       });
     }
+  };
+
+  const openTidsverkDialog = (resource: Resource) => {
+    setTidsverkResource(resource);
+    setSelectedArticleId("");
+    setEfficiencyFactor(1.0);
+    setProductionTimeOverride(null);
+    setTidsverkDialogOpen(true);
+  };
+
+  const handleAddTidsverk = () => {
+    if (!selectedArticleId || !tidsverkResource) {
+      toast({ title: "Välj en artikel", variant: "destructive" });
+      return;
+    }
+    createTidsverkMutation.mutate({
+      resourceId: tidsverkResource.id,
+      articleId: selectedArticleId,
+      efficiencyFactor,
+      productionTime: productionTimeOverride ?? undefined,
+    });
   };
 
   const filteredResources = useMemo(() => {
@@ -446,6 +526,23 @@ export default function ResourcesPage() {
                         <Badge variant={resource.status === "active" ? "secondary" : "outline"}>
                           {resource.status === "active" ? "Aktiv" : "Inaktiv"}
                         </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="opacity-0 group-hover:opacity-100 transition-opacity"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openTidsverkDialog(resource);
+                              }}
+                              data-testid={`button-tidsverk-resource-${resource.id}`}
+                            >
+                              <Wrench className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Hantera tidsverk</p></TooltipContent>
+                        </Tooltip>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
@@ -869,6 +966,128 @@ export default function ResourcesPage() {
             >
               {updateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Spara
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={tidsverkDialogOpen} onOpenChange={setTidsverkDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              Tidsverk för {tidsverkResource?.name}
+            </DialogTitle>
+            <DialogDescription>
+              Hantera vilka artiklar denna resurs kan utföra och dess effektivitet
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex gap-4 items-end flex-wrap">
+              <div className="flex-1 min-w-[200px] space-y-2">
+                <Label>Artikel</Label>
+                <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
+                  <SelectTrigger data-testid="select-tidsverk-article">
+                    <SelectValue placeholder="Välj artikel..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableArticles.map(article => (
+                      <SelectItem key={article.id} value={article.id}>
+                        {article.articleNumber} - {article.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-32 space-y-2">
+                <Label>Effektivitet</Label>
+                <Input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  max="3.0"
+                  value={efficiencyFactor}
+                  onChange={(e) => setEfficiencyFactor(parseFloat(e.target.value) || 1.0)}
+                  data-testid="input-tidsverk-efficiency"
+                />
+              </div>
+              <div className="w-32 space-y-2">
+                <Label>Tid (min)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="Standard"
+                  value={productionTimeOverride ?? ""}
+                  onChange={(e) => setProductionTimeOverride(e.target.value ? parseInt(e.target.value) : null)}
+                  data-testid="input-tidsverk-time"
+                />
+              </div>
+              <Button
+                onClick={handleAddTidsverk}
+                disabled={!selectedArticleId || createTidsverkMutation.isPending}
+                data-testid="button-add-tidsverk"
+              >
+                {createTidsverkMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Plus className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+
+            <Separator />
+
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">
+                Tilldelade artiklar ({resourceArticles.length})
+              </Label>
+              {resourceArticles.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4 text-center">
+                  Inga artiklar tilldelade ännu
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {resourceArticles.map(ra => {
+                    const article = articleMap.get(ra.articleId);
+                    return (
+                      <div
+                        key={ra.id}
+                        className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/50"
+                        data-testid={`tidsverk-item-${ra.id}`}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">
+                            {article?.articleNumber || "?"} - {article?.name || "Okänd artikel"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Effektivitet: {ra.efficiencyFactor}x | 
+                            Tid: {ra.productionTime ?? article?.productionTime ?? "—"} min
+                          </p>
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {article?.articleType || "—"}
+                        </Badge>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => tidsverkResource && deleteTidsverkMutation.mutate({ id: ra.id, resourceId: tidsverkResource.id })}
+                          disabled={deleteTidsverkMutation.isPending}
+                          data-testid={`button-delete-tidsverk-${ra.id}`}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTidsverkDialogOpen(false)}>
+              Stäng
             </Button>
           </DialogFooter>
         </DialogContent>
