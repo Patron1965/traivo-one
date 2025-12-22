@@ -1,4 +1,5 @@
 import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target } from "lucide-react";
+import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -89,9 +90,10 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
           <img 
-            src="/kinab-logo.png" 
-            alt="Kinab" 
+            src={unicornLogo} 
+            alt="Unicorn" 
             className="h-10 w-auto"
+            data-testid="img-unicorn-logo"
           />
           <div>
             <h1 className="text-base font-semibold">Unicorn</h1>
