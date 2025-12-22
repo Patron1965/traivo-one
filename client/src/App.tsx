@@ -28,6 +28,7 @@ import PlanningParametersPage from "@/pages/PlanningParametersPage";
 import SystemOverviewPage from "@/pages/SystemOverviewPage";
 import ClustersPage from "@/pages/ClustersPage";
 import ClusterDetailPage from "@/pages/ClusterDetailPage";
+import EconomicsDashboardPage from "@/pages/EconomicsDashboardPage";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -50,6 +51,7 @@ function Router() {
       <Route path="/subscriptions" component={SubscriptionsPage} />
       <Route path="/planning-parameters" component={PlanningParametersPage} />
       <Route path="/dashboard" component={DashboardPage} />
+      <Route path="/economics" component={EconomicsDashboardPage} />
       <Route path="/import" component={ImportPage} />
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />

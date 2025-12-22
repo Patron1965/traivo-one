@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign } from "lucide-react";
 import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -34,6 +34,7 @@ const planeringItems = [
   { title: "Ruttplanering", url: "/routes", icon: Map },
   { title: "Upphandlingar", url: "/procurements", icon: FileText },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Ekonomi", url: "/economics", icon: DollarSign },
 ];
 
 const settingsItems = [
