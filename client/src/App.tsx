@@ -26,6 +26,8 @@ import VehiclesPage from "@/pages/VehiclesPage";
 import SubscriptionsPage from "@/pages/SubscriptionsPage";
 import PlanningParametersPage from "@/pages/PlanningParametersPage";
 import SystemOverviewPage from "@/pages/SystemOverviewPage";
+import ClustersPage from "@/pages/ClustersPage";
+import ClusterDetailPage from "@/pages/ClusterDetailPage";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -33,6 +35,8 @@ function Router() {
     <Switch>
       <Route path="/" component={WeekPlannerPage} />
       <Route path="/planner" component={WeekPlannerPage} />
+      <Route path="/clusters" component={ClustersPage} />
+      <Route path="/clusters/:id" component={ClusterDetailPage} />
       <Route path="/routes" component={RoutesPage} />
       <Route path="/optimization" component={OptimizationPrepPage} />
       <Route path="/objects" component={ObjectsPage} />
