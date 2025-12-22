@@ -40,6 +40,7 @@ client/src/
 │   ├── ResourcesPage.tsx        # Resource management with tidsverk
 │   ├── ArticlesPage.tsx         # Article management (Modus integration)
 │   ├── PriceListsPage.tsx       # Price list management with hierarchy
+│   ├── OrderStockPage.tsx       # Order stock management with status flow
 │   ├── DashboardPage.tsx        # Analytics dashboard
 │   └── SettingsPage.tsx         # User/company settings
 └── App.tsx                       # Main app with sidebar layout
@@ -60,12 +61,14 @@ shared/
 - **customers:** Telgebostäder, Serviceboenden
 - **objects:** Hierarchical (parentId), with accessType, accessCode, containerCounts
 - **resources:** Technicians with competencies, homeLocation, weeklyHours
-- **work_orders:** Jobs with scheduling
+- **work_orders:** Jobs with orderStatus flow (skapad→planerad_pre→planerad_resurs→planerad_las→utford→fakturerad), cached totals (value/cost/productionMinutes), simulation flags
+- **work_order_lines:** Order line items with resolved prices from hierarchy
 - **setup_time_logs:** Ställtidsloggning per jobb
 - **articles:** Articles/services with articleNumber, productionTime, cost, listPrice, articleType
 - **price_lists:** Pricing hierarchy (general → customer → discount letter) with priority
 - **price_list_articles:** Junction table linking articles to price lists with custom prices
 - **resource_articles:** Tidsverk - which articles a resource can perform with efficiencyFactor
+- **simulation_scenarios:** Test scenarios for order simulation without affecting live data
 
 ## Key Features
 1. **Veckoplanering:** Drag-drop scheduling with priority colors
@@ -75,9 +78,10 @@ shared/
 5. **Resurser:** Technician management with competencies and tidsverk (article assignments)
 6. **Artiklar:** Article/service management with production times and costs
 7. **Prislistor:** Three-tier pricing hierarchy (general → customer → discount letter)
-8. **Dashboard:** Real analytics from setup_time_logs
-9. **Mobile Field App:** Access info, job completion, ställtidsrapportering
-10. **Modus 2.0 Import:** Direct import from Modus 2.0 CSV exports (semicolon-separated)
+8. **Orderstock:** Order management with status flow, price resolution, simulation mode
+9. **Dashboard:** Real analytics from setup_time_logs
+10. **Mobile Field App:** Access info, job completion, ställtidsrapportering
+11. **Modus 2.0 Import:** Direct import from Modus 2.0 CSV exports (semicolon-separated)
 
 ## Modus 2.0 Import System
 Located at `/import` page. Supports importing:
@@ -113,6 +117,13 @@ Field Mappings (Modus → Nordic Routing):
 - **Font:** Inter for UI
 
 ## Recent Changes
+- 2024-12-22: **Phase 2 Order Management** - Added OrderStockPage with status workflow, simulation mode, price resolution
+- 2024-12-22: Added orderStatus flow (skapad→planerad_pre→planerad_resurs→planerad_las→utford→fakturerad) with sequential validation
+- 2024-12-22: Added work_order_lines table for order line items with automatic price resolution from hierarchy
+- 2024-12-22: Added simulation_scenarios table for testing scenarios without affecting live data
+- 2024-12-22: Implemented price resolution service: rabattbrev > kundunik > generell > listprice
+- 2024-12-22: Added API endpoints: /api/order-stock, /api/work-orders/:id/lines, /api/simulation-scenarios
+- 2024-12-22: OrderStockPage uses lazy object loading (useObjectsByIds)
 - 2024-12-22: Added ArticlesPage for article/service management with filtering by type
 - 2024-12-22: Added PriceListsPage with three-tier pricing hierarchy (general → customer → discount)
 - 2024-12-22: Updated ResourcesPage with tidsverk dialog for article assignment per resource

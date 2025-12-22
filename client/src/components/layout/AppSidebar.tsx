@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -22,6 +22,7 @@ const navigationItems = [
   { title: "Ruttplanering", url: "/routes", icon: Map },
   { title: "Objekt", url: "/objects", icon: Building2 },
   { title: "Resurser", url: "/resources", icon: Users },
+  { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
   { title: "Artiklar", url: "/articles", icon: Package },
   { title: "Prislistor", url: "/price-lists", icon: Receipt },
   { title: "Upphandlingar", url: "/procurements", icon: FileText },

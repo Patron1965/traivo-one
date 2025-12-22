@@ -11,8 +11,11 @@ import {
   type PriceList, type InsertPriceList,
   type PriceListArticle, type InsertPriceListArticle,
   type ResourceArticle, type InsertResourceArticle,
+  type WorkOrderLine, type InsertWorkOrderLine,
+  type SimulationScenario, type InsertSimulationScenario,
+  type OrderStatus,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
-  articles, priceLists, priceListArticles, resourceArticles
+  articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte } from "drizzle-orm";
@@ -89,6 +92,43 @@ export interface IStorage {
   createResourceArticle(resourceArticle: InsertResourceArticle): Promise<ResourceArticle>;
   updateResourceArticle(id: string, data: Partial<InsertResourceArticle>): Promise<ResourceArticle | undefined>;
   deleteResourceArticle(id: string): Promise<void>;
+  
+  // Work Order Lines
+  getWorkOrderLines(workOrderId: string): Promise<WorkOrderLine[]>;
+  createWorkOrderLine(line: InsertWorkOrderLine): Promise<WorkOrderLine>;
+  updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>): Promise<WorkOrderLine | undefined>;
+  deleteWorkOrderLine(id: string): Promise<void>;
+  
+  // Simulation Scenarios
+  getSimulationScenarios(tenantId: string): Promise<SimulationScenario[]>;
+  getSimulationScenario(id: string): Promise<SimulationScenario | undefined>;
+  createSimulationScenario(scenario: InsertSimulationScenario): Promise<SimulationScenario>;
+  updateSimulationScenario(id: string, data: Partial<InsertSimulationScenario>): Promise<SimulationScenario | undefined>;
+  deleteSimulationScenario(id: string): Promise<void>;
+  
+  // Order Stock (with filters)
+  getOrderStock(tenantId: string, options?: {
+    includeSimulated?: boolean;
+    scenarioId?: string;
+    orderStatus?: OrderStatus;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<WorkOrder[]>;
+  
+  // Price Resolution
+  resolveArticlePrice(tenantId: string, articleId: string, customerId: string, date?: Date): Promise<{
+    price: number;
+    cost: number;
+    productionMinutes: number;
+    priceListId: string | null;
+    source: 'rabattbrev' | 'kundunik' | 'generell' | 'listprice';
+  }>;
+  
+  // Update work order status
+  updateWorkOrderStatus(id: string, newStatus: OrderStatus): Promise<WorkOrder | undefined>;
+  
+  // Recalculate work order totals from lines
+  recalculateWorkOrderTotals(workOrderId: string): Promise<WorkOrder | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -269,13 +309,25 @@ export class DatabaseStorage implements IStorage {
       orderType: workOrders.orderType,
       priority: workOrders.priority,
       status: workOrders.status,
+      orderStatus: workOrders.orderStatus,
       scheduledDate: workOrders.scheduledDate,
       scheduledStartTime: workOrders.scheduledStartTime,
+      plannedWindowStart: workOrders.plannedWindowStart,
+      plannedWindowEnd: workOrders.plannedWindowEnd,
       estimatedDuration: workOrders.estimatedDuration,
       actualDuration: workOrders.actualDuration,
       setupTime: workOrders.setupTime,
       setupReason: workOrders.setupReason,
+      lockedAt: workOrders.lockedAt,
       completedAt: workOrders.completedAt,
+      invoicedAt: workOrders.invoicedAt,
+      cachedValue: workOrders.cachedValue,
+      cachedCost: workOrders.cachedCost,
+      cachedProductionMinutes: workOrders.cachedProductionMinutes,
+      isSimulated: workOrders.isSimulated,
+      simulationScenarioId: workOrders.simulationScenarioId,
+      plannedBy: workOrders.plannedBy,
+      plannedNotes: workOrders.plannedNotes,
       notes: workOrders.notes,
       metadata: workOrders.metadata,
       createdAt: workOrders.createdAt,
@@ -458,6 +510,254 @@ export class DatabaseStorage implements IStorage {
 
   async deleteResourceArticle(id: string): Promise<void> {
     await db.delete(resourceArticles).where(eq(resourceArticles.id, id));
+  }
+
+  // Work Order Lines
+  async getWorkOrderLines(workOrderId: string): Promise<WorkOrderLine[]> {
+    return db.select().from(workOrderLines).where(eq(workOrderLines.workOrderId, workOrderId));
+  }
+
+  async getWorkOrderLine(id: string): Promise<WorkOrderLine | undefined> {
+    const [line] = await db.select().from(workOrderLines).where(eq(workOrderLines.id, id));
+    return line || undefined;
+  }
+
+  async createWorkOrderLine(line: InsertWorkOrderLine): Promise<WorkOrderLine> {
+    const [wol] = await db.insert(workOrderLines).values(line).returning();
+    return wol;
+  }
+
+  async updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>): Promise<WorkOrderLine | undefined> {
+    const [wol] = await db.update(workOrderLines).set(data).where(eq(workOrderLines.id, id)).returning();
+    return wol || undefined;
+  }
+
+  async deleteWorkOrderLine(id: string): Promise<void> {
+    await db.delete(workOrderLines).where(eq(workOrderLines.id, id));
+  }
+
+  // Simulation Scenarios
+  async getSimulationScenarios(tenantId: string): Promise<SimulationScenario[]> {
+    return db.select().from(simulationScenarios)
+      .where(and(eq(simulationScenarios.tenantId, tenantId), isNull(simulationScenarios.deletedAt)));
+  }
+
+  async getSimulationScenario(id: string): Promise<SimulationScenario | undefined> {
+    const [scenario] = await db.select().from(simulationScenarios)
+      .where(and(eq(simulationScenarios.id, id), isNull(simulationScenarios.deletedAt)));
+    return scenario || undefined;
+  }
+
+  async createSimulationScenario(scenario: InsertSimulationScenario): Promise<SimulationScenario> {
+    const [ss] = await db.insert(simulationScenarios).values(scenario).returning();
+    return ss;
+  }
+
+  async updateSimulationScenario(id: string, data: Partial<InsertSimulationScenario>): Promise<SimulationScenario | undefined> {
+    const [ss] = await db.update(simulationScenarios).set(data).where(eq(simulationScenarios.id, id)).returning();
+    return ss || undefined;
+  }
+
+  async deleteSimulationScenario(id: string): Promise<void> {
+    await db.update(simulationScenarios).set({ deletedAt: new Date() }).where(eq(simulationScenarios.id, id));
+  }
+
+  // Order Stock with filters
+  async getOrderStock(tenantId: string, options?: {
+    includeSimulated?: boolean;
+    scenarioId?: string;
+    orderStatus?: OrderStatus;
+    startDate?: Date;
+    endDate?: Date;
+  }): Promise<WorkOrder[]> {
+    let whereConditions = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
+    
+    // By default, exclude simulated orders unless explicitly requested
+    if (!options?.includeSimulated) {
+      whereConditions = and(whereConditions, eq(workOrders.isSimulated, false));
+    }
+    
+    // Filter by specific scenario
+    if (options?.scenarioId) {
+      whereConditions = and(whereConditions, eq(workOrders.simulationScenarioId, options.scenarioId));
+    }
+    
+    // Filter by order status
+    if (options?.orderStatus) {
+      whereConditions = and(whereConditions, eq(workOrders.orderStatus, options.orderStatus));
+    }
+    
+    // Filter by date range
+    if (options?.startDate) {
+      whereConditions = and(whereConditions, gte(workOrders.scheduledDate, options.startDate));
+    }
+    if (options?.endDate) {
+      whereConditions = and(whereConditions, lte(workOrders.scheduledDate, options.endDate));
+    }
+    
+    return db.select().from(workOrders).where(whereConditions).orderBy(desc(workOrders.createdAt));
+  }
+
+  // Price Resolution - implements the price list hierarchy
+  async resolveArticlePrice(tenantId: string, articleId: string, customerId: string, date?: Date): Promise<{
+    price: number;
+    cost: number;
+    productionMinutes: number;
+    priceListId: string | null;
+    source: 'rabattbrev' | 'kundunik' | 'generell' | 'listprice';
+  }> {
+    const resolveDate = date || new Date();
+    
+    // Get the article for fallback values
+    const article = await this.getArticle(articleId);
+    if (!article) {
+      return { price: 0, cost: 0, productionMinutes: 0, priceListId: null, source: 'listprice' };
+    }
+    
+    // Get all active price lists for this tenant, ordered by priority (highest first)
+    const allPriceLists = await db.select().from(priceLists)
+      .where(and(
+        eq(priceLists.tenantId, tenantId),
+        eq(priceLists.status, 'active'),
+        isNull(priceLists.deletedAt),
+        or(isNull(priceLists.validFrom), lte(priceLists.validFrom, resolveDate)),
+        or(isNull(priceLists.validTo), gte(priceLists.validTo, resolveDate))
+      ))
+      .orderBy(desc(priceLists.priority));
+    
+    // Priority order: rabattbrev > kundunik > generell
+    // 1. Try rabattbrev for this customer
+    for (const pl of allPriceLists) {
+      if (pl.priceListType === 'rabattbrev' && pl.customerId === customerId) {
+        const [pla] = await db.select().from(priceListArticles)
+          .where(and(eq(priceListArticles.priceListId, pl.id), eq(priceListArticles.articleId, articleId)));
+        if (pla) {
+          return {
+            price: pla.price,
+            cost: article.cost || 0,
+            productionMinutes: pla.productionTime || article.productionTime || 0,
+            priceListId: pl.id,
+            source: 'rabattbrev'
+          };
+        }
+        // If rabattbrev has discount percent, apply to listprice
+        if (pl.discountPercent) {
+          const discountedPrice = Math.round((article.listPrice || 0) * (100 - pl.discountPercent) / 100);
+          return {
+            price: discountedPrice,
+            cost: article.cost || 0,
+            productionMinutes: article.productionTime || 0,
+            priceListId: pl.id,
+            source: 'rabattbrev'
+          };
+        }
+      }
+    }
+    
+    // 2. Try kundunik for this customer
+    for (const pl of allPriceLists) {
+      if (pl.priceListType === 'kundunik' && pl.customerId === customerId) {
+        const [pla] = await db.select().from(priceListArticles)
+          .where(and(eq(priceListArticles.priceListId, pl.id), eq(priceListArticles.articleId, articleId)));
+        if (pla) {
+          return {
+            price: pla.price,
+            cost: article.cost || 0,
+            productionMinutes: pla.productionTime || article.productionTime || 0,
+            priceListId: pl.id,
+            source: 'kundunik'
+          };
+        }
+      }
+    }
+    
+    // 3. Try generell price list
+    for (const pl of allPriceLists) {
+      if (pl.priceListType === 'generell') {
+        const [pla] = await db.select().from(priceListArticles)
+          .where(and(eq(priceListArticles.priceListId, pl.id), eq(priceListArticles.articleId, articleId)));
+        if (pla) {
+          return {
+            price: pla.price,
+            cost: article.cost || 0,
+            productionMinutes: pla.productionTime || article.productionTime || 0,
+            priceListId: pl.id,
+            source: 'generell'
+          };
+        }
+      }
+    }
+    
+    // 4. Fallback to article list price
+    return {
+      price: article.listPrice || 0,
+      cost: article.cost || 0,
+      productionMinutes: article.productionTime || 0,
+      priceListId: null,
+      source: 'listprice'
+    };
+  }
+
+  // Update work order status with timestamp handling
+  async updateWorkOrderStatus(id: string, newStatus: OrderStatus): Promise<WorkOrder | undefined> {
+    // Get current order to validate transition
+    const currentOrder = await this.getWorkOrder(id);
+    if (!currentOrder) return undefined;
+    
+    const currentStatus = currentOrder.orderStatus || 'skapad';
+    const statusFlow: OrderStatus[] = ['skapad', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad'];
+    const currentIdx = statusFlow.indexOf(currentStatus);
+    const newIdx = statusFlow.indexOf(newStatus);
+    
+    // Validate sequential progression (allow forward only, max 1 step at a time or reset to skapad)
+    if (newStatus !== 'skapad' && (newIdx < 0 || newIdx > currentIdx + 1)) {
+      throw new Error(`Invalid status transition from ${currentStatus} to ${newStatus}`);
+    }
+    
+    const updates: Partial<InsertWorkOrder> = { orderStatus: newStatus };
+    
+    // Set appropriate timestamps based on status
+    if (newStatus === 'planerad_las') {
+      updates.lockedAt = new Date();
+    } else if (newStatus === 'utford') {
+      updates.completedAt = new Date();
+    } else if (newStatus === 'fakturerad') {
+      updates.invoicedAt = new Date();
+    } else if (newStatus === 'skapad') {
+      // Reset timestamps when reverting to skapad
+      updates.lockedAt = null;
+      updates.completedAt = null;
+      updates.invoicedAt = null;
+    }
+    
+    const [wo] = await db.update(workOrders).set(updates).where(eq(workOrders.id, id)).returning();
+    return wo || undefined;
+  }
+
+  // Recalculate work order totals from lines
+  async recalculateWorkOrderTotals(workOrderId: string): Promise<WorkOrder | undefined> {
+    const lines = await this.getWorkOrderLines(workOrderId);
+    
+    let totalValue = 0;
+    let totalCost = 0;
+    let totalMinutes = 0;
+    
+    for (const line of lines) {
+      if (!line.isOptional) {
+        const qty = line.quantity || 1;
+        totalValue += (line.resolvedPrice || 0) * qty;
+        totalCost += (line.resolvedCost || 0) * qty;
+        totalMinutes += (line.resolvedProductionMinutes || 0) * qty;
+      }
+    }
+    
+    const [wo] = await db.update(workOrders).set({
+      cachedValue: totalValue,
+      cachedCost: totalCost,
+      cachedProductionMinutes: totalMinutes
+    }).where(eq(workOrders.id, workOrderId)).returning();
+    
+    return wo || undefined;
   }
 }
 

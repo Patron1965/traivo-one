@@ -116,6 +116,20 @@ export const resources = pgTable("resources", {
   deletedAt: timestamp("deleted_at"),
 });
 
+// Simuleringsscenarier för att testa ordrar utan att de blir skarpa
+export const simulationScenarios = pgTable("simulation_scenarios", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // draft, active, archived
+  status: text("status").default("draft").notNull(),
+  createdBy: varchar("created_by"),
+  baselineSnapshot: jsonb("baseline_snapshot").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+});
+
 export const workOrders = pgTable("work_orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
@@ -126,18 +140,60 @@ export const workOrders = pgTable("work_orders", {
   description: text("description"),
   orderType: text("order_type").default("service").notNull(),
   priority: text("priority").default("normal").notNull(),
+  // Legacy status field - use orderStatus for new Modus flow
   status: text("status").default("draft").notNull(),
+  // Modus-style order status: skapad, planerad_pre, planerad_resurs, planerad_las, utford, fakturerad
+  orderStatus: text("order_status").default("skapad").notNull(),
   scheduledDate: timestamp("scheduled_date"),
   scheduledStartTime: text("scheduled_start_time"),
+  // Planerat tidsfönster för optimering
+  plannedWindowStart: timestamp("planned_window_start"),
+  plannedWindowEnd: timestamp("planned_window_end"),
   estimatedDuration: integer("estimated_duration").default(60),
   actualDuration: integer("actual_duration"),
   setupTime: integer("setup_time"),
   setupReason: text("setup_reason"),
+  // Tidsstämplar för statusflöde
+  lockedAt: timestamp("locked_at"),
   completedAt: timestamp("completed_at"),
+  invoicedAt: timestamp("invoiced_at"),
+  // Cachade beräknade värden från orderrader
+  cachedValue: integer("cached_value").default(0),
+  cachedCost: integer("cached_cost").default(0),
+  cachedProductionMinutes: integer("cached_production_minutes").default(0),
+  // Simulering
+  isSimulated: boolean("is_simulated").default(false),
+  simulationScenarioId: varchar("simulation_scenario_id").references(() => simulationScenarios.id),
+  // Planeringsmetadata
+  plannedBy: varchar("planned_by"),
+  plannedNotes: text("planned_notes"),
   notes: text("notes"),
   metadata: jsonb("metadata").default({}),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
+});
+
+// Orderrader - artiklar kopplade till en order med beräknade priser
+export const workOrderLines = pgTable("work_order_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  quantity: integer("quantity").default(1).notNull(),
+  // Beräknat pris (från prislisthierarkin vid skapande)
+  resolvedPrice: integer("resolved_price").default(0),
+  // Beräknad kostnad
+  resolvedCost: integer("resolved_cost").default(0),
+  // Beräknad produktionstid i minuter
+  resolvedProductionMinutes: integer("resolved_production_minutes").default(0),
+  // Vilken prislista som användes
+  priceListIdUsed: varchar("price_list_id_used").references(() => priceLists.id),
+  // Ev rabatt i procent
+  discountPercent: integer("discount_percent").default(0),
+  // Valfri rad (kan tas bort utan att påverka ordern)
+  isOptional: boolean("is_optional").default(false),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const setupTimeLogs = pgTable("setup_time_logs", {
@@ -305,11 +361,25 @@ export const resourceArticlesRelations = relations(resourceArticles, ({ one }) =
   article: one(articles, { fields: [resourceArticles.articleId], references: [articles.id] }),
 }));
 
-export const workOrdersRelations = relations(workOrders, ({ one }) => ({
+export const simulationScenariosRelations = relations(simulationScenarios, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [simulationScenarios.tenantId], references: [tenants.id] }),
+  workOrders: many(workOrders),
+}));
+
+export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
   tenant: one(tenants, { fields: [workOrders.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [workOrders.customerId], references: [customers.id] }),
   object: one(objects, { fields: [workOrders.objectId], references: [objects.id] }),
   resource: one(resources, { fields: [workOrders.resourceId], references: [resources.id] }),
+  simulationScenario: one(simulationScenarios, { fields: [workOrders.simulationScenarioId], references: [simulationScenarios.id] }),
+  lines: many(workOrderLines),
+}));
+
+export const workOrderLinesRelations = relations(workOrderLines, ({ one }) => ({
+  tenant: one(tenants, { fields: [workOrderLines.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [workOrderLines.workOrderId], references: [workOrders.id] }),
+  article: one(articles, { fields: [workOrderLines.articleId], references: [articles.id] }),
+  priceListUsed: one(priceLists, { fields: [workOrderLines.priceListIdUsed], references: [priceLists.id] }),
 }));
 
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
@@ -318,6 +388,8 @@ export const insertCustomerSchema = createInsertSchema(customers).omit({ id: tru
 export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, createdAt: true });
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
+export const insertWorkOrderLineSchema = createInsertSchema(workOrderLines).omit({ id: true, createdAt: true });
+export const insertSimulationScenarioSchema = createInsertSchema(simulationScenarios).omit({ id: true, createdAt: true });
 export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });
 export const insertProcurementSchema = createInsertSchema(procurements).omit({ id: true, createdAt: true });
 export const insertArticleSchema = createInsertSchema(articles).omit({ id: true, createdAt: true });
@@ -353,3 +425,18 @@ export type PriceListArticle = typeof priceListArticles.$inferSelect;
 export type InsertPriceListArticle = z.infer<typeof insertPriceListArticleSchema>;
 export type ResourceArticle = typeof resourceArticles.$inferSelect;
 export type InsertResourceArticle = z.infer<typeof insertResourceArticleSchema>;
+export type WorkOrderLine = typeof workOrderLines.$inferSelect;
+export type InsertWorkOrderLine = z.infer<typeof insertWorkOrderLineSchema>;
+export type SimulationScenario = typeof simulationScenarios.$inferSelect;
+export type InsertSimulationScenario = z.infer<typeof insertSimulationScenarioSchema>;
+
+// Order status constants
+export const ORDER_STATUSES = [
+  "skapad",
+  "planerad_pre", 
+  "planerad_resurs",
+  "planerad_las",
+  "utford",
+  "fakturerad"
+] as const;
+export type OrderStatus = typeof ORDER_STATUSES[number];

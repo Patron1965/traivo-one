@@ -4,7 +4,8 @@ import { storage } from "./storage";
 import { 
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
   insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema,
-  insertArticleSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema
+  insertArticleSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema,
+  insertWorkOrderLineSchema, insertSimulationScenarioSchema, ORDER_STATUSES, type OrderStatus
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
@@ -265,7 +266,13 @@ export async function registerRoutes(
 
   app.post("/api/work-orders", async (req, res) => {
     try {
-      const data = insertWorkOrderSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      // Default orderStatus to 'skapad' for new orders
+      const data = insertWorkOrderSchema.parse({ 
+        orderStatus: 'skapad',
+        isSimulated: false,
+        ...req.body, 
+        tenantId: DEFAULT_TENANT_ID 
+      });
       const workOrder = await storage.createWorkOrder(data);
       res.status(201).json(workOrder);
     } catch (error) {
@@ -300,6 +307,319 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete work order" });
+    }
+  });
+
+  // Order Stock - aggregated view with filters
+  app.get("/api/order-stock", async (req, res) => {
+    try {
+      const includeSimulated = req.query.includeSimulated === "true";
+      const scenarioId = req.query.scenarioId as string | undefined;
+      const orderStatus = req.query.orderStatus as OrderStatus | undefined;
+      const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+      const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      
+      const orders = await storage.getOrderStock(DEFAULT_TENANT_ID, {
+        includeSimulated,
+        scenarioId,
+        orderStatus,
+        startDate,
+        endDate
+      });
+      
+      // Calculate summaries
+      const summary = {
+        totalOrders: orders.length,
+        totalValue: orders.reduce((sum, o) => sum + (o.cachedValue || 0), 0),
+        totalCost: orders.reduce((sum, o) => sum + (o.cachedCost || 0), 0),
+        totalProductionMinutes: orders.reduce((sum, o) => sum + (o.cachedProductionMinutes || 0), 0),
+        byStatus: {} as Record<string, number>
+      };
+      
+      for (const order of orders) {
+        const status = order.orderStatus || 'skapad';
+        summary.byStatus[status] = (summary.byStatus[status] || 0) + 1;
+      }
+      
+      res.json({ orders, summary });
+    } catch (error) {
+      console.error("Failed to fetch order stock:", error);
+      res.status(500).json({ error: "Failed to fetch order stock" });
+    }
+  });
+
+  // Work Order Status Transitions
+  app.post("/api/work-orders/:id/status", async (req, res) => {
+    try {
+      const { status } = req.body;
+      
+      if (!ORDER_STATUSES.includes(status)) {
+        return res.status(400).json({ error: `Invalid status. Must be one of: ${ORDER_STATUSES.join(", ")}` });
+      }
+      
+      const workOrder = await storage.updateWorkOrderStatus(req.params.id, status);
+      if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+      res.json(workOrder);
+    } catch (error) {
+      // Handle sequential validation error with proper 4xx response
+      if (error instanceof Error && error.message.includes("Invalid status transition")) {
+        return res.status(409).json({ error: error.message });
+      }
+      console.error("Failed to update work order status:", error);
+      res.status(500).json({ error: "Failed to update work order status" });
+    }
+  });
+
+  // Work Order Lines
+  app.get("/api/work-orders/:workOrderId/lines", async (req, res) => {
+    try {
+      const lines = await storage.getWorkOrderLines(req.params.workOrderId);
+      res.json(lines);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch work order lines" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/lines", async (req, res) => {
+    try {
+      const workOrder = await storage.getWorkOrder(req.params.workOrderId);
+      if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+      
+      const { articleId, quantity = 1, isOptional = false, notes } = req.body;
+      
+      if (!articleId) {
+        return res.status(400).json({ error: "articleId is required" });
+      }
+      
+      // Resolve price using the hierarchy
+      const priceInfo = await storage.resolveArticlePrice(
+        DEFAULT_TENANT_ID,
+        articleId,
+        workOrder.customerId
+      );
+      
+      const lineData = insertWorkOrderLineSchema.parse({
+        tenantId: DEFAULT_TENANT_ID,
+        workOrderId: req.params.workOrderId,
+        articleId,
+        quantity,
+        resolvedPrice: priceInfo.price,
+        resolvedCost: priceInfo.cost,
+        resolvedProductionMinutes: priceInfo.productionMinutes,
+        priceListIdUsed: priceInfo.priceListId,
+        isOptional,
+        notes
+      });
+      
+      const line = await storage.createWorkOrderLine(lineData);
+      
+      // Recalculate work order totals
+      await storage.recalculateWorkOrderTotals(req.params.workOrderId);
+      
+      res.status(201).json({ ...line, priceSource: priceInfo.source });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create work order line:", error);
+      res.status(500).json({ error: "Failed to create work order line" });
+    }
+  });
+
+  app.patch("/api/work-order-lines/:id", async (req, res) => {
+    try {
+      const { id, tenantId, workOrderId, createdAt, ...updateData } = req.body;
+      const line = await storage.updateWorkOrderLine(req.params.id, updateData);
+      if (!line) return res.status(404).json({ error: "Work order line not found" });
+      
+      // Recalculate work order totals
+      if (line.workOrderId) {
+        await storage.recalculateWorkOrderTotals(line.workOrderId);
+      }
+      
+      res.json(line);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update work order line" });
+    }
+  });
+
+  app.delete("/api/work-order-lines/:id", async (req, res) => {
+    try {
+      // Get the line first to know which work order to recalculate
+      const line = await storage.getWorkOrderLine(req.params.id);
+      
+      await storage.deleteWorkOrderLine(req.params.id);
+      
+      // Recalculate work order totals if we found the line
+      if (line?.workOrderId) {
+        await storage.recalculateWorkOrderTotals(line.workOrderId);
+      }
+      
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete work order line" });
+    }
+  });
+
+  // Price Resolution API
+  app.get("/api/resolve-price", async (req, res) => {
+    try {
+      const { articleId, customerId, date } = req.query;
+      
+      if (!articleId || !customerId) {
+        return res.status(400).json({ error: "articleId and customerId are required" });
+      }
+      
+      const priceInfo = await storage.resolveArticlePrice(
+        DEFAULT_TENANT_ID,
+        articleId as string,
+        customerId as string,
+        date ? new Date(date as string) : undefined
+      );
+      
+      res.json(priceInfo);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to resolve price" });
+    }
+  });
+
+  // Simulation Scenarios
+  app.get("/api/simulation-scenarios", async (req, res) => {
+    try {
+      const scenarios = await storage.getSimulationScenarios(DEFAULT_TENANT_ID);
+      res.json(scenarios);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch simulation scenarios" });
+    }
+  });
+
+  app.get("/api/simulation-scenarios/:id", async (req, res) => {
+    try {
+      const scenario = await storage.getSimulationScenario(req.params.id);
+      if (!scenario) return res.status(404).json({ error: "Simulation scenario not found" });
+      res.json(scenario);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch simulation scenario" });
+    }
+  });
+
+  app.post("/api/simulation-scenarios", async (req, res) => {
+    try {
+      const data = insertSimulationScenarioSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const scenario = await storage.createSimulationScenario(data);
+      res.status(201).json(scenario);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      res.status(500).json({ error: "Failed to create simulation scenario" });
+    }
+  });
+
+  app.patch("/api/simulation-scenarios/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const scenario = await storage.updateSimulationScenario(req.params.id, updateData);
+      if (!scenario) return res.status(404).json({ error: "Simulation scenario not found" });
+      res.json(scenario);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update simulation scenario" });
+    }
+  });
+
+  app.delete("/api/simulation-scenarios/:id", async (req, res) => {
+    try {
+      await storage.deleteSimulationScenario(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete simulation scenario" });
+    }
+  });
+
+  // Clone orders to simulation scenario
+  app.post("/api/simulation-scenarios/:id/clone-orders", async (req, res) => {
+    try {
+      const { orderIds } = req.body;
+      const scenarioId = req.params.id;
+      
+      const scenario = await storage.getSimulationScenario(scenarioId);
+      if (!scenario) return res.status(404).json({ error: "Simulation scenario not found" });
+      
+      const clonedOrders = [];
+      for (const orderId of orderIds) {
+        const original = await storage.getWorkOrder(orderId);
+        if (!original) continue;
+        
+        // Clone the order with simulation flag
+        const clonedOrder = await storage.createWorkOrder({
+          tenantId: DEFAULT_TENANT_ID,
+          customerId: original.customerId,
+          objectId: original.objectId,
+          resourceId: original.resourceId,
+          title: `[SIM] ${original.title}`,
+          description: original.description,
+          orderType: original.orderType,
+          priority: original.priority,
+          orderStatus: 'skapad',
+          scheduledDate: original.scheduledDate,
+          scheduledStartTime: original.scheduledStartTime,
+          estimatedDuration: original.estimatedDuration,
+          isSimulated: true,
+          simulationScenarioId: scenarioId,
+          notes: original.notes,
+          metadata: original.metadata as Record<string, unknown> | undefined
+        });
+        
+        // Clone the lines
+        const lines = await storage.getWorkOrderLines(orderId);
+        for (const line of lines) {
+          await storage.createWorkOrderLine({
+            tenantId: DEFAULT_TENANT_ID,
+            workOrderId: clonedOrder.id,
+            articleId: line.articleId,
+            quantity: line.quantity,
+            resolvedPrice: line.resolvedPrice,
+            resolvedCost: line.resolvedCost,
+            resolvedProductionMinutes: line.resolvedProductionMinutes,
+            priceListIdUsed: line.priceListIdUsed,
+            isOptional: line.isOptional,
+            notes: line.notes
+          });
+        }
+        
+        // Recalculate totals
+        await storage.recalculateWorkOrderTotals(clonedOrder.id);
+        clonedOrders.push(clonedOrder);
+      }
+      
+      res.status(201).json({ clonedOrders, count: clonedOrders.length });
+    } catch (error) {
+      console.error("Failed to clone orders:", error);
+      res.status(500).json({ error: "Failed to clone orders to scenario" });
+    }
+  });
+
+  // Promote simulated order to real
+  app.post("/api/work-orders/:id/promote", async (req, res) => {
+    try {
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+      
+      if (!workOrder.isSimulated) {
+        return res.status(400).json({ error: "Order is not simulated" });
+      }
+      
+      // Remove simulation flag and scenario link, update title
+      const updatedTitle = workOrder.title?.replace(/^\[SIM\] /, "") || workOrder.title;
+      const promoted = await storage.updateWorkOrder(req.params.id, {
+        isSimulated: false,
+        simulationScenarioId: null,
+        title: updatedTitle
+      });
+      
+      res.json(promoted);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to promote simulated order" });
     }
   });
 
