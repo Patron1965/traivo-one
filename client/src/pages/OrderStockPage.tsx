@@ -166,9 +166,9 @@ export default function OrderStockPage() {
     mutationFn: async ({ orderId, status }: { orderId: string; status: OrderStatus }) => {
       return apiRequest("POST", `/api/work-orders/${orderId}/status`, { status });
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ title: "Status uppdaterad" });
       setShowStatusDialog(false);
       setSelectedOrder(null);
@@ -182,9 +182,9 @@ export default function OrderStockPage() {
     mutationFn: async (orderId: string) => {
       return apiRequest("POST", `/api/work-orders/${orderId}/promote`);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+      await queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ title: "Order befordrad till produktionsläge" });
     },
     onError: () => {
