@@ -134,6 +134,7 @@ export default function OrderStockPage() {
       setSelectedArticleId("");
       setLineQuantity(1);
       await refetchLines();
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
     },
     onError: () => {
       toast({ title: "Kunde inte lägga till artikel", variant: "destructive" });
@@ -147,6 +148,7 @@ export default function OrderStockPage() {
     onSuccess: async () => {
       toast({ title: "Artikel borttagen" });
       await refetchLines();
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
     },
     onError: () => {
       toast({ title: "Kunde inte ta bort artikel", variant: "destructive" });

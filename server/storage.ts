@@ -704,7 +704,7 @@ export class DatabaseStorage implements IStorage {
     const currentOrder = await this.getWorkOrder(id);
     if (!currentOrder) return undefined;
     
-    const currentStatus = currentOrder.orderStatus || 'skapad';
+    const currentStatus = (currentOrder.orderStatus || 'skapad') as OrderStatus;
     const statusFlow: OrderStatus[] = ['skapad', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad'];
     const currentIdx = statusFlow.indexOf(currentStatus);
     const newIdx = statusFlow.indexOf(newStatus);
