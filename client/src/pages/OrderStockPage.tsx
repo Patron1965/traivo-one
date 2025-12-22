@@ -74,6 +74,12 @@ interface OrderStockResponse {
     totalProductionMinutes: number;
     byStatus: Record<string, number>;
   };
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 const ORDERS_PER_PAGE = 50;
@@ -94,12 +100,14 @@ export default function OrderStockPage() {
   const [lineQuantity, setLineQuantity] = useState(1);
 
   const { data: orderStockData, isLoading: ordersLoading } = useQuery<OrderStockResponse>({
-    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter }],
+    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (includeSimulated) params.set("includeSimulated", "true");
       if (selectedScenario) params.set("scenarioId", selectedScenario);
       if (statusFilter !== "all") params.set("orderStatus", statusFilter);
+      params.set("page", currentPage.toString());
+      params.set("pageSize", ORDERS_PER_PAGE.toString());
       const response = await fetch(`/api/order-stock?${params.toString()}`);
       return response.json();
     }
@@ -127,7 +135,7 @@ export default function OrderStockPage() {
     enabled: !!selectedOrderForLines?.id
   });
 
-  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter }];
+  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage }];
   
   const updateOrderInCache = async (workOrderId: string) => {
     const response = await fetch(`/api/work-orders/${workOrderId}`);
@@ -241,11 +249,12 @@ export default function OrderStockPage() {
     }
   };
 
-  const filteredOrders = useMemo(() => {
+  // Client-side search filter on current page of orders (server handles pagination)
+  const displayOrders = useMemo(() => {
     if (!orderStockData?.orders) return [];
+    if (!searchTerm) return orderStockData.orders;
+    const searchLower = searchTerm.toLowerCase();
     return orderStockData.orders.filter(order => {
-      if (!searchTerm) return true;
-      const searchLower = searchTerm.toLowerCase();
       const customer = customerMap.get(order.customerId);
       const object = objectMap.get(order.objectId);
       return (
@@ -256,15 +265,17 @@ export default function OrderStockPage() {
     });
   }, [orderStockData?.orders, searchTerm, customerMap, objectMap]);
 
-  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
-  const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * ORDERS_PER_PAGE;
-    return filteredOrders.slice(start, start + ORDERS_PER_PAGE);
-  }, [filteredOrders, currentPage]);
+  // Use server-side pagination info
+  const totalPages = orderStockData?.pagination?.totalPages || 1;
+  const totalOrders = orderStockData?.pagination?.total || 0;
 
   // Reset page when filter changes
   const handleSearchChange = (value: string) => {
     setSearchTerm(value);
+  };
+
+  const handleStatusFilterChange = (status: OrderStatus | "all") => {
+    setStatusFilter(status);
     setCurrentPage(1);
   };
 
@@ -392,7 +403,7 @@ export default function OrderStockPage() {
               key={status}
               variant={statusFilter === status ? "default" : "outline"}
               size="sm"
-              onClick={() => setStatusFilter(statusFilter === status ? "all" : status)}
+              onClick={() => handleStatusFilterChange(statusFilter === status ? "all" : status)}
               className="gap-2"
               data-testid={`button-filter-${status}`}
             >
@@ -403,7 +414,7 @@ export default function OrderStockPage() {
           );
         })}
         {statusFilter !== "all" && (
-          <Button variant="ghost" size="sm" onClick={() => setStatusFilter("all")} data-testid="button-clear-filter">
+          <Button variant="ghost" size="sm" onClick={() => handleStatusFilterChange("all")} data-testid="button-clear-filter">
             Rensa filter
           </Button>
         )}
@@ -428,12 +439,12 @@ export default function OrderStockPage() {
         <Separator />
         <ScrollArea className="h-[500px]">
           <div className="divide-y">
-            {paginatedOrders.length === 0 ? (
+            {displayOrders.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 Inga order hittades
               </div>
             ) : (
-              paginatedOrders.map(order => {
+              displayOrders.map(order => {
                 const customer = customerMap.get(order.customerId);
                 const object = objectMap.get(order.objectId);
                 const status = (order.orderStatus || 'skapad') as OrderStatus;
@@ -532,7 +543,7 @@ export default function OrderStockPage() {
         {totalPages > 1 && (
           <div className="flex items-center justify-between gap-4 p-4 border-t">
             <span className="text-sm text-muted-foreground">
-              Visar {((currentPage - 1) * ORDERS_PER_PAGE) + 1}-{Math.min(currentPage * ORDERS_PER_PAGE, filteredOrders.length)} av {filteredOrders.length}
+              Visar {((currentPage - 1) * ORDERS_PER_PAGE) + 1}-{Math.min(currentPage * ORDERS_PER_PAGE, totalOrders)} av {totalOrders}
             </span>
             <div className="flex items-center gap-2">
               <Button

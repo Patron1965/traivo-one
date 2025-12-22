@@ -310,7 +310,7 @@ export async function registerRoutes(
     }
   });
 
-  // Order Stock - aggregated view with filters
+  // Order Stock - aggregated view with filters and server-side pagination
   app.get("/api/order-stock", async (req, res) => {
     try {
       const includeSimulated = req.query.includeSimulated === "true";
@@ -318,30 +318,29 @@ export async function registerRoutes(
       const orderStatus = req.query.orderStatus as OrderStatus | undefined;
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+      const page = req.query.page ? parseInt(req.query.page as string, 10) : 1;
+      const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 50;
       
-      const orders = await storage.getOrderStock(DEFAULT_TENANT_ID, {
+      const { orders, total, byStatus, aggregates } = await storage.getOrderStock(DEFAULT_TENANT_ID, {
         includeSimulated,
         scenarioId,
         orderStatus,
         startDate,
-        endDate
+        endDate,
+        page,
+        pageSize
       });
       
-      // Calculate summaries
+      // Summary with SQL-aggregated values from entire filtered dataset
       const summary = {
-        totalOrders: orders.length,
-        totalValue: orders.reduce((sum, o) => sum + (o.cachedValue || 0), 0),
-        totalCost: orders.reduce((sum, o) => sum + (o.cachedCost || 0), 0),
-        totalProductionMinutes: orders.reduce((sum, o) => sum + (o.cachedProductionMinutes || 0), 0),
-        byStatus: {} as Record<string, number>
+        totalOrders: total,
+        totalValue: aggregates.totalValue,
+        totalCost: aggregates.totalCost,
+        totalProductionMinutes: aggregates.totalProductionMinutes,
+        byStatus
       };
       
-      for (const order of orders) {
-        const status = order.orderStatus || 'skapad';
-        summary.byStatus[status] = (summary.byStatus[status] || 0) + 1;
-      }
-      
-      res.json({ orders, summary });
+      res.json({ orders, summary, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } });
     } catch (error) {
       console.error("Failed to fetch order stock:", error);
       res.status(500).json({ error: "Failed to fetch order stock" });

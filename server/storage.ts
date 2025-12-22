@@ -18,7 +18,7 @@ import {
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, desc, gte, lte } from "drizzle-orm";
+import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -106,14 +106,16 @@ export interface IStorage {
   updateSimulationScenario(id: string, data: Partial<InsertSimulationScenario>): Promise<SimulationScenario | undefined>;
   deleteSimulationScenario(id: string): Promise<void>;
   
-  // Order Stock (with filters)
+  // Order Stock (with filters and pagination)
   getOrderStock(tenantId: string, options?: {
     includeSimulated?: boolean;
     scenarioId?: string;
     orderStatus?: OrderStatus;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<WorkOrder[]>;
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }>;
   
   // Price Resolution
   resolveArticlePrice(tenantId: string, articleId: string, customerId: string, date?: Date): Promise<{
@@ -569,33 +571,82 @@ export class DatabaseStorage implements IStorage {
     orderStatus?: OrderStatus;
     startDate?: Date;
     endDate?: Date;
-  }): Promise<WorkOrder[]> {
-    let whereConditions = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
+    page?: number;
+    pageSize?: number;
+  }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }> {
+    // Base conditions (tenant, not deleted, simulated filter)
+    let baseConditions = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
     
-    // By default, exclude simulated orders unless explicitly requested
     if (!options?.includeSimulated) {
-      whereConditions = and(whereConditions, eq(workOrders.isSimulated, false));
+      baseConditions = and(baseConditions, eq(workOrders.isSimulated, false));
     }
     
-    // Filter by specific scenario
     if (options?.scenarioId) {
-      whereConditions = and(whereConditions, eq(workOrders.simulationScenarioId, options.scenarioId));
+      baseConditions = and(baseConditions, eq(workOrders.simulationScenarioId, options.scenarioId));
     }
     
-    // Filter by order status
-    if (options?.orderStatus) {
-      whereConditions = and(whereConditions, eq(workOrders.orderStatus, options.orderStatus));
-    }
-    
-    // Filter by date range
+    // Date filters apply to everything (status counts, aggregates, and paginated results)
+    let dateFilteredConditions = baseConditions;
     if (options?.startDate) {
-      whereConditions = and(whereConditions, gte(workOrders.scheduledDate, options.startDate));
+      dateFilteredConditions = and(dateFilteredConditions, gte(workOrders.scheduledDate, options.startDate));
     }
     if (options?.endDate) {
-      whereConditions = and(whereConditions, lte(workOrders.scheduledDate, options.endDate));
+      dateFilteredConditions = and(dateFilteredConditions, lte(workOrders.scheduledDate, options.endDate));
     }
     
-    return db.select().from(workOrders).where(whereConditions).orderBy(desc(workOrders.createdAt));
+    // Status filter only for paginated results (not for tab counts)
+    let paginatedConditions = dateFilteredConditions;
+    if (options?.orderStatus) {
+      paginatedConditions = and(dateFilteredConditions, eq(workOrders.orderStatus, options.orderStatus));
+    }
+    
+    // Get total count for current view (with status filter if applied)
+    const countResult = await db.select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(paginatedConditions);
+    const total = countResult[0]?.count || 0;
+    
+    // Get status counts (with date filters but without orderStatus filter for tab badges)
+    const statusCountsResult = await db.select({ 
+      status: workOrders.orderStatus,
+      count: sql<number>`count(*)::int`
+    })
+      .from(workOrders)
+      .where(dateFilteredConditions)
+      .groupBy(workOrders.orderStatus);
+    
+    const byStatus: Record<string, number> = {};
+    for (const row of statusCountsResult) {
+      byStatus[row.status || 'skapad'] = row.count;
+    }
+    
+    // Get aggregates for the full filtered dataset (without status filter, same as byStatus)
+    const aggregatesResult = await db.select({
+      totalValue: sql<number>`coalesce(sum(${workOrders.cachedValue}), 0)::numeric`,
+      totalCost: sql<number>`coalesce(sum(${workOrders.cachedCost}), 0)::numeric`,
+      totalProductionMinutes: sql<number>`coalesce(sum(${workOrders.cachedProductionMinutes}), 0)::int`
+    })
+      .from(workOrders)
+      .where(dateFilteredConditions);
+    
+    const aggregates = {
+      totalValue: Number(aggregatesResult[0]?.totalValue || 0),
+      totalCost: Number(aggregatesResult[0]?.totalCost || 0),
+      totalProductionMinutes: Number(aggregatesResult[0]?.totalProductionMinutes || 0)
+    };
+    
+    // Build paginated query
+    const page = options?.page || 1;
+    const pageSize = options?.pageSize || 50;
+    const offset = (page - 1) * pageSize;
+    
+    const orders = await db.select().from(workOrders)
+      .where(paginatedConditions)
+      .orderBy(desc(workOrders.createdAt))
+      .limit(pageSize)
+      .offset(offset);
+    
+    return { orders, total, byStatus, aggregates };
   }
 
   // Price Resolution - implements the price list hierarchy
