@@ -2522,6 +2522,70 @@ export async function registerRoutes(
     }
   });
 
+  // AI Setup Time Insights
+  app.get("/api/ai/setup-insights", async (req, res) => {
+    try {
+      const { analyzeSetupTimeLogs } = await import("./ai-planner");
+      
+      const [logs, objects, clusters] = await Promise.all([
+        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
+        storage.getObjects(DEFAULT_TENANT_ID),
+        storage.getClusters(DEFAULT_TENANT_ID),
+      ]);
+      
+      const analysis = analyzeSetupTimeLogs(logs, objects, clusters);
+      res.json(analysis);
+    } catch (error) {
+      console.error("Setup time insights error:", error);
+      res.status(500).json({ error: "Kunde inte analysera ställtider" });
+    }
+  });
+
+  // Apply recommended setup time updates
+  app.post("/api/ai/apply-setup-updates", async (req, res) => {
+    try {
+      const { updates } = req.body;
+      if (!Array.isArray(updates) || updates.length === 0) {
+        return res.status(400).json({ error: "Updates måste vara en icke-tom array" });
+      }
+      
+      // Validera varje uppdatering
+      const validUpdates = updates.filter(update => 
+        typeof update.objectId === "string" && 
+        typeof update.suggestedEstimate === "number" &&
+        update.suggestedEstimate >= 0
+      );
+      
+      if (validUpdates.length === 0) {
+        return res.status(400).json({ error: "Inga giltiga uppdateringar" });
+      }
+      
+      const results = await Promise.all(
+        validUpdates.map(async (update: { objectId: string; suggestedEstimate: number }) => {
+          try {
+            const updated = await storage.updateObject(update.objectId, { 
+              avgSetupTime: Math.round(update.suggestedEstimate)
+            });
+            return { objectId: update.objectId, success: !!updated };
+          } catch (e) {
+            console.error(`Failed to update object ${update.objectId}:`, e);
+            return { objectId: update.objectId, success: false };
+          }
+        })
+      );
+      
+      const successCount = results.filter(r => r.success).length;
+      res.json({ 
+        success: successCount > 0, 
+        message: `Uppdaterade ${successCount} av ${validUpdates.length} objekt.`,
+        results 
+      });
+    } catch (error) {
+      console.error("Apply setup updates error:", error);
+      res.status(500).json({ error: "Kunde inte tillämpa uppdateringar" });
+    }
+  });
+
   // Delete all data (for re-import)
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {

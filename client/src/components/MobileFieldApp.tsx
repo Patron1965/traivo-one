@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { 
   MapPin, Clock, Phone, Navigation, Key, Car, Info, 
-  Play, CheckCircle, Camera, ArrowLeft, ChevronRight, Loader2 
+  Play, CheckCircle, Camera, ArrowLeft, ChevronRight, Loader2, Pause, Timer, Square
 } from "lucide-react";
 import { startOfDay, endOfDay } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -35,11 +35,40 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
   const [view, setView] = useState<View>(initialView);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [jobStarted, setJobStarted] = useState(false);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const [completionData, setCompletionData] = useState({
     setupTime: "",
     setupReason: "",
     notes: "",
   });
+  
+  // Timer effect - uppdaterar varje sekund när jobb är startat
+  useEffect(() => {
+    if (jobStarted && startTime) {
+      timerRef.current = setInterval(() => {
+        setElapsedSeconds(Math.floor((Date.now() - startTime.getTime()) / 1000));
+      }, 1000);
+    } else {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, [jobStarted, startTime]);
+  
+  // Formatera tid som MM:SS
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+  };
 
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
@@ -100,7 +129,7 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
       if (data.setupTime > 0) {
         const job = workOrders.find(wo => wo.id === data.id);
         if (job) {
-          await apiRequest("POST", "/api/setup-logs", {
+          await apiRequest("POST", "/api/setup-time-logs", {
             workOrderId: data.id,
             objectId: job.objectId,
             resourceId: job.resourceId || null,
@@ -113,9 +142,11 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/setup-logs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/setup-time-logs"] });
       toast({ title: "Jobb slutfört", description: "Arbetsordern har markerats som slutförd." });
       setJobStarted(false);
+      setStartTime(null);
+      setElapsedSeconds(0);
       setView("list");
       setSelectedJobId(null);
       setCompletionData({ setupTime: "", setupReason: "", notes: "" });
@@ -132,9 +163,17 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
 
   const handleStartJob = () => {
     setJobStarted(true);
+    setStartTime(new Date());
+    setElapsedSeconds(0);
   };
 
   const handleCompleteJob = () => {
+    // Beräkna automatisk tid från timer
+    const elapsedMinutes = Math.ceil(elapsedSeconds / 60);
+    setCompletionData(prev => ({
+      ...prev,
+      setupTime: elapsedMinutes.toString(),
+    }));
     setView("completion");
   };
 
@@ -225,7 +264,15 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Ställtid (minuter)</label>
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium">Ställtid (minuter)</label>
+                {startTime && (
+                  <Badge variant="secondary" className="text-xs">
+                    <Timer className="h-3 w-3 mr-1" />
+                    Automatiskt uppmätt
+                  </Badge>
+                )}
+              </div>
               <Input 
                 type="number"
                 placeholder="0"
@@ -233,6 +280,11 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
                 onChange={(e) => setCompletionData({...completionData, setupTime: e.target.value})}
                 data-testid="input-setup-time"
               />
+              {startTime && (
+                <p className="text-xs text-muted-foreground">
+                  Tiden mättes automatiskt från när du startade jobbet. Du kan justera om det behövs.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -407,7 +459,16 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
         </div>
       </div>
 
-      <div className="p-4 border-t">
+      <div className="p-4 border-t space-y-3">
+        {jobStarted && (
+          <div className="flex items-center justify-center gap-3 p-3 bg-muted rounded-md">
+            <Timer className="h-5 w-5 text-primary animate-pulse" />
+            <span className="text-2xl font-mono font-bold" data-testid="text-elapsed-time">
+              {formatTime(elapsedSeconds)}
+            </span>
+            <Badge variant="secondary">Pågående</Badge>
+          </div>
+        )}
         {!jobStarted ? (
           <Button className="w-full h-14 text-lg" onClick={handleStartJob} data-testid="button-start-job">
             <Play className="h-5 w-5 mr-2" />

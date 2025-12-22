@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { WorkOrder, Resource, Cluster } from "@shared/schema";
+import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject } from "@shared/schema";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -676,4 +676,208 @@ Svara ENDAST med JSON:
     console.error("AI enhancement failed:", error);
     return baseResult;
   }
+}
+
+// ============ Setup Time Insights ============
+
+export interface SetupTimeInsight {
+  id: string;
+  type: "drift" | "anomaly" | "improvement" | "reliable" | "suggestion";
+  severity: "high" | "medium" | "low";
+  title: string;
+  description: string;
+  objectId?: string;
+  objectName?: string;
+  clusterId?: string;
+  clusterName?: string;
+  currentEstimate?: number;
+  actualAverage?: number;
+  sampleSize?: number;
+  suggestion?: string;
+}
+
+export interface SetupTimeAnalysisResult {
+  insights: SetupTimeInsight[];
+  overallAccuracy: number; // 0-100, hur bra estimeringar matchar verklighet
+  totalLogsAnalyzed: number;
+  objectsWithSufficientData: number;
+  summary: string;
+  recommendedUpdates: Array<{
+    objectId: string;
+    objectName: string;
+    currentEstimate: number;
+    suggestedEstimate: number;
+    reason: string;
+  }>;
+}
+
+const MIN_SAMPLES_FOR_ANALYSIS = 3;
+const DRIFT_THRESHOLD_PERCENT = 20; // 20% avvikelse = drift
+
+export function analyzeSetupTimeLogs(
+  logs: SetupTimeLog[],
+  objects: ServiceObject[],
+  clusters: Cluster[]
+): SetupTimeAnalysisResult {
+  const insights: SetupTimeInsight[] = [];
+  const recommendedUpdates: SetupTimeAnalysisResult["recommendedUpdates"] = [];
+  
+  const objectMap = new Map(objects.map(o => [o.id, o]));
+  const clusterMap = new Map(clusters.map(c => [c.id, c]));
+  
+  // Gruppera loggar per objekt
+  const logsByObject: Record<string, SetupTimeLog[]> = {};
+  logs.forEach(log => {
+    if (!logsByObject[log.objectId]) {
+      logsByObject[log.objectId] = [];
+    }
+    logsByObject[log.objectId].push(log);
+  });
+  
+  let totalDriftScore = 0;
+  let objectsWithData = 0;
+  
+  Object.entries(logsByObject).forEach(([objectId, objectLogs]) => {
+    const object = objectMap.get(objectId);
+    if (!object) return;
+    
+    const cluster = object.clusterId ? clusterMap.get(object.clusterId) : null;
+    
+    if (objectLogs.length < MIN_SAMPLES_FOR_ANALYSIS) {
+      return; // Inte tillräckligt med data
+    }
+    
+    objectsWithData++;
+    
+    // Beräkna statistik
+    const durations = objectLogs.map(l => l.durationMinutes);
+    const avg = durations.reduce((a, b) => a + b, 0) / durations.length;
+    const variance = durations.reduce((sum, d) => sum + Math.pow(d - avg, 2), 0) / durations.length;
+    const stdDev = Math.sqrt(variance);
+    const currentEstimate = object.avgSetupTime || 0;
+    
+    // Beräkna drift (skillnad mellan estimat och faktiskt)
+    const driftPercent = currentEstimate > 0 
+      ? ((avg - currentEstimate) / currentEstimate) * 100 
+      : 100;
+    
+    // Uppdatera total drift score
+    totalDriftScore += Math.min(100, Math.abs(driftPercent));
+    
+    // Detektera anomalier (outliers med z-score > 2)
+    const anomalies = objectLogs.filter(l => {
+      const zScore = stdDev > 0 ? Math.abs(l.durationMinutes - avg) / stdDev : 0;
+      return zScore > 2;
+    });
+    
+    // Generera insikter
+    if (Math.abs(driftPercent) > DRIFT_THRESHOLD_PERCENT && currentEstimate > 0) {
+      const severity = Math.abs(driftPercent) > 50 ? "high" : "medium";
+      insights.push({
+        id: `drift-${objectId}`,
+        type: "drift",
+        severity,
+        title: driftPercent > 0 ? "Underskattat ställtid" : "Överskattat ställtid",
+        description: `${object.name}: Estimat ${currentEstimate} min vs faktiskt snitt ${avg.toFixed(1)} min (${driftPercent > 0 ? "+" : ""}${driftPercent.toFixed(0)}%)`,
+        objectId,
+        objectName: object.name,
+        clusterId: cluster?.id,
+        clusterName: cluster?.name,
+        currentEstimate,
+        actualAverage: avg,
+        sampleSize: objectLogs.length,
+        suggestion: `Uppdatera estimat till ${Math.round(avg)} minuter baserat på ${objectLogs.length} mätningar.`
+      });
+      
+      recommendedUpdates.push({
+        objectId,
+        objectName: object.name,
+        currentEstimate,
+        suggestedEstimate: Math.round(avg),
+        reason: `Baserat på ${objectLogs.length} loggade ställtider med snitt ${avg.toFixed(1)} min.`
+      });
+    }
+    
+    // Lägg till pålitlig om låg varians
+    const coefficientOfVariation = avg > 0 ? (stdDev / avg) * 100 : 0;
+    if (coefficientOfVariation < 15 && objectLogs.length >= 5) {
+      insights.push({
+        id: `reliable-${objectId}`,
+        type: "reliable",
+        severity: "low",
+        title: "Pålitlig ställtid",
+        description: `${object.name}: Stabil ställtid (${avg.toFixed(1)}±${stdDev.toFixed(1)} min) över ${objectLogs.length} jobb.`,
+        objectId,
+        objectName: object.name,
+        clusterId: cluster?.id,
+        clusterName: cluster?.name,
+        currentEstimate,
+        actualAverage: avg,
+        sampleSize: objectLogs.length
+      });
+    }
+    
+    // Anomali-varning
+    if (anomalies.length > 0) {
+      insights.push({
+        id: `anomaly-${objectId}`,
+        type: "anomaly",
+        severity: "medium",
+        title: "Avvikande mätningar",
+        description: `${object.name}: ${anomalies.length} av ${objectLogs.length} mätningar avviker kraftigt från snittet.`,
+        objectId,
+        objectName: object.name,
+        sampleSize: objectLogs.length
+      });
+    }
+  });
+  
+  // Beräkna övergripande precision (0-100)
+  const overallAccuracy = objectsWithData > 0 
+    ? Math.max(0, Math.min(100, 100 - (totalDriftScore / objectsWithData)))
+    : 100;
+  
+  // Kluster-analys
+  const clusterStats: Record<string, { total: number; count: number; logs: number }> = {};
+  logs.forEach(log => {
+    const object = objectMap.get(log.objectId);
+    if (!object?.clusterId) return;
+    if (!clusterStats[object.clusterId]) {
+      clusterStats[object.clusterId] = { total: 0, count: 0, logs: 0 };
+    }
+    clusterStats[object.clusterId].total += log.durationMinutes;
+    clusterStats[object.clusterId].logs++;
+    clusterStats[object.clusterId].count = clusterStats[object.clusterId].logs;
+  });
+  
+  Object.entries(clusterStats).forEach(([clusterId, stats]) => {
+    if (stats.logs >= 10) {
+      const cluster = clusterMap.get(clusterId);
+      const avgTime = stats.total / stats.logs;
+      insights.push({
+        id: `cluster-avg-${clusterId}`,
+        type: "suggestion",
+        severity: "low",
+        title: `Klustersnitt: ${cluster?.name || clusterId}`,
+        description: `Genomsnittlig ställtid i klustret: ${avgTime.toFixed(1)} min (${stats.logs} mätningar).`,
+        clusterId,
+        clusterName: cluster?.name,
+        sampleSize: stats.logs
+      });
+    }
+  });
+  
+  return {
+    insights: insights.sort((a, b) => {
+      const severityOrder = { high: 0, medium: 1, low: 2 };
+      return severityOrder[a.severity] - severityOrder[b.severity];
+    }),
+    overallAccuracy: Math.round(overallAccuracy),
+    totalLogsAnalyzed: logs.length,
+    objectsWithSufficientData: objectsWithData,
+    summary: insights.length === 0
+      ? "Inga insikter tillgängliga. Samla in fler ställtidsloggar för analys."
+      : `Analyserade ${logs.length} loggar från ${objectsWithData} objekt. Precision: ${Math.round(overallAccuracy)}%. ${recommendedUpdates.length} estimat behöver uppdateras.`,
+    recommendedUpdates
+  };
 }
