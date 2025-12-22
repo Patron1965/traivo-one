@@ -125,6 +125,23 @@ export default function OrderStockPage() {
     enabled: !!selectedOrderForLines?.id
   });
 
+  const updateOrderInCache = async (workOrderId: string) => {
+    const response = await fetch(`/api/work-orders/${workOrderId}`);
+    if (!response.ok) return;
+    const updatedOrder: WorkOrder = await response.json();
+    
+    queryClient.setQueriesData<OrderStockResponse>(
+      { queryKey: ["/api/order-stock"] },
+      (oldData) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          orders: oldData.orders.map(o => o.id === workOrderId ? updatedOrder : o)
+        };
+      }
+    );
+  };
+
   const addLineMutation = useMutation({
     mutationFn: async ({ workOrderId, articleId, quantity }: { workOrderId: string; articleId: string; quantity: number }) => {
       await apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, { articleId, quantity });
@@ -135,7 +152,7 @@ export default function OrderStockPage() {
       setSelectedArticleId("");
       setLineQuantity(1);
       await queryClient.refetchQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/order-stock"], type: "active" });
+      await updateOrderInCache(workOrderId);
     },
     onError: () => {
       toast({ title: "Kunde inte lägga till artikel", variant: "destructive" });
@@ -150,7 +167,7 @@ export default function OrderStockPage() {
     onSuccess: async (workOrderId) => {
       toast({ title: "Artikel borttagen" });
       await queryClient.refetchQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
-      await queryClient.refetchQueries({ queryKey: ["/api/order-stock"], type: "active" });
+      await updateOrderInCache(workOrderId);
     },
     onError: () => {
       toast({ title: "Kunde inte ta bort artikel", variant: "destructive" });
