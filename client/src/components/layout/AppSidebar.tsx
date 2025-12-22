@@ -16,15 +16,18 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 
-const navigationItems = [
+const grunddataItems = [
+  { title: "Objekt", url: "/objects", icon: Building2 },
+  { title: "Resurser", url: "/resources", icon: Users },
+  { title: "Artiklar", url: "/articles", icon: Package },
+  { title: "Prislistor", url: "/price-lists", icon: Receipt },
+];
+
+const planeringItems = [
+  { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
   { title: "Veckoplanering", url: "/", icon: Calendar },
   { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
   { title: "Ruttplanering", url: "/routes", icon: Map },
-  { title: "Objekt", url: "/objects", icon: Building2 },
-  { title: "Resurser", url: "/resources", icon: Users },
-  { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
-  { title: "Artiklar", url: "/articles", icon: Package },
-  { title: "Prislistor", url: "/price-lists", icon: Receipt },
   { title: "Upphandlingar", url: "/procurements", icon: FileText },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
 ];
@@ -92,10 +95,28 @@ export function AppSidebar() {
       
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>Grunddata</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {grunddataItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
+                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           <SidebarGroupLabel>Planering</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navigationItems.map((item) => (
+              {planeringItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
                     <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
