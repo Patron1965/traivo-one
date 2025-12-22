@@ -75,12 +75,15 @@ interface OrderStockResponse {
   };
 }
 
+const ORDERS_PER_PAGE = 50;
+
 export default function OrderStockPage() {
   const { toast } = useToast();
   const [includeSimulated, setIncludeSimulated] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showLinesDialog, setShowLinesDialog] = useState(false);
@@ -230,6 +233,18 @@ export default function OrderStockPage() {
       );
     });
   }, [orderStockData?.orders, searchTerm, customerMap, objectMap]);
+
+  const totalPages = Math.ceil(filteredOrders.length / ORDERS_PER_PAGE);
+  const paginatedOrders = useMemo(() => {
+    const start = (currentPage - 1) * ORDERS_PER_PAGE;
+    return filteredOrders.slice(start, start + ORDERS_PER_PAGE);
+  }, [filteredOrders, currentPage]);
+
+  // Reset page when filter changes
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value);
+    setCurrentPage(1);
+  };
 
   const formatCurrency = (amount: number | null | undefined) => {
     if (amount == null) return "-";
@@ -382,7 +397,7 @@ export default function OrderStockPage() {
             <Input
               placeholder="Sök order, kund, objekt..."
               value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
+              onChange={e => handleSearchChange(e.target.value)}
               className="max-w-sm"
               data-testid="input-search-orders"
             />
@@ -391,12 +406,12 @@ export default function OrderStockPage() {
         <Separator />
         <ScrollArea className="h-[500px]">
           <div className="divide-y">
-            {filteredOrders.length === 0 ? (
+            {paginatedOrders.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 Inga order hittades
               </div>
             ) : (
-              filteredOrders.map(order => {
+              paginatedOrders.map(order => {
                 const customer = customerMap.get(order.customerId);
                 const object = objectMap.get(order.objectId);
                 const status = (order.orderStatus || 'skapad') as OrderStatus;
@@ -479,6 +494,36 @@ export default function OrderStockPage() {
             )}
           </div>
         </ScrollArea>
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between gap-4 p-4 border-t">
+            <span className="text-sm text-muted-foreground">
+              Visar {((currentPage - 1) * ORDERS_PER_PAGE) + 1}-{Math.min(currentPage * ORDERS_PER_PAGE, filteredOrders.length)} av {filteredOrders.length}
+            </span>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                data-testid="button-prev-page"
+              >
+                Föregående
+              </Button>
+              <span className="text-sm px-2">
+                Sida {currentPage} av {totalPages}
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                data-testid="button-next-page"
+              >
+                Nästa
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       <Dialog open={showStatusDialog} onOpenChange={setShowStatusDialog}>
