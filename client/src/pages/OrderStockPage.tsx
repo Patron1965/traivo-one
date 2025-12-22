@@ -1,6 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,9 +15,17 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine } from "@shared/schema";
+import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource } from "@shared/schema";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { 
   Package, 
@@ -34,7 +45,11 @@ import {
   Trash2,
   FileText,
   Loader2,
-  Download
+  Download,
+  Users,
+  UserCheck,
+  Lock,
+  Unlock
 } from "lucide-react";
 
 type OrderStatus = 'skapad' | 'planerad_pre' | 'planerad_resurs' | 'planerad_las' | 'utford' | 'fakturerad';
@@ -84,6 +99,14 @@ interface OrderStockResponse {
 }
 
 const ORDERS_PER_PAGE = 50;
+
+const planningFormSchema = z.object({
+  teamId: z.string().optional(),
+  resourceId: z.string().optional(),
+  scheduledDate: z.string().optional(),
+});
+
+type PlanningFormData = z.infer<typeof planningFormSchema>;
 
 export default function OrderStockPage() {
   const { toast } = useToast();
@@ -135,6 +158,26 @@ export default function OrderStockPage() {
 
   const { data: articles = [] } = useQuery<Article[]>({
     queryKey: ["/api/articles"]
+  });
+
+  const { data: teams = [] } = useQuery<Team[]>({
+    queryKey: ["/api/teams"]
+  });
+
+  const { data: resources = [] } = useQuery<Resource[]>({
+    queryKey: ["/api/resources"]
+  });
+
+  const [showPlanningDialog, setShowPlanningDialog] = useState(false);
+  const [planningOrder, setPlanningOrder] = useState<WorkOrder | null>(null);
+
+  const planningForm = useForm<PlanningFormData>({
+    resolver: zodResolver(planningFormSchema),
+    defaultValues: {
+      teamId: "",
+      resourceId: "",
+      scheduledDate: "",
+    },
   });
 
   const { data: orderLines = [], isLoading: linesLoading, refetch: refetchLines } = useQuery<WorkOrderLine[]>({
@@ -233,6 +276,68 @@ export default function OrderStockPage() {
       toast({ title: "Kunde inte befordra order", variant: "destructive" });
     }
   });
+
+  const planningMutation = useMutation({
+    mutationFn: async ({ orderId, data }: { orderId: string; data: PlanningFormData }) => {
+      const updates: Record<string, any> = {};
+      if (data.teamId) updates.teamId = data.teamId;
+      if (data.resourceId) updates.resourceId = data.resourceId;
+      if (data.scheduledDate) updates.scheduledDate = new Date(data.scheduledDate);
+      
+      // Determine new status based on what's being assigned
+      if (data.resourceId) {
+        updates.orderStatus = "planerad_resurs";
+      } else if (data.teamId) {
+        updates.orderStatus = "planerad_pre";
+      }
+      
+      return apiRequest("PATCH", `/api/work-orders/${orderId}`, updates);
+    },
+    onSuccess: () => {
+      toast({ title: "Planering sparad" });
+      setShowPlanningDialog(false);
+      setPlanningOrder(null);
+      planningForm.reset();
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte spara planering", variant: "destructive" });
+    }
+  });
+
+  const lockMutation = useMutation({
+    mutationFn: async ({ orderId, lock }: { orderId: string; lock: boolean }) => {
+      const updates = lock 
+        ? { orderStatus: "planerad_las", lockedAt: new Date() }
+        : { orderStatus: "planerad_resurs", lockedAt: null };
+      return apiRequest("PATCH", `/api/work-orders/${orderId}`, updates);
+    },
+    onSuccess: (_, { lock }) => {
+      toast({ title: lock ? "Order låst" : "Order upplåst" });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte ändra låsstatus", variant: "destructive" });
+    }
+  });
+
+  const openPlanningDialog = (order: WorkOrder) => {
+    setPlanningOrder(order);
+    planningForm.reset({
+      teamId: order.teamId || "",
+      resourceId: order.resourceId || "",
+      scheduledDate: order.scheduledDate ? new Date(order.scheduledDate).toISOString().split('T')[0] : "",
+    });
+    setShowPlanningDialog(true);
+  };
+
+  const onPlanningSubmit = (data: PlanningFormData) => {
+    if (planningOrder) {
+      planningMutation.mutate({ orderId: planningOrder.id, data });
+    }
+  };
 
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
   const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
@@ -548,16 +653,42 @@ export default function OrderStockPage() {
                         <FileText className="h-4 w-4" />
                       </Button>
                       
-                      {(status === "skapad" || status === "planerad_pre") && (
+                      {(status === "skapad" || status === "planerad_pre" || status === "planerad_resurs") && (
                         <Button
                           size="sm"
                           variant="default"
-                          onClick={() => setLocation("/")}
+                          onClick={() => openPlanningDialog(order)}
                           className="gap-1"
                           data-testid={`button-plan-${order.id}`}
                         >
-                          <Calendar className="h-4 w-4" />
+                          <Users className="h-4 w-4" />
                           Planera
+                        </Button>
+                      )}
+                      
+                      {status === "planerad_resurs" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => lockMutation.mutate({ orderId: order.id, lock: true })}
+                          className="gap-1"
+                          data-testid={`button-lock-${order.id}`}
+                        >
+                          <Lock className="h-4 w-4" />
+                          Lås
+                        </Button>
+                      )}
+                      
+                      {status === "planerad_las" && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => lockMutation.mutate({ orderId: order.id, lock: false })}
+                          className="gap-1"
+                          data-testid={`button-unlock-${order.id}`}
+                        >
+                          <Unlock className="h-4 w-4" />
+                          Lås upp
                         </Button>
                       )}
                       
@@ -665,6 +796,110 @@ export default function OrderStockPage() {
               {statusMutation.isPending ? 'Sparar...' : 'Bekräfta'}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showPlanningDialog} onOpenChange={setShowPlanningDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Planera order</DialogTitle>
+            <DialogDescription>
+              Tilldela team, resurs och datum för denna order
+            </DialogDescription>
+          </DialogHeader>
+          {planningOrder && (
+            <Form {...planningForm}>
+              <form onSubmit={planningForm.handleSubmit(onPlanningSubmit)} className="space-y-4">
+                <div className="text-sm text-muted-foreground">
+                  Order: {planningOrder.title}
+                </div>
+                
+                <FormField
+                  control={planningForm.control}
+                  name="scheduledDate"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Datum</FormLabel>
+                      <FormControl>
+                        <Input
+                          type="date"
+                          {...field}
+                          data-testid="input-planning-date"
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={planningForm.control}
+                  name="teamId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Team (förplanering)</FormLabel>
+                      <Select value={field.value || ""} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-planning-team">
+                            <SelectValue placeholder="Välj team" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Inget team</SelectItem>
+                          {teams.map((team) => (
+                            <SelectItem key={team.id} value={team.id}>
+                              {team.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={planningForm.control}
+                  name="resourceId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Resurs (detaljplanering)</FormLabel>
+                      <Select value={field.value || ""} onValueChange={field.onChange}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-planning-resource">
+                            <SelectValue placeholder="Välj resurs" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="">Ingen resurs</SelectItem>
+                          {resources.map((resource) => (
+                            <SelectItem key={resource.id} value={resource.id}>
+                              {resource.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setShowPlanningDialog(false)}>
+                    Avbryt
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={planningMutation.isPending}
+                    data-testid="button-save-planning"
+                  >
+                    {planningMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Spara
+                  </Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          )}
         </DialogContent>
       </Dialog>
 

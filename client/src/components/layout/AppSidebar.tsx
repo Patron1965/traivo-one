@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -22,6 +22,7 @@ const grunddataItems = [
   { title: "Fordon", url: "/vehicles", icon: Truck },
   { title: "Artiklar", url: "/articles", icon: Package },
   { title: "Prislistor", url: "/price-lists", icon: Receipt },
+  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
 ];
 
 const planeringItems = [
@@ -34,6 +35,7 @@ const planeringItems = [
 ];
 
 const settingsItems = [
+  { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
   { title: "Importera data", url: "/import", icon: Upload },
   { title: "Inställningar", url: "/settings", icon: Settings },
 ];

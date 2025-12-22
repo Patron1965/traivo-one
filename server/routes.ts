@@ -1923,6 +1923,84 @@ export async function registerRoutes(
     }
   });
 
+  // Generate orders from active subscriptions
+  app.post("/api/subscriptions/generate-orders", async (req, res) => {
+    try {
+      const subscriptions = await storage.getSubscriptions(DEFAULT_TENANT_ID);
+      const now = new Date();
+      let generatedCount = 0;
+
+      for (const sub of subscriptions) {
+        if (sub.status !== "active" || !sub.autoGenerate) continue;
+        if (!sub.nextGenerationDate) continue;
+        
+        const nextGenDate = new Date(sub.nextGenerationDate);
+        const generateAheadDays = sub.generateDaysAhead || 14;
+        const generateThreshold = new Date(now.getTime() + generateAheadDays * 24 * 60 * 60 * 1000);
+        
+        // Generate if nextGenerationDate is within the generate-ahead window
+        if (nextGenDate <= generateThreshold) {
+          // Create work order from subscription
+          const workOrder = await storage.createWorkOrder({
+            tenantId: DEFAULT_TENANT_ID,
+            customerId: sub.customerId,
+            objectId: sub.objectId,
+            title: sub.name,
+            description: `Genererad från abonnemang: ${sub.name}`,
+            orderStatus: "skapad",
+            priority: "normal",
+            estimatedDuration: 60,
+            scheduledDate: nextGenDate,
+            isSimulated: false,
+          });
+
+          generatedCount++;
+
+          // Calculate next generation date
+          let nextDate = new Date(nextGenDate);
+          switch (sub.periodicity) {
+            case "vecka":
+              nextDate.setDate(nextDate.getDate() + 7);
+              break;
+            case "varannan_vecka":
+              nextDate.setDate(nextDate.getDate() + 14);
+              break;
+            case "manad":
+              nextDate.setMonth(nextDate.getMonth() + 1);
+              break;
+            case "kvartal":
+              nextDate.setMonth(nextDate.getMonth() + 3);
+              break;
+            case "halvar":
+              nextDate.setMonth(nextDate.getMonth() + 6);
+              break;
+            case "ar":
+              nextDate.setFullYear(nextDate.getFullYear() + 1);
+              break;
+          }
+
+          // Check if we've passed endDate
+          if (sub.endDate && nextDate > new Date(sub.endDate)) {
+            await storage.updateSubscription(sub.id, {
+              status: "completed",
+              lastGeneratedDate: now,
+            });
+          } else {
+            await storage.updateSubscription(sub.id, {
+              lastGeneratedDate: now,
+              nextGenerationDate: nextDate,
+            });
+          }
+        }
+      }
+
+      res.json({ success: true, generatedCount });
+    } catch (error) {
+      console.error("Failed to generate orders:", error);
+      res.status(500).json({ error: "Failed to generate orders from subscriptions" });
+    }
+  });
+
   // ============== TEAMS ==============
   app.get("/api/teams", async (req, res) => {
     try {

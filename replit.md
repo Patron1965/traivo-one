@@ -138,6 +138,14 @@ Field Mappings (Modus → Nordic Routing):
 - **Font:** Inter for UI
 
 ## Recent Changes
+- 2024-12-22: **Phase 4: Production Control** - Added PlanningParametersPage for SLA settings, time slots, and delivery constraints
+- 2024-12-22: **Phase 3: Planning Workflow** - Team/resource assignment in OrderStockPage with lock/unlock functionality
+- 2024-12-22: Added planning dialog for team and resource assignment with date selection
+- 2024-12-22: Order locking before execution (planerad_las status)
+- 2024-12-22: **Phase 2: Subscriptions** - Added SubscriptionsPage with CRUD for recurring services
+- 2024-12-22: Automatic order generation from subscriptions with POST /api/subscriptions/generate-orders
+- 2024-12-22: Subscription periodicity: vecka, varannan_vecka, manad, kvartal, halvar, ar
+- 2024-12-22: Added teamId to work_orders for team assignment (förplanering)
 - 2024-12-22: **Phase 3 Modus Fleet Management** - Added VehiclesPage for fleet and equipment management
 - 2024-12-22: Added 10 new database tables: vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability, vehicleSchedule, subscriptions, teams, teamMembers, planningParameters
 - 2024-12-22: Added CRUD API routes for all fleet management tables
@@ -217,7 +225,9 @@ When creating a new page, ALWAYS complete these steps:
 | `/vehicles` | VehiclesPage | Fordon och utrustning |
 | `/articles` | ArticlesPage | Artikelhantering |
 | `/price-lists` | PriceListsPage | Prislistor |
-| `/order-stock` | OrderStockPage | Orderstock |
+| `/order-stock` | OrderStockPage | Orderstock med planering/låsning |
+| `/subscriptions` | SubscriptionsPage | Abonnemangshantering |
+| `/planning-parameters` | PlanningParametersPage | Produktionsstyrning/SLA |
 | `/procurements` | ProcurementsPage | Inköp |
 | `/dashboard` | DashboardPage | Analys |
 | `/import` | ImportPage | Modus 2.0 import |

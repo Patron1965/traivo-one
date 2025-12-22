@@ -136,6 +136,8 @@ export const workOrders = pgTable("work_orders", {
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   objectId: varchar("object_id").references(() => objects.id).notNull(),
   resourceId: varchar("resource_id").references(() => resources.id),
+  // Team för förplanering (innan specifik resurs är tilldelad)
+  teamId: varchar("team_id").references(() => teams.id),
   title: text("title").notNull(),
   description: text("description"),
   orderType: text("order_type").default("service").notNull(),
@@ -665,6 +667,7 @@ export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
   customer: one(customers, { fields: [workOrders.customerId], references: [customers.id] }),
   object: one(objects, { fields: [workOrders.objectId], references: [objects.id] }),
   resource: one(resources, { fields: [workOrders.resourceId], references: [resources.id] }),
+  team: one(teams, { fields: [workOrders.teamId], references: [teams.id] }),
   simulationScenario: one(simulationScenarios, { fields: [workOrders.simulationScenarioId], references: [simulationScenarios.id] }),
   lines: many(workOrderLines),
 }));

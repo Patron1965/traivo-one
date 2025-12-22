@@ -22,6 +22,8 @@ import ArticlesPage from "@/pages/ArticlesPage";
 import PriceListsPage from "@/pages/PriceListsPage";
 import OrderStockPage from "@/pages/OrderStockPage";
 import VehiclesPage from "@/pages/VehiclesPage";
+import SubscriptionsPage from "@/pages/SubscriptionsPage";
+import PlanningParametersPage from "@/pages/PlanningParametersPage";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -38,6 +40,8 @@ function Router() {
       <Route path="/price-lists" component={PriceListsPage} />
       <Route path="/order-stock" component={OrderStockPage} />
       <Route path="/vehicles" component={VehiclesPage} />
+      <Route path="/subscriptions" component={SubscriptionsPage} />
+      <Route path="/planning-parameters" component={PlanningParametersPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/import" component={ImportPage} />
       <Route path="/settings" component={SettingsPage} />
