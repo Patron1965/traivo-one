@@ -37,6 +37,7 @@ const planeringItems = [
 const settingsItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
   { title: "Importera data", url: "/import", icon: Upload },
+  { title: "Systemöversikt", url: "/system-overview", icon: FileText },
   { title: "Inställningar", url: "/settings", icon: Settings },
 ];
 

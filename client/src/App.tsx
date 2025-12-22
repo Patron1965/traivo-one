@@ -25,6 +25,7 @@ import OrderStockPage from "@/pages/OrderStockPage";
 import VehiclesPage from "@/pages/VehiclesPage";
 import SubscriptionsPage from "@/pages/SubscriptionsPage";
 import PlanningParametersPage from "@/pages/PlanningParametersPage";
+import SystemOverviewPage from "@/pages/SystemOverviewPage";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -45,6 +46,7 @@ function Router() {
       <Route path="/planning-parameters" component={PlanningParametersPage} />
       <Route path="/dashboard" component={DashboardPage} />
       <Route path="/import" component={ImportPage} />
+      <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
