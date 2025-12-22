@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building } from "lucide-react";
 import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -40,6 +40,7 @@ const planeringItems = [
   { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
   { title: "Väderplanering", url: "/weather", icon: Cloud },
+  { title: "Kundportal", url: "/customer-portal", icon: Building },
 ];
 
 const settingsItems = [
