@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3 } from "lucide-react";
 import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -17,6 +17,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 
+// Grunddata - stamdata som sätts upp en gång
 const grunddataItems = [
   { title: "Kluster", url: "/clusters", icon: Target },
   { title: "Objekt", url: "/objects", icon: Building2 },
@@ -27,24 +28,30 @@ const grunddataItems = [
   { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
 ];
 
+// Planering - operativt arbetsflöde i ordning
 const planeringItems = [
   { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
   { title: "Veckoplanering", url: "/", icon: Calendar },
+  { title: "Väderplanering", url: "/weather", icon: Cloud },
   { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
   { title: "Ruttplanering", url: "/routes", icon: Map },
-  { title: "Upphandlingar", url: "/procurements", icon: FileText },
+  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
+];
+
+// Analys - rapporter och insikter
+const analysItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Ekonomi", url: "/economics", icon: DollarSign },
   { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
   { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
-  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
-  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
-  { title: "Väderplanering", url: "/weather", icon: Cloud },
-  { title: "Kundportal", url: "/customer-portal", icon: Building },
 ];
 
+// System - administration och verktyg
 const settingsItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
+  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
+  { title: "Upphandlingar", url: "/procurements", icon: FileText },
+  { title: "Kundportal", url: "/customer-portal", icon: Building },
   { title: "Importera data", url: "/import", icon: Upload },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText },
   { title: "Inställningar", url: "/settings", icon: Settings },
@@ -133,6 +140,24 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               {planeringItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
+                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Analys</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {analysItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
                     <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
