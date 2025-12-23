@@ -12,6 +12,7 @@ import {
   ChevronRight, Calendar, CircleDollarSign, Package, Target, FileText,
   Sparkles, Brain, Route, Zap, MessageSquare, BarChart3, Cpu, Shield
 } from "lucide-react";
+import { AICard } from "@/components/AICard";
 import { Link } from "wouter";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -726,6 +727,17 @@ export function Dashboard() {
           icon={Users}
         />
       </div>
+
+      <AICard
+        title="AI Insikter"
+        variant="compact"
+        defaultExpanded={false}
+        insights={[
+          { type: "info", title: "Trendanalys", description: "AI identifierar mönster i ställtider och produktivitet över tid" },
+          { type: "optimization", title: "Effektivitetsförslag", description: "Få AI-drivna förslag för att förbättra marginaler och minska kostnader" },
+          { type: "warning", title: "Anomalidetektion", description: "Automatisk upptäckt av avvikande värden och potentiella problem" },
+        ]}
+      />
 
       {/* Ställtidstrend */}
       <Card>

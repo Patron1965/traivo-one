@@ -45,10 +45,11 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas för AI-förbättring:
 
 ### Implementerade AI-funktioner
-- **Global AI Assistant:** Tillgänglig från alla sidor via fast knapp i nedre högra hörnet. Kontextmedveten:
-  - Veckoplaneraren: Full AI-funktionalitet med auto-schemaläggning, analys och förslag
-  - Andra moduler: Visar modulspecifika AI-kapabiliteter (placeholders för framtida implementation)
-  - Använder route-matching för att identifiera aktuell modul (inkl. dynamiska routes som /clusters/:id)
+- **Integrerade AI-kort (AICard):** Kontextmedvetna AI-paneler integrerade direkt i varje sida:
+  - Veckoplaneraren: Full AISuggestionsPanel med auto-schemaläggning, arbetsbelastningsanalys, ruttoptimering
+  - Kluster, Orderstock, Dashboard, Objekt, Resurser, Rutter: Kompakta AI-kort med modulspecifika insikter
+  - Övriga moduler: GlobalAIButton med funktionell AI-chatt (/api/ai/chat endpoint)
+  - Hybrid-approach: Rika AI-upplevelser där kontext finns, funktionell chatt överallt annars
 - **AI Planning Assistant:** Analyserar veckoplanering och ger förslag för att balansera arbetsbelastning, optimera körtid och prioritera akuta ordrar.
 - **AI Auto-Scheduling med väderoptimering:** Automatisk schemaläggning som:
   - Hämtar 7-dagars väderprognos från Open-Meteo API för Umeå

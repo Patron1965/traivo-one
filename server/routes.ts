@@ -2378,6 +2378,77 @@ export async function registerRoutes(
     }
   });
 
+  // AI General Chat - contextual AI assistant for all modules
+  app.post("/api/ai/chat", async (req, res) => {
+    try {
+      const { question, context } = req.body;
+      if (!question || typeof question !== "string") {
+        return res.status(400).json({ error: "Fråga krävs" });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI();
+
+      // Fetch contextual data based on current module
+      let moduleData = "";
+      const moduleName = context?.module || "Generell";
+      const modulePath = context?.path || "/";
+
+      try {
+        if (modulePath.startsWith("/economics")) {
+          const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+          const completed = workOrders.filter(wo => wo.status === "completed" || wo.orderStatus === "utford").length;
+          const pending = workOrders.filter(wo => wo.status !== "completed" && wo.orderStatus !== "utford").length;
+          moduleData = `Ekonomisk översikt: ${workOrders.length} ordrar totalt, ${completed} utförda, ${pending} väntande`;
+        } else if (modulePath.startsWith("/vehicles")) {
+          const vehicles = await storage.getVehicles(DEFAULT_TENANT_ID);
+          moduleData = `Fordonsflotta: ${vehicles.length} fordon registrerade`;
+        } else if (modulePath.startsWith("/weather")) {
+          moduleData = "Väderplanering: AI-stöd för att anpassa schemaläggning baserat på väderförhållanden";
+        } else if (modulePath.startsWith("/subscriptions")) {
+          const subscriptions = await storage.getSubscriptions(DEFAULT_TENANT_ID);
+          const active = subscriptions.filter(s => s.status === "active").length;
+          moduleData = `Abonnemang: ${subscriptions.length} totalt, ${active} aktiva`;
+        } else if (modulePath.startsWith("/articles")) {
+          const articles = await storage.getArticles(DEFAULT_TENANT_ID);
+          moduleData = `Artiklar: ${articles.length} artiklar i systemet`;
+        } else {
+          const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
+          const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+          moduleData = `System: ${clusters.length} kluster, ${workOrders.length} ordrar`;
+        }
+      } catch (e) {
+        moduleData = "Kunde inte hämta moduldata";
+      }
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Du är en AI-assistent för Unicorn, en fältserviceoptimerings-plattform för avfallshantering och sophantering i Sverige. Användaren är på modulen "${moduleName}". 
+
+Aktuell kontext: ${moduleData}
+
+Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips för optimering och effektivisering. Om frågan är utanför systemets scope, föreslå att användaren kontaktar support.`,
+          },
+          {
+            role: "user",
+            content: question,
+          },
+        ],
+        max_tokens: 500,
+        temperature: 0.7,
+      });
+
+      const answer = response.choices[0]?.message?.content || "Kunde inte generera ett svar.";
+      res.json({ answer });
+    } catch (error) {
+      console.error("AI Chat error:", error);
+      res.status(500).json({ error: "Kunde inte behandla frågan" });
+    }
+  });
+
   // AI Planning suggestions
   app.post("/api/ai/planning-suggestions", async (req, res) => {
     try {

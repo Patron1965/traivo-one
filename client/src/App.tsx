@@ -7,6 +7,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { GlobalAIButton } from "@/components/GlobalAIButton";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import WeekPlannerPage from "@/pages/WeekPlannerPage";
@@ -93,6 +94,7 @@ function AuthenticatedApp() {
             </ErrorBoundary>
           </main>
         </div>
+        <GlobalAIButton />
       </div>
     </SidebarProvider>
   );

@@ -18,6 +18,7 @@ import {
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3
 } from "lucide-react";
+import { AICard } from "@/components/AICard";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -590,6 +591,17 @@ export default function ObjectsPage() {
           </Button>
         </div>
       </div>
+
+      <AICard
+        title="AI Objektanalys"
+        variant="compact"
+        defaultExpanded={false}
+        insights={[
+          { type: "suggestion", title: "Servicemönster", description: "AI kan identifiera mönster i hur objekt servas för bättre planering" },
+          { type: "optimization", title: "Gruppering", description: "Föreslå optimal gruppering av objekt baserat på geografi och servicebehov" },
+          { type: "info", title: "Underhållsprognoser", description: "Prediktera kommande servicebehov baserat på historik" },
+        ]}
+      />
 
       <Card>
         <CardHeader className="pb-3">

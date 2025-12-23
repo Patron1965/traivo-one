@@ -65,6 +65,7 @@ import { QueryErrorState } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { AddressSearch } from "@/components/AddressSearch";
+import { AICard } from "@/components/AICard";
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -326,6 +327,17 @@ export default function ClustersPage() {
           Nytt Kluster
         </Button>
       </div>
+
+      <AICard
+        title="AI Klusteranalys"
+        variant="compact"
+        defaultExpanded={false}
+        insights={[
+          { type: "optimization", title: "Klusteroptimering", description: "AI kan analysera geografisk spridning och föreslå bättre klusterindelning" },
+          { type: "suggestion", title: "Kapacitetsbalansering", description: "Identifiera kluster med ojämn arbetsbelastning" },
+          { type: "info", title: "Automatisk klusterbildning", description: "Låt AI föreslå nya kluster baserat på objektplaceringar" },
+        ]}
+      />
 
       <div className="flex items-center gap-4 flex-wrap">
         <div className="relative flex-1 max-w-md">

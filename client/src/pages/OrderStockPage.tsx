@@ -51,6 +51,7 @@ import {
   Lock,
   Unlock
 } from "lucide-react";
+import { AICard } from "@/components/AICard";
 
 type OrderStatus = 'skapad' | 'planerad_pre' | 'planerad_resurs' | 'planerad_las' | 'utford' | 'fakturerad';
 
@@ -551,6 +552,17 @@ export default function OrderStockPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AICard
+        title="AI Orderanalys"
+        variant="compact"
+        defaultExpanded={false}
+        insights={[
+          { type: "suggestion", title: "Prioriteringsförslag", description: "AI kan analysera ordrar och föreslå optimal prioritering baserat på deadlines och värde" },
+          { type: "optimization", title: "Batchoptimering", description: "Gruppera liknande ordrar för effektivare hantering" },
+          { type: "warning", title: "Deadline-varningar", description: "Identifiera ordrar som riskerar att missa sina tidsfönster" },
+        ]}
+      />
 
       <div className="flex items-center gap-2 flex-wrap">
         {(Object.keys(STATUS_LABELS) as OrderStatus[]).map(status => {

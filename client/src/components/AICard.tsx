@@ -69,7 +69,7 @@ export function AICard({
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <Card className="border-purple-500/20 bg-gradient-to-br from-purple-500/5 to-blue-500/5">
           <CollapsibleTrigger asChild>
-            <CardHeader className="pb-2 cursor-pointer hover-elevate">
+            <CardHeader className="pb-2 cursor-pointer hover-elevate" data-testid="button-ai-card-toggle">
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center gap-2 text-sm">
                   <div className="p-1 rounded-md bg-purple-500/20">

@@ -52,6 +52,7 @@ import {
   Wrench,
   X,
 } from "lucide-react";
+import { AICard } from "@/components/AICard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { QueryErrorState } from "@/components/ErrorBoundary";
@@ -429,6 +430,17 @@ export default function ResourcesPage() {
           Lägg till resurs
         </Button>
       </div>
+
+      <AICard
+        title="AI Resursanalys"
+        variant="compact"
+        defaultExpanded={false}
+        insights={[
+          { type: "optimization", title: "Kapacitetsbalansering", description: "AI kan föreslå optimal fördelning av arbetsbelastning mellan resurser" },
+          { type: "suggestion", title: "Kompetensoptimering", description: "Matcha resurskompetenser mot arbetsuppgifter för bästa effektivitet" },
+          { type: "info", title: "Tillgänglighetsanalys", description: "Förutse resursbehov och identifiera potentiella flaskhalsar" },
+        ]}
+      />
 
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-4 flex-wrap">
