@@ -38,23 +38,18 @@ export default function WeekPlannerPage() {
       </div>
 
       {showAIPanel && (
-        <div className="w-80 border-l bg-muted/30 flex flex-col shrink-0">
-          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-gradient-to-r from-purple-500/10 to-blue-500/10 min-h-[57px]">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-500 shrink-0" />
-              <span className="font-semibold text-sm">AI Assistent</span>
-            </div>
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={() => setShowAIPanel(false)}
-              data-testid="button-hide-ai-panel"
-            >
-              <PanelRightClose className="h-4 w-4" />
-            </Button>
-          </div>
+        <div className="w-80 border-l bg-muted/30 flex flex-col shrink-0 relative">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="absolute top-2 right-2 z-10"
+            onClick={() => setShowAIPanel(false)}
+            data-testid="button-hide-ai-panel"
+          >
+            <PanelRightClose className="h-4 w-4" />
+          </Button>
           
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto pt-2">
             <AISuggestionsPanel
               weekStart={weekStart}
               weekEnd={weekEnd}
