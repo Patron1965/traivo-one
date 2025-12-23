@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -6,13 +6,14 @@ import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, Play, CheckCircle, ArrowLeft, Mic, MicOff, 
   Volume2, Loader2, AlertTriangle, Navigation, Phone,
-  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, MessageCircle
+  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, MessageCircle, Bell
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
+import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 
 declare global {
@@ -70,6 +71,42 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [aiAnswer, setAiAnswer] = useState("");
   const [isSpeaking, setIsSpeaking] = useState(false);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  const handleNotification = useCallback((notification: Notification) => {
+    const iconMap: Record<string, "default" | "destructive"> = {
+      job_assigned: "default",
+      job_updated: "default", 
+      schedule_changed: "default",
+      priority_changed: "default",
+      job_cancelled: "destructive",
+    };
+    
+    toast({
+      title: notification.title,
+      description: notification.message,
+      variant: iconMap[notification.type] || "default",
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+
+    if ("vibrate" in navigator) {
+      navigator.vibrate(200);
+    }
+
+    try {
+      const audio = new Audio("data:audio/wav;base64,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");
+      audio.volume = 0.5;
+      audio.play().catch(() => {});
+    } catch (e) {
+      // Audio not supported
+    }
+  }, [toast]);
+
+  const { notifications, unreadCount, isConnected } = useNotifications({
+    resourceId: resourceId || "",
+    onNotification: handleNotification,
+    autoConnect: !!resourceId,
+  });
 
   useEffect(() => {
     if (jobStarted && startTime) {
@@ -538,6 +575,16 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {resourceId && (
+              <Badge 
+                variant={isConnected ? "outline" : "destructive"} 
+                className={isConnected ? "text-green-600" : ""}
+                data-testid="badge-connection-status"
+              >
+                <Bell className="h-3 w-3 mr-1" />
+                {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "Offline"}
+              </Badge>
+            )}
             <Badge variant="secondary">{todayJobs.length} kvar</Badge>
             <Badge variant="outline" className="text-green-600">{completedCount} klara</Badge>
           </div>

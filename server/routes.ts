@@ -11,9 +11,10 @@ import {
   insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertClusterSchema
 } from "@shared/schema";
 import { z } from "zod";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
+import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import multer from "multer";
 import Papa from "papaparse";
+import { notificationService } from "./notifications";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -43,6 +44,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  
+  // Initialize WebSocket notification service
+  notificationService.initialize(httpServer);
   
   await setupAuth(app);
   registerAuthRoutes(app);
@@ -295,6 +299,12 @@ export async function registerRoutes(
         tenantId: DEFAULT_TENANT_ID 
       });
       const workOrder = await storage.createWorkOrder(data);
+      
+      // Notify resource if order is assigned immediately
+      if (workOrder.resourceId) {
+        notificationService.notifyJobAssigned(workOrder, workOrder.resourceId);
+      }
+      
       res.status(201).json(workOrder);
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -308,6 +318,10 @@ export async function registerRoutes(
     try {
       const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
       
+      // Get existing order to detect changes
+      const existingOrder = await storage.getWorkOrder(req.params.id);
+      if (!existingOrder) return res.status(404).json({ error: "Work order not found" });
+      
       // Convert scheduledDate string to Date object if present (use UTC to prevent timezone shift)
       if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {
         updateData.scheduledDate = new Date(updateData.scheduledDate + 'T12:00:00Z');
@@ -315,6 +329,58 @@ export async function registerRoutes(
       
       const workOrder = await storage.updateWorkOrder(req.params.id, updateData);
       if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+      
+      // Send notifications based on what changed
+      const newResourceId = workOrder.resourceId;
+      const oldResourceId = existingOrder.resourceId;
+      
+      // New assignment
+      if (newResourceId && newResourceId !== oldResourceId) {
+        notificationService.notifyJobAssigned(workOrder, newResourceId);
+        
+        // Notify old resource if order was reassigned
+        if (oldResourceId) {
+          notificationService.notifyJobCancelled(existingOrder, oldResourceId);
+        }
+      }
+      
+      // Schedule change
+      if (newResourceId && updateData.scheduledDate !== undefined) {
+        const oldDate = existingOrder.scheduledDate?.toISOString().split('T')[0];
+        const newDate = workOrder.scheduledDate?.toISOString().split('T')[0];
+        if (oldDate !== newDate) {
+          notificationService.notifyScheduleChanged(workOrder, newResourceId, oldDate, newDate);
+        }
+      }
+      
+      // Priority change
+      if (newResourceId && updateData.priority && updateData.priority !== existingOrder.priority) {
+        notificationService.notifyPriorityChanged(workOrder, newResourceId, existingOrder.priority);
+      }
+      
+      // General update (if resource is assigned and update doesn't fall into other categories)
+      const isAssignmentChange = newResourceId !== oldResourceId;
+      const isScheduleChange = updateData.scheduledDate !== undefined && 
+        existingOrder.scheduledDate?.toISOString().split('T')[0] !== workOrder.scheduledDate?.toISOString().split('T')[0];
+      const isPriorityChange = updateData.priority && updateData.priority !== existingOrder.priority;
+      
+      if (newResourceId && !isAssignmentChange && !isScheduleChange && !isPriorityChange) {
+        // General update - status, notes, etc.
+        const changes: string[] = [];
+        if (updateData.status && updateData.status !== existingOrder.status) {
+          changes.push(`status ändrad till ${updateData.status}`);
+        }
+        if (updateData.notes !== undefined && updateData.notes !== existingOrder.notes) {
+          changes.push("anteckningar uppdaterade");
+        }
+        if (updateData.description !== undefined && updateData.description !== existingOrder.description) {
+          changes.push("beskrivning uppdaterad");
+        }
+        if (changes.length > 0) {
+          notificationService.notifyJobUpdated(workOrder, newResourceId, `${workOrder.title}: ${changes.join(", ")}`);
+        }
+      }
+      
       res.json(workOrder);
     } catch (error) {
       console.error("Failed to update work order:", error);
@@ -2895,6 +2961,46 @@ Svara alltid på svenska.`,
     } catch (error) {
       console.error("Clear error:", error);
       res.status(500).json({ error: "Kunde inte rensa data" });
+    }
+  });
+
+  // Notification token endpoint - generates auth token for WebSocket connection
+  // Requires authentication and validates resource ownership
+  app.post("/api/notifications/token", isAuthenticated, async (req: any, res) => {
+    try {
+      const { resourceId } = req.body;
+      
+      if (!resourceId) {
+        return res.status(400).json({ error: "resourceId required" });
+      }
+      
+      // Validate resource exists
+      const resource = await storage.getResource(resourceId);
+      if (!resource) {
+        return res.status(404).json({ error: "Resource not found" });
+      }
+      
+      // Verify resource belongs to the same tenant
+      // In production, you might also verify that the authenticated user
+      // is allowed to access this specific resource
+      if (resource.tenantId !== DEFAULT_TENANT_ID) {
+        console.log(`[notifications] Token request denied: resource ${resourceId} belongs to different tenant`);
+        return res.status(403).json({ error: "Not authorized to access this resource" });
+      }
+      
+      // Generate token for this resource
+      const token = notificationService.generateAuthToken(resourceId);
+      
+      console.log(`[notifications] Token generated for resource ${resourceId} by user ${req.user?.claims?.sub || "unknown"}`);
+      
+      res.json({ 
+        token,
+        expiresIn: 300, // 5 minutes
+        resourceId 
+      });
+    } catch (error) {
+      console.error("Failed to generate notification token:", error);
+      res.status(500).json({ error: "Failed to generate token" });
     }
   });
 

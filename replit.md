@@ -29,6 +29,13 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **Modus 2.0 Import System:** Dedicated `/import` page for CSV imports of Objects, Tasks, and Events from Modus 2.0, including data transformation and validation (e.g., geocoding, parent linking).
 -   **Lazy Object Loading:** Implemented across components using `useObjectsByIds` and `useObjectSearch` hooks to optimize performance by fetching only necessary data.
 -   **Address Search/Autocomplete:** `AddressSearch` component using OpenStreetMap Nominatim API for Swedish address geocoding. Used in cluster creation form to auto-populate coordinates and postal codes.
+-   **Real-time Notifications (WebSocket):** Push notifications to field workers when work orders change:
+    - WebSocket server at `/ws/notifications` with token-based authentication
+    - Token endpoint: `POST /api/notifications/token` (requires authentication, validates tenant)
+    - 5 notification types: job_assigned, job_updated, job_cancelled, schedule_changed, priority_changed
+    - Frontend hook: `useNotifications` handles token acquisition, connection, and reconnection
+    - Field apps: SimpleFieldApp and MobileFieldApp show connection status badge and toast notifications
+    - **Production TODO:** Implement user-to-resource mapping for fine-grained authorization (currently validates tenant only)
 
 ### Feature Specifications
 -   **Clusters:** A core concept for geographic organization, managing entities like objects and orders, visualized via lists and interactive maps (react-leaflet).

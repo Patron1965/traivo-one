@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,12 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { 
   MapPin, Clock, Phone, Navigation, Key, Car, Info, 
-  Play, CheckCircle, Camera, ArrowLeft, ChevronRight, Loader2, Pause, Timer, Square
+  Play, CheckCircle, Camera, ArrowLeft, ChevronRight, Loader2, Pause, Timer, Square, Bell
 } from "lucide-react";
 import { startOfDay, endOfDay } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
+import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import type { WorkOrderWithObject, ServiceObject, Customer } from "@shared/schema";
 
 const priorityColors: Record<string, string> = {
@@ -42,6 +43,34 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
     setupTime: "",
     setupReason: "",
     notes: "",
+  });
+
+  const handleNotification = useCallback((notification: Notification) => {
+    const iconMap: Record<string, "default" | "destructive"> = {
+      job_assigned: "default",
+      job_updated: "default", 
+      schedule_changed: "default",
+      priority_changed: "default",
+      job_cancelled: "destructive",
+    };
+    
+    toast({
+      title: notification.title,
+      description: notification.message,
+      variant: iconMap[notification.type] || "default",
+    });
+
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+
+    if ("vibrate" in navigator) {
+      navigator.vibrate(200);
+    }
+  }, [toast]);
+
+  const { notifications, unreadCount, isConnected } = useNotifications({
+    resourceId: resourceId || "",
+    onNotification: handleNotification,
+    autoConnect: !!resourceId,
   });
   
   // Timer effect - uppdaterar varje sekund när jobb är startat
@@ -201,8 +230,22 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
     return (
       <div className="flex flex-col h-full bg-background">
         <div className="p-4 border-b">
-          <h1 className="text-lg font-semibold">Dagens jobb</h1>
-          <p className="text-sm text-muted-foreground">{todayJobs.length} jobb planerade</p>
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <h1 className="text-lg font-semibold">Dagens jobb</h1>
+              <p className="text-sm text-muted-foreground">{todayJobs.length} jobb planerade</p>
+            </div>
+            {resourceId && (
+              <Badge 
+                variant={isConnected ? "outline" : "destructive"} 
+                className={isConnected ? "text-green-600" : ""}
+                data-testid="badge-connection-status"
+              >
+                <Bell className="h-3 w-3 mr-1" />
+                {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "Offline"}
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex-1 overflow-auto p-4 space-y-3">
           {todayJobs.length === 0 ? (
