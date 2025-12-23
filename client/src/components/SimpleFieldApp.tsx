@@ -1,16 +1,19 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, Play, CheckCircle, ArrowLeft, Mic, MicOff, 
   Volume2, Loader2, AlertTriangle, Navigation, Phone,
-  HelpCircle, X
+  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, MessageCircle
 } from "lucide-react";
-import { startOfDay, endOfDay } from "date-fns";
+import { startOfDay, endOfDay, format } from "date-fns";
+import { sv } from "date-fns/locale";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
-import type { WorkOrderWithObject, ServiceObject, Customer } from "@shared/schema";
+import type { WorkOrderWithObject, Customer } from "@shared/schema";
 
 declare global {
   interface Window {
@@ -45,7 +48,7 @@ declare global {
   }
 }
 
-type View = "jobs" | "job" | "ai" | "problem";
+type View = "jobs" | "job";
 
 interface SimpleFieldAppProps {
   resourceId?: string;
@@ -60,6 +63,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   
+  const [showAiPanel, setShowAiPanel] = useState(false);
+  const [showProblemPanel, setShowProblemPanel] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [aiQuestion, setAiQuestion] = useState("");
   const [aiAnswer, setAiAnswer] = useState("");
@@ -152,7 +157,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      toast({ title: "Bra jobbat!", description: "Jobbet är klart." });
+      toast({ title: "Klart!", description: "Jobbet markerat som slutfört." });
       setJobStarted(false);
       setStartTime(null);
       setElapsedSeconds(0);
@@ -239,6 +244,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const handleSelectJob = (jobId: string) => {
     setSelectedJobId(jobId);
     setView("job");
+    setShowAiPanel(false);
+    setShowProblemPanel(false);
   };
 
   const handleStartJob = () => {
@@ -248,162 +255,24 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   };
 
   const handleBack = () => {
-    if (view === "ai" || view === "problem") {
-      setView("job");
-      setAiQuestion("");
-      setAiAnswer("");
-    } else {
-      setView("jobs");
-      setSelectedJobId(null);
-      setJobStarted(false);
-      setStartTime(null);
-    }
+    setView("jobs");
+    setSelectedJobId(null);
+    setJobStarted(false);
+    setStartTime(null);
+    setShowAiPanel(false);
+    setShowProblemPanel(false);
+  };
+
+  const reportProblem = (problemType: string) => {
+    toast({ title: "Rapporterat", description: `Problem: ${problemType}` });
+    setShowProblemPanel(false);
   };
 
   if (isLoading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-4 p-8">
-        <Loader2 className="h-16 w-16 animate-spin text-primary" />
-        <p className="text-xl">Laddar...</p>
-      </div>
-    );
-  }
-
-  if (view === "ai") {
-    return (
-      <div className="flex flex-col h-full bg-background">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-3 p-6 border-b text-left hover-elevate"
-          data-testid="button-back-from-ai"
-        >
-          <ArrowLeft className="h-8 w-8" />
-          <span className="text-2xl font-medium">Tillbaka</span>
-        </button>
-
-        <div className="flex-1 flex flex-col items-center justify-center p-8 gap-8">
-          <div className="text-center space-y-2">
-            <HelpCircle className="h-16 w-16 mx-auto text-primary" />
-            <h1 className="text-3xl font-bold">Fråga AI</h1>
-            <p className="text-xl text-muted-foreground">
-              Tryck på mikrofonen och ställ din fråga
-            </p>
-          </div>
-
-          <button
-            onClick={isListening ? stopListening : startListening}
-            disabled={aiMutation.isPending}
-            className={`w-40 h-40 rounded-full flex items-center justify-center transition-all ${
-              isListening 
-                ? "bg-red-500 animate-pulse" 
-                : "bg-primary hover:scale-105"
-            }`}
-            data-testid="button-voice-input"
-          >
-            {aiMutation.isPending ? (
-              <Loader2 className="h-20 w-20 text-white animate-spin" />
-            ) : isListening ? (
-              <MicOff className="h-20 w-20 text-white" />
-            ) : (
-              <Mic className="h-20 w-20 text-white" />
-            )}
-          </button>
-
-          {isListening && (
-            <p className="text-2xl text-primary animate-pulse">Lyssnar...</p>
-          )}
-
-          {aiQuestion && (
-            <div className="w-full max-w-md p-6 bg-muted rounded-2xl">
-              <p className="text-lg font-medium mb-2">Du frågade:</p>
-              <p className="text-xl">{aiQuestion}</p>
-            </div>
-          )}
-
-          {aiAnswer && (
-            <div className="w-full max-w-md p-6 bg-primary/10 border-2 border-primary rounded-2xl">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-lg font-medium mb-2 text-primary">Svar:</p>
-                  <p className="text-xl">{aiAnswer}</p>
-                </div>
-                <button
-                  onClick={isSpeaking ? stopSpeaking : () => speakAnswer(aiAnswer)}
-                  className="p-3 rounded-full bg-primary text-white shrink-0"
-                  data-testid="button-speak-answer"
-                >
-                  <Volume2 className={`h-6 w-6 ${isSpeaking ? "animate-pulse" : ""}`} />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="p-6 border-t space-y-4">
-          <p className="text-center text-lg text-muted-foreground">Vanliga frågor:</p>
-          <div className="grid gap-3">
-            {[
-              "Hur öppnar jag kärlet?",
-              "Var är ingången?",
-              "Vad gör jag om det är fel?",
-            ].map((q, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  setAiQuestion(q);
-                  aiMutation.mutate(q);
-                }}
-                disabled={aiMutation.isPending}
-                className="p-4 text-xl text-left bg-muted rounded-xl hover-elevate"
-                data-testid={`button-quick-question-${i}`}
-              >
-                {q}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (view === "problem") {
-    return (
-      <div className="flex flex-col h-full bg-background">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-3 p-6 border-b text-left hover-elevate"
-          data-testid="button-back-from-problem"
-        >
-          <ArrowLeft className="h-8 w-8" />
-          <span className="text-2xl font-medium">Tillbaka</span>
-        </button>
-
-        <div className="flex-1 p-6">
-          <h1 className="text-3xl font-bold mb-8 text-center">Vad är problemet?</h1>
-          
-          <div className="grid gap-4">
-            {[
-              { icon: "🗑️", text: "Kärlet är trasigt", color: "bg-orange-100 dark:bg-orange-950 border-orange-300" },
-              { icon: "🚫", text: "Kommer inte åt", color: "bg-red-100 dark:bg-red-950 border-red-300" },
-              { icon: "📍", text: "Fel adress", color: "bg-yellow-100 dark:bg-yellow-950 border-yellow-300" },
-              { icon: "⏰", text: "Ingen tid", color: "bg-blue-100 dark:bg-blue-950 border-blue-300" },
-              { icon: "❓", text: "Annat", color: "bg-gray-100 dark:bg-gray-800 border-gray-300" },
-            ].map((problem, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  toast({ title: "Rapporterat", description: `Problem: ${problem.text}` });
-                  setView("job");
-                }}
-                className={`flex items-center gap-4 p-6 text-2xl rounded-2xl border-2 ${problem.color} hover-elevate`}
-                data-testid={`button-problem-${i}`}
-              >
-                <span className="text-4xl">{problem.icon}</span>
-                <span>{problem.text}</span>
-              </button>
-            ))}
-          </div>
-        </div>
+      <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        <p className="text-lg text-muted-foreground">Laddar schema...</p>
       </div>
     );
   }
@@ -418,116 +287,238 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
     return (
       <div className="flex flex-col h-full bg-background">
-        <button
-          onClick={handleBack}
-          className="flex items-center gap-3 p-6 border-b text-left hover-elevate"
-          data-testid="button-back-from-job"
-        >
-          <ArrowLeft className="h-8 w-8" />
-          <span className="text-2xl font-medium">Tillbaka</span>
-        </button>
-
-        <div className="flex-1 overflow-auto p-6 space-y-6">
-          <div className="text-center space-y-2">
-            <h1 className="text-3xl font-bold">{selectedJob.title}</h1>
-            <p className="text-xl text-muted-foreground">{selectedJob.objectName}</p>
+        <div className="flex items-center gap-3 p-4 border-b bg-card">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={handleBack}
+            data-testid="button-back-from-job"
+          >
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
+            <p className="text-sm text-muted-foreground truncate">{selectedJob.objectName}</p>
           </div>
-
-          {selectedJob.objectAddress && (
-            <button
-              onClick={() => window.open(`https://maps.google.com?q=${encodeURIComponent(selectedJob.objectAddress + ", " + (selectedObject?.city || ""))}`)}
-              className="w-full flex items-center gap-4 p-6 bg-blue-100 dark:bg-blue-950 rounded-2xl border-2 border-blue-300 hover-elevate"
-              data-testid="button-navigate"
-            >
-              <Navigation className="h-10 w-10 text-blue-600" />
-              <div className="text-left flex-1">
-                <p className="text-lg font-medium">Navigera hit</p>
-                <p className="text-muted-foreground">{selectedJob.objectAddress}</p>
-              </div>
-            </button>
-          )}
-
-          {accessInfo.gateCode && (
-            <div className="p-6 bg-green-100 dark:bg-green-950 rounded-2xl border-2 border-green-300">
-              <p className="text-lg text-muted-foreground mb-2">Portkod</p>
-              <p className="text-5xl font-mono font-bold text-center">{accessInfo.gateCode}</p>
-            </div>
-          )}
-
-          {accessInfo.specialInstructions && (
-            <div className="p-6 bg-yellow-100 dark:bg-yellow-950 rounded-2xl border-2 border-yellow-300">
-              <p className="text-lg font-medium mb-2">Viktig info</p>
-              <p className="text-xl">{accessInfo.specialInstructions}</p>
-            </div>
-          )}
-
-          {selectedCustomer?.phone && (
-            <button
-              onClick={() => window.open(`tel:${selectedCustomer.phone}`)}
-              className="w-full flex items-center gap-4 p-6 bg-muted rounded-2xl hover-elevate"
-              data-testid="button-call"
-            >
-              <Phone className="h-10 w-10" />
-              <div className="text-left">
-                <p className="text-lg font-medium">Ring kund</p>
-                <p className="text-muted-foreground">{selectedCustomer.phone}</p>
-              </div>
-            </button>
-          )}
-
           {jobStarted && (
-            <div className="text-center p-6 bg-primary/10 rounded-2xl">
-              <p className="text-lg text-muted-foreground mb-2">Tid</p>
-              <p className="text-6xl font-mono font-bold text-primary" data-testid="text-timer">
-                {formatTime(elapsedSeconds)}
-              </p>
-            </div>
+            <Badge variant="secondary" className="font-mono text-base gap-1">
+              <Timer className="h-4 w-4" />
+              {formatTime(elapsedSeconds)}
+            </Badge>
           )}
         </div>
 
-        <div className="p-6 border-t space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <button
-              onClick={() => setView("ai")}
-              className="flex flex-col items-center gap-2 p-6 bg-purple-100 dark:bg-purple-950 rounded-2xl border-2 border-purple-300 hover-elevate"
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            {selectedJob.objectAddress && (
+              <Button
+                variant="outline"
+                className="h-auto py-3 flex-col gap-1"
+                onClick={() => window.open(`https://maps.google.com?q=${encodeURIComponent(selectedJob.objectAddress + ", " + (selectedObject?.city || ""))}`)}
+                data-testid="button-navigate"
+              >
+                <Navigation className="h-5 w-5 text-blue-500" />
+                <span className="text-xs">Navigera</span>
+              </Button>
+            )}
+            {selectedCustomer?.phone && (
+              <Button
+                variant="outline"
+                className="h-auto py-3 flex-col gap-1"
+                onClick={() => window.open(`tel:${selectedCustomer.phone}`)}
+                data-testid="button-call"
+              >
+                <Phone className="h-5 w-5 text-green-500" />
+                <span className="text-xs">Ring kund</span>
+              </Button>
+            )}
+            <Button
+              variant="outline"
+              className="h-auto py-3 flex-col gap-1"
+              onClick={() => {
+                setShowAiPanel(!showAiPanel);
+                setShowProblemPanel(false);
+              }}
               data-testid="button-ask-ai"
             >
-              <HelpCircle className="h-10 w-10 text-purple-600" />
-              <span className="text-xl font-medium">Fråga AI</span>
-            </button>
-            <button
-              onClick={() => setView("problem")}
-              className="flex flex-col items-center gap-2 p-6 bg-orange-100 dark:bg-orange-950 rounded-2xl border-2 border-orange-300 hover-elevate"
+              <MessageCircle className="h-5 w-5 text-purple-500" />
+              <span className="text-xs">AI-hjälp</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto py-3 flex-col gap-1"
+              onClick={() => {
+                setShowProblemPanel(!showProblemPanel);
+                setShowAiPanel(false);
+              }}
               data-testid="button-report-problem"
             >
-              <AlertTriangle className="h-10 w-10 text-orange-600" />
-              <span className="text-xl font-medium">Problem</span>
-            </button>
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              <span className="text-xs">Problem</span>
+            </Button>
           </div>
 
+          {showAiPanel && (
+            <Card className="border-purple-200 dark:border-purple-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageCircle className="h-4 w-4 text-purple-500" />
+                  AI-assistent
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex justify-center">
+                  <button
+                    onClick={isListening ? stopListening : startListening}
+                    disabled={aiMutation.isPending}
+                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
+                      isListening 
+                        ? "bg-red-500 animate-pulse" 
+                        : "bg-primary"
+                    }`}
+                    data-testid="button-voice-input"
+                  >
+                    {aiMutation.isPending ? (
+                      <Loader2 className="h-8 w-8 text-white animate-spin" />
+                    ) : isListening ? (
+                      <MicOff className="h-8 w-8 text-white" />
+                    ) : (
+                      <Mic className="h-8 w-8 text-white" />
+                    )}
+                  </button>
+                </div>
+                {isListening && (
+                  <p className="text-center text-sm text-primary animate-pulse">Lyssnar...</p>
+                )}
+                {aiQuestion && (
+                  <div className="p-3 bg-muted rounded-lg text-sm">
+                    <span className="font-medium">Du: </span>{aiQuestion}
+                  </div>
+                )}
+                {aiAnswer && (
+                  <div className="p-3 bg-primary/10 rounded-lg">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm">{aiAnswer}</p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="shrink-0 h-8 w-8"
+                        onClick={isSpeaking ? stopSpeaking : () => speakAnswer(aiAnswer)}
+                        data-testid="button-speak-answer"
+                      >
+                        <Volume2 className={`h-4 w-4 ${isSpeaking ? "animate-pulse text-primary" : ""}`} />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {["Hur öppnar jag?", "Var är ingången?", "Hjälp med problem"].map((q, i) => (
+                    <Button
+                      key={i}
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        setAiQuestion(q);
+                        aiMutation.mutate(q);
+                      }}
+                      disabled={aiMutation.isPending}
+                      data-testid={`button-quick-question-${i}`}
+                    >
+                      {q}
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {showProblemPanel && (
+            <Card className="border-orange-200 dark:border-orange-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-orange-500" />
+                  Rapportera problem
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { icon: Trash2, text: "Trasigt kärl", color: "text-orange-500" },
+                    { icon: Ban, text: "Kommer ej åt", color: "text-red-500" },
+                    { icon: MapPinOff, text: "Fel adress", color: "text-yellow-600" },
+                    { icon: Clock, text: "Ingen tid", color: "text-blue-500" },
+                  ].map((problem, i) => (
+                    <Button
+                      key={i}
+                      variant="outline"
+                      className="h-auto py-3 flex-col gap-1"
+                      onClick={() => reportProblem(problem.text)}
+                      data-testid={`button-problem-${i}`}
+                    >
+                      <problem.icon className={`h-5 w-5 ${problem.color}`} />
+                      <span className="text-xs">{problem.text}</span>
+                    </Button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {accessInfo.gateCode && (
+            <Card className="border-green-200 dark:border-green-800">
+              <CardContent className="py-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide">Portkod</p>
+                <p className="text-3xl font-mono font-bold text-center mt-1">{accessInfo.gateCode}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {accessInfo.specialInstructions && (
+            <Card className="border-yellow-200 dark:border-yellow-800">
+              <CardContent className="py-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Viktig info</p>
+                <p className="text-sm">{accessInfo.specialInstructions}</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {selectedJob.objectAddress && (
+            <Card>
+              <CardContent className="py-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Adress</p>
+                <p className="text-sm">{selectedJob.objectAddress}</p>
+                {selectedObject?.city && (
+                  <p className="text-sm text-muted-foreground">{selectedObject.city}</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <div className="p-4 border-t bg-card">
           {!jobStarted ? (
-            <button
+            <Button
+              className="w-full h-14 text-lg gap-2"
               onClick={handleStartJob}
-              className="w-full flex items-center justify-center gap-4 p-8 bg-primary text-primary-foreground text-3xl font-bold rounded-2xl hover-elevate"
               data-testid="button-start-job"
             >
-              <Play className="h-10 w-10" />
-              STARTA
-            </button>
+              <Play className="h-5 w-5" />
+              Starta jobb
+            </Button>
           ) : (
-            <button
+            <Button
+              className="w-full h-14 text-lg gap-2 bg-green-600 hover:bg-green-700"
               onClick={() => completeJobMutation.mutate(selectedJob.id)}
               disabled={completeJobMutation.isPending}
-              className="w-full flex items-center justify-center gap-4 p-8 bg-green-600 text-white text-3xl font-bold rounded-2xl hover-elevate"
               data-testid="button-complete-job"
             >
               {completeJobMutation.isPending ? (
-                <Loader2 className="h-10 w-10 animate-spin" />
+                <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
-                <CheckCircle className="h-10 w-10" />
+                <CheckCircle className="h-5 w-5" />
               )}
-              KLAR
-            </button>
+              Slutför
+            </Button>
           )}
         </div>
       </div>
@@ -536,55 +527,84 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="p-6 border-b text-center">
-        <h1 className="text-3xl font-bold">Dagens jobb</h1>
-        <p className="text-xl text-muted-foreground mt-2">
-          {todayJobs.length} kvar · {completedCount} klara
-        </p>
+      <div className="p-4 border-b bg-card">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h1 className="text-xl font-bold">Dagens schema</h1>
+            <p className="text-sm text-muted-foreground">
+              {format(today, "EEEE d MMMM", { locale: sv })}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="secondary">{todayJobs.length} kvar</Badge>
+            <Badge variant="outline" className="text-green-600">{completedCount} klara</Badge>
+          </div>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-4">
+      <div className="flex-1 overflow-auto p-4 space-y-3">
         {todayJobs.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-center">
-            <CheckCircle className="h-24 w-24 text-green-500" />
-            <p className="text-3xl font-bold">Alla jobb klara!</p>
-            <p className="text-xl text-muted-foreground">Bra jobbat idag</p>
+          <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
+            <CheckCircle className="h-16 w-16 text-green-500" />
+            <div>
+              <p className="text-xl font-semibold">Alla jobb klara!</p>
+              <p className="text-muted-foreground">Bra jobbat idag</p>
+            </div>
           </div>
         ) : (
           todayJobs.map((job, index) => (
-            <button
+            <Card 
               key={job.id}
+              className="hover-elevate active-elevate-2 cursor-pointer"
               onClick={() => handleSelectJob(job.id)}
-              className="w-full flex items-center gap-4 p-6 bg-card rounded-2xl border-2 text-left hover-elevate active-elevate-2"
               data-testid={`button-job-${job.id}`}
             >
-              <div className="flex items-center justify-center w-16 h-16 rounded-full bg-primary text-primary-foreground text-2xl font-bold shrink-0">
-                {index + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-2xl font-medium truncate">{job.title}</p>
-                <div className="flex items-center gap-2 text-lg text-muted-foreground mt-1">
-                  <MapPin className="h-5 w-5 shrink-0" />
-                  <span className="truncate">{job.objectAddress || job.objectName}</span>
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-primary text-primary-foreground text-sm font-bold shrink-0">
+                    {index + 1}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="font-medium">{job.title}</p>
+                      {job.scheduledStartTime && (
+                        <Badge variant="outline" className="shrink-0 text-xs">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {job.scheduledStartTime}
+                        </Badge>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 text-sm text-muted-foreground mt-1">
+                      <MapPin className="h-3.5 w-3.5 shrink-0" />
+                      <span className="truncate">{job.objectAddress || job.objectName}</span>
+                    </div>
+                    {job.estimatedDuration && (
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Beräknad tid: {job.estimatedDuration} min
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </button>
+              </CardContent>
+            </Card>
           ))
         )}
       </div>
 
-      <div className="p-6 border-t">
-        <button
+      <div className="p-4 border-t bg-card">
+        <Button
+          variant="outline"
+          className="w-full h-12 gap-2"
           onClick={() => {
             setSelectedJobId(null);
-            setView("ai");
+            setShowAiPanel(true);
+            setView("job");
           }}
-          className="w-full flex items-center justify-center gap-4 p-6 bg-purple-100 dark:bg-purple-950 text-purple-900 dark:text-purple-100 rounded-2xl border-2 border-purple-300 hover-elevate"
           data-testid="button-ask-ai-general"
         >
-          <HelpCircle className="h-8 w-8" />
-          <span className="text-2xl font-medium">Fråga AI om hjälp</span>
-        </button>
+          <HelpCircle className="h-5 w-5 text-purple-500" />
+          Fråga AI om hjälp
+        </Button>
       </div>
     </div>
   );
