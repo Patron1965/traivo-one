@@ -27,7 +27,7 @@ import {
   Package,
   PieChart
 } from "lucide-react";
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isWithinInterval, parseISO } from "date-fns";
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import type { WorkOrderWithObject, Resource, ServiceObject, Customer } from "@shared/schema";
@@ -50,8 +50,17 @@ export default function OptimizationPrepPage() {
   const weekEnd = endOfWeek(selectedWeek, { weekStartsOn: 1 });
   const weekNumber = format(selectedWeek, "w", { locale: sv });
 
-  const { data: workOrders = [], isLoading: loadingOrders } = useQuery<WorkOrderWithObject[]>({
-    queryKey: ["/api/work-orders"],
+  // Formatera datum för API-filtrering
+  const startDateParam = format(selectedWeek, "yyyy-MM-dd");
+  const endDateParam = format(weekEnd, "yyyy-MM-dd");
+
+  const { data: weekOrders = [], isLoading: loadingOrders } = useQuery<WorkOrderWithObject[]>({
+    queryKey: ["/api/work-orders", { startDate: startDateParam, endDate: endDateParam }],
+    queryFn: async () => {
+      const res = await fetch(`/api/work-orders?startDate=${startDateParam}&endDate=${endDateParam}&includeUnscheduled=false`);
+      if (!res.ok) throw new Error("Failed to fetch work orders");
+      return res.json();
+    },
   });
 
   const { data: resources = [], isLoading: loadingResources } = useQuery<Resource[]>({
@@ -64,29 +73,10 @@ export default function OptimizationPrepPage() {
 
   // Hämta endast objekt som refereras i veckans arbetsordrar
   const weekOrderObjectIds = useMemo(() => {
-    return workOrders
-      .filter(order => {
-        if (!order.scheduledDate) return false;
-        const orderDate = typeof order.scheduledDate === 'string' 
-          ? parseISO(order.scheduledDate) 
-          : order.scheduledDate;
-        return isWithinInterval(orderDate, { start: selectedWeek, end: weekEnd });
-      })
-      .map(o => o.objectId)
-      .filter(Boolean);
-  }, [workOrders, selectedWeek, weekEnd]);
+    return weekOrders.map(o => o.objectId).filter(Boolean);
+  }, [weekOrders]);
 
   const { data: objects = [], isLoading: loadingObjects } = useObjectsByIds(weekOrderObjectIds);
-
-  const weekOrders = useMemo(() => {
-    return workOrders.filter(order => {
-      if (!order.scheduledDate) return false;
-      const orderDate = typeof order.scheduledDate === 'string' 
-        ? parseISO(order.scheduledDate) 
-        : order.scheduledDate;
-      return isWithinInterval(orderDate, { start: selectedWeek, end: weekEnd });
-    });
-  }, [workOrders, selectedWeek, weekEnd]);
 
   const activeResources = useMemo(() => {
     return resources.filter(r => r.status === "active");
