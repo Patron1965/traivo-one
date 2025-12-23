@@ -17,11 +17,11 @@ import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
-const priorityColors: Record<string, string> = {
-  urgent: "border-l-4 border-l-red-500",
-  high: "border-l-4 border-l-orange-500",
-  normal: "border-l-4 border-l-blue-500",
-  low: "border-l-4 border-l-gray-400",
+const priorityDotColors: Record<string, string> = {
+  urgent: "bg-red-500",
+  high: "bg-orange-500",
+  normal: "bg-blue-500",
+  low: "bg-gray-400",
 };
 
 const priorityLabels: Record<string, string> = {
@@ -397,13 +397,16 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         key={job.id}
         draggable
         onDragStart={(e) => handleDragStart(e, job.id)}
-        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} group`}
+        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${selectedJob === job.id ? "ring-2 ring-primary" : ""} group`}
         onClick={() => handleJobClick(job.id)}
         data-testid={`job-card-${job.id}`}
       >
         <div className="flex items-start justify-between gap-1">
           <div className="min-w-0 flex-1">
-            <div className="text-xs font-medium truncate">{job.title}</div>
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
+              <span className="text-xs font-medium truncate">{job.title}</span>
+            </div>
             <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
             {!compact && job.scheduledStartTime && (
               <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
@@ -680,12 +683,15 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                       key={job.id}
                       draggable
                       onDragStart={(e) => handleDragStart(e, job.id)}
-                      className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${priorityColors[job.priority]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
+                      className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
                       onClick={() => handleJobClick(job.id)}
                       data-testid={`unscheduled-job-${job.id}`}
                     >
                       <div className="space-y-1">
-                        <div className="text-sm font-medium">{job.title}</div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
+                          <span className="text-sm font-medium">{job.title}</span>
+                        </div>
                         <div className="text-xs text-muted-foreground">{job.objectName || "Okänt objekt"}</div>
                         {customer && (
                           <div className="text-xs text-muted-foreground">{customer.name}</div>

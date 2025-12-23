@@ -358,9 +358,15 @@ export function Dashboard() {
   };
 
   const insightColors = {
-    suggestion: "border-blue-500 bg-blue-50 dark:bg-blue-950",
-    warning: "border-orange-500 bg-orange-50 dark:bg-orange-950",
-    success: "border-green-500 bg-green-50 dark:bg-green-950",
+    suggestion: "bg-blue-50 dark:bg-blue-950",
+    warning: "bg-orange-50 dark:bg-orange-950",
+    success: "bg-green-50 dark:bg-green-950",
+  };
+
+  const insightIconColors = {
+    suggestion: "text-blue-500",
+    warning: "text-orange-500",
+    success: "text-green-500",
   };
 
   const { toast } = useToast();
@@ -1090,10 +1096,10 @@ export function Dashboard() {
               return (
                 <div 
                   key={index}
-                  className={`p-4 rounded-md border-l-4 ${insightColors[insight.type]}`}
+                  className={`p-4 rounded-md border ${insightColors[insight.type]}`}
                 >
                   <div className="flex items-start gap-3">
-                    <Icon className="h-5 w-5 shrink-0 mt-0.5" />
+                    <Icon className={`h-5 w-5 shrink-0 mt-0.5 ${insightIconColors[insight.type]}`} />
                     <div className="flex-1">
                       <p className="text-sm">{insight.message}</p>
                       {insight.link && (
