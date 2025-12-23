@@ -38,16 +38,11 @@ export default function WeekPlannerPage() {
       </div>
 
       {showAIPanel && (
-        <div className="w-96 border-l bg-muted/30 flex flex-col shrink-0">
-          <div className="flex items-center justify-between p-3 border-b bg-gradient-to-r from-purple-500/10 to-blue-500/10">
+        <div className="w-80 border-l bg-muted/30 flex flex-col shrink-0">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 border-b bg-gradient-to-r from-purple-500/10 to-blue-500/10 min-h-[57px]">
             <div className="flex items-center gap-2">
-              <div className="p-1.5 rounded-md bg-purple-500/20">
-                <Sparkles className="h-4 w-4 text-purple-500" />
-              </div>
-              <div>
-                <h2 className="font-semibold text-sm">AI Assistent</h2>
-                <p className="text-xs text-muted-foreground">Veckoplanering</p>
-              </div>
+              <Sparkles className="h-4 w-4 text-purple-500 shrink-0" />
+              <span className="font-semibold text-sm">AI Assistent</span>
             </div>
             <Button
               size="icon"
