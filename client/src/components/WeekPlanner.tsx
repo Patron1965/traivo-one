@@ -727,8 +727,8 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       </Collapsible>
 
       <div className="flex flex-col flex-1">
-        <div className="flex items-center justify-between gap-4 p-4 border-b flex-wrap">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-4 p-4 border-b overflow-x-auto">
+          <div className="flex items-center gap-2 shrink-0">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button variant="outline" size="icon" onClick={() => navigate("prev")} data-testid="button-prev">
@@ -748,11 +748,11 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
               </TooltipTrigger>
               <TooltipContent><p>Nästa</p></TooltipContent>
             </Tooltip>
-            <span className="text-sm font-medium ml-2 capitalize" data-testid="text-date-label">
+            <span className="text-sm font-medium ml-2 capitalize whitespace-nowrap" data-testid="text-date-label">
               {getHeaderLabel()}
             </span>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3 shrink-0">
             <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && handleViewModeChange(v as ViewMode)} data-testid="toggle-view-mode">
               <ToggleGroupItem value="day" aria-label="Dagvy" data-testid="toggle-day">
                 <CalendarDays className="h-4 w-4 mr-1" />
