@@ -4,9 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
-  MapPin, Play, CheckCircle, ArrowLeft, Mic, MicOff, 
-  Volume2, Loader2, AlertTriangle, Navigation, Phone,
-  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, MessageCircle, Bell
+  MapPin, Play, CheckCircle, ArrowLeft,
+  Loader2, AlertTriangle, Navigation, Phone,
+  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -16,39 +16,6 @@ import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
-
-declare global {
-  interface Window {
-    SpeechRecognition?: new () => SpeechRecognition;
-    webkitSpeechRecognition?: new () => SpeechRecognition;
-  }
-  interface SpeechRecognition extends EventTarget {
-    lang: string;
-    continuous: boolean;
-    interimResults: boolean;
-    onstart: (() => void) | null;
-    onend: (() => void) | null;
-    onerror: ((event: Event) => void) | null;
-    onresult: ((event: SpeechRecognitionEvent) => void) | null;
-    start(): void;
-    stop(): void;
-  }
-  interface SpeechRecognitionEvent extends Event {
-    results: SpeechRecognitionResultList;
-  }
-  interface SpeechRecognitionResultList {
-    readonly length: number;
-    [index: number]: SpeechRecognitionResult;
-  }
-  interface SpeechRecognitionResult {
-    readonly length: number;
-    [index: number]: SpeechRecognitionAlternative;
-  }
-  interface SpeechRecognitionAlternative {
-    readonly transcript: string;
-    readonly confidence: number;
-  }
-}
 
 type View = "jobs" | "job";
 
@@ -67,11 +34,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [showProblemPanel, setShowProblemPanel] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const [aiQuestion, setAiQuestion] = useState("");
-  const [aiAnswer, setAiAnswer] = useState("");
-  const [isSpeaking, setIsSpeaking] = useState(false);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
 
   const handleNotification = useCallback((notification: Notification) => {
     const iconMap: Record<string, "default" | "destructive"> = {
@@ -204,81 +166,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     },
   });
 
-  const aiMutation = useMutation({
-    mutationFn: async (question: string) => {
-      const jobContext = selectedJob ? {
-        jobTitle: selectedJob.title,
-        objectName: selectedJob.objectName,
-        objectAddress: selectedJob.objectAddress,
-        accessInfo: selectedObject?.accessInfo,
-      } : {};
-      
-      const response = await apiRequest("POST", "/api/ai/field-assistant", {
-        question,
-        jobContext,
-      }) as { answer?: string };
-      return response.answer || "Jag förstår inte. Försök igen.";
-    },
-    onSuccess: (answer) => {
-      setAiAnswer(answer);
-      speakAnswer(answer);
-    },
-    onError: () => {
-      setAiAnswer("Något gick fel. Försök igen.");
-    },
-  });
-
-  const startListening = () => {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    
-    if (!SpeechRecognitionAPI) {
-      toast({ title: "Röstinmatning stöds inte", variant: "destructive" });
-      return;
-    }
-
-    const recognition = new SpeechRecognitionAPI();
-    recognition.lang = "sv-SE";
-    recognition.continuous = false;
-    recognition.interimResults = false;
-
-    recognition.onstart = () => setIsListening(true);
-    recognition.onend = () => setIsListening(false);
-    recognition.onerror = () => setIsListening(false);
-    
-    recognition.onresult = (event: SpeechRecognitionEvent) => {
-      const transcript = event.results[0][0].transcript;
-      setAiQuestion(transcript);
-      aiMutation.mutate(transcript);
-    };
-
-    recognitionRef.current = recognition;
-    recognition.start();
-  };
-
-  const stopListening = () => {
-    if (recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
-  };
-
-  const speakAnswer = (text: string) => {
-    if (!("speechSynthesis" in window)) return;
-    
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "sv-SE";
-    utterance.rate = 0.9;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const stopSpeaking = () => {
-    window.speechSynthesis.cancel();
-    setIsSpeaking(false);
-  };
-
   const handleSelectJob = (jobId: string) => {
     setSelectedJobId(jobId);
     setView("job");
@@ -325,6 +212,17 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
     return (
       <div className="flex flex-col h-full bg-background">
+        <FieldAIAssistant 
+          isOpen={showAiPanel}
+          onClose={() => setShowAiPanel(false)}
+          jobContext={{
+            jobTitle: selectedJob.title,
+            objectName: selectedJob.objectName,
+            objectAddress: selectedJob.objectAddress,
+            accessInfo: selectedObject?.accessInfo,
+          }}
+        />
+        
         <div className="flex items-center gap-3 p-4 border-b bg-card">
           <Button 
             variant="ghost" 
@@ -379,7 +277,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               }}
               data-testid="button-ask-ai"
             >
-              <MessageCircle className="h-5 w-5 text-purple-500" />
+              <HelpCircle className="h-5 w-5 text-purple-500" />
               <span className="text-xs">AI-hjälp</span>
             </Button>
             <Button
@@ -396,79 +294,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Button>
           </div>
 
-          {showAiPanel && (
-            <Card className="border-purple-200 dark:border-purple-800">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MessageCircle className="h-4 w-4 text-purple-500" />
-                  AI-assistent
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-center">
-                  <button
-                    onClick={isListening ? stopListening : startListening}
-                    disabled={aiMutation.isPending}
-                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-                      isListening 
-                        ? "bg-red-500 animate-pulse" 
-                        : "bg-primary"
-                    }`}
-                    data-testid="button-voice-input"
-                  >
-                    {aiMutation.isPending ? (
-                      <Loader2 className="h-8 w-8 text-white animate-spin" />
-                    ) : isListening ? (
-                      <MicOff className="h-8 w-8 text-white" />
-                    ) : (
-                      <Mic className="h-8 w-8 text-white" />
-                    )}
-                  </button>
-                </div>
-                {isListening && (
-                  <p className="text-center text-sm text-primary animate-pulse">Lyssnar...</p>
-                )}
-                {aiQuestion && (
-                  <div className="p-3 bg-muted rounded-lg text-sm">
-                    <span className="font-medium">Du: </span>{aiQuestion}
-                  </div>
-                )}
-                {aiAnswer && (
-                  <div className="p-3 bg-primary/10 rounded-lg">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm">{aiAnswer}</p>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="shrink-0 h-8 w-8"
-                        onClick={isSpeaking ? stopSpeaking : () => speakAnswer(aiAnswer)}
-                        data-testid="button-speak-answer"
-                      >
-                        <Volume2 className={`h-4 w-4 ${isSpeaking ? "animate-pulse text-primary" : ""}`} />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {["Hur öppnar jag?", "Var är ingången?", "Hjälp med problem"].map((q, i) => (
-                    <Button
-                      key={i}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        setAiQuestion(q);
-                        aiMutation.mutate(q);
-                      }}
-                      disabled={aiMutation.isPending}
-                      data-testid={`button-quick-question-${i}`}
-                    >
-                      {q}
-                    </Button>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
 
           {showProblemPanel && (
             <Card className="border-orange-200 dark:border-orange-800">
@@ -588,6 +413,14 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             )}
             <Badge variant="secondary">{todayJobs.length} kvar</Badge>
             <Badge variant="outline" className="text-green-600">{completedCount} klara</Badge>
+            <Button 
+              variant="ghost" 
+              size="icon"
+              onClick={() => setShowAiPanel(true)}
+              data-testid="button-open-ai-assistant"
+            >
+              <HelpCircle className="h-5 w-5 text-purple-500" />
+            </Button>
           </div>
         </div>
       </div>

@@ -426,11 +426,32 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="p-4 border-b flex items-center gap-3">
-        <Button variant="ghost" size="icon" onClick={() => { setView("list"); setSelectedJobId(null); }} data-testid="button-back">
-          <ArrowLeft className="h-5 w-5" />
+      <FieldAIAssistant 
+        isOpen={showAiPanel}
+        onClose={() => setShowAiPanel(false)}
+        jobContext={{
+          jobTitle: selectedJob.title,
+          objectName: selectedJob.objectName,
+          objectAddress: selectedJob.objectAddress,
+          accessInfo: selectedObject?.accessInfo,
+        }}
+      />
+      
+      <div className="p-4 border-b flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <Button variant="ghost" size="icon" onClick={() => { setView("list"); setSelectedJobId(null); }} data-testid="button-back">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
+        </div>
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={() => setShowAiPanel(true)}
+          data-testid="button-open-ai-assistant"
+        >
+          <HelpCircle className="h-5 w-5 text-purple-500" />
         </Button>
-        <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
       </div>
 
       <div className="flex-1 overflow-auto">
