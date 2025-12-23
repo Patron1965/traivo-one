@@ -33,6 +33,7 @@ import EconomicsDashboardPage from "@/pages/EconomicsDashboardPage";
 import SetupTimeAnalysisPage from "@/pages/SetupTimeAnalysisPage";
 import PredictivePlanningPage from "@/pages/PredictivePlanningPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
+import SimpleFieldPage from "@/pages/SimpleFieldPage";
 import AutoClusterPage from "@/pages/AutoClusterPage";
 import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import CustomerPortalPage from "@/pages/CustomerPortalPage";
@@ -62,6 +63,7 @@ function Router() {
       <Route path="/setup-analysis" component={SetupTimeAnalysisPage} />
       <Route path="/predictive-planning" component={PredictivePlanningPage} />
       <Route path="/mobile" component={MobileFieldPage} />
+      <Route path="/field" component={SimpleFieldPage} />
       <Route path="/auto-cluster" component={AutoClusterPage} />
       <Route path="/weather" component={WeatherPlanningPage} />
       <Route path="/customer-portal" component={CustomerPortalPage} />

@@ -2449,6 +2449,67 @@ Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips
     }
   });
 
+  // AI Field Assistant - simple answers for field workers
+  app.post("/api/ai/field-assistant", async (req, res) => {
+    try {
+      const { question, jobContext } = req.body;
+      if (!question || typeof question !== "string") {
+        return res.status(400).json({ error: "Fråga krävs" });
+      }
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI();
+
+      let contextInfo = "";
+      if (jobContext) {
+        contextInfo = `
+Aktuellt jobb: ${jobContext.jobTitle || "Okänt"}
+Plats: ${jobContext.objectName || "Okänd"} - ${jobContext.objectAddress || ""}
+`;
+        if (jobContext.accessInfo) {
+          const access = jobContext.accessInfo;
+          if (access.gateCode) contextInfo += `Portkod: ${access.gateCode}\n`;
+          if (access.keyLocation) contextInfo += `Nyckel: ${access.keyLocation}\n`;
+          if (access.parking) contextInfo += `Parkering: ${access.parking}\n`;
+          if (access.specialInstructions) contextInfo += `Special: ${access.specialInstructions}\n`;
+        }
+      }
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `Du är en hjälpsam AI-assistent för fältarbetare inom avfallshantering och sophantering.
+
+VIKTIGT - DINA SVAR MÅSTE VARA:
+- Korta (max 2 meningar)
+- Enkla ord (inga svåra termer)
+- Praktiska och konkreta
+
+${contextInfo}
+
+Om du inte vet svaret, säg "Jag vet inte. Fråga din arbetsledare."
+
+Svara alltid på svenska.`,
+          },
+          {
+            role: "user",
+            content: question,
+          },
+        ],
+        max_tokens: 150,
+        temperature: 0.5,
+      });
+
+      const answer = response.choices[0]?.message?.content || "Jag vet inte. Fråga din arbetsledare.";
+      res.json({ answer });
+    } catch (error) {
+      console.error("Field AI error:", error);
+      res.status(500).json({ error: "Något gick fel" });
+    }
+  });
+
   // AI Planning suggestions
   app.post("/api/ai/planning-suggestions", async (req, res) => {
     try {
