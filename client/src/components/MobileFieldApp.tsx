@@ -325,7 +325,8 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
         </div>
         <div className="p-4 border-t">
           <Button 
-            className="w-full h-14 text-lg" 
+            size="mobile"
+            className="w-full" 
             onClick={handleSubmitCompletion} 
             disabled={completeJobMutation.isPending}
             data-testid="button-submit-completion"
@@ -470,12 +471,12 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
           </div>
         )}
         {!jobStarted ? (
-          <Button className="w-full h-14 text-lg" onClick={handleStartJob} data-testid="button-start-job">
+          <Button size="mobile" className="w-full" onClick={handleStartJob} data-testid="button-start-job">
             <Play className="h-5 w-5 mr-2" />
             Starta jobb
           </Button>
         ) : (
-          <Button className="w-full h-14 text-lg bg-green-600 hover:bg-green-700" onClick={handleCompleteJob} data-testid="button-complete-job">
+          <Button size="mobile" className="w-full bg-green-600" onClick={handleCompleteJob} data-testid="button-complete-job">
             <CheckCircle className="h-5 w-5 mr-2" />
             Klart - Slutför jobb
           </Button>

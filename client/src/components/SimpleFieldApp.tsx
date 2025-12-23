@@ -498,7 +498,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         <div className="p-4 border-t bg-card">
           {!jobStarted ? (
             <Button
-              className="w-full h-14 text-lg gap-2"
+              size="mobile"
+              className="w-full gap-2"
               onClick={handleStartJob}
               data-testid="button-start-job"
             >
@@ -507,7 +508,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Button>
           ) : (
             <Button
-              className="w-full h-14 text-lg gap-2 bg-green-600 hover:bg-green-700"
+              size="mobile"
+              className="w-full gap-2 bg-green-600"
               onClick={() => completeJobMutation.mutate(selectedJob.id)}
               disabled={completeJobMutation.isPending}
               data-testid="button-complete-job"
