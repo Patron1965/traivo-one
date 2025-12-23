@@ -19,6 +19,7 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **ObjectCard:** Displays object details, including setup time information.
 -   **Dashboard:** Provides analytics and KPIs based on real setup logs.
 -   **MobileFieldApp:** A dedicated interface for field technicians.
+-   **Button size="mobile":** A dedicated button size variant (min-h-14, text-lg) for mobile field apps with larger touch targets.
 
 ### Technical Implementations
 -   **Frontend:** React, TypeScript, Vite.
