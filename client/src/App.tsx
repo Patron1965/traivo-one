@@ -86,7 +86,10 @@ function AuthenticatedApp() {
         <div className="flex flex-col flex-1 min-w-0">
           <header className="flex items-center justify-between gap-4 p-2 border-b sticky top-0 bg-background z-50">
             <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <ThemeToggle />
+            <div className="flex items-center gap-1">
+              <GlobalAIButton />
+              <ThemeToggle />
+            </div>
           </header>
           <main className="flex-1 overflow-auto">
             <ErrorBoundary>
@@ -94,7 +97,6 @@ function AuthenticatedApp() {
             </ErrorBoundary>
           </main>
         </div>
-        <GlobalAIButton />
       </div>
     </SidebarProvider>
   );
