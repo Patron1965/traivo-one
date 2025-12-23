@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
+import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 
 declare global {
@@ -591,96 +592,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4 space-y-3">
-        {showAiPanel && (
-          <Card className="border-purple-200 dark:border-purple-800">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MessageCircle className="h-4 w-4 text-purple-500" />
-                  AI-assistent
-                </CardTitle>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => {
-                    setShowAiPanel(false);
-                    setAiQuestion("");
-                    setAiAnswer("");
-                  }}
-                  data-testid="button-close-ai-panel"
-                >
-                  <ArrowLeft className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="flex justify-center">
-                <button
-                  onClick={isListening ? stopListening : startListening}
-                  disabled={aiMutation.isPending}
-                  className={`w-20 h-20 rounded-full flex items-center justify-center transition-all ${
-                    isListening 
-                      ? "bg-red-500 animate-pulse" 
-                      : "bg-primary"
-                  }`}
-                  data-testid="button-voice-input-general"
-                >
-                  {aiMutation.isPending ? (
-                    <Loader2 className="h-8 w-8 text-white animate-spin" />
-                  ) : isListening ? (
-                    <MicOff className="h-8 w-8 text-white" />
-                  ) : (
-                    <Mic className="h-8 w-8 text-white" />
-                  )}
-                </button>
-              </div>
-              {isListening && (
-                <p className="text-center text-sm text-primary animate-pulse">Lyssnar...</p>
-              )}
-              {aiQuestion && (
-                <div className="p-3 bg-muted rounded-lg text-sm">
-                  <span className="font-medium">Du: </span>{aiQuestion}
-                </div>
-              )}
-              {aiAnswer && (
-                <div className="p-3 bg-primary/10 rounded-lg">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm">{aiAnswer}</p>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="shrink-0 h-8 w-8"
-                      onClick={isSpeaking ? stopSpeaking : () => speakAnswer(aiAnswer)}
-                      data-testid="button-speak-answer-general"
-                    >
-                      <Volume2 className={`h-4 w-4 ${isSpeaking ? "animate-pulse text-primary" : ""}`} />
-                    </Button>
-                  </div>
-                </div>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {["Hur funkar appen?", "Kontakta kontoret", "Rapportera sjukdom"].map((q, i) => (
-                  <Button
-                    key={i}
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      setAiQuestion(q);
-                      aiMutation.mutate(q);
-                    }}
-                    disabled={aiMutation.isPending}
-                    data-testid={`button-general-question-${i}`}
-                  >
-                    {q}
-                  </Button>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+      <FieldAIAssistant 
+        isOpen={showAiPanel}
+        onClose={() => setShowAiPanel(false)}
+        jobContext={selectedJob ? {
+          jobTitle: selectedJob.title,
+          objectName: selectedJob.objectName,
+          objectAddress: selectedJob.objectAddress,
+          accessInfo: selectedObject?.accessInfo,
+        } : undefined}
+      />
 
+      <div className="flex-1 overflow-auto p-4 space-y-3">
         {todayJobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
             <CheckCircle className="h-16 w-16 text-green-500" />
@@ -689,7 +612,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <p className="text-muted-foreground">Bra jobbat idag</p>
             </div>
           </div>
-        ) : !showAiPanel && (
+        ) : (
           todayJobs.map((job, index) => (
             <Card 
               key={job.id}

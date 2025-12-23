@@ -8,13 +8,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { 
   MapPin, Clock, Phone, Navigation, Key, Car, Info, 
-  Play, CheckCircle, Camera, ArrowLeft, ChevronRight, Loader2, Pause, Timer, Square, Bell
+  Play, CheckCircle, Camera, ArrowLeft, ChevronRight, Loader2, Pause, Timer, Square, Bell, HelpCircle
 } from "lucide-react";
 import { startOfDay, endOfDay } from "date-fns";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
+import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import type { WorkOrderWithObject, ServiceObject, Customer } from "@shared/schema";
 
 const priorityColors: Record<string, string> = {
@@ -39,6 +40,7 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [showAiPanel, setShowAiPanel] = useState(false);
   const [completionData, setCompletionData] = useState({
     setupTime: "",
     setupReason: "",
@@ -229,22 +231,43 @@ export function MobileFieldApp({ initialView = "list", resourceId }: MobileField
   if (view === "list") {
     return (
       <div className="flex flex-col h-full bg-background">
+        <FieldAIAssistant 
+          isOpen={showAiPanel}
+          onClose={() => setShowAiPanel(false)}
+          jobContext={selectedJob ? {
+            jobTitle: selectedJob.title,
+            objectName: selectedJob.objectName,
+            objectAddress: selectedJob.objectAddress,
+            accessInfo: selectedObject?.accessInfo,
+          } : undefined}
+        />
+        
         <div className="p-4 border-b">
           <div className="flex items-center justify-between gap-2">
             <div>
               <h1 className="text-lg font-semibold">Dagens jobb</h1>
               <p className="text-sm text-muted-foreground">{todayJobs.length} jobb planerade</p>
             </div>
-            {resourceId && (
-              <Badge 
-                variant={isConnected ? "outline" : "destructive"} 
-                className={isConnected ? "text-green-600" : ""}
-                data-testid="badge-connection-status"
+            <div className="flex items-center gap-2">
+              {resourceId && (
+                <Badge 
+                  variant={isConnected ? "outline" : "destructive"} 
+                  className={isConnected ? "text-green-600" : ""}
+                  data-testid="badge-connection-status"
+                >
+                  <Bell className="h-3 w-3 mr-1" />
+                  {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "Offline"}
+                </Badge>
+              )}
+              <Button 
+                variant="ghost" 
+                size="icon"
+                onClick={() => setShowAiPanel(true)}
+                data-testid="button-open-ai-assistant"
               >
-                <Bell className="h-3 w-3 mr-1" />
-                {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "Offline"}
-              </Badge>
-            )}
+                <HelpCircle className="h-5 w-5 text-purple-500" />
+              </Button>
+            </div>
           </div>
         </div>
         <div className="flex-1 overflow-auto p-4 space-y-3">
