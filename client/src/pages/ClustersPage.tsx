@@ -64,6 +64,7 @@ import { useToast } from "@/hooks/use-toast";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
+import { AddressSearch } from "@/components/AddressSearch";
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -663,6 +664,31 @@ export default function ClustersPage() {
                   </FormItem>
                 )}
               />
+
+              <div>
+                <FormLabel className="mb-2 block">Sök adress (centrum)</FormLabel>
+                <AddressSearch
+                  placeholder="Börja skriva en adress..."
+                  onSelect={(result) => {
+                    form.setValue("centerLatitude", result.lat.toString());
+                    form.setValue("centerLongitude", result.lon.toString());
+                    if (result.postalCode) {
+                      const currentPostalCodes = form.getValues("postalCodes");
+                      if (!currentPostalCodes?.includes(result.postalCode)) {
+                        form.setValue(
+                          "postalCodes",
+                          currentPostalCodes
+                            ? `${currentPostalCodes}, ${result.postalCode}`
+                            : result.postalCode
+                        );
+                      }
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Sök efter en adress för att automatiskt fylla i koordinater
+                </p>
+              </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <FormField
