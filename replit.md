@@ -27,6 +27,7 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **Multi-tenancy:** Supported at the database level.
 -   **Modus 2.0 Import System:** Dedicated `/import` page for CSV imports of Objects, Tasks, and Events from Modus 2.0, including data transformation and validation (e.g., geocoding, parent linking).
 -   **Lazy Object Loading:** Implemented across components using `useObjectsByIds` and `useObjectSearch` hooks to optimize performance by fetching only necessary data.
+-   **Address Search/Autocomplete:** `AddressSearch` component using OpenStreetMap Nominatim API for Swedish address geocoding. Used in cluster creation form to auto-populate coordinates and postal codes.
 
 ### Feature Specifications
 -   **Clusters:** A core concept for geographic organization, managing entities like objects and orders, visualized via lists and interactive maps (react-leaflet).
@@ -63,6 +64,7 @@ AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas
 -   **Drizzle ORM:** Used for database interactions.
 -   **OpenAI API:** AI-drivna planeringsförslag via Replit AI Integrations.
 -   **OpenRouteService:** Utilized for route visualization.
+-   **OpenStreetMap Nominatim:** Free geocoding API for address search/autocomplete (Swedish addresses).
 -   **External Unicorn Optimization Service:** A separate, dedicated service for performing route optimization calculations.
 -   **DataClean Service:** An external service for data validation and geocoding.
 -   **Modus 2.0:** Source of CSV data for initial import and ongoing data synchronization.
