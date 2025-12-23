@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject } from "@shared/schema";
+import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -624,8 +625,30 @@ export function analyzeWorkloadImbalances(context: PlanningContext): WorkloadAna
 export async function aiEnhancedSchedule(
   context: PlanningContext
 ): Promise<AutoScheduleResult> {
-  // Först: Använd algoritm-baserad schemaläggning
-  const baseResult = await autoScheduleOrders(context);
+  // Hämta väderprognos för Umeå (Kinabs huvudort)
+  const UMEA_LAT = 63.82;
+  const UMEA_LON = 20.26;
+  let weatherInfo = "";
+  let weatherImpacts: WeatherImpact[] = [];
+  
+  try {
+    const weatherResult = await fetchWeatherForecast(UMEA_LAT, UMEA_LON, 7);
+    weatherImpacts = weatherResult.impacts;
+    
+    if (weatherResult.impacts.length > 0) {
+      const impactDays = weatherResult.impacts.filter(i => i.impactLevel !== "none");
+      if (impactDays.length > 0) {
+        weatherInfo = `\nVÄDERPROGNOS:\n${impactDays.map(i => 
+          `- ${i.date}: ${i.reason} (kapacitet: ${Math.round(i.capacityMultiplier * 100)}%)`
+        ).join("\n")}`;
+      }
+    }
+  } catch (e) {
+    console.error("Weather fetch failed:", e);
+  }
+  
+  // Först: Använd algoritm-baserad schemaläggning (med väderdata)
+  const baseResult = await autoScheduleOrdersWithWeather(context, weatherImpacts);
   
   if (baseResult.assignments.length === 0) {
     return baseResult;
@@ -633,22 +656,43 @@ export async function aiEnhancedSchedule(
   
   // Sedan: Be AI:n optimera/validera fördelningen
   try {
+    // Räkna ordrar per kluster för att visa AI:n klusterdistribution
+    const clusterCounts: Record<string, number> = {};
+    baseResult.assignments.forEach(a => {
+      const order = context.workOrders.find(o => o.id === a.workOrderId);
+      const clusterId = order?.clusterId || "inget";
+      clusterCounts[clusterId] = (clusterCounts[clusterId] || 0) + 1;
+    });
+    
+    const clusterInfo = context.clusters
+      .filter(c => clusterCounts[c.id])
+      .map(c => `- ${c.name}: ${clusterCounts[c.id]} ordrar`)
+      .join("\n");
+    
     const prompt = `
-Du är en expert på fältserviceoptimering. Analysera denna automatiska schemaläggning och ge förbättringsförslag.
+Du är en expert på fältserviceoptimering för ett avfallshanteringsföretag i Umeå (Kinab).
+Analysera denna automatiska schemaläggning och ge förbättringsförslag.
 
-RESURSER:
-${context.resources.map(r => `- ${r.name} (${r.id.slice(0,8)}), serviceArea: ${(r.serviceArea || []).join(", ") || "inget"}`).join("\n")}
+RESURSER (${context.resources.length} st):
+${context.resources.map(r => `- ${r.name}, serviceArea: ${(r.serviceArea || []).join(", ") || "alla områden"}`).join("\n")}
 
-SCHEMALÄGGNING (${baseResult.assignments.length} ordrar):
-${baseResult.assignments.map(a => {
+KLUSTER-DISTRIBUTION:
+${clusterInfo || "Inga kluster-tilldelningar"}
+${weatherInfo}
+
+SCHEMALÄGGNING (${baseResult.assignments.length} ordrar fördelade):
+${baseResult.assignments.slice(0, 20).map(a => {
   const order = context.workOrders.find(o => o.id === a.workOrderId);
-  return `- Order ${a.workOrderId.slice(0,8)} → ${a.resourceId.slice(0,8)} på ${a.scheduledDate} (kluster: ${order?.clusterId || "inget"})`;
-}).join("\n")}
+  const cluster = context.clusters.find(c => c.id === order?.clusterId);
+  return `- ${a.scheduledDate}: ${order?.title?.slice(0, 30) || "Order"} → ${context.resources.find(r => r.id === a.resourceId)?.name || "Resurs"} (kluster: ${cluster?.name || "-"})`;
+}).join("\n")}${baseResult.assignments.length > 20 ? `\n... och ${baseResult.assignments.length - 20} till` : ""}
 
 Svara ENDAST med JSON:
 {
   "optimizationTips": ["förslag1", "förslag2"],
-  "potentialIssues": ["problem1"],
+  "weatherConsiderations": ["väderrelaterat tips om relevant"],
+  "clusterOptimizations": ["klusterrelaterat förslag"],
+  "potentialIssues": ["problem om det finns"],
   "efficiencyBoost": 5
 }
 `;
@@ -656,26 +700,265 @@ Svara ENDAST med JSON:
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "Du är en svensk planeringsexpert. Ge korta, praktiska förslag." },
+        { role: "system", content: "Du är en svensk planeringsexpert för fältservice. Ge korta, praktiska förslag. Beakta väder och geografisk gruppering." },
         { role: "user", content: prompt }
       ],
       temperature: 0.3,
-      max_tokens: 500,
+      max_tokens: 600,
       response_format: { type: "json_object" }
     });
     
     const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
     const tips = aiResponse.optimizationTips || [];
+    const weatherTips = aiResponse.weatherConsiderations || [];
+    const clusterTips = aiResponse.clusterOptimizations || [];
+    
+    let enhancedSummary = baseResult.summary;
+    if (tips.length > 0) {
+      enhancedSummary += ` AI-tips: ${tips[0]}`;
+    }
+    if (weatherTips.length > 0 && weatherInfo) {
+      enhancedSummary += ` Väder: ${weatherTips[0]}`;
+    }
     
     return {
       ...baseResult,
-      summary: `${baseResult.summary}${tips.length > 0 ? ` AI-tips: ${tips[0]}` : ""}`,
+      summary: enhancedSummary,
       estimatedEfficiency: Math.min(100, baseResult.estimatedEfficiency + (aiResponse.efficiencyBoost || 0))
     };
   } catch (error) {
     console.error("AI enhancement failed:", error);
     return baseResult;
   }
+}
+
+// Wrapper för autoScheduleOrders med väderdata
+async function autoScheduleOrdersWithWeather(
+  context: PlanningContext,
+  weatherImpacts: WeatherImpact[]
+): Promise<AutoScheduleResult> {
+  const validOrders = context.workOrders.filter(
+    o => o.status !== "fakturerad" && o.status !== "utford" && o.status !== "completed"
+  );
+  const unscheduledOrders = validOrders.filter(
+    o => !o.scheduledDate || !o.resourceId
+  );
+  const scheduledOrders = validOrders.filter(
+    o => o.scheduledDate && o.resourceId
+  );
+  
+  if (unscheduledOrders.length === 0) {
+    return {
+      assignments: [],
+      summary: "Inga oschemalagda ordrar att planera.",
+      totalOrdersScheduled: 0,
+      estimatedEfficiency: 100
+    };
+  }
+  
+  const weekDays = getWeekDays(context.weekStart);
+  const capacities = calculateResourceCapacityWithWeather(
+    context.resources,
+    scheduledOrders,
+    weekDays,
+    weatherImpacts
+  );
+  
+  // Sortera ordrar: akuta först, sedan efter kluster
+  const sortedOrders = [...unscheduledOrders].sort((a, b) => {
+    const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+    const aPriority = priorityOrder[getOrderPriority(a)] ?? 2;
+    const bPriority = priorityOrder[getOrderPriority(b)] ?? 2;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    
+    // Sedan efter kluster för att gruppera
+    const aCluster = a.clusterId || "zzz";
+    const bCluster = b.clusterId || "zzz";
+    return aCluster.localeCompare(bCluster);
+  });
+  
+  const assignments: ScheduleAssignment[] = [];
+  
+  for (const order of sortedOrders) {
+    const slot = findBestSlotWithWeather(order, capacities, weekDays, context.clusters, context.resources, weatherImpacts);
+    
+    if (slot) {
+      // Uppdatera kapaciteten
+      const cap = capacities.find(c => c.id === slot.resourceId);
+      if (cap) {
+        const hours = getOrderDuration(order) / 60;
+        cap.dailyLoad[slot.date] = (cap.dailyLoad[slot.date] || 0) + hours;
+      }
+      
+      const resource = context.resources.find(r => r.id === slot.resourceId);
+      const cluster = context.clusters.find(c => c.id === order.clusterId);
+      const weatherImpact = weatherImpacts.find(w => w.date === slot.date);
+      
+      let reason = cluster 
+        ? `${resource?.name || "Resurs"} i kluster ${cluster.name}`
+        : `${resource?.name || "Resurs"} baserat på tillgänglighet`;
+      
+      if (weatherImpact && weatherImpact.impactLevel !== "none") {
+        reason += ` (väder: ${weatherImpact.reason})`;
+      }
+      
+      assignments.push({
+        workOrderId: order.id,
+        resourceId: slot.resourceId,
+        scheduledDate: slot.date,
+        reason,
+        confidence: Math.min(100, slot.score + 10)
+      });
+    }
+  }
+  
+  // Beräkna effektivitet baserat på områdesmatchning, balans och väder
+  const clusterMatches = assignments.filter(a => {
+    const order = unscheduledOrders.find(o => o.id === a.workOrderId);
+    const resource = context.resources.find(r => r.id === a.resourceId);
+    if (!order?.clusterId || !resource) return false;
+    const cluster = context.clusters.find(c => c.id === order.clusterId);
+    return cluster && resourceServesCluster(resource, cluster);
+  }).length;
+  
+  // Räkna dagar med bra väder
+  const goodWeatherDays = assignments.filter(a => {
+    const impact = weatherImpacts.find(w => w.date === a.scheduledDate);
+    return !impact || impact.impactLevel === "none" || impact.impactLevel === "low";
+  }).length;
+  
+  const weatherBonus = assignments.length > 0 
+    ? Math.round((goodWeatherDays / assignments.length) * 10) 
+    : 0;
+  
+  const efficiency = assignments.length > 0
+    ? Math.round(50 + (clusterMatches / assignments.length) * 40 + weatherBonus)
+    : 0;
+  
+  const weatherWarning = weatherImpacts.some(w => w.impactLevel === "high" || w.impactLevel === "severe")
+    ? " Varning: Dåligt väder förväntas vissa dagar."
+    : "";
+  
+  return {
+    assignments,
+    summary: `Schemalade ${assignments.length} av ${unscheduledOrders.length} ordrar. ${clusterMatches} matchade kluster.${weatherWarning}`,
+    totalOrdersScheduled: assignments.length,
+    estimatedEfficiency: Math.min(100, efficiency)
+  };
+}
+
+// Beräkna kapacitet med väderkorrigering
+function calculateResourceCapacityWithWeather(
+  resources: Resource[],
+  scheduledOrders: WorkOrder[],
+  weekDays: string[],
+  weatherImpacts: WeatherImpact[]
+): ResourceCapacity[] {
+  const capacities: ResourceCapacity[] = resources.map(r => ({
+    id: r.id,
+    name: r.name,
+    hoursPerDay: 8,
+    dailyLoad: {},
+    serviceArea: r.serviceArea || []
+  }));
+
+  // Initiera alla dagar med 0 (men justera kapacitet baserat på väder)
+  capacities.forEach(cap => {
+    weekDays.forEach(day => {
+      cap.dailyLoad[day] = 0;
+    });
+  });
+
+  // Räkna befintlig belastning
+  scheduledOrders.forEach(order => {
+    if (!order.resourceId || !order.scheduledDate) return;
+    
+    const cap = capacities.find(c => c.id === order.resourceId);
+    if (!cap) return;
+    
+    const dateStr = order.scheduledDate instanceof Date
+      ? order.scheduledDate.toISOString().split("T")[0]
+      : String(order.scheduledDate);
+    
+    const hours = getOrderDuration(order) / 60;
+    cap.dailyLoad[dateStr] = (cap.dailyLoad[dateStr] || 0) + hours;
+  });
+
+  return capacities;
+}
+
+// Hitta bästa slot med väder-hänsyn
+function findBestSlotWithWeather(
+  order: WorkOrder,
+  capacities: ResourceCapacity[],
+  weekDays: string[],
+  clusters: Cluster[],
+  resources: Resource[],
+  weatherImpacts: WeatherImpact[]
+): { resourceId: string; date: string; score: number } | null {
+  const orderDuration = getOrderDuration(order) / 60;
+  const orderClusterId = order.clusterId;
+  const orderPriority = getOrderPriority(order);
+  
+  const orderCluster = orderClusterId 
+    ? clusters.find(c => c.id === orderClusterId) 
+    : null;
+  
+  let bestSlot: { resourceId: string; date: string; score: number } | null = null;
+  
+  for (const cap of capacities) {
+    for (const day of weekDays) {
+      // Hämta väderkapacitetsmultiplikator för dagen
+      const weatherImpact = weatherImpacts.find(w => w.date === day);
+      const weatherMultiplier = weatherImpact?.capacityMultiplier ?? 1.0;
+      const effectiveHoursPerDay = cap.hoursPerDay * weatherMultiplier;
+      
+      const availableHours = effectiveHoursPerDay - (cap.dailyLoad[day] || 0);
+      
+      // Kontrollera om det finns tillräckligt med tid
+      if (availableHours < orderDuration) continue;
+      
+      let score = 50; // Baspoäng
+      
+      // Områdesmatchning: +30 poäng om resursen betjänar klustret
+      if (orderCluster) {
+        const resource = resources.find(r => r.id === cap.id);
+        if (resource && resourceServesCluster(resource, orderCluster)) {
+          score += 30;
+        }
+      }
+      
+      // Balanserad belastning: +0-20 poäng baserat på ledig kapacitet
+      const loadRatio = (cap.dailyLoad[day] || 0) / effectiveHoursPerDay;
+      score += Math.round((1 - loadRatio) * 20);
+      
+      // Akuta ordrar: tidigare i veckan = högre poäng
+      if (orderPriority === "urgent" || orderPriority === "high") {
+        const dayIndex = weekDays.indexOf(day);
+        score += Math.max(0, 10 - dayIndex * 2);
+      }
+      
+      // Väderbonus: föredra dagar med bättre väder (+0-15 poäng)
+      if (weatherImpact) {
+        const weatherBonus: Record<string, number> = {
+          "none": 15,
+          "low": 10,
+          "medium": 5,
+          "high": 0,
+          "severe": -10
+        };
+        score += weatherBonus[weatherImpact.impactLevel] || 0;
+      } else {
+        score += 10; // Ingen väderdata = anta normalt väder
+      }
+      
+      if (!bestSlot || score > bestSlot.score) {
+        bestSlot = { resourceId: cap.id, date: day, score };
+      }
+    }
+  }
+  
+  return bestSlot;
 }
 
 // ============ Setup Time Insights ============
