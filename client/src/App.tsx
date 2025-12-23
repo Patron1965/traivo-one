@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { GlobalAIAssistant } from "@/components/GlobalAIAssistant";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
@@ -94,7 +93,6 @@ function AuthenticatedApp() {
             </ErrorBoundary>
           </main>
         </div>
-        <GlobalAIAssistant />
       </div>
     </SidebarProvider>
   );
