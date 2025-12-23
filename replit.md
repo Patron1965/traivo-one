@@ -46,6 +46,12 @@ AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas
 
 ### Implementerade AI-funktioner
 - **AI Planning Assistant:** Analyserar veckoplanering och ger förslag för att balansera arbetsbelastning, optimera körtid och prioritera akuta ordrar. Tillgänglig via "AI Assistent"-knappen i veckoplaneraren.
+- **AI Auto-Scheduling med väderoptimering:** Automatisk schemaläggning som:
+  - Hämtar 7-dagars väderprognos från Open-Meteo API för Umeå
+  - Justerar kapacitet baserat på väderförhållanden (multiplikator 0.4-1.0)
+  - Prioriterar dagar med bra väder för utomhusarbeten (+15 poäng för bra, -10 för svårt)
+  - Grupperar ordrar efter kluster för effektivare körning
+  - Inkluderar väderinformation i AI-analysen för kontextmedvetna förslag
 
 ### Planerade AI-funktioner
 - **Automatisk klusterbildning:** AI analyserar objekts geografi och servicemönster för att föreslå optimala kluster
