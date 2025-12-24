@@ -7,6 +7,18 @@ export interface WeatherForecast {
   weatherDescription: string;
 }
 
+interface WeatherCache {
+  result: WeatherForecastResult;
+  timestamp: number;
+}
+
+const weatherCache = new Map<string, WeatherCache>();
+const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+
+function getCacheKey(latitude: number, longitude: number, days: number): string {
+  return `${latitude.toFixed(2)}_${longitude.toFixed(2)}_${days}`;
+}
+
 export interface WeatherImpact {
   date: string;
   impactLevel: "none" | "low" | "medium" | "high" | "severe";
@@ -154,6 +166,13 @@ export async function fetchWeatherForecast(
   longitude: number,
   days: number = 7
 ): Promise<WeatherForecastResult> {
+  const cacheKey = getCacheKey(latitude, longitude, days);
+  const cached = weatherCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.result;
+  }
+
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code&timezone=Europe/Stockholm&forecast_days=${Math.min(days, 16)}`;
 
@@ -184,12 +203,16 @@ export async function fetchWeatherForecast(
       ? `Väderavvikelser förväntas ${severeCount} av ${impacts.length} dagar. Planera kapacitet därefter.`
       : "Normala väderförhållanden förväntas. Inga justeringar behövs.";
 
-    return {
+    const result: WeatherForecastResult = {
       location: { latitude, longitude },
       forecasts,
       impacts,
       summary,
     };
+
+    weatherCache.set(cacheKey, { result, timestamp: Date.now() });
+
+    return result;
   } catch (error) {
     console.error("Weather fetch error:", error);
     return {

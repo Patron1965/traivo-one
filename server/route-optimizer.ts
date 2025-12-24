@@ -2,6 +2,18 @@ import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema
 
 const OPENROUTESERVICE_API_KEY = process.env.OPENROUTESERVICE_API_KEY;
 
+interface RouteCache {
+  result: { distance: number; duration: number };
+  timestamp: number;
+}
+
+const routeCache = new Map<string, RouteCache>();
+const ROUTE_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function getRouteCacheKey(coordinates: [number, number][]): string {
+  return coordinates.map(c => `${c[0].toFixed(4)},${c[1].toFixed(4)}`).join("|");
+}
+
 export interface RouteStop {
   workOrderId: string;
   objectId: string;
@@ -119,6 +131,13 @@ async function getRouteFromORS(coordinates: [number, number][]): Promise<{
     return null;
   }
   
+  const cacheKey = getRouteCacheKey(coordinates);
+  const cached = routeCache.get(cacheKey);
+  
+  if (cached && Date.now() - cached.timestamp < ROUTE_CACHE_TTL) {
+    return cached.result;
+  }
+  
   try {
     const response = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
       method: "POST",
@@ -141,10 +160,12 @@ async function getRouteFromORS(coordinates: [number, number][]): Promise<{
     const summary = data.features?.[0]?.properties?.summary;
     
     if (summary) {
-      return {
+      const result = {
         distance: summary.distance / 1000,
         duration: summary.duration / 60,
       };
+      routeCache.set(cacheKey, { result, timestamp: Date.now() });
+      return result;
     }
     
     return null;
