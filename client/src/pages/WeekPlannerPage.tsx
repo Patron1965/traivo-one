@@ -15,8 +15,8 @@ export default function WeekPlannerPage() {
   const weekEnd = format(endOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
 
   return (
-    <div className="flex h-full">
-      <div className={`flex-1 min-w-0 transition-all duration-300 ${showAIPanel ? "mr-0" : ""}`}>
+    <div className="flex h-full overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden">
         <div className="h-full relative">
           <WeekPlanner 
             onAddJob={() => setShowJobModal(true)}
@@ -25,7 +25,7 @@ export default function WeekPlannerPage() {
           
           {!showAIPanel && (
             <Button
-              className="absolute top-4 right-4 gap-2 shadow-lg"
+              className="absolute top-4 right-4 gap-2 shadow-lg z-10"
               onClick={() => setShowAIPanel(true)}
               data-testid="button-show-ai-panel"
             >
@@ -38,15 +38,16 @@ export default function WeekPlannerPage() {
       </div>
 
       {showAIPanel && (
-        <div className="w-80 border-l bg-muted/30 flex flex-col shrink-0">
-          <div className="flex items-center justify-between p-3 border-b">
-            <div className="flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-500" />
-              <span className="font-medium text-sm">AI Assistent</span>
+        <div className="w-80 border-l bg-muted/30 flex flex-col shrink-0 overflow-hidden">
+          <div className="flex items-center justify-between gap-2 p-3 border-b shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <Sparkles className="h-4 w-4 text-purple-500 shrink-0" />
+              <span className="font-medium text-sm truncate">AI Assistent</span>
             </div>
             <Button
               size="icon"
               variant="ghost"
+              className="shrink-0"
               onClick={() => setShowAIPanel(false)}
               data-testid="button-hide-ai-panel"
             >
