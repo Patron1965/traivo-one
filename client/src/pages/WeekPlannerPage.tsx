@@ -15,27 +15,25 @@ export default function WeekPlannerPage() {
   const weekEnd = format(endOfWeek(currentDate, { weekStartsOn: 1 }), "yyyy-MM-dd");
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden relative">
       <div className="flex-1 min-w-0 overflow-hidden">
-        <div className="h-full relative">
-          <WeekPlanner 
-            onAddJob={() => setShowJobModal(true)}
-            onSelectJob={(id) => console.log("Selected job for detail:", id)}
-          />
-          
-          {!showAIPanel && (
-            <Button
-              className="absolute top-4 right-4 gap-2 shadow-lg z-50 bg-purple-600 hover:bg-purple-700 text-white"
-              onClick={() => setShowAIPanel(true)}
-              data-testid="button-show-ai-panel"
-            >
-              <Sparkles className="h-4 w-4" />
-              AI Assistent
-              <PanelRightOpen className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
+        <WeekPlanner 
+          onAddJob={() => setShowJobModal(true)}
+          onSelectJob={(id) => console.log("Selected job for detail:", id)}
+        />
       </div>
+      
+      {!showAIPanel && (
+        <Button
+          className="fixed top-20 right-4 gap-2 shadow-lg z-50 bg-purple-600 hover:bg-purple-700 text-white"
+          onClick={() => setShowAIPanel(true)}
+          data-testid="button-show-ai-panel"
+        >
+          <Sparkles className="h-4 w-4" />
+          AI Assistent
+          <PanelRightOpen className="h-4 w-4" />
+        </Button>
+      )}
 
       {showAIPanel && (
         <div className="w-80 border-l bg-muted/30 flex flex-col shrink-0 overflow-hidden">
