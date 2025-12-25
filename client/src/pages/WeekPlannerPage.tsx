@@ -23,14 +23,15 @@ export default function WeekPlannerPage() {
         />
         
         {!showAIPanel && (
-          <div className="absolute top-4 right-4 z-50 pointer-events-none overflow-visible">
+          <div className="absolute top-16 right-4 z-50">
             <Button
-              size="icon"
-              className="pointer-events-auto shadow-lg bg-purple-600 hover:bg-purple-700 text-white"
+              size="sm"
+              className="shadow-lg bg-purple-600 hover:bg-purple-700 text-white gap-1"
               onClick={() => setShowAIPanel(true)}
               data-testid="button-show-ai-panel"
             >
               <Sparkles className="h-4 w-4" />
+              AI
             </Button>
           </div>
         )}
