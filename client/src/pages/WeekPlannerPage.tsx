@@ -25,7 +25,7 @@ export default function WeekPlannerPage() {
           
           {!showAIPanel && (
             <Button
-              className="absolute top-4 right-4 gap-2 shadow-lg z-10"
+              className="absolute top-4 right-4 gap-2 shadow-lg z-50 bg-purple-600 hover:bg-purple-700 text-white"
               onClick={() => setShowAIPanel(true)}
               data-testid="button-show-ai-panel"
             >

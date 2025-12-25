@@ -322,12 +322,12 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
             AI Planeringsassistent
           </CardTitle>
         </div>
-        <div className="flex gap-1 pt-2">
+        <div className="flex flex-wrap gap-1 pt-2">
           <Button
             size="sm"
             variant={activeTab === "auto-schedule" ? "default" : "ghost"}
             onClick={() => setActiveTab("auto-schedule")}
-            className="text-xs"
+            className="text-xs whitespace-nowrap"
             data-testid="tab-auto-schedule"
           >
             <Zap className="h-3 w-3 mr-1" />
@@ -337,7 +337,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
             size="sm"
             variant={activeTab === "routes" ? "default" : "ghost"}
             onClick={() => setActiveTab("routes")}
-            className="text-xs"
+            className="text-xs whitespace-nowrap"
             data-testid="tab-routes"
           >
             <Route className="h-3 w-3 mr-1" />
@@ -347,7 +347,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
             size="sm"
             variant={activeTab === "suggestions" ? "default" : "ghost"}
             onClick={() => setActiveTab("suggestions")}
-            className="text-xs"
+            className="text-xs whitespace-nowrap"
             data-testid="tab-suggestions"
           >
             <Sparkles className="h-3 w-3 mr-1" />
@@ -357,7 +357,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
             size="sm"
             variant={activeTab === "varningar" ? "default" : "ghost"}
             onClick={() => setActiveTab("varningar")}
-            className="text-xs"
+            className="text-xs whitespace-nowrap"
             data-testid="tab-varningar"
           >
             <AlertTriangle className="h-3 w-3 mr-1" />
