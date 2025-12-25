@@ -26,6 +26,12 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **Backend:** Express.js.
 -   **Database:** PostgreSQL with Drizzle ORM.
 -   **Multi-tenancy:** Supported at the database level.
+-   **MCP Server (Model Context Protocol):** External AI assistants can interact with Unicorn data:
+    - SSE endpoint: `GET /mcp/sse` for real-time connection
+    - Message endpoint: `POST /mcp/messages` with X-MCP-Session-Id header
+    - Resources: work-orders, resources, clusters
+    - Tools: get_work_orders, get_resources, get_clusters, schedule_work_order, get_daily_summary
+    - Documentation: `docs/MCP_INTEGRATION.md`
 -   **Modus 2.0 Import System:** Dedicated `/import` page for CSV imports of Objects, Tasks, and Events from Modus 2.0, including data transformation and validation (e.g., geocoding, parent linking).
 -   **Lazy Object Loading:** Implemented across components using `useObjectsByIds` and `useObjectSearch` hooks to optimize performance by fetching only necessary data.
 -   **Address Search/Autocomplete:** `AddressSearch` component using OpenStreetMap Nominatim API for Swedish address geocoding. Used in cluster creation form to auto-populate coordinates and postal codes.
