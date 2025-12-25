@@ -15,6 +15,7 @@ import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integra
 import multer from "multer";
 import Papa from "papaparse";
 import { notificationService } from "./notifications";
+import { handleMcpSse, handleMcpMessage } from "./mcp";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -52,6 +53,10 @@ export async function registerRoutes(
   registerAuthRoutes(app);
   
   await ensureDefaultTenant();
+
+  // MCP Server endpoints
+  app.get("/mcp/sse", handleMcpSse);
+  app.post("/mcp/messages", handleMcpMessage);
 
   app.get("/api/customers", async (req, res) => {
     try {
