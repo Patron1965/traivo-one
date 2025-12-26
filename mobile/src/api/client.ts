@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://your-app-url.replit.app';
+const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'https://8a66c250-81a0-4795-8b10-d7e5288aac2f-00-31xofz3v62pfu.worf.replit.dev';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
