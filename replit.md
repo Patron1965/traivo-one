@@ -29,6 +29,13 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **Dashboard:** Provides analytics and KPIs based on real setup logs.
 -   **MobileFieldApp:** A dedicated interface for field technicians.
 -   **Button size="mobile":** A dedicated button size variant (min-h-14, text-lg) for mobile field apps with larger touch targets.
+-   **Native Mobile App (Expo/React Native):** Separate mobile app in `mobile/` folder for field workers:
+    - Login with email + PIN
+    - View assigned work orders for the day
+    - Start/complete/cancel orders with status workflow
+    - Add notes to orders
+    - Navigate to addresses via native maps
+    - Call customers directly
 
 ### Technical Implementations
 -   **Frontend:** React, TypeScript, Vite.
@@ -51,6 +58,15 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
     - Frontend hook: `useNotifications` handles token acquisition, connection, and reconnection
     - Field apps: SimpleFieldApp and MobileFieldApp show connection status badge and toast notifications
     - **Production TODO:** Implement user-to-resource mapping for fine-grained authorization (currently validates tenant only)
+-   **Mobile API Endpoints:** Dedicated endpoints for mobile app:
+    - `POST /api/mobile/login` - Login with email + PIN
+    - `POST /api/mobile/logout` - Logout
+    - `GET /api/mobile/me` - Get logged-in resource
+    - `GET /api/mobile/my-orders` - Get assigned work orders (with ?date filter)
+    - `GET /api/mobile/orders/:id` - Get order details
+    - `PATCH /api/mobile/orders/:id/status` - Update status (scheduled → in_progress → completed)
+    - `POST /api/mobile/orders/:id/notes` - Add note to order
+    - **Production TODO:** Implement proper PIN hashing/verification (currently simplified for demo)
 
 ### Feature Specifications
 -   **Clusters:** A core concept for geographic organization, managing entities like objects and orders, visualized via lists and interactive maps (react-leaflet).
