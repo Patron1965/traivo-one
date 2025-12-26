@@ -383,7 +383,7 @@ function UsersTab() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<UserTenantRole | null>(null);
-  const [newUser, setNewUser] = useState({ email: "", name: "", role: "viewer", permissions: [] as string[] });
+  const [newUser, setNewUser] = useState({ email: "", name: "", role: "viewer", permissions: [] as string[], password: "" });
   const [importData, setImportData] = useState<Array<{ email: string; name: string; role: string }>>([]);
 
   const { data: roles, isLoading, refetch } = useQuery<UserTenantRole[]>({
@@ -391,18 +391,20 @@ function UsersTab() {
   });
 
   const createUserMutation = useMutation({
-    mutationFn: async (data: { email: string; name: string; role: string; permissions: string[] }) => {
+    mutationFn: async (data: { email: string; name: string; role: string; permissions: string[]; password: string }) => {
       return apiRequest("POST", "/api/system/user-roles", {
         userId: `email:${data.email}`,
+        name: data.name,
         role: data.role,
         permissions: data.permissions,
+        password: data.password,
       });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/system/user-roles"] });
       toast({ title: "Användare skapad", description: "Användaren har lagts till." });
       setShowAddDialog(false);
-      setNewUser({ email: "", name: "", role: "viewer", permissions: [] });
+      setNewUser({ email: "", name: "", role: "viewer", permissions: [], password: "" });
     },
     onError: () => {
       toast({ title: "Fel", description: "Kunde inte skapa användare.", variant: "destructive" });
@@ -410,7 +412,7 @@ function UsersTab() {
   });
 
   const updateUserMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: { role?: string; permissions?: string[]; isActive?: boolean } }) => {
+    mutationFn: async ({ id, data }: { id: string; data: { role?: string; permissions?: string[]; isActive?: boolean; password?: string } }) => {
       return apiRequest("PATCH", `/api/system/user-roles/${id}`, data);
     },
     onSuccess: () => {
@@ -636,6 +638,17 @@ function UsersTab() {
                       />
                     </div>
                     <div className="space-y-2">
+                      <Label htmlFor="new-password">Lösenord</Label>
+                      <Input
+                        id="new-password"
+                        type="password"
+                        value={newUser.password}
+                        onChange={(e) => setNewUser(prev => ({ ...prev, password: e.target.value }))}
+                        placeholder="Minst 6 tecken"
+                        data-testid="input-new-user-password"
+                      />
+                    </div>
+                    <div className="space-y-2">
                       <Label htmlFor="new-role">Roll</Label>
                       <Select value={newUser.role} onValueChange={(v) => setNewUser(prev => ({ ...prev, role: v }))}>
                         <SelectTrigger data-testid="select-new-user-role">
@@ -813,7 +826,7 @@ function EditUserPermissions({
   isPending 
 }: { 
   role: UserTenantRole; 
-  onSave: (data: { role?: string; permissions?: string[]; isActive?: boolean }) => void;
+  onSave: (data: { role?: string; permissions?: string[]; isActive?: boolean; password?: string }) => void;
   isPending: boolean;
 }) {
   const [editRole, setEditRole] = useState(role.role);
@@ -821,6 +834,7 @@ function EditUserPermissions({
     Array.isArray(role.permissions) ? role.permissions as string[] : []
   );
   const [isActive, setIsActive] = useState(role.isActive ?? true);
+  const [newPassword, setNewPassword] = useState("");
 
   const togglePermission = (moduleId: string) => {
     setEditPermissions(prev => 
@@ -900,9 +914,26 @@ function EditUserPermissions({
         </label>
       </div>
 
+      <div className="space-y-2">
+        <Label htmlFor="edit-password">Nytt lösenord (lämna tomt för att behålla)</Label>
+        <Input
+          id="edit-password"
+          type="password"
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          placeholder="Ange nytt lösenord..."
+          data-testid="input-edit-password"
+        />
+      </div>
+
       <DialogFooter>
         <Button
-          onClick={() => onSave({ role: editRole, permissions: editPermissions, isActive })}
+          onClick={() => onSave({ 
+            role: editRole, 
+            permissions: editPermissions, 
+            isActive,
+            password: newPassword || undefined
+          })}
           disabled={isPending}
           data-testid="button-save-permissions"
         >

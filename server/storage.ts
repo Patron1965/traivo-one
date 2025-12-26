@@ -1,5 +1,5 @@
 import { 
-  type User, type InsertUser,
+  type User, type InsertUser, type UpsertUser,
   type Tenant, type InsertTenant,
   type Customer, type InsertCustomer,
   type ServiceObject, type InsertObject,
@@ -42,6 +42,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
+  upsertUser(user: Partial<UpsertUser> & { id: string; email: string }): Promise<User>;
   
   getTenant(id: string): Promise<Tenant | undefined>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
@@ -213,6 +214,32 @@ export class DatabaseStorage implements IStorage {
 
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  async upsertUser(userData: Partial<UpsertUser> & { id: string; email: string }): Promise<User> {
+    const existing = await this.getUser(userData.id);
+    if (existing) {
+      const updateData: Record<string, unknown> = { updatedAt: new Date() };
+      if (userData.firstName !== undefined) updateData.firstName = userData.firstName;
+      if (userData.lastName !== undefined) updateData.lastName = userData.lastName;
+      if (userData.passwordHash !== undefined) updateData.passwordHash = userData.passwordHash;
+      if (userData.profileImageUrl !== undefined) updateData.profileImageUrl = userData.profileImageUrl;
+      
+      const [updated] = await db.update(users)
+        .set(updateData)
+        .where(eq(users.id, userData.id))
+        .returning();
+      return updated;
+    }
+    const [user] = await db.insert(users).values({
+      id: userData.id,
+      email: userData.email,
+      firstName: userData.firstName || null,
+      lastName: userData.lastName || null,
+      passwordHash: userData.passwordHash || null,
+      profileImageUrl: userData.profileImageUrl || null,
+    }).returning();
     return user;
   }
 

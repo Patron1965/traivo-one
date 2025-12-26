@@ -16,6 +16,7 @@ import multer from "multer";
 import Papa from "papaparse";
 import { notificationService } from "./notifications";
 import { handleMcpSse, handleMcpMessage } from "./mcp";
+import { hashPassword } from "./password";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -3453,7 +3454,7 @@ Svara alltid på svenska.`,
   // User Tenant Roles - Create new user role
   app.post("/api/system/user-roles", async (req, res) => {
     try {
-      const { userId, role, permissions } = req.body;
+      const { userId, name, role, permissions, password } = req.body;
       
       if (!userId || !role) {
         return res.status(400).json({ error: "userId and role are required" });
@@ -3463,6 +3464,20 @@ Svara alltid på svenska.`,
       const existing = await storage.getUserTenantRole(userId, DEFAULT_TENANT_ID);
       if (existing) {
         return res.status(400).json({ error: "User already has a role in this tenant" });
+      }
+      
+      // Create or update user record with password if provided
+      const email = userId.startsWith("email:") ? userId.replace("email:", "") : null;
+      if (email) {
+        const passwordHash = password ? hashPassword(password) : undefined;
+        const [firstName, ...lastNameParts] = (name || "").split(" ");
+        await storage.upsertUser({
+          id: userId,
+          email,
+          firstName: firstName || null,
+          lastName: lastNameParts.join(" ") || null,
+          passwordHash,
+        });
       }
       
       const result = await storage.createUserTenantRole({
@@ -3478,7 +3493,7 @@ Svara alltid på svenska.`,
         action: "create_user_role",
         resourceType: "user_tenant_roles",
         resourceId: result.id,
-        changes: { userId, role, permissions },
+        changes: { userId, role, permissions, hasPassword: !!password },
       });
       
       res.status(201).json(result);
@@ -3491,7 +3506,7 @@ Svara alltid på svenska.`,
   // User Tenant Roles - Update role
   app.patch("/api/system/user-roles/:id", async (req, res) => {
     try {
-      const { role, permissions, isActive } = req.body;
+      const { role, permissions, isActive, password } = req.body;
       
       const result = await storage.updateUserTenantRole(req.params.id, {
         role,
@@ -3503,12 +3518,25 @@ Svara alltid på svenska.`,
         return res.status(404).json({ error: "User role not found" });
       }
       
+      // Update password if provided
+      if (password && result.userId) {
+        const email = result.userId.startsWith("email:") ? result.userId.replace("email:", "") : null;
+        if (email) {
+          const passwordHash = hashPassword(password);
+          await storage.upsertUser({
+            id: result.userId,
+            email,
+            passwordHash,
+          });
+        }
+      }
+      
       await storage.createAuditLog({
         tenantId: DEFAULT_TENANT_ID,
         action: "update_user_role",
         resourceType: "user_tenant_roles",
         resourceId: result.id,
-        changes: { role, permissions, isActive },
+        changes: { role, permissions, isActive, passwordChanged: !!password },
       });
       
       res.json(result);
