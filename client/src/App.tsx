@@ -71,6 +71,7 @@ function Router() {
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/system-dashboard" component={SystemDashboardPage} />
+      <Route path="/system" component={SystemDashboardPage} />
       <Route component={NotFound} />
     </Switch>
   );
