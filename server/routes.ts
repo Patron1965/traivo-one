@@ -3009,5 +3009,311 @@ Svara alltid på svenska.`,
     }
   });
 
+  // ========================================
+  // MOBILE APP API ENDPOINTS
+  // ========================================
+  
+  // Simple token storage for mobile auth (in production, use Redis or database)
+  const mobileTokens = new Map<string, { resourceId: string; expiresAt: number }>();
+  
+  function generateMobileToken(): string {
+    return Array.from({ length: 64 }, () => 
+      Math.random().toString(36).charAt(2)
+    ).join('');
+  }
+  
+  function validateMobileToken(token: string): string | null {
+    const tokenData = mobileTokens.get(token);
+    if (!tokenData) return null;
+    if (Date.now() > tokenData.expiresAt) {
+      mobileTokens.delete(token);
+      return null;
+    }
+    return tokenData.resourceId;
+  }
+  
+  // Middleware to check mobile auth
+  function isMobileAuthenticated(req: any, res: any, next: any) {
+    const authHeader = req.headers.authorization;
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    
+    const token = authHeader.substring(7);
+    const resourceId = validateMobileToken(token);
+    
+    if (!resourceId) {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+    
+    req.mobileResourceId = resourceId;
+    next();
+  }
+
+  // Mobile login - authenticate with email and PIN
+  app.post("/api/mobile/login", async (req, res) => {
+    try {
+      const { email, pin } = req.body;
+      
+      if (!email || !pin) {
+        return res.status(400).json({ error: "Email and PIN required" });
+      }
+      
+      // Find resource by email
+      const resources = await storage.getResources(DEFAULT_TENANT_ID);
+      const resource = resources.find(r => 
+        r.email?.toLowerCase() === email.toLowerCase() && r.status === 'active'
+      );
+      
+      if (!resource) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      // For demo purposes, accept any 4-digit PIN
+      // In production, you would store and validate PINs properly
+      if (pin.length < 4 || pin.length > 6) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+      
+      // Generate token
+      const token = generateMobileToken();
+      const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+      
+      mobileTokens.set(token, { resourceId: resource.id, expiresAt });
+      
+      console.log(`[mobile] Login successful for resource ${resource.name} (${resource.id})`);
+      
+      res.json({
+        success: true,
+        resource: {
+          id: resource.id,
+          tenantId: resource.tenantId,
+          userId: resource.userId,
+          name: resource.name,
+          initials: resource.initials,
+          resourceType: resource.resourceType,
+          phone: resource.phone,
+          email: resource.email,
+          homeLocation: resource.homeLocation,
+          homeLatitude: resource.homeLatitude,
+          homeLongitude: resource.homeLongitude,
+          status: resource.status,
+        },
+        token,
+      });
+    } catch (error) {
+      console.error("Mobile login failed:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+  
+  // Mobile logout
+  app.post("/api/mobile/logout", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const token = authHeader.substring(7);
+      mobileTokens.delete(token);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Logout failed" });
+    }
+  });
+  
+  // Get current resource info
+  app.get("/api/mobile/me", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resource = await storage.getResource(req.mobileResourceId);
+      if (!resource) {
+        return res.status(404).json({ error: "Resource not found" });
+      }
+      res.json(resource);
+    } catch (error) {
+      console.error("Failed to get resource:", error);
+      res.status(500).json({ error: "Failed to get resource" });
+    }
+  });
+  
+  // Get work orders for the logged-in resource
+  app.get("/api/mobile/my-orders", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const dateParam = req.query.date as string;
+      
+      // Get all work orders for this resource
+      const allOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+      
+      // Filter by resource
+      let orders = allOrders.filter(o => o.resourceId === resourceId);
+      
+      // Filter by date if provided
+      if (dateParam) {
+        const targetDate = new Date(dateParam);
+        targetDate.setHours(0, 0, 0, 0);
+        const nextDay = new Date(targetDate);
+        nextDay.setDate(nextDay.getDate() + 1);
+        
+        orders = orders.filter(o => {
+          if (!o.scheduledDate) return false;
+          const orderDate = new Date(o.scheduledDate);
+          return orderDate >= targetDate && orderDate < nextDay;
+        });
+      }
+      
+      // Sort by scheduled time
+      orders.sort((a, b) => {
+        if (!a.scheduledStartTime && !b.scheduledStartTime) return 0;
+        if (!a.scheduledStartTime) return 1;
+        if (!b.scheduledStartTime) return -1;
+        return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
+      });
+      
+      // Enrich with object and customer info
+      const enrichedOrders = await Promise.all(orders.map(async (order) => {
+        const object = order.objectId ? await storage.getObject(order.objectId) : null;
+        const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
+        
+        return {
+          ...order,
+          objectName: object?.name,
+          objectAddress: object?.address,
+          customerName: customer?.name,
+          customerPhone: customer?.phone,
+        };
+      }));
+      
+      res.json({
+        orders: enrichedOrders,
+        total: enrichedOrders.length,
+      });
+    } catch (error) {
+      console.error("Failed to get mobile orders:", error);
+      res.status(500).json({ error: "Failed to get orders" });
+    }
+  });
+  
+  // Get single work order details
+  app.get("/api/mobile/orders/:id", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+      
+      const order = await storage.getWorkOrder(orderId);
+      
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // Verify this order belongs to the resource
+      if (order.resourceId !== resourceId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      // Enrich with object and customer info
+      const object = order.objectId ? await storage.getObject(order.objectId) : null;
+      const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
+      
+      res.json({
+        ...order,
+        objectName: object?.name,
+        objectAddress: object?.address,
+        objectLatitude: object?.latitude,
+        objectLongitude: object?.longitude,
+        accessCode: object?.accessCode,
+        keyNumber: object?.keyNumber,
+        objectNotes: object?.notes,
+        customerName: customer?.name,
+        customerPhone: customer?.phone,
+        customerEmail: customer?.email,
+      });
+    } catch (error) {
+      console.error("Failed to get order details:", error);
+      res.status(500).json({ error: "Failed to get order" });
+    }
+  });
+  
+  // Update work order status from mobile
+  app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+      const { status, notes } = req.body;
+      
+      const order = await storage.getWorkOrder(orderId);
+      
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      if (order.resourceId !== resourceId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      const updateData: any = {};
+      
+      if (status === 'paborjad') {
+        // Use 'in_progress' status that the mobile app can recognize
+        updateData.status = 'in_progress';
+        updateData.orderStatus = 'planerad_resurs';
+      } else if (status === 'utford') {
+        updateData.status = 'completed';
+        updateData.orderStatus = 'utford';
+        updateData.completedAt = new Date();
+      } else if (status === 'ej_utford') {
+        updateData.status = 'cancelled';
+        updateData.orderStatus = 'skapad';
+        if (notes) {
+          updateData.notes = order.notes 
+            ? `${order.notes}\n\nEj utförd: ${notes}` 
+            : `Ej utförd: ${notes}`;
+        }
+      }
+      
+      const updatedOrder = await storage.updateWorkOrder(orderId, updateData);
+      
+      console.log(`[mobile] Order ${orderId} status updated to ${status} by resource ${resourceId}`);
+      
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error("Failed to update order status:", error);
+      res.status(500).json({ error: "Failed to update status" });
+    }
+  });
+  
+  // Add note to work order
+  app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+      const { note } = req.body;
+      
+      if (!note || !note.trim()) {
+        return res.status(400).json({ error: "Note is required" });
+      }
+      
+      const order = await storage.getWorkOrder(orderId);
+      
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      if (order.resourceId !== resourceId) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+      
+      const timestamp = new Date().toLocaleString('sv-SE');
+      const newNote = `[${timestamp}] ${note.trim()}`;
+      const updatedNotes = order.notes 
+        ? `${order.notes}\n${newNote}` 
+        : newNote;
+      
+      const updatedOrder = await storage.updateWorkOrder(orderId, { notes: updatedNotes });
+      
+      res.json(updatedOrder);
+    } catch (error) {
+      console.error("Failed to add note:", error);
+      res.status(500).json({ error: "Failed to add note" });
+    }
+  });
+
   return httpServer;
 }
