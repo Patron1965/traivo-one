@@ -3545,16 +3545,24 @@ Svara alltid på svenska.`,
           continue;
         }
         
-        // Map role names (Swedish to English)
-        let role = user.role?.toLowerCase() || "viewer";
+        // Map role names (Swedish to English) - handle whitespace and case variations
+        let role = user.role?.toLowerCase().trim() || "viewer";
         const roleMap: Record<string, string> = {
           "ägare": "owner",
+          "owner": "owner",
           "administratör": "admin",
+          "administrator": "admin",
+          "admin": "admin",
           "planerare": "planner",
+          "planner": "planner",
           "tekniker": "technician",
+          "technician": "technician",
           "läsare": "viewer",
+          "viewer": "viewer",
+          "user": "viewer",
+          "användare": "viewer",
         };
-        role = roleMap[role] || role;
+        role = roleMap[role] || "viewer";
         
         await storage.createUserTenantRole({
           userId,
