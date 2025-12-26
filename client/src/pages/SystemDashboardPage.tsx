@@ -760,16 +760,14 @@ function UsersTab() {
                           className="pr-10"
                           data-testid="input-new-user-password"
                         />
-                        <Button
+                        <button
                           type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0 top-0 h-full"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
                           onClick={() => setShowNewPassword(!showNewPassword)}
                           data-testid="button-toggle-new-password"
                         >
                           {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </Button>
+                        </button>
                       </div>
                     </div>
                     <div className="space-y-2">
@@ -1051,16 +1049,14 @@ function EditUserPermissions({
             className="pr-10"
             data-testid="input-edit-password"
           />
-          <Button
+          <button
             type="button"
-            variant="ghost"
-            size="icon"
-            className="absolute right-0 top-0 h-full"
+            className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
             onClick={() => setShowPassword(!showPassword)}
             data-testid="button-toggle-edit-password"
           >
             {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-          </Button>
+          </button>
         </div>
       </div>
 
