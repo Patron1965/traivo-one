@@ -3518,6 +3518,68 @@ Svara alltid på svenska.`,
     }
   });
 
+  // User Tenant Roles - Import users from CSV data
+  app.post("/api/system/user-roles/import", async (req, res) => {
+    try {
+      const { users } = req.body;
+      
+      if (!Array.isArray(users) || users.length === 0) {
+        return res.status(400).json({ error: "No users provided" });
+      }
+      
+      let imported = 0;
+      let skipped = 0;
+      
+      for (const user of users) {
+        if (!user.email) {
+          skipped++;
+          continue;
+        }
+        
+        const userId = `email:${user.email}`;
+        
+        // Check if user already has a role
+        const existing = await storage.getUserTenantRole(userId, DEFAULT_TENANT_ID);
+        if (existing) {
+          skipped++;
+          continue;
+        }
+        
+        // Map role names (Swedish to English)
+        let role = user.role?.toLowerCase() || "viewer";
+        const roleMap: Record<string, string> = {
+          "ägare": "owner",
+          "administratör": "admin",
+          "planerare": "planner",
+          "tekniker": "technician",
+          "läsare": "viewer",
+        };
+        role = roleMap[role] || role;
+        
+        await storage.createUserTenantRole({
+          userId,
+          tenantId: DEFAULT_TENANT_ID,
+          role,
+          permissions: [],
+          isActive: true,
+        });
+        imported++;
+      }
+      
+      await storage.createAuditLog({
+        tenantId: DEFAULT_TENANT_ID,
+        action: "import_users",
+        resourceType: "user_tenant_roles",
+        changes: { imported, skipped, total: users.length },
+      });
+      
+      res.json({ imported, skipped, total: users.length });
+    } catch (error) {
+      console.error("Failed to import users:", error);
+      res.status(500).json({ error: "Failed to import users" });
+    }
+  });
+
   // User Tenant Roles - Delete role
   app.delete("/api/system/user-roles/:id", async (req, res) => {
     try {
