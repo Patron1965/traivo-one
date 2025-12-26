@@ -36,6 +36,7 @@ import AutoClusterPage from "@/pages/AutoClusterPage";
 import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import CustomerPortalPage from "@/pages/CustomerPortalPage";
 import SystemDashboardPage from "@/pages/SystemDashboardPage";
+import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -77,15 +78,17 @@ function Router() {
 
 function AuthenticatedApp() {
   return (
-    <div className="flex flex-col min-h-screen w-full">
-      <TopNav />
-      <main className="flex-1 overflow-auto">
-        <ErrorBoundary>
-          <Router />
-        </ErrorBoundary>
-      </main>
-      <FloatingActionButton />
-    </div>
+    <TenantBrandingProvider>
+      <div className="flex flex-col min-h-screen w-full">
+        <TopNav />
+        <main className="flex-1 overflow-auto">
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
+        </main>
+        <FloatingActionButton />
+      </div>
+    </TenantBrandingProvider>
   );
 }
 
