@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,8 +35,11 @@ import {
   Trash2,
   Shield,
   Eye,
-  EyeOff
+  EyeOff,
+  ImageIcon,
+  X
 } from "lucide-react";
+import { useUpload } from "@/hooks/use-upload";
 import type { BrandingTemplate, TenantBranding, UserTenantRole, AuditLog } from "@shared/schema";
 
 const AVAILABLE_MODULES = [
@@ -79,6 +82,19 @@ function BrandingTab() {
     primaryColor: "",
     secondaryColor: "",
     accentColor: "",
+  });
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoScale, setLogoScale] = useState(100);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const { uploadFile, isUploading, progress } = useUpload({
+    onSuccess: (response) => {
+      setLogoUrl(response.objectPath);
+      toast({ title: "Logotyp uppladdad", description: "Logotypen har sparats." });
+    },
+    onError: (error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
   });
 
   const { data: templates, isLoading: templatesLoading } = useQuery<BrandingTemplate[]>({
@@ -136,6 +152,7 @@ function BrandingTab() {
       primaryColor: customBranding.primaryColor || undefined,
       secondaryColor: customBranding.secondaryColor || undefined,
       accentColor: customBranding.accentColor || undefined,
+      logoUrl: logoUrl || undefined,
     });
   };
 
@@ -347,6 +364,97 @@ function BrandingTab() {
               </div>
             </div>
           </div>
+
+          <div className="space-y-4 pt-4 border-t">
+            <Label className="flex items-center gap-2">
+              <ImageIcon className="h-4 w-4" />
+              Logotyp
+            </Label>
+            <div className="flex flex-col md:flex-row gap-6">
+              <div 
+                className="relative w-48 h-48 border-2 border-dashed border-border rounded-md flex items-center justify-center bg-muted/30"
+                data-testid="logo-preview-frame"
+              >
+                {logoUrl || currentBranding?.logoUrl ? (
+                  <>
+                    <img
+                      src={logoUrl || currentBranding?.logoUrl || ""}
+                      alt="Företagslogotyp"
+                      className="max-w-full max-h-full object-contain"
+                      style={{ transform: `scale(${logoScale / 100})` }}
+                      data-testid="img-logo-preview"
+                    />
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="absolute top-1 right-1"
+                      onClick={() => setLogoUrl(null)}
+                      data-testid="button-remove-logo"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <div className="text-center text-muted-foreground">
+                    <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">Ingen logotyp</p>
+                  </div>
+                )}
+              </div>
+              <div className="flex-1 space-y-4">
+                <div className="space-y-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        uploadFile(file);
+                      }
+                    }}
+                    data-testid="input-logo-file"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isUploading}
+                    data-testid="button-upload-logo"
+                  >
+                    {isUploading ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Laddar upp... {progress}%
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="h-4 w-4 mr-2" />
+                        Ladda upp logotyp
+                      </>
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Rekommenderad storlek: 200x200px. Stödjer PNG, JPG, SVG.
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="logoScale">Skalning: {logoScale}%</Label>
+                  <Input
+                    id="logoScale"
+                    type="range"
+                    min="50"
+                    max="150"
+                    value={logoScale}
+                    onChange={(e) => setLogoScale(Number(e.target.value))}
+                    className="w-full"
+                    data-testid="input-logo-scale"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className="flex justify-end gap-2 pt-4">
             <Button
               variant="outline"

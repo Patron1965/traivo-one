@@ -17,6 +17,7 @@ import Papa from "papaparse";
 import { notificationService } from "./notifications";
 import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { hashPassword } from "./password";
+import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -54,6 +55,9 @@ export async function registerRoutes(
   registerAuthRoutes(app);
   
   await ensureDefaultTenant();
+
+  // Object Storage routes for file uploads
+  registerObjectStorageRoutes(app);
 
   // MCP Server endpoints
   app.get("/mcp/sse", handleMcpSse);
