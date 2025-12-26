@@ -25,10 +25,15 @@ import {
   type PlanningParameter, type InsertPlanningParameter,
   type Cluster, type InsertCluster,
   type OrderStatus,
+  type BrandingTemplate, type InsertBrandingTemplate,
+  type TenantBranding, type InsertTenantBranding,
+  type UserTenantRole, type InsertUserTenantRole,
+  type AuditLog, type InsertAuditLog,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
-  vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters
+  vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
+  brandingTemplates, tenantBranding, userTenantRoles, auditLogs
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
@@ -165,6 +170,34 @@ export interface IStorage {
   getClusterWorkOrders(clusterId: string, options?: { startDate?: Date; endDate?: Date }): Promise<WorkOrder[]>;
   getClusterSubscriptions(clusterId: string): Promise<Subscription[]>;
   updateClusterCaches(clusterId: string): Promise<Cluster | undefined>;
+  
+  // System Dashboard - Branding Templates
+  getBrandingTemplates(): Promise<BrandingTemplate[]>;
+  getBrandingTemplate(id: string): Promise<BrandingTemplate | undefined>;
+  getBrandingTemplateBySlug(slug: string): Promise<BrandingTemplate | undefined>;
+  createBrandingTemplate(template: InsertBrandingTemplate): Promise<BrandingTemplate>;
+  updateBrandingTemplate(id: string, data: Partial<InsertBrandingTemplate>): Promise<BrandingTemplate | undefined>;
+  deleteBrandingTemplate(id: string): Promise<void>;
+  incrementTemplateUsage(id: string): Promise<void>;
+  
+  // System Dashboard - Tenant Branding
+  getTenantBranding(tenantId: string): Promise<TenantBranding | undefined>;
+  createTenantBranding(branding: InsertTenantBranding): Promise<TenantBranding>;
+  updateTenantBranding(tenantId: string, data: Partial<InsertTenantBranding>): Promise<TenantBranding | undefined>;
+  publishTenantBranding(tenantId: string): Promise<TenantBranding | undefined>;
+  
+  // System Dashboard - User Tenant Roles
+  getUserTenantRoles(tenantId: string): Promise<(UserTenantRole & { user: User | null })[]>;
+  getUserTenantRole(userId: string, tenantId: string): Promise<UserTenantRole | undefined>;
+  getUserRolesForUser(userId: string): Promise<UserTenantRole[]>;
+  createUserTenantRole(role: InsertUserTenantRole): Promise<UserTenantRole>;
+  updateUserTenantRole(id: string, data: Partial<InsertUserTenantRole>): Promise<UserTenantRole | undefined>;
+  deleteUserTenantRole(id: string): Promise<void>;
+  isOwner(userId: string, tenantId: string): Promise<boolean>;
+  
+  // System Dashboard - Audit Logs
+  getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string }): Promise<AuditLog[]>;
+  createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1223,6 +1256,178 @@ export class DatabaseStorage implements IStorage {
       cachedMonthlyValue: stats.monthlyValue,
       cachedAvgSetupTime: stats.avgSetupTime
     });
+  }
+
+  // System Dashboard - Branding Templates
+  async getBrandingTemplates(): Promise<BrandingTemplate[]> {
+    return db.select().from(brandingTemplates).orderBy(brandingTemplates.name);
+  }
+
+  async getBrandingTemplate(id: string): Promise<BrandingTemplate | undefined> {
+    const [template] = await db.select().from(brandingTemplates).where(eq(brandingTemplates.id, id));
+    return template || undefined;
+  }
+
+  async getBrandingTemplateBySlug(slug: string): Promise<BrandingTemplate | undefined> {
+    const [template] = await db.select().from(brandingTemplates).where(eq(brandingTemplates.slug, slug));
+    return template || undefined;
+  }
+
+  async createBrandingTemplate(template: InsertBrandingTemplate): Promise<BrandingTemplate> {
+    const [result] = await db.insert(brandingTemplates).values(template).returning();
+    return result;
+  }
+
+  async updateBrandingTemplate(id: string, data: Partial<InsertBrandingTemplate>): Promise<BrandingTemplate | undefined> {
+    const [result] = await db.update(brandingTemplates)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(brandingTemplates.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteBrandingTemplate(id: string): Promise<void> {
+    await db.delete(brandingTemplates).where(eq(brandingTemplates.id, id));
+  }
+
+  async incrementTemplateUsage(id: string): Promise<void> {
+    await db.update(brandingTemplates)
+      .set({ usageCount: sql`COALESCE(usage_count, 0) + 1` })
+      .where(eq(brandingTemplates.id, id));
+  }
+
+  // System Dashboard - Tenant Branding
+  async getTenantBranding(tenantId: string): Promise<TenantBranding | undefined> {
+    const [branding] = await db.select().from(tenantBranding).where(eq(tenantBranding.tenantId, tenantId));
+    return branding || undefined;
+  }
+
+  async createTenantBranding(branding: InsertTenantBranding): Promise<TenantBranding> {
+    const [result] = await db.insert(tenantBranding).values(branding).returning();
+    return result;
+  }
+
+  async updateTenantBranding(tenantId: string, data: Partial<InsertTenantBranding>): Promise<TenantBranding | undefined> {
+    const existing = await this.getTenantBranding(tenantId);
+    if (!existing) return undefined;
+    
+    const [result] = await db.update(tenantBranding)
+      .set({ 
+        ...data, 
+        version: (existing.version || 1) + 1,
+        updatedAt: new Date() 
+      })
+      .where(eq(tenantBranding.tenantId, tenantId))
+      .returning();
+    return result || undefined;
+  }
+
+  async publishTenantBranding(tenantId: string): Promise<TenantBranding | undefined> {
+    const [result] = await db.update(tenantBranding)
+      .set({ 
+        isPublished: true, 
+        publishedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(tenantBranding.tenantId, tenantId))
+      .returning();
+    return result || undefined;
+  }
+
+  // System Dashboard - User Tenant Roles
+  async getUserTenantRoles(tenantId: string): Promise<(UserTenantRole & { user: User | null })[]> {
+    const roles = await db.select({
+      id: userTenantRoles.id,
+      userId: userTenantRoles.userId,
+      tenantId: userTenantRoles.tenantId,
+      role: userTenantRoles.role,
+      permissions: userTenantRoles.permissions,
+      isActive: userTenantRoles.isActive,
+      assignedBy: userTenantRoles.assignedBy,
+      createdAt: userTenantRoles.createdAt,
+      updatedAt: userTenantRoles.updatedAt,
+      user: {
+        id: users.id,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        profileImageUrl: users.profileImageUrl,
+        createdAt: users.createdAt,
+      }
+    })
+    .from(userTenantRoles)
+    .leftJoin(users, eq(userTenantRoles.userId, users.id))
+    .where(eq(userTenantRoles.tenantId, tenantId))
+    .orderBy(userTenantRoles.role);
+    
+    return roles.map(r => ({
+      ...r,
+      user: r.user?.id ? r.user as User : null
+    }));
+  }
+
+  async getUserTenantRole(userId: string, tenantId: string): Promise<UserTenantRole | undefined> {
+    const [role] = await db.select()
+      .from(userTenantRoles)
+      .where(and(eq(userTenantRoles.userId, userId), eq(userTenantRoles.tenantId, tenantId)));
+    return role || undefined;
+  }
+
+  async getUserRolesForUser(userId: string): Promise<UserTenantRole[]> {
+    return db.select().from(userTenantRoles).where(eq(userTenantRoles.userId, userId));
+  }
+
+  async createUserTenantRole(role: InsertUserTenantRole): Promise<UserTenantRole> {
+    const [result] = await db.insert(userTenantRoles).values(role).returning();
+    return result;
+  }
+
+  async updateUserTenantRole(id: string, data: Partial<InsertUserTenantRole>): Promise<UserTenantRole | undefined> {
+    const [result] = await db.update(userTenantRoles)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(userTenantRoles.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteUserTenantRole(id: string): Promise<void> {
+    await db.delete(userTenantRoles).where(eq(userTenantRoles.id, id));
+  }
+
+  async isOwner(userId: string, tenantId: string): Promise<boolean> {
+    const role = await this.getUserTenantRole(userId, tenantId);
+    return role?.role === "owner" && role?.isActive === true;
+  }
+
+  // System Dashboard - Audit Logs
+  async getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string }): Promise<AuditLog[]> {
+    const conditions = [eq(auditLogs.tenantId, tenantId)];
+    
+    if (options?.action) {
+      conditions.push(eq(auditLogs.action, options.action));
+    }
+    if (options?.userId) {
+      conditions.push(eq(auditLogs.userId, options.userId));
+    }
+    
+    let query = db.select()
+      .from(auditLogs)
+      .where(and(...conditions))
+      .orderBy(desc(auditLogs.createdAt));
+    
+    if (options?.limit) {
+      query = query.limit(options.limit) as typeof query;
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset) as typeof query;
+    }
+    
+    return query;
+  }
+
+  async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
+    const [result] = await db.insert(auditLogs).values(log).returning();
+    return result;
   }
 }
 

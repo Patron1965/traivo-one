@@ -3315,5 +3315,242 @@ Svara alltid på svenska.`,
     }
   });
 
+  // ============================================
+  // SYSTEM DASHBOARD API ENDPOINTS
+  // ============================================
+
+  // Branding Templates - List all
+  app.get("/api/system/branding-templates", async (req, res) => {
+    try {
+      const templates = await storage.getBrandingTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Failed to fetch branding templates:", error);
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  // Branding Templates - Get by ID
+  app.get("/api/system/branding-templates/:id", async (req, res) => {
+    try {
+      const template = await storage.getBrandingTemplate(req.params.id);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error) {
+      console.error("Failed to fetch branding template:", error);
+      res.status(500).json({ error: "Failed to fetch template" });
+    }
+  });
+
+  // Branding Templates - Get by slug
+  app.get("/api/system/branding-templates/slug/:slug", async (req, res) => {
+    try {
+      const template = await storage.getBrandingTemplateBySlug(req.params.slug);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error) {
+      console.error("Failed to fetch branding template:", error);
+      res.status(500).json({ error: "Failed to fetch template" });
+    }
+  });
+
+  // Tenant Branding - Get current tenant branding
+  app.get("/api/system/tenant-branding", async (req, res) => {
+    try {
+      const branding = await storage.getTenantBranding(DEFAULT_TENANT_ID);
+      res.json(branding || null);
+    } catch (error) {
+      console.error("Failed to fetch tenant branding:", error);
+      res.status(500).json({ error: "Failed to fetch branding" });
+    }
+  });
+
+  // Tenant Branding - Update or create branding
+  app.put("/api/system/tenant-branding", async (req, res) => {
+    try {
+      const { templateId, ...brandingData } = req.body;
+      
+      let existing = await storage.getTenantBranding(DEFAULT_TENANT_ID);
+      
+      // If using a template, fetch and merge template colors
+      if (templateId) {
+        const template = await storage.getBrandingTemplate(templateId);
+        if (template) {
+          brandingData.templateId = templateId;
+          brandingData.primaryColor = brandingData.primaryColor || template.primaryColor;
+          brandingData.primaryLight = brandingData.primaryLight || template.primaryLight;
+          brandingData.primaryDark = brandingData.primaryDark || template.primaryDark;
+          brandingData.secondaryColor = brandingData.secondaryColor || template.secondaryColor;
+          brandingData.accentColor = brandingData.accentColor || template.accentColor;
+          brandingData.successColor = brandingData.successColor || template.successColor;
+          brandingData.errorColor = brandingData.errorColor || template.errorColor;
+          
+          // Increment template usage
+          await storage.incrementTemplateUsage(templateId);
+        }
+      }
+      
+      let result;
+      if (existing) {
+        result = await storage.updateTenantBranding(DEFAULT_TENANT_ID, brandingData);
+      } else {
+        result = await storage.createTenantBranding({ 
+          tenantId: DEFAULT_TENANT_ID, 
+          ...brandingData 
+        });
+      }
+      
+      // Create audit log
+      await storage.createAuditLog({
+        tenantId: DEFAULT_TENANT_ID,
+        action: existing ? "update_branding" : "create_branding",
+        resourceType: "tenant_branding",
+        resourceId: result?.id,
+        changes: brandingData,
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to update tenant branding:", error);
+      res.status(500).json({ error: "Failed to update branding" });
+    }
+  });
+
+  // Tenant Branding - Publish branding
+  app.post("/api/system/tenant-branding/publish", async (req, res) => {
+    try {
+      const result = await storage.publishTenantBranding(DEFAULT_TENANT_ID);
+      
+      if (!result) {
+        return res.status(404).json({ error: "Branding not found" });
+      }
+      
+      await storage.createAuditLog({
+        tenantId: DEFAULT_TENANT_ID,
+        action: "publish_branding",
+        resourceType: "tenant_branding",
+        resourceId: result.id,
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to publish branding:", error);
+      res.status(500).json({ error: "Failed to publish branding" });
+    }
+  });
+
+  // User Tenant Roles - List all users with roles for current tenant
+  app.get("/api/system/user-roles", async (req, res) => {
+    try {
+      const roles = await storage.getUserTenantRoles(DEFAULT_TENANT_ID);
+      res.json(roles);
+    } catch (error) {
+      console.error("Failed to fetch user roles:", error);
+      res.status(500).json({ error: "Failed to fetch user roles" });
+    }
+  });
+
+  // User Tenant Roles - Create new user role
+  app.post("/api/system/user-roles", async (req, res) => {
+    try {
+      const { userId, role, permissions } = req.body;
+      
+      if (!userId || !role) {
+        return res.status(400).json({ error: "userId and role are required" });
+      }
+      
+      // Check if user already has a role
+      const existing = await storage.getUserTenantRole(userId, DEFAULT_TENANT_ID);
+      if (existing) {
+        return res.status(400).json({ error: "User already has a role in this tenant" });
+      }
+      
+      const result = await storage.createUserTenantRole({
+        userId,
+        tenantId: DEFAULT_TENANT_ID,
+        role,
+        permissions: permissions || [],
+        isActive: true,
+      });
+      
+      await storage.createAuditLog({
+        tenantId: DEFAULT_TENANT_ID,
+        action: "create_user_role",
+        resourceType: "user_tenant_roles",
+        resourceId: result.id,
+        changes: { userId, role, permissions },
+      });
+      
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Failed to create user role:", error);
+      res.status(500).json({ error: "Failed to create user role" });
+    }
+  });
+
+  // User Tenant Roles - Update role
+  app.patch("/api/system/user-roles/:id", async (req, res) => {
+    try {
+      const { role, permissions, isActive } = req.body;
+      
+      const result = await storage.updateUserTenantRole(req.params.id, {
+        role,
+        permissions,
+        isActive,
+      });
+      
+      if (!result) {
+        return res.status(404).json({ error: "User role not found" });
+      }
+      
+      await storage.createAuditLog({
+        tenantId: DEFAULT_TENANT_ID,
+        action: "update_user_role",
+        resourceType: "user_tenant_roles",
+        resourceId: result.id,
+        changes: { role, permissions, isActive },
+      });
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to update user role:", error);
+      res.status(500).json({ error: "Failed to update user role" });
+    }
+  });
+
+  // User Tenant Roles - Delete role
+  app.delete("/api/system/user-roles/:id", async (req, res) => {
+    try {
+      await storage.createAuditLog({
+        tenantId: DEFAULT_TENANT_ID,
+        action: "delete_user_role",
+        resourceType: "user_tenant_roles",
+        resourceId: req.params.id,
+      });
+      
+      await storage.deleteUserTenantRole(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete user role:", error);
+      res.status(500).json({ error: "Failed to delete user role" });
+    }
+  });
+
+  // Audit Logs - Get logs for current tenant
+  app.get("/api/system/audit-logs", async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 100;
+      const offset = parseInt(req.query.offset as string) || 0;
+      const action = req.query.action as string;
+      const userId = req.query.userId as string;
+      
+      const logs = await storage.getAuditLogs(DEFAULT_TENANT_ID, { limit, offset, action, userId });
+      res.json(logs);
+    } catch (error) {
+      console.error("Failed to fetch audit logs:", error);
+      res.status(500).json({ error: "Failed to fetch audit logs" });
+    }
+  });
+
   return httpServer;
 }
