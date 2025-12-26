@@ -33,7 +33,9 @@ import {
   Settings,
   Edit,
   Trash2,
-  Shield
+  Shield,
+  Eye,
+  EyeOff
 } from "lucide-react";
 import type { BrandingTemplate, TenantBranding, UserTenantRole, AuditLog } from "@shared/schema";
 
@@ -384,6 +386,7 @@ function UsersTab() {
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<UserTenantRole | null>(null);
   const [newUser, setNewUser] = useState({ email: "", name: "", role: "viewer", permissions: [] as string[], password: "" });
+  const [showNewPassword, setShowNewPassword] = useState(false);
   const [importData, setImportData] = useState<Array<{ email: string; name: string; role: string }>>([]);
 
   const { data: roles, isLoading, refetch } = useQuery<UserTenantRole[]>({
@@ -639,14 +642,27 @@ function UsersTab() {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="new-password">Lösenord</Label>
-                      <Input
-                        id="new-password"
-                        type="password"
-                        value={newUser.password}
-                        onChange={(e) => setNewUser(prev => ({ ...prev, password: e.target.value }))}
-                        placeholder="Minst 6 tecken"
-                        data-testid="input-new-user-password"
-                      />
+                      <div className="relative">
+                        <Input
+                          id="new-password"
+                          type={showNewPassword ? "text" : "password"}
+                          value={newUser.password}
+                          onChange={(e) => setNewUser(prev => ({ ...prev, password: e.target.value }))}
+                          placeholder="Minst 6 tecken"
+                          className="pr-10"
+                          data-testid="input-new-user-password"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-full"
+                          onClick={() => setShowNewPassword(!showNewPassword)}
+                          data-testid="button-toggle-new-password"
+                        >
+                          {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="new-role">Roll</Label>
@@ -835,6 +851,7 @@ function EditUserPermissions({
   );
   const [isActive, setIsActive] = useState(role.isActive ?? true);
   const [newPassword, setNewPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const togglePermission = (moduleId: string) => {
     setEditPermissions(prev => 
@@ -916,14 +933,27 @@ function EditUserPermissions({
 
       <div className="space-y-2">
         <Label htmlFor="edit-password">Nytt lösenord (lämna tomt för att behålla)</Label>
-        <Input
-          id="edit-password"
-          type="password"
-          value={newPassword}
-          onChange={(e) => setNewPassword(e.target.value)}
-          placeholder="Ange nytt lösenord..."
-          data-testid="input-edit-password"
-        />
+        <div className="relative">
+          <Input
+            id="edit-password"
+            type={showPassword ? "text" : "password"}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Ange nytt lösenord..."
+            className="pr-10"
+            data-testid="input-edit-password"
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-0 top-0 h-full"
+            onClick={() => setShowPassword(!showPassword)}
+            data-testid="button-toggle-edit-password"
+          >
+            {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </Button>
+        </div>
       </div>
 
       <DialogFooter>
