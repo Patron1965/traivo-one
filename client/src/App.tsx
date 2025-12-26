@@ -35,6 +35,7 @@ import SimpleFieldPage from "@/pages/SimpleFieldPage";
 import AutoClusterPage from "@/pages/AutoClusterPage";
 import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import CustomerPortalPage from "@/pages/CustomerPortalPage";
+import SystemDashboardPage from "@/pages/SystemDashboardPage";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -68,6 +69,7 @@ function Router() {
       <Route path="/import" component={ImportPage} />
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/system-dashboard" component={SystemDashboardPage} />
       <Route component={NotFound} />
     </Switch>
   );

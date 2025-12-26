@@ -52,6 +52,7 @@ import {
   Database,
   BarChart3,
   Briefcase,
+  Palette,
 } from "lucide-react";
 
 const grunddataItems = [
@@ -88,6 +89,7 @@ const systemItems = [
   { title: "Importera data", url: "/import", icon: Upload, description: "Modus 2.0 import" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
   { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
+  { title: "Varumärke & Admin", url: "/system-dashboard", icon: Palette, description: "White-label och roller" },
 ];
 
 interface NavDropdownProps {
