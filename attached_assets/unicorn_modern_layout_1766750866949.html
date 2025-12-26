@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Unicorn Admin - Modern Layout</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1e40af;
+            --secondary: #64748b;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+            --background: #f8fafc;
+            --surface: #ffffff;
+            --text-primary: #0f172a;
+            --text-secondary: #64748b;
+            --border: #e2e8f0;
+            --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px -1px rgba(0, 0, 0, 0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--background);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+
+        /* Top Navigation Bar */
+        .top-nav {
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: var(--shadow);
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            height: 64px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--primary);
+        }
+
+        .logo-icon {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 20px;
+        }
+
+        .search-bar {
+            flex: 1;
+            max-width: 500px;
+            margin: 0 32px;
+            position: relative;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 10px 16px 10px 44px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .search-icon {
+            position: absolute;
+            left: 14px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--text-secondary);
+        }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .nav-btn {
+            background: none;
+            border: none;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .nav-btn:hover {
+            background: var(--background);
+            color: var(--primary);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: 4px;
+            right: 4px;
+            width: 8px;
+            height: 8px;
+            background: var(--danger);
+            border-radius: 50%;
+            border: 2px solid var(--surface);
+        }
+
+        .user-profile {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-profile:hover {
+            background: var(--background);
+        }
+
+        .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .user-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .user-name {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .user-role {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        /* Main Content */
+        .main-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 32px 24px;
+        }
+
+        /* Dashboard Header */
+        .dashboard-header {
+            margin-bottom: 32px;
+        }
+
+        .dashboard-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .dashboard-subtitle {
+            color: var(--text-secondary);
+            font-size: 16px;
+        }
+
+        /* Quick Stats */
+        .quick-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 24px;
+            margin-bottom: 32px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s;
+            border: 1px solid var(--border);
+        }
+
+        .stat-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .stat-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+
+        .stat-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .stat-icon.blue {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary);
+        }
+
+        .stat-icon.green {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .stat-icon.yellow {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .stat-icon.purple {
+            background: rgba(124, 58, 237, 0.1);
+            color: #7c3aed;
+        }
+
+        .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .stat-trend {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 6px;
+            margin-top: 8px;
+        }
+
+        .stat-trend.up {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .stat-trend.down {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        /* Module Sections */
+        .module-section {
+            margin-bottom: 40px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .section-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .view-all-btn {
+            background: none;
+            border: none;
+            color: var(--primary);
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 8px 16px;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+
+        .view-all-btn:hover {
+            background: rgba(37, 99, 235, 0.1);
+        }
+
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .module-card {
+            background: var(--surface);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: var(--shadow);
+            transition: all 0.3s;
+            cursor: pointer;
+            border: 1px solid var(--border);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .module-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary), #7c3aed);
+            transform: scaleX(0);
+            transition: transform 0.3s;
+        }
+
+        .module-card:hover {
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-4px);
+            border-color: var(--primary);
+        }
+
+        .module-card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .module-icon-wrapper {
+            width: 56px;
+            height: 56px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 16px;
+            font-size: 28px;
+        }
+
+        .module-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .module-description {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 16px;
+            line-height: 1.5;
+        }
+
+        .module-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .module-meta-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            position: fixed;
+            bottom: 32px;
+            right: 32px;
+            z-index: 999;
+        }
+
+        .fab {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--primary), #7c3aed);
+            color: white;
+            border: none;
+            box-shadow: var(--shadow-lg);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            transition: all 0.3s;
+        }
+
+        .fab:hover {
+            transform: scale(1.1);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.2);
+        }
+
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .nav-container {
+                padding: 0 16px;
+            }
+
+            .search-bar {
+                display: none;
+            }
+
+            .main-container {
+                padding: 24px 16px;
+            }
+
+            .dashboard-title {
+                font-size: 24px;
+            }
+
+            .quick-stats {
+                grid-template-columns: 1fr;
+            }
+
+            .module-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .user-info {
+                display: none;
+            }
+        }
+
+        /* Color variations for module cards */
+        .module-icon-wrapper.blue {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary);
+        }
+
+        .module-icon-wrapper.green {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .module-icon-wrapper.purple {
+            background: rgba(124, 58, 237, 0.1);
+            color: #7c3aed;
+        }
+
+        .module-icon-wrapper.orange {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+
+        .module-icon-wrapper.red {
+            background: rgba(239, 68, 68, 0.1);
+            color: var(--danger);
+        }
+
+        .module-icon-wrapper.teal {
+            background: rgba(20, 184, 166, 0.1);
+            color: #14b8a6;
+        }
+
+        .section-icon.blue {
+            background: rgba(37, 99, 235, 0.1);
+            color: var(--primary);
+        }
+
+        .section-icon.green {
+            background: rgba(16, 185, 129, 0.1);
+            color: var(--success);
+        }
+
+        .section-icon.purple {
+            background: rgba(124, 58, 237, 0.1);
+            color: #7c3aed;
+        }
+
+        .section-icon.orange {
+            background: rgba(245, 158, 11, 0.1);
+            color: var(--warning);
+        }
+    </style>
+</head>
+<body>
+    <!-- Top Navigation -->
+    <nav class="top-nav">
+        <div class="nav-container">
+            <div class="logo">
+                <div class="logo-icon">🦄</div>
+                <span>Unicorn</span>
+            </div>
+
+            <div class="search-bar">
+                <span class="search-icon">🔍</span>
+                <input type="text" class="search-input" placeholder="Sök efter kunder, objekt, ordrar...">
+            </div>
+
+            <div class="nav-actions">
+                <button class="nav-btn" title="Notifikationer">
+                    <span style="font-size: 20px;">🔔</span>
+                    <span class="notification-badge"></span>
+                </button>
+                <button class="nav-btn" title="Hjälp">
+                    <span style="font-size: 20px;">❓</span>
+                </button>
+                <button class="nav-btn" title="Inställningar">
+                    <span style="font-size: 20px;">⚙️</span>
+                </button>
+                <div class="user-profile">
+                    <div class="user-avatar">TB</div>
+                    <div class="user-info">
+                        <div class="user-name">Tomas Björnberg</div>
+                        <div class="user-role">Admin</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main-container">
+        <!-- Dashboard Header -->
+        <div class="dashboard-header">
+            <h1 class="dashboard-title">Välkommen tillbaka, Tomas!</h1>
+            <p class="dashboard-subtitle">Här är en översikt av ditt system idag</p>
+        </div>
+
+        <!-- Quick Stats -->
+        <div class="quick-stats">
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon blue">👥</div>
+                </div>
+                <div class="stat-value">1,248</div>
+                <div class="stat-label">Aktiva kunder</div>
+                <div class="stat-trend up">↗ +12.5% från förra månaden</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon green">📦</div>
+                </div>
+                <div class="stat-value">342</div>
+                <div class="stat-label">Pågående ordrar</div>
+                <div class="stat-trend up">↗ +8.3% från förra veckan</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon yellow">📅</div>
+                </div>
+                <div class="stat-value">156</div>
+                <div class="stat-label">Planerade jobb denna vecka</div>
+                <div class="stat-trend down">↘ -3.2% från förra veckan</div>
+            </div>
+
+            <div class="stat-card">
+                <div class="stat-header">
+                    <div class="stat-icon purple">💰</div>
+                </div>
+                <div class="stat-value">2.4M kr</div>
+                <div class="stat-label">Månadens omsättning</div>
+                <div class="stat-trend up">↗ +18.7% från förra månaden</div>
+            </div>
+        </div>
+
+        <!-- Grunddata Section -->
+        <div class="module-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <span class="section-icon blue">📊</span>
+                    Grunddata
+                </h2>
+                <button class="view-all-btn">Visa alla →</button>
+            </div>
+            <div class="module-grid">
+                <div class="module-card">
+                    <div class="module-icon-wrapper blue">👥</div>
+                    <h3 class="module-title">Kunder</h3>
+                    <p class="module-description">Hantera kundregister, kontaktuppgifter och kundhistorik</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 1,248 kunder</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper green">🏢</div>
+                    <h3 class="module-title">Objekt</h3>
+                    <p class="module-description">Administrera objekt, fastigheter och arbetsplatser</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 3,567 objekt</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper purple">👷</div>
+                    <h3 class="module-title">Resurser</h3>
+                    <p class="module-description">Hantera personal, kompetenser och tillgänglighet</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 89 resurser</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper orange">🚗</div>
+                    <h3 class="module-title">Fordon</h3>
+                    <p class="module-description">Fordonsregister, service och ruttplanering</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 45 fordon</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper teal">📦</div>
+                    <h3 class="module-title">Artiklar</h3>
+                    <p class="module-description">Produktkatalog, lager och artikelhantering</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 2,145 artiklar</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper blue">💵</div>
+                    <h3 class="module-title">Prislister</h3>
+                    <p class="module-description">Prislistor, avtal och rabatthantering</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 34 prislister</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper green">🔄</div>
+                    <h3 class="module-title">Abonnemang</h3>
+                    <p class="module-description">Återkommande tjänster och abonnemangsavtal</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 456 abonnemang</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Planering Section -->
+        <div class="module-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <span class="section-icon green">📅</span>
+                    Planering
+                </h2>
+                <button class="view-all-btn">Visa alla →</button>
+            </div>
+            <div class="module-grid">
+                <div class="module-card">
+                    <div class="module-icon-wrapper blue">📋</div>
+                    <h3 class="module-title">Orderstock</h3>
+                    <p class="module-description">Översikt av alla ordrar och deras status</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 342 ordrar</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper green">📆</div>
+                    <h3 class="module-title">Veckoplanering</h3>
+                    <p class="module-description">Detaljerad planering för kommande vecka</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 156 jobb</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper purple">🔮</div>
+                    <h3 class="module-title">Vidareplanering</h3>
+                    <p class="module-description">Långsiktig planering och resursallokering</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 89 projekt</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper orange">⚡</div>
+                    <h3 class="module-title">Info Optimering</h3>
+                    <p class="module-description">Optimera rutter och resursanvändning</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 AI-driven</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper teal">🗺️</div>
+                    <h3 class="module-title">Ruttplanering</h3>
+                    <p class="module-description">Effektiv ruttplanering för fordon och personal</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 78 rutter</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper blue">📱</div>
+                    <h3 class="module-title">Mobilapp Fas</h3>
+                    <p class="module-description">Mobilapplikation för fältarbete</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 45 användare</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analys Section -->
+        <div class="module-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <span class="section-icon purple">📈</span>
+                    Analys
+                </h2>
+                <button class="view-all-btn">Visa alla →</button>
+            </div>
+            <div class="module-grid">
+                <div class="module-card">
+                    <div class="module-icon-wrapper blue">📊</div>
+                    <h3 class="module-title">Dashboard</h3>
+                    <p class="module-description">Interaktiv dashboard med nyckeltal och KPI:er</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 Real-time</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper green">💰</div>
+                    <h3 class="module-title">Ekonomi</h3>
+                    <p class="module-description">Ekonomisk rapportering och analys</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 2.4M kr</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper purple">📉</div>
+                    <h3 class="module-title">Statistikanalys</h3>
+                    <p class="module-description">Detaljerad statistik och trendanalys</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 Avancerad</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper orange">🤖</div>
+                    <h3 class="module-title">Prediktiv Planering</h3>
+                    <p class="module-description">AI-baserade prognoser och rekommendationer</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 AI/ML</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Section -->
+        <div class="module-section">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <span class="section-icon orange">⚙️</span>
+                    System
+                </h2>
+                <button class="view-all-btn">Visa alla →</button>
+            </div>
+            <div class="module-grid">
+                <div class="module-card">
+                    <div class="module-icon-wrapper blue">🏭</div>
+                    <h3 class="module-title">Produktionsplanering</h3>
+                    <p class="module-description">Planering av produktionsresurser</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 Produktion</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper green">🔗</div>
+                    <h3 class="module-title">Auto-knutning</h3>
+                    <p class="module-description">Automatisk koppling av ordrar och resurser</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 Automatisk</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper purple">🤝</div>
+                    <h3 class="module-title">Upphandlingar</h3>
+                    <p class="module-description">Hantera upphandlingar och leverantörer</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 67 avtal</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper orange">🌐</div>
+                    <h3 class="module-title">Kundportal</h3>
+                    <p class="module-description">Självbetjäningsportal för kunder</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 834 användare</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper teal">📥</div>
+                    <h3 class="module-title">Importera data</h3>
+                    <p class="module-description">Importera data från externa källor</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 Integration</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper blue">🖥️</div>
+                    <h3 class="module-title">Systemöversikt</h3>
+                    <p class="module-description">Systemhälsa och prestanda</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 Monitoring</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+
+                <div class="module-card">
+                    <div class="module-icon-wrapper green">⚙️</div>
+                    <h3 class="module-title">Inställningar</h3>
+                    <p class="module-description">Systemkonfiguration och användarprofiler</p>
+                    <div class="module-meta">
+                        <span class="module-meta-item">📊 Admin</span>
+                        <span class="module-meta-item">⚡ Aktiv</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Quick Actions FAB -->
+    <div class="quick-actions">
+        <button class="fab" title="Snabbåtgärder">+</button>
+    </div>
+</body>
+</html>
