@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { tenants, customers, objects, resources, workOrders } from "@shared/schema";
+import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users } from "@shared/schema";
 import { sql } from "drizzle-orm";
 
 const DEFAULT_TENANT_ID = "default-tenant";
@@ -490,5 +490,190 @@ export async function seedDatabase() {
   ]);
 
   console.log("Created work orders");
+
+  // Seed branding templates (8 industry templates)
+  const existingTemplates = await db.select().from(brandingTemplates).limit(1);
+  if (existingTemplates.length === 0) {
+    await db.insert(brandingTemplates).values([
+      {
+        name: "HVAC-Tjänster",
+        slug: "hvac",
+        industry: "HVAC",
+        description: "Värme, ventilation, AC-installation och underhåll",
+        primaryColor: "#FF6B35",
+        primaryLight: "#FF8F66",
+        primaryDark: "#CC5529",
+        secondaryColor: "#1E3A5F",
+        accentColor: "#4ECDC4",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "Klimatkontroll för alla miljöer",
+        defaultSubheading: "Professionell HVAC-service",
+        isSystem: true,
+      },
+      {
+        name: "Eltjänster",
+        slug: "electrical",
+        industry: "Electrical",
+        description: "Kommersiella och bostadselektriker",
+        primaryColor: "#FFD700",
+        primaryLight: "#FFEB80",
+        primaryDark: "#CCA800",
+        secondaryColor: "#2D3748",
+        accentColor: "#E53E3E",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "Säker och pålitlig el",
+        defaultSubheading: "Certifierade elektriker",
+        isSystem: true,
+      },
+      {
+        name: "VVS-Tjänster",
+        slug: "plumbing",
+        industry: "Plumbing",
+        description: "Akut- och schemalagd VVS",
+        primaryColor: "#3182CE",
+        primaryLight: "#63B3ED",
+        primaryDark: "#2C5282",
+        secondaryColor: "#1A365D",
+        accentColor: "#48BB78",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "VVS-lösningar som fungerar",
+        defaultSubheading: "Jour dygnet runt",
+        isSystem: true,
+      },
+      {
+        name: "Byggverksamhet",
+        slug: "construction",
+        industry: "Construction",
+        description: "Entreprenörer, renoveringar, specialhantverk",
+        primaryColor: "#D69E2E",
+        primaryLight: "#ECC94B",
+        primaryDark: "#B7791F",
+        secondaryColor: "#4A5568",
+        accentColor: "#ED8936",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "Bygg med kvalitet",
+        defaultSubheading: "Erfarna hantverkare",
+        isSystem: true,
+      },
+      {
+        name: "Fastighetsförvaltning",
+        slug: "property",
+        industry: "Property Management",
+        description: "Byggnadsunderhållstjänster",
+        primaryColor: "#38A169",
+        primaryLight: "#68D391",
+        primaryDark: "#276749",
+        secondaryColor: "#234E52",
+        accentColor: "#81E6D9",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "Professionell fastighetsförvaltning",
+        defaultSubheading: "Vi tar hand om din fastighet",
+        isSystem: true,
+      },
+      {
+        name: "Städtjänster",
+        slug: "cleaning",
+        industry: "Cleaning",
+        description: "Kommersiell och bostadsstädning",
+        primaryColor: "#00CED1",
+        primaryLight: "#5FD9DB",
+        primaryDark: "#008B8D",
+        secondaryColor: "#2D3748",
+        accentColor: "#9F7AEA",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "Rent och fräscht",
+        defaultSubheading: "Professionell städservice",
+        isSystem: true,
+      },
+      {
+        name: "IT-Tjänster",
+        slug: "it-services",
+        industry: "IT Services",
+        description: "Teknisk support på plats",
+        primaryColor: "#805AD5",
+        primaryLight: "#B794F4",
+        primaryDark: "#553C9A",
+        secondaryColor: "#1A202C",
+        accentColor: "#38B2AC",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "IT-support när du behöver det",
+        defaultSubheading: "Experthjälp på plats",
+        isSystem: true,
+      },
+      {
+        name: "Grön Teknologi",
+        slug: "green-tech",
+        industry: "Green Technology",
+        description: "Solpanel, EV-laddning, värmepumpar",
+        primaryColor: "#48BB78",
+        primaryLight: "#9AE6B4",
+        primaryDark: "#276749",
+        secondaryColor: "#1A365D",
+        accentColor: "#F6E05E",
+        successColor: "#22C55E",
+        errorColor: "#EF4444",
+        defaultHeading: "Hållbar energi för framtiden",
+        defaultSubheading: "Miljövänliga lösningar",
+        isSystem: true,
+      },
+    ]);
+    console.log("Created 8 industry branding templates");
+  }
+
+  // Create default branding for tenant
+  const existingBranding = await db.select().from(tenantBranding).where(sql`tenant_id = ${DEFAULT_TENANT_ID}`);
+  if (existingBranding.length === 0) {
+    await db.insert(tenantBranding).values({
+      tenantId: DEFAULT_TENANT_ID,
+      primaryColor: "#3B82F6",
+      secondaryColor: "#6366F1",
+      accentColor: "#F59E0B",
+      companyName: "Kinab AB",
+      headingText: "Unicorn Field Service",
+      subheadingText: "Planering som funkar",
+      isPublished: true,
+    });
+    console.log("Created default tenant branding");
+  }
+
+  // Create owner role for Tomas Björneberg resource user if exists
+  const tomasResource = await db.select().from(resources).where(sql`email = 'tomas@nordicrouting.se'`);
+  if (tomasResource.length > 0) {
+    // Check if user exists in users table
+    const existingUser = await db.select().from(users).where(sql`email = 'tomas@nordicrouting.se'`);
+    let userId: string;
+    
+    if (existingUser.length === 0) {
+      const [newUser] = await db.insert(users).values({
+        email: "tomas@nordicrouting.se",
+        firstName: "Tomas",
+        lastName: "Björneberg",
+      }).returning();
+      userId = newUser.id;
+      console.log("Created user for Tomas Björneberg");
+    } else {
+      userId = existingUser[0].id;
+    }
+    
+    // Create owner role
+    const existingRole = await db.select().from(userTenantRoles).where(sql`user_id = ${userId} AND tenant_id = ${DEFAULT_TENANT_ID}`);
+    if (existingRole.length === 0) {
+      await db.insert(userTenantRoles).values({
+        userId: userId,
+        tenantId: DEFAULT_TENANT_ID,
+        role: "owner",
+        isActive: true,
+      });
+      console.log("Created owner role for Tomas Björneberg");
+    }
+  }
+
   console.log("Database seeding complete!");
 }

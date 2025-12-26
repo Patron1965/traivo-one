@@ -844,3 +844,159 @@ export type Conversation = typeof conversations.$inferSelect;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
+
+// ============================================
+// SYSTEM DASHBOARD - Branding & User Management
+// ============================================
+
+// Branding Templates - Predefined industry templates
+export const brandingTemplates = pgTable("branding_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: varchar("slug", { length: 100 }).unique().notNull(),
+  industry: text("industry").notNull(),
+  description: text("description"),
+  // Color configuration (7 key colors)
+  primaryColor: varchar("primary_color", { length: 7 }).notNull(),
+  primaryLight: varchar("primary_light", { length: 7 }),
+  primaryDark: varchar("primary_dark", { length: 7 }),
+  secondaryColor: varchar("secondary_color", { length: 7 }).notNull(),
+  accentColor: varchar("accent_color", { length: 7 }).notNull(),
+  successColor: varchar("success_color", { length: 7 }).default("#22C55E"),
+  errorColor: varchar("error_color", { length: 7 }).default("#EF4444"),
+  // Default texts
+  defaultHeading: text("default_heading"),
+  defaultSubheading: text("default_subheading"),
+  // Preview image
+  previewImageUrl: varchar("preview_image_url", { length: 500 }),
+  // System template (cannot be deleted)
+  isSystem: boolean("is_system").default(true),
+  usageCount: integer("usage_count").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Tenant Branding - Per-tenant branding configuration
+export const tenantBranding = pgTable("tenant_branding", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull().unique(),
+  // Version control
+  version: integer("version").default(1),
+  isPublished: boolean("is_published").default(false),
+  // Template used (if any)
+  templateId: varchar("template_id").references(() => brandingTemplates.id),
+  // Colors (7 key colors for MVP)
+  primaryColor: varchar("primary_color", { length: 7 }).default("#3B82F6"),
+  primaryLight: varchar("primary_light", { length: 7 }),
+  primaryDark: varchar("primary_dark", { length: 7 }),
+  secondaryColor: varchar("secondary_color", { length: 7 }).default("#6366F1"),
+  accentColor: varchar("accent_color", { length: 7 }).default("#F59E0B"),
+  successColor: varchar("success_color", { length: 7 }).default("#22C55E"),
+  errorColor: varchar("error_color", { length: 7 }).default("#EF4444"),
+  // Typography
+  fontFamily: varchar("font_family", { length: 100 }).default("Inter"),
+  // Logos
+  logoUrl: varchar("logo_url", { length: 500 }),
+  logoIconUrl: varchar("logo_icon_url", { length: 500 }),
+  faviconUrl: varchar("favicon_url", { length: 500 }),
+  // Texts
+  companyName: text("company_name"),
+  tagline: text("tagline"),
+  headingText: text("heading_text"),
+  subheadingText: text("subheading_text"),
+  // Dark mode
+  darkModeEnabled: boolean("dark_mode_enabled").default(true),
+  // Metadata
+  createdBy: varchar("created_by").references(() => users.id),
+  updatedBy: varchar("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  publishedAt: timestamp("published_at"),
+});
+
+// User Tenant Roles - Links users to tenants with roles
+export const userTenantRoles = pgTable("user_tenant_roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Role: owner, admin, user
+  role: varchar("role", { length: 20 }).default("user").notNull(),
+  // Additional permissions (JSON array)
+  permissions: jsonb("permissions").default([]),
+  // Status
+  isActive: boolean("is_active").default(true),
+  // Assigned by
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_user_tenant_roles_user").on(table.userId),
+  index("idx_user_tenant_roles_tenant").on(table.tenantId),
+]);
+
+// Audit Logs - Track all changes in the system
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id),
+  userId: varchar("user_id").references(() => users.id),
+  // Action: create, update, delete, login, logout, etc.
+  action: varchar("action", { length: 100 }).notNull(),
+  // Resource type: users, branding, tenants, etc.
+  resourceType: varchar("resource_type", { length: 50 }),
+  resourceId: varchar("resource_id"),
+  // Changes (before/after values)
+  changes: jsonb("changes"),
+  // Request metadata
+  ipAddress: varchar("ip_address", { length: 45 }),
+  userAgent: text("user_agent"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_audit_logs_tenant").on(table.tenantId),
+  index("idx_audit_logs_user").on(table.userId),
+  index("idx_audit_logs_action").on(table.action),
+  index("idx_audit_logs_created").on(table.createdAt),
+]);
+
+// Relations
+export const brandingTemplatesRelations = relations(brandingTemplates, ({ many }) => ({
+  tenantBrandings: many(tenantBranding),
+}));
+
+export const tenantBrandingRelations = relations(tenantBranding, ({ one }) => ({
+  tenant: one(tenants, { fields: [tenantBranding.tenantId], references: [tenants.id] }),
+  template: one(brandingTemplates, { fields: [tenantBranding.templateId], references: [brandingTemplates.id] }),
+  createdByUser: one(users, { fields: [tenantBranding.createdBy], references: [users.id] }),
+  updatedByUser: one(users, { fields: [tenantBranding.updatedBy], references: [users.id] }),
+}));
+
+export const userTenantRolesRelations = relations(userTenantRoles, ({ one }) => ({
+  user: one(users, { fields: [userTenantRoles.userId], references: [users.id] }),
+  tenant: one(tenants, { fields: [userTenantRoles.tenantId], references: [tenants.id] }),
+  assignedByUser: one(users, { fields: [userTenantRoles.assignedBy], references: [users.id] }),
+}));
+
+export const auditLogsRelations = relations(auditLogs, ({ one }) => ({
+  tenant: one(tenants, { fields: [auditLogs.tenantId], references: [tenants.id] }),
+  user: one(users, { fields: [auditLogs.userId], references: [users.id] }),
+}));
+
+// Insert schemas
+export const insertBrandingTemplateSchema = createInsertSchema(brandingTemplates).omit({ id: true, createdAt: true });
+export const insertTenantBrandingSchema = createInsertSchema(tenantBranding).omit({ id: true, createdAt: true });
+export const insertUserTenantRoleSchema = createInsertSchema(userTenantRoles).omit({ id: true, createdAt: true });
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({ id: true, createdAt: true });
+
+// Types
+export type BrandingTemplate = typeof brandingTemplates.$inferSelect;
+export type InsertBrandingTemplate = z.infer<typeof insertBrandingTemplateSchema>;
+export type TenantBranding = typeof tenantBranding.$inferSelect;
+export type InsertTenantBranding = z.infer<typeof insertTenantBrandingSchema>;
+export type UserTenantRole = typeof userTenantRoles.$inferSelect;
+export type InsertUserTenantRole = z.infer<typeof insertUserTenantRoleSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+
+// Role constants
+export const USER_ROLES = ["owner", "admin", "user"] as const;
+export type UserRole = typeof USER_ROLES[number];
