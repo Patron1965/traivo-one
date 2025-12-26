@@ -51,16 +51,18 @@
 ## Component Library
 
 ### Navigation
-**Desktop Sidebar:**
-- Fixed left sidebar (w-64) with navigation links
-- Icon + label format for clarity
-- Active state: subtle fill treatment
-- Collapsible for more screen space
+**Desktop Top Navigation:**
+- Sticky top bar (h-16) with logo, dropdown menus, and user profile
+- Four dropdown categories: Grunddata, Planering, Analys, System
+- Global search accessible via Cmd+K shortcut
+- Notifications bell with badge indicator
+- User avatar with dropdown menu for settings/logout
+- Backdrop blur effect for visual depth
 
 **Mobile Navigation:**
-- Bottom tab bar (fixed) with 4 primary actions
-- Icons only, labels on active state
-- Thumbs-friendly touch targets (min h-12)
+- Hamburger menu (Sheet) with grouped navigation items
+- Bottom FAB for quick actions (new order, new customer, etc.)
+- Touch-friendly targets (min h-14 for mobile buttons)
 
 ### Weekly Planner
 **Layout:** Table-like grid with resource rows and day columns

@@ -3,11 +3,9 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/layout/AppSidebar";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { TopNav } from "@/components/layout/TopNav";
+import { FloatingActionButton } from "@/components/layout/FloatingActionButton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { GlobalAIButton } from "@/components/GlobalAIButton";
 import { useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import WeekPlannerPage from "@/pages/WeekPlannerPage";
@@ -76,31 +74,16 @@ function Router() {
 }
 
 function AuthenticatedApp() {
-  const sidebarStyle = {
-    "--sidebar-width": "16rem",
-    "--sidebar-width-icon": "3rem",
-  };
-
   return (
-    <SidebarProvider style={sidebarStyle as React.CSSProperties}>
-      <div className="flex h-screen w-full">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 min-w-0">
-          <header className="flex items-center justify-between gap-4 p-2 border-b sticky top-0 bg-background z-50">
-            <SidebarTrigger data-testid="button-sidebar-toggle" />
-            <div className="flex items-center gap-1">
-              <GlobalAIButton />
-              <ThemeToggle />
-            </div>
-          </header>
-          <main className="flex-1 overflow-auto">
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
-          </main>
-        </div>
-      </div>
-    </SidebarProvider>
+    <div className="flex flex-col min-h-screen w-full">
+      <TopNav />
+      <main className="flex-1 overflow-auto">
+        <ErrorBoundary>
+          <Router />
+        </ErrorBoundary>
+      </main>
+      <FloatingActionButton />
+    </div>
   );
 }
 

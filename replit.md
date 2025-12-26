@@ -14,6 +14,15 @@ The Unicorn platform is built as a functional prototype using a modern web stack
 
 ### UI/UX Decisions
 The user interface emphasizes a clean, professional Nordic aesthetic with support for both dark and light themes, utilizing the Inter font for consistency. Key UI components include:
+-   **TopNav:** Sticky horizontal top navigation (h-16) replacing the previous sidebar:
+    - Logo and company name (Unicorn/Kinab AB)
+    - Four dropdown categories: Grunddata, Planering, Analys, System
+    - Global search bar with Cmd+K shortcut
+    - Notifications, Help, AI Assistant, Theme toggle
+    - User profile dropdown with settings and logout
+-   **MobileNav:** Hamburger menu (Sheet) for mobile devices with grouped navigation
+-   **FloatingActionButton (FAB):** Quick actions button (bottom-right) for creating orders, customers, etc.
+-   **QuickStats:** Dashboard cards showing key metrics (customers, orders, clusters, revenue)
 -   **WeekPlanner:** A drag-and-drop interface for weekly scheduling.
 -   **RouteMap:** Visualization of optimized routes.
 -   **ObjectCard:** Displays object details, including setup time information.
