@@ -239,28 +239,23 @@ class AnomalyMonitor {
     console.log(`[anomaly-monitor] Alert: ${alert.title} (${alert.severity})`);
     console.log(`[anomaly-monitor] ${alert.severity.toUpperCase()}: ${alert.description}`);
     
-    // Broadcast to all connected clients (planners) about the anomaly
-    // For high/critical alerts, notify all connected resources
+    // Broadcast high/critical alerts to all connected clients (planners + resources)
+    // This ensures operations staff and dispatchers receive anomaly notifications
     if (alert.severity === "high" || alert.severity === "critical") {
-      const connectedResources = notificationService.getConnectedResources();
-      for (const resourceId of connectedResources) {
-        // Skip the resource that caused the alert
-        if (resourceId === alert.resourceId) continue;
-        
-        notificationService.sendToResource(resourceId, {
-          type: "anomaly_alert",
-          title: alert.title,
-          message: alert.description,
-          orderId: alert.workOrderId,
-          data: {
-            alertType: alert.type,
-            severity: alert.severity,
-            objectId: alert.objectId,
-            value: alert.value,
-            expectedValue: alert.expectedValue
-          }
-        });
-      }
+      notificationService.broadcastSystemAlert({
+        type: "anomaly_alert",
+        title: alert.title,
+        message: alert.description,
+        orderId: alert.workOrderId,
+        data: {
+          alertType: alert.type,
+          severity: alert.severity,
+          objectId: alert.objectId,
+          resourceId: alert.resourceId,
+          value: alert.value,
+          expectedValue: alert.expectedValue
+        }
+      });
     }
   }
 

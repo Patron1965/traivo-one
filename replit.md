@@ -57,10 +57,23 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **Real-time Notifications (WebSocket):** Push notifications to field workers when work orders change:
     - WebSocket server at `/ws/notifications` with token-based authentication
     - Token endpoint: `POST /api/notifications/token` (requires authentication, validates tenant)
-    - 5 notification types: job_assigned, job_updated, job_cancelled, schedule_changed, priority_changed
+    - 6 notification types: job_assigned, job_updated, job_cancelled, schedule_changed, priority_changed, anomaly_alert
     - Frontend hook: `useNotifications` handles token acquisition, connection, and reconnection
     - Field apps: SimpleFieldApp and MobileFieldApp show connection status badge and toast notifications
+    - System-wide broadcast via `broadcastSystemAlert` for critical alerts to all connected clients (planners + resources)
     - **Production TODO:** Implement user-to-resource mapping for fine-grained authorization (currently validates tenant only)
+-   **Real-time GPS Position Tracking:** Track field resource locations with breadcrumb trails:
+    - Database: `resourcePositions` table stores position history with lat/lng, speed, heading, accuracy, status
+    - Resources extended with: `currentLatitude`, `currentLongitude`, `lastPositionUpdate`, `trackingStatus`
+    - Position updates via WebSocket (real-time) and HTTP endpoint (`POST /api/resources/:id/position`) for offline fallback
+    - Frontend components: `ResourceTrackingMap` (single resource breadcrumb trail), `LiveResourceMap` (all active resources with real-time updates)
+    - Stale position indicators (>10 min since last update) with auto-refresh every 30 seconds
+-   **Automatic Anomaly Monitoring:** Background job detecting operational anomalies:
+    - Runs every 5 minutes with 30-minute alert cooldown per anomaly
+    - Detects: stale positions (>30 min), delayed orders (>1 hour past expected), setup time anomalies (>50% above average)
+    - Severity levels: low, medium, high, critical
+    - High/critical alerts broadcast to all connected clients (planners + field resources)
+    - Manual trigger endpoint: `POST /api/system/anomalies/check`
 -   **Mobile API Endpoints:** Dedicated endpoints for mobile app:
     - `POST /api/mobile/login` - Login with email + PIN
     - `POST /api/mobile/logout` - Logout

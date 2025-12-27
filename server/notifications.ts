@@ -378,6 +378,31 @@ class NotificationService {
   getConnectedResourcePositions(): string[] {
     return Array.from(this.clients.keys());
   }
+
+  // Broadcast system-wide alert to ALL connected clients (planners + resources)
+  broadcastSystemAlert(notification: Omit<Notification, "id" | "timestamp">) {
+    const fullNotification: Notification = {
+      ...notification,
+      id: this.generateNotificationId(),
+      timestamp: new Date().toISOString()
+    };
+
+    const message = JSON.stringify(fullNotification);
+    let sentCount = 0;
+
+    // Send to all connected clients
+    this.clients.forEach((clients) => {
+      clients.forEach(client => {
+        if (client.ws.readyState === WebSocket.OPEN) {
+          client.ws.send(message);
+          sentCount++;
+        }
+      });
+    });
+
+    console.log(`[ws] System alert broadcasted to ${sentCount} clients: ${notification.title}`);
+    return fullNotification;
+  }
 }
 
 export const notificationService = new NotificationService();
