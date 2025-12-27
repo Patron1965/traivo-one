@@ -35,6 +35,7 @@ import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import CustomerPortalPage from "@/pages/CustomerPortalPage";
 import SystemDashboardPage from "@/pages/SystemDashboardPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
+import ProjectReportPage from "@/pages/ProjectReportPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -71,6 +72,7 @@ function Router() {
       <Route path="/mobile" component={MobileFieldPage} />
       <Route path="/field" component={MobileFieldPage} />
       <Route path="/simple" component={MobileFieldPage} />
+      <Route path="/project-report" component={ProjectReportPage} />
       <Route component={NotFound} />
     </Switch>
   );

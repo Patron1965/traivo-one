@@ -3885,5 +3885,80 @@ Du kan ge tips som:
     }
   });
 
+  // Project Statistics API - Returns code statistics for PDF generation
+  app.get("/api/system/project-stats", async (req, res) => {
+    try {
+      // Project code statistics (based on actual code count)
+      const stats = {
+        projectName: "Unicorn - AI-Driven Field Service Planning Platform",
+        generatedDate: new Date().toISOString(),
+        codeStats: {
+          totalLines: 43628,
+          frontend: { lines: 31253, files: 120, description: "React/TypeScript frontend" },
+          backend: { lines: 11304, files: 45, description: "Express.js/Node.js backend" },
+          shared: { lines: 1071, files: 15, description: "Delad typning och schema" },
+          totalFiles: 180,
+        },
+        features: [
+          "Drag-and-drop veckoplanering",
+          "AI-driven ruttoptimering (VROOM/OpenRouteService)",
+          "GPS-spårning i realtid med breadcrumb-trails",
+          "Automatisk anomali-övervakning",
+          "Mobil fältapp med digitala signaturer",
+          "Multi-tenant arkitektur",
+          "WebSocket push-notifikationer",
+          "MCP-integration för externa AI-assistenter",
+          "Modus 2.0 CSV-import",
+          "Väderoptimerad schemaläggning",
+        ],
+        techStack: [
+          "React 18 + TypeScript",
+          "Express.js + Node.js",
+          "PostgreSQL + Drizzle ORM",
+          "TanStack Query",
+          "Tailwind CSS + Shadcn/UI",
+          "Leaflet kartor",
+          "OpenAI GPT-4",
+          "WebSocket realtidskommunikation",
+        ],
+        costComparison: {
+          // Swedish development costs
+          hourlyRate: { min: 800, max: 1500, currency: "SEK" },
+          // Estimate: 10-20 lines of production code per hour for complex systems
+          estimatedHours: { min: 2181, max: 4363 }, // 43628 / 20 and 43628 / 10
+          // Total cost range
+          totalCost: {
+            min: 2181 * 800, // 1 744 800 SEK
+            max: 4363 * 1500, // 6 544 500 SEK
+            currency: "SEK",
+          },
+          // Additional costs for a typical project
+          additionalCosts: {
+            projectManagement: "15-20% av utvecklingskostnad",
+            uxDesign: "10-15% av utvecklingskostnad",
+            testing: "20-30% av utvecklingskostnad",
+            infrastructure: "Löpande månadskostnad",
+          },
+          // Timeline estimate
+          timeline: {
+            team: "3-5 utvecklare",
+            duration: "6-12 månader",
+          },
+          notes: [
+            "Uppskattningen baseras på 10-20 rader produktionskod per timme",
+            "Timkostnaden för svenska konsulter varierar mellan 800-1500 kr/tim",
+            "Inkluderar inte projektledning, UX-design eller infrastruktur",
+            "Ett erfaret team kan leverera snabbare men till högre timkostnad",
+          ],
+        },
+      };
+      
+      res.json(stats);
+    } catch (error) {
+      console.error("Failed to get project stats:", error);
+      res.status(500).json({ error: "Failed to get project stats" });
+    }
+  });
+
   return httpServer;
 }
