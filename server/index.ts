@@ -15,9 +15,21 @@ declare module "http" {
 
 // CORS middleware for mobile API endpoints
 app.use((req, res, next) => {
-  // Allow all origins for mobile API endpoints
   if (req.path.startsWith('/api/mobile')) {
-    res.header('Access-Control-Allow-Origin', '*');
+    const origin = req.headers.origin;
+    // Allow same-origin, Replit URLs, and localhost for development
+    const allowedPatterns = [
+      /^https?:\/\/.*\.replit\.dev$/,
+      /^https?:\/\/.*\.replit\.app$/,
+      /^https?:\/\/.*\.exp\.direct$/,
+      /^https?:\/\/localhost(:\d+)?$/,
+      /^https?:\/\/127\.0\.0\.1(:\d+)?$/,
+    ];
+    
+    if (origin && allowedPatterns.some(pattern => pattern.test(origin))) {
+      res.header('Access-Control-Allow-Origin', origin);
+      res.header('Access-Control-Allow-Credentials', 'true');
+    }
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'unicorn-field-v1';
+const CACHE_NAME = 'unicorn-field-v2';
 const STATIC_ASSETS = [
   '/field',
   '/favicon.png',
