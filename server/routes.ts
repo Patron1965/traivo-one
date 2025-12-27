@@ -18,6 +18,7 @@ import { notificationService } from "./notifications";
 import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { hashPassword } from "./password";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
+import { anomalyMonitor } from "./anomaly-monitor";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -50,6 +51,9 @@ export async function registerRoutes(
   
   // Initialize WebSocket notification service
   notificationService.initialize(httpServer);
+  
+  // Start anomaly monitoring (runs every 5 minutes)
+  anomalyMonitor.start();
   
   await setupAuth(app);
   registerAuthRoutes(app);
@@ -3525,6 +3529,25 @@ Du kan ge tips som:
     } catch (error) {
       console.error("Failed to fetch active positions:", error);
       res.status(500).json({ error: "Failed to fetch positions" });
+    }
+  });
+
+  // ============================================
+  // ANOMALY MONITORING API ENDPOINTS
+  // ============================================
+  
+  // Manually trigger anomaly check and get results
+  app.get("/api/system/anomalies/check", async (req, res) => {
+    try {
+      const alerts = await anomalyMonitor.runManualCheck();
+      res.json({
+        timestamp: new Date().toISOString(),
+        alertCount: alerts.length,
+        alerts: alerts
+      });
+    } catch (error) {
+      console.error("Failed to run anomaly check:", error);
+      res.status(500).json({ error: "Failed to run anomaly check" });
     }
   });
 

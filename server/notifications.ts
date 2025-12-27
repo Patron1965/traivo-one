@@ -23,7 +23,8 @@ export interface PositionUpdate {
 export type NotificationType = 
   | "job_assigned" 
   | "job_updated" 
-  | "job_cancelled" 
+  | "job_cancelled"
+  | "anomaly_alert" 
   | "schedule_changed"
   | "priority_changed"
   | "position_update";
