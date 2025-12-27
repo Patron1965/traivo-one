@@ -119,13 +119,13 @@ function App() {
     window.location.pathname.startsWith("/resource-focus/")
   );
 
-  // Render standalone resource focus page with minimal providers
+  // Render standalone resource focus page - absolute minimal test
   if (isResourceFocusWindow) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <ResourceFocusPage />
-        <Toaster />
-      </QueryClientProvider>
+      <div className="p-8">
+        <h1 className="text-2xl font-bold">Resource Focus Test</h1>
+        <p>Path: {window.location.pathname}</p>
+      </div>
     );
   }
 
