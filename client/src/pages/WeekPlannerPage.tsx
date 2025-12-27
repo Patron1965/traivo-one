@@ -28,7 +28,7 @@ export default function WeekPlannerPage() {
       </div>
 
       {showAIPanel && (
-        <div className="w-80 border-l bg-background flex flex-col shrink-0">
+        <div className="w-80 max-w-[320px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
           <div className="flex items-center justify-between p-2 border-b">
             <span className="text-sm font-medium flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-purple-500" />

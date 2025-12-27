@@ -89,7 +89,7 @@ export function OptimizedRouteMap({
   const defaultCenter = positions[0];
 
   return (
-    <Card className={`overflow-hidden ${expanded ? "fixed inset-4 z-50" : "h-64"}`}>
+    <Card className={`overflow-hidden relative ${expanded ? "fixed inset-4 z-50" : "h-64 w-full"}`}>
       <div className="absolute top-2 right-2 z-[1000] flex gap-1">
         {onToggleExpand && (
           <Button 
