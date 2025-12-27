@@ -2525,10 +2525,10 @@ Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips
     }
   });
 
-  // AI Field Assistant - simple answers for field workers
+  // AI Field Assistant - conversational AI for field workers with location awareness
   app.post("/api/ai/field-assistant", async (req, res) => {
     try {
-      const { question, jobContext } = req.body;
+      const { question, context } = req.body;
       if (!question || typeof question !== "string") {
         return res.status(400).json({ error: "Fråga krävs" });
       }
@@ -2536,19 +2536,45 @@ Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI();
 
+      // Build rich context from the request
       let contextInfo = "";
-      if (jobContext) {
-        contextInfo = `
-Aktuellt jobb: ${jobContext.jobTitle || "Okänt"}
-Plats: ${jobContext.objectName || "Okänd"} - ${jobContext.objectAddress || ""}
-`;
-        if (jobContext.accessInfo) {
-          const access = jobContext.accessInfo;
-          if (access.gateCode) contextInfo += `Portkod: ${access.gateCode}\n`;
-          if (access.keyLocation) contextInfo += `Nyckel: ${access.keyLocation}\n`;
-          if (access.parking) contextInfo += `Parkering: ${access.parking}\n`;
-          if (access.specialInstructions) contextInfo += `Special: ${access.specialInstructions}\n`;
+      
+      // Resource/worker info
+      if (context?.resourceName) {
+        contextInfo += `Fältarbetare: ${context.resourceName}\n`;
+      }
+      
+      // Location info - with defensive checks for all numeric fields
+      if (context?.position && 
+          typeof context.position.latitude === 'number' && 
+          typeof context.position.longitude === 'number') {
+        const lat = context.position.latitude.toFixed(4);
+        const lng = context.position.longitude.toFixed(4);
+        const acc = typeof context.position.accuracy === 'number' ? Math.round(context.position.accuracy) : '?';
+        contextInfo += `Din position: ${lat}, ${lng} (noggrannhet: ${acc}m)\n`;
+      }
+      
+      // Today's jobs summary
+      if (context?.todayJobsCount !== undefined || context?.completedJobsCount !== undefined) {
+        contextInfo += `Dagens uppdrag: ${context.todayJobsCount || 0} kvar, ${context.completedJobsCount || 0} klara\n`;
+      }
+      
+      // Current job context
+      if (context?.currentJob) {
+        contextInfo += `\nAktuellt jobb:\n`;
+        contextInfo += `- Titel: ${context.currentJob.title || "Okänt"}\n`;
+        contextInfo += `- Adress: ${context.currentJob.address || "Okänd"}\n`;
+        if (context.currentJob.customer) {
+          contextInfo += `- Kund: ${context.currentJob.customer}\n`;
         }
+      }
+      
+      // Nearby jobs
+      if (context?.nearbyJobs && context.nearbyJobs.length > 0) {
+        contextInfo += `\nNästa uppdrag i ordning:\n`;
+        context.nearbyJobs.forEach((job: { title: string; address: string }, i: number) => {
+          contextInfo += `${i + 1}. ${job.title} - ${job.address || "Adress saknas"}\n`;
+        });
       }
 
       const response = await openai.chat.completions.create({
@@ -2556,29 +2582,39 @@ Plats: ${jobContext.objectName || "Okänd"} - ${jobContext.objectAddress || ""}
         messages: [
           {
             role: "system",
-            content: `Du är en hjälpsam AI-assistent för fältarbetare inom avfallshantering och sophantering.
+            content: `Du är en personlig AI-assistent för fältarbetare inom fältservice (avfall, underhåll, service). Du pratar vänligt och hjälpsamt, som en kollega.
 
-VIKTIGT - DINA SVAR MÅSTE VARA:
-- Korta (max 2 meningar)
-- Enkla ord (inga svåra termer)
-- Praktiska och konkreta
+DITT UPPDRAG:
+- Hjälpa fältarbetaren med dagens arbete
+- Ge praktiska tips baserat på position och uppdrag
+- Svara på frågor om jobb, kunder, och rutter
+- Vara proaktiv med förslag när det är relevant
 
-${contextInfo}
+KONTEXT:
+${contextInfo || "Ingen specifik kontext tillgänglig."}
 
-Om du inte vet svaret, säg "Jag vet inte. Fråga din arbetsledare."
+RIKTLINJER:
+- Svara på svenska
+- Var vänlig och personlig (använd "du")
+- Håll svaren korta men hjälpsamma (2-4 meningar)
+- Om frågan handlar om "nästa jobb" eller "vart ska jag", ge konkret vägledning
+- Om du inte vet, säg det ärligt och föreslå vem som kan hjälpa
 
-Svara alltid på svenska.`,
+Du kan ge tips som:
+- "Ditt nästa jobb är på [adress]. Vill du att jag öppnar navigation?"
+- "Du har 3 uppdrag kvar idag. Det närmaste är..."
+- "Portkoden till denna adress är [kod]."`,
           },
           {
             role: "user",
             content: question,
           },
         ],
-        max_tokens: 150,
-        temperature: 0.5,
+        max_tokens: 300,
+        temperature: 0.7,
       });
 
-      const answer = response.choices[0]?.message?.content || "Jag vet inte. Fråga din arbetsledare.";
+      const answer = response.choices[0]?.message?.content || "Jag vet inte just nu. Fråga din arbetsledare.";
       res.json({ answer });
     } catch (error) {
       console.error("Field AI error:", error);

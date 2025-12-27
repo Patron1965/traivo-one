@@ -217,9 +217,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           onClose={() => setShowAiPanel(false)}
           jobContext={{
             jobTitle: selectedJob.title,
-            objectName: selectedJob.objectName,
-            objectAddress: selectedJob.objectAddress,
-            accessInfo: selectedObject?.accessInfo,
+            objectName: selectedJob.objectName ?? undefined,
+            objectAddress: selectedJob.objectAddress ?? undefined,
+            accessInfo: (selectedObject?.accessInfo as { gateCode?: string; keyLocation?: string; parking?: string; specialInstructions?: string } | undefined),
           }}
         />
         
@@ -430,9 +430,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         onClose={() => setShowAiPanel(false)}
         jobContext={selectedJob ? {
           jobTitle: selectedJob.title,
-          objectName: selectedJob.objectName,
-          objectAddress: selectedJob.objectAddress,
-          accessInfo: selectedObject?.accessInfo,
+          objectName: selectedJob.objectName ?? undefined,
+          objectAddress: selectedJob.objectAddress ?? undefined,
+          accessInfo: (selectedObject?.accessInfo as { gateCode?: string; keyLocation?: string; parking?: string; specialInstructions?: string } | undefined),
         } : undefined}
       />
 
@@ -489,11 +489,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         <Button
           variant="outline"
           className="w-full h-12 gap-2"
-          onClick={() => {
-            setShowAiPanel(!showAiPanel);
-            setAiQuestion("");
-            setAiAnswer("");
-          }}
+          onClick={() => setShowAiPanel(!showAiPanel)}
           data-testid="button-ask-ai-general"
         >
           <HelpCircle className="h-5 w-5 text-purple-500" />
