@@ -518,8 +518,8 @@ export async function optimizeRoutesVRP(
 
     const data: VROOMResponse = await response.json();
 
-    // Build order ID map
-    const orderIdMap = new Map(validJobs.map((j, idx) => [idx + 1, j.order.id]));
+    // Build order ID map using actual job IDs (not array indices)
+    const orderIdMap = new Map(validJobs.map(j => [j.job.id, j.order.id]));
     const orderMap = new Map(workOrders.map(o => [o.id, o]));
 
     // Convert routes
