@@ -29,11 +29,7 @@ export default function WeekPlannerPage() {
 
       {showAIPanel && (
         <div className="w-80 max-w-[320px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
-          <div className="flex items-center justify-between p-2 border-b">
-            <span className="text-sm font-medium flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-500" />
-              AI Assistent
-            </span>
+          <div className="flex items-center justify-end p-2 border-b">
             <Button 
               size="icon" 
               variant="ghost" 
@@ -55,11 +51,12 @@ export default function WeekPlannerPage() {
 
       {!showAIPanel && (
         <Button
+          variant="outline"
           onClick={() => setShowAIPanel(true)}
-          className="fixed bottom-4 right-4 shadow-lg z-50"
+          className="fixed bottom-4 right-4 shadow-lg z-50 bg-background"
           data-testid="button-open-ai-panel"
         >
-          <Sparkles className="h-4 w-4 mr-2" />
+          <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
           AI Assistent
         </Button>
       )}
