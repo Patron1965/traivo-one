@@ -373,12 +373,13 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
       <CardContent className="space-y-3 flex-1 overflow-auto">
         {activeTab === "auto-schedule" && (
           <>
-            <div className="flex gap-2">
+            <div>
               <Button
                 size="sm"
+                variant="outline"
                 onClick={() => autoScheduleMutation.mutate()}
                 disabled={autoScheduleMutation.isPending}
-                className="flex-1"
+                className="w-full"
                 data-testid="button-auto-schedule"
               >
                 {autoScheduleMutation.isPending ? (
@@ -449,9 +450,9 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
                     <div className="flex gap-2">
                       <Button
+                        variant="secondary"
                         onClick={() => applyScheduleMutation.mutate(autoScheduleResult.assignments)}
                         disabled={applyScheduleMutation.isPending}
-                        className="flex-1"
                         data-testid="button-apply-auto-schedule"
                       >
                         {applyScheduleMutation.isPending ? (
@@ -480,6 +481,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
         {activeTab === "routes" && (
           <>
             <Button
+              variant="outline"
               onClick={() => routeOptimizeMutation.mutate()}
               disabled={routeOptimizeMutation.isPending}
               className="w-full"
