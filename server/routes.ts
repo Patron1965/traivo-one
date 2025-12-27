@@ -19,6 +19,7 @@ import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { hashPassword } from "./password";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { anomalyMonitor } from "./anomaly-monitor";
+import { sendEmail } from "./replit_integrations/resend";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -3957,6 +3958,49 @@ Du kan ge tips som:
     } catch (error) {
       console.error("Failed to get project stats:", error);
       res.status(500).json({ error: "Failed to get project stats" });
+    }
+  });
+
+  // Send project report via email
+  app.post("/api/system/send-project-report", async (req, res) => {
+    try {
+      const { to, pdfBase64 } = req.body;
+      
+      if (!to || !pdfBase64) {
+        return res.status(400).json({ error: "Missing required fields: to, pdfBase64" });
+      }
+
+      const pdfBuffer = Buffer.from(pdfBase64, 'base64');
+      
+      const result = await sendEmail({
+        to,
+        subject: "Unicorn Projektrapport - Kodstatistik och Kostnadsjämförelse",
+        html: `
+          <h1>Unicorn Projektrapport</h1>
+          <p>Bifogat finner du projektrapporten med kodstatistik och kostnadsjämförelse för Unicorn-plattformen.</p>
+          <h2>Sammanfattning</h2>
+          <ul>
+            <li><strong>Totalt antal kodrader:</strong> ~43 600</li>
+            <li><strong>Uppskattad utvecklingskostnad:</strong> 1,7 - 6,5 miljoner SEK</li>
+            <li><strong>Uppskattad utvecklingstid:</strong> 6-12 månader med 3-5 utvecklare</li>
+          </ul>
+          <p>Se bifogad PDF för detaljerad information.</p>
+          <hr>
+          <p><em>Genererad av Unicorn - AI-Driven Field Service Planning Platform</em></p>
+        `,
+        attachments: [
+          {
+            filename: "Unicorn_Projektrapport_Kostnadsjamforelse.pdf",
+            content: pdfBuffer,
+          }
+        ],
+      });
+      
+      console.log("Email sent successfully:", result);
+      res.json({ success: true, result });
+    } catch (error) {
+      console.error("Failed to send email:", error);
+      res.status(500).json({ error: "Failed to send email", details: String(error) });
     }
   });
 

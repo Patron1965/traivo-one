@@ -1,10 +1,12 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { FileDown, Loader2, Code, Users, Clock, Banknote, CheckCircle } from "lucide-react";
+import { FileDown, Loader2, Code, Users, Clock, Banknote, CheckCircle, Mail } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
@@ -48,10 +50,163 @@ function formatCurrency(value: number): string {
 
 export default function ProjectReportPage() {
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const { toast } = useToast();
 
   const { data: stats, isLoading } = useQuery<ProjectStats>({
     queryKey: ["/api/system/project-stats"],
   });
+
+  const generatePDFBase64 = (stats: ProjectStats): string => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    let yPos = 20;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(20);
+    doc.text("Projektrapport", pageWidth / 2, yPos, { align: "center" });
+    yPos += 10;
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "normal");
+    doc.text(stats.projectName, pageWidth / 2, yPos, { align: "center" });
+    yPos += 10;
+
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Genererad: ${new Date(stats.generatedDate).toLocaleDateString("sv-SE")}`, pageWidth / 2, yPos, { align: "center" });
+    doc.setTextColor(0);
+    yPos += 15;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Kodstatistik", 14, yPos);
+    yPos += 8;
+
+    doc.autoTable({
+      startY: yPos,
+      head: [["Komponent", "Kodrader", "Filer", "Beskrivning"]],
+      body: [
+        ["Frontend", stats.codeStats.frontend.lines.toLocaleString("sv-SE"), stats.codeStats.frontend.files.toString(), stats.codeStats.frontend.description],
+        ["Backend", stats.codeStats.backend.lines.toLocaleString("sv-SE"), stats.codeStats.backend.files.toString(), stats.codeStats.backend.description],
+        ["Delad kod", stats.codeStats.shared.lines.toLocaleString("sv-SE"), stats.codeStats.shared.files.toString(), stats.codeStats.shared.description],
+        ["Totalt", stats.codeStats.totalLines.toLocaleString("sv-SE"), stats.codeStats.totalFiles.toString(), ""],
+      ],
+      theme: "striped",
+      headStyles: { fillColor: [59, 130, 246] },
+      margin: { left: 14, right: 14 },
+    });
+
+    yPos = doc.lastAutoTable.finalY + 15;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Teknisk stack", 14, yPos);
+    yPos += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    stats.techStack.forEach((tech) => {
+      doc.text(`- ${tech}`, 18, yPos);
+      yPos += 5;
+    });
+
+    yPos += 10;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.text("Huvudfunktioner", 14, yPos);
+    yPos += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    stats.features.forEach((feature) => {
+      doc.text(`- ${feature}`, 18, yPos);
+      yPos += 5;
+    });
+
+    doc.addPage();
+    yPos = 20;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.text("Kostnadsjamforelse", pageWidth / 2, yPos, { align: "center" });
+    yPos += 15;
+
+    doc.autoTable({
+      startY: yPos,
+      head: [["Parameter", "Varde"]],
+      body: [
+        ["Totalt antal kodrader", stats.codeStats.totalLines.toLocaleString("sv-SE")],
+        ["Uppskattad produktivitet", "10-20 rader/timme"],
+        ["Timkostnad (svensk konsult)", `${stats.costComparison.hourlyRate.min}-${stats.costComparison.hourlyRate.max} SEK/tim`],
+        ["Uppskattade timmar", `${stats.costComparison.estimatedHours.min.toLocaleString("sv-SE")} - ${stats.costComparison.estimatedHours.max.toLocaleString("sv-SE")} tim`],
+      ],
+      theme: "striped",
+      headStyles: { fillColor: [34, 197, 94] },
+      margin: { left: 14, right: 14 },
+    });
+
+    yPos = doc.lastAutoTable.finalY + 15;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(34, 139, 34);
+    doc.text("Uppskattad utvecklingskostnad", 14, yPos);
+    doc.setTextColor(0);
+    yPos += 10;
+
+    doc.setFontSize(12);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Lagsta uppskattning: ${formatCurrency(stats.costComparison.totalCost.min)}`, 18, yPos);
+    yPos += 7;
+    doc.text(`Hogsta uppskattning: ${formatCurrency(stats.costComparison.totalCost.max)}`, 18, yPos);
+    yPos += 15;
+
+    const avgCost = (stats.costComparison.totalCost.min + stats.costComparison.totalCost.max) / 2;
+    doc.setFillColor(240, 240, 240);
+    doc.rect(14, yPos, pageWidth - 28, 20, "F");
+    yPos += 8;
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.text("Sammanfattning", 18, yPos);
+    yPos += 7;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text(`Ett projekt av denna storlek kostar typiskt ${formatCurrency(avgCost)} i ren utvecklingskostnad.`, 18, yPos);
+
+    return doc.output("datauristring").split(",")[1];
+  };
+
+  const sendEmailMutation = useMutation({
+    mutationFn: async (to: string) => {
+      if (!stats) throw new Error("No stats available");
+      const pdfBase64 = generatePDFBase64(stats);
+      return apiRequest("POST", "/api/system/send-project-report", { to, pdfBase64 });
+    },
+    onSuccess: () => {
+      toast({
+        title: "E-post skickad!",
+        description: "Projektrapporten har skickats till tomas@nordicrouting.se",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Kunde inte skicka e-post",
+        description: String(error),
+        variant: "destructive",
+      });
+    },
+  });
+
+  const sendEmail = async () => {
+    setIsSending(true);
+    try {
+      await sendEmailMutation.mutateAsync("tomas@nordicrouting.se");
+    } finally {
+      setIsSending(false);
+    }
+  };
 
   const generatePDF = async () => {
     if (!stats) return;
@@ -265,18 +420,33 @@ export default function ProjectReportPage() {
           <h1 className="text-2xl font-bold">Projektrapport</h1>
           <p className="text-muted-foreground">Kodstatistik och kostnadsjamforelse</p>
         </div>
-        <Button
-          onClick={generatePDF}
-          disabled={isGenerating}
-          data-testid="button-download-pdf"
-        >
-          {isGenerating ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          ) : (
-            <FileDown className="h-4 w-4 mr-2" />
-          )}
-          Ladda ner PDF
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button
+            onClick={generatePDF}
+            disabled={isGenerating}
+            data-testid="button-download-pdf"
+          >
+            {isGenerating ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <FileDown className="h-4 w-4 mr-2" />
+            )}
+            Ladda ner PDF
+          </Button>
+          <Button
+            onClick={sendEmail}
+            disabled={isSending}
+            variant="secondary"
+            data-testid="button-send-email"
+          >
+            {isSending ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Mail className="h-4 w-4 mr-2" />
+            )}
+            Skicka via e-post
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
