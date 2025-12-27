@@ -46,6 +46,7 @@ function Router() {
       <Route path="/" component={WeekPlannerPage} />
       <Route path="/planner" component={WeekPlannerPage} />
       <Route path="/week-planner" component={WeekPlannerPage} />
+      <Route path="/resource-focus/:id" component={ResourceFocusPage} />
       <Route path="/clusters" component={ClustersPage} />
       <Route path="/clusters/:id" component={ClusterDetailPage} />
       <Route path="/routes" component={RoutesPage} />
@@ -73,7 +74,6 @@ function Router() {
       <Route path="/settings" component={SettingsPage} />
       <Route path="/system-dashboard" component={SystemDashboardPage} />
       <Route path="/system" component={SystemDashboardPage} />
-      <Route path="/resource-focus/:id" component={ResourceFocusPage} />
       <Route component={NotFound} />
     </Switch>
   );
