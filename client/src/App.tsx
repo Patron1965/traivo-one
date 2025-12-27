@@ -70,6 +70,7 @@ function Router() {
       <Route path="/system-dashboard" component={SystemDashboardPage} />
       <Route path="/mobile" component={MobileFieldPage} />
       <Route path="/field" component={MobileFieldPage} />
+      <Route path="/simple" component={MobileFieldPage} />
       <Route component={NotFound} />
     </Switch>
   );
