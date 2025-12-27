@@ -9,7 +9,9 @@ import {
   Send, Mic, MicOff, MapPin, Navigation, Phone, Clock, 
   CheckCircle, Play, ArrowLeft, Loader2, Bot, User,
   Calendar, ChevronRight, Volume2, VolumeX, Settings,
-  Compass, Target, Sparkles, ListTodo, MoreHorizontal
+  Compass, Target, Sparkles, ListTodo, MoreHorizontal,
+  CloudSun, CloudRain, Sun, Thermometer, AlertCircle,
+  Route, Timer, Coffee, Sunset, Sunrise
 } from "lucide-react";
 import { startOfDay, endOfDay, format, startOfWeek, endOfWeek, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -18,6 +20,21 @@ import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useVoice } from "@/hooks/useVoice";
 import type { WorkOrderWithObject, Customer, Resource } from "@shared/schema";
+
+interface WeatherData {
+  temperature: number;
+  condition: "sunny" | "cloudy" | "rainy" | "snow";
+  description: string;
+}
+
+interface ProactiveReminder {
+  id: string;
+  type: "weather" | "lunch" | "break" | "next_job" | "traffic" | "end_of_day";
+  message: string;
+  priority: "low" | "medium" | "high";
+  icon: typeof Sun;
+  dismissed: boolean;
+}
 
 interface Message {
   id: string;
@@ -60,6 +77,10 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
   const [position, setPosition] = useState<GeoPosition | null>(null);
   const [voiceEnabled, setVoiceEnabled] = useState(true);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [voiceMode, setVoiceMode] = useState(false);
+  const [weather, setWeather] = useState<WeatherData | null>(null);
+  const [reminders, setReminders] = useState<ProactiveReminder[]>([]);
+  const [lastReminderCheck, setLastReminderCheck] = useState<Date>(new Date());
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -112,6 +133,41 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
       return () => navigator.geolocation.clearWatch(watchId);
     }
   }, []);
+
+  // Fetch weather data (mock for now - could integrate real API)
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        // Use Open-Meteo API for real weather (free, no API key needed)
+        if (position) {
+          const res = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${position.latitude}&longitude=${position.longitude}&current=temperature_2m,weather_code&timezone=Europe/Stockholm`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            const temp = Math.round(data.current.temperature_2m);
+            const code = data.current.weather_code;
+            let condition: WeatherData["condition"] = "sunny";
+            let description = "Soligt";
+            if (code >= 61 && code <= 67) { condition = "rainy"; description = "Regnigt"; }
+            else if (code >= 71 && code <= 77) { condition = "snow"; description = "Snö"; }
+            else if (code >= 1 && code <= 3) { condition = "cloudy"; description = "Molnigt"; }
+            else if (code === 0) { condition = "sunny"; description = "Klart"; }
+            else { condition = "cloudy"; description = "Växlande"; }
+            setWeather({ temperature: temp, condition, description });
+          }
+        }
+      } catch (err) {
+        // Fallback weather
+        setWeather({ temperature: 5, condition: "cloudy", description: "Växlande molnighet" });
+      }
+    };
+    fetchWeather();
+    const interval = setInterval(fetchWeather, 30 * 60 * 1000); // Update every 30 min
+    return () => clearInterval(interval);
+  }, [position]);
+
+  // Note: Proactive reminders are generated after pendingJobs is defined
 
   // Timer for job duration
   useEffect(() => {
@@ -195,6 +251,89 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
   const objectMap = useMemo(() => new Map(objects.map((o) => [o.id, o])), [objects]);
   const customerMap = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
 
+  // Generate proactive reminders based on time and context
+  useEffect(() => {
+    const generateReminders = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const newReminders: ProactiveReminder[] = [];
+
+      // Lunch reminder (11:30 - 12:30)
+      if (hour >= 11 && hour <= 12 && !jobStarted) {
+        newReminders.push({
+          id: "lunch",
+          type: "lunch",
+          message: "Dags för lunch snart? Ta en paus och ladda batterierna.",
+          priority: "low",
+          icon: Coffee,
+          dismissed: false,
+        });
+      }
+
+      // End of day reminder (16:00+)
+      if (hour >= 16 && pendingJobs.length > 0) {
+        const totalTime = pendingJobs.reduce((acc, j) => acc + (j.estimatedDuration || 30), 0);
+        if (totalTime > 60) {
+          newReminders.push({
+            id: "end_of_day",
+            type: "end_of_day",
+            message: `Du har ${pendingJobs.length} uppdrag kvar (~${totalTime} min). Planera för avslut.`,
+            priority: "medium",
+            icon: Sunset,
+            dismissed: false,
+          });
+        }
+      }
+
+      // Weather warning
+      if (weather && (weather.condition === "rainy" || weather.condition === "snow")) {
+        newReminders.push({
+          id: "weather",
+          type: "weather",
+          message: `${weather.description} och ${weather.temperature}°C idag. Tänk på halkrisk!`,
+          priority: weather.condition === "snow" ? "high" : "medium",
+          icon: weather.condition === "rainy" ? CloudRain : CloudSun,
+          dismissed: false,
+        });
+      }
+
+      // Next job is far away
+      if (position && pendingJobs.length > 0) {
+        const nextJob = pendingJobs[0];
+        const obj = objectMap.get(nextJob.objectId);
+        if (obj?.latitude && obj?.longitude) {
+          const distance = calculateDistance(
+            position.latitude, position.longitude,
+            obj.latitude, obj.longitude
+          );
+          if (distance > 10) { // More than 10km away
+            newReminders.push({
+              id: "next_job_far",
+              type: "next_job",
+              message: `Nästa jobb är ${distance.toFixed(1)} km bort. Planera restid!`,
+              priority: "medium",
+              icon: Route,
+              dismissed: false,
+            });
+          }
+        }
+      }
+
+      setReminders(prev => {
+        // Keep dismissed state
+        const dismissedIds = prev.filter(r => r.dismissed).map(r => r.id);
+        return newReminders.map(r => ({
+          ...r,
+          dismissed: dismissedIds.includes(r.id)
+        }));
+      });
+    };
+
+    generateReminders();
+    const interval = setInterval(generateReminders, 5 * 60 * 1000); // Check every 5 min
+    return () => clearInterval(interval);
+  }, [weather, position, pendingJobs, jobStarted, objectMap]);
+
   const selectedJob = selectedJobId ? workOrders.find((wo) => wo.id === selectedJobId) : null;
   const selectedObject = selectedJob ? objectMap.get(selectedJob.objectId) : null;
   const selectedCustomer = selectedJob ? customerMap.get(selectedJob.customerId) : null;
@@ -270,6 +409,68 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
+
+  // Get nearest job with distance info (or first job if no coordinates)
+  const nearestJob = useMemo(() => {
+    if (pendingJobs.length === 0) return null;
+    
+    // If we have position, try to find nearest by coordinates
+    if (position) {
+      let nearest: { job: WorkOrderWithObject; distance: number; estimatedDriveTime: number } | null = null;
+      
+      for (const job of pendingJobs) {
+        const obj = objectMap.get(job.objectId);
+        if (obj?.latitude && obj?.longitude) {
+          const distance = calculateDistance(
+            position.latitude, position.longitude,
+            obj.latitude, obj.longitude
+          );
+          // Rough estimate: 40 km/h average speed in city
+          const driveTime = Math.round((distance / 40) * 60);
+          
+          if (!nearest || distance < nearest.distance) {
+            nearest = { job, distance, estimatedDriveTime: driveTime };
+          }
+        }
+      }
+      
+      if (nearest) return nearest;
+    }
+    
+    // Fallback: return first job without distance info
+    return { 
+      job: pendingJobs[0], 
+      distance: -1, // -1 indicates unknown
+      estimatedDriveTime: -1 
+    };
+  }, [position, pendingJobs, objectMap]);
+
+  function dismissReminder(id: string) {
+    setReminders(prev => prev.map(r => r.id === id ? { ...r, dismissed: true } : r));
+  }
+
+  function handleVoiceModeToggle() {
+    if (voiceMode) {
+      setVoiceMode(false);
+      stopListening();
+    } else {
+      setVoiceMode(true);
+      if (isRecognitionSupported) {
+        startListening();
+      }
+    }
+  }
+
+  // Exit voice mode when all operations complete
+  useEffect(() => {
+    if (voiceMode && !isListening && !isLoading && !isSpeaking) {
+      // Auto-close voice mode after a brief pause when everything is done
+      const timer = setTimeout(() => {
+        if (!isLoading && !isSpeaking) setVoiceMode(false);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [voiceMode, isListening, isLoading, isSpeaking]);
 
   async function handleSendMessage(text?: string) {
     const messageText = text || inputText.trim();
@@ -416,7 +617,7 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
     </div>
   );
 
-  // Quick stats bar
+  // Quick stats bar with weather and location
   const StatsBar = () => (
     <div className="flex items-center gap-2 p-3 border-b bg-muted/50">
       <Badge 
@@ -436,13 +637,204 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
         <CheckCircle className="h-3.5 w-3.5 mr-1.5" />
         {completedJobs.length} klara
       </Badge>
+      {weather && (
+        <Badge 
+          variant="outline" 
+          className="flex-1 justify-center py-1.5"
+          data-testid="badge-weather"
+        >
+          {weather.condition === "sunny" && <Sun className="h-3.5 w-3.5 mr-1.5 text-yellow-500" />}
+          {weather.condition === "cloudy" && <CloudSun className="h-3.5 w-3.5 mr-1.5 text-gray-500" />}
+          {weather.condition === "rainy" && <CloudRain className="h-3.5 w-3.5 mr-1.5 text-blue-500" />}
+          {weather.condition === "snow" && <CloudRain className="h-3.5 w-3.5 mr-1.5 text-blue-300" />}
+          {weather.temperature}°
+        </Badge>
+      )}
     </div>
   );
+
+  // Proactive reminders component
+  const ProactiveReminders = () => {
+    const activeReminders = reminders.filter(r => !r.dismissed);
+    if (activeReminders.length === 0) return null;
+
+    return (
+      <div className="px-4 py-2 space-y-2">
+        {activeReminders.map(reminder => (
+          <div 
+            key={reminder.id}
+            className={`flex items-center gap-3 p-3 rounded-lg text-sm ${
+              reminder.priority === "high" ? "bg-destructive/10 border border-destructive/30" :
+              reminder.priority === "medium" ? "bg-yellow-500/10 border border-yellow-500/30" :
+              "bg-muted"
+            }`}
+          >
+            <reminder.icon className={`h-5 w-5 shrink-0 ${
+              reminder.priority === "high" ? "text-destructive" :
+              reminder.priority === "medium" ? "text-yellow-600" :
+              "text-muted-foreground"
+            }`} />
+            <p className="flex-1">{reminder.message}</p>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6 shrink-0"
+              onClick={() => dismissReminder(reminder.id)}
+              data-testid={`button-dismiss-${reminder.id}`}
+            >
+              <span className="text-xs">X</span>
+            </Button>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // Nearest job card
+  const NearestJobCard = () => {
+    if (!nearestJob) return null;
+
+    const hasDistance = nearestJob.distance >= 0;
+
+    return (
+      <Card 
+        className="mx-4 hover-elevate active-elevate-2 cursor-pointer"
+        onClick={() => {
+          setSelectedJobId(nearestJob.job.id);
+          setView("job-detail");
+        }}
+        data-testid="card-nearest-job"
+      >
+        <CardContent className="p-4">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+            <Navigation className="h-3.5 w-3.5" />
+            <span>
+              {hasDistance 
+                ? `Närmaste jobb • ${nearestJob.distance.toFixed(1)} km • ~${nearestJob.estimatedDriveTime} min`
+                : "Nästa uppdrag"
+              }
+            </span>
+          </div>
+          <p className="font-medium">{nearestJob.job.title}</p>
+          <p className="text-sm text-muted-foreground">{nearestJob.job.objectAddress}</p>
+        </CardContent>
+      </Card>
+    );
+  };
+
+  // Voice mode overlay - fully modal, no accidental dismissal
+  const VoiceModeOverlay = () => {
+    if (!voiceMode) return null;
+
+    // Prevent closing during active operations
+    const canClose = !isListening && !isLoading && !isSpeaking;
+
+    return (
+      <div 
+        className="fixed inset-0 bg-background z-50 flex flex-col items-center justify-center"
+        onClick={(e) => e.stopPropagation()} // Prevent all backdrop clicks
+      >
+        <div className="text-center space-y-8">
+          <div className="space-y-2">
+            <p className="text-2xl font-semibold">
+              {isListening ? "Lyssnar..." : isLoading ? "Tänker..." : isSpeaking ? "Svarar..." : "Tryck för att prata"}
+            </p>
+            <p className="text-muted-foreground">
+              {isListening && transcript ? `"${transcript}"` : 
+               isSpeaking ? "AI-assistenten pratar..." :
+               "Ställ en fråga eller ge ett kommando"}
+            </p>
+          </div>
+
+          <button
+            className={`w-32 h-32 rounded-full flex items-center justify-center transition-all ${
+              isListening 
+                ? "bg-red-500 animate-pulse scale-110" 
+                : isLoading
+                ? "bg-primary/50"
+                : isSpeaking
+                ? "bg-green-500"
+                : "bg-primary hover:bg-primary/90 active:scale-95"
+            }`}
+            onClick={() => {
+              if (isSpeaking) {
+                stopSpeaking();
+              } else if (isListening) {
+                stopListening();
+              } else if (!isLoading) {
+                startListening();
+              }
+            }}
+            disabled={isLoading || !isRecognitionSupported}
+            data-testid="button-voice-mode-mic"
+          >
+            {isLoading ? (
+              <Loader2 className="h-16 w-16 text-white animate-spin" />
+            ) : isSpeaking ? (
+              <Volume2 className="h-16 w-16 text-white" />
+            ) : isListening ? (
+              <MicOff className="h-16 w-16 text-white" />
+            ) : (
+              <Mic className="h-16 w-16 text-white" />
+            )}
+          </button>
+
+          <p className="text-sm text-muted-foreground">
+            {isSpeaking ? "Tryck för att stoppa" : isListening ? "Tryck för att avsluta" : ""}
+          </p>
+
+          <div className="flex items-center justify-center gap-4">
+            <Button
+              variant="outline"
+              size="lg"
+              onClick={() => {
+                if (canClose) {
+                  handleVoiceModeToggle();
+                } else {
+                  stopSpeaking();
+                  stopListening();
+                }
+              }}
+              data-testid="button-close-voice-mode"
+            >
+              {canClose ? "Stäng" : "Avbryt"}
+            </Button>
+            {isSynthesisSupported && (
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setVoiceEnabled(!voiceEnabled)}
+                data-testid="button-toggle-tts"
+              >
+                {voiceEnabled ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5" />}
+              </Button>
+            )}
+          </div>
+
+          {!isRecognitionSupported && (
+            <p className="text-sm text-destructive">
+              Röstinmatning stöds inte i din webbläsare
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  };
 
   // Chat view
   const ChatView = () => (
     <div className="flex flex-col h-full">
       <StatsBar />
+      
+      {/* Proactive reminders */}
+      <ProactiveReminders />
+      
+      {/* Nearest job card */}
+      {!jobStarted && pendingJobs.length > 0 && nearestJob && (
+        <div className="py-2">
+          <NearestJobCard />
+        </div>
+      )}
       
       <ScrollArea className="flex-1 p-4">
         <div className="space-y-4">
@@ -508,8 +900,21 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
         </div>
       </ScrollArea>
 
-      {/* Input area */}
+      {/* Input area with prominent voice button */}
       <div className="p-4 border-t bg-card">
+        {/* Large voice button */}
+        {isRecognitionSupported && (
+          <div className="flex justify-center mb-4">
+            <button
+              onClick={handleVoiceModeToggle}
+              className="w-20 h-20 rounded-full bg-primary flex items-center justify-center shadow-lg hover:bg-primary/90 active:scale-95 transition-all"
+              data-testid="button-voice-main"
+            >
+              <Mic className="h-10 w-10 text-white" />
+            </button>
+          </div>
+        )}
+        
         <div className="flex items-center gap-2">
           <div className="flex-1 relative">
             <input
@@ -523,17 +928,6 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
               disabled={isLoading}
               data-testid="input-chat-message"
             />
-            {isRecognitionSupported && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className={`absolute right-1 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full ${isListening ? "text-red-500" : ""}`}
-                onClick={isListening ? stopListening : startListening}
-                data-testid="button-voice-input"
-              >
-                {isListening ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5" />}
-              </Button>
-            )}
           </div>
           <Button
             size="icon"
@@ -809,6 +1203,7 @@ export function AIFieldAssistant({ resourceId, resourceName, onLogout }: AIField
       {view === "chat" && <ChatView />}
       {view === "jobs" && <JobsView />}
       {view === "job-detail" && <JobDetailView />}
+      <VoiceModeOverlay />
     </div>
   );
 }
