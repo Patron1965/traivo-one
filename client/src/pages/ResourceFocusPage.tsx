@@ -29,7 +29,7 @@ const priorityDotColors: Record<string, string> = {
 
 export default function ResourceFocusPage() {
   const params = useParams<{ id: string }>();
-  const resourceId = params.id;
+  const resourceId = params.id || "";
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const { toast } = useToast();
   const { focusResource, unfocusResource, onJobAssignment, notifyJobAssigned } = useFocusedResource();
@@ -166,7 +166,7 @@ export default function ResourceFocusPage() {
     setCurrentWeekStart(startOfWeek(new Date(), { weekStartsOn: 1 }));
   };
 
-  if (resourceLoading || !resource) {
+  if (!resourceId || resourceLoading || !resource) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-background">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
