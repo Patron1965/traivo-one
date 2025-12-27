@@ -40,9 +40,6 @@ import ResourceFocusPage from "@/pages/ResourceFocusPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
-// Check path at module level - before any React rendering
-const IS_RESOURCE_FOCUS_WINDOW = window.location.pathname.startsWith("/resource-focus/");
-
 function Router() {
   return (
     <Switch>
@@ -118,20 +115,7 @@ function AuthenticatedApp() {
   );
 }
 
-// Standalone app for resource focus window - completely separate component tree
-function ResourceFocusApp() {
-  return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <ResourceFocusPage />
-        <Toaster />
-      </TooltipProvider>
-    </QueryClientProvider>
-  );
-}
-
-// Main app with full layout
-function MainApp() {
+export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -141,6 +125,3 @@ function MainApp() {
     </QueryClientProvider>
   );
 }
-
-// Export different component based on path - decided at module load time
-export default IS_RESOURCE_FOCUS_WINDOW ? ResourceFocusApp : MainApp;

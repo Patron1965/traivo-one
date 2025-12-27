@@ -69,7 +69,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     const left = window.screenX + 100;
     const top = window.screenY + 100;
     window.open(
-      `/resource-focus/${resource.id}`,
+      `/resource-focus/${resource.id}?standalone=1`,
       `resource-${resource.id}`,
       `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
     );
