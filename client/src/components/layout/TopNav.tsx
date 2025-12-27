@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
-import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { useAuth } from "@/hooks/use-auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
@@ -242,18 +241,6 @@ export function TopNav() {
       <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
         <div className="flex items-center gap-4 md:gap-6">
           <MobileNav />
-          <Link href="/" className="flex items-center gap-3" data-testid="link-home">
-            <img
-              src={unicornLogo}
-              alt="Unicorn"
-              className="h-9 w-auto"
-              data-testid="img-unicorn-logo"
-            />
-            <div className="hidden sm:block">
-              <h1 className="text-lg font-semibold leading-none">Unicorn</h1>
-              <p className="text-xs text-muted-foreground">Kinab AB</p>
-            </div>
-          </Link>
 
           <nav className="hidden md:flex items-center gap-1">
             <NavDropdown
