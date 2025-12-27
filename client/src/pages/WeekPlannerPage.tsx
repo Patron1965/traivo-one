@@ -31,6 +31,8 @@ export default function WeekPlannerPage() {
         <WeekPlanner 
           onAddJob={() => setShowJobModal(true)}
           onSelectJob={(id) => console.log("Selected job for detail:", id)}
+          showAIPanel={showAIPanel}
+          onToggleAIPanel={() => setShowAIPanel(!showAIPanel)}
         />
       </div>
 
@@ -60,17 +62,6 @@ export default function WeekPlannerPage() {
         </div>
       )}
 
-      {!showAIPanel && (
-        <Button
-          variant="secondary"
-          onClick={() => setShowAIPanel(true)}
-          className="fixed bottom-6 right-6 shadow-lg z-50 gap-2"
-          data-testid="button-open-ai-panel"
-        >
-          <Sparkles className="h-4 w-4 text-purple-500" />
-          AI stöd
-        </Button>
-      )}
 
       <JobModal 
         open={showJobModal}

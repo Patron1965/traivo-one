@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -45,11 +45,13 @@ const DAY_END_HOUR = 17;
 interface WeekPlannerProps {
   onAddJob?: () => void;
   onSelectJob?: (jobId: string) => void;
+  showAIPanel?: boolean;
+  onToggleAIPanel?: () => void;
 }
 
 type ViewMode = "day" | "week" | "month";
 
-export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
+export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
@@ -815,6 +817,16 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
               <Plus className="h-4 w-4 mr-2" />
               Nytt jobb
             </Button>
+            {onToggleAIPanel && (
+              <Button 
+                variant={showAIPanel ? "default" : "ghost"} 
+                onClick={onToggleAIPanel}
+                data-testid="button-toggle-ai-panel"
+              >
+                <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+                AI stöd
+              </Button>
+            )}
           </div>
         </div>
 
