@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { FieldAIAssistant } from "@/components/FieldAIAssistant";
+import { PhotoCapture } from "@/components/PhotoCapture";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 
 type View = "jobs" | "job";
@@ -324,6 +325,21 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               </CardContent>
             </Card>
           )}
+
+          <PhotoCapture 
+            workOrderId={selectedJob.id}
+            existingPhotos={(selectedJob.metadata as { photos?: string[] } | null)?.photos || []}
+            onPhotosChange={async (photos) => {
+              try {
+                await apiRequest("PATCH", `/api/work-orders/${selectedJob.id}`, {
+                  metadata: { ...(selectedJob.metadata as object || {}), photos }
+                });
+                queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+              } catch (error) {
+                console.error("Failed to save photos:", error);
+              }
+            }}
+          />
 
           {accessInfo.gateCode && (
             <Card className="border-green-200 dark:border-green-800">

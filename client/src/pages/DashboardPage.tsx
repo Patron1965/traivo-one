@@ -1,5 +1,6 @@
 import { Dashboard } from "@/components/Dashboard";
 import { QuickStats } from "@/components/layout/QuickStats";
+import { AnomalyAlerts } from "@/components/AnomalyAlerts";
 
 export default function DashboardPage() {
   return (
@@ -9,7 +10,14 @@ export default function DashboardPage() {
         <p className="text-muted-foreground">Översikt och nyckeltal</p>
       </div>
       <QuickStats />
-      <Dashboard />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2">
+          <Dashboard />
+        </div>
+        <div>
+          <AnomalyAlerts />
+        </div>
+      </div>
     </div>
   );
 }
