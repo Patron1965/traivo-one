@@ -269,6 +269,336 @@ export async function optimizeResourceDayRoute(
   };
 }
 
+// =============================================================================
+// VROOM-based VRP Optimization (OpenRouteService Optimization API)
+// =============================================================================
+
+interface VROOMVehicle {
+  id: number;
+  profile: string;
+  description?: string;
+  start: [number, number]; // [lng, lat]
+  end?: [number, number];
+  capacity?: number[];
+  skills?: number[];
+  time_window?: [number, number];
+}
+
+interface VROOMJob {
+  id: number;
+  location: [number, number];
+  service?: number;
+  delivery?: number[];
+  pickup?: number[];
+  skills?: number[];
+  priority?: number;
+  time_windows?: [number, number][];
+  description?: string;
+}
+
+interface VROOMStep {
+  type: "start" | "job" | "end";
+  location?: [number, number];
+  id?: number;
+  service?: number;
+  waiting_time?: number;
+  arrival?: number;
+  duration?: number;
+  distance?: number;
+  description?: string;
+}
+
+interface VROOMRoute {
+  vehicle: number;
+  cost: number;
+  service: number;
+  duration: number;
+  distance: number;
+  waiting_time: number;
+  priority: number;
+  steps: VROOMStep[];
+  geometry?: string;
+}
+
+interface VROOMResponse {
+  code: number;
+  summary: {
+    cost: number;
+    routes: number;
+    unassigned: number;
+    service: number;
+    duration: number;
+    distance: number;
+  };
+  unassigned: Array<{ id: number; description?: string }>;
+  routes: VROOMRoute[];
+}
+
+export interface VRPOptimizationResult {
+  success: boolean;
+  routes: Array<{
+    resourceId: string;
+    resourceName: string;
+    stops: Array<{
+      orderId: string;
+      orderTitle: string;
+      sequence: number;
+      arrivalSeconds?: number;
+      serviceMinutes: number;
+      waitingMinutes: number;
+      location: { lat: number; lng: number };
+    }>;
+    totalDurationMinutes: number;
+    totalDistanceKm: number;
+    totalServiceMinutes: number;
+    efficiency: number;
+    geometry?: string;
+  }>;
+  unassignedOrders: Array<{ orderId: string; reason: string }>;
+  summary: {
+    totalOrders: number;
+    assignedOrders: number;
+    totalDurationMinutes: number;
+    totalDistanceKm: number;
+    avgEfficiency: number;
+  };
+  error?: string;
+}
+
+const ORS_OPTIMIZATION_URL = "https://api.openrouteservice.org/optimization";
+const DEFAULT_SERVICE_TIME_SECONDS = 30 * 60; // 30 min
+const DEFAULT_WORK_HOURS: [number, number] = [8 * 3600, 17 * 3600]; // 08-17
+
+/**
+ * Optimize routes using VROOM via OpenRouteService's optimization API
+ * Supports multi-vehicle VRP with time windows
+ */
+export async function optimizeRoutesVRP(
+  workOrders: WorkOrder[],
+  resources: Resource[],
+  objects: ServiceObject[],
+  clusters: Cluster[]
+): Promise<VRPOptimizationResult> {
+  if (!OPENROUTESERVICE_API_KEY) {
+    return {
+      success: false,
+      routes: [],
+      unassignedOrders: [],
+      summary: {
+        totalOrders: workOrders.length,
+        assignedOrders: 0,
+        totalDurationMinutes: 0,
+        totalDistanceKm: 0,
+        avgEfficiency: 0
+      },
+      error: "OpenRouteService API-nyckel saknas. Lägg till OPENROUTESERVICE_API_KEY."
+    };
+  }
+
+  const objectMap = new Map(objects.map(o => [o.id, o]));
+  const clusterMap = new Map(clusters.map(c => [c.id, c]));
+
+  // Build jobs from work orders
+  const validJobs: Array<{ order: WorkOrder; job: VROOMJob }> = [];
+  let jobId = 1;
+
+  for (const order of workOrders) {
+    let coords: [number, number] | null = null;
+
+    // Try object coordinates
+    const obj = objectMap.get(order.objectId);
+    if (obj?.latitude && obj?.longitude) {
+      coords = [obj.longitude, obj.latitude];
+    } 
+    // Try cluster center
+    else if (order.clusterId) {
+      const cluster = clusterMap.get(order.clusterId);
+      if (cluster?.centerLatitude && cluster?.centerLongitude) {
+        coords = [cluster.centerLongitude, cluster.centerLatitude];
+      }
+    }
+
+    if (!coords) continue;
+
+    const serviceTime = order.estimatedDuration 
+      ? order.estimatedDuration * 60 
+      : DEFAULT_SERVICE_TIME_SECONDS;
+
+    const priority = order.priority === "urgent" ? 100 
+      : order.priority === "high" ? 75
+      : order.priority === "normal" ? 50 : 25;
+
+    const job: VROOMJob = {
+      id: jobId,
+      location: coords,
+      service: serviceTime,
+      priority,
+      description: order.title || `Order ${order.id.slice(0, 8)}`
+    };
+
+    // Add time window if scheduled
+    if (order.scheduledStartTime) {
+      const start = new Date(order.scheduledStartTime);
+      const startSec = start.getHours() * 3600 + start.getMinutes() * 60;
+      job.time_windows = [[startSec, Math.min(startSec + 3600, DEFAULT_WORK_HOURS[1])]];
+    }
+
+    validJobs.push({ order, job });
+    jobId++;
+  }
+
+  if (validJobs.length === 0) {
+    return {
+      success: false,
+      routes: [],
+      unassignedOrders: workOrders.map(o => ({ orderId: o.id, reason: "Saknar koordinater" })),
+      summary: {
+        totalOrders: workOrders.length,
+        assignedOrders: 0,
+        totalDurationMinutes: 0,
+        totalDistanceKm: 0,
+        avgEfficiency: 0
+      },
+      error: "Inga ordrar med giltiga koordinater"
+    };
+  }
+
+  // Build vehicles from resources
+  const vehicles: VROOMVehicle[] = resources.map((resource, idx) => {
+    const startCoord: [number, number] = resource.homeLatitude && resource.homeLongitude
+      ? [resource.homeLongitude, resource.homeLatitude]
+      : [20.263, 63.826]; // Umeå default
+
+    return {
+      id: idx + 1,
+      profile: "driving-car",
+      description: resource.name,
+      start: startCoord,
+      end: startCoord,
+      time_window: DEFAULT_WORK_HOURS,
+      capacity: [8]
+    };
+  });
+
+  if (vehicles.length === 0) {
+    return {
+      success: false,
+      routes: [],
+      unassignedOrders: [],
+      summary: {
+        totalOrders: workOrders.length,
+        assignedOrders: 0,
+        totalDurationMinutes: 0,
+        totalDistanceKm: 0,
+        avgEfficiency: 0
+      },
+      error: "Inga resurser tillgängliga"
+    };
+  }
+
+  // Call VROOM API
+  try {
+    const response = await fetch(ORS_OPTIMIZATION_URL, {
+      method: "POST",
+      headers: {
+        "Authorization": OPENROUTESERVICE_API_KEY,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        vehicles,
+        jobs: validJobs.map(j => j.job),
+        options: { g: true }
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`ORS Optimization API error: ${response.status} - ${errorText}`);
+    }
+
+    const data: VROOMResponse = await response.json();
+
+    // Build order ID map
+    const orderIdMap = new Map(validJobs.map((j, idx) => [idx + 1, j.order.id]));
+    const orderMap = new Map(workOrders.map(o => [o.id, o]));
+
+    // Convert routes
+    const routes = data.routes.map(route => {
+      const resource = resources[route.vehicle - 1];
+
+      const stops = route.steps
+        .filter(step => step.type === "job" && step.id !== undefined)
+        .map((step, idx) => {
+          const orderId = orderIdMap.get(step.id!) || "";
+          const order = orderMap.get(orderId);
+          return {
+            orderId,
+            orderTitle: step.description || order?.title || `Order ${orderId.slice(0, 8)}`,
+            sequence: idx + 1,
+            arrivalSeconds: step.arrival,
+            serviceMinutes: Math.round((step.service || 0) / 60),
+            waitingMinutes: Math.round((step.waiting_time || 0) / 60),
+            location: step.location 
+              ? { lat: step.location[1], lng: step.location[0] }
+              : { lat: 0, lng: 0 }
+          };
+        });
+
+      const totalDur = Math.round(route.duration / 60);
+      const totalSvc = Math.round(route.service / 60);
+
+      return {
+        resourceId: resource?.id || "",
+        resourceName: resource?.name || `Resurs ${route.vehicle}`,
+        stops,
+        totalDurationMinutes: totalDur,
+        totalDistanceKm: Math.round(route.distance / 100) / 10,
+        totalServiceMinutes: totalSvc,
+        efficiency: totalDur > 0 ? Math.round((totalSvc / totalDur) * 100) : 0,
+        geometry: route.geometry
+      };
+    });
+
+    const unassignedOrders = data.unassigned.map(u => ({
+      orderId: orderIdMap.get(u.id) || "",
+      reason: "Kunde inte tilldelas"
+    }));
+
+    const avgEff = routes.length > 0
+      ? Math.round(routes.reduce((s, r) => s + r.efficiency, 0) / routes.length)
+      : 0;
+
+    return {
+      success: true,
+      routes,
+      unassignedOrders,
+      summary: {
+        totalOrders: workOrders.length,
+        assignedOrders: validJobs.length - data.unassigned.length,
+        totalDurationMinutes: Math.round(data.summary.duration / 60),
+        totalDistanceKm: Math.round(data.summary.distance / 100) / 10,
+        avgEfficiency: avgEff
+      }
+    };
+
+  } catch (error) {
+    console.error("VRP optimization error:", error);
+    return {
+      success: false,
+      routes: [],
+      unassignedOrders: [],
+      summary: {
+        totalOrders: workOrders.length,
+        assignedOrders: 0,
+        totalDurationMinutes: 0,
+        totalDistanceKm: 0,
+        avgEfficiency: 0
+      },
+      error: error instanceof Error ? error.message : "Okänt fel vid VRP-optimering"
+    };
+  }
+}
+
 export async function optimizeDayRoutes(
   date: string,
   workOrders: WorkOrder[],

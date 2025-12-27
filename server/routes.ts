@@ -2728,6 +2728,49 @@ Du kan ge tips som:
     }
   });
 
+  // VRP-based route optimization using VROOM/OpenRouteService
+  app.post("/api/ai/optimize-vrp", async (req, res) => {
+    try {
+      const { optimizeRoutesVRP } = await import("./route-optimizer");
+      const { date, clusterId } = req.body;
+      
+      const [workOrders, resources, objects, clusters] = await Promise.all([
+        storage.getWorkOrders(DEFAULT_TENANT_ID),
+        storage.getResources(DEFAULT_TENANT_ID),
+        storage.getObjects(DEFAULT_TENANT_ID),
+        storage.getClusters(DEFAULT_TENANT_ID),
+      ]);
+      
+      // Filter orders if specific date or cluster provided
+      let filteredOrders = workOrders;
+      
+      if (date) {
+        filteredOrders = filteredOrders.filter(o => {
+          if (!o.scheduledDate) return false;
+          const orderDate = o.scheduledDate instanceof Date 
+            ? o.scheduledDate.toISOString().split("T")[0]
+            : String(o.scheduledDate).split("T")[0];
+          return orderDate === date;
+        });
+      }
+      
+      if (clusterId) {
+        filteredOrders = filteredOrders.filter(o => o.clusterId === clusterId);
+      }
+      
+      // Only include unexecuted orders
+      filteredOrders = filteredOrders.filter(o => 
+        o.status !== "executed" && o.status !== "invoiced"
+      );
+      
+      const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters);
+      res.json(result);
+    } catch (error) {
+      console.error("VRP optimization error:", error);
+      res.status(500).json({ error: "Kunde inte optimera rutter med VRP" });
+    }
+  });
+
   // Apply auto-schedule assignments
   app.post("/api/ai/auto-schedule/apply", async (req, res) => {
     try {
