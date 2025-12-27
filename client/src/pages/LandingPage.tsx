@@ -25,9 +25,6 @@ export default function LandingPage() {
             <span className="font-bold text-xl">Unicorn</span>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" asChild data-testid="button-demo">
-              <a href="/field">Fältapp Demo</a>
-            </Button>
             <Button asChild data-testid="button-login">
               <a href="/api/login">Logga in</a>
             </Button>
@@ -60,9 +57,6 @@ export default function LandingPage() {
                     Kom igång
                     <ChevronRight className="h-4 w-4" />
                   </a>
-                </Button>
-                <Button size="lg" variant="outline" asChild data-testid="button-see-demo">
-                  <a href="/field">Se fältappen</a>
                 </Button>
               </div>
             </div>
@@ -236,9 +230,6 @@ export default function LandingPage() {
                   Kom igång nu
                   <ChevronRight className="h-4 w-4" />
                 </a>
-              </Button>
-              <Button size="lg" variant="outline" asChild>
-                <a href="/mobile">Testa mobilappen</a>
               </Button>
             </div>
           </div>
