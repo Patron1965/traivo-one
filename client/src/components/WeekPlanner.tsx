@@ -857,7 +857,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                   <div>
                     <SheetTitle className="text-left">{activeResource.name}</SheetTitle>
                     <p className="text-sm text-muted-foreground">
-                      {activeResource.role || "Fälttekniker"} • {activeResource.weeklyHours || 40}h/vecka
+                      {activeResource.resourceType || "Fälttekniker"} • {activeResource.weeklyHours || 40}h/vecka
                     </p>
                   </div>
                 </div>
