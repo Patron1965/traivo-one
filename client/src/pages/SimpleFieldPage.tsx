@@ -1,4 +1,5 @@
 import { AIFieldAssistant } from "@/components/AIFieldAssistant";
+import { PWAInstallPrompt } from "@/components/PWAInstallPrompt";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Sparkles } from "lucide-react";
@@ -57,6 +58,7 @@ export default function SimpleFieldPage() {
             </div>
           )}
         </div>
+        <PWAInstallPrompt />
       </div>
     );
   }
@@ -71,6 +73,7 @@ export default function SimpleFieldPage() {
           setShowResourcePicker(true);
         }}
       />
+      <PWAInstallPrompt />
     </div>
   );
 }
