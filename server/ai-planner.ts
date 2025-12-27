@@ -7,6 +7,237 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+// ============================================
+// KPI CALCULATIONS FOR AI CONTEXT
+// ============================================
+
+export interface PlanningKPIs {
+  // Ställtider
+  avgSetupTimeMinutes: number;
+  setupTimeByCluster: Record<string, { avg: number; count: number; trend: "up" | "down" | "stable" }>;
+  anomalousSetupTimes: { objectId: string; objectName?: string; actual: number; expected: number; deviation: number }[];
+  
+  // Resurseffektivitet
+  resourceEfficiency: Record<string, { 
+    name: string; 
+    utilizationPercent: number; 
+    completedOrders: number;
+    avgOrderDuration: number;
+    delayRate: number; // % av ordrar som var försenade
+  }>;
+  
+  // Förseningar
+  delayedOrdersCount: number;
+  delayedOrdersPercent: number;
+  avgDelayMinutes: number;
+  
+  // Orderstatistik
+  completionRateLast30Days: number;
+  ordersPerCluster: Record<string, number>;
+  
+  // Kostnad
+  avgCostPerOrder: number;
+  costAnomalies: { orderId: string; title: string; cost: number; avgCost: number; deviation: number }[];
+}
+
+export function calculatePlanningKPIs(
+  workOrders: WorkOrder[],
+  resources: Resource[],
+  clusters: Cluster[],
+  setupTimeLogs: SetupTimeLog[] = []
+): PlanningKPIs {
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  
+  // Filtrera ordrar senaste 30 dagarna
+  const recentOrders = workOrders.filter(o => {
+    if (!o.completedAt) return false;
+    const completedAt = o.completedAt instanceof Date ? o.completedAt : new Date(o.completedAt);
+    return completedAt >= thirtyDaysAgo;
+  });
+  
+  const completedOrders = recentOrders.filter(o => o.status === "utford" || o.status === "fakturerad");
+  const allActiveOrders = workOrders.filter(o => o.status !== "fakturerad");
+  
+  // === Ställtidsberäkningar ===
+  const setupTimeByCluster: Record<string, { total: number; count: number }> = {};
+  let totalSetupTime = 0;
+  let setupCount = 0;
+  
+  setupTimeLogs.forEach(log => {
+    totalSetupTime += log.durationMinutes;
+    setupCount++;
+    
+    // Hitta kluster för objektet
+    const order = workOrders.find(o => o.objectId === log.objectId);
+    if (order?.clusterId) {
+      if (!setupTimeByCluster[order.clusterId]) {
+        setupTimeByCluster[order.clusterId] = { total: 0, count: 0 };
+      }
+      setupTimeByCluster[order.clusterId].total += log.durationMinutes;
+      setupTimeByCluster[order.clusterId].count++;
+    }
+  });
+  
+  const avgSetupTimeMinutes = setupCount > 0 ? totalSetupTime / setupCount : 0;
+  
+  // Konvertera till KPI-format med trend (förenklad - alltid "stable" utan historik)
+  const setupTimeByClusterKPI: Record<string, { avg: number; count: number; trend: "up" | "down" | "stable" }> = {};
+  Object.entries(setupTimeByCluster).forEach(([clusterId, data]) => {
+    const cluster = clusters.find(c => c.id === clusterId);
+    const key = cluster?.name || clusterId.slice(0, 8);
+    setupTimeByClusterKPI[key] = {
+      avg: data.count > 0 ? Math.round(data.total / data.count) : 0,
+      count: data.count,
+      trend: "stable"
+    };
+  });
+  
+  // Anomala ställtider (>30% över snitt)
+  const anomalousSetupTimes = setupTimeLogs
+    .filter(log => log.durationMinutes > avgSetupTimeMinutes * 1.3 && avgSetupTimeMinutes > 0)
+    .slice(0, 5)
+    .map(log => ({
+      objectId: log.objectId,
+      objectName: undefined,
+      actual: log.durationMinutes,
+      expected: Math.round(avgSetupTimeMinutes),
+      deviation: Math.round(((log.durationMinutes - avgSetupTimeMinutes) / avgSetupTimeMinutes) * 100)
+    }));
+  
+  // === Resurseffektivitet ===
+  const resourceEfficiency: Record<string, { 
+    name: string; 
+    utilizationPercent: number; 
+    completedOrders: number;
+    avgOrderDuration: number;
+    delayRate: number;
+  }> = {};
+  
+  resources.forEach(r => {
+    const resourceOrders = completedOrders.filter(o => o.resourceId === r.id);
+    const totalDuration = resourceOrders.reduce((sum, o) => sum + (o.actualDuration || o.estimatedDuration || 60), 0);
+    const delayedOrders = resourceOrders.filter(o => {
+      if (!o.actualDuration || !o.estimatedDuration) return false;
+      return o.actualDuration > o.estimatedDuration * 1.2;
+    });
+    
+    // Antag 8h/dag, 20 arbetsdagar/månad = 160h = 9600 min
+    const maxCapacityMinutes = 9600;
+    
+    resourceEfficiency[r.id] = {
+      name: r.name,
+      utilizationPercent: Math.min(100, Math.round((totalDuration / maxCapacityMinutes) * 100)),
+      completedOrders: resourceOrders.length,
+      avgOrderDuration: resourceOrders.length > 0 ? Math.round(totalDuration / resourceOrders.length) : 0,
+      delayRate: resourceOrders.length > 0 ? Math.round((delayedOrders.length / resourceOrders.length) * 100) : 0
+    };
+  });
+  
+  // === Förseningar ===
+  const delayedOrders = completedOrders.filter(o => {
+    if (!o.actualDuration || !o.estimatedDuration) return false;
+    return o.actualDuration > o.estimatedDuration * 1.2;
+  });
+  
+  const avgDelayMinutes = delayedOrders.length > 0
+    ? Math.round(delayedOrders.reduce((sum, o) => sum + ((o.actualDuration || 0) - (o.estimatedDuration || 0)), 0) / delayedOrders.length)
+    : 0;
+  
+  // === Ordrar per kluster ===
+  const ordersPerCluster: Record<string, number> = {};
+  allActiveOrders.forEach(o => {
+    if (o.clusterId) {
+      const cluster = clusters.find(c => c.id === o.clusterId);
+      const key = cluster?.name || o.clusterId.slice(0, 8);
+      ordersPerCluster[key] = (ordersPerCluster[key] || 0) + 1;
+    }
+  });
+  
+  // === Kostnadsanomalier - beräknas baserat på estimatedValue ===
+  const ordersWithValue = completedOrders.filter(o => o.estimatedValue && o.estimatedValue > 0);
+  const avgCost = ordersWithValue.length > 0
+    ? ordersWithValue.reduce((sum, o) => sum + (o.estimatedValue || 0), 0) / ordersWithValue.length
+    : 0;
+  
+  const costAnomalies = ordersWithValue
+    .filter(o => o.estimatedValue && o.estimatedValue > avgCost * 1.5)
+    .slice(0, 5)
+    .map(o => ({
+      orderId: o.id,
+      title: o.title || `Order ${o.id.slice(0, 8)}`,
+      cost: o.estimatedValue || 0,
+      avgCost: Math.round(avgCost),
+      deviation: avgCost > 0 ? Math.round(((o.estimatedValue || 0) - avgCost) / avgCost * 100) : 0
+    }));
+  
+  return {
+    avgSetupTimeMinutes: Math.round(avgSetupTimeMinutes),
+    setupTimeByCluster: setupTimeByClusterKPI,
+    anomalousSetupTimes,
+    resourceEfficiency,
+    delayedOrdersCount: delayedOrders.length,
+    delayedOrdersPercent: completedOrders.length > 0 ? Math.round((delayedOrders.length / completedOrders.length) * 100) : 0,
+    avgDelayMinutes,
+    completionRateLast30Days: recentOrders.length > 0 ? Math.round((completedOrders.length / recentOrders.length) * 100) : 0,
+    ordersPerCluster,
+    avgCostPerOrder: Math.round(avgCost),
+    costAnomalies
+  };
+}
+
+function formatKPIsForPrompt(kpis: PlanningKPIs): string {
+  const sections: string[] = [];
+  
+  // Ställtider
+  if (kpis.avgSetupTimeMinutes > 0) {
+    const clusterBreakdown = Object.entries(kpis.setupTimeByCluster)
+      .map(([name, data]) => `  - ${name}: ${data.avg} min (${data.count} mätningar)`)
+      .join("\n");
+    
+    sections.push(`STÄLLTIDSANALYS:
+- Genomsnittlig ställtid: ${kpis.avgSetupTimeMinutes} min
+${clusterBreakdown ? `Per kluster:\n${clusterBreakdown}` : ""}
+${kpis.anomalousSetupTimes.length > 0 ? `\nAnomalier (>30% över snitt): ${kpis.anomalousSetupTimes.length} st` : ""}`);
+  }
+  
+  // Resurseffektivitet
+  const resourceSummary = Object.values(kpis.resourceEfficiency)
+    .filter(r => r.completedOrders > 0)
+    .map(r => `  - ${r.name}: ${r.utilizationPercent}% utnyttjande, ${r.completedOrders} ordrar, ${r.delayRate}% förseningsgrad`)
+    .join("\n");
+  
+  if (resourceSummary) {
+    sections.push(`RESURSEFFEKTIVITET (senaste 30 dagar):\n${resourceSummary}`);
+  }
+  
+  // Förseningar
+  if (kpis.delayedOrdersCount > 0) {
+    sections.push(`FÖRSENINGAR:
+- ${kpis.delayedOrdersCount} försenade ordrar (${kpis.delayedOrdersPercent}%)
+- Genomsnittlig försening: ${kpis.avgDelayMinutes} min`);
+  }
+  
+  // Klusterfördelning
+  const clusterDist = Object.entries(kpis.ordersPerCluster)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([name, count]) => `  - ${name}: ${count} ordrar`)
+    .join("\n");
+  
+  if (clusterDist) {
+    sections.push(`ORDERFÖRDELNING PER KLUSTER:\n${clusterDist}`);
+  }
+  
+  // Kostnadsanomalier
+  if (kpis.costAnomalies.length > 0) {
+    sections.push(`KOSTNADSANOMALIER (>50% över snitt):
+${kpis.costAnomalies.map(a => `  - ${a.title}: ${a.cost} kr (+${a.deviation}%)`).join("\n")}`);
+  }
+  
+  return sections.join("\n\n");
+}
+
 export interface PlanningSuggestion {
   id: string;
   type: "move" | "swap" | "balance" | "warning";
@@ -28,6 +259,8 @@ export interface PlanningContext {
   clusters: Cluster[];
   weekStart: string;
   weekEnd: string;
+  setupTimeLogs?: SetupTimeLog[];
+  kpis?: PlanningKPIs;
 }
 
 function getOrderTitle(order: WorkOrder): string {
@@ -89,6 +322,10 @@ function buildContextPrompt(context: PlanningContext): string {
       return `- ${getOrderTitle(o)} (${getOrderPriority(o)}) - ${dateStr ? `schemalagd ${dateStr}` : "OSCHEMALAGD"}`;
     });
 
+  // Calculate KPIs if not provided
+  const kpis = context.kpis || calculatePlanningKPIs(context.workOrders, context.resources, context.clusters, context.setupTimeLogs || []);
+  const kpiSection = formatKPIsForPrompt(kpis);
+
   return `
 Du är en AI-planeringsassistent för fältservice. Analysera nuvarande planering och ge förslag.
 
@@ -104,11 +341,15 @@ ${urgentOrders.length > 0 ? `AKUTA ORDRAR:\n${urgentOrders.join("\n")}` : ""}
 
 VECKA: ${context.weekStart} till ${context.weekEnd}
 
+${kpiSection ? `\n--- NYCKELTAL & HISTORIK ---\n${kpiSection}\n` : ""}
+
 Ge 2-4 konkreta förslag för att förbättra planeringen. Fokusera på:
 1. Obalans i arbetsbelastning mellan resurser
 2. Oschemalagda ordrar som behöver planeras
 3. Möjligheter att spara körtid genom att gruppera ordrar
 4. Akuta ordrar som kanske bör flyttas tidigare
+5. Anomalier i ställtider eller kostnader som behöver åtgärdas
+6. Resurser med hög förseningsgrad som kan behöva stöd
 
 Svara ENDAST med JSON i detta format:
 {

@@ -2622,17 +2622,21 @@ Du kan ge tips som:
     }
   });
 
-  // AI Planning suggestions
+  // AI Planning suggestions - now with KPIs
   app.post("/api/ai/planning-suggestions", async (req, res) => {
     try {
-      const { generatePlanningSuggestions } = await import("./ai-planner");
+      const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("./ai-planner");
       const { weekStart, weekEnd } = req.body;
       
-      const [workOrders, resources, clusters] = await Promise.all([
+      const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
         storage.getWorkOrders(DEFAULT_TENANT_ID),
         storage.getResources(DEFAULT_TENANT_ID),
         storage.getClusters(DEFAULT_TENANT_ID),
+        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
       ]);
+      
+      // Pre-calculate KPIs so they can be reused
+      const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
       
       const suggestions = await generatePlanningSuggestions({
         workOrders,
@@ -2640,6 +2644,8 @@ Du kan ge tips som:
         clusters,
         weekStart: weekStart || new Date().toISOString().split("T")[0],
         weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        setupTimeLogs,
+        kpis,
       });
       
       res.json(suggestions);
@@ -2649,16 +2655,37 @@ Du kan ge tips som:
     }
   });
 
+  // AI KPIs endpoint - get planning KPIs for dashboard/analysis
+  app.get("/api/ai/kpis", async (req, res) => {
+    try {
+      const { calculatePlanningKPIs } = await import("./ai-planner");
+      
+      const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+        storage.getWorkOrders(DEFAULT_TENANT_ID),
+        storage.getResources(DEFAULT_TENANT_ID),
+        storage.getClusters(DEFAULT_TENANT_ID),
+        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
+      ]);
+      
+      const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
+      res.json(kpis);
+    } catch (error) {
+      console.error("AI KPIs error:", error);
+      res.status(500).json({ error: "Kunde inte beräkna nyckeltal" });
+    }
+  });
+
   // AI Auto-Schedule - automatisk schemaläggning av oschemalagda ordrar
   app.post("/api/ai/auto-schedule", async (req, res) => {
     try {
       const { aiEnhancedSchedule } = await import("./ai-planner");
       const { weekStart, weekEnd } = req.body;
       
-      const [workOrders, resources, clusters] = await Promise.all([
+      const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
         storage.getWorkOrders(DEFAULT_TENANT_ID),
         storage.getResources(DEFAULT_TENANT_ID),
         storage.getClusters(DEFAULT_TENANT_ID),
+        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
       ]);
       
       const result = await aiEnhancedSchedule({
@@ -2667,6 +2694,7 @@ Du kan ge tips som:
         clusters,
         weekStart: weekStart || new Date().toISOString().split("T")[0],
         weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        setupTimeLogs,
       });
       
       res.json(result);
