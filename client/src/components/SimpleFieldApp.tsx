@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, Play, CheckCircle, ArrowLeft,
   Loader2, AlertTriangle, Navigation, Phone,
-  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff
+  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -17,6 +17,8 @@ import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { useOfflineSupport } from "@/hooks/useOfflineSupport";
 import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import { PhotoCapture } from "@/components/PhotoCapture";
+import { SignatureCapture } from "@/components/SignatureCapture";
+import { generateJobProtocol, downloadBlob } from "@/components/JobProtocolGenerator";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 
 type View = "jobs" | "job";
@@ -36,6 +38,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [showProblemPanel, setShowProblemPanel] = useState(false);
+  const [showSignaturePanel, setShowSignaturePanel] = useState(false);
+  const [currentSignature, setCurrentSignature] = useState<string | null>(null);
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
   
@@ -168,24 +172,56 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const selectedJob = selectedJobId ? workOrders.find(wo => wo.id === selectedJobId) : null;
   const selectedObject = selectedJob ? objectMap.get(selectedJob.objectId) : null;
   const selectedCustomer = selectedJob ? customerMap.get(selectedJob.customerId) : null;
+  const selectedJobMetadata = (selectedJob?.metadata as Record<string, unknown>) || {};
+  const existingSignaturePath = (selectedJobMetadata.signaturePath as string) || null;
 
   const completeJobMutation = useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async ({ id, signaturePath }: { id: string; signaturePath?: string }) => {
       const elapsed = Math.ceil(elapsedSeconds / 60);
+      const job = workOrders.find(wo => wo.id === id);
+      const existingMetadata = (job?.metadata as Record<string, unknown>) || {};
+      const photos = (existingMetadata.photos as string[]) || [];
+      const finalSignature = signaturePath || (existingMetadata.signaturePath as string) || undefined;
+      
+      const updatedMetadata = {
+        ...existingMetadata,
+        signaturePath: finalSignature,
+      };
+      
       await apiRequest("PATCH", `/api/work-orders/${id}`, {
         status: "completed",
         completedAt: new Date().toISOString(),
         actualDuration: elapsed,
+        metadata: updatedMetadata,
       });
+
+      if (job) {
+        const customer = customerMap.get(job.customerId);
+        const pdfBlob = await generateJobProtocol({
+          workOrderId: job.id,
+          title: job.title,
+          objectName: job.objectName || undefined,
+          objectAddress: job.objectAddress || undefined,
+          customerName: customer?.name || undefined,
+          scheduledDate: job.scheduledDate || undefined,
+          actualDuration: elapsed,
+          photos,
+          signaturePath: finalSignature,
+          status: "completed",
+        });
+        downloadBlob(pdfBlob, `protokoll-${job.id.slice(0, 8)}.pdf`);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      toast({ title: "Klart!", description: "Jobbet markerat som slutfört." });
+      toast({ title: "Klart!", description: "Jobbet slutfört och protokoll genererat." });
       setJobStarted(false);
       setStartTime(null);
       setElapsedSeconds(0);
       setView("jobs");
       setSelectedJobId(null);
+      setShowSignaturePanel(false);
+      setCurrentSignature(null);
     },
   });
 
@@ -396,6 +432,21 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           )}
         </div>
 
+        {showSignaturePanel && (
+          <div className="p-4 border-t bg-muted/50">
+            <SignatureCapture
+              workOrderId={selectedJob.id}
+              existingSignature={currentSignature || existingSignaturePath}
+              onSignatureSaved={(path) => {
+                setCurrentSignature(path);
+                setShowSignaturePanel(false);
+                completeJobMutation.mutate({ id: selectedJob.id, signaturePath: path });
+              }}
+              onCancel={() => setShowSignaturePanel(false)}
+            />
+          </div>
+        )}
+
         <div className="p-4 border-t bg-card">
           {!jobStarted ? (
             <Button
@@ -407,21 +458,37 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <Play className="h-5 w-5" />
               Starta jobb
             </Button>
-          ) : (
-            <Button
-              size="mobile"
-              className="w-full gap-2 bg-green-600"
-              onClick={() => completeJobMutation.mutate(selectedJob.id)}
-              disabled={completeJobMutation.isPending}
-              data-testid="button-complete-job"
-            >
-              {completeJobMutation.isPending ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
-              ) : (
-                <CheckCircle className="h-5 w-5" />
-              )}
-              Slutför
-            </Button>
+          ) : showSignaturePanel ? null : (
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                size="mobile"
+                variant="outline"
+                className="gap-2"
+                onClick={() => completeJobMutation.mutate({ 
+                  id: selectedJob.id, 
+                  signaturePath: currentSignature || existingSignaturePath || undefined 
+                })}
+                disabled={completeJobMutation.isPending}
+                data-testid="button-complete-without-signature"
+              >
+                {completeJobMutation.isPending ? (
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                ) : (
+                  <CheckCircle className="h-5 w-5" />
+                )}
+                {existingSignaturePath ? "Slutf\u00f6r" : "Utan signatur"}
+              </Button>
+              <Button
+                size="mobile"
+                className="gap-2 bg-green-600"
+                onClick={() => setShowSignaturePanel(true)}
+                disabled={completeJobMutation.isPending}
+                data-testid="button-complete-with-signature"
+              >
+                <FileSignature className="h-5 w-5" />
+                {existingSignaturePath ? "Ny signatur" : "Signera"}
+              </Button>
+            </div>
           )}
         </div>
       </div>
