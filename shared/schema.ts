@@ -97,6 +97,8 @@ export const resources = pgTable("resources", {
   resourceType: text("resource_type").default("person").notNull(),
   phone: text("phone"),
   email: text("email"),
+  // PIN-kod för mobilapp-inloggning (4-6 siffror)
+  pin: text("pin"),
   homeLocation: text("home_location"),
   // GPS-koordinater för utgångsplats
   homeLatitude: real("home_latitude"),

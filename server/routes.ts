@@ -3110,10 +3110,17 @@ Du kan ge tips som:
         return res.status(401).json({ error: "Invalid credentials" });
       }
       
-      // For demo purposes, accept any 4-digit PIN
-      // In production, you would store and validate PINs properly
-      if (pin.length < 4 || pin.length > 6) {
-        return res.status(401).json({ error: "Invalid credentials" });
+      // Validate PIN against stored value
+      // If resource has no PIN set, allow any valid PIN for initial setup
+      if (resource.pin) {
+        if (resource.pin !== pin) {
+          return res.status(401).json({ error: "Invalid credentials" });
+        }
+      } else {
+        // No PIN set - require at least 4 digits for demo
+        if (pin.length < 4 || pin.length > 6) {
+          return res.status(401).json({ error: "PIN must be 4-6 digits" });
+        }
       }
       
       // Generate token
