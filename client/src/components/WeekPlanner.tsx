@@ -63,16 +63,14 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const { toast } = useToast();
   const { focusedResource, assignJobToFocusedResource } = useFocusedResource();
 
-  const openResourceInNewWindow = useCallback((resource: Resource) => {
-    const width = 1200;
-    const height = 800;
-    const left = window.screenX + 100;
-    const top = window.screenY + 100;
-    window.open(
-      `/resource-focus/${resource.id}?standalone=1`,
-      `resource-${resource.id}`,
-      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
-    );
+  const [focusedResourceForPanel, setFocusedResourceForPanel] = useState<Resource | null>(null);
+  
+  const openResourceInPanel = useCallback((resource: Resource) => {
+    setFocusedResourceForPanel(resource);
+  }, []);
+  
+  const closeResourcePanel = useCallback(() => {
+    setFocusedResourceForPanel(null);
   }, []);
 
   
@@ -615,14 +613,14 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                       className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0"
                       onClick={(e) => {
                         e.stopPropagation();
-                        openResourceInNewWindow(resource);
+                        openResourceInPanel(resource);
                       }}
-                      data-testid={`button-open-resource-window-${resource.id}`}
+                      data-testid={`button-open-resource-panel-${resource.id}`}
                     >
                       <ExternalLink className="h-4 w-4" />
                     </Button>
                   </TooltipTrigger>
-                  <TooltipContent>Öppna i nytt fönster</TooltipContent>
+                  <TooltipContent>Visa resursfokus</TooltipContent>
                 </Tooltip>
               </div>
               {visibleDates.map((day, dayIndex) => {
@@ -1000,6 +998,117 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                           )}
                         </div>
                       </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {/* Full Resource Focus Panel */}
+      <Sheet open={!!focusedResourceForPanel} onOpenChange={(open) => !open && closeResourcePanel()}>
+        <SheetContent side="right" className="w-[800px] sm:w-[900px] p-0 flex flex-col">
+          {focusedResourceForPanel && (
+            <>
+              <SheetHeader className="p-4 border-b">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="h-10 w-10">
+                      <AvatarFallback>
+                        {focusedResourceForPanel.initials || focusedResourceForPanel.name.split(" ").map(n => n[0]).join("")}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <SheetTitle>{focusedResourceForPanel.name}</SheetTitle>
+                      <p className="text-sm text-muted-foreground">
+                        {focusedResourceForPanel.resourceType || "Fälttekniker"} • {focusedResourceForPanel.weeklyHours || 40}h/vecka
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="secondary">
+                      <Clock className="h-3.5 w-3.5 mr-1" />
+                      {workOrders
+                        .filter(j => j.resourceId === focusedResourceForPanel.id)
+                        .reduce((sum, j) => sum + (j.estimatedDuration || 0) / 60, 0)
+                        .toFixed(1)}h denna vecka
+                    </Badge>
+                  </div>
+                </div>
+              </SheetHeader>
+              <ScrollArea className="flex-1 p-4">
+                <div className="grid grid-cols-5 gap-3">
+                  {visibleDates.map((day) => {
+                    const dateKey = format(day, "yyyy-MM-dd");
+                    const dayJobs = workOrders.filter(j => {
+                      if (!j.scheduledDate || j.resourceId !== focusedResourceForPanel.id) return false;
+                      const jobDateStr = typeof j.scheduledDate === "string" 
+                        ? j.scheduledDate 
+                        : (j.scheduledDate as Date).toISOString();
+                      return jobDateStr.split("T")[0] === dateKey;
+                    });
+                    const dayHours = dayJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0) / 60, 0);
+                    const isToday = isSameDay(day, new Date());
+                    const utilization = Math.min((dayHours / HOURS_IN_DAY) * 100, 100);
+                    const focusPanelDropCellId = `focus-${focusedResourceForPanel.id}-${dateKey}`;
+                    const isDragOver = dragOverCell === focusPanelDropCellId;
+
+                    return (
+                      <Card key={dateKey} className={isToday ? "ring-2 ring-primary" : ""}>
+                        <div className="p-2 border-b">
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <div>
+                              <p className="text-xs font-medium capitalize">
+                                {format(day, "EEE", { locale: sv })}
+                              </p>
+                              <p className="text-[10px] text-muted-foreground">
+                                {format(day, "d MMM", { locale: sv })}
+                              </p>
+                            </div>
+                            <Badge 
+                              variant={utilization > 100 ? "destructive" : utilization > 80 ? "secondary" : "outline"} 
+                              className="text-[10px]"
+                            >
+                              {dayHours.toFixed(1)}h
+                            </Badge>
+                          </div>
+                          <Progress value={utilization} className={`h-1 ${utilization > 100 ? "[&>div]:bg-orange-500" : ""}`} />
+                        </div>
+                        <div
+                          className={`min-h-[200px] p-2 space-y-1.5 transition-colors ${
+                            isDragOver ? "bg-primary/10" : ""
+                          }`}
+                          onDragOver={(e) => handleDragOver(e, focusPanelDropCellId)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, focusedResourceForPanel.id, day)}
+                          data-testid={`focus-drop-zone-${dateKey}`}
+                        >
+                          {dayJobs.length === 0 ? (
+                            <p className="text-[10px] text-muted-foreground text-center py-6">
+                              Inga jobb
+                            </p>
+                          ) : (
+                            dayJobs.map((job) => (
+                              <Card key={job.id} className="p-1.5">
+                                <div className="flex items-start gap-1.5">
+                                  <div className={`h-2 w-2 rounded-full mt-1 shrink-0 ${priorityDotColors[job.priority || "normal"]}`} />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-medium truncate">{job.title}</p>
+                                    {job.objectAddress && (
+                                      <p className="text-[10px] text-muted-foreground truncate">{job.objectAddress}</p>
+                                    )}
+                                    <p className="text-[10px] text-muted-foreground">
+                                      {job.estimatedDuration || 0} min
+                                    </p>
+                                  </div>
+                                </div>
+                              </Card>
+                            ))
+                          )}
+                        </div>
+                      </Card>
                     );
                   })}
                 </div>
