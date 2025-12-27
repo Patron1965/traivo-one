@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
-import type { WorkOrder } from "@shared/schema";
+import type { WorkOrder, InsertResourcePosition } from "@shared/schema";
 import { storage } from "./storage";
 import crypto from "crypto";
 
@@ -9,12 +9,24 @@ interface WorkOrderWithDetails extends WorkOrder {
   objectAddress?: string;
 }
 
+export interface PositionUpdate {
+  resourceId: string;
+  latitude: number;
+  longitude: number;
+  speed?: number;
+  heading?: number;
+  accuracy?: number;
+  status?: "traveling" | "on_site" | "idle";
+  workOrderId?: string;
+}
+
 export type NotificationType = 
   | "job_assigned" 
   | "job_updated" 
   | "job_cancelled" 
   | "schedule_changed"
-  | "priority_changed";
+  | "priority_changed"
+  | "position_update";
 
 export interface Notification {
   id: string;
@@ -60,7 +72,8 @@ class NotificationService {
 
   private cleanupExpiredTokens() {
     const now = Date.now();
-    for (const [token, data] of this.authTokens.entries()) {
+    const entries = Array.from(this.authTokens.entries());
+    for (const [token, data] of entries) {
       if (data.expiresAt < now) {
         this.authTokens.delete(token);
       }
@@ -122,11 +135,24 @@ class NotificationService {
         this.removeClient(resourceId, ws);
       });
 
-      ws.on("message", (data) => {
+      ws.on("message", async (data) => {
         try {
           const message = JSON.parse(data.toString());
           if (message.type === "ping") {
             ws.send(JSON.stringify({ type: "pong", timestamp: new Date().toISOString() }));
+          } else if (message.type === "position_update") {
+            // Handle position update from mobile app
+            const positionData: PositionUpdate = {
+              resourceId,
+              latitude: message.latitude,
+              longitude: message.longitude,
+              speed: message.speed,
+              heading: message.heading,
+              accuracy: message.accuracy,
+              status: message.status || "traveling",
+              workOrderId: message.workOrderId
+            };
+            await this.handlePositionUpdate(positionData);
           }
         } catch (e) {
           // Ignore invalid messages
@@ -287,6 +313,69 @@ class NotificationService {
   isResourceConnected(resourceId: string): boolean {
     const clients = this.clients.get(resourceId);
     return clients !== undefined && clients.length > 0;
+  }
+
+  // Handle position update from mobile app
+  async handlePositionUpdate(position: PositionUpdate) {
+    try {
+      // Update resource's current position
+      await storage.updateResourcePosition(position.resourceId, {
+        currentLatitude: position.latitude,
+        currentLongitude: position.longitude,
+        lastPositionUpdate: new Date(),
+        trackingStatus: position.status || "traveling"
+      });
+
+      // Save to position history for breadcrumb trail
+      await storage.createResourcePosition({
+        resourceId: position.resourceId,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        speed: position.speed,
+        heading: position.heading,
+        accuracy: position.accuracy,
+        status: position.status || "traveling",
+        workOrderId: position.workOrderId
+      });
+
+      // Broadcast to planners listening for position updates
+      this.broadcastPositionUpdate(position);
+      
+      console.log(`[ws] Position updated for resource ${position.resourceId}: ${position.latitude}, ${position.longitude}`);
+    } catch (error) {
+      console.error(`[ws] Failed to save position update:`, error);
+    }
+  }
+
+  // Broadcast position update to all connected planners
+  private broadcastPositionUpdate(position: PositionUpdate) {
+    const message = JSON.stringify({
+      type: "position_update",
+      resourceId: position.resourceId,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      speed: position.speed,
+      heading: position.heading,
+      status: position.status,
+      workOrderId: position.workOrderId,
+      timestamp: new Date().toISOString()
+    });
+
+    // Broadcast to all connected clients except the sender
+    this.clients.forEach((clients, resourceId) => {
+      if (resourceId !== position.resourceId) {
+        clients.forEach(client => {
+          if (client.ws.readyState === WebSocket.OPEN) {
+            client.ws.send(message);
+          }
+        });
+      }
+    });
+  }
+
+  // Get all connected resource positions (for initial load)
+  getConnectedResourcePositions(): string[] {
+    return Array.from(this.clients.keys());
   }
 }
 

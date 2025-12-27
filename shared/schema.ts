@@ -103,6 +103,12 @@ export const resources = pgTable("resources", {
   // GPS-koordinater för utgångsplats
   homeLatitude: real("home_latitude"),
   homeLongitude: real("home_longitude"),
+  // Realtidsposition - senaste rapporterade position
+  currentLatitude: real("current_latitude"),
+  currentLongitude: real("current_longitude"),
+  lastPositionUpdate: timestamp("last_position_update"),
+  // Aktuell status för tracking: idle, traveling, on_site, offline
+  trackingStatus: text("tracking_status").default("offline"),
   weeklyHours: integer("weekly_hours").default(40),
   competencies: text("competencies").array().default([]),
   availability: jsonb("availability").default({}),
@@ -457,6 +463,29 @@ export const subscriptions = pgTable("subscriptions", {
   index("idx_subscriptions_next_gen").on(table.nextGenerationDate)
 ]);
 
+// Resurs-positionshistorik för breadcrumb trail och realtidsspårning
+export const resourcePositions = pgTable("resource_positions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  latitude: real("latitude").notNull(),
+  longitude: real("longitude").notNull(),
+  // Hastighet i km/h (om tillgänglig)
+  speed: real("speed"),
+  // Riktning i grader (0-360)
+  heading: real("heading"),
+  // Precision i meter
+  accuracy: real("accuracy"),
+  // Status vid denna position: traveling, on_site, idle
+  status: text("status").default("traveling"),
+  // Koppling till aktuell arbetsorder (om på plats)
+  workOrderId: varchar("work_order_id"),
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_resource_positions_resource").on(table.resourceId),
+  index("idx_resource_positions_recorded").on(table.recordedAt),
+  index("idx_resource_positions_resource_date").on(table.resourceId, table.recordedAt)
+]);
+
 // Kluster - kärnan i verksamheten, samlar objekt, team, resurser och flöden
 export const clusters = pgTable("clusters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -758,6 +787,7 @@ export const insertTeamSchema = createInsertSchema(teams).omit({ id: true, creat
 export const insertTeamMemberSchema = createInsertSchema(teamMembers).omit({ id: true, createdAt: true });
 export const insertPlanningParameterSchema = createInsertSchema(planningParameters).omit({ id: true, createdAt: true });
 export const insertClusterSchema = createInsertSchema(clusters).omit({ id: true, createdAt: true });
+export const insertResourcePositionSchema = createInsertSchema(resourcePositions).omit({ id: true, recordedAt: true });
 
 export type Tenant = typeof tenants.$inferSelect;
 export type InsertTenant = z.infer<typeof insertTenantSchema>;
@@ -813,6 +843,8 @@ export type PlanningParameter = typeof planningParameters.$inferSelect;
 export type InsertPlanningParameter = z.infer<typeof insertPlanningParameterSchema>;
 export type Cluster = typeof clusters.$inferSelect;
 export type InsertCluster = z.infer<typeof insertClusterSchema>;
+export type ResourcePosition = typeof resourcePositions.$inferSelect;
+export type InsertResourcePosition = z.infer<typeof insertResourcePositionSchema>;
 
 // Order status constants
 export const ORDER_STATUSES = [

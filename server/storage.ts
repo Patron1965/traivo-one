@@ -24,6 +24,7 @@ import {
   type TeamMember, type InsertTeamMember,
   type PlanningParameter, type InsertPlanningParameter,
   type Cluster, type InsertCluster,
+  type ResourcePosition, type InsertResourcePosition,
   type OrderStatus,
   type BrandingTemplate, type InsertBrandingTemplate,
   type TenantBranding, type InsertTenantBranding,
@@ -33,6 +34,7 @@ import {
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
   vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
+  resourcePositions,
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs
 } from "@shared/schema";
 import { db } from "./db";
@@ -199,6 +201,12 @@ export interface IStorage {
   // System Dashboard - Audit Logs
   getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string }): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  
+  // Resource Position Tracking
+  updateResourcePosition(resourceId: string, position: { currentLatitude: number; currentLongitude: number; lastPositionUpdate: Date; trackingStatus: string }): Promise<Resource | undefined>;
+  createResourcePosition(position: InsertResourcePosition): Promise<ResourcePosition>;
+  getResourcePositions(resourceId: string, startDate?: Date, endDate?: Date): Promise<ResourcePosition[]>;
+  getActiveResourcePositions(): Promise<Resource[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1455,6 +1463,52 @@ export class DatabaseStorage implements IStorage {
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
     const [result] = await db.insert(auditLogs).values(log).returning();
     return result;
+  }
+
+  // Resource Position Tracking
+  async updateResourcePosition(resourceId: string, position: { currentLatitude: number; currentLongitude: number; lastPositionUpdate: Date; trackingStatus: string }): Promise<Resource | undefined> {
+    const [result] = await db.update(resources)
+      .set({
+        currentLatitude: position.currentLatitude,
+        currentLongitude: position.currentLongitude,
+        lastPositionUpdate: position.lastPositionUpdate,
+        trackingStatus: position.trackingStatus
+      })
+      .where(eq(resources.id, resourceId))
+      .returning();
+    return result || undefined;
+  }
+
+  async createResourcePosition(position: InsertResourcePosition): Promise<ResourcePosition> {
+    const [result] = await db.insert(resourcePositions).values(position).returning();
+    return result;
+  }
+
+  async getResourcePositions(resourceId: string, startDate?: Date, endDate?: Date): Promise<ResourcePosition[]> {
+    const conditions = [eq(resourcePositions.resourceId, resourceId)];
+    
+    if (startDate) {
+      conditions.push(gte(resourcePositions.recordedAt, startDate));
+    }
+    if (endDate) {
+      conditions.push(lte(resourcePositions.recordedAt, endDate));
+    }
+    
+    return db.select()
+      .from(resourcePositions)
+      .where(and(...conditions))
+      .orderBy(resourcePositions.recordedAt);
+  }
+
+  async getActiveResourcePositions(): Promise<Resource[]> {
+    // Get resources with recent position updates (within last 5 minutes)
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    return db.select()
+      .from(resources)
+      .where(and(
+        isNull(resources.deletedAt),
+        gte(resources.lastPositionUpdate, fiveMinutesAgo)
+      ));
   }
 }
 

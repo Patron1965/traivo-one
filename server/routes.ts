@@ -3453,6 +3453,82 @@ Du kan ge tips som:
   });
 
   // ============================================
+  // POSITION TRACKING API ENDPOINTS
+  // ============================================
+  
+  // Update position from mobile app (also handled via WebSocket)
+  app.post("/api/mobile/position", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const { latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
+      
+      // Validate coordinates - allow 0 values (equator/prime meridian)
+      if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
+        return res.status(400).json({ error: "Latitude and longitude are required" });
+      }
+      
+      // Use the notification service to handle position update (broadcasts to planners)
+      await notificationService.handlePositionUpdate({
+        resourceId,
+        latitude,
+        longitude,
+        speed,
+        heading,
+        accuracy,
+        status: status || "traveling",
+        workOrderId
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to update position:", error);
+      res.status(500).json({ error: "Failed to update position" });
+    }
+  });
+  
+  // Get resource position history (breadcrumb trail) for a specific date
+  app.get("/api/resources/:id/positions", async (req, res) => {
+    try {
+      const resourceId = req.params.id;
+      const dateParam = req.query.date as string;
+      
+      let startDate: Date | undefined;
+      let endDate: Date | undefined;
+      
+      if (dateParam) {
+        startDate = new Date(dateParam);
+        startDate.setHours(0, 0, 0, 0);
+        endDate = new Date(dateParam);
+        endDate.setHours(23, 59, 59, 999);
+      }
+      
+      const positions = await storage.getResourcePositions(resourceId, startDate, endDate);
+      res.json(positions);
+    } catch (error) {
+      console.error("Failed to fetch positions:", error);
+      res.status(500).json({ error: "Failed to fetch positions" });
+    }
+  });
+  
+  // Get all active resource positions (for planner map view)
+  app.get("/api/resources/active-positions", async (req, res) => {
+    try {
+      const resources = await storage.getActiveResourcePositions();
+      res.json(resources.map(r => ({
+        id: r.id,
+        name: r.name,
+        latitude: r.currentLatitude,
+        longitude: r.currentLongitude,
+        status: r.trackingStatus,
+        lastUpdate: r.lastPositionUpdate
+      })));
+    } catch (error) {
+      console.error("Failed to fetch active positions:", error);
+      res.status(500).json({ error: "Failed to fetch positions" });
+    }
+  });
+
+  // ============================================
   // SYSTEM DASHBOARD API ENDPOINTS
   // ============================================
 
