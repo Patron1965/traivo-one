@@ -1,0 +1,160 @@
+Utvecklingslista för Marknadsledande Unicorn-System på Replit
+Jag har skapat en omfattande och actionable utvecklingslista baserad på de återkommande temana i Replit-chatten. Här är sammanfattningen:
+
+🎯 Vision
+Bygga Nordens mest intelligenta och användarvänliga fältserviceplattform genom att kombinera felfri ruttoptimering, proaktiv AI-assistans, robust mobilfunktionalitet och kristallklar användarupplevelse.
+
+⭐ 16 PRIORITERADE FUNKTIONER
+1. RUTTOPTIMERING & KARTVISNING (3 funktioner)
+1.1 Numrerade Markörer med Intelligent Felhantering
+Visa numrerade markörer (1, 2, 3...) i optimerad körordning
+Varna INNAN optimering om stopp saknar koordinater
+Automatisk geokodning med fallback till kluster-centroid
+Tooltip på varje markör med objektnamn och ETA
+Success: ✅ Inga felaktiga index, 100% geokodning, proaktiva varningar
+
+1.2 VRP-Algoritm med Hybrid-Approach
+VROOM för snabbhet (< 50 stopp, < 5 sekunder)
+Google OR-Tools för komplexa constraints (kompetens, tidsfönster)
+Intelligent väljare som rekommenderar bästa algoritm
+Visa jämförelse: "VROOM: 145 km | OR-Tools: 138 km - Välj bästa"
+Success: ✅ 20-30% reduktion i körsträcka, < 5 sek optimering
+
+1.3 Interaktiv Ruttvisualisering med Realtidsuppdateringar
+Färgad rutt (blå = planerad, grön = utförd, röd = försenad)
+Dra-och-släpp för manuell justering
+Realtids-tracking med "breadcrumb trail"
+ETA-uppdatering baserat på faktisk position och trafik
+Success: ✅ Visuell rutt med tider, realtids-tracking var 30:e sek
+
+2. AI-FUNKTIONER (3 funktioner)
+2.1 AI-Förklaringar för Avvikelser med Kontextuell Intelligens
+"Förklara"-knapp på varje avvikelse
+AI-prompt inkluderar: historik, klustersnitt, väder, SLA-nivå
+3 nivåer: Kort sammanfattning → Detaljerad analys → Handlingsförslag
+Success: ✅ < 2 sek generering, 90%+ relevanta förslag
+
+2.2 Intelligent Cachning av AI-Svar
+Cacha i PostgreSQL med prompt_hash, expires_at (7 dagar)
+Cache-invalidering vid ny data
+Visa cache-status: "AI-analys (cachad, 2 dagar sedan)" + refresh-knapp
+Success: ✅ 70%+ cache-träffar, 70% lägre API-kostnader
+
+2.3 KPI-Driven AI-Kontext
+Inkludera KPI:er i prompts: klustersnitt, resurseffektivitet, väder, kundnöjdhet
+"AI Context Builder" samlar automatiskt all relevant data
+Debug-läge för admins att granska prompts
+Success: ✅ 50% mer relevanta förslag, AI identifierar dolda mönster
+
+3. MOBILAPP FÖR FÄLTPERSONAL (4 funktioner)
+3.1 Fotodokumentation med Automatisk Kvalitetskontroll
+3 lägen: Före (obligatorisk) → Under (valfri) → Efter (obligatorisk)
+AI-validering (Google Cloud Vision): Kontrollera relevans, jämför före/efter
+Offline-stöd: Spara lokalt, synka automatiskt
+Komprimering: Max 1 MB per foto
+Success: ✅ 100% jobb har foton, 80% färre dåliga foton
+
+3.2 Digital Signatur med Juridisk Giltighet
+Signaturkomponent med namn, tidsstämpel, GPS
+Generera PDF-kvitto omedelbart (foton + arbetsmoment + material + signatur)
+Skicka automatiskt till kund via email
+7 års retention i Object Storage
+Success: ✅ PDF på < 5 sek, kund får kvitto inom 2 min
+
+3.3 Offline-Stöd med Smart Synkronisering
+Service Worker + IndexedDB för offline-cache
+Cacha: dagens ordrar, objektinfo, artikelkatalog
+Sync Queue för ändringar, synka vid återanslutning
+Konflikthantering med diff-visning
+Success: ✅ Fungerar hela dagen offline, synk inom 5 min
+
+3.4 Materialloggning med Lagerintegration
+Snabbsökning + streckkodscanning
+Visa lagersaldo i realtid: "15 st kvar"
+Varna om lågt lager: "⚠️ Endast 3 st - beställ mer"
+Automatisk påfyllningsförslag
+Success: ✅ < 10 sek per artikel, 100% spårbarhet
+
+4. ANOMALIDETEKTION (3 funktioner)
+4.1 Separata Flikar för Olika Avvikelsetyper
+4 flikar: Ställtid | Kostnad | Kvalitet | Schema
+Badge med antal: "Ställtid (12)"
+Sortera efter allvarlighetsgrad + datum + kluster
+Filter: "Endast olösta", "Denna vecka", "Kluster X"
+Success: ✅ Hitta avvikelse på < 5 sek, kritiska syns omedelbart
+
+4.2 On-Demand AI-Förklaringar med Lazy-Loading
+Visa avvikelser UTAN AI initialt (snabb laddning)
+"Förklara med AI"-knapp → generera on-demand
+Laddningsindikator: "Analyserar... (2s kvar)"
+Feedback: "Hjälpte detta? 👍/👎"
+Success: ✅ < 1 sek laddning, < 3 sek AI-generering, 60% lägre kostnader
+
+4.3 Automatiska Varningar med Eskalering
+Realtidsövervakning varje timme
+Notifikationer: Kritisk (SMS+Email+Push) | Hög (Email+Push) | Medel (Push)
+Eskalering: Om ej åtgärdat inom 24h → notifiera chef
+"Snooze"-funktion med motivering
+Success: ✅ Upptäck inom 1h, notifiera inom 5 min, 90% åtgärdat inom 24h
+
+5. PRESTANDA & UX (3 funktioner)
+5.1 Proaktiva Varningar för Saknad Data
+Validering vid: objektskapande, schemaläggning, ruttoptimering
+Varningar med åtgärder: "⚠️ 5 objekt saknar koordinater - Geokoda nu"
+"Data Health Dashboard": % objekt med koordinater, % resurser med kompetenser
+Veckovis rapport: "Din datakvalitet: 87% - Förbättra genom att..."
+Success: ✅ Varna INNAN problem, 95%+ datakvalitet inom 3 mån
+
+5.2 Intelligent Cachning för Blixtsnabb UX
+Multi-level: Browser (5 min) → Server/Redis (15 min) → DB Materialized Views (natt)
+Cache-invalidering vid dataändringar
+Visa status: "Data uppdaterad för 2 min sedan" + refresh-ikon
+Optimistic Updates: Visa omedelbart, synka i bakgrund
+Success: ✅ Dashboard < 500ms, klusteröversikt < 1 sek, 70% lägre server-belastning
+
+5.3 Laddningsindikatorer och Skelettlägen
+Skelettlägen istället för "Loading...": Pulsande grå rader/boxar
+Progress-indikatorer: "Optimerar... 45% klart (3s kvar)"
+Instant feedback: "Order skapad ✓" (grön toast)
+Felhantering med återförsök: "Försöker igen... (försök 2/3)"
+Success: ✅ Alltid transparent, progress + tidsestimat, omedelbar feedback
+
+🚀 IMPLEMENTATIONSORDNING
+Sprint 1-2 (Vecka 1-4): Ruttoptimering
+→ Leverans: Perfekt fungerande ruttoptimering
+
+Sprint 3-4 (Vecka 5-8): AI-Funktioner
+→ Leverans: AI som förklarar sig själv
+
+Sprint 5-6 (Vecka 9-12): Mobilapp
+→ Leverans: Professionell mobilapp som fungerar överallt
+
+Sprint 7-8 (Vecka 13-16): Anomalidetektion & UX
+→ Leverans: Proaktivt system med perfekt UX
+
+📊 SUCCESS METRICS
+Tekniska
+⚡ Dashboard < 500ms
+⚡ Ruttoptimering < 5 sek (50 stopp)
+⚡ AI-förklaring < 3 sek
+⚡ 100% offline-funktionalitet
+Användarupplevelse
+😊 NPS > 50
+😊 90%+ "Hjälpte detta: 👍"
+😊 < 5 sek hitta avvikelse
+Affär
+💰 20-30% färre körkilometer
+💰 90% tidsreduktion i planering
+💰 70% lägre AI-kostnader
+💰 50% färre upprepade avvikelser
+🏆 RESULTAT
+Genom dessa 16 funktioner blir Unicorn:
+
+✅ Mest precisa - Perfekt ruttoptimering
+✅ Mest intelligenta - AI som förklarar och guidar
+✅ Mest robusta - Fungerar överallt, även offline
+✅ Mest proaktiva - Varnar innan problem uppstår
+✅ Snabbaste - Blixtsnabb UX
+✅ Mest transparenta - Användaren ser alltid vad som händer
+
+= Nordens ledande fältserviceplattform 🏆
