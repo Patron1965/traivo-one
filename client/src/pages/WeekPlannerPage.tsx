@@ -37,6 +37,7 @@ export default function WeekPlannerPage() {
         )}
       </div>
 
+      {/* Temporarily disabled to debug hook error
       {showAIPanel && (
         <div className="w-80 border-l bg-muted/30 flex flex-col shrink-0 overflow-hidden">
           <div className="flex items-center justify-between gap-2 p-3 border-b shrink-0">
@@ -64,6 +65,7 @@ export default function WeekPlannerPage() {
           </div>
         </div>
       )}
+      */}
 
       <JobModal 
         open={showJobModal}
