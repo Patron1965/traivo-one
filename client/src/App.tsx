@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -41,6 +40,9 @@ import ResourceFocusPage from "@/pages/ResourceFocusPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
+// Check path at module level - before any React rendering
+const IS_RESOURCE_FOCUS_WINDOW = window.location.pathname.startsWith("/resource-focus/");
+
 function Router() {
   return (
     <Switch>
@@ -73,35 +75,22 @@ function Router() {
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/system-dashboard" component={SystemDashboardPage} />
-      <Route path="/system" component={SystemDashboardPage} />
+      <Route path="/resource-focus/:id" component={ResourceFocusPage} />
       <Route component={NotFound} />
     </Switch>
   );
 }
 
-function AuthenticatedApp() {
-  return (
-    <TenantBrandingProvider>
-      <div className="flex flex-col min-h-screen w-full">
-        <TopNav />
-        <main className="flex-1 overflow-auto">
-          <ErrorBoundary>
-            <Router />
-          </ErrorBoundary>
-        </main>
-        <FloatingActionButton />
-      </div>
-    </TenantBrandingProvider>
-  );
-}
-
 function AppContent() {
-  const { user, isLoading, isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Laddar...</p>
+        </div>
       </div>
     );
   }
@@ -113,22 +102,36 @@ function AppContent() {
   return <AuthenticatedApp />;
 }
 
-function App() {
-  // Check once on mount if this is a standalone resource focus window
-  const [isResourceFocusWindow] = useState(() => 
-    window.location.pathname.startsWith("/resource-focus/")
-  );
-
-  // Render standalone resource focus page - absolute minimal test
-  if (isResourceFocusWindow) {
-    return (
-      <div className="p-8">
-        <h1 className="text-2xl font-bold">Resource Focus Test</h1>
-        <p>Path: {window.location.pathname}</p>
+function AuthenticatedApp() {
+  return (
+    <TenantBrandingProvider>
+      <div className="flex flex-col min-h-screen bg-background">
+        <TopNav />
+        <main className="flex-1">
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
+        </main>
+        <FloatingActionButton />
       </div>
-    );
-  }
+    </TenantBrandingProvider>
+  );
+}
 
+// Standalone app for resource focus window - completely separate component tree
+function ResourceFocusApp() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <ResourceFocusPage />
+        <Toaster />
+      </TooltipProvider>
+    </QueryClientProvider>
+  );
+}
+
+// Main app with full layout
+function MainApp() {
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
@@ -139,4 +142,5 @@ function App() {
   );
 }
 
-export default App;
+// Export different component based on path - decided at module load time
+export default IS_RESOURCE_FOCUS_WINDOW ? ResourceFocusApp : MainApp;
