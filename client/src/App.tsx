@@ -46,7 +46,6 @@ function Router() {
       <Route path="/" component={WeekPlannerPage} />
       <Route path="/planner" component={WeekPlannerPage} />
       <Route path="/week-planner" component={WeekPlannerPage} />
-      <Route path="/resource-focus/:id" component={ResourceFocusPage} />
       <Route path="/clusters" component={ClustersPage} />
       <Route path="/clusters/:id" component={ClusterDetailPage} />
       <Route path="/routes" component={RoutesPage} />
@@ -97,6 +96,9 @@ function AuthenticatedApp() {
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
+  
+  // Check if we're on the resource-focus route (standalone window)
+  const isResourceFocusRoute = window.location.pathname.startsWith("/resource-focus/");
 
   if (isLoading) {
     return (
@@ -108,6 +110,17 @@ function AppContent() {
 
   if (!isAuthenticated) {
     return <LandingPage />;
+  }
+
+  // Render ResourceFocusPage standalone without TopNav/FAB
+  if (isResourceFocusRoute) {
+    return (
+      <TenantBrandingProvider>
+        <ErrorBoundary>
+          <ResourceFocusPage />
+        </ErrorBoundary>
+      </TenantBrandingProvider>
+    );
   }
 
   return <AuthenticatedApp />;

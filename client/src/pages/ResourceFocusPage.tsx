@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { useParams } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,8 +27,12 @@ const priorityDotColors: Record<string, string> = {
 };
 
 export default function ResourceFocusPage() {
-  const params = useParams<{ id: string }>();
-  const resourceId = params.id || "";
+  // Extract ID from URL path since we render outside Router
+  const getResourceIdFromPath = () => {
+    const match = window.location.pathname.match(/\/resource-focus\/(.+)/);
+    return match ? match[1] : "";
+  };
+  const [resourceId] = useState(getResourceIdFromPath);
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const { toast } = useToast();
   const { focusResource, unfocusResource, onJobAssignment, notifyJobAssigned } = useFocusedResource();
