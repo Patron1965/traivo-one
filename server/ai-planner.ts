@@ -1812,3 +1812,113 @@ export async function generateAutoClusterSuggestions(
     coverage: Math.round(coverage)
   };
 }
+
+// ============================================
+// AI ANOMALY EXPLANATION
+// ============================================
+
+export interface AnomalyExplanation {
+  explanation: string;
+  possibleCauses: string[];
+  recommendations: string[];
+  severity: "low" | "medium" | "high";
+}
+
+export async function explainAnomaly(
+  anomalyType: "setup_time" | "cost",
+  context: {
+    objectName?: string;
+    clusterName?: string;
+    expected?: number;
+    actual?: number;
+    deviation?: number;
+    orderTitle?: string;
+    avgCost?: number;
+    actualCost?: number;
+    historicalData?: string;
+  }
+): Promise<AnomalyExplanation> {
+  const prompt = anomalyType === "setup_time" 
+    ? `Du är en expert på fältservice-optimering för avfallshantering i Norden.
+
+Analysera följande ställtidsavvikelse:
+- Objekt: ${context.objectName || "Okänt"}
+- Kluster: ${context.clusterName || "Ej specificerat"}
+- Förväntad ställtid: ${context.expected || 0} minuter
+- Faktisk ställtid: ${context.actual || 0} minuter
+- Avvikelse: ${context.deviation || 0}%
+${context.historicalData ? `- Historik: ${context.historicalData}` : ""}
+
+Ge en kortfattad analys på svenska med:
+1. Förklaring till varför denna avvikelse kan ha uppstått
+2. Möjliga orsaker (2-4 punkter)
+3. Rekommenderade åtgärder (2-3 punkter)
+
+Svara i JSON-format:
+{
+  "explanation": "kort sammanfattning",
+  "possibleCauses": ["orsak 1", "orsak 2"],
+  "recommendations": ["åtgärd 1", "åtgärd 2"],
+  "severity": "low|medium|high"
+}`
+    : `Du är en expert på fältservice-ekonomi för avfallshantering i Norden.
+
+Analysera följande kostnadsavvikelse:
+- Order: ${context.orderTitle || "Okänd"}
+- Genomsnittlig kostnad: ${context.avgCost?.toLocaleString() || 0} kr
+- Faktisk kostnad: ${context.actualCost?.toLocaleString() || 0} kr
+- Avvikelse: ${context.deviation || 0}%
+
+Ge en kortfattad analys på svenska med:
+1. Förklaring till varför denna kostnadsavvikelse kan ha uppstått
+2. Möjliga orsaker (2-4 punkter)
+3. Rekommenderade åtgärder (2-3 punkter)
+
+Svara i JSON-format:
+{
+  "explanation": "kort sammanfattning",
+  "possibleCauses": ["orsak 1", "orsak 2"],
+  "recommendations": ["åtgärd 1", "åtgärd 2"],
+  "severity": "low|medium|high"
+}`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: "Du är en AI-assistent för fältservice-optimering. Svara alltid på svenska i valid JSON-format." },
+        { role: "user", content: prompt }
+      ],
+      temperature: 0.7,
+      max_tokens: 500
+    });
+
+    const content = response.choices[0]?.message?.content || "";
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return {
+        explanation: parsed.explanation || "Kunde inte analysera avvikelsen.",
+        possibleCauses: parsed.possibleCauses || [],
+        recommendations: parsed.recommendations || [],
+        severity: parsed.severity || "medium"
+      };
+    }
+    
+    return {
+      explanation: "Kunde inte generera en förklaring för denna avvikelse.",
+      possibleCauses: ["Otillräcklig data"],
+      recommendations: ["Samla in mer data", "Granska manuellt"],
+      severity: "low"
+    };
+  } catch (error) {
+    console.error("Error explaining anomaly:", error);
+    return {
+      explanation: "Ett fel uppstod vid analysen.",
+      possibleCauses: ["Tekniskt fel"],
+      recommendations: ["Försök igen senare"],
+      severity: "low"
+    };
+  }
+}

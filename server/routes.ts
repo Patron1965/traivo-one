@@ -2675,6 +2675,24 @@ Du kan ge tips som:
     }
   });
 
+  // AI Explain Anomaly - get AI explanation for a specific anomaly
+  app.post("/api/ai/explain-anomaly", async (req, res) => {
+    try {
+      const { explainAnomaly } = await import("./ai-planner");
+      const { anomalyType, context } = req.body;
+      
+      if (!anomalyType || !["setup_time", "cost"].includes(anomalyType)) {
+        return res.status(400).json({ error: "Ogiltig anomalityp" });
+      }
+      
+      const explanation = await explainAnomaly(anomalyType, context || {});
+      res.json(explanation);
+    } catch (error) {
+      console.error("Explain anomaly error:", error);
+      res.status(500).json({ error: "Kunde inte generera förklaring" });
+    }
+  });
+
   // AI Auto-Schedule - automatisk schemaläggning av oschemalagda ordrar
   app.post("/api/ai/auto-schedule", async (req, res) => {
     try {

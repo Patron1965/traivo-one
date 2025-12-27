@@ -1,10 +1,14 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { AlertTriangle, TrendingUp, TrendingDown, ChevronRight, Loader2, Bell } from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { AlertTriangle, TrendingUp, TrendingDown, ChevronRight, ChevronDown, Loader2, Bell, Clock, DollarSign, Sparkles, Lightbulb, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 
 interface SetupTimeInsight {
   id: string;
@@ -30,9 +34,43 @@ interface SetupTimeAnalysisResult {
   summary: string;
 }
 
+interface CostAnomaly {
+  orderId: string;
+  title: string;
+  cost: number;
+  avgCost: number;
+  deviation: number;
+}
+
+interface SetupTimeAnomaly {
+  objectId: string;
+  objectName?: string;
+  avgMinutes: number;
+  count: number;
+  deviationPercent: number;
+}
+
+interface PlanningKPIs {
+  costAnomalies: CostAnomaly[];
+  anomalousSetupTimes: SetupTimeAnomaly[];
+  avgSetupTimeMinutes: number;
+}
+
+interface AnomalyExplanation {
+  explanation: string;
+  possibleCauses: string[];
+  recommendations: string[];
+  severity: "low" | "medium" | "high";
+}
+
 export function AnomalyAlerts() {
-  const { data: analysis, isLoading } = useQuery<SetupTimeAnalysisResult>({
+  const { data: analysis, isLoading: setupLoading } = useQuery<SetupTimeAnalysisResult>({
     queryKey: ["/api/ai/setup-insights"],
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const { data: kpis, isLoading: kpisLoading } = useQuery<PlanningKPIs>({
+    queryKey: ["/api/ai/kpis"],
     staleTime: 5 * 60 * 1000,
   });
 
@@ -44,7 +82,11 @@ export function AnomalyAlerts() {
     i => (i.type === "drift" || i.type === "anomaly") && i.severity === "medium"
   ) || [];
 
-  const totalAlerts = criticalAlerts.length + warningAlerts.length;
+  const setupAlertCount = criticalAlerts.length + warningAlerts.length;
+  const costAnomalies = kpis?.costAnomalies || [];
+  const totalAlerts = setupAlertCount + costAnomalies.length;
+
+  const isLoading = setupLoading || kpisLoading;
 
   if (isLoading) {
     return (
@@ -85,7 +127,7 @@ export function AnomalyAlerts() {
   return (
     <Card className="border-destructive/20">
       <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
           <CardTitle className="text-base flex items-center gap-2">
             <AlertTriangle className="h-4 w-4 text-destructive" />
             Anomali-varningar
@@ -102,73 +144,295 @@ export function AnomalyAlerts() {
         </div>
       </CardHeader>
       <CardContent className="pt-0">
-        <ScrollArea className="h-[200px]">
-          <div className="space-y-2">
-            {criticalAlerts.slice(0, 3).map((alert) => (
-              <AlertItem key={alert.id} alert={alert} />
-            ))}
-            {warningAlerts.slice(0, 3 - criticalAlerts.length).map((alert) => (
-              <AlertItem key={alert.id} alert={alert} />
-            ))}
-            {totalAlerts > 3 && (
-              <div className="text-center pt-2">
-                <span className="text-xs text-muted-foreground">
-                  +{totalAlerts - 3} fler varningar
-                </span>
+        <Tabs defaultValue="setup" className="w-full">
+          <TabsList className="w-full mb-2">
+            <TabsTrigger value="setup" className="flex-1 gap-1" data-testid="tab-setup-anomalies">
+              <Clock className="h-3 w-3" />
+              Ställtider
+              {setupAlertCount > 0 && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1 no-default-hover-elevate">
+                  {setupAlertCount}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="cost" className="flex-1 gap-1" data-testid="tab-cost-anomalies">
+              <DollarSign className="h-3 w-3" />
+              Kostnader
+              {costAnomalies.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1 no-default-hover-elevate">
+                  {costAnomalies.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="setup" className="mt-0">
+            <ScrollArea className="h-[180px]">
+              <div className="space-y-2">
+                {criticalAlerts.slice(0, 3).map((alert) => (
+                  <AlertItem key={alert.id} alert={alert} />
+                ))}
+                {warningAlerts.slice(0, 3 - criticalAlerts.length).map((alert) => (
+                  <AlertItem key={alert.id} alert={alert} />
+                ))}
+                {setupAlertCount === 0 && (
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    Inga ställtidsavvikelser
+                  </div>
+                )}
+                {setupAlertCount > 3 && (
+                  <div className="text-center pt-2">
+                    <span className="text-xs text-muted-foreground">
+                      +{setupAlertCount - 3} fler varningar
+                    </span>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </ScrollArea>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="cost" className="mt-0">
+            <ScrollArea className="h-[180px]">
+              <div className="space-y-2">
+                {costAnomalies.slice(0, 5).map((anomaly) => (
+                  <CostAnomalyItem key={anomaly.orderId} anomaly={anomaly} />
+                ))}
+                {costAnomalies.length === 0 && (
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    Inga kostnadsavvikelser
+                  </div>
+                )}
+                {costAnomalies.length > 5 && (
+                  <div className="text-center pt-2">
+                    <span className="text-xs text-muted-foreground">
+                      +{costAnomalies.length - 5} fler avvikelser
+                    </span>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );
 }
 
+function CostAnomalyItem({ anomaly }: { anomaly: CostAnomaly }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [explanation, setExplanation] = useState<AnomalyExplanation | null>(null);
+
+  const explainMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ai/explain-anomaly", {
+        anomalyType: "cost",
+        context: {
+          orderTitle: anomaly.title,
+          avgCost: anomaly.avgCost,
+          actualCost: anomaly.cost,
+          deviation: anomaly.deviation
+        }
+      });
+      return res.json();
+    },
+    onSuccess: (data) => setExplanation(data)
+  });
+
+  const handleExpand = () => {
+    if (!isOpen && !explanation && !explainMutation.isPending) {
+      explainMutation.mutate();
+    }
+    setIsOpen(!isOpen);
+  };
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div 
+        className="p-3 rounded-md border bg-yellow-500/5 border-yellow-500/20"
+        data-testid={`cost-anomaly-${anomaly.orderId}`}
+      >
+        <div className="flex items-start gap-2">
+          <TrendingUp className="h-4 w-4 text-yellow-600 mt-0.5 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-sm truncate">
+                {anomaly.title}
+              </span>
+              <Badge 
+                variant="outline" 
+                className="text-xs border-yellow-500/50 text-yellow-600"
+              >
+                +{anomaly.deviation}%
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Värde: {anomaly.cost.toLocaleString()} kr (snitt: {anomaly.avgCost.toLocaleString()} kr)
+            </p>
+          </div>
+          <CollapsibleTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6 flex-shrink-0"
+              onClick={handleExpand}
+              data-testid={`button-explain-cost-${anomaly.orderId}`}
+            >
+              {explainMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isOpen ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <Sparkles className="h-3 w-3" />
+              )}
+            </Button>
+          </CollapsibleTrigger>
+        </div>
+        <CollapsibleContent>
+          {explanation && (
+            <ExplanationContent explanation={explanation} />
+          )}
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
+  );
+}
+
 function AlertItem({ alert }: { alert: SetupTimeInsight }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [explanation, setExplanation] = useState<AnomalyExplanation | null>(null);
   const isOverestimate = alert.actualAverage && alert.currentEstimate && 
     alert.actualAverage < alert.currentEstimate;
+
+  const explainMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/ai/explain-anomaly", {
+        anomalyType: "setup_time",
+        context: {
+          objectName: alert.objectName,
+          clusterName: alert.clusterName,
+          expected: alert.currentEstimate,
+          actual: alert.actualAverage,
+          deviation: alert.actualAverage && alert.currentEstimate 
+            ? Math.round(((alert.actualAverage - alert.currentEstimate) / alert.currentEstimate) * 100)
+            : 0
+        }
+      });
+      return res.json();
+    },
+    onSuccess: (data) => setExplanation(data)
+  });
+
+  const handleExpand = () => {
+    if (!isOpen && !explanation && !explainMutation.isPending) {
+      explainMutation.mutate();
+    }
+    setIsOpen(!isOpen);
+  };
   
   return (
-    <div 
-      className={`p-3 rounded-md border ${
-        alert.severity === "high" 
-          ? "bg-destructive/5 border-destructive/20" 
-          : "bg-yellow-500/5 border-yellow-500/20"
-      }`}
-      data-testid={`alert-item-${alert.id}`}
-    >
-      <div className="flex items-start gap-2">
-        {isOverestimate ? (
-          <TrendingDown className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
-        ) : (
-          <TrendingUp className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
-        )}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-medium text-sm truncate">
-              {alert.objectName || "Okänt objekt"}
-            </span>
-            <Badge 
-              variant="outline" 
-              className={`text-xs ${
-                alert.severity === "high" 
-                  ? "border-destructive/50 text-destructive" 
-                  : "border-yellow-500/50 text-yellow-600"
-              }`}
-            >
-              {alert.severity === "high" ? "Kritisk" : "Varning"}
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-1">
-            Estimat: {alert.currentEstimate} min → Faktiskt: {alert.actualAverage?.toFixed(0)} min
-          </p>
-          {alert.clusterName && (
-            <p className="text-xs text-muted-foreground">
-              Kluster: {alert.clusterName}
-            </p>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div 
+        className={`p-3 rounded-md border ${
+          alert.severity === "high" 
+            ? "bg-destructive/5 border-destructive/20" 
+            : "bg-yellow-500/5 border-yellow-500/20"
+        }`}
+        data-testid={`alert-item-${alert.id}`}
+      >
+        <div className="flex items-start gap-2">
+          {isOverestimate ? (
+            <TrendingDown className="h-4 w-4 text-green-600 mt-0.5 flex-shrink-0" />
+          ) : (
+            <TrendingUp className="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0" />
           )}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-sm truncate">
+                {alert.objectName || "Okänt objekt"}
+              </span>
+              <Badge 
+                variant="outline" 
+                className={`text-xs ${
+                  alert.severity === "high" 
+                    ? "border-destructive/50 text-destructive" 
+                    : "border-yellow-500/50 text-yellow-600"
+                }`}
+              >
+                {alert.severity === "high" ? "Kritisk" : "Varning"}
+              </Badge>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Estimat: {alert.currentEstimate} min → Faktiskt: {alert.actualAverage?.toFixed(0)} min
+            </p>
+            {alert.clusterName && (
+              <p className="text-xs text-muted-foreground">
+                Kluster: {alert.clusterName}
+              </p>
+            )}
+          </div>
+          <CollapsibleTrigger asChild>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6 flex-shrink-0"
+              onClick={handleExpand}
+              data-testid={`button-explain-setup-${alert.id}`}
+            >
+              {explainMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin" />
+              ) : isOpen ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <Sparkles className="h-3 w-3" />
+              )}
+            </Button>
+          </CollapsibleTrigger>
         </div>
+        <CollapsibleContent>
+          {explanation && (
+            <ExplanationContent explanation={explanation} />
+          )}
+        </CollapsibleContent>
       </div>
+    </Collapsible>
+  );
+}
+
+function ExplanationContent({ explanation }: { explanation: AnomalyExplanation }) {
+  return (
+    <div className="mt-3 pt-3 border-t border-border/50 space-y-2">
+      <div className="flex items-start gap-2">
+        <Sparkles className="h-3 w-3 text-primary mt-0.5 flex-shrink-0" />
+        <p className="text-xs">{explanation.explanation}</p>
+      </div>
+      
+      {explanation.possibleCauses.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <AlertCircle className="h-3 w-3" />
+            Möjliga orsaker:
+          </div>
+          <ul className="text-xs space-y-0.5 ml-4">
+            {explanation.possibleCauses.map((cause, i) => (
+              <li key={i} className="list-disc">{cause}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      
+      {explanation.recommendations.length > 0 && (
+        <div className="space-y-1">
+          <div className="flex items-center gap-1 text-xs text-muted-foreground">
+            <Lightbulb className="h-3 w-3" />
+            Rekommendationer:
+          </div>
+          <ul className="text-xs space-y-0.5 ml-4">
+            {explanation.recommendations.map((rec, i) => (
+              <li key={i} className="list-disc">{rec}</li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

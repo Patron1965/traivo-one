@@ -67,11 +67,14 @@ export function OptimizedRouteMap({
   expanded = false,
   onToggleExpand 
 }: OptimizedRouteMapProps) {
-  const positions = useMemo(() => {
-    return stops
-      .filter(s => s.latitude && s.longitude)
-      .map(s => [s.latitude!, s.longitude!] as [number, number]);
+  // Filter stops with valid coordinates and keep track of both positions and stop data
+  const validStops = useMemo(() => {
+    return stops.filter(s => s.latitude && s.longitude);
   }, [stops]);
+
+  const positions = useMemo(() => {
+    return validStops.map(s => [s.latitude!, s.longitude!] as [number, number]);
+  }, [validStops]);
 
   if (positions.length === 0) {
     return (
@@ -111,7 +114,7 @@ export function OptimizedRouteMap({
       </div>
       <div className="absolute top-2 left-2 z-[1000]">
         <Badge variant="secondary" className="text-xs">
-          {resourceName} - {stops.length} stopp
+          {resourceName} - {validStops.length} stopp
         </Badge>
       </div>
       <MapContainer
@@ -137,11 +140,11 @@ export function OptimizedRouteMap({
           }}
         />
         
-        {positions.map((pos, idx) => (
+        {validStops.map((stop, idx) => (
           <Marker
-            key={stops[idx]?.workOrderId || idx}
-            position={pos}
-            icon={createNumberedIcon(idx + 1, idx === 0, idx === positions.length - 1)}
+            key={stop.workOrderId}
+            position={[stop.latitude!, stop.longitude!]}
+            icon={createNumberedIcon(idx + 1, idx === 0, idx === validStops.length - 1)}
           />
         ))}
       </MapContainer>
