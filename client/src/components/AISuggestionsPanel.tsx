@@ -314,7 +314,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
   };
 
   return (
-    <Card className="h-full flex flex-col">
+    <Card className="h-full flex flex-col border-0 rounded-none shadow-none">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-base">
