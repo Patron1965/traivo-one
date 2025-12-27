@@ -1,12 +1,11 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { FileDown, Loader2, Code, Users, Clock, Banknote, CheckCircle, Mail } from "lucide-react";
+import { FileDown, Loader2, Code, Users, Clock, Banknote, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
@@ -50,7 +49,6 @@ function formatCurrency(value: number): string {
 
 export default function ProjectReportPage() {
   const [isGenerating, setIsGenerating] = useState(false);
-  const [isSending, setIsSending] = useState(false);
   const { toast } = useToast();
 
   const { data: stats, isLoading } = useQuery<ProjectStats>({
@@ -176,36 +174,6 @@ export default function ProjectReportPage() {
     doc.text(`Ett projekt av denna storlek kostar typiskt ${formatCurrency(avgCost)} i ren utvecklingskostnad.`, 18, yPos);
 
     return doc.output("datauristring").split(",")[1];
-  };
-
-  const sendEmailMutation = useMutation({
-    mutationFn: async (to: string) => {
-      if (!stats) throw new Error("No stats available");
-      const pdfBase64 = generatePDFBase64(stats);
-      return apiRequest("POST", "/api/system/send-project-report", { to, pdfBase64 });
-    },
-    onSuccess: () => {
-      toast({
-        title: "E-post skickad!",
-        description: "Projektrapporten har skickats till tomas@nordicrouting.se",
-      });
-    },
-    onError: (error) => {
-      toast({
-        title: "Kunde inte skicka e-post",
-        description: String(error),
-        variant: "destructive",
-      });
-    },
-  });
-
-  const sendEmail = async () => {
-    setIsSending(true);
-    try {
-      await sendEmailMutation.mutateAsync("tomas@nordicrouting.se");
-    } finally {
-      setIsSending(false);
-    }
   };
 
   const generatePDF = async () => {
@@ -420,33 +388,18 @@ export default function ProjectReportPage() {
           <h1 className="text-2xl font-bold">Projektrapport</h1>
           <p className="text-muted-foreground">Kodstatistik och kostnadsjamforelse</p>
         </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button
-            onClick={generatePDF}
-            disabled={isGenerating}
-            data-testid="button-download-pdf"
-          >
-            {isGenerating ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <FileDown className="h-4 w-4 mr-2" />
-            )}
-            Ladda ner PDF
-          </Button>
-          <Button
-            onClick={sendEmail}
-            disabled={isSending}
-            variant="secondary"
-            data-testid="button-send-email"
-          >
-            {isSending ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Mail className="h-4 w-4 mr-2" />
-            )}
-            Skicka via e-post
-          </Button>
-        </div>
+        <Button
+          onClick={generatePDF}
+          disabled={isGenerating}
+          data-testid="button-download-pdf"
+        >
+          {isGenerating ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <FileDown className="h-4 w-4 mr-2" />
+          )}
+          Ladda ner PDF
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">

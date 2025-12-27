@@ -141,3 +141,4 @@ AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas
 -   **Twilio SMS:** User dismissed the Twilio connector integration. If SMS notifications are needed in the future, ask user to either:
     1. Set up the Twilio connector integration, or
     2. Provide TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER as secrets manually
+-   **E-post/SMS:** Användaren har en egen leverantör för e-post och SMS som kommer kopplas senare. Projektrapporten kan laddas ned som PDF för manuell vidarebefordran.
