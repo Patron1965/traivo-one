@@ -315,14 +315,8 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
 
   return (
     <Card className="h-full flex flex-col border-0 rounded-none shadow-none">
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between gap-2">
-          <CardTitle className="flex items-center gap-2 text-base">
-            <Sparkles className="h-5 w-5 text-purple-500" />
-            AI Planeringsassistent
-          </CardTitle>
-        </div>
-        <div className="flex flex-wrap gap-1 pt-2">
+      <CardHeader className="pb-3 pt-2">
+        <div className="flex flex-wrap gap-1">
           <Button
             size="sm"
             variant={activeTab === "auto-schedule" ? "default" : "ghost"}

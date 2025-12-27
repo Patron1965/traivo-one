@@ -1,14 +1,21 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
 import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { Button } from "@/components/ui/button";
-import { Sparkles, X } from "lucide-react";
+import { Sparkles, X, ChevronLeft } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
   const [showJobModal, setShowJobModal] = useState(false);
-  const [showAIPanel, setShowAIPanel] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(() => {
+    const saved = localStorage.getItem('weekplanner-ai-panel-open');
+    return saved === 'true';
+  });
+  
+  useEffect(() => {
+    localStorage.setItem('weekplanner-ai-panel-open', String(showAIPanel));
+  }, [showAIPanel]);
   
   const weekDates = useMemo(() => {
     const weekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
@@ -28,15 +35,20 @@ export default function WeekPlannerPage() {
       </div>
 
       {showAIPanel && (
-        <div className="w-80 max-w-[320px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
-          <div className="flex items-center justify-end p-2 border-b">
+        <div className="w-80 max-w-[320px] border-l bg-card flex flex-col shrink-0 overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b bg-purple-600 dark:bg-purple-700">
+            <span className="text-sm font-medium text-white flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              AI Planeringsassistent
+            </span>
             <Button 
               size="icon" 
               variant="ghost" 
               onClick={() => setShowAIPanel(false)}
+              className="text-white hover:bg-purple-500"
               data-testid="button-close-ai-panel"
             >
-              <X className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" />
             </Button>
           </div>
           <div className="flex-1 overflow-auto">
@@ -51,12 +63,11 @@ export default function WeekPlannerPage() {
 
       {!showAIPanel && (
         <Button
-          variant="outline"
           onClick={() => setShowAIPanel(true)}
-          className="fixed bottom-4 right-4 shadow-lg z-50 bg-background"
+          className="fixed bottom-6 right-6 shadow-xl z-50 bg-purple-600 hover:bg-purple-700 text-white gap-2 px-4 py-5"
           data-testid="button-open-ai-panel"
         >
-          <Sparkles className="h-4 w-4 mr-2 text-purple-500" />
+          <Sparkles className="h-5 w-5" />
           AI Assistent
         </Button>
       )}
