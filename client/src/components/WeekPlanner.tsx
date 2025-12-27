@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, ExternalLink, UserPlus } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -17,6 +17,7 @@ import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useFocusedResource } from "@/hooks/useFocusedResource";
 
 const priorityDotColors: Record<string, string> = {
   urgent: "bg-red-500",
@@ -60,7 +61,21 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const { toast } = useToast();
+  const { focusedResource, assignJobToFocusedResource } = useFocusedResource();
 
+  const openResourceInNewWindow = useCallback((resource: Resource) => {
+    const width = 1200;
+    const height = 800;
+    const left = window.screenX + 100;
+    const top = window.screenY + 100;
+    window.open(
+      `/resource-focus/${resource.id}`,
+      `resource-${resource.id}`,
+      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,location=no,status=no`
+    );
+  }, []);
+
+  
   const visibleDates = useMemo((): Date[] => {
     if (viewMode === "day") {
       return [currentDate];
@@ -200,6 +215,19 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
       });
     },
   });
+
+  const handleAssignToFocusedResource = useCallback((jobId: string) => {
+    if (!focusedResource.resourceId) return;
+    const today = format(new Date(), "yyyy-MM-dd");
+    
+    assignJobToFocusedResource(jobId, today);
+    
+    updateWorkOrderMutation.mutate({
+      id: jobId,
+      resourceId: focusedResource.resourceId,
+      scheduledDate: today,
+    });
+  }, [focusedResource.resourceId, assignJobToFocusedResource, updateWorkOrderMutation]);
 
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
@@ -563,17 +591,39 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
           resources.map((resource) => (
             <div key={resource.id} className="grid grid-cols-[200px_repeat(5,1fr)] border-b">
               <div 
-                className="p-3 border-r flex items-center gap-3 cursor-pointer hover-elevate"
-                onClick={() => handleResourceClick(resource.id)}
+                className="p-3 border-r flex items-center gap-3 group"
                 data-testid={`resource-row-${resource.id}`}
               >
-                <Avatar className="h-8 w-8">
+                <Avatar 
+                  className="h-8 w-8 cursor-pointer hover-elevate"
+                  onClick={() => handleResourceClick(resource.id)}
+                >
                   <AvatarFallback className="text-xs">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
                 </Avatar>
-                <div className="min-w-0">
+                <div 
+                  className="min-w-0 flex-1 cursor-pointer"
+                  onClick={() => handleResourceClick(resource.id)}
+                >
                   <div className="text-sm font-medium truncate">{resource.name}</div>
                   <div className="text-xs text-muted-foreground">{resource.weeklyHours || 40}h/vecka</div>
                 </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity shrink-0"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openResourceInNewWindow(resource);
+                      }}
+                      data-testid={`button-open-resource-window-${resource.id}`}
+                    >
+                      <ExternalLink className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Öppna i nytt fönster</TooltipContent>
+                </Tooltip>
               </div>
               {visibleDates.map((day, dayIndex) => {
                 const jobs = getJobsForResourceAndDay(resource.id, day);
@@ -682,6 +732,15 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
               <span className="text-sm font-medium">Oschemalagda</span>
               <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}</Badge>
             </div>
+            {focusedResource.resourceId && (
+              <div className="flex items-center gap-2 p-2 rounded-md bg-primary/10 border border-primary/20">
+                <UserPlus className="h-4 w-4 text-primary" />
+                <div className="min-w-0 flex-1">
+                  <div className="text-xs font-medium truncate">Fokuserad: {focusedResource.resourceName}</div>
+                  <div className="text-[10px] text-muted-foreground">Klicka på ett jobb för att tilldela</div>
+                </div>
+              </div>
+            )}
             <div className="space-y-2">
               <Select value={filterCustomer} onValueChange={setFilterCustomer}>
                 <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-customer">
@@ -743,6 +802,21 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                             {((job.estimatedDuration || 0) / 60).toFixed(1)}h
                           </Badge>
                         </div>
+                        {focusedResource.resourceId && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="w-full mt-2 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleAssignToFocusedResource(job.id);
+                            }}
+                            data-testid={`button-assign-focused-${job.id}`}
+                          >
+                            <UserPlus className="h-3 w-3 mr-1" />
+                            Tilldela till {focusedResource.resourceName}
+                          </Button>
+                        )}
                       </div>
                     </Card>
                   );

@@ -36,6 +36,7 @@ import AutoClusterPage from "@/pages/AutoClusterPage";
 import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import CustomerPortalPage from "@/pages/CustomerPortalPage";
 import SystemDashboardPage from "@/pages/SystemDashboardPage";
+import ResourceFocusPage from "@/pages/ResourceFocusPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -72,6 +73,7 @@ function Router() {
       <Route path="/settings" component={SettingsPage} />
       <Route path="/system-dashboard" component={SystemDashboardPage} />
       <Route path="/system" component={SystemDashboardPage} />
+      <Route path="/resource-focus/:id" component={ResourceFocusPage} />
       <Route component={NotFound} />
     </Switch>
   );
