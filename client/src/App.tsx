@@ -119,16 +119,12 @@ function App() {
     window.location.pathname.startsWith("/resource-focus/")
   );
 
-  // Render standalone resource focus page
+  // Render standalone resource focus page with minimal providers
   if (isResourceFocusWindow) {
     return (
       <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <TenantBrandingProvider>
-            <ResourceFocusPage />
-          </TenantBrandingProvider>
-          <Toaster />
-        </TooltipProvider>
+        <ResourceFocusPage />
+        <Toaster />
       </QueryClientProvider>
     );
   }
