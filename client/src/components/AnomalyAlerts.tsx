@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +9,13 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { AlertTriangle, TrendingUp, TrendingDown, ChevronRight, ChevronDown, Loader2, Bell, Clock, DollarSign, Sparkles, Lightbulb, AlertCircle } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+
+// In-memory cache for AI explanations (persists for the session)
+const explanationCache = new Map<string, AnomalyExplanation>();
+
+function getCacheKey(anomalyType: string, id: string): string {
+  return `${anomalyType}:${id}`;
+}
 
 interface SetupTimeInsight {
   id: string;
@@ -220,10 +227,17 @@ export function AnomalyAlerts() {
 
 function CostAnomalyItem({ anomaly }: { anomaly: CostAnomaly }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [explanation, setExplanation] = useState<AnomalyExplanation | null>(null);
+  const cacheKey = getCacheKey("cost", anomaly.orderId);
+  const [explanation, setExplanation] = useState<AnomalyExplanation | null>(
+    () => explanationCache.get(cacheKey) || null
+  );
 
   const explainMutation = useMutation({
     mutationFn: async () => {
+      // Check cache first
+      const cached = explanationCache.get(cacheKey);
+      if (cached) return cached;
+      
       const res = await apiRequest("POST", "/api/ai/explain-anomaly", {
         anomalyType: "cost",
         context: {
@@ -235,7 +249,10 @@ function CostAnomalyItem({ anomaly }: { anomaly: CostAnomaly }) {
       });
       return res.json();
     },
-    onSuccess: (data) => setExplanation(data)
+    onSuccess: (data) => {
+      explanationCache.set(cacheKey, data);
+      setExplanation(data);
+    }
   });
 
   const handleExpand = () => {
@@ -299,12 +316,19 @@ function CostAnomalyItem({ anomaly }: { anomaly: CostAnomaly }) {
 
 function AlertItem({ alert }: { alert: SetupTimeInsight }) {
   const [isOpen, setIsOpen] = useState(false);
-  const [explanation, setExplanation] = useState<AnomalyExplanation | null>(null);
+  const cacheKey = getCacheKey("setup_time", alert.id);
+  const [explanation, setExplanation] = useState<AnomalyExplanation | null>(
+    () => explanationCache.get(cacheKey) || null
+  );
   const isOverestimate = alert.actualAverage && alert.currentEstimate && 
     alert.actualAverage < alert.currentEstimate;
 
   const explainMutation = useMutation({
     mutationFn: async () => {
+      // Check cache first
+      const cached = explanationCache.get(cacheKey);
+      if (cached) return cached;
+      
       const res = await apiRequest("POST", "/api/ai/explain-anomaly", {
         anomalyType: "setup_time",
         context: {
@@ -319,7 +343,10 @@ function AlertItem({ alert }: { alert: SetupTimeInsight }) {
       });
       return res.json();
     },
-    onSuccess: (data) => setExplanation(data)
+    onSuccess: (data) => {
+      explanationCache.set(cacheKey, data);
+      setExplanation(data);
+    }
   });
 
   const handleExpand = () => {

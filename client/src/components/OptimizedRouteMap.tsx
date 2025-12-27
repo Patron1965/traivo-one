@@ -5,7 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Maximize2, Minimize2, X } from "lucide-react";
+import { Maximize2, Minimize2, X, AlertTriangle } from "lucide-react";
 
 interface RouteStop {
   workOrderId: string;
@@ -72,6 +72,8 @@ export function OptimizedRouteMap({
     return stops.filter(s => s.latitude && s.longitude);
   }, [stops]);
 
+  const skippedCount = stops.length - validStops.length;
+
   const positions = useMemo(() => {
     return validStops.map(s => [s.latitude!, s.longitude!] as [number, number]);
   }, [validStops]);
@@ -112,10 +114,16 @@ export function OptimizedRouteMap({
           </Button>
         )}
       </div>
-      <div className="absolute top-2 left-2 z-[1000]">
+      <div className="absolute top-2 left-2 z-[1000] flex gap-1">
         <Badge variant="secondary" className="text-xs">
           {resourceName} - {validStops.length} stopp
         </Badge>
+        {skippedCount > 0 && (
+          <Badge variant="outline" className="text-xs border-yellow-500/50 text-yellow-600 bg-background/90" data-testid="badge-skipped-stops">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            {skippedCount} saknar koordinater
+          </Badge>
+        )}
       </div>
       <MapContainer
         center={defaultCenter}
