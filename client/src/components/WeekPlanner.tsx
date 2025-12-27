@@ -466,7 +466,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
               <TooltipContent>Avschemalägg</TooltipContent>
             </Tooltip>
             <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px]">
-              {((job.estimatedDuration || 0) / 60).toFixed(1)}h
+              {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
             </Badge>
           </div>
         </div>
@@ -541,7 +541,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
 
   const renderWeekView = () => (
     <div className="flex-1 overflow-auto">
-      <div className="min-w-[800px]">
+      <div className="min-w-[1000px]">
         <div className="grid grid-cols-[200px_repeat(5,1fr)] border-b sticky top-0 bg-background z-10">
           <div className="p-3 font-medium text-sm text-muted-foreground border-r">Resurser</div>
           {visibleDates.map((day, i) => {
@@ -600,7 +600,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                     <div className="flex items-center gap-1 mb-2">
                       <Progress value={capacityPct} className={`h-1.5 flex-1 ${isOverbooked ? "[&>div]:bg-orange-500" : ""}`} />
                       <span className={`text-[10px] ${isOverbooked ? "text-orange-600" : "text-muted-foreground"}`}>
-                        {dayHours.toFixed(1)}h
+                        {dayHours.toFixed(1).replace(".", ",")} h
                       </span>
                     </div>
                     {isOverbooked && (
@@ -745,7 +745,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                             {priorityLabels[job.priority] || job.priority}
                           </Badge>
                           <Badge variant="secondary" className="text-[10px]">
-                            {((job.estimatedDuration || 0) / 60).toFixed(1)}h
+                            {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
                           </Badge>
                         </div>
                       </div>
@@ -880,7 +880,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
                   </div>
                   <div className="bg-background rounded-md p-2 text-center">
                     <div className="font-medium">
-                      {(activeResourceJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0) / 60).toFixed(1)}h
+                      {(activeResourceJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0) / 60).toFixed(1).replace(".", ",")} h
                     </div>
                     <div className="text-muted-foreground">planerat</div>
                   </div>

@@ -19,8 +19,8 @@ export default function WeekPlannerPage() {
   }, []);
 
   return (
-    <div className="flex h-full overflow-hidden relative">
-      <div className="flex-1 min-w-0 overflow-hidden">
+    <div className="flex h-full relative">
+      <div className="flex-1 min-w-0 overflow-auto">
         <WeekPlanner 
           onAddJob={() => setShowJobModal(true)}
           onSelectJob={(id) => console.log("Selected job for detail:", id)}
