@@ -3,7 +3,7 @@ import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
 import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { Button } from "@/components/ui/button";
-import { Sparkles, X, ChevronLeft } from "lucide-react";
+import { Sparkles, X } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
@@ -35,23 +35,22 @@ export default function WeekPlannerPage() {
       </div>
 
       {showAIPanel && (
-        <div className="w-80 max-w-[320px] border-l bg-card flex flex-col shrink-0 overflow-hidden">
-          <div className="flex items-center justify-between p-3 border-b bg-purple-600 dark:bg-purple-700">
-            <span className="text-sm font-medium text-white flex items-center gap-2">
-              <Sparkles className="h-4 w-4" />
+        <div className="w-80 max-w-[320px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
+          <div className="flex items-center justify-between p-3 border-b shrink-0">
+            <span className="text-sm font-medium flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-500" />
               AI Planeringsassistent
             </span>
             <Button 
               size="icon" 
               variant="ghost" 
               onClick={() => setShowAIPanel(false)}
-              className="text-white hover:bg-purple-500"
               data-testid="button-close-ai-panel"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <X className="h-4 w-4" />
             </Button>
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="flex-1 overflow-auto bg-background">
             <AISuggestionsPanel
               weekStart={weekDates.start}
               weekEnd={weekDates.end}
