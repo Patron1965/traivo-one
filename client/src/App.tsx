@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -96,9 +97,6 @@ function AuthenticatedApp() {
 
 function AppContent() {
   const { user, isLoading, isAuthenticated } = useAuth();
-  
-  // Check if we're on the resource-focus route (standalone window)
-  const isResourceFocusRoute = window.location.pathname.startsWith("/resource-focus/");
 
   if (isLoading) {
     return (
@@ -112,21 +110,29 @@ function AppContent() {
     return <LandingPage />;
   }
 
-  // Render ResourceFocusPage standalone without TopNav/FAB
-  if (isResourceFocusRoute) {
-    return (
-      <TenantBrandingProvider>
-        <ErrorBoundary>
-          <ResourceFocusPage />
-        </ErrorBoundary>
-      </TenantBrandingProvider>
-    );
-  }
-
   return <AuthenticatedApp />;
 }
 
 function App() {
+  // Check once on mount if this is a standalone resource focus window
+  const [isResourceFocusWindow] = useState(() => 
+    window.location.pathname.startsWith("/resource-focus/")
+  );
+
+  // Render standalone resource focus page
+  if (isResourceFocusWindow) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <TenantBrandingProvider>
+            <ResourceFocusPage />
+          </TenantBrandingProvider>
+          <Toaster />
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
