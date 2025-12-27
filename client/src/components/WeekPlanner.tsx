@@ -378,21 +378,6 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     });
   }, [workOrders, updateWorkOrderMutation]);
 
-  const isLoading = resourcesLoading || workOrdersLoading;
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-
-  const handleUnschedule = (e: { stopPropagation: () => void }, jobId: string) => {
-    e.stopPropagation();
-    unscheduleWorkOrderMutation.mutate(jobId);
-  };
-
   const handleResourceClick = useCallback((resourceId: string) => {
     setActiveResourceId(resourceId);
   }, []);
@@ -425,6 +410,21 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     }
     return map;
   }, [activeResourceJobs]);
+
+  const isLoading = resourcesLoading || workOrdersLoading;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const handleUnschedule = (e: { stopPropagation: () => void }, jobId: string) => {
+    e.stopPropagation();
+    unscheduleWorkOrderMutation.mutate(jobId);
+  };
 
   const renderJobCard = (job: WorkOrderWithObject, compact = false) => {
     return (
