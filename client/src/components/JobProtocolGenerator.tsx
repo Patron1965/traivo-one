@@ -3,6 +3,13 @@ import "jspdf-autotable";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 
+interface MaterialItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unit: string;
+}
+
 interface JobProtocolData {
   workOrderId: string;
   title: string;
@@ -18,6 +25,7 @@ interface JobProtocolData {
   signaturePath?: string;
   notes?: string;
   status: string;
+  materials?: MaterialItem[];
 }
 
 export async function generateJobProtocol(data: JobProtocolData): Promise<Blob> {
@@ -84,6 +92,27 @@ export async function generateJobProtocol(data: JobProtocolData): Promise<Blob> 
     const splitNotes = doc.splitTextToSize(data.notes, pageWidth - 40);
     doc.text(splitNotes, 20, y);
     y += splitNotes.length * 5 + 10;
+  }
+
+  if (data.materials && data.materials.length > 0) {
+    if (y > 200) {
+      doc.addPage();
+      y = 20;
+    }
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Materialrapport", 20, y);
+    y += 8;
+
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+
+    data.materials.forEach((item) => {
+      doc.text(`- ${item.name}: ${item.quantity} ${item.unit}`, 25, y);
+      y += 5;
+    });
+    y += 5;
   }
 
   if (data.photos && data.photos.length > 0) {

@@ -19,6 +19,7 @@ import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import { PhotoCapture } from "@/components/PhotoCapture";
 import { SignatureCapture } from "@/components/SignatureCapture";
 import { generateJobProtocol, downloadBlob } from "@/components/JobProtocolGenerator";
+import { MaterialLog, type MaterialItem } from "@/components/MaterialLog";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 
 type View = "jobs" | "job";
@@ -40,6 +41,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [showProblemPanel, setShowProblemPanel] = useState(false);
   const [showSignaturePanel, setShowSignaturePanel] = useState(false);
   const [currentSignature, setCurrentSignature] = useState<string | null>(null);
+  const [materials, setMaterials] = useState<MaterialItem[]>([]);
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
   
@@ -186,6 +188,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       const updatedMetadata = {
         ...existingMetadata,
         signaturePath: finalSignature,
+        materials: materials.length > 0 ? materials : (existingMetadata.materials || []),
       };
       
       await apiRequest("PATCH", `/api/work-orders/${id}`, {
@@ -203,10 +206,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           objectName: job.objectName || undefined,
           objectAddress: job.objectAddress || undefined,
           customerName: customer?.name || undefined,
-          scheduledDate: job.scheduledDate || undefined,
+          scheduledDate: job.scheduledDate ? String(job.scheduledDate) : undefined,
           actualDuration: elapsed,
           photos,
           signaturePath: finalSignature,
+          materials: materials.length > 0 ? materials : (existingMetadata.materials as MaterialItem[]) || [],
           status: "completed",
         });
         downloadBlob(pdfBlob, `protokoll-${job.id.slice(0, 8)}.pdf`);
@@ -222,6 +226,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setSelectedJobId(null);
       setShowSignaturePanel(false);
       setCurrentSignature(null);
+      setMaterials([]);
     },
   });
 
@@ -230,9 +235,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     setView("job");
     setShowAiPanel(false);
     setShowProblemPanel(false);
+    setMaterials([]);
+    setCurrentSignature(null);
   };
 
   const handleStartJob = () => {
+    const existingMaterials = (selectedJobMetadata.materials as MaterialItem[]) || [];
+    setMaterials(existingMaterials);
     setJobStarted(true);
     setStartTime(new Date());
     setElapsedSeconds(0);
@@ -400,6 +409,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               }
             }}
           />
+
+          {jobStarted && (
+            <MaterialLog
+              materials={materials}
+              onMaterialsChange={setMaterials}
+            />
+          )}
 
           {accessInfo.gateCode && (
             <Card className="border-green-200 dark:border-green-800">
