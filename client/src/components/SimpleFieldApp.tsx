@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, Play, CheckCircle, ArrowLeft,
   Loader2, AlertTriangle, Navigation, Phone,
-  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell
+  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -14,6 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
+import { useOfflineSupport } from "@/hooks/useOfflineSupport";
 import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import { PhotoCapture } from "@/components/PhotoCapture";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
@@ -70,6 +71,23 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     autoConnect: !!resourceId,
   });
 
+  const { isOnline, cacheWorkOrders } = useOfflineSupport({
+    onOffline: () => {
+      toast({
+        title: "Du är offline",
+        description: "Dagens jobb är cachade och tillgängliga.",
+        variant: "destructive",
+      });
+    },
+    onOnline: () => {
+      toast({
+        title: "Ansluten igen",
+        description: "Synkroniserar data...",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+  });
+
   useEffect(() => {
     if (jobStarted && startTime) {
       timerRef.current = setInterval(() => {
@@ -99,6 +117,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
+
+  useEffect(() => {
+    if (workOrders.length > 0) {
+      cacheWorkOrders(workOrders);
+    }
+  }, [workOrders, cacheWorkOrders]);
 
   const objectIdsNeeded = useMemo(() => {
     const today = new Date();
@@ -415,14 +439,23 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {resourceId && (
+            {!isOnline && (
               <Badge 
-                variant={isConnected ? "outline" : "destructive"} 
+                variant="destructive"
+                data-testid="badge-offline-status"
+              >
+                <WifiOff className="h-3 w-3 mr-1" />
+                Offline
+              </Badge>
+            )}
+            {resourceId && isOnline && (
+              <Badge 
+                variant={isConnected ? "outline" : "secondary"} 
                 className={isConnected ? "text-green-600" : ""}
                 data-testid="badge-connection-status"
               >
                 <Bell className="h-3 w-3 mr-1" />
-                {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "Offline"}
+                {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "..."}
               </Badge>
             )}
             <Badge variant="secondary">{todayJobs.length} kvar</Badge>

@@ -120,3 +120,8 @@ AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas
 -   **Modus 2.0:** Source of CSV data for initial import and ongoing data synchronization.
 -   **react-leaflet:** Used for interactive map visualizations.
 -   **shadcn/ui:** UI component library.
+
+## Pending Integrations
+-   **Twilio SMS:** User dismissed the Twilio connector integration. If SMS notifications are needed in the future, ask user to either:
+    1. Set up the Twilio connector integration, or
+    2. Provide TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER as secrets manually
