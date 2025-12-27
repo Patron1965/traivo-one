@@ -29,6 +29,8 @@ The user interface emphasizes a clean, professional Nordic aesthetic with suppor
 -   **Dashboard:** Provides analytics and KPIs based on real setup logs.
 -   **MobileFieldApp:** A dedicated interface for field technicians.
 -   **Button size="mobile":** A dedicated button size variant (min-h-14, text-lg) for mobile field apps with larger touch targets.
+-   **SignatureCapture:** Canvas-based digital signature collection for customer sign-off on completed jobs.
+-   **JobProtocolGenerator:** Automatic PDF report generation on job completion with job details, photos, signature, and time tracking.
 -   **Native Mobile App (Expo/React Native):** Separate mobile app in `mobile/` folder for field workers:
     - Login with email + PIN
     - View assigned work orders for the day
