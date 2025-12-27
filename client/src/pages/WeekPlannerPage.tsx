@@ -56,7 +56,7 @@ export default function WeekPlannerPage() {
       {!showAIPanel && (
         <Button
           onClick={() => setShowAIPanel(true)}
-          className="absolute bottom-4 right-4 shadow-lg"
+          className="fixed bottom-4 right-4 shadow-lg z-50"
           data-testid="button-open-ai-panel"
         >
           <Sparkles className="h-4 w-4 mr-2" />
