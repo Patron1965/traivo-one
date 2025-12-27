@@ -1,6 +1,5 @@
-const CACHE_NAME = 'unicorn-field-v2';
+const CACHE_NAME = 'unicorn-field-v3';
 const STATIC_ASSETS = [
-  '/field',
   '/favicon.png',
   '/manifest.json'
 ];
@@ -18,13 +17,23 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
-        cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
+        cacheNames.map((name) => caches.delete(name))
       );
+    }).then(() => {
+      return self.clients.claim();
     })
   );
-  self.clients.claim();
+});
+
+self.addEventListener('message', (event) => {
+  if (event.data === 'skipWaiting') {
+    self.skipWaiting();
+  }
+  if (event.data === 'clearCache') {
+    caches.keys().then((cacheNames) => {
+      return Promise.all(cacheNames.map((name) => caches.delete(name)));
+    });
+  }
 });
 
 self.addEventListener('fetch', (event) => {
