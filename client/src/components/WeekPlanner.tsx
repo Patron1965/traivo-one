@@ -7,7 +7,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -57,6 +58,7 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
   const [showUnscheduled, setShowUnscheduled] = useState(true);
   const [filterCustomer, setFilterCustomer] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const visibleDates = useMemo((): Date[] => {
@@ -391,6 +393,39 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
     unscheduleWorkOrderMutation.mutate(jobId);
   };
 
+  const handleResourceClick = useCallback((resourceId: string) => {
+    setActiveResourceId(resourceId);
+  }, []);
+
+  const activeResource = useMemo(() => {
+    if (!activeResourceId) return null;
+    return resources.find(r => r.id === activeResourceId) || null;
+  }, [activeResourceId, resources]);
+
+  const activeResourceJobs = useMemo(() => {
+    if (!activeResourceId) return [];
+    return scheduledJobs
+      .filter(job => job.resourceId === activeResourceId)
+      .sort((a, b) => {
+        if (!a.scheduledDate || !b.scheduledDate) return 0;
+        return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+      });
+  }, [activeResourceId, scheduledJobs]);
+
+  const activeResourceJobsByDay = useMemo(() => {
+    const map: Record<string, WorkOrderWithObject[]> = {};
+    for (const job of activeResourceJobs) {
+      if (!job.scheduledDate) continue;
+      const dateStr = typeof job.scheduledDate === 'string' 
+        ? job.scheduledDate 
+        : (job.scheduledDate as Date).toISOString();
+      const dayKey = dateStr.split("T")[0];
+      if (!map[dayKey]) map[dayKey] = [];
+      map[dayKey].push(job);
+    }
+    return map;
+  }, [activeResourceJobs]);
+
   const renderJobCard = (job: WorkOrderWithObject, compact = false) => {
     return (
       <Card
@@ -527,7 +562,11 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
         ) : (
           resources.map((resource) => (
             <div key={resource.id} className="grid grid-cols-[200px_repeat(5,1fr)] border-b">
-              <div className="p-3 border-r flex items-center gap-3">
+              <div 
+                className="p-3 border-r flex items-center gap-3 cursor-pointer hover-elevate"
+                onClick={() => handleResourceClick(resource.id)}
+                data-testid={`resource-row-${resource.id}`}
+              >
                 <Avatar className="h-8 w-8">
                   <AvatarFallback className="text-xs">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
                 </Avatar>
@@ -802,6 +841,99 @@ export function WeekPlanner({ onAddJob, onSelectJob }: WeekPlannerProps) {
           </div>
         </div>
       </div>
+
+      {/* Resource Detail Panel */}
+      <Sheet open={!!activeResourceId} onOpenChange={(open) => !open && setActiveResourceId(null)}>
+        <SheetContent className="w-[400px] sm:w-[450px] p-0 flex flex-col">
+          {activeResource && (
+            <>
+              <SheetHeader className="p-4 border-b">
+                <div className="flex items-center gap-3">
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="text-lg">
+                      {activeResource.initials || activeResource.name.split(" ").map(n => n[0]).join("")}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <SheetTitle className="text-left">{activeResource.name}</SheetTitle>
+                    <p className="text-sm text-muted-foreground">
+                      {activeResource.role || "Fälttekniker"} • {activeResource.weeklyHours || 40}h/vecka
+                    </p>
+                  </div>
+                </div>
+              </SheetHeader>
+
+              <div className="p-4 border-b bg-muted/30">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mb-2">
+                  <User className="h-4 w-4" />
+                  <span>Veckoschema - Dra jobb hit för att schemalägga</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 text-xs">
+                  <div className="bg-background rounded-md p-2 text-center">
+                    <div className="font-medium">{activeResourceJobs.length}</div>
+                    <div className="text-muted-foreground">jobb</div>
+                  </div>
+                  <div className="bg-background rounded-md p-2 text-center">
+                    <div className="font-medium">
+                      {(activeResourceJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0) / 60).toFixed(1)}h
+                    </div>
+                    <div className="text-muted-foreground">planerat</div>
+                  </div>
+                  <div className="bg-background rounded-md p-2 text-center">
+                    <div className="font-medium">{Object.keys(activeResourceJobsByDay).length}</div>
+                    <div className="text-muted-foreground">dagar</div>
+                  </div>
+                </div>
+              </div>
+
+              <ScrollArea className="flex-1">
+                <div className="p-4 space-y-4">
+                  {visibleDates.map((day) => {
+                    const dayKey = format(day, "yyyy-MM-dd");
+                    const dayJobs = activeResourceJobsByDay[dayKey] || [];
+                    const dayHours = dayJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0) / 60, 0);
+                    const isToday = isSameDay(day, new Date());
+                    const panelDropCellId = `panel-${activeResourceId}-${dayKey}`;
+                    const isDragOver = dragOverCell === panelDropCellId;
+
+                    return (
+                      <div key={dayKey} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>
+                            {format(day, "EEEE d MMM", { locale: sv })}
+                          </div>
+                          <Badge variant="secondary" className="text-xs">
+                            {dayHours.toFixed(1)}h
+                          </Badge>
+                        </div>
+                        <div
+                          className={`min-h-[80px] border border-dashed rounded-md p-2 transition-colors ${
+                            isDragOver ? "border-primary bg-primary/10" : "border-border"
+                          }`}
+                          onDragOver={(e) => handleDragOver(e, panelDropCellId)}
+                          onDragLeave={handleDragLeave}
+                          onDrop={(e) => handleDrop(e, activeResourceId!, day)}
+                          data-testid={`panel-drop-zone-${dayKey}`}
+                        >
+                          {dayJobs.length === 0 ? (
+                            <div className="text-xs text-muted-foreground text-center py-4">
+                              Dra jobb hit för att schemalägga
+                            </div>
+                          ) : (
+                            <div className="space-y-2">
+                              {dayJobs.map((job) => renderJobCard(job))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
