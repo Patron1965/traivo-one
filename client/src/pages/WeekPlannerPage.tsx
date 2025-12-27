@@ -39,7 +39,7 @@ export default function WeekPlannerPage() {
           <div className="flex items-center justify-between p-3 border-b shrink-0">
             <span className="text-sm font-medium flex items-center gap-2">
               <Sparkles className="h-4 w-4 text-purple-500" />
-              AI Planeringsassistent
+              AI stöd
             </span>
             <Button 
               size="icon" 
