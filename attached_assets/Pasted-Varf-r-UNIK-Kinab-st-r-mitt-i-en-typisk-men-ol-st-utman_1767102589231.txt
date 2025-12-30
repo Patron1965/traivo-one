@@ -1,0 +1,62 @@
+Varför UNIK?
+Kinab står mitt i en typisk – men olöst – utmaning för servicebranschen:
+
+många objekt och kärl, spridda över stora geografiska ytor
+hårt styrda avtal med bostadsbolag och serviceboenden
+komplex vardag för både planerare och utförare
+Idag krävs mycket handpåläggning: export från Modus, manuell planering, ad hoc-omläggningar, erfarenhet i huvudet hos enskilda nyckelpersoner. Det fungerar – men det skalar inte, och det är svårt att snabbt se:
+
+”Har vi rätt resurser på rätt plats, vid rätt tid?”
+”Hur påverkas våra kostnader, marginaler och körsträckor av den här planen?”
+Projekt UNIK handlar om att ta ett steg bort från manuell mikrostyrning och istället:
+
+låta en AI-driven plattform (Unicorn) hantera det tunga optimeringsarbetet
+ge planerare och ledning beslutstöd i realtid, baserat på verklig data och ställtider
+skapa en lösning som är så bra att den kan bli standardplattformen för servicebolag i Norden
+Varför Kinab?
+Kinab är inte ”ännu en kund” – ni är designpartner och medskapare.
+
+Det som gör Kinab idealiskt för Projekt UNIK är kombinationen av:
+
+Hög komplexitet men tydliga strukturer
+Kluster, områden, objekt, kärltyper (K1–K4), abonnemang och arbetsordrar
+Tydliga samband mellan data i Modus och verklig vardag i fält
+Mogen datamiljö
+Modus 2.0 och befintliga databaser ger oss en konkret startpunkt
+Det finns redan struktur för kunder, objekt, uppgifter, pris/tid, planeringsgeneratorer m.m.
+Verklig förändringsvilja
+Kinab vill inte bara “digitalisera befintligt arbetssätt”
+Ni vill utmana hur planering, rutter och resursstyrning kan fungera när man bygger för AI från början
+Tillsammans kan vi bygga något som är skapat för Kinabs verklighet, men tillräckligt generellt för att återanvändas i hela branschen. Kinab får:
+
+ett försprång i effektivitet och styrning, och
+en strategisk position som referenskund när plattformen lanseras bredare.
+Varför nu?
+Timing är central. Tre saker sammanfaller:
+
+Teknikmognad
+AI, optimeringsalgoritmer och molnplattformar är nu tillräckligt mogna för att hantera:
+stora datamängder
+dynamiska rutter
+kontinuerlig replanering i nära realtid
+Data finns redan på plats
+Kinab har redan strukturerad data i Modus (objekt, uppdrag, kunder, ställtider m.m.).
+Vi behöver inte börja från noll – vi kan bygga värde ovanpå det ni redan har.
+Tryck på effektivitet och hållbarhet
+Krav från kunder, ekonomi och miljö gör att:
+onödiga kilometer, tomkörningar och sena leveranser blir allt dyrare
+företag som kan visa datadriven optimering och transparens får ett rejält försprång
+Att vänta innebär att fortsätta bära samma planeringsbörda, samma risk för personberoende och samma blandning av system & excel. Att agera nu innebär att:
+
+använda de kommande månaderna till att:
+bygga, testa och justera Unicorn tillsammans
+köra en verklig pilot och se konkreta effekter på körsträcka, planeringstid och leveransprecision
+Vår gemensamma ambition
+Projekt UNIK ska:
+
+ge Kinab en praktisk, vardagsnära förbättring i hur ni planerar och kör er verksamhet
+skapa en skalbar, modern plattform som kan bli navet för framtidens fältservice
+bli ett gemensamt flaggskeppsprojekt som visar vad som är möjligt när:
+domänkunskap (Kinab)
+och AI/produktutveckling (NR)
+möts på riktigt.
