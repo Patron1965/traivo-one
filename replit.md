@@ -1,7 +1,7 @@
 # Unicorn - AI-Driven Field Service Planning Platform
 
 ## Overview
-Unicorn is an AI-driven planning platform designed for field service companies in the Nordic market, developed in collaboration with Kinab AB. Its primary purpose is to provide comprehensive optimization across various aspects of field service operations, including route optimization, resource planning, economic control, productivity improvements, and predictive analytics. The project aims to first prove value with Kinab AB, focusing on waste management and refuse collection, and then scale into a commercial multi-tenant SaaS solution for all Nordic service companies.
+Unicorn is an AI-driven planning platform for field service companies in the Nordic market, developed in collaboration with Kinab AB. Its purpose is to optimize route planning, resource allocation, economic control, productivity, and predictive analytics. The project aims to first prove value with Kinab AB in waste management and refuse collection, then scale into a commercial multi-tenant SaaS solution for all Nordic service companies. The ambition is to transition from manual micromanagement to AI-driven optimization, providing real-time decision support and becoming the standard platform for Nordic field service.
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
@@ -10,183 +10,56 @@ Unicorn is an AI-driven planning platform designed for field service companies i
 - **Font:** Inter for UI
 
 ## System Architecture
-The Unicorn platform is built as a functional prototype using a modern web stack.
+The Unicorn platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and AI integration throughout.
 
 ### UI/UX Decisions
-The user interface emphasizes a clean, professional Nordic aesthetic with support for both dark and light themes, utilizing the Inter font for consistency. Key UI components include:
--   **TopNav:** Sticky horizontal top navigation (h-16) replacing the previous sidebar:
-    - Logo and company name (Unicorn/Kinab AB)
-    - Four dropdown categories: Grunddata, Planering, Analys, System
-    - Global search bar with Cmd+K shortcut
-    - Notifications, Help, AI Assistant, Theme toggle
-    - User profile dropdown with settings and logout
--   **MobileNav:** Hamburger menu (Sheet) for mobile devices with grouped navigation
--   **FloatingActionButton (FAB):** Quick actions button (bottom-right) for creating orders, customers, etc.
--   **QuickStats:** Dashboard cards showing key metrics (customers, orders, clusters, revenue)
--   **WeekPlanner:** A drag-and-drop interface for weekly scheduling.
--   **RouteMap:** Visualization of optimized routes.
--   **ObjectCard:** Displays object details, including setup time information.
--   **Dashboard:** Provides analytics and KPIs based on real setup logs.
--   **MobileFieldApp:** A dedicated interface for field technicians.
--   **Button size="mobile":** A dedicated button size variant (min-h-14, text-lg) for mobile field apps with larger touch targets.
--   **SignatureCapture:** Canvas-based digital signature collection for customer sign-off on completed jobs.
--   **MaterialLog:** Component for logging materials used during a job (waste bags, containers, locks, etc.) with autocomplete suggestions for common Nordic waste management materials.
--   **JobProtocolGenerator:** Automatic PDF report generation on job completion with job details, photos, materials used, signature, and time tracking.
--   **Native Mobile App (Expo/React Native):** Separate mobile app in `mobile/` folder for field workers:
-    - Login with email + PIN
-    - View assigned work orders for the day
-    - Start/complete/cancel orders with status workflow
-    - Add notes to orders
-    - Navigate to addresses via native maps
-    - Call customers directly
+The user interface features a sticky TopNav with dropdown categories (Grunddata, Planering, Analys, System), a global search, and user utilities. Mobile navigation uses a hamburger menu (Sheet). Key components include a Floating Action Button for quick actions, QuickStats dashboard cards, a drag-and-drop WeekPlanner, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Dedicated mobile interfaces for field technicians include a MobileFieldApp with a large button size variant, SignatureCapture, MaterialLog with autocomplete for Nordic waste management items, and a JobProtocolGenerator for automatic PDF reporting.
 
 ### Technical Implementations
--   **Frontend:** React, TypeScript, Vite.
--   **Backend:** Express.js.
--   **Database:** PostgreSQL with Drizzle ORM.
--   **Multi-tenancy:** Supported at the database level.
--   **MCP Server (Model Context Protocol):** External AI assistants can interact with Unicorn data:
-    - SSE endpoint: `GET /mcp/sse` for real-time connection
-    - Message endpoint: `POST /mcp/messages` with X-MCP-Session-Id header
-    - Resources: work-orders, resources, clusters
-    - Tools: get_work_orders, get_resources, get_clusters, schedule_work_order, get_daily_summary
-    - Documentation: `docs/MCP_INTEGRATION.md`
--   **Modus 2.0 Import System:** Dedicated `/import` page for CSV imports of Objects, Tasks, and Events from Modus 2.0, including data transformation and validation (e.g., geocoding, parent linking).
--   **Lazy Object Loading:** Implemented across components using `useObjectsByIds` and `useObjectSearch` hooks to optimize performance by fetching only necessary data.
--   **Address Search/Autocomplete:** `AddressSearch` component using OpenStreetMap Nominatim API for Swedish address geocoding. Used in cluster creation form to auto-populate coordinates and postal codes.
--   **Real-time Notifications (WebSocket):** Push notifications to field workers when work orders change:
-    - WebSocket server at `/ws/notifications` with token-based authentication
-    - Token endpoint: `POST /api/notifications/token` (requires authentication, validates tenant)
-    - 6 notification types: job_assigned, job_updated, job_cancelled, schedule_changed, priority_changed, anomaly_alert
-    - Frontend hook: `useNotifications` handles token acquisition, connection, and reconnection
-    - Field apps: SimpleFieldApp and MobileFieldApp show connection status badge and toast notifications
-    - System-wide broadcast via `broadcastSystemAlert` for critical alerts to all connected clients (planners + resources)
-    - **Production TODO:** Implement user-to-resource mapping for fine-grained authorization (currently validates tenant only)
--   **Real-time GPS Position Tracking:** Track field resource locations with breadcrumb trails:
-    - Database: `resourcePositions` table stores position history with lat/lng, speed, heading, accuracy, status
-    - Resources extended with: `currentLatitude`, `currentLongitude`, `lastPositionUpdate`, `trackingStatus`
-    - Position updates via WebSocket (real-time) and HTTP endpoint (`POST /api/resources/:id/position`) for offline fallback
-    - Frontend components: `ResourceTrackingMap` (single resource breadcrumb trail), `LiveResourceMap` (all active resources with real-time updates)
-    - Stale position indicators (>10 min since last update) with auto-refresh every 30 seconds
--   **Automatic Anomaly Monitoring:** Background job detecting operational anomalies:
-    - Runs every 5 minutes with 30-minute alert cooldown per anomaly
-    - Detects: stale positions (>30 min), delayed orders (>1 hour past expected), setup time anomalies (>50% above average)
-    - Severity levels: low, medium, high, critical
-    - High/critical alerts broadcast to all connected clients (planners + field resources)
-    - Manual trigger endpoint: `POST /api/system/anomalies/check`
--   **Mobile API Endpoints:** Dedicated endpoints for mobile app:
-    - `POST /api/mobile/login` - Login with email + PIN
-    - `POST /api/mobile/logout` - Logout
-    - `GET /api/mobile/me` - Get logged-in resource
-    - `GET /api/mobile/my-orders` - Get assigned work orders (with ?date filter)
-    - `GET /api/mobile/orders/:id` - Get order details
-    - `PATCH /api/mobile/orders/:id/status` - Update status (scheduled → in_progress → completed)
-    - `POST /api/mobile/orders/:id/notes` - Add note to order
-    - **Production TODO:** Implement proper PIN hashing/verification (currently simplified for demo)
+- **Frontend:** React, TypeScript, Vite.
+- **Backend:** Express.js.
+- **Database:** PostgreSQL with Drizzle ORM.
+- **Multi-tenancy:** Supported at the database level.
+- **MCP Server (Model Context Protocol):** Enables external AI assistants to interact with Unicorn data via SSE and message endpoints for resources and work order management.
+- **Modus 2.0 Import System:** Dedicated `/import` page for CSV imports with data transformation and validation.
+- **Lazy Object Loading:** Performance optimization using `useObjectsByIds` and `useObjectSearch` hooks.
+- **Address Search/Autocomplete:** Uses OpenStreetMap Nominatim API for Swedish address geocoding.
+- **Real-time Notifications (WebSocket):** Token-based authenticated push notifications for field workers (job status, schedule, priority changes, anomaly alerts) and system-wide broadcasts.
+- **Real-time GPS Position Tracking:** Tracks field resource locations with breadcrumb trails, storing history in `resourcePositions` table, with real-time updates via WebSocket and HTTP fallback.
+- **Automatic Anomaly Monitoring:** Background job detects operational anomalies (stale positions, delayed orders, setup time anomalies) and broadcasts high/critical alerts.
+- **Mobile API Endpoints:** Dedicated endpoints for mobile login, resource/order retrieval, status updates, and note-taking.
 
 ### Feature Specifications
--   **Clusters:** A core concept for geographic organization, managing entities like objects and orders, visualized via lists and interactive maps (react-leaflet).
--   **Order Management:** Comprehensive workflow with status tracking (created, pre-planned, resource-planned, locked, executed, invoiced), cost/value tracking, and simulation capabilities. Includes work order lines with hierarchical price resolution.
--   **Pricing System:** Three-tier hierarchy (general, customer, discount letter) for articles and services.
--   **Fleet & Resource Management:** Tracking of vehicles and equipment, resource allocation with competencies and "tidsverk" (article assignments), and resource availability scheduling.
--   **Subscription Management:** Handling recurring services with various periodicities and automatic order generation.
--   **Planning Parameters:** Configuration of SLA levels, time slots, and other production control settings.
+- **Clusters:** Core concept for geographic organization, visualized with lists and interactive maps.
+- **Order Management:** Comprehensive workflow with status tracking, cost/value tracking, and simulation.
+- **Pricing System:** Three-tier hierarchy (general, customer, discount letter) for articles and services.
+- **Fleet & Resource Management:** Tracking of vehicles, equipment, resource allocation with competencies, and availability scheduling.
+- **Subscription Management:** Handles recurring services and automatic order generation.
+- **Planning Parameters:** Configuration of SLA levels and time slots.
+- **Hierarchical Object Structure:** `Område → Fastighet → Rum` (Area → Property → Room) for managing customer locations, with inherited information.
 
 ### System Design Choices
--   **Hierarchical Object Structure:** `Område → Fastighet → Rum` (Area → Property → Room) to manage customer locations.
--   **External Service Integration:** Route optimization is offloaded to a separate, external Unicorn optimization service. Data preparation for this external service is handled internally. A separate DataClean service is used for data validation and geocoding.
+- **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
+- **External Optimization:** Route optimization is offloaded to a separate Unicorn optimization service, with internal data preparation.
+- **Data Validation:** DataClean service handles external data validation and geocoding.
 
-## AI Strategy (Core Principle)
-AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas för AI-förbättring:
-
-### Implementerade AI-funktioner
-- **Integrerade AI-kort (AICard):** Kontextmedvetna AI-paneler integrerade direkt i varje sida:
-  - Veckoplaneraren: Full AISuggestionsPanel med auto-schemaläggning, arbetsbelastningsanalys, ruttoptimering
-  - Kluster, Orderstock, Dashboard, Objekt, Resurser, Rutter: Kompakta AI-kort med modulspecifika insikter
-  - Övriga moduler: GlobalAIButton med funktionell AI-chatt (/api/ai/chat endpoint)
-  - Hybrid-approach: Rika AI-upplevelser där kontext finns, funktionell chatt överallt annars
-- **AI Planning Assistant:** Analyserar veckoplanering och ger förslag för att balansera arbetsbelastning, optimera körtid och prioritera akuta ordrar.
-- **AI Auto-Scheduling med väderoptimering:** Automatisk schemaläggning som:
-  - Hämtar 7-dagars väderprognos från Open-Meteo API för Umeå
-  - Justerar kapacitet baserat på väderförhållanden (multiplikator 0.4-1.0)
-  - Prioriterar dagar med bra väder för utomhusarbeten (+15 poäng för bra, -10 för svårt)
-  - Grupperar ordrar efter kluster för effektivare körning
-  - Inkluderar väderinformation i AI-analysen för kontextmedvetna förslag
-
-### Planerade AI-funktioner
-- **Automatisk klusterbildning:** AI analyserar objekts geografi och servicemönster för att föreslå optimala kluster
-- **Prediktiv schemaläggning:** Lär sig från historik för att föreslå bästa servicetider
-- **Anomali-detektion:** Identifierar avvikande ställtider och kostnadsmönster
-- **Smart ruttoptimering:** Per-kluster daglig optimering med hänsyn till tidsfönster och trafikprognoser
-- **Naturligt språk-gränssnitt:** Fråga systemet på naturligt språk ("Vilka kluster har överbelastade veckor?")
-
-### AI-teknologi
-- **Provider:** OpenAI via Replit AI Integrations (ingen egen API-nyckel krävs)
-- **Modeller:** gpt-4o-mini för snabba analyser, gpt-4o för komplexa beslut
-- **Mönster:** Kontext-driven prompting med strukturerad JSON-output
+### AI Strategy
+AI is deeply integrated throughout the platform.
+- **Implemented AI Features:**
+    - **Integrated AI Cards (AICard):** Context-aware AI panels on every page, offering detailed suggestions on the WeekPlanner (auto-scheduling, workload analysis, route optimization) and compact insights on other modules. A global AI chat is available elsewhere.
+    - **AI Planning Assistant:** Analyzes weekly planning to balance workload, optimize drive time, and prioritize urgent orders.
+    - **AI Auto-Scheduling with Weather Optimization:** Uses 7-day weather forecasts from Open-Meteo API to adjust capacity, prioritize outdoor work, and group orders by cluster.
+- **AI Technology:** Utilizes OpenAI via Replit AI Integrations (gpt-4o-mini for quick analyses, gpt-4o for complex decisions) with context-driven prompting and structured JSON output.
 
 ## External Dependencies
--   **PostgreSQL:** Primary database for persistent storage.
--   **Drizzle ORM:** Used for database interactions.
--   **OpenAI API:** AI-drivna planeringsförslag via Replit AI Integrations.
--   **OpenRouteService:** Utilized for route visualization.
--   **OpenStreetMap Nominatim:** Free geocoding API for address search/autocomplete (Swedish addresses).
--   **External Unicorn Optimization Service:** A separate, dedicated service for performing route optimization calculations.
--   **DataClean Service:** An external service for data validation and geocoding.
--   **Modus 2.0:** Source of CSV data for initial import and ongoing data synchronization.
--   **react-leaflet:** Used for interactive map visualizations.
--   **shadcn/ui:** UI component library.
-
-## Kinab Kluster-Filosofi (Bekräftad Design)
-Dokumenterad i `attached_assets/Uppfattad_Kluster_Tanke_Unicorn_Fixad_(1)_1767100869171.pdf`
-
-### Hierarkisk Struktur ("Familjeträd")
-Information registreras på rätt nivå och "faller nedåt som tyngdkraft":
-```
-KONCERN (t.ex. Castor Förvaltning AB)
-├── Kontakt, Fakturareferens, Avtal, Logotyp
-└── BRF/FÖRENING (t.ex. BRF Huset)
-    ├── Kontakt, [ÄRV från Koncern]
-    └── FASTIGHET (t.ex. Grytan 5)
-        ├── Adress, Nyckelkod, [ÄRV uppifrån]
-        └── RUM (t.ex. Återvinningsrum Södra)
-            ├── Kvadratmeter, Foto, [ÄRV uppifrån]
-            ├── MATAVFALLSKÄRL (3 st, 240L)
-            └── RESTAVFALLSKÄRL (8 st, 360L)
-```
-
-### Tre Typer av Metadata
-1. **Fast information** - Stannar på nivån där den skapas (t.ex. nyckelkod på fastighet)
-2. **Fallande information** - Ärvs automatiskt nedåt (t.ex. avtal, fakturareferens)
-3. **Dynamisk information** - Ändras över tid och fortsätter falla (t.ex. kontaktdatum för förnyelse)
-
-### Artiklar med "Fasthakning"
-Artiklar hakar fast på rätt nivå automatiskt:
-| Artikel | Beskrivning | Fasthakning | Var den hamnar |
-|---------|-------------|-------------|----------------|
-| T100 | Kärltvätt standard | KÄRL | På varje kärl |
-| T110 | Rumstvätt | RUM | På återvinningsrum |
-| KOD10 | Öppna med kod | KOD | På fastigheter med kod |
-| K100 | Matavfallsdekal | KÄRLMAT | Bara på matavfallskärl |
-
-### Intelligent Orderbyggare
-Systemet bygger automatiskt komplett order genom att:
-1. Läsa trädet uppifrån och samla all ärvd information
-2. Titta på aktuell nivå och se vad som ska göras
-3. Resultat: Komplett order med VAR, TILLGÅNG, HITTA FRAM, VAD, TID & RESURS, FAKTURERING, KONTAKT
-
-### Fördelar
-- Registrera EN GÅNG – Använd ÖVERALLT
-- Ändra EN GÅNG – Uppdatera ÖVERALLT
-- Skalbart när verksamheten växer
-- Färre fel, snabbare orderbygge, bättre orderunderlag
-
-### Implementation Status
-- **Implementerat:** Hierarkisk objektstruktur (Område → Fastighet → Rum), grundläggande arv
-- **Saknas:** Nedåtpropagerande metadata med brytlogik, artikelfasthakning, multipla betalare per objekt
-
-## Pending Integrations
--   **Twilio SMS:** User dismissed the Twilio connector integration. If SMS notifications are needed in the future, ask user to either:
-    1. Set up the Twilio connector integration, or
-    2. Provide TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_PHONE_NUMBER as secrets manually
--   **E-post/SMS:** Användaren har en egen leverantör för e-post och SMS som kommer kopplas senare. Projektrapporten kan laddas ned som PDF för manuell vidarebefordran.
+- **PostgreSQL:** Primary database.
+- **Drizzle ORM:** Database interactions.
+- **OpenAI API:** AI planning suggestions (via Replit AI Integrations).
+- **OpenRouteService:** Route visualization.
+- **OpenStreetMap Nominatim:** Geocoding for Swedish addresses.
+- **External Unicorn Optimization Service:** Dedicated route optimization service.
+- **DataClean Service:** External service for data validation and geocoding.
+- **Modus 2.0:** Source of CSV data for imports.
+- **react-leaflet:** Interactive map visualizations.
+- **shadcn/ui:** UI component library.
+- **Open-Meteo API:** Provides weather forecast data for AI auto-scheduling.
