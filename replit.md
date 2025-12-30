@@ -137,6 +137,54 @@ AI-stöd ska genomsyra hela Unicorn-plattformen. Varje funktion bör övervägas
 -   **react-leaflet:** Used for interactive map visualizations.
 -   **shadcn/ui:** UI component library.
 
+## Kinab Kluster-Filosofi (Bekräftad Design)
+Dokumenterad i `attached_assets/Uppfattad_Kluster_Tanke_Unicorn_Fixad_(1)_1767100869171.pdf`
+
+### Hierarkisk Struktur ("Familjeträd")
+Information registreras på rätt nivå och "faller nedåt som tyngdkraft":
+```
+KONCERN (t.ex. Castor Förvaltning AB)
+├── Kontakt, Fakturareferens, Avtal, Logotyp
+└── BRF/FÖRENING (t.ex. BRF Huset)
+    ├── Kontakt, [ÄRV från Koncern]
+    └── FASTIGHET (t.ex. Grytan 5)
+        ├── Adress, Nyckelkod, [ÄRV uppifrån]
+        └── RUM (t.ex. Återvinningsrum Södra)
+            ├── Kvadratmeter, Foto, [ÄRV uppifrån]
+            ├── MATAVFALLSKÄRL (3 st, 240L)
+            └── RESTAVFALLSKÄRL (8 st, 360L)
+```
+
+### Tre Typer av Metadata
+1. **Fast information** - Stannar på nivån där den skapas (t.ex. nyckelkod på fastighet)
+2. **Fallande information** - Ärvs automatiskt nedåt (t.ex. avtal, fakturareferens)
+3. **Dynamisk information** - Ändras över tid och fortsätter falla (t.ex. kontaktdatum för förnyelse)
+
+### Artiklar med "Fasthakning"
+Artiklar hakar fast på rätt nivå automatiskt:
+| Artikel | Beskrivning | Fasthakning | Var den hamnar |
+|---------|-------------|-------------|----------------|
+| T100 | Kärltvätt standard | KÄRL | På varje kärl |
+| T110 | Rumstvätt | RUM | På återvinningsrum |
+| KOD10 | Öppna med kod | KOD | På fastigheter med kod |
+| K100 | Matavfallsdekal | KÄRLMAT | Bara på matavfallskärl |
+
+### Intelligent Orderbyggare
+Systemet bygger automatiskt komplett order genom att:
+1. Läsa trädet uppifrån och samla all ärvd information
+2. Titta på aktuell nivå och se vad som ska göras
+3. Resultat: Komplett order med VAR, TILLGÅNG, HITTA FRAM, VAD, TID & RESURS, FAKTURERING, KONTAKT
+
+### Fördelar
+- Registrera EN GÅNG – Använd ÖVERALLT
+- Ändra EN GÅNG – Uppdatera ÖVERALLT
+- Skalbart när verksamheten växer
+- Färre fel, snabbare orderbygge, bättre orderunderlag
+
+### Implementation Status
+- **Implementerat:** Hierarkisk objektstruktur (Område → Fastighet → Rum), grundläggande arv
+- **Saknas:** Nedåtpropagerande metadata med brytlogik, artikelfasthakning, multipla betalare per objekt
+
 ## Pending Integrations
 -   **Twilio SMS:** User dismissed the Twilio connector integration. If SMS notifications are needed in the future, ask user to either:
     1. Set up the Twilio connector integration, or
