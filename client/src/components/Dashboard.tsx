@@ -10,15 +10,17 @@ import {
   Clock, TrendingUp, Users, Briefcase, AlertCircle, Lightbulb, 
   ArrowUpRight, ArrowDownRight, Loader2, MapPin, Building2, AlertTriangle,
   ChevronRight, Calendar, CircleDollarSign, Package, Target, FileText,
-  Sparkles, Brain, Route, Zap, MessageSquare, BarChart3, Cpu, Shield
+  Sparkles, Brain, Route, Zap, MessageSquare, BarChart3, Cpu, Shield, Download,
+  TrendingDown, Equal, AreaChart as AreaChartIcon
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
 import { Link } from "wouter";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
-  BarChart, Bar, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell
+  BarChart, Bar, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell,
+  Area, ComposedChart
 } from "recharts";
-import { format, subDays, startOfDay, isBefore } from "date-fns";
+import { format, subDays, startOfDay, isBefore, startOfWeek, endOfWeek, subWeeks } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useToast } from "@/hooks/use-toast";
@@ -220,6 +222,100 @@ export function Dashboard() {
     }
     
     return days;
+  }, [workOrders, setupLogs]);
+
+  // Ekonomitrend - senaste 30 dagarna
+  const economicTrend = useMemo(() => {
+    const today = startOfDay(new Date());
+    const days: { date: string; label: string; value: number; cost: number; margin: number; orders: number }[] = [];
+    
+    for (let i = 29; i >= 0; i--) {
+      const day = subDays(today, i);
+      const dayStr = format(day, "yyyy-MM-dd");
+      
+      const dayOrders = workOrders.filter(wo => {
+        if (!wo.scheduledDate) return false;
+        const orderDate = format(new Date(wo.scheduledDate), "yyyy-MM-dd");
+        return orderDate === dayStr;
+      });
+      
+      const value = dayOrders.reduce((sum, wo) => sum + (wo.cachedValue || 0), 0);
+      const cost = dayOrders.reduce((sum, wo) => sum + (wo.cachedCost || 0), 0);
+      const margin = value - cost;
+      
+      days.push({
+        date: dayStr,
+        label: format(day, "d/M", { locale: sv }),
+        value: Math.round(value / 1000),
+        cost: Math.round(cost / 1000),
+        margin: Math.round(margin / 1000),
+        orders: dayOrders.length,
+      });
+    }
+    
+    return days;
+  }, [workOrders]);
+
+  // Veckojämförelse - denna vecka vs förra veckan
+  const weekComparison = useMemo(() => {
+    const today = new Date();
+    const thisWeekStart = startOfWeek(today, { weekStartsOn: 1 });
+    const thisWeekEnd = endOfWeek(today, { weekStartsOn: 1 });
+    const lastWeekStart = subWeeks(thisWeekStart, 1);
+    const lastWeekEnd = subWeeks(thisWeekEnd, 1);
+    
+    const thisWeekOrders = workOrders.filter(wo => {
+      if (!wo.scheduledDate) return false;
+      const d = new Date(wo.scheduledDate);
+      return d >= thisWeekStart && d <= thisWeekEnd;
+    });
+    
+    const lastWeekOrders = workOrders.filter(wo => {
+      if (!wo.scheduledDate) return false;
+      const d = new Date(wo.scheduledDate);
+      return d >= lastWeekStart && d <= lastWeekEnd;
+    });
+    
+    const thisWeekSetupLogs = setupLogs.filter(log => {
+      if (!log.createdAt) return false;
+      const d = new Date(log.createdAt);
+      return d >= thisWeekStart && d <= thisWeekEnd;
+    });
+    
+    const lastWeekSetupLogs = setupLogs.filter(log => {
+      if (!log.createdAt) return false;
+      const d = new Date(log.createdAt);
+      return d >= lastWeekStart && d <= lastWeekEnd;
+    });
+    
+    const calcWeekStats = (orders: typeof workOrders, logs: typeof setupLogs) => ({
+      orders: orders.length,
+      completed: orders.filter(o => o.orderStatus === "utford" || o.orderStatus === "fakturerad").length,
+      value: orders.reduce((sum, o) => sum + (o.cachedValue || 0), 0),
+      cost: orders.reduce((sum, o) => sum + (o.cachedCost || 0), 0),
+      setupTime: logs.reduce((sum, l) => sum + (l.durationMinutes || 0), 0),
+      plannedHours: orders.reduce((sum, o) => sum + (o.estimatedDuration || 0), 0) / 60,
+      actualHours: orders.reduce((sum, o) => sum + (o.actualDuration || 0), 0) / 60,
+    });
+    
+    const thisWeek = calcWeekStats(thisWeekOrders, thisWeekSetupLogs);
+    const lastWeek = calcWeekStats(lastWeekOrders, lastWeekSetupLogs);
+    
+    const calcChange = (current: number, previous: number) => {
+      if (previous === 0) return current > 0 ? 100 : 0;
+      return Math.round(((current - previous) / previous) * 100);
+    };
+    
+    return {
+      thisWeek,
+      lastWeek,
+      changes: {
+        orders: calcChange(thisWeek.orders, lastWeek.orders),
+        completed: calcChange(thisWeek.completed, lastWeek.completed),
+        value: calcChange(thisWeek.value, lastWeek.value),
+        setupTime: calcChange(thisWeek.setupTime, lastWeek.setupTime),
+      },
+    };
   }, [workOrders, setupLogs]);
 
   // SLA-risker - jobb med hög ställtid eller förseningar
@@ -673,6 +769,90 @@ export function Dashboard() {
     topSetupTimeObjects, setupTimeTrend, resourceUtilization, plannedVsActual, insights, toast
   ]);
 
+  const handleExportExcel = useCallback(() => {
+    try {
+      const today = format(new Date(), "yyyy-MM-dd");
+      let csv = "Unicorn Dashboard Export - " + today + "\n\n";
+      
+      csv += "NYCKELTAL\n";
+      csv += "Mått;Värde;Detaljer\n";
+      csv += `Ordrar totalt;${totalJobs};${completedJobs} utförda\n`;
+      csv += `Totalt ordervärde;${totalOrderValue} kr;Snitt ${avgOrderValue} kr/order\n`;
+      csv += `Marginal;${marginPercent}%;${totalMargin} kr totalt\n`;
+      csv += `Planerade timmar;${plannedHours.toFixed(1)}h;${actualHours.toFixed(1)}h utfört\n`;
+      csv += `Total ställtid;${totalSetupTime} min;Snitt ${avgSetupTime} min/jobb\n`;
+      csv += `Resurser;${resources.length};${resources.filter(r => r.status === "active").length} aktiva\n`;
+      
+      csv += "\nEKONOMITREND (30 DAGAR)\n";
+      csv += "Datum;Ordervärde (tkr);Kostnad (tkr);Marginal (tkr);Antal ordrar\n";
+      economicTrend.forEach(d => {
+        csv += `${d.date};${d.value};${d.cost};${d.margin};${d.orders}\n`;
+      });
+      
+      csv += "\nVECKOJÄMFÖRELSE\n";
+      csv += "Mått;Denna vecka;Förra veckan;Förändring\n";
+      csv += `Ordrar;${weekComparison.thisWeek.orders};${weekComparison.lastWeek.orders};${weekComparison.changes.orders}%\n`;
+      csv += `Utförda;${weekComparison.thisWeek.completed};${weekComparison.lastWeek.completed};${weekComparison.changes.completed}%\n`;
+      csv += `Ordervärde;${weekComparison.thisWeek.value} kr;${weekComparison.lastWeek.value} kr;${weekComparison.changes.value}%\n`;
+      csv += `Ställtid;${weekComparison.thisWeek.setupTime} min;${weekComparison.lastWeek.setupTime} min;${weekComparison.changes.setupTime}%\n`;
+      
+      csv += "\nORDERSTATUSFÖRDELNING\n";
+      csv += "Status;Antal;Andel\n";
+      orderStatusDistribution.forEach(item => {
+        csv += `${item.name};${item.value};${totalJobs > 0 ? ((item.value / totalJobs) * 100).toFixed(1) : 0}%\n`;
+      });
+      
+      csv += "\nTOP 5 KUNDER EFTER ORDERVÄRDE\n";
+      csv += "Kund;Ordervärde;Antal ordrar\n";
+      topCustomersByValue.forEach(item => {
+        csv += `${item.name};${item.value} kr;${item.count}\n`;
+      });
+      
+      csv += "\nTOP 5 OBJEKT MED HÖGST STÄLLTID\n";
+      csv += "Objekt;Kund;Total tid;Antal besök\n";
+      topSetupTimeObjects.forEach(item => {
+        csv += `${item.name};${item.customerName || "-"};${item.totalMinutes} min;${item.count}\n`;
+      });
+      
+      csv += "\nSTÄLLTIDSTREND (14 DAGAR)\n";
+      csv += "Datum;Snitt ställtid;Antal jobb\n";
+      setupTimeTrend.forEach(item => {
+        csv += `${item.label};${item.avgSetupTime} min;${item.count}\n`;
+      });
+      
+      csv += "\nRESURSBELÄGGNING\n";
+      csv += "Resurs;Planerat;Kapacitet;Beläggning\n";
+      resourceUtilization.forEach(r => {
+        csv += `${r.fullName};${r.actual.toFixed(1)}h;${r.planned}h;${r.utilization}%\n`;
+      });
+      
+      const BOM = "\uFEFF";
+      const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `unicorn-export-${today}.csv`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+      
+      toast({
+        title: "Data exporterad",
+        description: "CSV-fil har laddats ner. Öppna i Excel för fullständig analys.",
+      });
+    } catch (error) {
+      console.error("Excel export error:", error);
+      toast({
+        title: "Exportfel",
+        description: "Kunde inte skapa CSV-filen. Försök igen.",
+        variant: "destructive",
+      });
+    }
+  }, [
+    totalJobs, completedJobs, totalOrderValue, avgOrderValue, marginPercent, totalMargin,
+    plannedHours, actualHours, totalSetupTime, avgSetupTime, resources,
+    economicTrend, weekComparison, orderStatusDistribution, topCustomersByValue,
+    topSetupTimeObjects, setupTimeTrend, resourceUtilization, toast
+  ]);
+
   const isLoading = workOrdersLoading || resourcesLoading || setupLogsLoading;
 
   if (isLoading) {
@@ -690,10 +870,16 @@ export function Dashboard() {
           <h1 className="text-2xl font-semibold">Dashboard</h1>
           <p className="text-sm text-muted-foreground">Översikt - {format(new Date(), "MMMM yyyy", { locale: sv })}</p>
         </div>
-        <Button variant="outline" onClick={handleExportPDF} data-testid="button-export">
-          <FileText className="h-4 w-4 mr-2" />
-          Exportera PDF-rapport
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleExportPDF} data-testid="button-export-pdf">
+            <FileText className="h-4 w-4 mr-2" />
+            PDF
+          </Button>
+          <Button variant="outline" onClick={handleExportExcel} data-testid="button-export-excel">
+            <Download className="h-4 w-4 mr-2" />
+            Excel
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
@@ -747,6 +933,97 @@ export function Dashboard() {
           { type: "warning", title: "Anomalidetektion", description: "Automatisk upptäckt av avvikande värden och potentiella problem" },
         ]}
       />
+
+      {/* Veckojämförelse */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <WeekCompareCard 
+          title="Ordrar"
+          thisWeek={weekComparison.thisWeek.orders}
+          lastWeek={weekComparison.lastWeek.orders}
+          change={weekComparison.changes.orders}
+          unit=""
+        />
+        <WeekCompareCard 
+          title="Utförda"
+          thisWeek={weekComparison.thisWeek.completed}
+          lastWeek={weekComparison.lastWeek.completed}
+          change={weekComparison.changes.completed}
+          unit=""
+        />
+        <WeekCompareCard 
+          title="Ordervärde"
+          thisWeek={Math.round(weekComparison.thisWeek.value / 1000)}
+          lastWeek={Math.round(weekComparison.lastWeek.value / 1000)}
+          change={weekComparison.changes.value}
+          unit="k kr"
+        />
+        <WeekCompareCard 
+          title="Ställtid"
+          thisWeek={weekComparison.thisWeek.setupTime}
+          lastWeek={weekComparison.lastWeek.setupTime}
+          change={weekComparison.changes.setupTime}
+          unit=" min"
+          invertColors
+        />
+      </div>
+
+      {/* Ekonomitrend - 30 dagar */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <AreaChartIcon className="h-4 w-4" />
+            Ekonomitrend (senaste 30 dagarna)
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[250px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={economicTrend}>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                <XAxis 
+                  dataKey="label" 
+                  tick={{ fontSize: 10 }}
+                  interval={4}
+                  className="text-muted-foreground"
+                />
+                <YAxis 
+                  tick={{ fontSize: 12 }}
+                  className="text-muted-foreground"
+                  label={{ value: 'tkr', angle: -90, position: 'insideLeft', fontSize: 12 }}
+                />
+                <RechartsTooltip 
+                  contentStyle={{ 
+                    backgroundColor: 'hsl(var(--card))', 
+                    border: '1px solid hsl(var(--border))',
+                    borderRadius: '6px',
+                  }}
+                  formatter={(value: number, name: string) => {
+                    const labels: Record<string, string> = { value: 'Ordervärde', cost: 'Kostnad', margin: 'Marginal' };
+                    return [`${value}k kr`, labels[name] || name];
+                  }}
+                />
+                <Legend />
+                <Area 
+                  type="monotone" 
+                  dataKey="value" 
+                  name="Ordervärde"
+                  fill="hsl(var(--primary) / 0.2)"
+                  stroke="hsl(var(--primary))"
+                  strokeWidth={2}
+                />
+                <Line 
+                  type="monotone" 
+                  dataKey="margin" 
+                  name="Marginal"
+                  stroke="hsl(140 70% 45%)"
+                  strokeWidth={2}
+                  dot={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* Ställtidstrend */}
       <Card>
@@ -1268,6 +1545,49 @@ function StatCard({ title, value, subtitle, icon: Icon, trend }: StatCardProps) 
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface WeekCompareCardProps {
+  title: string;
+  thisWeek: number;
+  lastWeek: number;
+  change: number;
+  unit: string;
+  invertColors?: boolean;
+}
+
+function WeekCompareCard({ title, thisWeek, lastWeek, change, unit, invertColors }: WeekCompareCardProps) {
+  const isPositive = invertColors ? change < 0 : change > 0;
+  const isNegative = invertColors ? change > 0 : change < 0;
+  
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <span className="text-xs text-muted-foreground">{title}</span>
+          <span className="text-xs text-muted-foreground">vs förra veckan</span>
+        </div>
+        <div className="flex items-baseline gap-2 mb-1">
+          <span className="text-2xl font-bold">{thisWeek.toLocaleString("sv-SE")}{unit}</span>
+          {change !== 0 && (
+            <span className={`flex items-center text-sm font-medium ${
+              isPositive ? "text-green-600 dark:text-green-400" : 
+              isNegative ? "text-red-600 dark:text-red-400" : 
+              "text-muted-foreground"
+            }`}>
+              {isPositive ? <TrendingUp className="h-3 w-3 mr-0.5" /> : 
+               isNegative ? <TrendingDown className="h-3 w-3 mr-0.5" /> :
+               <Equal className="h-3 w-3 mr-0.5" />}
+              {change > 0 ? "+" : ""}{change}%
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-muted-foreground">
+          Förra veckan: {lastWeek.toLocaleString("sv-SE")}{unit}
+        </p>
       </CardContent>
     </Card>
   );
