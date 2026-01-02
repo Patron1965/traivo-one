@@ -377,6 +377,12 @@ export default function SubscriptionsPage() {
                   )}
                 </div>
 
+                {(sub.cachedMonthlyValue ?? 0) > 0 && (
+                  <div className="text-sm font-medium">
+                    {(sub.cachedMonthlyValue ?? 0).toLocaleString("sv-SE")} kr/mån
+                  </div>
+                )}
+
                 {sub.nextGenerationDate && (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Calendar className="h-3 w-3" />
