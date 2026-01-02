@@ -9,13 +9,17 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { CalendarIcon, Loader2, ChevronsUpDown, Check } from "lucide-react";
+import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Customer, ServiceObject, Resource } from "@shared/schema";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import type { Customer, ServiceObject, Resource, Article } from "@shared/schema";
+import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
 
 interface JobModalProps {
   open: boolean;
@@ -51,6 +55,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
   const [selectedObjectName, setSelectedObjectName] = useState("");
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -94,6 +99,28 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     queryKey: ["/api/resources"],
   });
 
+  const { data: applicableArticles = [], isLoading: articlesLoading } = useQuery<Article[]>({
+    queryKey: ["/api/objects", formData.objectId, "applicable-articles"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${formData.objectId}/applicable-articles`);
+      if (!res.ok) throw new Error("Failed to fetch applicable articles");
+      return res.json();
+    },
+    enabled: !!formData.objectId,
+  });
+
+  const toggleArticle = (articleId: string) => {
+    setSelectedArticleIds(prev => {
+      const next = new Set(prev);
+      if (next.has(articleId)) {
+        next.delete(articleId);
+      } else {
+        next.add(articleId);
+      }
+      return next;
+    });
+  };
+
   const createWorkOrderMutation = useMutation({
     mutationFn: async (data: {
       title: string;
@@ -106,12 +133,33 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       resourceId: string | null;
       scheduledDate: Date | null;
       status: string;
+      articlesToAdd: Array<{ id: string; name: string; price: number | null }>;
     }) => {
-      return apiRequest("POST", "/api/work-orders", data);
+      const { articlesToAdd, ...orderData } = data;
+      const response = await apiRequest("POST", "/api/work-orders", orderData);
+      const workOrder = response as unknown as { id: string };
+      
+      if (articlesToAdd.length > 0 && workOrder.id) {
+        for (const article of articlesToAdd) {
+          await apiRequest("POST", "/api/work-order-lines", {
+            workOrderId: workOrder.id,
+            articleId: article.id,
+            quantity: 1,
+            unitPrice: article.price || 0,
+            description: article.name,
+          });
+        }
+      }
+      
+      return { workOrder, articleCount: articlesToAdd.length };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
-      toast({ title: "Jobb skapat", description: "Arbetsordern har skapats." });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-order-lines"] });
+      const message = result.articleCount > 0 
+        ? `Arbetsordern har skapats med ${result.articleCount} fasthakade artiklar.`
+        : "Arbetsordern har skapats.";
+      toast({ title: "Jobb skapat", description: message });
       handleClose();
     },
     onError: () => {
@@ -133,6 +181,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     });
     setObjectSearch("");
     setSelectedObjectName("");
+    setSelectedArticleIds(new Set());
     onClose();
   };
 
@@ -141,6 +190,10 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       toast({ title: "Fel", description: "Fyll i titel, kund och objekt.", variant: "destructive" });
       return;
     }
+
+    const articlesToAdd = applicableArticles
+      .filter(a => selectedArticleIds.has(a.id))
+      .map(a => ({ id: a.id, name: a.name, price: a.price }));
 
     createWorkOrderMutation.mutate({
       title: formData.title,
@@ -153,6 +206,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       resourceId: formData.resourceId || null,
       scheduledDate: formData.scheduledDate || null,
       status: formData.resourceId && formData.scheduledDate ? "scheduled" : "draft",
+      articlesToAdd,
     });
 
     onSubmit?.(formData);
@@ -357,6 +411,62 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               </PopoverContent>
             </Popover>
           </div>
+
+          {formData.objectId && (
+            <div className="space-y-2">
+              <Label className="flex items-center gap-2">
+                <Anchor className="h-4 w-4" />
+                Fasthakade artiklar
+              </Label>
+              {articlesLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : applicableArticles.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-2">
+                  Inga fasthakade artiklar för detta objekt
+                </div>
+              ) : (
+                <ScrollArea className="h-[120px] border rounded-md p-2">
+                  <div className="space-y-2">
+                    {applicableArticles.map((article) => (
+                      <div 
+                        key={article.id}
+                        className="flex items-center gap-2 p-2 rounded-md hover-elevate"
+                      >
+                        <Checkbox
+                          id={`article-${article.id}`}
+                          checked={selectedArticleIds.has(article.id)}
+                          onCheckedChange={() => toggleArticle(article.id)}
+                          data-testid={`checkbox-article-${article.id}`}
+                        />
+                        <label 
+                          htmlFor={`article-${article.id}`}
+                          className="flex-1 flex items-center gap-2 cursor-pointer"
+                        >
+                          <Package className="h-3 w-3 text-muted-foreground" />
+                          <span className="text-sm">{article.name}</span>
+                          {article.hookLevel && (
+                            <Badge variant="outline" className="text-xs">
+                              {ARTICLE_HOOK_LEVEL_LABELS[article.hookLevel as keyof typeof ARTICLE_HOOK_LEVEL_LABELS] || article.hookLevel}
+                            </Badge>
+                          )}
+                        </label>
+                        <span className="text-sm text-muted-foreground">
+                          {article.price ? `${article.price} kr` : "-"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+              {selectedArticleIds.size > 0 && (
+                <div className="text-xs text-muted-foreground">
+                  {selectedArticleIds.size} artikel(ar) valda - läggs till vid skapande
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="description">Beskrivning</Label>

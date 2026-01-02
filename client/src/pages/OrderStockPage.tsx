@@ -49,11 +49,16 @@ import {
   Users,
   UserCheck,
   Lock,
-  Unlock
+  Unlock,
+  XCircle,
+  Camera,
+  User
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
 
-type OrderStatus = 'skapad' | 'planerad_pre' | 'planerad_resurs' | 'planerad_las' | 'utford' | 'fakturerad';
+import { IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
+
+type OrderStatus = 'skapad' | 'planerad_pre' | 'planerad_resurs' | 'planerad_las' | 'utford' | 'fakturerad' | 'omojlig';
 
 const STATUS_LABELS: Record<OrderStatus, string> = {
   skapad: "Skapad",
@@ -61,7 +66,8 @@ const STATUS_LABELS: Record<OrderStatus, string> = {
   planerad_resurs: "Resurs tilldelad",
   planerad_las: "Låst",
   utford: "Utförd",
-  fakturerad: "Fakturerad"
+  fakturerad: "Fakturerad",
+  omojlig: "Omöjlig"
 };
 
 const STATUS_COLORS: Record<OrderStatus, string> = {
@@ -70,7 +76,8 @@ const STATUS_COLORS: Record<OrderStatus, string> = {
   planerad_resurs: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
   planerad_las: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300",
   utford: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
-  fakturerad: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300"
+  fakturerad: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
+  omojlig: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300"
 };
 
 const STATUS_ICONS: Record<OrderStatus, typeof ListChecks> = {
@@ -79,7 +86,8 @@ const STATUS_ICONS: Record<OrderStatus, typeof ListChecks> = {
   planerad_resurs: Clock,
   planerad_las: FileCheck,
   utford: CheckCircle,
-  fakturerad: CircleDollarSign
+  fakturerad: CircleDollarSign,
+  omojlig: XCircle
 };
 
 interface OrderStockResponse {
@@ -642,6 +650,33 @@ export default function OrderStockPage() {
                         <ChevronRight className="h-3 w-3" />
                         <span>{object?.name || "-"}</span>
                       </div>
+                      {status === "omojlig" && order.impossibleReason && (
+                        <div className="mt-2 p-2 bg-red-50 dark:bg-red-900/20 rounded-md text-xs" data-testid={`impossible-details-${order.id}`}>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <XCircle className="h-3 w-3 text-red-500" />
+                            <span className="font-medium text-red-700 dark:text-red-300">
+                              {IMPOSSIBLE_REASON_LABELS[order.impossibleReason as keyof typeof IMPOSSIBLE_REASON_LABELS] || order.impossibleReason}
+                            </span>
+                            {order.impossibleAt && (
+                              <span className="text-muted-foreground">
+                                {new Date(order.impossibleAt).toLocaleDateString("sv-SE")}
+                              </span>
+                            )}
+                            {order.impossibleBy && (
+                              <span className="flex items-center gap-1 text-muted-foreground">
+                                <User className="h-3 w-3" />
+                                {order.impossibleBy}
+                              </span>
+                            )}
+                            {order.impossiblePhotoUrl && (
+                              <Camera className="h-3 w-3 text-muted-foreground" data-testid={`icon-photo-${order.id}`} />
+                            )}
+                          </div>
+                          {order.impossibleReasonText && (
+                            <p className="mt-1 text-muted-foreground">{order.impossibleReasonText}</p>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     <div className="text-right text-sm">

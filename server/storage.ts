@@ -643,44 +643,62 @@ export class DatabaseStorage implements IStorage {
     // Kolla om objektet har accesskod direkt på objektet
     const hasAccessCode = !!(object.accessCode && object.accessCode.trim() !== '');
 
+    // Hierarkiordning för propagering nedåt
+    // Koncern → BRF → Fastighet → Rum → Kärl
+    // Artiklar som är fasthakade på högre nivå propagerar nedåt till alla undernivåer
+    const hierarchyOrder = ['koncern', 'brf', 'fastighet', 'rum', 'karl'];
+    
+    const getHierarchyPosition = (level: string): number => {
+      if (level === 'koncern') return 0;
+      if (level === 'brf') return 1;
+      if (level === 'fastighet') return 2;
+      if (level === 'rum') return 3;
+      if (level === 'karl' || level === 'karl_mat' || level === 'karl_rest' || level === 'karl_plast') return 4;
+      if (level === 'kod') return -1; // Specialfall - hanteras separat
+      return -1;
+    };
+    
+    const getCurrentObjectLevel = (): number => {
+      if (isKoncern) return 0;
+      if (isBrf) return 1;
+      if (isFastighet) return 2;
+      if (isRum) return 3;
+      if (isKarl) return 4;
+      return -1;
+    };
+    
+    const currentLevel = getCurrentObjectLevel();
+    
     return allArticles.filter(article => {
       if (!article.hookLevel) return false;
       
       const hookLevel = article.hookLevel.toLowerCase();
       const hookConditions = (article.hookConditions as Record<string, unknown>) || {};
       
-      // Matchningslogik: endast exakt nivå-matchning
+      // Matchningslogik med hierarkisk propagering nedåt
       let levelMatches = false;
-      switch (hookLevel) {
-        case 'koncern':
-          levelMatches = isKoncern;
-          break;
-        case 'brf':
-          levelMatches = isBrf;
-          break;
-        case 'fastighet':
-          levelMatches = isFastighet;
-          break;
-        case 'rum':
-          levelMatches = isRum;
-          break;
-        case 'karl':
-          levelMatches = isKarl;
-          break;
-        case 'karl_mat':
-          levelMatches = isMatKarl;
-          break;
-        case 'karl_rest':
-          levelMatches = isRestKarl;
-          break;
-        case 'karl_plast':
-          levelMatches = isPlastKarl;
-          break;
-        case 'kod':
-          levelMatches = hasAccessCode;
-          break;
-        default:
-          levelMatches = false;
+      
+      // Specialfall: kod-hook (matchar om objektet har accesskod)
+      if (hookLevel === 'kod') {
+        levelMatches = hasAccessCode;
+      }
+      // Specialfall: kärl-subtyper (exakt matchning)
+      else if (hookLevel === 'karl_mat') {
+        levelMatches = isMatKarl;
+      }
+      else if (hookLevel === 'karl_rest') {
+        levelMatches = isRestKarl;
+      }
+      else if (hookLevel === 'karl_plast') {
+        levelMatches = isPlastKarl;
+      }
+      // Hierarkisk propagering: artikel-hook på högre nivå matchar alla undernivåer
+      else {
+        const hookPosition = getHierarchyPosition(hookLevel);
+        if (hookPosition >= 0 && currentLevel >= 0) {
+          // Artikeln matchar om objektets nivå är samma eller djupare i hierarkin
+          levelMatches = currentLevel >= hookPosition;
+        }
       }
       
       if (!levelMatches) return false;

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, Play, CheckCircle, ArrowLeft,
   Loader2, AlertTriangle, Navigation, Phone,
-  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature
+  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -54,6 +54,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [showImpossibleDialog, setShowImpossibleDialog] = useState(false);
   const [selectedImpossibleReason, setSelectedImpossibleReason] = useState<string | null>(null);
   const [impossibleReasonText, setImpossibleReasonText] = useState("");
+  const [impossiblePhoto, setImpossiblePhoto] = useState<string | null>(null);
 
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
@@ -247,11 +248,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     mutationFn: async ({ 
       id, 
       reason, 
-      reasonText 
+      reasonText,
+      photoUrl
     }: { 
       id: string; 
       reason: string; 
-      reasonText?: string; 
+      reasonText?: string;
+      photoUrl?: string;
     }) => {
       await apiRequest("PATCH", `/api/work-orders/${id}`, {
         status: "omojlig",
@@ -259,6 +262,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         impossibleReasonText: reasonText || null,
         impossibleAt: new Date().toISOString(),
         impossibleBy: resourceId || null,
+        impossiblePhotoUrl: photoUrl || null,
       });
     },
     onSuccess: () => {
@@ -270,6 +274,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setShowImpossibleDialog(false);
       setSelectedImpossibleReason(null);
       setImpossibleReasonText("");
+      setImpossiblePhoto(null);
       setShowProblemPanel(false);
       setView("jobs");
       setSelectedJobId(null);
@@ -320,6 +325,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         id: selectedJob.id,
         reason: selectedImpossibleReason,
         reasonText: impossibleReasonText || undefined,
+        photoUrl: impossiblePhoto || undefined,
       });
     }
   };
@@ -486,6 +492,59 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     data-testid="input-impossible-reason-text"
                   />
                 </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Foto som bevis (valfritt)
+                  </label>
+                  {impossiblePhoto ? (
+                    <div className="relative">
+                      <img 
+                        src={impossiblePhoto} 
+                        alt="Bevis" 
+                        className="w-full h-32 object-cover rounded-md border"
+                      />
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="absolute top-1 right-1"
+                        onClick={() => setImpossiblePhoto(null)}
+                        data-testid="button-remove-impossible-photo"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        className="hidden"
+                        id="impossible-photo-input"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = () => {
+                              setImpossiblePhoto(reader.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
+                        }}
+                        data-testid="input-impossible-photo"
+                      />
+                      <Button
+                        variant="outline"
+                        className="flex-1"
+                        onClick={() => document.getElementById('impossible-photo-input')?.click()}
+                        data-testid="button-take-impossible-photo"
+                      >
+                        <Camera className="h-4 w-4 mr-2" />
+                        Ta foto
+                      </Button>
+                    </div>
+                  )}
+                </div>
               </div>
               <DialogFooter className="gap-2">
                 <Button 
@@ -494,6 +553,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                     setShowImpossibleDialog(false);
                     setSelectedImpossibleReason(null);
                     setImpossibleReasonText("");
+                    setImpossiblePhoto(null);
                   }}
                 >
                   Avbryt
