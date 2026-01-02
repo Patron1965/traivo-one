@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, ClipboardList, Target, DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import { Users, ClipboardList, Target, DollarSign, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from "lucide-react";
 import type { Customer, WorkOrder, Resource, Cluster } from "@shared/schema";
 
 interface StatCardProps {
@@ -87,7 +87,11 @@ export function QuickStats() {
   const isLoading = loadingCustomers || loadingOrders || loadingResources || loadingClusters;
 
   const activeCustomers = customers?.length ?? 0;
-  const pendingOrders = workOrders?.filter((o) => o.status !== "completed" && o.status !== "cancelled")?.length ?? 0;
+  const pendingOrders = workOrders?.filter((o) => 
+    o.orderStatus !== "utford" && o.orderStatus !== "fakturerad" && o.orderStatus !== "omojlig"
+  )?.length ?? 0;
+  const completedOrders = workOrders?.filter((o) => o.orderStatus === "utford" || o.orderStatus === "fakturerad")?.length ?? 0;
+  const impossibleOrders = workOrders?.filter((o) => o.orderStatus === "omojlig")?.length ?? 0;
   const scheduledOrders = workOrders?.filter((o) => o.scheduledDate)?.length ?? 0;
   const activeResources = resources?.filter((r) => r.status === "active")?.length ?? 0;
   const activeClusters = clusters?.filter((c) => c.status === "active")?.length ?? 0;
@@ -99,38 +103,60 @@ export function QuickStats() {
     ? `${(totalOrderValue / 1000).toFixed(0)}K kr`
     : `${totalOrderValue} kr`;
 
-  const hasCustomerData = customers && customers.length > 0;
   const hasOrderData = workOrders && workOrders.length > 0;
   const hasResourceData = resources && resources.length > 0;
-  const hasClusterData = clusters && clusters.length > 0;
+
+  const completionRate = hasOrderData && workOrders.length > 0 
+    ? Math.round((completedOrders / workOrders.length) * 100) 
+    : 0;
+  const impossibleRate = hasOrderData && workOrders.length > 0 
+    ? Math.round((impossibleOrders / workOrders.length) * 100) 
+    : 0;
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
       <StatCard
-        title="Aktiva kunder"
-        value={activeCustomers}
-        icon={Users}
-        iconColor="text-blue-600 dark:text-blue-400"
-        iconBg="bg-blue-500/10"
-        trend={hasCustomerData ? { value: `${activeCustomers} totalt`, up: true } : undefined}
+        title="Utförda ordrar"
+        value={completedOrders}
+        icon={CheckCircle}
+        iconColor="text-green-600 dark:text-green-400"
+        iconBg="bg-green-500/10"
+        trend={hasOrderData ? { value: `${completionRate}% av alla`, up: true } : undefined}
         isLoading={isLoading}
       />
       <StatCard
         title="Pågående ordrar"
         value={pendingOrders}
         icon={ClipboardList}
-        iconColor="text-green-600 dark:text-green-400"
-        iconBg="bg-green-500/10"
+        iconColor="text-blue-600 dark:text-blue-400"
+        iconBg="bg-blue-500/10"
         trend={hasOrderData && scheduledOrders > 0 ? { value: `${scheduledOrders} schemalagda`, up: true } : undefined}
         isLoading={isLoading}
       />
       <StatCard
-        title="Aktiva kluster"
-        value={activeClusters}
+        title="Omöjliga ordrar"
+        value={impossibleOrders}
+        icon={AlertTriangle}
+        iconColor="text-orange-600 dark:text-orange-400"
+        iconBg="bg-orange-500/10"
+        trend={hasOrderData && impossibleOrders > 0 ? { value: `${impossibleRate}% av alla`, up: false } : undefined}
+        isLoading={isLoading}
+      />
+      <StatCard
+        title="Aktiva resurser"
+        value={activeResources}
+        icon={Users}
+        iconColor="text-cyan-600 dark:text-cyan-400"
+        iconBg="bg-cyan-500/10"
+        trend={hasResourceData ? { value: `${activeClusters} kluster`, up: true } : undefined}
+        isLoading={isLoading}
+      />
+      <StatCard
+        title="Aktiva kunder"
+        value={activeCustomers}
         icon={Target}
         iconColor="text-amber-600 dark:text-amber-400"
         iconBg="bg-amber-500/10"
-        trend={hasResourceData && activeResources > 0 ? { value: `${activeResources} resurser`, up: true } : undefined}
         isLoading={isLoading}
       />
       <StatCard

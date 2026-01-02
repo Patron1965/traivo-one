@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { AlertTriangle, TrendingUp, TrendingDown, ChevronRight, ChevronDown, Loader2, Bell, Clock, DollarSign, Sparkles, Lightbulb, AlertCircle } from "lucide-react";
+import { AlertTriangle, TrendingUp, TrendingDown, ChevronRight, ChevronDown, Loader2, Bell, Clock, DollarSign, Sparkles, Lightbulb, AlertCircle, Ban, MapPin } from "lucide-react";
 import { Link } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import type { WorkOrder } from "@shared/schema";
+import { IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
 
 // In-memory cache for AI explanations (persists for the session)
 const explanationCache = new Map<string, AnomalyExplanation>();
@@ -81,6 +83,13 @@ export function AnomalyAlerts() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: workOrders = [], isLoading: ordersLoading } = useQuery<WorkOrder[]>({
+    queryKey: ["/api/work-orders"],
+    staleTime: 60 * 1000,
+  });
+
+  const impossibleOrders = workOrders.filter(wo => wo.orderStatus === "omojlig");
+
   const criticalAlerts = analysis?.insights.filter(
     i => (i.type === "drift" || i.type === "anomaly") && i.severity === "high"
   ) || [];
@@ -91,9 +100,9 @@ export function AnomalyAlerts() {
 
   const setupAlertCount = criticalAlerts.length + warningAlerts.length;
   const costAnomalies = kpis?.costAnomalies || [];
-  const totalAlerts = setupAlertCount + costAnomalies.length;
+  const totalAlerts = setupAlertCount + costAnomalies.length + impossibleOrders.length;
 
-  const isLoading = setupLoading || kpisLoading;
+  const isLoading = setupLoading || kpisLoading || ordersLoading;
 
   if (isLoading) {
     return (
@@ -171,6 +180,15 @@ export function AnomalyAlerts() {
                 </Badge>
               )}
             </TabsTrigger>
+            <TabsTrigger value="impossible" className="flex-1 gap-1" data-testid="tab-impossible-orders">
+              <Ban className="h-3 w-3" />
+              Omöjliga
+              {impossibleOrders.length > 0 && (
+                <Badge variant="secondary" className="text-[10px] px-1 py-0 ml-1 no-default-hover-elevate">
+                  {impossibleOrders.length}
+                </Badge>
+              )}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="setup" className="mt-0">
@@ -213,6 +231,28 @@ export function AnomalyAlerts() {
                   <div className="text-center pt-2">
                     <span className="text-xs text-muted-foreground">
                       +{costAnomalies.length - 5} fler avvikelser
+                    </span>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="impossible" className="mt-0">
+            <ScrollArea className="h-[180px]">
+              <div className="space-y-2">
+                {impossibleOrders.slice(0, 5).map((order) => (
+                  <ImpossibleOrderItem key={order.id} order={order} />
+                ))}
+                {impossibleOrders.length === 0 && (
+                  <div className="text-center py-4 text-muted-foreground text-sm">
+                    Inga omöjliga ordrar
+                  </div>
+                )}
+                {impossibleOrders.length > 5 && (
+                  <div className="text-center pt-2">
+                    <span className="text-xs text-muted-foreground">
+                      +{impossibleOrders.length - 5} fler ordrar
                     </span>
                   </div>
                 )}
@@ -311,6 +351,56 @@ function CostAnomalyItem({ anomaly }: { anomaly: CostAnomaly }) {
         </CollapsibleContent>
       </div>
     </Collapsible>
+  );
+}
+
+function ImpossibleOrderItem({ order }: { order: WorkOrder }) {
+  const reasonLabel = order.impossibleReason 
+    ? IMPOSSIBLE_REASON_LABELS[order.impossibleReason as keyof typeof IMPOSSIBLE_REASON_LABELS] 
+    : "Okänd anledning";
+  
+  const formattedDate = order.impossibleAt 
+    ? new Date(order.impossibleAt).toLocaleDateString("sv-SE", { day: "numeric", month: "short" })
+    : "";
+
+  return (
+    <div 
+      className="p-3 rounded-md border bg-orange-500/5 border-orange-500/20"
+      data-testid={`impossible-order-${order.id}`}
+    >
+      <div className="flex items-start gap-2">
+        <Ban className="h-4 w-4 text-orange-600 mt-0.5 flex-shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="font-medium text-sm truncate">
+              {order.title || `Order ${order.id.slice(0, 8)}`}
+            </span>
+            <Badge 
+              variant="outline" 
+              className="text-xs border-orange-500/50 text-orange-600"
+            >
+              {reasonLabel}
+            </Badge>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-1 flex-wrap">
+            {formattedDate && <span>{formattedDate}</span>}
+            {order.impossibleReasonText && (
+              <span className="truncate max-w-[200px]">{order.impossibleReasonText}</span>
+            )}
+          </div>
+        </div>
+        <Link href={`/orders/${order.id}`}>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-6 w-6 flex-shrink-0"
+            data-testid={`button-view-order-${order.id}`}
+          >
+            <ChevronRight className="h-3 w-3" />
+          </Button>
+        </Link>
+      </div>
+    </div>
   );
 }
 

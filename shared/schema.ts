@@ -908,6 +908,17 @@ export const IMPOSSIBLE_REASONS = [
 ] as const;
 export type ImpossibleReason = typeof IMPOSSIBLE_REASONS[number];
 
+export const IMPOSSIBLE_REASON_LABELS: Record<ImpossibleReason, string> = {
+  locked_gate: "Låst grind/port",
+  no_access: "Ingen tillgång",
+  wrong_address: "Fel adress",
+  obstacle: "Hinder",
+  customer_absent: "Kund ej hemma",
+  weather: "Väder",
+  equipment_issue: "Utrustning",
+  other: "Annat"
+};
+
 // AI Chat tables for planning assistant
 export const conversations = pgTable("conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

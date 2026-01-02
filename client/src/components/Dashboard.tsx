@@ -56,7 +56,7 @@ export function Dashboard() {
   const objectMap = useMemo(() => new Map(objects.map(o => [o.id, o])), [objects]);
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c.name])), [customers]);
 
-  const completedJobs = workOrders.filter(wo => wo.status === "completed").length;
+  const completedJobs = workOrders.filter(wo => wo.orderStatus === "utford" || wo.orderStatus === "fakturerad").length;
   const totalJobs = workOrders.length;
   const plannedHours = workOrders.reduce((sum, wo) => sum + (wo.estimatedDuration || 0), 0) / 60;
   const actualHours = workOrders.filter(wo => wo.actualDuration).reduce((sum, wo) => sum + (wo.actualDuration || 0), 0) / 60;
@@ -79,7 +79,8 @@ export function Dashboard() {
       planerad_resurs: "Resurs tilldelad",
       planerad_las: "Låst",
       utford: "Utförd",
-      fakturerad: "Fakturerad"
+      fakturerad: "Fakturerad",
+      omojlig: "Omöjlig"
     };
     const statusCounts: Record<string, number> = {};
     workOrders.forEach(wo => {
@@ -121,7 +122,8 @@ export function Dashboard() {
     "hsl(240 70% 50%)",
     "hsl(30 90% 50%)",
     "hsl(140 70% 45%)",
-    "hsl(280 70% 50%)"
+    "hsl(280 70% 50%)",
+    "hsl(15 90% 50%)"  // Orange-röd för omöjliga ordrar
   ];
 
   // Ställtidstrend - senaste 14 dagarna
@@ -232,8 +234,9 @@ export function Dashboard() {
     workOrders.forEach(wo => {
       const obj = wo.objectId ? objectMap.get(wo.objectId) : undefined;
       
-      // Försenade jobb
-      if (wo.status !== "completed" && wo.scheduledDate) {
+      // Försenade jobb (ej utförd, fakturerad eller omöjlig)
+      const isCompleted = wo.orderStatus === "utford" || wo.orderStatus === "fakturerad" || wo.orderStatus === "omojlig";
+      if (!isCompleted && wo.scheduledDate) {
         const scheduled = new Date(wo.scheduledDate);
         if (isBefore(scheduled, today)) {
           risks.push({
@@ -245,7 +248,7 @@ export function Dashboard() {
       }
       
       // Jobb med objekt som har hög ställtid
-      if (obj && (obj.avgSetupTime || 0) > 20 && wo.status !== "completed") {
+      if (obj && (obj.avgSetupTime || 0) > 20 && !isCompleted) {
         risks.push({
           type: "high_setup",
           workOrder: wo,

@@ -21,7 +21,7 @@ import { SignatureCapture } from "@/components/SignatureCapture";
 import { generateJobProtocol, downloadBlob } from "@/components/JobProtocolGenerator";
 import { MaterialLog, type MaterialItem } from "@/components/MaterialLog";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
-import { IMPOSSIBLE_REASONS } from "@shared/schema";
+import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
@@ -55,16 +55,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [selectedImpossibleReason, setSelectedImpossibleReason] = useState<string | null>(null);
   const [impossibleReasonText, setImpossibleReasonText] = useState("");
 
-  const IMPOSSIBLE_REASON_LABELS: Record<string, string> = {
-    locked_gate: "Låst grind/port",
-    no_access: "Ingen tillgång",
-    wrong_address: "Fel adress",
-    obstacle: "Hinder (parkering etc.)",
-    customer_absent: "Kund ej hemma",
-    weather: "Väderförhållanden",
-    equipment_issue: "Utrustningsproblem",
-    other: "Annat",
-  };
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
   
@@ -482,7 +472,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 <p className="text-sm text-muted-foreground">
                   Du markerar denna order som omöjlig med anledning: 
                   <strong className="ml-1">
-                    {selectedImpossibleReason && IMPOSSIBLE_REASON_LABELS[selectedImpossibleReason]}
+                    {selectedImpossibleReason && IMPOSSIBLE_REASON_LABELS[selectedImpossibleReason as keyof typeof IMPOSSIBLE_REASON_LABELS]}
                   </strong>
                 </p>
                 <div className="space-y-2">
