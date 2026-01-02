@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject } from "@shared/schema";
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
+import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -938,10 +939,13 @@ Svara ENDAST med JSON:
 }
 `;
     
+    // Use shared persona with planning focus
+    const plannerSystemPrompt = buildSystemPrompt({ role: "planner" }) + "\n" + PLANNING_PERSONA_ADDITIONS + "\nSvara ENDAST med valid JSON.";
+    
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "Du är en svensk planeringsexpert för fältservice. Ge korta, praktiska förslag. Beakta väder och geografisk gruppering." },
+        { role: "system", content: plannerSystemPrompt },
         { role: "user", content: prompt }
       ],
       temperature: 0.3,
@@ -1883,10 +1887,13 @@ Svara i JSON-format:
 }`;
 
   try {
+    // Use shared persona for anomaly analysis
+    const anomalySystemPrompt = buildSystemPrompt({ role: "planner", additionalContext: "Du analyserar avvikelser och ger förklaringar." }) + "\nSvara alltid i valid JSON-format.";
+    
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        { role: "system", content: "Du är en AI-assistent för fältservice-optimering. Svara alltid på svenska i valid JSON-format." },
+        { role: "system", content: anomalySystemPrompt },
         { role: "user", content: prompt }
       ],
       temperature: 0.7,
