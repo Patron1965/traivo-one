@@ -4076,8 +4076,17 @@ Du kan ge tips som:
   });
 
   // ============== OBJECT METADATA ==============
+  // Helper to verify object belongs to current tenant
+  async function verifyObjectTenant(objectId: string): Promise<boolean> {
+    const obj = await storage.getObject(objectId);
+    return obj?.tenantId === DEFAULT_TENANT_ID;
+  }
+
   app.get("/api/objects/:objectId/metadata", async (req, res) => {
     try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const metadata = await storage.getObjectMetadata(req.params.objectId);
       res.json(metadata);
     } catch (error) {
@@ -4088,6 +4097,9 @@ Du kan ge tips som:
 
   app.post("/api/objects/:objectId/metadata", async (req, res) => {
     try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const data = insertObjectMetadataSchema.parse({ 
         ...req.body, 
         tenantId: DEFAULT_TENANT_ID,
@@ -4106,11 +4118,22 @@ Du kan ge tips som:
 
   app.patch("/api/objects/:objectId/metadata/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, objectId, ...updateData } = req.body;
-      const metadata = await storage.updateObjectMetadata(req.params.id, updateData);
-      if (!metadata) return res.status(404).json({ error: "Metadata not found" });
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const updateSchema = z.object({
+        value: z.string().optional(),
+        breaksInheritance: z.boolean().optional(),
+      });
+      const updateData = updateSchema.parse(req.body);
+      // Storage method enforces objectId and tenantId match at DB level
+      const metadata = await storage.updateObjectMetadata(req.params.id, req.params.objectId, DEFAULT_TENANT_ID, updateData);
+      if (!metadata) return res.status(404).json({ error: "Metadata not found or does not belong to this object" });
       res.json(metadata);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
       console.error("Failed to update object metadata:", error);
       res.status(500).json({ error: "Failed to update object metadata" });
     }
@@ -4118,11 +4141,29 @@ Du kan ge tips som:
 
   app.delete("/api/objects/:objectId/metadata/:id", async (req, res) => {
     try {
-      await storage.deleteObjectMetadata(req.params.id);
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      // Storage method enforces objectId and tenantId match at DB level
+      await storage.deleteObjectMetadata(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete object metadata:", error);
       res.status(500).json({ error: "Failed to delete object metadata" });
+    }
+  });
+
+  // Get effective metadata for an object (including inherited values)
+  app.get("/api/objects/:objectId/effective-metadata", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const effectiveMetadata = await storage.getEffectiveMetadata(req.params.objectId, DEFAULT_TENANT_ID);
+      res.json(effectiveMetadata);
+    } catch (error) {
+      console.error("Failed to fetch effective metadata:", error);
+      res.status(500).json({ error: "Failed to fetch effective metadata" });
     }
   });
 

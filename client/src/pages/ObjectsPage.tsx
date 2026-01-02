@@ -19,10 +19,19 @@ import {
   Check, X, FileSpreadsheet, Download, BarChart3
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
+import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { ServiceObject, Customer, SetupTimeLog } from "@shared/schema";
+
+const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
+  koncern: { label: "Koncern", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
+  brf: { label: "BRF", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+  fastighet: { label: "Fastighet", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+  rum: { label: "Rum", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+  karl: { label: "Kärl", color: "bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200" },
+};
 
 const objectTypeLabels: Record<string, string> = {
   omrade: "Område",
@@ -94,6 +103,7 @@ export default function ObjectsPage() {
   const [typeFilter, setTypeFilter] = useState("all");
   const [accessFilter, setAccessFilter] = useState("all");
   const [customerFilter, setCustomerFilter] = useState("all");
+  const [hierarchyFilter, setHierarchyFilter] = useState("all");
   const [setupTimeRange, setSetupTimeRange] = useState<[number, number]>([0, 60]);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
@@ -213,11 +223,12 @@ export default function ObjectsPage() {
       const matchesType = typeFilter === "all" || obj.objectType === typeFilter;
       const matchesAccess = accessFilter === "all" || obj.accessType === accessFilter;
       const matchesCustomer = customerFilter === "all" || obj.customerId === customerFilter;
+      const matchesHierarchy = hierarchyFilter === "all" || obj.hierarchyLevel === hierarchyFilter;
       const setupTime = obj.avgSetupTime || 0;
       const matchesSetupTime = setupTime >= setupTimeRange[0] && setupTime <= setupTimeRange[1];
-      return matchesType && matchesAccess && matchesCustomer && matchesSetupTime;
+      return matchesType && matchesAccess && matchesCustomer && matchesHierarchy && matchesSetupTime;
     });
-  }, [objects, typeFilter, accessFilter, customerFilter, setupTimeRange]);
+  }, [objects, typeFilter, accessFilter, customerFilter, hierarchyFilter, setupTimeRange]);
 
   const filteredTopLevel = filteredObjects.filter(obj => !obj.parentId);
 
@@ -403,6 +414,11 @@ export default function ObjectsPage() {
           <div className="flex-1 min-w-0" onClick={() => hasChildren && toggleExpand(obj.id)}>
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-medium">{obj.name}</span>
+              {obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel] && (
+                <Badge className={`text-xs ${hierarchyLevelLabels[obj.hierarchyLevel].color}`}>
+                  {hierarchyLevelLabels[obj.hierarchyLevel].label}
+                </Badge>
+              )}
               <Badge variant="secondary" className="text-xs">
                 {objectTypeLabels[obj.objectType] || obj.objectType}
               </Badge>
@@ -543,6 +559,7 @@ export default function ObjectsPage() {
                   </TooltipTrigger>
                   <TooltipContent><p>Visa historik</p></TooltipContent>
                 </Tooltip>
+                <ObjectMetadataPanel object={obj} />
               </>
             )}
           </div>
@@ -652,6 +669,17 @@ export default function ObjectsPage() {
                 <SelectItem value="all">Alla kunder</SelectItem>
                 {customers.map(c => (
                   <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select value={hierarchyFilter} onValueChange={setHierarchyFilter}>
+              <SelectTrigger className="w-[140px]" data-testid="select-hierarchy-filter">
+                <SelectValue placeholder="Nivå" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Alla nivåer</SelectItem>
+                {Object.entries(hierarchyLevelLabels).map(([key, config]) => (
+                  <SelectItem key={key} value={key}>{config.label}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

@@ -222,8 +222,9 @@ export interface IStorage {
   getObjectMetadata(objectId: string): Promise<ObjectMetadata[]>;
   getObjectMetadataByDefinition(objectId: string, definitionId: string): Promise<ObjectMetadata | undefined>;
   createObjectMetadata(metadata: InsertObjectMetadata): Promise<ObjectMetadata>;
-  updateObjectMetadata(id: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined>;
-  deleteObjectMetadata(id: string): Promise<void>;
+  updateObjectMetadata(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined>;
+  deleteObjectMetadata(id: string, objectId: string, tenantId: string): Promise<void>;
+  getEffectiveMetadata(objectId: string, tenantId: string): Promise<Record<string, unknown>>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1587,16 +1588,108 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateObjectMetadata(id: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined> {
+  async updateObjectMetadata(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined> {
+    // Validate metadata belongs to the specified object and tenant before updating
     const [result] = await db.update(objectMetadata)
       .set(data)
-      .where(eq(objectMetadata.id, id))
+      .where(and(
+        eq(objectMetadata.id, id),
+        eq(objectMetadata.objectId, objectId),
+        eq(objectMetadata.tenantId, tenantId)
+      ))
       .returning();
     return result || undefined;
   }
 
-  async deleteObjectMetadata(id: string): Promise<void> {
-    await db.delete(objectMetadata).where(eq(objectMetadata.id, id));
+  async deleteObjectMetadata(id: string, objectId: string, tenantId: string): Promise<void> {
+    // Validate metadata belongs to the specified object and tenant before deleting
+    await db.delete(objectMetadata)
+      .where(and(
+        eq(objectMetadata.id, id),
+        eq(objectMetadata.objectId, objectId),
+        eq(objectMetadata.tenantId, tenantId)
+      ));
+  }
+
+  async getEffectiveMetadata(objectId: string, tenantId: string): Promise<Record<string, unknown>> {
+    // Get metadata definitions scoped to tenant
+    const definitions = await db.select()
+      .from(metadataDefinitions)
+      .where(eq(metadataDefinitions.tenantId, tenantId));
+    const result: Record<string, unknown> = {};
+    
+    // Build the ancestor chain once - cache object lookups
+    const ancestorChain: string[] = [];
+    let currentObj = await this.getObject(objectId);
+    while (currentObj?.parentId) {
+      ancestorChain.push(currentObj.parentId);
+      currentObj = await this.getObject(currentObj.parentId);
+    }
+    
+    // For each definition, try to get the effective value
+    for (const def of definitions) {
+      // First check if the object has its own value
+      const [ownMeta] = await db.select()
+        .from(objectMetadata)
+        .where(and(
+          eq(objectMetadata.objectId, objectId),
+          eq(objectMetadata.definitionId, def.id)
+        ));
+      
+      if (ownMeta) {
+        // Prefer valueJson for structured data, fall back to value string
+        if (ownMeta.valueJson !== null) {
+          result[def.fieldKey] = ownMeta.valueJson;
+        } else {
+          result[def.fieldKey] = ownMeta.value;
+        }
+        continue;
+      }
+      
+      // If no own value and propagation is 'fixed', skip inheritance
+      if (def.propagationType === 'fixed') {
+        result[def.fieldKey] = null;
+        continue;
+      }
+      
+      // Walk up the pre-built ancestor chain looking for inherited value
+      let inheritedValue: unknown = null;
+      
+      for (const ancestorId of ancestorChain) {
+        const [ancestorMeta] = await db.select()
+          .from(objectMetadata)
+          .where(and(
+            eq(objectMetadata.objectId, ancestorId),
+            eq(objectMetadata.definitionId, def.id)
+          ));
+        
+        if (ancestorMeta) {
+          // Found metadata at this ancestor - check if it has a concrete value
+          const hasValue = ancestorMeta.value !== null || ancestorMeta.valueJson !== null;
+          
+          if (hasValue) {
+            // Prefer valueJson for structured data, fall back to value string
+            if (ancestorMeta.valueJson !== null) {
+              inheritedValue = ancestorMeta.valueJson;
+            } else {
+              inheritedValue = ancestorMeta.value;
+            }
+            break;
+          }
+          
+          // Metadata record exists but has no value - if it breaks inheritance, stop
+          if (ancestorMeta.breaksInheritance) {
+            break;
+          }
+        }
+        
+        // No value at this ancestor - continue searching up the chain
+      }
+      
+      result[def.fieldKey] = inheritedValue;
+    }
+    
+    return result;
   }
 }
 
