@@ -51,10 +51,23 @@ import {
   Package,
   ChevronDown,
   ChevronUp,
+  List,
+  LayoutGrid,
+  Link,
+  Building2,
+  Building,
+  Home,
+  Box,
+  Trash,
+  Key,
+  Target,
+  CheckCircle2,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Article } from "@shared/schema";
+import type { Article, ServiceObject } from "@shared/schema";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 const articleTypeOptions = [
   { value: "tjanst", label: "Tjänst" },
@@ -102,12 +115,20 @@ const hookLevelLabels: Record<string, string> = Object.fromEntries(
   hookLevelOptions.filter(o => o.value).map(o => [o.value, o.label])
 );
 
+interface HookConditions {
+  container_type?: string;
+  requires_access_code?: boolean;
+  min_volume?: number;
+  max_volume?: number;
+}
+
 interface ArticleFormData {
   articleNumber: string;
   name: string;
   description: string;
   articleType: string;
   hookLevel: string;
+  hookConditions: HookConditions;
   objectTypes: string[];
   productionTime: number;
   cost: number;
@@ -122,6 +143,7 @@ const emptyFormData: ArticleFormData = {
   description: "",
   articleType: "tjanst",
   hookLevel: "",
+  hookConditions: {},
   objectTypes: [],
   productionTime: 15,
   cost: 0,
@@ -135,7 +157,11 @@ export default function ArticlesPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [objectTypeFilter, setObjectTypeFilter] = useState<string>("all");
+  const [hookLevelFilter, setHookLevelFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"list" | "hooks">("list");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [testDialogOpen, setTestDialogOpen] = useState(false);
+  const [selectedObjectId, setSelectedObjectId] = useState<string>("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [editingArticle, setEditingArticle] = useState<Article | null>(null);
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
@@ -144,6 +170,20 @@ export default function ArticlesPage() {
 
   const { data: articles = [], isLoading } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
+  });
+
+  const { data: objects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
+  });
+
+  const { data: applicableArticles = [], isLoading: isLoadingApplicable } = useQuery<Article[]>({
+    queryKey: ["/api/objects", selectedObjectId, "applicable-articles"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${selectedObjectId}/applicable-articles`);
+      if (!res.ok) throw new Error("Failed to fetch applicable articles");
+      return res.json();
+    },
+    enabled: !!selectedObjectId && testDialogOpen,
   });
 
   const createMutation = useMutation({
@@ -209,6 +249,7 @@ export default function ArticlesPage() {
       description: article.description || "",
       articleType: article.articleType,
       hookLevel: article.hookLevel || "",
+      hookConditions: (article.hookConditions as HookConditions) || {},
       objectTypes: article.objectTypes || [],
       productionTime: article.productionTime || 15,
       cost: article.cost || 0,
@@ -241,9 +282,12 @@ export default function ArticlesPage() {
       const matchesObjectType = objectTypeFilter === "all" || 
         (article.objectTypes && article.objectTypes.includes(objectTypeFilter));
       
-      return matchesSearch && matchesType && matchesObjectType;
+      const matchesHookLevel = hookLevelFilter === "all" || 
+        (hookLevelFilter === "none" ? !article.hookLevel : article.hookLevel === hookLevelFilter);
+      
+      return matchesSearch && matchesType && matchesObjectType && matchesHookLevel;
     });
-  }, [articles, searchQuery, typeFilter, objectTypeFilter]);
+  }, [articles, searchQuery, typeFilter, objectTypeFilter, hookLevelFilter]);
 
   const formatPrice = (price: number | null | undefined) => {
     if (price === null || price === undefined) return "-";
@@ -302,6 +346,39 @@ export default function ArticlesPage() {
             Filter
             {showFilters ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
           </Button>
+          <div className="flex items-center border rounded-md">
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="icon"
+              onClick={() => setViewMode("list")}
+              data-testid="button-view-list"
+            >
+              <List className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === "hooks" ? "secondary" : "ghost"}
+              size="icon"
+              onClick={() => setViewMode("hooks")}
+              data-testid="button-view-hooks"
+            >
+              <Link className="h-4 w-4" />
+            </Button>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                onClick={() => setTestDialogOpen(true)}
+                data-testid="button-test-hook"
+              >
+                <Target className="h-4 w-4 mr-2" />
+                Testa
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Testa vilka artiklar som gäller för ett objekt</p>
+            </TooltipContent>
+          </Tooltip>
         </div>
 
         {showFilters && (
@@ -337,18 +414,122 @@ export default function ArticlesPage() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-sm whitespace-nowrap">Fasthakning:</Label>
+              <Select value={hookLevelFilter} onValueChange={setHookLevelFilter}>
+                <SelectTrigger className="w-[180px]" data-testid="select-hook-level-filter">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla</SelectItem>
+                  <SelectItem value="none">Utan fasthakning</SelectItem>
+                  {hookLevelOptions.filter(o => o.value).map(level => (
+                    <SelectItem key={level.value} value={level.value}>
+                      {level.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         )}
       </div>
 
-      <Card className="flex-1 flex flex-col overflow-hidden">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 pb-4">
-          <CardTitle className="text-lg">
-            {filteredArticles.length} artiklar
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="flex-1 overflow-auto p-0">
-          <Table>
+      {viewMode === "hooks" ? (
+        <div className="flex-1 overflow-auto">
+          <div className="grid gap-4">
+            {[
+              { level: "koncern", label: "Koncern", icon: Building2, description: "Artiklar som gäller på organisationsnivå" },
+              { level: "brf", label: "BRF", icon: Building, description: "Artiklar för bostadsrättsföreningar" },
+              { level: "fastighet", label: "Fastighet", icon: Home, description: "Artiklar på fastighetsnivå" },
+              { level: "rum", label: "Rum", icon: Box, description: "Artiklar för rum (soprum, kök, etc.)" },
+              { level: "karl", label: "Alla kärl", icon: Trash, description: "Gäller alla kärltyper (T100 Kärltvätt)" },
+              { level: "karl_mat", label: "Matavfall", icon: Trash, description: "Endast matavfallskärl (K100 Dekal)" },
+              { level: "karl_rest", label: "Restavfall", icon: Trash, description: "Endast restavfallskärl" },
+              { level: "karl_plast", label: "Plast", icon: Trash, description: "Endast plastkärl" },
+              { level: "kod", label: "Accesskod", icon: Key, description: "Objekt med portkod (KOD10)" },
+            ].map(({ level, label, icon: Icon, description }) => {
+              const levelArticles = articles.filter(a => a.hookLevel === level);
+              if (levelArticles.length === 0) return null;
+              
+              return (
+                <Card key={level} data-testid={`card-hook-level-${level}`}>
+                  <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                    <div className="p-2 rounded-md bg-muted">
+                      <Icon className="h-5 w-5" />
+                    </div>
+                    <div className="flex-1">
+                      <CardTitle className="text-base">{label}</CardTitle>
+                      <p className="text-sm text-muted-foreground">{description}</p>
+                    </div>
+                    <Badge variant="secondary">{levelArticles.length} artiklar</Badge>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <div className="flex flex-wrap gap-2">
+                      {levelArticles.map(article => (
+                        <Badge
+                          key={article.id}
+                          variant="outline"
+                          className="cursor-pointer hover-elevate"
+                          onClick={() => openEditDialog(article)}
+                          data-testid={`badge-article-${article.id}`}
+                        >
+                          <span className="font-mono text-xs mr-1">{article.articleNumber}</span>
+                          {article.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+            
+            {articles.filter(a => !a.hookLevel).length > 0 && (
+              <Card className="border-dashed" data-testid="card-no-hook">
+                <CardHeader className="flex flex-row items-center gap-3 pb-2">
+                  <div className="p-2 rounded-md bg-muted/50">
+                    <Package className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <div className="flex-1">
+                    <CardTitle className="text-base text-muted-foreground">Utan fasthakning</CardTitle>
+                    <p className="text-sm text-muted-foreground">Artiklar som inte är kopplade till en hierarkinivå</p>
+                  </div>
+                  <Badge variant="outline">{articles.filter(a => !a.hookLevel).length} artiklar</Badge>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <div className="flex flex-wrap gap-2">
+                    {articles.filter(a => !a.hookLevel).slice(0, 20).map(article => (
+                      <Badge
+                        key={article.id}
+                        variant="outline"
+                        className="cursor-pointer hover-elevate text-muted-foreground"
+                        onClick={() => openEditDialog(article)}
+                        data-testid={`badge-article-${article.id}`}
+                      >
+                        <span className="font-mono text-xs mr-1">{article.articleNumber}</span>
+                        {article.name}
+                      </Badge>
+                    ))}
+                    {articles.filter(a => !a.hookLevel).length > 20 && (
+                      <Badge variant="outline" className="text-muted-foreground">
+                        +{articles.filter(a => !a.hookLevel).length - 20} fler...
+                      </Badge>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        </div>
+      ) : (
+        <Card className="flex-1 flex flex-col overflow-hidden">
+          <CardHeader className="flex flex-row items-center justify-between gap-2 pb-4">
+            <CardTitle className="text-lg">
+              {filteredArticles.length} artiklar
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex-1 overflow-auto p-0">
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Artikelnr</TableHead>
@@ -449,8 +630,9 @@ export default function ArticlesPage() {
               )}
             </TableBody>
           </Table>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      )}
 
       <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) resetForm(); setDialogOpen(open); }}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -500,7 +682,7 @@ export default function ArticlesPage() {
                 <Label htmlFor="hookLevel">Fasthakning (Kinab-koncept)</Label>
                 <Select
                   value={formData.hookLevel}
-                  onValueChange={(value) => setFormData({ ...formData, hookLevel: value })}
+                  onValueChange={(value) => setFormData({ ...formData, hookLevel: value, hookConditions: {} })}
                 >
                   <SelectTrigger data-testid="select-hook-level">
                     <SelectValue placeholder="Välj nivå" />
@@ -517,6 +699,78 @@ export default function ArticlesPage() {
                   Bestämmer på vilken hierarkinivå artikeln hakar fast och genererar ordrar
                 </p>
               </div>
+
+              {formData.hookLevel && formData.hookLevel.startsWith("karl") && (
+                <div className="space-y-3 p-3 rounded-md border bg-muted/30">
+                  <Label className="text-sm font-medium">Villkor för fasthakning</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="containerType" className="text-sm">Kärltyp</Label>
+                      <Select
+                        value={formData.hookConditions.container_type || ""}
+                        onValueChange={(value) => setFormData({
+                          ...formData,
+                          hookConditions: { ...formData.hookConditions, container_type: value || undefined }
+                        })}
+                      >
+                        <SelectTrigger data-testid="select-container-type-condition">
+                          <SelectValue placeholder="Alla kärltyper" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="">Alla kärltyper</SelectItem>
+                          <SelectItem value="matavfall">Matavfall</SelectItem>
+                          <SelectItem value="restavfall">Restavfall</SelectItem>
+                          <SelectItem value="plastemballage">Plast</SelectItem>
+                          <SelectItem value="atervinning">Återvinning</SelectItem>
+                          <SelectItem value="uj_hushallsavfall">UJ Hushållsavfall</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="minVolume" className="text-sm">Min volym (L)</Label>
+                      <Input
+                        id="minVolume"
+                        type="number"
+                        min="0"
+                        placeholder="Ingen gräns"
+                        value={formData.hookConditions.min_volume || ""}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          hookConditions: { 
+                            ...formData.hookConditions, 
+                            min_volume: e.target.value ? parseInt(e.target.value) : undefined 
+                          }
+                        })}
+                        data-testid="input-min-volume"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {formData.hookLevel === "kod" && (
+                <div className="space-y-2 p-3 rounded-md border bg-muted/30">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="requiresAccessCode"
+                      checked={formData.hookConditions.requires_access_code || false}
+                      onChange={(e) => setFormData({
+                        ...formData,
+                        hookConditions: { ...formData.hookConditions, requires_access_code: e.target.checked }
+                      })}
+                      className="rounded"
+                      data-testid="checkbox-requires-access-code"
+                    />
+                    <Label htmlFor="requiresAccessCode" className="text-sm cursor-pointer">
+                      Kräver att objektet har en accesskod
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Artikeln kommer endast att gälla för objekt som har en registrerad accesskod (t.ex. portkod)
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-2">
                 <Label htmlFor="name">Namn</Label>
@@ -676,6 +930,114 @@ export default function ArticlesPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={testDialogOpen} onOpenChange={(open) => { 
+        setTestDialogOpen(open); 
+        if (!open) setSelectedObjectId(""); 
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle>Testa artikelfasthakning</DialogTitle>
+            <DialogDescription>
+              Välj ett objekt för att se vilka artiklar som gäller baserat på hierarkinivå och villkor
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Välj objekt att testa</Label>
+              <Select value={selectedObjectId} onValueChange={setSelectedObjectId}>
+                <SelectTrigger data-testid="select-test-object">
+                  <SelectValue placeholder="Sök och välj objekt..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <ScrollArea className="h-[200px]">
+                    {objects.map(obj => (
+                      <SelectItem key={obj.id} value={obj.id}>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-xs text-muted-foreground">{obj.hierarchyLevel || "fastighet"}</span>
+                          <span>{obj.name}</span>
+                          <span className="text-muted-foreground text-xs">({obj.objectType})</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </ScrollArea>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {selectedObjectId && (
+              <div className="space-y-3">
+                {(() => {
+                  const selectedObj = objects.find(o => o.id === selectedObjectId);
+                  if (!selectedObj) return null;
+                  return (
+                    <Card className="bg-muted/30">
+                      <CardContent className="pt-4">
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div><span className="text-muted-foreground">Namn:</span> {selectedObj.name}</div>
+                          <div><span className="text-muted-foreground">Typ:</span> {selectedObj.objectType}</div>
+                          <div><span className="text-muted-foreground">Hierarkinivå:</span> {selectedObj.hierarchyLevel || "Inte definierad"}</div>
+                          <div><span className="text-muted-foreground">Accesskod:</span> {selectedObj.accessCode || "Ingen"}</div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  );
+                })()}
+
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    Giltiga artiklar ({applicableArticles.length})
+                  </Label>
+                  {isLoadingApplicable ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : applicableArticles.length === 0 ? (
+                    <Card className="border-dashed">
+                      <CardContent className="pt-4 text-center text-muted-foreground">
+                        <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p>Inga artiklar matchar detta objekt</p>
+                      </CardContent>
+                    </Card>
+                  ) : (
+                    <ScrollArea className="h-[200px]">
+                      <div className="space-y-2">
+                        {applicableArticles.map(article => (
+                          <Card key={article.id} className="p-3" data-testid={`card-applicable-article-${article.id}`}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono text-xs text-muted-foreground">{article.articleNumber}</span>
+                                  <span className="font-medium">{article.name}</span>
+                                </div>
+                                {article.hookLevel && (
+                                  <Badge variant="outline" className="mt-1">
+                                    {hookLevelLabels[article.hookLevel] || article.hookLevel}
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-right text-sm">
+                                <div>{formatPrice(article.listPrice)}</div>
+                                <div className="text-muted-foreground">{formatTime(article.productionTime)}</div>
+                              </div>
+                            </div>
+                          </Card>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTestDialogOpen(false)}>
+              Stäng
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
