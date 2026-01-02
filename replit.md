@@ -150,6 +150,17 @@ Full integration infrastructure for Swedish accounting system:
 - `GET/POST/PATCH /api/fortnox/config` - Configuration management
 - `GET/POST/DELETE /api/fortnox/mappings` - Entity mappings CRUD
 - `GET/POST/PATCH /api/fortnox/exports` - Invoice export management
+- `GET /api/fortnox/authorize` - Generate OAuth authorization URL
+- `GET /api/fortnox/callback` - OAuth callback handler (token exchange)
+- `GET /api/fortnox/status` - Check connection status
+- `POST /api/fortnox/exports/:id/process` - Execute invoice export to Fortnox
+
+**Fortnox Client (server/fortnox-client.ts):**
+- OAuth 2.0 authorization and token exchange
+- Automatic token refresh before expiry
+- Rate limiting (5 concurrent requests via p-limit)
+- Retry logic with exponential backoff (p-retry)
+- Invoice creation with multi-payer split support
 
 **Security:**
 - All routes tenant-scoped with DEFAULT_TENANT_ID
