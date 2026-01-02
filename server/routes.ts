@@ -4263,6 +4263,93 @@ Du kan ge tips som:
   // FORTNOX INTEGRATION
   // ============================================
 
+  const { createFortnoxClient, exportWorkOrderToFortnox } = await import("./fortnox-client");
+
+  // Fortnox OAuth Authorization
+  app.get("/api/fortnox/authorize", async (req, res) => {
+    try {
+      const client = createFortnoxClient(DEFAULT_TENANT_ID);
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/fortnox/callback`;
+      const state = Buffer.from(JSON.stringify({ tenantId: DEFAULT_TENANT_ID, timestamp: Date.now() })).toString("base64");
+      
+      const authUrl = await client.getAuthorizationUrlWithConfig(redirectUri, state);
+      if (!authUrl) {
+        return res.status(400).json({ error: "Fortnox configuration missing - please add Client ID first" });
+      }
+      
+      res.json({ authUrl });
+    } catch (error) {
+      console.error("Failed to generate Fortnox auth URL:", error);
+      res.status(500).json({ error: "Failed to generate authorization URL" });
+    }
+  });
+
+  // Fortnox OAuth Callback
+  app.get("/api/fortnox/callback", async (req, res) => {
+    try {
+      const { code, state, error: oauthError } = req.query;
+      
+      if (oauthError) {
+        return res.redirect(`/fortnox?error=${encodeURIComponent(oauthError as string)}`);
+      }
+      
+      if (!code || !state) {
+        return res.redirect("/fortnox?error=missing_code");
+      }
+
+      let stateData: { tenantId: string };
+      try {
+        stateData = JSON.parse(Buffer.from(state as string, "base64").toString());
+      } catch {
+        return res.redirect("/fortnox?error=invalid_state");
+      }
+
+      const client = createFortnoxClient(stateData.tenantId);
+      const redirectUri = `${req.protocol}://${req.get("host")}/api/fortnox/callback`;
+      
+      await client.exchangeCodeForTokens(code as string, redirectUri);
+      
+      res.redirect("/fortnox?success=true");
+    } catch (error) {
+      console.error("Fortnox OAuth callback failed:", error);
+      res.redirect(`/fortnox?error=${encodeURIComponent("Token exchange failed")}`);
+    }
+  });
+
+  // Fortnox Connection Status
+  app.get("/api/fortnox/status", async (req, res) => {
+    try {
+      const client = createFortnoxClient(DEFAULT_TENANT_ID);
+      const isConnected = await client.isConnected();
+      const config = await storage.getFortnoxConfig(DEFAULT_TENANT_ID);
+      
+      res.json({
+        isConnected,
+        hasConfig: !!config?.clientId,
+        tokenExpiresAt: config?.tokenExpiresAt,
+      });
+    } catch (error) {
+      console.error("Failed to check Fortnox status:", error);
+      res.status(500).json({ error: "Failed to check connection status" });
+    }
+  });
+
+  // Process Fortnox Export (send to Fortnox API)
+  app.post("/api/fortnox/exports/:id/process", async (req, res) => {
+    try {
+      const result = await exportWorkOrderToFortnox(DEFAULT_TENANT_ID, req.params.id);
+      
+      if (result.success) {
+        res.json({ success: true, invoiceNumber: result.invoiceNumber });
+      } else {
+        res.status(400).json({ success: false, error: result.error });
+      }
+    } catch (error) {
+      console.error("Failed to process Fortnox export:", error);
+      res.status(500).json({ error: "Failed to process export" });
+    }
+  });
+
   // Fortnox Config
   app.get("/api/fortnox/config", async (req, res) => {
     try {
