@@ -1,8 +1,11 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Link } from "wouter";
 import {
   Calendar,
@@ -17,10 +20,171 @@ import {
   HelpCircle,
   Truck,
   Users,
+  MessageCircle,
+  Send,
+  Loader2,
+  Bot,
+  User,
+  X,
+  Sparkles,
 } from "lucide-react";
 import { format, isToday, isTomorrow, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
+import { apiRequest } from "@/lib/queryClient";
 import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
+
+interface AIMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+}
+
+function AIAssistantPanel({ 
+  isOpen, 
+  onClose,
+  todaysOrders,
+  thisWeekOrders,
+}: { 
+  isOpen: boolean; 
+  onClose: () => void;
+  todaysOrders: WorkOrder[];
+  thisWeekOrders: WorkOrder[];
+}) {
+  const [messages, setMessages] = useState<AIMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Hej! Jag är din AI-assistent. Fråga mig om dagens arbete, kommande uppdrag eller om du behöver hjälp med något.",
+    }
+  ]);
+  const [input, setInput] = useState("");
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const askMutation = useMutation({
+    mutationFn: async (question: string) => {
+      const response = await apiRequest("POST", "/api/ai/field-assistant", {
+        question,
+        jobContext: {
+          todaysOrderCount: todaysOrders.length,
+          thisWeekOrderCount: thisWeekOrders.length,
+          pendingOrders: todaysOrders.filter(o => o.status !== "completed").length,
+        },
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      setMessages(prev => [...prev, {
+        id: `assistant-${Date.now()}`,
+        role: "assistant",
+        content: data.answer || "Jag kunde tyvärr inte svara på det just nu.",
+      }]);
+    },
+    onError: () => {
+      setMessages(prev => [...prev, {
+        id: `error-${Date.now()}`,
+        role: "assistant",
+        content: "Ett fel uppstod. Försök igen senare.",
+      }]);
+    },
+  });
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const handleSend = () => {
+    if (!input.trim() || askMutation.isPending) return;
+    
+    setMessages(prev => [...prev, {
+      id: `user-${Date.now()}`,
+      role: "user",
+      content: input,
+    }]);
+    askMutation.mutate(input);
+    setInput("");
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <Card className="fixed bottom-4 right-4 w-[380px] max-w-[calc(100vw-2rem)] h-[500px] max-h-[calc(100vh-8rem)] flex flex-col shadow-lg z-50" data-testid="panel-ai-assistant">
+      <CardHeader className="flex flex-row items-center justify-between gap-4 pb-3 border-b shrink-0">
+        <div className="flex items-center gap-2">
+          <div className="p-2 rounded-lg bg-purple-500/10">
+            <Sparkles className="h-5 w-5 text-purple-500" />
+          </div>
+          <div>
+            <CardTitle className="text-base">AI-Assistent</CardTitle>
+            <CardDescription className="text-xs">Fråga om arbete och planering</CardDescription>
+          </div>
+        </div>
+        <Button size="icon" variant="ghost" onClick={onClose} data-testid="button-close-ai">
+          <X className="h-4 w-4" />
+        </Button>
+      </CardHeader>
+      <ScrollArea className="flex-1 p-4">
+        <div className="space-y-4">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+            >
+              {msg.role === "assistant" && (
+                <div className="p-1.5 rounded-full bg-purple-500/10 h-7 w-7 flex items-center justify-center shrink-0">
+                  <Bot className="h-4 w-4 text-purple-500" />
+                </div>
+              )}
+              <div
+                className={`rounded-lg px-3 py-2 max-w-[80%] text-sm ${
+                  msg.role === "user"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted"
+                }`}
+              >
+                {msg.content}
+              </div>
+              {msg.role === "user" && (
+                <div className="p-1.5 rounded-full bg-primary/10 h-7 w-7 flex items-center justify-center shrink-0">
+                  <User className="h-4 w-4 text-primary" />
+                </div>
+              )}
+            </div>
+          ))}
+          {askMutation.isPending && (
+            <div className="flex gap-2 justify-start">
+              <div className="p-1.5 rounded-full bg-purple-500/10 h-7 w-7 flex items-center justify-center shrink-0">
+                <Bot className="h-4 w-4 text-purple-500" />
+              </div>
+              <div className="bg-muted rounded-lg px-3 py-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </ScrollArea>
+      <div className="p-3 border-t shrink-0">
+        <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Skriv din fråga..."
+            disabled={askMutation.isPending}
+            data-testid="input-ai-question"
+          />
+          <Button 
+            type="submit" 
+            size="icon" 
+            disabled={!input.trim() || askMutation.isPending}
+            data-testid="button-send-ai"
+          >
+            <Send className="h-4 w-4" />
+          </Button>
+        </form>
+      </div>
+    </Card>
+  );
+}
 
 function StatCard({ 
   title, 
@@ -150,6 +314,7 @@ function TodaysOrdersList({ orders, objectMap }: { orders: WorkOrder[]; objectMa
 }
 
 export default function MyTasksPage() {
+  const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
@@ -191,13 +356,23 @@ export default function MyTasksPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold" data-testid="page-title">
-            Välkommen till Unicorn
-          </h1>
-          <p className="text-muted-foreground mt-2">
-            {format(today, "EEEE d MMMM yyyy", { locale: sv })}
-          </p>
+        <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
+          <div>
+            <h1 className="text-3xl font-bold" data-testid="page-title">
+              Välkommen till Unicorn
+            </h1>
+            <p className="text-muted-foreground mt-2">
+              {format(today, "EEEE d MMMM yyyy", { locale: sv })}
+            </p>
+          </div>
+          <Button 
+            onClick={() => setAiPanelOpen(true)}
+            className="bg-purple-600 hover:bg-purple-700 text-white"
+            data-testid="button-open-ai-assistant"
+          >
+            <MessageCircle className="h-4 w-4 mr-2" />
+            Fråga din AI-assistent
+          </Button>
         </div>
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
@@ -367,6 +542,13 @@ export default function MyTasksPage() {
           />
         </div>
       </div>
+
+      <AIAssistantPanel 
+        isOpen={aiPanelOpen} 
+        onClose={() => setAiPanelOpen(false)}
+        todaysOrders={todaysOrders}
+        thisWeekOrders={thisWeekOrders}
+      />
     </div>
   );
 }
