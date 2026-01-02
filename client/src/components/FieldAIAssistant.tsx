@@ -15,6 +15,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  suggestedQuestions?: string[];
 }
 
 interface JobContext {
@@ -41,6 +42,7 @@ export function FieldAIAssistant({ jobContext, onClose, isOpen }: FieldAIAssista
   const [inputText, setInputText] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [voiceOutputEnabled, setVoiceOutputEnabled] = useState(true);
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -106,14 +108,23 @@ export function FieldAIAssistant({ jobContext, onClose, isOpen }: FieldAIAssista
       timestamp: new Date(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const newMessages = [...messages, userMessage];
+    setMessages(newMessages);
     setInputText("");
     setIsLoading(true);
+    setSuggestedQuestions([]);
 
     try {
+      // Send conversation history for context
+      const conversationHistory = newMessages.map(m => ({
+        role: m.role,
+        content: m.content
+      }));
+      
       const response = await apiRequest("POST", "/api/ai/field-assistant", {
         question: messageText,
         jobContext,
+        conversationHistory,
       });
 
       const data = await response.json();
@@ -122,9 +133,15 @@ export function FieldAIAssistant({ jobContext, onClose, isOpen }: FieldAIAssista
         role: "assistant",
         content: data.answer,
         timestamp: new Date(),
+        suggestedQuestions: data.suggestedQuestions,
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+      
+      // Update suggested questions
+      if (data.suggestedQuestions && data.suggestedQuestions.length > 0) {
+        setSuggestedQuestions(data.suggestedQuestions);
+      }
 
       // Speak the response if voice output is enabled
       if (voiceOutputEnabled && isSynthesisSupported && data.answer) {
@@ -274,6 +291,29 @@ export function FieldAIAssistant({ jobContext, onClose, isOpen }: FieldAIAssista
             </div>
             <div className="bg-muted rounded-lg px-4 py-2">
               <Loader2 className="h-4 w-4 animate-spin" />
+            </div>
+          </div>
+        )}
+
+        {/* Suggested follow-up questions */}
+        {!isLoading && suggestedQuestions.length > 0 && (
+          <div className="pt-2 border-t border-border/50">
+            <p className="text-xs text-muted-foreground mb-2">Föreslagna följdfrågor:</p>
+            <div className="flex flex-col gap-2">
+              {suggestedQuestions.map((q, i) => (
+                <Button
+                  key={i}
+                  variant="outline"
+                  size="sm"
+                  className="text-left justify-start h-auto py-2 px-3 whitespace-normal"
+                  onClick={() => {
+                    handleSendMessage(q);
+                  }}
+                  data-testid={`button-suggested-question-${i}`}
+                >
+                  {q}
+                </Button>
+              ))}
             </div>
           </div>
         )}

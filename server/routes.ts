@@ -2477,7 +2477,7 @@ export async function registerRoutes(
   // AI General Chat - contextual AI assistant for all modules
   app.post("/api/ai/chat", async (req, res) => {
     try {
-      const { question, context } = req.body;
+      const { question, context, conversationHistory = [] } = req.body;
       if (!question || typeof question !== "string") {
         return res.status(400).json({ error: "Fråga krävs" });
       }
@@ -2538,26 +2538,47 @@ export async function registerRoutes(
         role, 
         moduleName, 
         additionalContext: moduleData 
-      });
+      }) + `
+
+VIKTIGT: Avsluta ALLTID ditt svar med exakt 2-3 föreslagna följdfrågor som användaren kan ställa.
+Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följt av frågorna separerade med "|".`;
+
+      // Build messages array with history
+      const chatMessages: { role: "system" | "user" | "assistant"; content: string }[] = [
+        { role: "system", content: systemPrompt }
+      ];
+      
+      // Add conversation history (limit to last 10)
+      const recentHistory = conversationHistory.slice(-10);
+      for (const msg of recentHistory) {
+        if (msg.role === "user" || msg.role === "assistant") {
+          chatMessages.push({ role: msg.role, content: msg.content });
+        }
+      }
+      
+      chatMessages.push({ role: "user", content: question });
 
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: systemPrompt,
-          },
-          {
-            role: "user",
-            content: question,
-          },
-        ],
+        messages: chatMessages,
         max_tokens: 500,
         temperature: 0.7,
       });
 
-      const answer = response.choices[0]?.message?.content || "Kunde inte generera ett svar.";
-      res.json({ answer });
+      let rawAnswer = response.choices[0]?.message?.content || "Kunde inte generera ett svar.";
+      
+      // Parse suggested follow-up questions
+      let suggestedQuestions: string[] = [];
+      const followUpMatch = rawAnswer.match(/FÖLJDFRÅGOR:(.+?)$/s);
+      if (followUpMatch) {
+        suggestedQuestions = followUpMatch[1].split("|").map(q => q.trim()).filter(q => q.length > 0);
+        rawAnswer = rawAnswer.replace(/\n*FÖLJDFRÅGOR:.+$/s, "").trim();
+      }
+      
+      res.json({ 
+        answer: rawAnswer,
+        suggestedQuestions: suggestedQuestions.slice(0, 3)
+      });
     } catch (error) {
       console.error("AI Chat error:", error);
       res.status(500).json({ error: "Kunde inte behandla frågan" });
@@ -2567,7 +2588,7 @@ export async function registerRoutes(
   // AI Field Assistant - conversational AI with full system data access via function calling
   app.post("/api/ai/field-assistant", async (req, res) => {
     try {
-      const { question, jobContext } = req.body;
+      const { question, jobContext, conversationHistory = [] } = req.body;
       if (!question || typeof question !== "string") {
         return res.status(400).json({ error: "Fråga krävs" });
       }
@@ -2852,19 +2873,33 @@ export async function registerRoutes(
 
       // Use shared persona module for consistent AI personality
       const { buildSystemPromptWithTools } = await import("./ai/persona");
-      const systemPrompt = buildSystemPromptWithTools({ role: "field_worker" });
+      const systemPrompt = buildSystemPromptWithTools({ role: "field_worker" }) + `
+
+VIKTIGT: Avsluta ALLTID ditt svar med exakt 2-3 föreslagna följdfrågor som användaren kan ställa.
+Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följt av frågorna separerade med "|".
+Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur rapporterar jag ett problem`;
       
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const messages: any[] = [
         {
           role: "system",
           content: systemPrompt
-        },
-        {
-          role: "user",
-          content: question
         }
       ];
+      
+      // Add conversation history (limit to last 10 messages)
+      const recentHistory = conversationHistory.slice(-10);
+      for (const msg of recentHistory) {
+        if (msg.role === "user" || msg.role === "assistant") {
+          messages.push({ role: msg.role, content: msg.content });
+        }
+      }
+      
+      // Add current question
+      messages.push({
+        role: "user",
+        content: question
+      });
 
       // First API call with tools
       let response = await openai.chat.completions.create({
@@ -2911,8 +2946,20 @@ export async function registerRoutes(
         assistantMessage = response.choices[0]?.message;
       }
 
-      const answer = assistantMessage?.content || "Jag kunde tyvärr inte hitta ett svar. Försök formulera om din fråga.";
-      res.json({ answer });
+      let rawAnswer = assistantMessage?.content || "Jag kunde tyvärr inte hitta ett svar. Försök formulera om din fråga.";
+      
+      // Parse suggested follow-up questions
+      let suggestedQuestions: string[] = [];
+      const followUpMatch = rawAnswer.match(/FÖLJDFRÅGOR:(.+?)$/s);
+      if (followUpMatch) {
+        suggestedQuestions = followUpMatch[1].split("|").map(q => q.trim()).filter(q => q.length > 0);
+        rawAnswer = rawAnswer.replace(/\n*FÖLJDFRÅGOR:.+$/s, "").trim();
+      }
+      
+      res.json({ 
+        answer: rawAnswer,
+        suggestedQuestions: suggestedQuestions.slice(0, 3)
+      });
     } catch (error) {
       console.error("Field AI error:", error);
       res.status(500).json({ error: "Något gick fel" });

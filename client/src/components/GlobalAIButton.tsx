@@ -123,6 +123,7 @@ export function GlobalAIButton() {
   const [location] = useLocation();
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [input, setInput] = useState("");
+  const [suggestedQuestions, setSuggestedQuestions] = useState<string[]>([]);
 
   const hasDedicatedAI = pagesWithDedicatedAI.some(path => 
     location === path || (path !== "/" && location.startsWith(path + "/"))
@@ -138,11 +139,16 @@ export function GlobalAIButton() {
           module: currentModule.name,
           path: location,
         },
-      }) as { answer?: string; message?: string };
-      return response.answer || response.message || "Jag kan inte svara på det just nu.";
+        conversationHistory: messages,
+      }) as { answer?: string; message?: string; suggestedQuestions?: string[] };
+      return response;
     },
-    onSuccess: (answer) => {
+    onSuccess: (response) => {
+      const answer = response.answer || response.message || "Jag kan inte svara på det just nu.";
       setMessages(prev => [...prev, { role: "assistant", content: answer }]);
+      if (response.suggestedQuestions && response.suggestedQuestions.length > 0) {
+        setSuggestedQuestions(response.suggestedQuestions);
+      }
     },
     onError: () => {
       setMessages(prev => [...prev, { 
@@ -152,13 +158,14 @@ export function GlobalAIButton() {
     },
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim() || chatMutation.isPending) return;
+  const handleSubmit = (e: React.FormEvent, questionOverride?: string) => {
+    e?.preventDefault?.();
+    const question = questionOverride || input.trim();
+    if (!question || chatMutation.isPending) return;
     
-    const question = input.trim();
     setMessages(prev => [...prev, { role: "user", content: question }]);
     setInput("");
+    setSuggestedQuestions([]);
     chatMutation.mutate(question);
   };
 
@@ -241,6 +248,24 @@ export function GlobalAIButton() {
                   <div className="flex items-center gap-2 text-xs text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Analyserar...
+                  </div>
+                )}
+                {/* Suggested follow-up questions */}
+                {!chatMutation.isPending && suggestedQuestions.length > 0 && (
+                  <div className="pt-2 border-t border-border/50 mt-2">
+                    <p className="text-xs text-muted-foreground mb-1">Följdfrågor:</p>
+                    <div className="space-y-1">
+                      {suggestedQuestions.map((q, i) => (
+                        <button
+                          key={i}
+                          className="block w-full text-left text-xs p-2 rounded-md bg-muted/50 hover-elevate"
+                          onClick={() => handleSubmit(null as unknown as React.FormEvent, q)}
+                          data-testid={`button-followup-${i}`}
+                        >
+                          {q}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
               </div>
