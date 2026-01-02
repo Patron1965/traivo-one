@@ -2545,10 +2545,10 @@ Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips
     }
   });
 
-  // AI Field Assistant - conversational AI for field workers with location awareness
+  // AI Field Assistant - conversational AI with full system data access via function calling
   app.post("/api/ai/field-assistant", async (req, res) => {
     try {
-      const { question, context } = req.body;
+      const { question, jobContext } = req.body;
       if (!question || typeof question !== "string") {
         return res.status(400).json({ error: "Fråga krävs" });
       }
@@ -2556,85 +2556,361 @@ Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips
       const OpenAI = (await import("openai")).default;
       const openai = new OpenAI();
 
-      // Build rich context from the request
-      let contextInfo = "";
-      
-      // Resource/worker info
-      if (context?.resourceName) {
-        contextInfo += `Fältarbetare: ${context.resourceName}\n`;
-      }
-      
-      // Location info - with defensive checks for all numeric fields
-      if (context?.position && 
-          typeof context.position.latitude === 'number' && 
-          typeof context.position.longitude === 'number') {
-        const lat = context.position.latitude.toFixed(4);
-        const lng = context.position.longitude.toFixed(4);
-        const acc = typeof context.position.accuracy === 'number' ? Math.round(context.position.accuracy) : '?';
-        contextInfo += `Din position: ${lat}, ${lng} (noggrannhet: ${acc}m)\n`;
-      }
-      
-      // Today's jobs summary
-      if (context?.todayJobsCount !== undefined || context?.completedJobsCount !== undefined) {
-        contextInfo += `Dagens uppdrag: ${context.todayJobsCount || 0} kvar, ${context.completedJobsCount || 0} klara\n`;
-      }
-      
-      // Current job context
-      if (context?.currentJob) {
-        contextInfo += `\nAktuellt jobb:\n`;
-        contextInfo += `- Titel: ${context.currentJob.title || "Okänt"}\n`;
-        contextInfo += `- Adress: ${context.currentJob.address || "Okänd"}\n`;
-        if (context.currentJob.customer) {
-          contextInfo += `- Kund: ${context.currentJob.customer}\n`;
+      // Define tools for data access
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tools: any[] = [
+        {
+          type: "function",
+          function: {
+            name: "get_todays_orders",
+            description: "Hämta alla ordrar planerade för idag",
+            parameters: { type: "object", properties: {}, required: [] }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_weeks_orders",
+            description: "Hämta alla ordrar för denna vecka",
+            parameters: { type: "object", properties: {}, required: [] }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_pending_orders",
+            description: "Hämta alla ordrar som inte är slutförda",
+            parameters: { type: "object", properties: {}, required: [] }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_urgent_orders",
+            description: "Hämta alla brådskande ordrar med hög prioritet",
+            parameters: { type: "object", properties: {}, required: [] }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_resources",
+            description: "Hämta alla resurser (personal och fordon)",
+            parameters: { type: "object", properties: {}, required: [] }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "search_objects",
+            description: "Sök efter objekt/platser baserat på namn eller adress",
+            parameters: {
+              type: "object",
+              properties: {
+                query: { type: "string", description: "Sökord för objekt (namn eller adress)" }
+              },
+              required: ["query"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_object_details",
+            description: "Hämta detaljerad information om ett specifikt objekt (portkod, anteckningar etc)",
+            parameters: {
+              type: "object",
+              properties: {
+                objectId: { type: "string", description: "ID för objektet" }
+              },
+              required: ["objectId"]
+            }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_customers",
+            description: "Hämta alla kunder i systemet",
+            parameters: { type: "object", properties: {}, required: [] }
+          }
+        },
+        {
+          type: "function",
+          function: {
+            name: "get_system_stats",
+            description: "Hämta systemstatistik (antal ordrar, resurser, objekt)",
+            parameters: { type: "object", properties: {}, required: [] }
+          }
+        }
+      ];
+
+      // Tool execution helper
+      const executeTool = async (name: string, args: Record<string, unknown>): Promise<string> => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const tomorrow = new Date(today);
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        
+        const weekStart = new Date(today);
+        weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekEnd.getDate() + 6);
+
+        switch (name) {
+          case "get_todays_orders": {
+            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const objectMap = new Map(objects.map(o => [o.id, o]));
+            
+            const todaysOrders = orders.filter(o => {
+              if (!o.scheduledDate) return false;
+              const orderDate = new Date(o.scheduledDate);
+              return orderDate >= today && orderDate < tomorrow;
+            });
+            
+            return JSON.stringify(todaysOrders.map(o => ({
+              id: o.id,
+              titel: o.title || o.description,
+              status: o.status === "completed" ? "Klar" : o.status === "in_progress" ? "Pågår" : "Planerad",
+              tid: o.scheduledStartTime,
+              plats: o.objectId ? (objectMap.get(o.objectId)?.name || objectMap.get(o.objectId)?.address) : "Okänd",
+              adress: o.objectId ? objectMap.get(o.objectId)?.address : null,
+              prioritet: o.priority === "high" ? "Hög" : o.priority === "medium" ? "Medium" : "Normal"
+            })));
+          }
+          
+          case "get_weeks_orders": {
+            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const objectMap = new Map(objects.map(o => [o.id, o]));
+            
+            const weekOrders = orders.filter(o => {
+              if (!o.scheduledDate) return false;
+              const orderDate = new Date(o.scheduledDate);
+              return orderDate >= weekStart && orderDate <= weekEnd;
+            });
+            
+            return JSON.stringify({
+              totalt: weekOrders.length,
+              klara: weekOrders.filter(o => o.status === "completed").length,
+              kvar: weekOrders.filter(o => o.status !== "completed").length,
+              ordrar: weekOrders.slice(0, 10).map(o => ({
+                titel: o.title || o.description,
+                datum: o.scheduledDate,
+                status: o.status,
+                plats: o.objectId ? objectMap.get(o.objectId)?.name : null
+              }))
+            });
+          }
+          
+          case "get_pending_orders": {
+            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const objectMap = new Map(objects.map(o => [o.id, o]));
+            
+            const pending = orders.filter(o => o.status !== "completed" && o.status !== "cancelled");
+            return JSON.stringify({
+              antal: pending.length,
+              ordrar: pending.slice(0, 15).map(o => ({
+                titel: o.title || o.description,
+                datum: o.scheduledDate,
+                plats: o.objectId ? objectMap.get(o.objectId)?.name : null,
+                prioritet: o.priority
+              }))
+            });
+          }
+          
+          case "get_urgent_orders": {
+            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const objectMap = new Map(objects.map(o => [o.id, o]));
+            
+            const urgent = orders.filter(o => o.priority === "high" && o.status !== "completed" && o.status !== "cancelled");
+            return JSON.stringify({
+              antal: urgent.length,
+              ordrar: urgent.map(o => ({
+                titel: o.title || o.description,
+                datum: o.scheduledDate,
+                plats: o.objectId ? objectMap.get(o.objectId)?.name : null,
+                adress: o.objectId ? objectMap.get(o.objectId)?.address : null
+              }))
+            });
+          }
+          
+          case "get_resources": {
+            const resources = await storage.getResources(DEFAULT_TENANT_ID);
+            return JSON.stringify({
+              totalt: resources.length,
+              aktiva: resources.filter(r => r.status === "active").length,
+              resurser: resources.map(r => ({
+                namn: r.name,
+                typ: r.resourceType === "driver" ? "Förare" : r.resourceType === "vehicle" ? "Fordon" : r.resourceType,
+                status: r.status === "active" ? "Aktiv" : "Inaktiv",
+                telefon: r.phone
+              }))
+            });
+          }
+          
+          case "search_objects": {
+            const query = (args.query as string || "").toLowerCase();
+            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const matching = objects.filter(o => 
+              o.name?.toLowerCase().includes(query) || 
+              o.address?.toLowerCase().includes(query)
+            ).slice(0, 10);
+            
+            return JSON.stringify(matching.map(o => ({
+              id: o.id,
+              namn: o.name,
+              adress: o.address,
+              portkod: o.accessCode,
+              typ: o.objectType
+            })));
+          }
+          
+          case "get_object_details": {
+            const objectId = args.objectId as string;
+            const obj = await storage.getObject(objectId);
+            if (!obj) return JSON.stringify({ error: "Objektet hittades inte" });
+            
+            const customer = obj.customerId ? await storage.getCustomer(obj.customerId) : null;
+            
+            return JSON.stringify({
+              namn: obj.name,
+              adress: obj.address,
+              portkod: obj.accessCode,
+              anteckningar: obj.notes,
+              kund: customer?.name,
+              typ: obj.objectType,
+              lat: obj.latitude,
+              lng: obj.longitude
+            });
+          }
+          
+          case "get_customers": {
+            const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+            return JSON.stringify({
+              antal: customers.length,
+              kunder: customers.slice(0, 20).map(c => ({
+                id: c.id,
+                namn: c.name,
+                kontakt: c.contactPerson,
+                telefon: c.phone,
+                email: c.email
+              }))
+            });
+          }
+          
+          case "get_system_stats": {
+            const [orders, resources, objects, customers, clusters] = await Promise.all([
+              storage.getWorkOrders(DEFAULT_TENANT_ID),
+              storage.getResources(DEFAULT_TENANT_ID),
+              storage.getObjects(DEFAULT_TENANT_ID),
+              storage.getCustomers(DEFAULT_TENANT_ID),
+              storage.getClusters(DEFAULT_TENANT_ID)
+            ]);
+            
+            const completed = orders.filter(o => o.status === "completed").length;
+            const pending = orders.filter(o => o.status !== "completed" && o.status !== "cancelled").length;
+            
+            return JSON.stringify({
+              ordrar: { totalt: orders.length, klara: completed, väntande: pending },
+              resurser: { totalt: resources.length, aktiva: resources.filter(r => r.status === "active").length },
+              objekt: objects.length,
+              kunder: customers.length,
+              kluster: clusters.length
+            });
+          }
+          
+          default:
+            return JSON.stringify({ error: "Okänt verktyg" });
         }
       }
-      
-      // Nearby jobs
-      if (context?.nearbyJobs && context.nearbyJobs.length > 0) {
-        contextInfo += `\nNästa uppdrag i ordning:\n`;
-        context.nearbyJobs.forEach((job: { title: string; address: string }, i: number) => {
-          contextInfo += `${i + 1}. ${job.title} - ${job.address || "Adress saknas"}\n`;
-        });
-      }
 
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content: `Du är en personlig AI-assistent för fältarbetare inom fältservice (avfall, underhåll, service). Du pratar vänligt och hjälpsamt, som en kollega.
+      // Initial message to AI
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const messages: any[] = [
+        {
+          role: "system",
+          content: `Du är en personlig AI-assistent för fältarbetare inom fältservice (avfallshantering, underhåll, service) i Sverige.
 
-DITT UPPDRAG:
-- Hjälpa fältarbetaren med dagens arbete
-- Ge praktiska tips baserat på position och uppdrag
-- Svara på frågor om jobb, kunder, och rutter
-- Vara proaktiv med förslag när det är relevant
-
-KONTEXT:
-${contextInfo || "Ingen specifik kontext tillgänglig."}
+DINA FÖRMÅGOR:
+Du har tillgång till hela systemets data via verktyg:
+- Dagens ordrar, veckans ordrar, brådskande ordrar
+- Alla resurser (personal och fordon)
+- Objekt/platser med adresser och portkoder
+- Kunder och kontaktuppgifter
+- Systemstatistik
 
 RIKTLINJER:
-- Svara på svenska
+- Svara alltid på svenska
 - Var vänlig och personlig (använd "du")
-- Håll svaren korta men hjälpsamma (2-4 meningar)
-- Om frågan handlar om "nästa jobb" eller "vart ska jag", ge konkret vägledning
-- Om du inte vet, säg det ärligt och föreslå vem som kan hjälpa
+- Använd verktygen för att hämta aktuell data innan du svarar
+- Ge korrekta svar baserat på systemdata - gissa aldrig
+- Håll svaren korta och tydliga (2-5 meningar)
+- Om du hittar specifik info (portkod, adress etc), dela den
+- Om du inte hittar info, säg det tydligt
 
-Du kan ge tips som:
-- "Ditt nästa jobb är på [adress]. Vill du att jag öppnar navigation?"
-- "Du har 3 uppdrag kvar idag. Det närmaste är..."
-- "Portkoden till denna adress är [kod]."`,
-          },
-          {
-            role: "user",
-            content: question,
-          },
-        ],
-        max_tokens: 300,
-        temperature: 0.7,
+EXEMPEL PÅ FRÅGOR DU KAN SVARA:
+- "Vilka jobb har jag idag?"
+- "Hur många ordrar är kvar denna vecka?"
+- "Vad är portkoden till Storgatan 5?"
+- "Vilka brådskande ordrar finns det?"
+- "Hur många aktiva resurser har vi?"`
+        },
+        {
+          role: "user",
+          content: question
+        }
+      ];
+
+      // First API call with tools
+      let response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages,
+        tools,
+        tool_choice: "auto",
+        max_tokens: 500,
+        temperature: 0.5
       });
 
-      const answer = response.choices[0]?.message?.content || "Jag vet inte just nu. Fråga din arbetsledare.";
+      let assistantMessage = response.choices[0]?.message;
+
+      // Handle tool calls (up to 3 iterations)
+      let iterations = 0;
+      while (assistantMessage?.tool_calls && iterations < 3) {
+        iterations++;
+        messages.push(assistantMessage);
+
+        // Execute all tool calls
+        for (const toolCall of assistantMessage.tool_calls) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const tc = toolCall as any;
+          const args = JSON.parse(tc.function?.arguments || "{}");
+          const result = await executeTool(tc.function?.name, args);
+          
+          messages.push({
+            role: "tool",
+            tool_call_id: toolCall.id,
+            content: result
+          });
+        }
+
+        // Get next response
+        response = await openai.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages,
+          tools,
+          tool_choice: "auto",
+          max_tokens: 500,
+          temperature: 0.5
+        });
+
+        assistantMessage = response.choices[0]?.message;
+      }
+
+      const answer = assistantMessage?.content || "Jag kunde tyvärr inte hitta ett svar. Försök formulera om din fråga.";
       res.json({ answer });
     } catch (error) {
       console.error("Field AI error:", error);
