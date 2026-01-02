@@ -21,6 +21,7 @@ import {
 import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
+import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -562,6 +563,7 @@ export default function ObjectsPage() {
                 </Tooltip>
                 <ObjectMetadataPanel object={obj} />
                 <ObjectPayersPanel object={obj} />
+                <ObjectApplicableArticlesPanel object={obj} />
               </>
             )}
           </div>
