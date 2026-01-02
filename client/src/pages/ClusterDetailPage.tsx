@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   ArrowLeft,
   Package,
@@ -26,10 +32,21 @@ import {
   Building2,
   DollarSign,
   Target,
+  ChevronRight,
+  ChevronDown,
+  Layers,
+  Map as MapIcon,
+  TreePine,
+  Home,
+  Trash2,
+  Container,
 } from "lucide-react";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import type { Cluster, ServiceObject, WorkOrder, Subscription } from "@shared/schema";
 
 interface ClusterWithStats extends Cluster {
@@ -53,6 +70,133 @@ const ORDER_STATUS_LABELS: Record<string, { label: string; color: string }> = {
   utford: { label: "Utförd", color: "bg-green-500/20 text-green-700 dark:text-green-300" },
   fakturerad: { label: "Fakturerad", color: "bg-emerald-500/20 text-emerald-700 dark:text-emerald-300" },
 };
+
+const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; color: string }> = {
+  koncern: { label: "Koncern", icon: Building2, color: "text-purple-600 dark:text-purple-400" },
+  brf: { label: "BRF", icon: Users, color: "text-blue-600 dark:text-blue-400" },
+  fastighet: { label: "Fastighet", icon: Home, color: "text-green-600 dark:text-green-400" },
+  rum: { label: "Rum", icon: Container, color: "text-yellow-600 dark:text-yellow-400" },
+  karl: { label: "Kärl", icon: Trash2, color: "text-orange-600 dark:text-orange-400" },
+};
+
+interface TreeNode {
+  object: ServiceObject;
+  children: TreeNode[];
+}
+
+function buildObjectTree(objects: ServiceObject[]): TreeNode[] {
+  const objectMap = new Map<string, ServiceObject>();
+  const childrenMap = new Map<string, ServiceObject[]>();
+  
+  objects.forEach(obj => {
+    objectMap.set(obj.id, obj);
+    if (obj.parentId) {
+      const siblings = childrenMap.get(obj.parentId) || [];
+      siblings.push(obj);
+      childrenMap.set(obj.parentId, siblings);
+    }
+  });
+  
+  const rootObjects = objects.filter(obj => !obj.parentId);
+  
+  function buildNode(obj: ServiceObject): TreeNode {
+    const children = childrenMap.get(obj.id) || [];
+    return {
+      object: obj,
+      children: children.map(buildNode),
+    };
+  }
+  
+  return rootObjects.map(buildNode);
+}
+
+function ObjectTreeNode({ node, level = 0 }: { node: TreeNode; level?: number }) {
+  const [isOpen, setIsOpen] = useState(level < 2);
+  const hasChildren = node.children.length > 0;
+  const hierarchyInfo = HIERARCHY_LEVELS[node.object.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
+  const Icon = hierarchyInfo.icon;
+  
+  return (
+    <div className="select-none">
+      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <div 
+          className="flex items-center gap-2 py-1.5 px-2 rounded-md hover-elevate cursor-pointer"
+          style={{ paddingLeft: `${level * 20 + 8}px` }}
+        >
+          {hasChildren ? (
+            <CollapsibleTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-5 w-5 p-0">
+                {isOpen ? (
+                  <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </CollapsibleTrigger>
+          ) : (
+            <div className="w-5" />
+          )}
+          <Icon className={`h-4 w-4 ${hierarchyInfo.color}`} />
+          <span className="text-sm font-medium flex-1 truncate">{node.object.name}</span>
+          <Badge variant="outline" className="text-[10px]">
+            {hierarchyInfo.label}
+          </Badge>
+          {node.object.address && (
+            <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+              {node.object.address}
+            </span>
+          )}
+        </div>
+        {hasChildren && (
+          <CollapsibleContent>
+            {node.children.map(child => (
+              <ObjectTreeNode key={child.object.id} node={child} level={level + 1} />
+            ))}
+          </CollapsibleContent>
+        )}
+      </Collapsible>
+    </div>
+  );
+}
+
+function createHierarchyIcon(level: string) {
+  const colors: Record<string, string> = {
+    koncern: "#9333ea",
+    brf: "#3b82f6",
+    fastighet: "#22c55e",
+    rum: "#eab308",
+    karl: "#f97316",
+  };
+  const color = colors[level] || "#6b7280";
+  return L.divIcon({
+    className: "custom-marker",
+    html: `<div style="
+      background-color: ${color};
+      color: white;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: bold;
+      font-size: 10px;
+      border: 2px solid white;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    "></div>`,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+  });
+}
+
+function MapFitBounds({ positions }: { positions: [number, number][] }) {
+  const map = useMap();
+  if (positions.length > 0) {
+    const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
+    map.fitBounds(bounds, { padding: [50, 50] });
+  }
+  return null;
+}
 
 export default function ClusterDetailPage() {
   const [, navigate] = useLocation();
@@ -265,10 +409,19 @@ export default function ClusterDetailPage() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="objects" className="space-y-4">
-        <TabsList>
+      <Tabs defaultValue="hierarchy" className="space-y-4">
+        <TabsList className="flex-wrap gap-1">
+          <TabsTrigger value="hierarchy" data-testid="tab-hierarchy">
+            <TreePine className="h-4 w-4 mr-1" />
+            Hierarki
+          </TabsTrigger>
+          <TabsTrigger value="map" data-testid="tab-map">
+            <MapIcon className="h-4 w-4 mr-1" />
+            Karta
+          </TabsTrigger>
           <TabsTrigger value="objects" data-testid="tab-objects">
-            Objekt ({clusterObjects.length})
+            <Package className="h-4 w-4 mr-1" />
+            Lista ({clusterObjects.length})
           </TabsTrigger>
           <TabsTrigger value="subscriptions" data-testid="tab-subscriptions">
             Abonnemang ({subscriptions.length})
@@ -277,6 +430,135 @@ export default function ClusterDetailPage() {
             Ordrar ({workOrders.length})
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="hierarchy">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <TreePine className="h-4 w-4" />
+                Objekthierarki - Drill-down
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {objectsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : clusterObjects.length === 0 ? (
+                <div className="py-8 text-center text-muted-foreground">
+                  Inga objekt i detta kluster
+                </div>
+              ) : (
+                <>
+                  <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b">
+                    {Object.entries(HIERARCHY_LEVELS).map(([key, info]) => {
+                      const count = clusterObjects.filter(o => o.hierarchyLevel === key).length;
+                      if (count === 0) return null;
+                      const Icon = info.icon;
+                      return (
+                        <Badge key={key} variant="outline" className="gap-1">
+                          <Icon className={`h-3 w-3 ${info.color}`} />
+                          {info.label}: {count}
+                        </Badge>
+                      );
+                    })}
+                  </div>
+                  <div className="max-h-[500px] overflow-y-auto">
+                    {buildObjectTree(clusterObjects).map(node => (
+                      <ObjectTreeNode key={node.object.id} node={node} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="map">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapIcon className="h-4 w-4" />
+                Klusterkarta
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-0">
+              {objectsLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : (
+                <div className="h-[500px] rounded-b-md overflow-hidden">
+                  <MapContainer
+                    center={[
+                      cluster.centerLatitude || 59.3293,
+                      cluster.centerLongitude || 18.0686
+                    ]}
+                    zoom={13}
+                    style={{ height: "100%", width: "100%" }}
+                  >
+                    <TileLayer
+                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    />
+                    {cluster.centerLatitude && cluster.centerLongitude && cluster.radiusKm && (
+                      <Circle
+                        center={[cluster.centerLatitude, cluster.centerLongitude]}
+                        radius={cluster.radiusKm * 1000}
+                        pathOptions={{
+                          color: cluster.color || "#3B82F6",
+                          fillColor: cluster.color || "#3B82F6",
+                          fillOpacity: 0.1,
+                        }}
+                      />
+                    )}
+                    {clusterObjects
+                      .filter(obj => obj.latitude && obj.longitude)
+                      .map(obj => (
+                        <Marker
+                          key={obj.id}
+                          position={[obj.latitude!, obj.longitude!]}
+                          icon={createHierarchyIcon(obj.hierarchyLevel || "fastighet")}
+                        >
+                          <Popup>
+                            <div className="text-sm">
+                              <div className="font-medium">{obj.name}</div>
+                              <div className="text-muted-foreground">{obj.address}</div>
+                              <Badge variant="outline" className="mt-1">
+                                {HIERARCHY_LEVELS[obj.hierarchyLevel || "fastighet"]?.label || "Fastighet"}
+                              </Badge>
+                            </div>
+                          </Popup>
+                        </Marker>
+                      ))}
+                    {(() => {
+                      const positions = clusterObjects
+                        .filter(obj => obj.latitude && obj.longitude)
+                        .map(obj => [obj.latitude!, obj.longitude!] as [number, number]);
+                      return positions.length > 0 ? <MapFitBounds positions={positions} /> : null;
+                    })()}
+                  </MapContainer>
+                </div>
+              )}
+              <div className="flex flex-wrap gap-2 p-4 border-t">
+                {Object.entries(HIERARCHY_LEVELS).map(([key, info]) => (
+                  <div key={key} className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <div 
+                      className="w-3 h-3 rounded-full"
+                      style={{ 
+                        backgroundColor: key === "koncern" ? "#9333ea" :
+                                         key === "brf" ? "#3b82f6" :
+                                         key === "fastighet" ? "#22c55e" :
+                                         key === "rum" ? "#eab308" : "#f97316"
+                      }}
+                    />
+                    {info.label}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         <TabsContent value="objects">
           <Card>
