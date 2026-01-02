@@ -67,6 +67,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Article, ServiceObject } from "@shared/schema";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip, PageHelp } from "@/components/ui/help-tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
 const articleTypeOptions = [
@@ -317,7 +318,7 @@ export default function ArticlesPage() {
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">Artiklar</h1>
             <p className="text-muted-foreground">
-              Hantera artiklar, tjänster och produkter
+              Produkter och tjänster som kan läggas på ordrar
             </p>
           </div>
           <Button onClick={openCreateDialog} data-testid="button-create-article">
@@ -679,7 +680,10 @@ export default function ArticlesPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="hookLevel">Fasthakning (Kinab-koncept)</Label>
+                <Label htmlFor="hookLevel" className="flex items-center gap-1">
+                  Fasthakning
+                  <HelpTooltip content="Fasthakning bestämmer på vilken nivå artikeln automatiskt föreslås. Välj t.ex. 'Kärl' för att artikeln ska föreslås på alla kärl." />
+                </Label>
                 <Select
                   value={formData.hookLevel}
                   onValueChange={(value) => setFormData({ ...formData, hookLevel: value, hookConditions: {} })}

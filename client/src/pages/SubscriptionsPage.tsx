@@ -59,6 +59,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Subscription, Customer, Article } from "@shared/schema";
+import { PageHelp, HelpTooltip } from "@/components/ui/help-tooltip";
 
 const periodicityOptions = [
   { value: "vecka", label: "Varje vecka" },
@@ -286,7 +287,7 @@ export default function SubscriptionsPage() {
         <div>
           <h1 className="text-2xl font-bold">Abonnemang</h1>
           <p className="text-muted-foreground">
-            Hantera periodiska tjänster och automatisk ordergenerering
+            Återkommande tjänster som genererar ordrar automatiskt
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
@@ -322,6 +323,11 @@ export default function SubscriptionsPage() {
           </Button>
         </div>
       </div>
+
+      <PageHelp
+        title="Vad är ett abonnemang?"
+        description="Ett abonnemang skapar ordrar automatiskt med jämna mellanrum. Du väljer hur ofta (vecka, månad, år) och systemet lägger in ordrar i planeringen."
+      />
 
       {isLoading ? (
         <div className="flex items-center justify-center py-12">

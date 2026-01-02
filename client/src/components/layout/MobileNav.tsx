@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -36,30 +36,34 @@ import {
   Cloud,
   Building,
   Briefcase,
+  Home,
+  Palette,
 } from "lucide-react";
 
 const navigationGroups = [
   {
+    title: "Start",
+    items: [
+      { title: "Startsidan", url: "/", icon: Home },
+    ],
+  },
+  {
     title: "Grunddata",
     items: [
-      { title: "Kluster", url: "/clusters", icon: Target },
       { title: "Objekt", url: "/objects", icon: Building2 },
       { title: "Resurser", url: "/resources", icon: Users },
       { title: "Fordon", url: "/vehicles", icon: Truck },
       { title: "Artiklar", url: "/articles", icon: Package },
-      { title: "Prislistor", url: "/price-lists", icon: Receipt },
-      { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
+      { title: "Kluster", url: "/clusters", icon: Target },
     ],
   },
   {
     title: "Planering",
     items: [
+      { title: "Veckoplanering", url: "/planner", icon: Calendar },
       { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
-      { title: "Veckoplanering", url: "/", icon: Calendar },
-      { title: "Väderplanering", url: "/weather", icon: Cloud },
-      { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
-      { title: "Ruttplanering", url: "/routes", icon: Map },
-      { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
+      { title: "Mobilapp", url: "/mobile", icon: Smartphone },
+      { title: "Rutter", url: "/routes", icon: Map },
     ],
   },
   {
@@ -67,20 +71,32 @@ const navigationGroups = [
     items: [
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
       { title: "Ekonomi", url: "/economics", icon: DollarSign },
-      { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
-      { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
     ],
   },
   {
     title: "System",
     items: [
+      { title: "Prislistor", url: "/price-lists", icon: Receipt },
+      { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
+      { title: "Fortnox", url: "/fortnox", icon: Receipt },
       { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
+      { title: "Importera data", url: "/import", icon: Upload },
+      { title: "Inställningar", url: "/settings", icon: Settings },
+    ],
+  },
+  {
+    title: "Avancerat",
+    items: [
+      { title: "Väderplanering", url: "/weather", icon: Cloud },
+      { title: "AI-optimering", url: "/optimization", icon: Sparkles },
       { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
+      { title: "Prediktiv planering", url: "/predictive-planning", icon: TrendingUp },
+      { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
+      { title: "Metadata", url: "/metadata", icon: FileText },
       { title: "Upphandlingar", url: "/procurements", icon: Briefcase },
       { title: "Kundportal", url: "/customer-portal", icon: Building },
-      { title: "Importera data", url: "/import", icon: Upload },
       { title: "Systemöversikt", url: "/system-overview", icon: FileText },
-      { title: "Inställningar", url: "/settings", icon: Settings },
+      { title: "Admin", url: "/system-dashboard", icon: Palette },
     ],
   },
 ];
@@ -122,14 +138,10 @@ export function MobileNav() {
                 </h3>
                 <div className="space-y-1">
                   {group.items.map((item) => (
-                    <a
+                    <Link
                       key={item.url}
                       href={item.url}
-                      onClick={(e) => {
-                        e.preventDefault();
-                        setOpen(false);
-                        window.location.href = item.url;
-                      }}
+                      onClick={() => setOpen(false)}
                       data-testid={`mobile-nav-${item.url.replace("/", "") || "home"}`}
                       className={`flex items-center gap-3 px-3 py-2 rounded-md hover-elevate active-elevate-2 ${
                         location === item.url
@@ -139,7 +151,7 @@ export function MobileNav() {
                     >
                       <item.icon className="h-4 w-4" />
                       <span className="text-sm font-medium">{item.title}</span>
-                    </a>
+                    </Link>
                   ))}
                 </div>
               </div>

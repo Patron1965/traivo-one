@@ -38,13 +38,15 @@ import MobileFieldPage from "@/pages/MobileFieldPage";
 import ProjectReportPage from "@/pages/ProjectReportPage";
 import MetadataPage from "@/pages/MetadataPage";
 import FortnoxSettingsPage from "@/pages/FortnoxSettingsPage";
+import MyTasksPage from "@/pages/MyTasksPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={WeekPlannerPage} />
+      <Route path="/" component={MyTasksPage} />
+      <Route path="/home" component={MyTasksPage} />
       <Route path="/planner" component={WeekPlannerPage} />
       <Route path="/week-planner" component={WeekPlannerPage} />
       <Route path="/clusters" component={ClustersPage} />

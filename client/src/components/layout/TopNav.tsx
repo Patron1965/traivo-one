@@ -52,45 +52,50 @@ import {
   BarChart3,
   Briefcase,
   Palette,
+  Home,
+  Wrench,
 } from "lucide-react";
 
 const grunddataItems = [
-  { title: "Kluster", url: "/clusters", icon: Target, description: "Geografiska arbetsområden" },
-  { title: "Objekt", url: "/objects", icon: Building2, description: "Fastigheter och arbetsplatser" },
-  { title: "Resurser", url: "/resources", icon: Users, description: "Personal och kompetenser" },
-  { title: "Fordon", url: "/vehicles", icon: Truck, description: "Fordonspark och service" },
-  { title: "Artiklar", url: "/articles", icon: Package, description: "Produktkatalog och lager" },
-  { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning och avtal" },
-  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
+  { title: "Objekt", url: "/objects", icon: Building2, description: "Fastigheter och platser" },
+  { title: "Resurser", url: "/resources", icon: Users, description: "Personal" },
+  { title: "Fordon", url: "/vehicles", icon: Truck, description: "Fordon" },
+  { title: "Artiklar", url: "/articles", icon: Package, description: "Produkter och tjänster" },
+  { title: "Kluster", url: "/clusters", icon: Target, description: "Arbetsområden" },
 ];
 
 const planeringItems = [
-  { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: "Orderöversikt och hantering" },
-  { title: "Veckoplanering", url: "/", icon: Calendar, description: "Detaljerad veckoplanering" },
-  { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Väderjusterad planering" },
-  { title: "Inför Optimering", url: "/optimization", icon: Sparkles, description: "AI-driven optimering" },
-  { title: "Ruttplanering", url: "/routes", icon: Map, description: "Effektiva rutter" },
-  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete på mobil" },
+  { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
+  { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: "Alla ordrar" },
+  { title: "Mobilapp", url: "/mobile", icon: Smartphone, description: "Fältarbete" },
+  { title: "Rutter", url: "/routes", icon: Map, description: "Körvägar" },
 ];
 
 const analysItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, description: "KPI:er och nyckeltal" },
-  { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Ekonomisk rapportering" },
-  { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer, description: "Tidsanalys och mönster" },
-  { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, description: "Översikt och nyckeltal" },
+  { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
 ];
 
 const systemItems = [
-  { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tidsfönster" },
-  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk klusterbildning" },
-  { title: "Metadata", url: "/metadata", icon: FileText, description: "Anpassade fält och arv" },
+  { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
+  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
+  { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
+  { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tider" },
+  { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
+  { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
+];
+
+const avanceratItems = [
+  { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
+  { title: "AI-optimering", url: "/optimization", icon: Sparkles, description: "Automatisk optimering" },
+  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
+  { title: "Prediktiv planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
+  { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer, description: "Tidsanalys" },
+  { title: "Metadata", url: "/metadata", icon: FileText, description: "Anpassade fält" },
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, description: "Avtalshantering" },
   { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
-  { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport och integration" },
-  { title: "Importera data", url: "/import", icon: Upload, description: "Modus 2.0 import" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
-  { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
-  { title: "Varumärke & Admin", url: "/system-dashboard", icon: Palette, description: "White-label och roller" },
+  { title: "Admin", url: "/system-dashboard", icon: Palette, description: "Varumärke och roller" },
 ];
 
 interface NavDropdownProps {
@@ -245,6 +250,16 @@ export function TopNav() {
           <MobileNav />
 
           <nav className="hidden md:flex items-center gap-1">
+            <Link href="/">
+              <Button
+                variant="ghost"
+                className="gap-2"
+                data-testid="nav-home"
+              >
+                <Home className="h-4 w-4" />
+                <span className="hidden lg:inline">Start</span>
+              </Button>
+            </Link>
             <NavDropdown
               label="Grunddata"
               items={grunddataItems}
@@ -268,6 +283,12 @@ export function TopNav() {
               items={systemItems}
               icon={Settings}
               colorClass="text-orange-500"
+            />
+            <NavDropdown
+              label="Avancerat"
+              items={avanceratItems}
+              icon={Wrench}
+              colorClass="text-gray-500"
             />
           </nav>
         </div>
