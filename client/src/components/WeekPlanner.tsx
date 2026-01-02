@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2 } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -17,6 +17,25 @@ import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+
+interface PlannerAction {
+  type: "schedule" | "unschedule";
+  jobId: string;
+  previousState: {
+    resourceId: string | null;
+    scheduledDate: string | null;
+    scheduledStartTime: string | null;
+    status: string;
+    orderStatus: string;
+  };
+  newState: {
+    resourceId: string | null;
+    scheduledDate: string | null;
+    scheduledStartTime: string | null;
+    status: string;
+    orderStatus: string;
+  };
+}
 
 const priorityDotColors: Record<string, string> = {
   urgent: "bg-red-500",
@@ -61,6 +80,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [filterCustomer, setFilterCustomer] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
+  const [undoStack, setUndoStack] = useState<PlannerAction[]>([]);
+  const [redoStack, setRedoStack] = useState<PlannerAction[]>([]);
   const { toast } = useToast();
 
   const visibleDates = useMemo((): Date[] => {
@@ -346,6 +367,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     setDragOverCell(null);
   }, []);
 
+  const addToUndoStack = useCallback((action: PlannerAction) => {
+    setUndoStack(prev => [...prev.slice(-19), action]);
+    setRedoStack([]);
+  }, []);
+
   const handleDrop = useCallback((e: React.DragEvent, resourceId: string, day: Date, hour?: number) => {
     e.preventDefault();
     dragOverCellRef.current = null;
@@ -370,6 +396,28 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     }
 
     const scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
+    const previousDateStr = job.scheduledDate 
+      ? format(new Date(job.scheduledDate), "yyyy-MM-dd")
+      : null;
+
+    addToUndoStack({
+      type: "schedule",
+      jobId,
+      previousState: {
+        resourceId: job.resourceId || null,
+        scheduledDate: previousDateStr,
+        scheduledStartTime: job.scheduledStartTime || null,
+        status: job.status,
+        orderStatus: job.orderStatus,
+      },
+      newState: {
+        resourceId,
+        scheduledDate: format(day, "yyyy-MM-dd"),
+        scheduledStartTime: scheduledStartTime || null,
+        status: "scheduled",
+        orderStatus: "planerad_resurs",
+      },
+    });
 
     console.log("DROP: calling mutate for", jobId, "to", resourceId, format(day, "yyyy-MM-dd"));
     updateWorkOrderMutation.mutate({
@@ -378,7 +426,80 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       scheduledDate: format(day, "yyyy-MM-dd"),
       scheduledStartTime,
     });
-  }, [workOrders, updateWorkOrderMutation]);
+  }, [workOrders, updateWorkOrderMutation, addToUndoStack]);
+
+  const applyActionMutation = useMutation({
+    mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => {
+      const response = await apiRequest("PATCH", `/api/work-orders/${jobId}`, {
+        resourceId: state.resourceId,
+        scheduledDate: state.scheduledDate,
+        scheduledStartTime: state.scheduledStartTime,
+        status: state.status,
+        orderStatus: state.orderStatus,
+      });
+      return response.json() as Promise<WorkOrderWithObject>;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: workOrdersQueryKey });
+    },
+    onError: () => {
+      toast({
+        title: "Fel",
+        description: "Kunde inte ångra/göra om ändringen.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleUndo = useCallback(() => {
+    if (undoStack.length === 0) return;
+    
+    const lastAction = undoStack[undoStack.length - 1];
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [...prev, lastAction]);
+    
+    applyActionMutation.mutate({
+      jobId: lastAction.jobId,
+      state: lastAction.previousState,
+    });
+    
+    toast({ title: "Ändring ångrad" });
+  }, [undoStack, applyActionMutation, toast]);
+
+  const handleRedo = useCallback(() => {
+    if (redoStack.length === 0) return;
+    
+    const lastAction = redoStack[redoStack.length - 1];
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [...prev, lastAction]);
+    
+    applyActionMutation.mutate({
+      jobId: lastAction.jobId,
+      state: lastAction.newState,
+    });
+    
+    toast({ title: "Ändring återställd" });
+  }, [redoStack, applyActionMutation, toast]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (undoStack.length > 0) {
+          handleUndo();
+        }
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'y' || (e.key === 'z' && e.shiftKey))) {
+        e.preventDefault();
+        if (redoStack.length > 0) {
+          handleRedo();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleUndo, handleRedo, undoStack.length, redoStack.length]);
 
   const handleResourceClick = useCallback((resourceId: string) => {
     setActiveResourceId(resourceId);
@@ -425,6 +546,33 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const handleUnschedule = (e: { stopPropagation: () => void }, jobId: string) => {
     e.stopPropagation();
+    
+    const job = workOrders.find(j => j.id === jobId);
+    if (job) {
+      const previousDateStr = job.scheduledDate 
+        ? format(new Date(job.scheduledDate), "yyyy-MM-dd")
+        : null;
+      
+      addToUndoStack({
+        type: "unschedule",
+        jobId,
+        previousState: {
+          resourceId: job.resourceId || null,
+          scheduledDate: previousDateStr,
+          scheduledStartTime: job.scheduledStartTime || null,
+          status: job.status,
+          orderStatus: job.orderStatus,
+        },
+        newState: {
+          resourceId: null,
+          scheduledDate: null,
+          scheduledStartTime: null,
+          status: "draft",
+          orderStatus: "skapad",
+        },
+      });
+    }
+    
     unscheduleWorkOrderMutation.mutate(jobId);
   };
 
@@ -797,6 +945,36 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             <span className="text-sm font-medium ml-2 capitalize whitespace-nowrap" data-testid="text-date-label">
               {getHeaderLabel()}
             </span>
+            <div className="flex items-center gap-1 ml-2 border-l pl-2">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={handleUndo} 
+                    disabled={undoStack.length === 0}
+                    data-testid="button-undo"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Ångra (Ctrl+Z)</p></TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="ghost" 
+                    size="icon" 
+                    onClick={handleRedo} 
+                    disabled={redoStack.length === 0}
+                    data-testid="button-redo"
+                  >
+                    <Redo2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Gör om (Ctrl+Y)</p></TooltipContent>
+              </Tooltip>
+            </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
             <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && handleViewModeChange(v as ViewMode)} data-testid="toggle-view-mode">

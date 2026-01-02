@@ -55,6 +55,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [selectedImpossibleReason, setSelectedImpossibleReason] = useState<string | null>(null);
   const [impossibleReasonText, setImpossibleReasonText] = useState("");
   const [impossiblePhoto, setImpossiblePhoto] = useState<string | null>(null);
+  const [isUploadingImpossiblePhoto, setIsUploadingImpossiblePhoto] = useState(false);
 
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
@@ -521,15 +522,47 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         capture="environment"
                         className="hidden"
                         id="impossible-photo-input"
-                        onChange={(e) => {
+                        onChange={async (e) => {
                           const file = e.target.files?.[0];
                           if (file) {
-                            const reader = new FileReader();
-                            reader.onload = () => {
-                              setImpossiblePhoto(reader.result as string);
-                            };
-                            reader.readAsDataURL(file);
+                            setIsUploadingImpossiblePhoto(true);
+                            try {
+                              const response = await fetch("/api/uploads/request-url", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({
+                                  name: `impossible-${selectedJobId}-${Date.now()}-${file.name}`,
+                                  size: file.size,
+                                  contentType: file.type,
+                                }),
+                              });
+
+                              if (!response.ok) throw new Error("Kunde inte få uppladdnings-URL");
+
+                              const { uploadURL, objectPath } = await response.json();
+
+                              const uploadResponse = await fetch(uploadURL, {
+                                method: "PUT",
+                                body: file,
+                                headers: { "Content-Type": file.type },
+                              });
+
+                              if (!uploadResponse.ok) throw new Error("Uppladdning misslyckades");
+                              
+                              setImpossiblePhoto(objectPath);
+                              toast({ title: "Foto uppladdat" });
+                            } catch (error) {
+                              console.error("Upload error:", error);
+                              toast({ 
+                                title: "Fel vid uppladdning", 
+                                description: "Kunde inte ladda upp bilden.",
+                                variant: "destructive" 
+                              });
+                            } finally {
+                              setIsUploadingImpossiblePhoto(false);
+                            }
                           }
+                          e.target.value = "";
                         }}
                         data-testid="input-impossible-photo"
                       />
@@ -537,10 +570,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                         variant="outline"
                         className="flex-1"
                         onClick={() => document.getElementById('impossible-photo-input')?.click()}
+                        disabled={isUploadingImpossiblePhoto}
                         data-testid="button-take-impossible-photo"
                       >
-                        <Camera className="h-4 w-4 mr-2" />
-                        Ta foto
+                        {isUploadingImpossiblePhoto ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <Camera className="h-4 w-4 mr-2" />
+                        )}
+                        {isUploadingImpossiblePhoto ? "Laddar upp..." : "Ta foto"}
                       </Button>
                     </div>
                   )}
