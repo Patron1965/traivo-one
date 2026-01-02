@@ -2554,7 +2554,10 @@ Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips
       }
 
       const OpenAI = (await import("openai")).default;
-      const openai = new OpenAI();
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
 
       // Define tools for data access
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
