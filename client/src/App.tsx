@@ -36,6 +36,7 @@ import CustomerPortalPage from "@/pages/CustomerPortalPage";
 import SystemDashboardPage from "@/pages/SystemDashboardPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
 import ProjectReportPage from "@/pages/ProjectReportPage";
+import MetadataPage from "@/pages/MetadataPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -73,6 +74,7 @@ function Router() {
       <Route path="/field" component={MobileFieldPage} />
       <Route path="/simple" component={MobileFieldPage} />
       <Route path="/project-report" component={ProjectReportPage} />
+      <Route path="/metadata" component={MetadataPage} />
       <Route component={NotFound} />
     </Switch>
   );

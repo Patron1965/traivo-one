@@ -30,12 +30,15 @@ import {
   type TenantBranding, type InsertTenantBranding,
   type UserTenantRole, type InsertUserTenantRole,
   type AuditLog, type InsertAuditLog,
+  type MetadataDefinition, type InsertMetadataDefinition,
+  type ObjectMetadata, type InsertObjectMetadata,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
   vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
   resourcePositions,
-  brandingTemplates, tenantBranding, userTenantRoles, auditLogs
+  brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
+  metadataDefinitions, objectMetadata
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
@@ -207,6 +210,20 @@ export interface IStorage {
   createResourcePosition(position: InsertResourcePosition): Promise<ResourcePosition>;
   getResourcePositions(resourceId: string, startDate?: Date, endDate?: Date): Promise<ResourcePosition[]>;
   getActiveResourcePositions(): Promise<Resource[]>;
+  
+  // Metadata Definitions
+  getMetadataDefinitions(tenantId: string): Promise<MetadataDefinition[]>;
+  getMetadataDefinition(id: string): Promise<MetadataDefinition | undefined>;
+  createMetadataDefinition(definition: InsertMetadataDefinition): Promise<MetadataDefinition>;
+  updateMetadataDefinition(id: string, data: Partial<InsertMetadataDefinition>): Promise<MetadataDefinition | undefined>;
+  deleteMetadataDefinition(id: string): Promise<void>;
+  
+  // Object Metadata
+  getObjectMetadata(objectId: string): Promise<ObjectMetadata[]>;
+  getObjectMetadataByDefinition(objectId: string, definitionId: string): Promise<ObjectMetadata | undefined>;
+  createObjectMetadata(metadata: InsertObjectMetadata): Promise<ObjectMetadata>;
+  updateObjectMetadata(id: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined>;
+  deleteObjectMetadata(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -462,6 +479,11 @@ export class DatabaseStorage implements IStorage {
       metadata: workOrders.metadata,
       createdAt: workOrders.createdAt,
       deletedAt: workOrders.deletedAt,
+      impossibleReason: workOrders.impossibleReason,
+      impossibleReasonText: workOrders.impossibleReasonText,
+      impossibleAt: workOrders.impossibleAt,
+      impossibleBy: workOrders.impossibleBy,
+      impossiblePhotoUrl: workOrders.impossiblePhotoUrl,
       objectName: objects.name,
       objectAddress: objects.address,
     })
@@ -1509,6 +1531,72 @@ export class DatabaseStorage implements IStorage {
         isNull(resources.deletedAt),
         gte(resources.lastPositionUpdate, fiveMinutesAgo)
       ));
+  }
+
+  // Metadata Definitions
+  async getMetadataDefinitions(tenantId: string): Promise<MetadataDefinition[]> {
+    return db.select()
+      .from(metadataDefinitions)
+      .where(eq(metadataDefinitions.tenantId, tenantId))
+      .orderBy(metadataDefinitions.fieldKey);
+  }
+
+  async getMetadataDefinition(id: string): Promise<MetadataDefinition | undefined> {
+    const [definition] = await db.select()
+      .from(metadataDefinitions)
+      .where(eq(metadataDefinitions.id, id));
+    return definition || undefined;
+  }
+
+  async createMetadataDefinition(definition: InsertMetadataDefinition): Promise<MetadataDefinition> {
+    const [result] = await db.insert(metadataDefinitions).values(definition).returning();
+    return result;
+  }
+
+  async updateMetadataDefinition(id: string, data: Partial<InsertMetadataDefinition>): Promise<MetadataDefinition | undefined> {
+    const [result] = await db.update(metadataDefinitions)
+      .set(data)
+      .where(eq(metadataDefinitions.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteMetadataDefinition(id: string): Promise<void> {
+    await db.delete(metadataDefinitions).where(eq(metadataDefinitions.id, id));
+  }
+
+  // Object Metadata
+  async getObjectMetadata(objectId: string): Promise<ObjectMetadata[]> {
+    return db.select()
+      .from(objectMetadata)
+      .where(eq(objectMetadata.objectId, objectId));
+  }
+
+  async getObjectMetadataByDefinition(objectId: string, definitionId: string): Promise<ObjectMetadata | undefined> {
+    const [result] = await db.select()
+      .from(objectMetadata)
+      .where(and(
+        eq(objectMetadata.objectId, objectId),
+        eq(objectMetadata.definitionId, definitionId)
+      ));
+    return result || undefined;
+  }
+
+  async createObjectMetadata(metadata: InsertObjectMetadata): Promise<ObjectMetadata> {
+    const [result] = await db.insert(objectMetadata).values(metadata).returning();
+    return result;
+  }
+
+  async updateObjectMetadata(id: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined> {
+    const [result] = await db.update(objectMetadata)
+      .set(data)
+      .where(eq(objectMetadata.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteObjectMetadata(id: string): Promise<void> {
+    await db.delete(objectMetadata).where(eq(objectMetadata.id, id));
   }
 }
 

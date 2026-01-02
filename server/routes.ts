@@ -8,7 +8,8 @@ import {
   insertWorkOrderLineSchema, insertSimulationScenarioSchema, ORDER_STATUSES, type OrderStatus,
   insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema,
   insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema,
-  insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertClusterSchema
+  insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertClusterSchema,
+  insertMetadataDefinitionSchema, insertObjectMetadataSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -4001,6 +4002,127 @@ Du kan ge tips som:
     } catch (error) {
       console.error("Failed to send email:", error);
       res.status(500).json({ error: "Failed to send email", details: String(error) });
+    }
+  });
+
+  // ============== METADATA DEFINITIONS ==============
+  app.get("/api/metadata-definitions", async (req, res) => {
+    try {
+      const definitions = await storage.getMetadataDefinitions(DEFAULT_TENANT_ID);
+      res.json(definitions);
+    } catch (error) {
+      console.error("Failed to fetch metadata definitions:", error);
+      res.status(500).json({ error: "Failed to fetch metadata definitions" });
+    }
+  });
+
+  app.get("/api/metadata-definitions/:id", async (req, res) => {
+    try {
+      const definition = await storage.getMetadataDefinition(req.params.id);
+      if (!definition) return res.status(404).json({ error: "Definition not found" });
+      res.json(definition);
+    } catch (error) {
+      console.error("Failed to fetch metadata definition:", error);
+      res.status(500).json({ error: "Failed to fetch metadata definition" });
+    }
+  });
+
+  app.post("/api/metadata-definitions", async (req, res) => {
+    try {
+      const data = insertMetadataDefinitionSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const definition = await storage.createMetadataDefinition(data);
+      res.status(201).json(definition);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create metadata definition:", error);
+      res.status(500).json({ error: "Failed to create metadata definition" });
+    }
+  });
+
+  app.patch("/api/metadata-definitions/:id", async (req, res) => {
+    try {
+      // Only allow updating safe fields - never tenantId, id, fieldKey, or createdAt
+      const updateSchema = z.object({
+        fieldLabel: z.string().optional(),
+        dataType: z.string().optional(),
+        propagationType: z.string().optional(),
+        applicableLevels: z.array(z.string()).optional(),
+        isRequired: z.boolean().optional(),
+        defaultValue: z.string().nullable().optional(),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const definition = await storage.updateMetadataDefinition(req.params.id, updateData);
+      if (!definition) return res.status(404).json({ error: "Definition not found" });
+      res.json(definition);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to update metadata definition:", error);
+      res.status(500).json({ error: "Failed to update metadata definition" });
+    }
+  });
+
+  app.delete("/api/metadata-definitions/:id", async (req, res) => {
+    try {
+      await storage.deleteMetadataDefinition(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete metadata definition:", error);
+      res.status(500).json({ error: "Failed to delete metadata definition" });
+    }
+  });
+
+  // ============== OBJECT METADATA ==============
+  app.get("/api/objects/:objectId/metadata", async (req, res) => {
+    try {
+      const metadata = await storage.getObjectMetadata(req.params.objectId);
+      res.json(metadata);
+    } catch (error) {
+      console.error("Failed to fetch object metadata:", error);
+      res.status(500).json({ error: "Failed to fetch object metadata" });
+    }
+  });
+
+  app.post("/api/objects/:objectId/metadata", async (req, res) => {
+    try {
+      const data = insertObjectMetadataSchema.parse({ 
+        ...req.body, 
+        tenantId: DEFAULT_TENANT_ID,
+        objectId: req.params.objectId 
+      });
+      const metadata = await storage.createObjectMetadata(data);
+      res.status(201).json(metadata);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create object metadata:", error);
+      res.status(500).json({ error: "Failed to create object metadata" });
+    }
+  });
+
+  app.patch("/api/objects/:objectId/metadata/:id", async (req, res) => {
+    try {
+      const { tenantId, id, createdAt, objectId, ...updateData } = req.body;
+      const metadata = await storage.updateObjectMetadata(req.params.id, updateData);
+      if (!metadata) return res.status(404).json({ error: "Metadata not found" });
+      res.json(metadata);
+    } catch (error) {
+      console.error("Failed to update object metadata:", error);
+      res.status(500).json({ error: "Failed to update object metadata" });
+    }
+  });
+
+  app.delete("/api/objects/:objectId/metadata/:id", async (req, res) => {
+    try {
+      await storage.deleteObjectMetadata(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete object metadata:", error);
+      res.status(500).json({ error: "Failed to delete object metadata" });
     }
   });
 

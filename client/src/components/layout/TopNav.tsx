@@ -83,6 +83,7 @@ const analysItems = [
 const systemItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tidsfönster" },
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk klusterbildning" },
+  { title: "Metadata", url: "/metadata", icon: FileText, description: "Anpassade fält och arv" },
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, description: "Avtalshantering" },
   { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
   { title: "Importera data", url: "/import", icon: Upload, description: "Modus 2.0 import" },
