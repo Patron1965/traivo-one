@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
+import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -560,6 +561,7 @@ export default function ObjectsPage() {
                   <TooltipContent><p>Visa historik</p></TooltipContent>
                 </Tooltip>
                 <ObjectMetadataPanel object={obj} />
+                <ObjectPayersPanel object={obj} />
               </>
             )}
           </div>

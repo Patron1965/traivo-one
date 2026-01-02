@@ -21,6 +21,15 @@ import { SignatureCapture } from "@/components/SignatureCapture";
 import { generateJobProtocol, downloadBlob } from "@/components/JobProtocolGenerator";
 import { MaterialLog, type MaterialItem } from "@/components/MaterialLog";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
+import { IMPOSSIBLE_REASONS } from "@shared/schema";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 type View = "jobs" | "job";
 
@@ -42,6 +51,20 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [showSignaturePanel, setShowSignaturePanel] = useState(false);
   const [currentSignature, setCurrentSignature] = useState<string | null>(null);
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
+  const [showImpossibleDialog, setShowImpossibleDialog] = useState(false);
+  const [selectedImpossibleReason, setSelectedImpossibleReason] = useState<string | null>(null);
+  const [impossibleReasonText, setImpossibleReasonText] = useState("");
+
+  const IMPOSSIBLE_REASON_LABELS: Record<string, string> = {
+    locked_gate: "Låst grind/port",
+    no_access: "Ingen tillgång",
+    wrong_address: "Fel adress",
+    obstacle: "Hinder (parkering etc.)",
+    customer_absent: "Kund ej hemma",
+    weather: "Väderförhållanden",
+    equipment_issue: "Utrustningsproblem",
+    other: "Annat",
+  };
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
   
@@ -230,6 +253,46 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     },
   });
 
+  const markImpossibleMutation = useMutation({
+    mutationFn: async ({ 
+      id, 
+      reason, 
+      reasonText 
+    }: { 
+      id: string; 
+      reason: string; 
+      reasonText?: string; 
+    }) => {
+      await apiRequest("PATCH", `/api/work-orders/${id}`, {
+        status: "omojlig",
+        impossibleReason: reason,
+        impossibleReasonText: reasonText || null,
+        impossibleAt: new Date().toISOString(),
+        impossibleBy: resourceId || null,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({ 
+        title: "Order markerad som omöjlig", 
+        description: "Ordern har markerats och en ny kommer schemaläggas.",
+      });
+      setShowImpossibleDialog(false);
+      setSelectedImpossibleReason(null);
+      setImpossibleReasonText("");
+      setShowProblemPanel(false);
+      setView("jobs");
+      setSelectedJobId(null);
+    },
+    onError: () => {
+      toast({ 
+        title: "Fel", 
+        description: "Kunde inte markera ordern som omöjlig.", 
+        variant: "destructive" 
+      });
+    },
+  });
+
   const handleSelectJob = (jobId: string) => {
     setSelectedJobId(jobId);
     setView("job");
@@ -256,9 +319,19 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     setShowProblemPanel(false);
   };
 
-  const reportProblem = (problemType: string) => {
-    toast({ title: "Rapporterat", description: `Problem: ${problemType}` });
-    setShowProblemPanel(false);
+  const handleSelectImpossibleReason = (reason: string) => {
+    setSelectedImpossibleReason(reason);
+    setShowImpossibleDialog(true);
+  };
+
+  const handleConfirmImpossible = () => {
+    if (selectedJob && selectedImpossibleReason) {
+      markImpossibleMutation.mutate({
+        id: selectedJob.id,
+        reason: selectedImpossibleReason,
+        reasonText: impossibleReasonText || undefined,
+      });
+    }
   };
 
   if (isLoading) {
@@ -368,32 +441,89 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-orange-500" />
-                  Rapportera problem
+                  Markera som omöjlig
                 </CardTitle>
               </CardHeader>
               <CardContent>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Välj anledning till att ordern inte kan utföras:
+                </p>
                 <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { icon: Trash2, text: "Trasigt kärl", color: "text-orange-500" },
-                    { icon: Ban, text: "Kommer ej åt", color: "text-red-500" },
-                    { icon: MapPinOff, text: "Fel adress", color: "text-yellow-600" },
-                    { icon: Clock, text: "Ingen tid", color: "text-blue-500" },
-                  ].map((problem, i) => (
+                  {IMPOSSIBLE_REASONS.map((reason) => (
                     <Button
-                      key={i}
+                      key={reason}
                       variant="outline"
                       className="h-auto py-3 flex-col gap-1"
-                      onClick={() => reportProblem(problem.text)}
-                      data-testid={`button-problem-${i}`}
+                      onClick={() => handleSelectImpossibleReason(reason)}
+                      data-testid={`button-impossible-${reason}`}
                     >
-                      <problem.icon className={`h-5 w-5 ${problem.color}`} />
-                      <span className="text-xs">{problem.text}</span>
+                      {reason === "locked_gate" && <Ban className="h-5 w-5 text-red-500" />}
+                      {reason === "no_access" && <Ban className="h-5 w-5 text-red-500" />}
+                      {reason === "wrong_address" && <MapPinOff className="h-5 w-5 text-yellow-600" />}
+                      {reason === "obstacle" && <Trash2 className="h-5 w-5 text-orange-500" />}
+                      {reason === "customer_absent" && <Clock className="h-5 w-5 text-blue-500" />}
+                      {reason === "weather" && <AlertTriangle className="h-5 w-5 text-gray-500" />}
+                      {reason === "equipment_issue" && <AlertTriangle className="h-5 w-5 text-purple-500" />}
+                      {reason === "other" && <HelpCircle className="h-5 w-5 text-gray-500" />}
+                      <span className="text-xs">{IMPOSSIBLE_REASON_LABELS[reason]}</span>
                     </Button>
                   ))}
                 </div>
               </CardContent>
             </Card>
           )}
+
+          <Dialog open={showImpossibleDialog} onOpenChange={setShowImpossibleDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Bekräfta omöjlig order</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  Du markerar denna order som omöjlig med anledning: 
+                  <strong className="ml-1">
+                    {selectedImpossibleReason && IMPOSSIBLE_REASON_LABELS[selectedImpossibleReason]}
+                  </strong>
+                </p>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">
+                    Ytterligare detaljer (valfritt)
+                  </label>
+                  <Textarea
+                    value={impossibleReasonText}
+                    onChange={(e) => setImpossibleReasonText(e.target.value)}
+                    placeholder="Beskriv vad som hindrade dig..."
+                    data-testid="input-impossible-reason-text"
+                  />
+                </div>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowImpossibleDialog(false);
+                    setSelectedImpossibleReason(null);
+                    setImpossibleReasonText("");
+                  }}
+                >
+                  Avbryt
+                </Button>
+                <Button 
+                  variant="destructive"
+                  onClick={handleConfirmImpossible}
+                  disabled={markImpossibleMutation.isPending}
+                  data-testid="button-confirm-impossible"
+                >
+                  {markImpossibleMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <AlertTriangle className="h-4 w-4 mr-1" />
+                  )}
+                  Markera som omöjlig
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <PhotoCapture 
             workOrderId={selectedJob.id}

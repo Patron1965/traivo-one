@@ -85,11 +85,25 @@ const objectTypeLabels: Record<string, string> = Object.fromEntries(
   objectTypeOptions.map(t => [t.value, t.label])
 );
 
+const hookLevelOptions = [
+  { value: "", label: "Ingen fasthakning" },
+  { value: "koncern", label: "Koncern" },
+  { value: "brf", label: "BRF" },
+  { value: "fastighet", label: "Fastighet" },
+  { value: "rum", label: "Rum" },
+  { value: "karl", label: "Kärl" },
+];
+
+const hookLevelLabels: Record<string, string> = Object.fromEntries(
+  hookLevelOptions.filter(o => o.value).map(o => [o.value, o.label])
+);
+
 interface ArticleFormData {
   articleNumber: string;
   name: string;
   description: string;
   articleType: string;
+  hookLevel: string;
   objectTypes: string[];
   productionTime: number;
   cost: number;
@@ -103,6 +117,7 @@ const emptyFormData: ArticleFormData = {
   name: "",
   description: "",
   articleType: "tjanst",
+  hookLevel: "",
   objectTypes: [],
   productionTime: 15,
   cost: 0,
@@ -189,6 +204,7 @@ export default function ArticlesPage() {
       name: article.name,
       description: article.description || "",
       articleType: article.articleType,
+      hookLevel: article.hookLevel || "",
       objectTypes: article.objectTypes || [],
       productionTime: article.productionTime || 15,
       cost: article.cost || 0,
@@ -334,6 +350,7 @@ export default function ArticlesPage() {
                 <TableHead>Artikelnr</TableHead>
                 <TableHead>Namn</TableHead>
                 <TableHead>Typ</TableHead>
+                <TableHead>Fasthakning</TableHead>
                 <TableHead className="text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Clock className="h-4 w-4" />
@@ -353,7 +370,7 @@ export default function ArticlesPage() {
             <TableBody>
               {filteredArticles.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     <Package className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     <p>Inga artiklar hittades</p>
                     {searchQuery && <p className="text-sm">Prova att ändra sökningen</p>}
@@ -379,6 +396,15 @@ export default function ArticlesPage() {
                       <Badge variant="secondary">
                         {articleTypeLabels[article.articleType] || article.articleType}
                       </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {article.hookLevel ? (
+                        <Badge variant="outline">
+                          {hookLevelLabels[article.hookLevel] || article.hookLevel}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       {formatTime(article.productionTime)}
@@ -464,6 +490,28 @@ export default function ArticlesPage() {
                     </SelectContent>
                   </Select>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="hookLevel">Fasthakning (Kinab-koncept)</Label>
+                <Select
+                  value={formData.hookLevel}
+                  onValueChange={(value) => setFormData({ ...formData, hookLevel: value })}
+                >
+                  <SelectTrigger data-testid="select-hook-level">
+                    <SelectValue placeholder="Välj nivå" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {hookLevelOptions.map(level => (
+                      <SelectItem key={level.value || "none"} value={level.value}>
+                        {level.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Bestämmer på vilken hierarkinivå artikeln hakar fast och genererar ordrar
+                </p>
               </div>
 
               <div className="space-y-2">

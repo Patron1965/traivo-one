@@ -32,13 +32,14 @@ import {
   type AuditLog, type InsertAuditLog,
   type MetadataDefinition, type InsertMetadataDefinition,
   type ObjectMetadata, type InsertObjectMetadata,
+  type ObjectPayer, type InsertObjectPayer,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
   vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
   resourcePositions,
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
-  metadataDefinitions, objectMetadata
+  metadataDefinitions, objectMetadata, objectPayers
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
@@ -225,6 +226,13 @@ export interface IStorage {
   updateObjectMetadata(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined>;
   deleteObjectMetadata(id: string, objectId: string, tenantId: string): Promise<void>;
   getEffectiveMetadata(objectId: string, tenantId: string): Promise<Record<string, unknown>>;
+  
+  // Object Payers
+  getObjectPayers(objectId: string): Promise<ObjectPayer[]>;
+  getObjectPayer(id: string): Promise<ObjectPayer | undefined>;
+  createObjectPayer(payer: InsertObjectPayer): Promise<ObjectPayer>;
+  updateObjectPayer(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectPayer>): Promise<ObjectPayer | undefined>;
+  deleteObjectPayer(id: string, objectId: string, tenantId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1690,6 +1698,46 @@ export class DatabaseStorage implements IStorage {
     }
     
     return result;
+  }
+
+  // Object Payers
+  async getObjectPayers(objectId: string): Promise<ObjectPayer[]> {
+    return db.select()
+      .from(objectPayers)
+      .where(eq(objectPayers.objectId, objectId));
+  }
+
+  async getObjectPayer(id: string): Promise<ObjectPayer | undefined> {
+    const [payer] = await db.select()
+      .from(objectPayers)
+      .where(eq(objectPayers.id, id));
+    return payer || undefined;
+  }
+
+  async createObjectPayer(payer: InsertObjectPayer): Promise<ObjectPayer> {
+    const [result] = await db.insert(objectPayers).values(payer).returning();
+    return result;
+  }
+
+  async updateObjectPayer(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectPayer>): Promise<ObjectPayer | undefined> {
+    const [result] = await db.update(objectPayers)
+      .set(data)
+      .where(and(
+        eq(objectPayers.id, id),
+        eq(objectPayers.objectId, objectId),
+        eq(objectPayers.tenantId, tenantId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteObjectPayer(id: string, objectId: string, tenantId: string): Promise<void> {
+    await db.delete(objectPayers)
+      .where(and(
+        eq(objectPayers.id, id),
+        eq(objectPayers.objectId, objectId),
+        eq(objectPayers.tenantId, tenantId)
+      ));
   }
 }
 

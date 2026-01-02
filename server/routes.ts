@@ -9,7 +9,7 @@ import {
   insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema,
   insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema,
   insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertClusterSchema,
-  insertMetadataDefinitionSchema, insertObjectMetadataSchema
+  insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -4164,6 +4164,84 @@ Du kan ge tips som:
     } catch (error) {
       console.error("Failed to fetch effective metadata:", error);
       res.status(500).json({ error: "Failed to fetch effective metadata" });
+    }
+  });
+
+  // ============== OBJECT PAYERS ==============
+  app.get("/api/objects/:objectId/payers", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const payers = await storage.getObjectPayers(req.params.objectId);
+      res.json(payers);
+    } catch (error) {
+      console.error("Failed to fetch object payers:", error);
+      res.status(500).json({ error: "Failed to fetch object payers" });
+    }
+  });
+
+  app.post("/api/objects/:objectId/payers", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const data = insertObjectPayerSchema.parse({
+        ...req.body,
+        tenantId: DEFAULT_TENANT_ID,
+        objectId: req.params.objectId
+      });
+      const payer = await storage.createObjectPayer(data);
+      res.status(201).json(payer);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create object payer:", error);
+      res.status(500).json({ error: "Failed to create object payer" });
+    }
+  });
+
+  app.patch("/api/objects/:objectId/payers/:id", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const updateSchema = z.object({
+        customerId: z.string().optional(),
+        payerType: z.string().optional(),
+        sharePercent: z.number().optional(),
+        articleTypes: z.array(z.string()).optional(),
+        priority: z.number().optional(),
+        validFrom: z.string().optional(),
+        validTo: z.string().optional(),
+        invoiceReference: z.string().optional(),
+        fortnoxCustomerId: z.string().optional(),
+        notes: z.string().optional(),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, DEFAULT_TENANT_ID, updateData);
+      if (!payer) return res.status(404).json({ error: "Payer not found or does not belong to this object" });
+      res.json(payer);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to update object payer:", error);
+      res.status(500).json({ error: "Failed to update object payer" });
+    }
+  });
+
+  app.delete("/api/objects/:objectId/payers/:id", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      await storage.deleteObjectPayer(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete object payer:", error);
+      res.status(500).json({ error: "Failed to delete object payer" });
     }
   });
 
