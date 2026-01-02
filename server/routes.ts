@@ -2966,6 +2966,96 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // AI Proactive Tips - background anomaly analysis for proactive suggestions
+  app.get("/api/ai/proactive-tips", isAuthenticated, async (req, res) => {
+    try {
+      const tenantId = (req.user as any)?.tenantId || DEFAULT_TENANT_ID;
+      // Fetch current operational data
+      const orders = await storage.getWorkOrders({ tenantId });
+      const resources = await storage.getResources({ tenantId });
+      
+      const today = new Date();
+      const todayStr = today.toISOString().split("T")[0];
+      
+      // Detect anomalies
+      const tips: { type: string; severity: "info" | "warning" | "critical"; title: string; message: string; action?: string }[] = [];
+      
+      // Check for overdue orders
+      const overdueOrders = orders.filter(o => 
+        o.scheduledDate && 
+        new Date(o.scheduledDate) < today && 
+        o.status !== "completed" && 
+        o.status !== "cancelled"
+      );
+      if (overdueOrders.length > 0) {
+        tips.push({
+          type: "overdue",
+          severity: overdueOrders.length > 5 ? "critical" : "warning",
+          title: "Försenade ordrar",
+          message: `Du har ${overdueOrders.length} ordrar som passerat sitt schemalagda datum.`,
+          action: "Se veckoplanering"
+        });
+      }
+      
+      // Check for today's workload
+      const todayOrders = orders.filter(o => 
+        o.scheduledDate?.split("T")[0] === todayStr && 
+        o.status !== "completed" && 
+        o.status !== "cancelled"
+      );
+      const activeResources = resources.filter(r => r.isActive);
+      if (todayOrders.length > 0 && activeResources.length > 0) {
+        const ordersPerResource = todayOrders.length / activeResources.length;
+        if (ordersPerResource > 8) {
+          tips.push({
+            type: "workload",
+            severity: "warning",
+            title: "Hög arbetsbelastning",
+            message: `Idag finns ${todayOrders.length} ordrar för ${activeResources.length} resurser (${ordersPerResource.toFixed(1)} per resurs).`,
+            action: "Granska planeringen"
+          });
+        }
+      }
+      
+      // Check for impossible orders
+      const impossibleOrders = orders.filter(o => o.status === "omojlig");
+      if (impossibleOrders.length > 0) {
+        tips.push({
+          type: "impossible",
+          severity: "warning",
+          title: "Omöjliga ordrar",
+          message: `${impossibleOrders.length} ordrar har markerats som omöjliga och behöver åtgärdas.`,
+          action: "Se omöjliga ordrar"
+        });
+      }
+      
+      // Check for unassigned orders this week
+      const nextWeek = new Date(today);
+      nextWeek.setDate(nextWeek.getDate() + 7);
+      const unassignedThisWeek = orders.filter(o => 
+        o.scheduledDate && 
+        new Date(o.scheduledDate) <= nextWeek &&
+        !o.resourceId &&
+        o.status !== "completed" && 
+        o.status !== "cancelled"
+      );
+      if (unassignedThisWeek.length > 3) {
+        tips.push({
+          type: "unassigned",
+          severity: "info",
+          title: "Ordrar utan resurs",
+          message: `${unassignedThisWeek.length} ordrar den kommande veckan saknar tilldelad resurs.`,
+          action: "Tilldela resurser"
+        });
+      }
+      
+      res.json({ tips: tips.slice(0, 3) }); // Return max 3 tips
+    } catch (error) {
+      console.error("Proactive tips error:", error);
+      res.json({ tips: [] });
+    }
+  });
+
   // AI Planning suggestions - now with KPIs
   app.post("/api/ai/planning-suggestions", async (req, res) => {
     try {

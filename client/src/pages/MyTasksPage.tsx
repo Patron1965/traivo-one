@@ -32,6 +32,7 @@ import { format, isToday, isTomorrow, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
 import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
+import { ProactiveTips } from "@/components/ProactiveTips";
 
 interface AIMessage {
   id: string;
@@ -446,6 +447,11 @@ export default function MyTasksPage() {
               href="/resources"
             />
           )}
+        </div>
+
+        {/* Proactive AI Tips */}
+        <div className="mb-6">
+          <ProactiveTips />
         </div>
 
         <Card className="mb-8">

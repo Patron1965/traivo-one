@@ -121,13 +121,11 @@ export function FieldAIAssistant({ jobContext, onClose, isOpen }: FieldAIAssista
         content: m.content
       }));
       
-      const response = await apiRequest("POST", "/api/ai/field-assistant", {
+      const data = await apiRequest("POST", "/api/ai/field-assistant", {
         question: messageText,
         jobContext,
         conversationHistory,
-      });
-
-      const data = await response.json();
+      }) as { answer: string; suggestedQuestions?: string[] };
       const assistantMessage: Message = {
         id: `assistant-${Date.now()}`,
         role: "assistant",

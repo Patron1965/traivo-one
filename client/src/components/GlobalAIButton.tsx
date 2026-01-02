@@ -139,7 +139,7 @@ export function GlobalAIButton() {
           module: currentModule.name,
           path: location,
         },
-        conversationHistory: messages,
+        conversationHistory: messages.map(m => ({ role: m.role, content: m.content })),
       }) as { answer?: string; message?: string; suggestedQuestions?: string[] };
       return response;
     },
