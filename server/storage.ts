@@ -248,14 +248,14 @@ export interface IStorage {
   getFortnoxMappings(tenantId: string, entityType?: string): Promise<FortnoxMapping[]>;
   getFortnoxMapping(tenantId: string, entityType: string, unicornId: string): Promise<FortnoxMapping | undefined>;
   createFortnoxMapping(mapping: InsertFortnoxMapping): Promise<FortnoxMapping>;
-  updateFortnoxMapping(id: string, data: Partial<InsertFortnoxMapping>): Promise<FortnoxMapping | undefined>;
-  deleteFortnoxMapping(id: string): Promise<void>;
+  updateFortnoxMapping(id: string, tenantId: string, data: Partial<InsertFortnoxMapping>): Promise<FortnoxMapping | undefined>;
+  deleteFortnoxMapping(id: string, tenantId: string): Promise<void>;
   
   // Fortnox Invoice Exports
   getFortnoxInvoiceExports(tenantId: string, status?: string): Promise<FortnoxInvoiceExport[]>;
   getFortnoxInvoiceExport(id: string): Promise<FortnoxInvoiceExport | undefined>;
   createFortnoxInvoiceExport(invoiceExport: InsertFortnoxInvoiceExport): Promise<FortnoxInvoiceExport>;
-  updateFortnoxInvoiceExport(id: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined>;
+  updateFortnoxInvoiceExport(id: string, tenantId: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1924,16 +1924,16 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateFortnoxMapping(id: string, data: Partial<InsertFortnoxMapping>): Promise<FortnoxMapping | undefined> {
+  async updateFortnoxMapping(id: string, tenantId: string, data: Partial<InsertFortnoxMapping>): Promise<FortnoxMapping | undefined> {
     const [result] = await db.update(fortnoxMappings)
       .set(data)
-      .where(eq(fortnoxMappings.id, id))
+      .where(and(eq(fortnoxMappings.id, id), eq(fortnoxMappings.tenantId, tenantId)))
       .returning();
     return result || undefined;
   }
 
-  async deleteFortnoxMapping(id: string): Promise<void> {
-    await db.delete(fortnoxMappings).where(eq(fortnoxMappings.id, id));
+  async deleteFortnoxMapping(id: string, tenantId: string): Promise<void> {
+    await db.delete(fortnoxMappings).where(and(eq(fortnoxMappings.id, id), eq(fortnoxMappings.tenantId, tenantId)));
   }
 
   // Fortnox Invoice Exports
@@ -1955,10 +1955,10 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateFortnoxInvoiceExport(id: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined> {
+  async updateFortnoxInvoiceExport(id: string, tenantId: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined> {
     const [result] = await db.update(fortnoxInvoiceExports)
       .set(data)
-      .where(eq(fortnoxInvoiceExports.id, id))
+      .where(and(eq(fortnoxInvoiceExports.id, id), eq(fortnoxInvoiceExports.tenantId, tenantId)))
       .returning();
     return result || undefined;
   }

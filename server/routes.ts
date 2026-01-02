@@ -4306,10 +4306,22 @@ Du kan ge tips som:
 
   app.patch("/api/fortnox/config", async (req, res) => {
     try {
-      const config = await storage.updateFortnoxConfig(DEFAULT_TENANT_ID, req.body);
+      const updateSchema = z.object({
+        clientId: z.string().optional(),
+        clientSecret: z.string().optional(),
+        isActive: z.boolean().optional(),
+        accessToken: z.string().nullable().optional(),
+        refreshToken: z.string().nullable().optional(),
+        tokenExpiresAt: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const config = await storage.updateFortnoxConfig(DEFAULT_TENANT_ID, updateData);
       if (!config) return res.status(404).json({ error: "Config not found" });
       res.json(config);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
       console.error("Failed to update Fortnox config:", error);
       res.status(500).json({ error: "Failed to update Fortnox config" });
     }
@@ -4336,7 +4348,7 @@ Du kan ge tips som:
 
       const existing = await storage.getFortnoxMapping(DEFAULT_TENANT_ID, entityType, unicornId);
       if (existing) {
-        const updated = await storage.updateFortnoxMapping(existing.id, { fortnoxId, lastSyncedAt: new Date() });
+        const updated = await storage.updateFortnoxMapping(existing.id, DEFAULT_TENANT_ID, { fortnoxId, lastSyncedAt: new Date() });
         return res.json(updated);
       }
 
@@ -4355,7 +4367,7 @@ Du kan ge tips som:
 
   app.delete("/api/fortnox/mappings/:id", async (req, res) => {
     try {
-      await storage.deleteFortnoxMapping(req.params.id);
+      await storage.deleteFortnoxMapping(req.params.id, DEFAULT_TENANT_ID);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete Fortnox mapping:", error);
@@ -4399,10 +4411,20 @@ Du kan ge tips som:
 
   app.patch("/api/fortnox/exports/:id", async (req, res) => {
     try {
-      const invoiceExport = await storage.updateFortnoxInvoiceExport(req.params.id, req.body);
+      const updateSchema = z.object({
+        status: z.string().optional(),
+        fortnoxInvoiceNumber: z.string().nullable().optional(),
+        errorMessage: z.string().nullable().optional(),
+        exportedAt: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const invoiceExport = await storage.updateFortnoxInvoiceExport(req.params.id, DEFAULT_TENANT_ID, updateData);
       if (!invoiceExport) return res.status(404).json({ error: "Export not found" });
       res.json(invoiceExport);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
       console.error("Failed to update Fortnox export:", error);
       res.status(500).json({ error: "Failed to update Fortnox export" });
     }
