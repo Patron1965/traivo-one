@@ -448,63 +448,31 @@ export default function MyTasksPage() {
           )}
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3 mb-8">
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
-              <div>
-                <CardTitle>Dagens arbete</CardTitle>
-                <CardDescription>Ordrar planerade för idag</CardDescription>
+        <Card className="mb-8">
+          <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
+            <div>
+              <CardTitle>Dagens arbete</CardTitle>
+              <CardDescription>Ordrar planerade för idag</CardDescription>
+            </div>
+            <Link href="/planner">
+              <Button variant="outline" size="sm" data-testid="button-view-planner">
+                Se hela planeringen
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {ordersLoading ? (
+              <div className="space-y-3">
+                {[1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))}
               </div>
-              <Link href="/planner">
-                <Button variant="outline" size="sm" data-testid="button-view-planner">
-                  Se hela planeringen
-                  <ArrowRight className="h-4 w-4 ml-2" />
-                </Button>
-              </Link>
-            </CardHeader>
-            <CardContent>
-              {ordersLoading ? (
-                <div className="space-y-3">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : (
-                <TodaysOrdersList orders={orders} objectMap={objectMap} />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <HelpCircle className="h-5 w-5" />
-                Snabbhjälp
-              </CardTitle>
-              <CardDescription>Vanliga frågor</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="p-3 rounded-lg bg-muted/30">
-                <p className="font-medium text-sm">Hur lägger jag till en ny order?</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Gå till Veckoplanering och klicka på "Ny order" eller använd snabbknappen (+)
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/30">
-                <p className="font-medium text-sm">Hur rapporterar jag ett slutfört jobb?</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Använd Mobilappen för att markera jobbet som klart direkt på plats
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-muted/30">
-                <p className="font-medium text-sm">Hur hittar jag en specifik kund?</p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Använd sökfältet i navigeringen eller gå till Objekt
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+            ) : (
+              <TodaysOrdersList orders={orders} objectMap={objectMap} />
+            )}
+          </CardContent>
+        </Card>
 
         <div className="mb-6">
           <h2 className="text-xl font-semibold mb-4">Snabbval</h2>
