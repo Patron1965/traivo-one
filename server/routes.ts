@@ -2483,12 +2483,28 @@ export async function registerRoutes(
       }
 
       const OpenAI = (await import("openai")).default;
-      const openai = new OpenAI();
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+      
+      // Use shared persona module
+      const { buildSystemPrompt } = await import("./ai/persona");
 
       // Fetch contextual data based on current module
       let moduleData = "";
       const moduleName = context?.module || "Generell";
       const modulePath = context?.path || "/";
+      
+      // Determine role based on module path
+      let role: "field_worker" | "planner" | "admin" | "general" = "general";
+      if (modulePath.startsWith("/mobile") || modulePath === "/") {
+        role = "field_worker";
+      } else if (modulePath.startsWith("/planner") || modulePath.startsWith("/week")) {
+        role = "planner";
+      } else if (modulePath.startsWith("/fortnox") || modulePath.startsWith("/admin")) {
+        role = "admin";
+      }
 
       try {
         if (modulePath.startsWith("/economics")) {
@@ -2517,16 +2533,19 @@ export async function registerRoutes(
         moduleData = "Kunde inte hämta moduldata";
       }
 
+      // Build system prompt with shared persona
+      const systemPrompt = buildSystemPrompt({ 
+        role, 
+        moduleName, 
+        additionalContext: moduleData 
+      });
+
       const response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `Du är en AI-assistent för Unicorn, en fältserviceoptimerings-plattform för avfallshantering och sophantering i Sverige. Användaren är på modulen "${moduleName}". 
-
-Aktuell kontext: ${moduleData}
-
-Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips för optimering och effektivisering. Om frågan är utanför systemets scope, föreslå att användaren kontaktar support.`,
+            content: systemPrompt,
           },
           {
             role: "user",
@@ -2831,50 +2850,15 @@ Svara alltid på svenska. Var hjälpsam och konkret. Fokusera på praktiska tips
         }
       }
 
-      // Initial message to AI with conversational, colleague-like persona
+      // Use shared persona module for consistent AI personality
+      const { buildSystemPromptWithTools } = await import("./ai/persona");
+      const systemPrompt = buildSystemPromptWithTools({ role: "field_worker" });
+      
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const messages: any[] = [
         {
           role: "system",
-          content: `Du är "Kollen" - en erfaren kollega på Unicorn som hjälper fältarbetare i realtid. Du är varm, lugn och lösningsorienterad - precis som en bra arbetskamrat. Du har jobbat inom fältservice i många år och vet hur frustrerande det kan vara när saker inte fungerar.
-
-PERSONLIGHET:
-- Du är en kollega, INTE en robot eller FAQ-bot
-- Du visar empati: "Ah, det är jobbigt!" eller "Okej, vi löser det!"
-- Du pratar naturligt och avslappnat, men professionellt
-- Du frågar ALLTID om specifik information när du behöver det
-
-DINA VERKTYG (använd dem aktivt!):
-Du har tillgång till systemdata och MÅSTE använda verktygen för att ge korrekta svar:
-- search_objects: Sök på adress eller platsnamn
-- get_object_details: Hämta portkod, anteckningar, kundinfo för ett objekt
-- get_todays_orders: Se dagens planerade jobb
-- get_resources: Kolla vilka som är ute i fält
-
-VIKTIGA REGLER:
-1. FRÅGA ALLTID FÖRST om du behöver veta vilken adress/plats det gäller
-2. Sök ALLTID i systemet efter konkret info innan du svarar
-3. Om du hittar portkod/info - ge den direkt
-4. Om info saknas i systemet - säg det tydligt och föreslå vad de kan göra
-
-EXEMPEL PÅ BRA KONVERSATIONER:
-
-Användare: "Porten är låst"
-Du: "Vilken adress står du på? Jag kollar om vi har en kod i systemet!"
-[Användare: "Storgatan 5"]
-[Du använder search_objects med "Storgatan 5", sedan get_object_details]
-Du: "Portkoden till Storgatan 5 är 1234. Lycka till!"
-ELLER om ingen kod finns:
-Du: "Tyvärr har vi ingen kod registrerad för Storgatan 5. Prova ringa kunden på [telefon] eller meddela din arbetsledare så fixar vi det!"
-
-Användare: "Jag hittar inte adressen"
-Du: "Vilken adress letar du efter? Jag kan kolla koordinaterna!"
-
-Användare: "Vilka jobb har jag idag?"
-[Du använder get_todays_orders]
-Du: "Du har 5 jobb idag! Första är Kärltvätt på Oxbacksgatan 3 kl 08:47..."
-
-ALDRIG ge generiska svar som "kontakta kunden" utan att först ha kollat i systemet!`
+          content: systemPrompt
         },
         {
           role: "user",
