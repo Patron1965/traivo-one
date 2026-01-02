@@ -126,8 +126,43 @@ The article hook system enables automatic article suggestions for objects based 
 - hookConditions for additional filtering (container_type, etc.)
 - Access code detection via object.accessCode field
 
-### Fortnox Integration Mapping
+### Fortnox Integration (Completed 2026-01-02)
+Full integration infrastructure for Swedish accounting system:
+
+**Configuration:**
+- OAuth 2.0 flow preparation with client ID/secret storage
+- Token management with automatic expiry tracking
+- Tenant-scoped configuration in `fortnox_config` table
+
+**Entity Mapping:**
 - **Cost Centers** = Vehicles (registration number)
 - **Projects** = Teams (team name)
-- Rate limits: 25 requests/5 seconds
-- OAuth 2.0 with 1-hour access tokens, 45-day refresh tokens
+- **Customers** = Unicorn customers mapped to Fortnox customer IDs
+- **Articles** = Unicorn articles mapped to Fortnox article numbers
+
+**Invoice Export Pipeline:**
+- Export tracking with status (pending, exported, failed)
+- Multi-payer support from `object_payers`
+- Error logging and retry capability
+- Full audit trail in `fortnox_invoice_exports` table
+
+**API Endpoints:**
+- `GET/POST/PATCH /api/fortnox/config` - Configuration management
+- `GET/POST/DELETE /api/fortnox/mappings` - Entity mappings CRUD
+- `GET/POST/PATCH /api/fortnox/exports` - Invoice export management
+
+**Security:**
+- All routes tenant-scoped with DEFAULT_TENANT_ID
+- Zod validation on all mutation endpoints
+- No cross-tenant data access possible
+
+**UI:** FortnoxSettingsPage at `/fortnox` with tabs for OAuth config, mappings, and export history
+
+**Rate Limits:** 25 requests/5 seconds per Fortnox API documentation
+
+### Dashboard Anomaly Detection
+Comprehensive anomaly monitoring with AI-powered explanations:
+- **Setup Time Anomalies** - Detects unusually long or short setup times
+- **Cost Anomalies** - Flags orders with unexpected cost variances
+- **Impossible Orders** - Tracks orders marked as "omöjlig" with detailed reasons and photo evidence
+- **AI Explanations** - OpenAI-generated insights for each anomaly type
