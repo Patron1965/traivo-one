@@ -33,6 +33,10 @@ import {
   type MetadataDefinition, type InsertMetadataDefinition,
   type ObjectMetadata, type InsertObjectMetadata,
   type ObjectPayer, type InsertObjectPayer,
+  type FortnoxConfig, type InsertFortnoxConfig,
+  type FortnoxMapping, type InsertFortnoxMapping,
+  type FortnoxInvoiceExport, type InsertFortnoxInvoiceExport,
+  fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
@@ -234,6 +238,24 @@ export interface IStorage {
   createObjectPayer(payer: InsertObjectPayer): Promise<ObjectPayer>;
   updateObjectPayer(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectPayer>): Promise<ObjectPayer | undefined>;
   deleteObjectPayer(id: string, objectId: string, tenantId: string): Promise<void>;
+  
+  // Fortnox Config
+  getFortnoxConfig(tenantId: string): Promise<FortnoxConfig | undefined>;
+  createFortnoxConfig(config: InsertFortnoxConfig): Promise<FortnoxConfig>;
+  updateFortnoxConfig(tenantId: string, data: Partial<InsertFortnoxConfig>): Promise<FortnoxConfig | undefined>;
+  
+  // Fortnox Mappings
+  getFortnoxMappings(tenantId: string, entityType?: string): Promise<FortnoxMapping[]>;
+  getFortnoxMapping(tenantId: string, entityType: string, unicornId: string): Promise<FortnoxMapping | undefined>;
+  createFortnoxMapping(mapping: InsertFortnoxMapping): Promise<FortnoxMapping>;
+  updateFortnoxMapping(id: string, data: Partial<InsertFortnoxMapping>): Promise<FortnoxMapping | undefined>;
+  deleteFortnoxMapping(id: string): Promise<void>;
+  
+  // Fortnox Invoice Exports
+  getFortnoxInvoiceExports(tenantId: string, status?: string): Promise<FortnoxInvoiceExport[]>;
+  getFortnoxInvoiceExport(id: string): Promise<FortnoxInvoiceExport | undefined>;
+  createFortnoxInvoiceExport(invoiceExport: InsertFortnoxInvoiceExport): Promise<FortnoxInvoiceExport>;
+  updateFortnoxInvoiceExport(id: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1857,6 +1879,88 @@ export class DatabaseStorage implements IStorage {
         eq(objectPayers.objectId, objectId),
         eq(objectPayers.tenantId, tenantId)
       ));
+  }
+
+  // Fortnox Config
+  async getFortnoxConfig(tenantId: string): Promise<FortnoxConfig | undefined> {
+    const [config] = await db.select().from(fortnoxConfig).where(eq(fortnoxConfig.tenantId, tenantId));
+    return config || undefined;
+  }
+
+  async createFortnoxConfig(config: InsertFortnoxConfig): Promise<FortnoxConfig> {
+    const [result] = await db.insert(fortnoxConfig).values(config).returning();
+    return result;
+  }
+
+  async updateFortnoxConfig(tenantId: string, data: Partial<InsertFortnoxConfig>): Promise<FortnoxConfig | undefined> {
+    const [result] = await db.update(fortnoxConfig)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(fortnoxConfig.tenantId, tenantId))
+      .returning();
+    return result || undefined;
+  }
+
+  // Fortnox Mappings
+  async getFortnoxMappings(tenantId: string, entityType?: string): Promise<FortnoxMapping[]> {
+    const conditions = [eq(fortnoxMappings.tenantId, tenantId)];
+    if (entityType) {
+      conditions.push(eq(fortnoxMappings.entityType, entityType));
+    }
+    return db.select().from(fortnoxMappings).where(and(...conditions));
+  }
+
+  async getFortnoxMapping(tenantId: string, entityType: string, unicornId: string): Promise<FortnoxMapping | undefined> {
+    const [mapping] = await db.select().from(fortnoxMappings)
+      .where(and(
+        eq(fortnoxMappings.tenantId, tenantId),
+        eq(fortnoxMappings.entityType, entityType),
+        eq(fortnoxMappings.unicornId, unicornId)
+      ));
+    return mapping || undefined;
+  }
+
+  async createFortnoxMapping(mapping: InsertFortnoxMapping): Promise<FortnoxMapping> {
+    const [result] = await db.insert(fortnoxMappings).values(mapping).returning();
+    return result;
+  }
+
+  async updateFortnoxMapping(id: string, data: Partial<InsertFortnoxMapping>): Promise<FortnoxMapping | undefined> {
+    const [result] = await db.update(fortnoxMappings)
+      .set(data)
+      .where(eq(fortnoxMappings.id, id))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteFortnoxMapping(id: string): Promise<void> {
+    await db.delete(fortnoxMappings).where(eq(fortnoxMappings.id, id));
+  }
+
+  // Fortnox Invoice Exports
+  async getFortnoxInvoiceExports(tenantId: string, status?: string): Promise<FortnoxInvoiceExport[]> {
+    const conditions = [eq(fortnoxInvoiceExports.tenantId, tenantId)];
+    if (status) {
+      conditions.push(eq(fortnoxInvoiceExports.status, status));
+    }
+    return db.select().from(fortnoxInvoiceExports).where(and(...conditions)).orderBy(desc(fortnoxInvoiceExports.createdAt));
+  }
+
+  async getFortnoxInvoiceExport(id: string): Promise<FortnoxInvoiceExport | undefined> {
+    const [result] = await db.select().from(fortnoxInvoiceExports).where(eq(fortnoxInvoiceExports.id, id));
+    return result || undefined;
+  }
+
+  async createFortnoxInvoiceExport(invoiceExport: InsertFortnoxInvoiceExport): Promise<FortnoxInvoiceExport> {
+    const [result] = await db.insert(fortnoxInvoiceExports).values(invoiceExport).returning();
+    return result;
+  }
+
+  async updateFortnoxInvoiceExport(id: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined> {
+    const [result] = await db.update(fortnoxInvoiceExports)
+      .set(data)
+      .where(eq(fortnoxInvoiceExports.id, id))
+      .returning();
+    return result || undefined;
   }
 }
 

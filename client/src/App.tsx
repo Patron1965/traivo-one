@@ -37,6 +37,7 @@ import SystemDashboardPage from "@/pages/SystemDashboardPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
 import ProjectReportPage from "@/pages/ProjectReportPage";
 import MetadataPage from "@/pages/MetadataPage";
+import FortnoxSettingsPage from "@/pages/FortnoxSettingsPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -75,6 +76,7 @@ function Router() {
       <Route path="/simple" component={MobileFieldPage} />
       <Route path="/project-report" component={ProjectReportPage} />
       <Route path="/metadata" component={MetadataPage} />
+      <Route path="/fortnox" component={FortnoxSettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -4259,5 +4259,154 @@ Du kan ge tips som:
     }
   });
 
+  // ============================================
+  // FORTNOX INTEGRATION
+  // ============================================
+
+  // Fortnox Config
+  app.get("/api/fortnox/config", async (req, res) => {
+    try {
+      const config = await storage.getFortnoxConfig(DEFAULT_TENANT_ID);
+      res.json(config || null);
+    } catch (error) {
+      console.error("Failed to fetch Fortnox config:", error);
+      res.status(500).json({ error: "Failed to fetch Fortnox config" });
+    }
+  });
+
+  app.post("/api/fortnox/config", async (req, res) => {
+    try {
+      const { clientId, clientSecret } = req.body;
+      if (!clientId || !clientSecret) {
+        return res.status(400).json({ error: "Client ID and Secret required" });
+      }
+
+      const existing = await storage.getFortnoxConfig(DEFAULT_TENANT_ID);
+      if (existing) {
+        const updated = await storage.updateFortnoxConfig(DEFAULT_TENANT_ID, {
+          clientId,
+          clientSecret,
+          isActive: true
+        });
+        return res.json(updated);
+      }
+
+      const config = await storage.createFortnoxConfig({
+        tenantId: DEFAULT_TENANT_ID,
+        clientId,
+        clientSecret,
+        isActive: true
+      });
+      res.status(201).json(config);
+    } catch (error) {
+      console.error("Failed to save Fortnox config:", error);
+      res.status(500).json({ error: "Failed to save Fortnox config" });
+    }
+  });
+
+  app.patch("/api/fortnox/config", async (req, res) => {
+    try {
+      const config = await storage.updateFortnoxConfig(DEFAULT_TENANT_ID, req.body);
+      if (!config) return res.status(404).json({ error: "Config not found" });
+      res.json(config);
+    } catch (error) {
+      console.error("Failed to update Fortnox config:", error);
+      res.status(500).json({ error: "Failed to update Fortnox config" });
+    }
+  });
+
+  // Fortnox Mappings
+  app.get("/api/fortnox/mappings", async (req, res) => {
+    try {
+      const entityType = req.query.entityType as string | undefined;
+      const mappings = await storage.getFortnoxMappings(DEFAULT_TENANT_ID, entityType);
+      res.json(mappings);
+    } catch (error) {
+      console.error("Failed to fetch Fortnox mappings:", error);
+      res.status(500).json({ error: "Failed to fetch Fortnox mappings" });
+    }
+  });
+
+  app.post("/api/fortnox/mappings", async (req, res) => {
+    try {
+      const { entityType, unicornId, fortnoxId } = req.body;
+      if (!entityType || !unicornId || !fortnoxId) {
+        return res.status(400).json({ error: "All fields required" });
+      }
+
+      const existing = await storage.getFortnoxMapping(DEFAULT_TENANT_ID, entityType, unicornId);
+      if (existing) {
+        const updated = await storage.updateFortnoxMapping(existing.id, { fortnoxId, lastSyncedAt: new Date() });
+        return res.json(updated);
+      }
+
+      const mapping = await storage.createFortnoxMapping({
+        tenantId: DEFAULT_TENANT_ID,
+        entityType,
+        unicornId,
+        fortnoxId
+      });
+      res.status(201).json(mapping);
+    } catch (error) {
+      console.error("Failed to create Fortnox mapping:", error);
+      res.status(500).json({ error: "Failed to create Fortnox mapping" });
+    }
+  });
+
+  app.delete("/api/fortnox/mappings/:id", async (req, res) => {
+    try {
+      await storage.deleteFortnoxMapping(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete Fortnox mapping:", error);
+      res.status(500).json({ error: "Failed to delete Fortnox mapping" });
+    }
+  });
+
+  // Fortnox Invoice Exports
+  app.get("/api/fortnox/exports", async (req, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const exports = await storage.getFortnoxInvoiceExports(DEFAULT_TENANT_ID, status);
+      res.json(exports);
+    } catch (error) {
+      console.error("Failed to fetch Fortnox exports:", error);
+      res.status(500).json({ error: "Failed to fetch Fortnox exports" });
+    }
+  });
+
+  app.post("/api/fortnox/exports", async (req, res) => {
+    try {
+      const { workOrderId, payerId, costCenter, project } = req.body;
+      if (!workOrderId) {
+        return res.status(400).json({ error: "Work order ID required" });
+      }
+
+      const invoiceExport = await storage.createFortnoxInvoiceExport({
+        tenantId: DEFAULT_TENANT_ID,
+        workOrderId,
+        payerId: payerId || null,
+        costCenter: costCenter || null,
+        project: project || null,
+        status: "pending"
+      });
+      res.status(201).json(invoiceExport);
+    } catch (error) {
+      console.error("Failed to create Fortnox export:", error);
+      res.status(500).json({ error: "Failed to create Fortnox export" });
+    }
+  });
+
+  app.patch("/api/fortnox/exports/:id", async (req, res) => {
+    try {
+      const invoiceExport = await storage.updateFortnoxInvoiceExport(req.params.id, req.body);
+      if (!invoiceExport) return res.status(404).json({ error: "Export not found" });
+      res.json(invoiceExport);
+    } catch (error) {
+      console.error("Failed to update Fortnox export:", error);
+      res.status(500).json({ error: "Failed to update Fortnox export" });
+    }
+  });
+
   return httpServer;
 }

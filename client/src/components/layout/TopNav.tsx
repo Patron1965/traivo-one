@@ -86,6 +86,7 @@ const systemItems = [
   { title: "Metadata", url: "/metadata", icon: FileText, description: "Anpassade fält och arv" },
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, description: "Avtalshantering" },
   { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
+  { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport och integration" },
   { title: "Importera data", url: "/import", icon: Upload, description: "Modus 2.0 import" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
   { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
