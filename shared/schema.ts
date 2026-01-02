@@ -260,6 +260,18 @@ export const ARTICLE_HOOK_LEVELS = [
 ] as const;
 export type ArticleHookLevel = typeof ARTICLE_HOOK_LEVELS[number];
 
+export const ARTICLE_HOOK_LEVEL_LABELS: Record<ArticleHookLevel, string> = {
+  koncern: "Koncern",
+  brf: "BRF",
+  fastighet: "Fastighet",
+  rum: "Rum",
+  karl: "Kärl",
+  karl_mat: "Matavfall",
+  karl_rest: "Restavfall",
+  karl_plast: "Plast",
+  kod: "Accesskod"
+};
+
 // Artiklar - tjänster, varor, kontroller etc.
 export const articles = pgTable("articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
