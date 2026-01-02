@@ -177,3 +177,35 @@ Comprehensive anomaly monitoring with AI-powered explanations:
 - **Cost Anomalies** - Flags orders with unexpected cost variances
 - **Impossible Orders** - Tracks orders marked as "omöjlig" with detailed reasons and photo evidence
 - **AI Explanations** - OpenAI-generated insights for each anomaly type
+
+### UX Simplification for Field Workers (2026-01-02)
+Major usability improvements targeting non-technical field workers:
+
+**New MyTasksPage (Home):**
+- Simplified home page at `/` showing today's orders and key stats
+- Large stat cards with progressive loading (skeleton placeholders per card)
+- Friendly object names instead of raw IDs
+- Quick action tiles linking to common workflows (Veckoplanering, Mobilapp, Karta, Support)
+- Help section with FAQs for common questions
+
+**Navigation Restructuring:**
+- **TopNav:** Added "Start" home button, reorganized menu categories
+- **MobileNav:** Matching structure with proper SPA navigation (wouter Link)
+- **"Avancerat" menu:** Power-user features (MCP, Fortnox, Optimering, Fleet) grouped separately
+- Route structure: `/` = MyTasksPage, `/planner` = WeekPlanner
+
+**Contextual Help System:**
+- **HelpTooltip component:** Inline explanations for form fields (info icon with popover)
+- **PageHelp component:** Page-level guidance banners (collapsible)
+- Applied to ArticlesPage (Fasthakning field) and SubscriptionsPage
+
+**Progressive Loading Pattern:**
+- Individual skeleton cards per data query instead of blocking entire page
+- Orders, resources, objects load independently with visual feedback
+- Prevents misleading zero values during data fetch
+
+**Key Files:**
+- `client/src/pages/MyTasksPage.tsx` - New home page
+- `client/src/components/layout/TopNav.tsx` - Desktop navigation
+- `client/src/components/layout/MobileNav.tsx` - Mobile navigation
+- `client/src/components/ui/help-tooltip.tsx` - Help components
