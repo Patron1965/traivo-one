@@ -91,7 +91,11 @@ const hookLevelOptions = [
   { value: "brf", label: "BRF" },
   { value: "fastighet", label: "Fastighet" },
   { value: "rum", label: "Rum" },
-  { value: "karl", label: "Kärl" },
+  { value: "karl", label: "Alla kärl (T100 Kärltvätt)" },
+  { value: "karl_mat", label: "Matavfallskärl (K100 Dekal)" },
+  { value: "karl_rest", label: "Restavfallskärl" },
+  { value: "karl_plast", label: "Plastkärl" },
+  { value: "kod", label: "Objekt med accesskod (KOD10)" },
 ];
 
 const hookLevelLabels: Record<string, string> = Object.fromEntries(

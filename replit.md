@@ -104,6 +104,28 @@ Metadata propagation types:
 - **Falling** - Inherits automatically downward
 - **Dynamic** - Changes over time and continues falling
 
+### Article Hook System (Artikelfasthakning - Kinab-koncept)
+The article hook system enables automatic article suggestions for objects based on their hierarchy level:
+
+**Hook Levels:**
+- `koncern` - Applies to organization-level objects
+- `brf` - Applies to BRF (housing association) objects
+- `fastighet` - Applies to property objects
+- `rum` - Applies to room objects (soprum, kök, etc.)
+- `karl` - Applies to all container types (T100 Kärltvätt)
+- `karl_mat` - Only food waste containers (K100 Matavfallsdekal)
+- `karl_rest` - Only residual waste containers
+- `karl_plast` - Only plastic containers
+- `kod` - Objects with access codes (KOD10)
+
+**API Endpoint:**
+- `GET /api/objects/:objectId/applicable-articles` - Returns articles matching the object's hook level
+
+**Matching Logic:**
+- Exact level matching (a fastighet hook only matches fastighet objects)
+- hookConditions for additional filtering (container_type, etc.)
+- Access code detection via object.accessCode field
+
 ### Fortnox Integration Mapping
 - **Cost Centers** = Vehicles (registration number)
 - **Projects** = Teams (team name)

@@ -96,6 +96,7 @@ export interface IStorage {
   // Articles
   getArticles(tenantId: string): Promise<Article[]>;
   getArticle(id: string): Promise<Article | undefined>;
+  getApplicableArticlesForObject(tenantId: string, objectId: string): Promise<Article[]>;
   createArticle(article: InsertArticle): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article | undefined>;
   deleteArticle(id: string): Promise<void>;
@@ -595,6 +596,106 @@ export class DatabaseStorage implements IStorage {
   async getArticle(id: string): Promise<Article | undefined> {
     const [article] = await db.select().from(articles).where(and(eq(articles.id, id), isNull(articles.deletedAt)));
     return article || undefined;
+  }
+
+  /**
+   * Hämta artiklar som är applicerbara för ett specifikt objekt baserat på hookLevel (Kinab fasthakning)
+   * 
+   * Fasthakning-logik:
+   * - Artikeln matchar om objektets nivå/typ EXAKT motsvarar artikelns hookLevel
+   * - hookConditions kan användas för ytterligare filtrering (t.ex. container_type)
+   * - "kod"-hook matchar objekt med accessCode satt
+   * 
+   * Hook-nivåer:
+   * - koncern: Endast objekt på koncern-nivå (hierarchyLevel=koncern)
+   * - brf: Endast BRF-objekt (hierarchyLevel=brf)
+   * - fastighet: Fastighetsobjekt (hierarchyLevel=fastighet eller objectType=fastighet)
+   * - rum: Rum-objekt (hierarchyLevel=rum eller objectType rum/soprum/kok)
+   * - karl: Alla kärl (objectType matavfall/atervinning/etc eller hierarchyLevel=karl)
+   * - karl_mat: Endast matavfallskärl
+   * - karl_rest: Endast restavfallskärl
+   * - karl_plast: Endast plastkärl
+   * - kod: Objekt med accessCode
+   */
+  async getApplicableArticlesForObject(tenantId: string, objectId: string): Promise<Article[]> {
+    const object = await this.getObject(objectId);
+    if (!object || object.tenantId !== tenantId) {
+      return [];
+    }
+
+    const allArticles = await this.getArticles(tenantId);
+    const objectType = object.objectType?.toLowerCase() || '';
+    const hierarchyLevel = object.hierarchyLevel?.toLowerCase() || '';
+    
+    // Kärltypsmappning
+    const karlTypes = ['matavfall', 'atervinning', 'uj_hushallsavfall', 'plastemballage', 'restavfall'];
+    const isKarl = karlTypes.includes(objectType) || hierarchyLevel === 'karl';
+    const isMatKarl = objectType === 'matavfall' || objectType.includes('mat');
+    const isRestKarl = objectType === 'restavfall' || objectType.includes('rest');
+    const isPlastKarl = objectType === 'plastemballage' || objectType.includes('plast');
+    
+    // Hierarkinivåer
+    const isFastighet = objectType === 'fastighet' || hierarchyLevel === 'fastighet';
+    const isRum = ['rum', 'soprum', 'kok'].includes(objectType) || hierarchyLevel === 'rum';
+    const isBrf = hierarchyLevel === 'brf';
+    const isKoncern = hierarchyLevel === 'koncern';
+    
+    // Kolla om objektet har accesskod direkt på objektet
+    const hasAccessCode = !!(object.accessCode && object.accessCode.trim() !== '');
+
+    return allArticles.filter(article => {
+      if (!article.hookLevel) return false;
+      
+      const hookLevel = article.hookLevel.toLowerCase();
+      const hookConditions = (article.hookConditions as Record<string, unknown>) || {};
+      
+      // Matchningslogik: endast exakt nivå-matchning
+      let levelMatches = false;
+      switch (hookLevel) {
+        case 'koncern':
+          levelMatches = isKoncern;
+          break;
+        case 'brf':
+          levelMatches = isBrf;
+          break;
+        case 'fastighet':
+          levelMatches = isFastighet;
+          break;
+        case 'rum':
+          levelMatches = isRum;
+          break;
+        case 'karl':
+          levelMatches = isKarl;
+          break;
+        case 'karl_mat':
+          levelMatches = isMatKarl;
+          break;
+        case 'karl_rest':
+          levelMatches = isRestKarl;
+          break;
+        case 'karl_plast':
+          levelMatches = isPlastKarl;
+          break;
+        case 'kod':
+          levelMatches = hasAccessCode;
+          break;
+        default:
+          levelMatches = false;
+      }
+      
+      if (!levelMatches) return false;
+      
+      // Kontrollera hookConditions om de finns
+      if (Object.keys(hookConditions).length > 0) {
+        // container_type-villkor
+        if (hookConditions.container_type && hookConditions.container_type !== objectType) {
+          return false;
+        }
+        // Kan utökas med fler villkor (waste_fraction, etc.)
+      }
+      
+      return true;
+    });
   }
 
   async createArticle(insertArticle: InsertArticle): Promise<Article> {

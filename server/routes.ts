@@ -1617,6 +1617,20 @@ export async function registerRoutes(
     }
   });
 
+  // Fasthakning: Hämta applicerbara artiklar för ett objekt baserat på hookLevel
+  app.get("/api/objects/:objectId/applicable-articles", async (req, res) => {
+    try {
+      const applicableArticles = await storage.getApplicableArticlesForObject(
+        DEFAULT_TENANT_ID,
+        req.params.objectId
+      );
+      res.json(applicableArticles);
+    } catch (error) {
+      console.error("Failed to get applicable articles:", error);
+      res.status(500).json({ error: "Failed to fetch applicable articles" });
+    }
+  });
+
   // ============== PRICE LISTS ==============
   app.get("/api/price-lists", async (req, res) => {
     try {
