@@ -63,3 +63,49 @@ AI is deeply integrated throughout the platform.
 - **react-leaflet:** Interactive map visualizations.
 - **shadcn/ui:** UI component library.
 - **Open-Meteo API:** Provides weather forecast data for AI auto-scheduling.
+
+## Recent Changes (2026-01-02)
+
+### Database Schema Expansion - Fas 1 Foundation
+Major schema additions to support Mats' cluster philosophy and MVP features:
+
+#### New Tables Added:
+1. **fortnox_config** - OAuth tokens and tenant-specific Fortnox configuration
+2. **fortnox_mappings** - Entity synchronization between Unicorn and Fortnox (customers, articles, cost centers, projects)
+3. **fortnox_invoice_exports** - Invoice export log with status tracking and error handling
+4. **object_payers** - Multiple payers per object with split percentages and article type filtering
+5. **metadata_definitions** - Propagation rules (fixed/falling/dynamic) for metadata fields
+6. **object_metadata** - Metadata values on objects with inheritance logic and break flags
+
+#### Schema Modifications:
+- **objects**: Added `hierarchyLevel` field for explicit hierarchy type (koncern, brf, fastighet, rum, karl)
+- **articles**: Added `hookLevel` and `hookConditions` for article fastening system (Kinab concept)
+- **work_orders**: Added impossible order fields (`impossibleReason`, `impossibleReasonText`, `impossibleAt`, `impossibleBy`, `impossiblePhotoUrl`)
+- **ORDER_STATUSES**: Added "omojlig" status for orders that cannot be completed
+
+#### New TypeScript Constants:
+- `OBJECT_HIERARCHY_LEVELS` - Hierarchy levels for cluster philosophy
+- `ARTICLE_HOOK_LEVELS` - Hook levels for article fastening
+- `METADATA_PROPAGATION_TYPES` - Metadata propagation types
+- `IMPOSSIBLE_REASONS` - Standard reasons for impossible orders
+
+#### PostgreSQL Functions:
+- `get_effective_metadata(object_id, field_key)` - Returns inherited metadata value through hierarchy
+- `get_all_effective_metadata(object_id)` - Returns all effective metadata for an object
+
+### Kinab Cluster Philosophy (Mats Vision)
+The system now supports hierarchical organization:
+```
+Koncern (Organization) → BRF (Housing association) → Fastighet (Property) → Rum (Room) → Kärl (Container)
+```
+
+Metadata propagation types:
+- **Fixed** - Stays at the level where it's created
+- **Falling** - Inherits automatically downward
+- **Dynamic** - Changes over time and continues falling
+
+### Fortnox Integration Mapping
+- **Cost Centers** = Vehicles (registration number)
+- **Projects** = Teams (team name)
+- Rate limits: 25 requests/5 seconds
+- OAuth 2.0 with 1-hour access tokens, 45-day refresh tokens

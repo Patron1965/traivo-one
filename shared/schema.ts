@@ -53,6 +53,16 @@ export const customers = pgTable("customers", {
   deletedAt: timestamp("deleted_at"),
 });
 
+// Hierarkinivåer för objekt (Mats klusterfilosofi)
+export const OBJECT_HIERARCHY_LEVELS = [
+  "koncern",     // Översta nivå - juridisk koncern
+  "brf",         // Bostadsrättsförening
+  "fastighet",   // Fysisk fastighet
+  "rum",         // Återvinningsrum/område inom fastighet
+  "karl"         // Individuellt kärl
+] as const;
+export type ObjectHierarchyLevel = typeof OBJECT_HIERARCHY_LEVELS[number];
+
 export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
@@ -63,6 +73,9 @@ export const objects = pgTable("objects", {
   name: text("name").notNull(),
   objectNumber: text("object_number"),
   objectType: text("object_type").default("omrade").notNull(),
+  // Hierarkinivå enligt Mats klusterfilosofi: koncern, brf, fastighet, rum, karl
+  hierarchyLevel: text("hierarchy_level").default("fastighet"),
+  // Legacy - numerisk nivå (1=överst, 5=kärl)
   objectLevel: integer("object_level").default(1).notNull(),
   address: text("address"),
   city: text("city"),
@@ -179,6 +192,12 @@ export const workOrders = pgTable("work_orders", {
   // Simulering
   isSimulated: boolean("is_simulated").default(false),
   simulationScenarioId: varchar("simulation_scenario_id").references(() => simulationScenarios.id),
+  // Omöjlig order - när order inte kan utföras
+  impossibleReason: text("impossible_reason"),        // locked_gate, no_access, etc.
+  impossibleReasonText: text("impossible_reason_text"), // Fritext för detaljer
+  impossibleAt: timestamp("impossible_at"),           // När markerad som omöjlig
+  impossibleBy: varchar("impossible_by").references(() => resources.id), // Vem markerade
+  impossiblePhotoUrl: text("impossible_photo_url"),   // Bild som bevis
   // Planeringsmetadata
   plannedBy: varchar("planned_by"),
   plannedNotes: text("planned_notes"),
@@ -227,6 +246,20 @@ export const setupTimeLogs = pgTable("setup_time_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Hook-nivåer för artikelfasthakning (Kinab-koncept)
+export const ARTICLE_HOOK_LEVELS = [
+  "koncern",     // Hakar på koncernnivå
+  "brf",         // Hakar på BRF-nivå
+  "fastighet",   // Hakar på fastighetsnivå
+  "rum",         // Hakar på rumsnivå
+  "karl",        // Alla kärl (T100 Kärltvätt)
+  "karl_mat",    // Endast matavfallskärl (K100 Matavfallsdekal)
+  "karl_rest",   // Endast restavfallskärl
+  "karl_plast",  // Endast plastkärl
+  "kod"          // Objekt med accesskod (KOD10)
+] as const;
+export type ArticleHookLevel = typeof ARTICLE_HOOK_LEVELS[number];
+
 // Artiklar - tjänster, varor, kontroller etc.
 export const articles = pgTable("articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -238,6 +271,10 @@ export const articles = pgTable("articles", {
   articleType: text("article_type").default("tjanst").notNull(),
   // Vilka objekttyper artikeln kan kopplas till (t.ex. ["matavfall", "atervinning"])
   objectTypes: text("object_types").array().default([]),
+  // Hook-nivå för artikelfasthakning: karl, karl_mat, rum, fastighet, kod etc.
+  hookLevel: text("hook_level"),
+  // Villkor för hook (t.ex. {"container_type": "matavfall"})
+  hookConditions: jsonb("hook_conditions").default({}),
   // Produktionstid i minuter
   productionTime: integer("production_time").default(0),
   // Kostnad (intern)
@@ -846,16 +883,30 @@ export type InsertCluster = z.infer<typeof insertClusterSchema>;
 export type ResourcePosition = typeof resourcePositions.$inferSelect;
 export type InsertResourcePosition = z.infer<typeof insertResourcePositionSchema>;
 
-// Order status constants
+// Order status constants (med "omojlig" för ordrar som inte kan utföras)
 export const ORDER_STATUSES = [
   "skapad",
   "planerad_pre", 
   "planerad_resurs",
   "planerad_las",
   "utford",
-  "fakturerad"
+  "fakturerad",
+  "omojlig"      // Order kunde inte utföras (låst port, fel adress, etc.)
 ] as const;
 export type OrderStatus = typeof ORDER_STATUSES[number];
+
+// Standardorsaker för omöjliga ordrar
+export const IMPOSSIBLE_REASONS = [
+  "locked_gate",      // Låst grind/port
+  "no_access",        // Ingen tillgång
+  "wrong_address",    // Fel adress
+  "obstacle",         // Hinder (bil parkerad, etc.)
+  "customer_absent",  // Kund ej hemma (krävs närvaro)
+  "weather",          // Väderförhållanden
+  "equipment_issue",  // Problem med utrustning
+  "other"             // Annat (fritext)
+] as const;
+export type ImpossibleReason = typeof IMPOSSIBLE_REASONS[number];
 
 // AI Chat tables for planning assistant
 export const conversations = pgTable("conversations", {
@@ -1035,3 +1086,217 @@ export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 // Role constants
 export const USER_ROLES = ["owner", "admin", "user"] as const;
 export type UserRole = typeof USER_ROLES[number];
+
+// ============================================
+// FORTNOX INTEGRATION TABLES
+// ============================================
+
+// Fortnox-konfiguration per tenant (OAuth-tokens)
+export const fortnoxConfig = pgTable("fortnox_config", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull().unique(),
+  clientId: varchar("client_id"),
+  clientSecret: varchar("client_secret"),
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  isActive: boolean("is_active").default(false),
+  lastSyncAt: timestamp("last_sync_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Mappning Unicorn <-> Fortnox entiteter
+export const fortnoxMappings = pgTable("fortnox_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // customer, article, costcenter, project
+  entityType: varchar("entity_type", { length: 50 }).notNull(),
+  unicornId: varchar("unicorn_id").notNull(),
+  fortnoxId: varchar("fortnox_id").notNull(),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_fortnox_mappings_tenant").on(table.tenantId),
+  index("idx_fortnox_mappings_entity").on(table.entityType, table.unicornId),
+]);
+
+// Fakturaexport-logg
+export const fortnoxInvoiceExports = pgTable("fortnox_invoice_exports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  fortnoxInvoiceNumber: varchar("fortnox_invoice_number"),
+  // pending, exported, failed, cancelled
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  costCenter: varchar("cost_center"),
+  project: varchar("project"),
+  // Vilken betalare (för multi-payer split)
+  payerId: varchar("payer_id"),
+  totalAmount: integer("total_amount"),
+  errorMessage: text("error_message"),
+  exportedAt: timestamp("exported_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_fortnox_exports_tenant").on(table.tenantId),
+  index("idx_fortnox_exports_work_order").on(table.workOrderId),
+  index("idx_fortnox_exports_status").on(table.status),
+]);
+
+// ============================================
+// MULTIPLA BETALARE PER OBJEKT
+// ============================================
+
+// Betalare kopplade till objekt
+export const objectPayers = pgTable("object_payers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  // Typ av betalare: primary, secondary, split
+  payerType: varchar("payer_type", { length: 20 }).default("primary").notNull(),
+  // Andel i procent (för split-betalning)
+  sharePercent: integer("share_percent").default(100),
+  // Vilka artikeltyper denna betalare ansvarar för (tom = alla)
+  articleTypes: text("article_types").array().default([]),
+  // Prioritet vid konflikt (högre = prioriteras)
+  priority: integer("priority").default(1),
+  // Giltighet
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  // Fakturareferens specifik för denna betalare
+  invoiceReference: text("invoice_reference"),
+  // Fortnox-koppling
+  fortnoxCustomerId: varchar("fortnox_customer_id"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_object_payers_object").on(table.objectId),
+  index("idx_object_payers_customer").on(table.customerId),
+]);
+
+// ============================================
+// METADATA PROPAGATION SYSTEM
+// ============================================
+
+// Propagationstyper för metadata
+export const METADATA_PROPAGATION_TYPES = [
+  "fixed",    // Fast - stannar på nivån där den skapas
+  "falling",  // Fallande - ärvs automatiskt nedåt
+  "dynamic"   // Dynamisk - ändras över tid och fortsätter falla
+] as const;
+export type MetadataPropagationType = typeof METADATA_PROPAGATION_TYPES[number];
+
+// Metadatadefinitioner (vilka fält som kan propagera)
+export const metadataDefinitions = pgTable("metadata_definitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Unikt namn för metadata-fältet
+  fieldKey: varchar("field_key", { length: 100 }).notNull(),
+  fieldLabel: text("field_label").notNull(),
+  // Datatyp: text, number, date, boolean, json
+  dataType: varchar("data_type", { length: 20 }).default("text"),
+  // Propagationstyp: fixed, falling, dynamic
+  propagationType: varchar("propagation_type", { length: 20 }).default("falling"),
+  // Vilka objektnivåer fältet kan appliceras på
+  applicableLevels: text("applicable_levels").array().default([]),
+  // Standardvärde
+  defaultValue: text("default_value"),
+  // Valideringsregler (JSON schema)
+  validationRules: jsonb("validation_rules").default({}),
+  isRequired: boolean("is_required").default(false),
+  // Sorteringsordning i UI
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_metadata_definitions_tenant").on(table.tenantId),
+  index("idx_metadata_definitions_field").on(table.fieldKey),
+]);
+
+// Metadatavärden på objekt
+export const objectMetadata = pgTable("object_metadata", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  definitionId: varchar("definition_id").references(() => metadataDefinitions.id).notNull(),
+  // Värdet (text för enkla värden)
+  value: text("value"),
+  // JSON-värde för komplexa strukturer
+  valueJson: jsonb("value_json"),
+  // Brytlogik: stoppar arv nedåt för detta fält
+  breaksInheritance: boolean("breaks_inheritance").default(false),
+  // Om ärvt: varifrån kommer värdet?
+  inheritedFromObjectId: varchar("inherited_from_object_id"),
+  // Giltighet för dynamiska värden
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  // Spårning
+  updatedBy: varchar("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_object_metadata_object").on(table.objectId),
+  index("idx_object_metadata_definition").on(table.definitionId),
+]);
+
+// ============================================
+// RELATIONS FOR NEW TABLES
+// ============================================
+
+export const fortnoxConfigRelations = relations(fortnoxConfig, ({ one }) => ({
+  tenant: one(tenants, { fields: [fortnoxConfig.tenantId], references: [tenants.id] }),
+}));
+
+export const fortnoxMappingsRelations = relations(fortnoxMappings, ({ one }) => ({
+  tenant: one(tenants, { fields: [fortnoxMappings.tenantId], references: [tenants.id] }),
+}));
+
+export const fortnoxInvoiceExportsRelations = relations(fortnoxInvoiceExports, ({ one }) => ({
+  tenant: one(tenants, { fields: [fortnoxInvoiceExports.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [fortnoxInvoiceExports.workOrderId], references: [workOrders.id] }),
+}));
+
+export const objectPayersRelations = relations(objectPayers, ({ one }) => ({
+  tenant: one(tenants, { fields: [objectPayers.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [objectPayers.objectId], references: [objects.id] }),
+  customer: one(customers, { fields: [objectPayers.customerId], references: [customers.id] }),
+}));
+
+export const metadataDefinitionsRelations = relations(metadataDefinitions, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [metadataDefinitions.tenantId], references: [tenants.id] }),
+  objectMetadata: many(objectMetadata),
+}));
+
+export const objectMetadataRelations = relations(objectMetadata, ({ one }) => ({
+  tenant: one(tenants, { fields: [objectMetadata.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [objectMetadata.objectId], references: [objects.id] }),
+  definition: one(metadataDefinitions, { fields: [objectMetadata.definitionId], references: [metadataDefinitions.id] }),
+}));
+
+// ============================================
+// INSERT SCHEMAS FOR NEW TABLES
+// ============================================
+
+export const insertFortnoxConfigSchema = createInsertSchema(fortnoxConfig).omit({ id: true, createdAt: true });
+export const insertFortnoxMappingSchema = createInsertSchema(fortnoxMappings).omit({ id: true, createdAt: true });
+export const insertFortnoxInvoiceExportSchema = createInsertSchema(fortnoxInvoiceExports).omit({ id: true, createdAt: true });
+export const insertObjectPayerSchema = createInsertSchema(objectPayers).omit({ id: true, createdAt: true });
+export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true });
+export const insertObjectMetadataSchema = createInsertSchema(objectMetadata).omit({ id: true, createdAt: true });
+
+// ============================================
+// TYPES FOR NEW TABLES
+// ============================================
+
+export type FortnoxConfig = typeof fortnoxConfig.$inferSelect;
+export type InsertFortnoxConfig = z.infer<typeof insertFortnoxConfigSchema>;
+export type FortnoxMapping = typeof fortnoxMappings.$inferSelect;
+export type InsertFortnoxMapping = z.infer<typeof insertFortnoxMappingSchema>;
+export type FortnoxInvoiceExport = typeof fortnoxInvoiceExports.$inferSelect;
+export type InsertFortnoxInvoiceExport = z.infer<typeof insertFortnoxInvoiceExportSchema>;
+export type ObjectPayer = typeof objectPayers.$inferSelect;
+export type InsertObjectPayer = z.infer<typeof insertObjectPayerSchema>;
+export type MetadataDefinition = typeof metadataDefinitions.$inferSelect;
+export type InsertMetadataDefinition = z.infer<typeof insertMetadataDefinitionSchema>;
+export type ObjectMetadata = typeof objectMetadata.$inferSelect;
+export type InsertObjectMetadata = z.infer<typeof insertObjectMetadataSchema>;
