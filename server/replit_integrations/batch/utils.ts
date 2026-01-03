@@ -1,5 +1,22 @@
-import pLimit from "p-limit";
-import pRetry from "p-retry";
+// Dynamic imports for ESM-only packages
+let pLimitFn: typeof import("p-limit").default | null = null;
+let pRetryFn: typeof import("p-retry").default | null = null;
+
+async function getPLimit() {
+  if (!pLimitFn) {
+    const mod = await import("p-limit");
+    pLimitFn = mod.default;
+  }
+  return pLimitFn;
+}
+
+async function getPRetry() {
+  if (!pRetryFn) {
+    const mod = await import("p-retry");
+    pRetryFn = mod.default;
+  }
+  return pRetryFn;
+}
 
 /**
  * Batch Processing Utilities
@@ -90,6 +107,9 @@ export async function batchProcess<T, R>(
     onProgress,
   } = options;
 
+  const pLimit = await getPLimit();
+  const pRetry = await getPRetry();
+  
   const limit = pLimit(concurrency);
   let completed = 0;
 
@@ -107,7 +127,8 @@ export async function batchProcess<T, R>(
               throw error; // Rethrow to trigger p-retry
             }
             // For non-rate-limit errors, abort immediately
-            throw new pRetry.AbortError(
+            const pRetryMod = await import("p-retry");
+            throw new pRetryMod.AbortError(
               error instanceof Error ? error : new Error(String(error))
             );
           }
@@ -136,6 +157,7 @@ export async function batchProcessWithSSE<T, R>(
   options: Omit<BatchOptions, "concurrency" | "onProgress"> = {}
 ): Promise<R[]> {
   const { retries = 5, minTimeout = 1000, maxTimeout = 15000 } = options;
+  const pRetry = await getPRetry();
 
   sendEvent({ type: "started", total: items.length });
 
@@ -154,9 +176,10 @@ export async function batchProcessWithSSE<T, R>(
           minTimeout,
           maxTimeout,
           factor: 2,
-          onFailedAttempt: (error) => {
+          onFailedAttempt: async (error) => {
             if (!isRateLimitError(error)) {
-              throw new pRetry.AbortError(
+              const pRetryMod = await import("p-retry");
+              throw new pRetryMod.AbortError(
                 error instanceof Error ? error : new Error(String(error))
               );
             }

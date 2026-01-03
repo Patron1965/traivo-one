@@ -1,12 +1,29 @@
 import { storage } from "./storage";
-import pLimit from "p-limit";
-import pRetry from "p-retry";
 
 const FORTNOX_API_BASE = "https://api.fortnox.se/3";
 const FORTNOX_AUTH_URL = "https://apps.fortnox.se/oauth-v1/auth";
 const FORTNOX_TOKEN_URL = "https://apps.fortnox.se/oauth-v1/token";
 
-const rateLimiter = pLimit(5);
+// Dynamic import for ESM-only packages
+let rateLimiter: ReturnType<typeof import("p-limit").default> | null = null;
+let pRetryFn: typeof import("p-retry").default | null = null;
+
+async function getRateLimiter() {
+  if (!rateLimiter) {
+    const pLimitModule = await import("p-limit");
+    const pLimit = pLimitModule.default;
+    rateLimiter = pLimit(5);
+  }
+  return rateLimiter;
+}
+
+async function getPRetry() {
+  if (!pRetryFn) {
+    const pRetryModule = await import("p-retry");
+    pRetryFn = pRetryModule.default;
+  }
+  return pRetryFn;
+}
 
 interface FortnoxTokenResponse {
   access_token: string;
@@ -167,7 +184,10 @@ export class FortnoxClient {
     endpoint: string,
     body?: object
   ): Promise<T> {
-    return rateLimiter(() =>
+    const limiter = await getRateLimiter();
+    const pRetry = await getPRetry();
+    
+    return limiter(() =>
       pRetry(
         async () => {
           const accessToken = await this.getValidAccessToken();
