@@ -2966,6 +2966,100 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // AI Predictive Maintenance - analyze order history to predict service needs
+  app.get("/api/ai/predictive-maintenance", isAuthenticated, async (req, res) => {
+    try {
+      const tenantId = (req.user as any)?.tenantId || DEFAULT_TENANT_ID;
+      const orders = await storage.getWorkOrders({ tenantId });
+      const objects = await storage.getObjects({ tenantId });
+      
+      // Build object service history map
+      const objectHistory: Map<string, { lastService: Date | null; avgDaysBetweenServices: number; serviceCount: number; objectName: string }> = new Map();
+      
+      objects.forEach(obj => {
+        const objectOrders = orders.filter(o => 
+          o.objectId === obj.id && 
+          (o.status === "completed" || o.status === "utford" || o.status === "fakturerad")
+        ).sort((a, b) => {
+          const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+          const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+          return dateB - dateA;
+        });
+        
+        if (objectOrders.length >= 2) {
+          const intervals: number[] = [];
+          for (let i = 0; i < objectOrders.length - 1; i++) {
+            const current = objectOrders[i].completedAt ? new Date(objectOrders[i].completedAt!) : null;
+            const previous = objectOrders[i + 1].completedAt ? new Date(objectOrders[i + 1].completedAt!) : null;
+            if (current && previous) {
+              const daysDiff = (current.getTime() - previous.getTime()) / (1000 * 60 * 60 * 24);
+              if (daysDiff > 0 && daysDiff < 365) {
+                intervals.push(daysDiff);
+              }
+            }
+          }
+          
+          if (intervals.length > 0) {
+            const avgInterval = intervals.reduce((sum, d) => sum + d, 0) / intervals.length;
+            const lastService = objectOrders[0].completedAt ? new Date(objectOrders[0].completedAt) : null;
+            
+            objectHistory.set(obj.id, {
+              lastService,
+              avgDaysBetweenServices: Math.round(avgInterval),
+              serviceCount: objectOrders.length,
+              objectName: obj.name
+            });
+          }
+        }
+      });
+      
+      // Predict upcoming service needs
+      const predictions: { objectId: string; objectName: string; predictedDate: string; daysUntil: number; confidence: number; avgInterval: number }[] = [];
+      const today = new Date();
+      
+      objectHistory.forEach((history, objectId) => {
+        if (history.lastService && history.avgDaysBetweenServices > 0) {
+          const predictedDate = new Date(history.lastService);
+          predictedDate.setDate(predictedDate.getDate() + history.avgDaysBetweenServices);
+          
+          const daysUntil = Math.ceil((predictedDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+          
+          // Only predict within next 30 days
+          if (daysUntil >= -7 && daysUntil <= 30) {
+            const confidence = Math.min(95, 50 + (history.serviceCount * 5));
+            predictions.push({
+              objectId,
+              objectName: history.objectName,
+              predictedDate: predictedDate.toISOString().split("T")[0],
+              daysUntil,
+              confidence,
+              avgInterval: history.avgDaysBetweenServices
+            });
+          }
+        }
+      });
+      
+      // Sort by days until (overdue first, then soonest)
+      predictions.sort((a, b) => a.daysUntil - b.daysUntil);
+      
+      // Separate into overdue and upcoming
+      const overdue = predictions.filter(p => p.daysUntil < 0).slice(0, 5);
+      const upcoming = predictions.filter(p => p.daysUntil >= 0).slice(0, 10);
+      
+      res.json({
+        overdue,
+        upcoming,
+        totalPredicted: predictions.length,
+        summary: overdue.length > 0 
+          ? `${overdue.length} objekt har passerat förväntad servicedag, ${upcoming.length} förväntas inom 30 dagar`
+          : `${upcoming.length} objekt förväntas behöva service inom 30 dagar`
+      });
+    } catch (error) {
+      console.error("Predictive maintenance error:", error);
+      res.status(500).json({ error: "Kunde inte generera prediktioner" });
+    }
+  });
+
   // AI Proactive Tips - background anomaly analysis for proactive suggestions
   app.get("/api/ai/proactive-tips", isAuthenticated, async (req, res) => {
     try {

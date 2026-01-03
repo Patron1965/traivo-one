@@ -1,6 +1,7 @@
 import { Dashboard } from "@/components/Dashboard";
 import { QuickStats } from "@/components/layout/QuickStats";
 import { AnomalyAlerts } from "@/components/AnomalyAlerts";
+import { PredictiveInsights } from "@/components/PredictiveInsights";
 
 export default function DashboardPage() {
   return (
@@ -14,7 +15,8 @@ export default function DashboardPage() {
         <div className="lg:col-span-2">
           <Dashboard />
         </div>
-        <div>
+        <div className="space-y-6">
+          <PredictiveInsights />
           <AnomalyAlerts />
         </div>
       </div>
