@@ -16,6 +16,7 @@ const forceExternal = [
   "@modelcontextprotocol/sdk",
   "google-auth-library",
   "@google-cloud/storage",
+  "pg",
 ];
 
 // server deps to bundle to reduce openat(2) syscalls
@@ -35,7 +36,6 @@ const allowlist = [
   "nanoid",
   "nodemailer",
   "openai",
-  "pg",
   "stripe",
   "uuid",
   "ws",
