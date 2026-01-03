@@ -9,6 +9,13 @@ const forceExternal = [
   "p-retry",
   "openid-client",
   "resend",
+  "papaparse",
+  "passport",
+  "express-session",
+  "connect-pg-simple",
+  "@modelcontextprotocol/sdk",
+  "google-auth-library",
+  "@google-cloud/storage",
 ];
 
 // server deps to bundle to reduce openat(2) syscalls
@@ -16,22 +23,18 @@ const forceExternal = [
 const allowlist = [
   "@google/generative-ai",
   "axios",
-  "connect-pg-simple",
   "cors",
   "date-fns",
   "drizzle-orm",
   "drizzle-zod",
   "express",
   "express-rate-limit",
-  "express-session",
   "jsonwebtoken",
   "memorystore",
   "multer",
   "nanoid",
   "nodemailer",
   "openai",
-  "passport",
-  "passport-local",
   "pg",
   "stripe",
   "uuid",
@@ -70,6 +73,8 @@ async function buildAll() {
     minify: true,
     external: externals,
     logLevel: "info",
+    mainFields: ["module", "main"],
+    conditions: ["import", "node", "default"],
   });
 }
 
