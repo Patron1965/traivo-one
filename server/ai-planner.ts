@@ -381,7 +381,7 @@ export async function generatePlanningSuggestions(
     const prompt = buildContextPrompt(context);
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o", // Upgraded for complex planning decisions
       messages: [
         {
           role: "system",
@@ -943,7 +943,7 @@ Svara ENDAST med JSON:
     const plannerSystemPrompt = buildSystemPrompt({ role: "planner" }) + "\n" + PLANNING_PERSONA_ADDITIONS + "\nSvara ENDAST med valid JSON.";
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o", // Upgraded for complex optimization analysis
       messages: [
         { role: "system", content: plannerSystemPrompt },
         { role: "user", content: prompt }
