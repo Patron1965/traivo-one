@@ -885,14 +885,14 @@ export default function OrderStockPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Team (förplanering)</FormLabel>
-                      <Select value={field.value || ""} onValueChange={field.onChange}>
+                      <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
                         <FormControl>
                           <SelectTrigger data-testid="select-planning-team">
                             <SelectValue placeholder="Välj team" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Inget team</SelectItem>
+                          <SelectItem value="none">Inget team</SelectItem>
                           {teams.map((team) => (
                             <SelectItem key={team.id} value={team.id}>
                               {team.name}
@@ -911,14 +911,14 @@ export default function OrderStockPage() {
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel>Resurs (detaljplanering)</FormLabel>
-                      <Select value={field.value || ""} onValueChange={field.onChange}>
+                      <Select value={field.value || "none"} onValueChange={(val) => field.onChange(val === "none" ? "" : val)}>
                         <FormControl>
                           <SelectTrigger data-testid="select-planning-resource">
                             <SelectValue placeholder="Välj resurs" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="">Ingen resurs</SelectItem>
+                          <SelectItem value="none">Ingen resurs</SelectItem>
                           {resources.map((resource) => (
                             <SelectItem key={resource.id} value={resource.id}>
                               {resource.name}

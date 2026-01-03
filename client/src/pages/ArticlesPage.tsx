@@ -711,17 +711,17 @@ export default function ArticlesPage() {
                     <div className="space-y-2">
                       <Label htmlFor="containerType" className="text-sm">Kärltyp</Label>
                       <Select
-                        value={formData.hookConditions.container_type || ""}
+                        value={formData.hookConditions.container_type || "all"}
                         onValueChange={(value) => setFormData({
                           ...formData,
-                          hookConditions: { ...formData.hookConditions, container_type: value || undefined }
+                          hookConditions: { ...formData.hookConditions, container_type: value === "all" ? undefined : value }
                         })}
                       >
                         <SelectTrigger data-testid="select-container-type-condition">
                           <SelectValue placeholder="Alla kärltyper" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="">Alla kärltyper</SelectItem>
+                          <SelectItem value="all">Alla kärltyper</SelectItem>
                           <SelectItem value="matavfall">Matavfall</SelectItem>
                           <SelectItem value="restavfall">Restavfall</SelectItem>
                           <SelectItem value="plastemballage">Plast</SelectItem>
