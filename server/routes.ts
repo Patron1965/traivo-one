@@ -3236,6 +3236,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
       ]);
       
+      // Hämta tidsfönster för alla oschemalagda ordrar
+      const unscheduledOrderIds = workOrders
+        .filter(o => !o.scheduledDate || !o.resourceId)
+        .map(o => o.id);
+      const timeWindows = await storage.getTaskTimewindowsBatch(unscheduledOrderIds);
+      
       const result = await aiEnhancedSchedule({
         workOrders,
         resources,
@@ -3243,6 +3249,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         weekStart: weekStart || new Date().toISOString().split("T")[0],
         weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
         setupTimeLogs,
+        timeWindows,
       });
       
       res.json(result);

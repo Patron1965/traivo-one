@@ -53,7 +53,7 @@ import {
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
+import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -279,6 +279,7 @@ export interface IStorage {
   
   // Task Desired Timewindows
   getTaskTimewindows(workOrderId: string): Promise<TaskDesiredTimewindow[]>;
+  getTaskTimewindowsBatch(workOrderIds: string[]): Promise<Record<string, TaskDesiredTimewindow[]>>;
   createTaskTimewindow(timewindow: InsertTaskDesiredTimewindow): Promise<TaskDesiredTimewindow>;
   updateTaskTimewindow(id: string, workOrderId: string, tenantId: string, data: Partial<InsertTaskDesiredTimewindow>): Promise<TaskDesiredTimewindow | undefined>;
   deleteTaskTimewindow(id: string, workOrderId: string, tenantId: string): Promise<void>;
@@ -2120,6 +2121,24 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(taskDesiredTimewindows)
       .where(eq(taskDesiredTimewindows.workOrderId, workOrderId))
       .orderBy(taskDesiredTimewindows.priority);
+  }
+
+  async getTaskTimewindowsBatch(workOrderIds: string[]): Promise<Record<string, TaskDesiredTimewindow[]>> {
+    if (workOrderIds.length === 0) return {};
+    
+    const allTimewindows = await db.select().from(taskDesiredTimewindows)
+      .where(inArray(taskDesiredTimewindows.workOrderId, workOrderIds))
+      .orderBy(taskDesiredTimewindows.priority);
+    
+    const result: Record<string, TaskDesiredTimewindow[]> = {};
+    workOrderIds.forEach(id => { result[id] = []; });
+    
+    allTimewindows.forEach(tw => {
+      if (!result[tw.workOrderId]) result[tw.workOrderId] = [];
+      result[tw.workOrderId].push(tw);
+    });
+    
+    return result;
   }
 
   async createTaskTimewindow(timewindow: InsertTaskDesiredTimewindow): Promise<TaskDesiredTimewindow> {

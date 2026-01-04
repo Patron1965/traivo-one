@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject } from "@shared/schema";
+import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDesiredTimewindow } from "@shared/schema";
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
 
@@ -262,6 +262,7 @@ export interface PlanningContext {
   weekEnd: string;
   setupTimeLogs?: SetupTimeLog[];
   kpis?: PlanningKPIs;
+  timeWindows?: Record<string, TaskDesiredTimewindow[]>;
 }
 
 function getOrderTitle(order: WorkOrder): string {
@@ -533,8 +534,9 @@ function findBestSlot(
   capacities: ResourceCapacity[],
   weekDays: string[],
   clusters: Cluster[],
-  resources: Resource[]
-): { resourceId: string; date: string; score: number } | null {
+  resources: Resource[],
+  timeWindows?: TaskDesiredTimewindow[]
+): { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null {
   const orderDuration = getOrderDuration(order) / 60;
   const orderClusterId = order.clusterId;
   const orderPriority = getOrderPriority(order);
@@ -544,7 +546,7 @@ function findBestSlot(
     ? clusters.find(c => c.id === orderClusterId) 
     : null;
   
-  let bestSlot: { resourceId: string; date: string; score: number } | null = null;
+  let bestSlot: { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null = null;
   
   for (const cap of capacities) {
     for (const day of weekDays) {
@@ -557,8 +559,10 @@ function findBestSlot(
       // 1. Områdesmatchning (resursens serviceArea matchar klustrets postnummer)
       // 2. Ledig kapacitet (mer ledig tid = jämnare fördelning)
       // 3. Tidigt i veckan för akuta ordrar
+      // 4. Tidsfönstermatchning
       
       let score = 50; // Baspoäng
+      let dayTimeWindowMatched = false;
       
       // Områdesmatchning: +30 poäng om resursen betjänar klustret
       if (orderCluster) {
@@ -578,13 +582,46 @@ function findBestSlot(
         score += Math.max(0, 10 - dayIndex * 2);
       }
       
+      // Tidsfönstermatchning: +25 poäng om dagen matchar önskat tidsfönster
+      if (timeWindows && timeWindows.length > 0) {
+        const dayDate = new Date(day);
+        const dayOfWeek = dayDate.getDay(); // 0=söndag, 1=måndag, etc
+        const weekNum = getWeekNumber(dayDate);
+        
+        for (const tw of timeWindows) {
+          // Matcha veckonummer om specificerat
+          if (tw.weekNumber && tw.weekNumber !== weekNum) continue;
+          
+          // Matcha veckodag om specificerat (1=måndag, 7=söndag i vår modell)
+          if (tw.weekday) {
+            const twWeekday = tw.weekday; // 1-7 (måndag-söndag)
+            const jsWeekday = dayOfWeek === 0 ? 7 : dayOfWeek; // Konvertera JS 0-6 till 1-7
+            if (twWeekday !== jsWeekday) continue;
+          }
+          
+          // Matchat tidsfönster! Ge bonus baserat på prioritet
+          const priorityBonus = tw.priority ? Math.max(0, 30 - (tw.priority - 1) * 5) : 25;
+          score += priorityBonus;
+          dayTimeWindowMatched = true;
+          break; // Räcker med en match
+        }
+      }
+      
       if (!bestSlot || score > bestSlot.score) {
-        bestSlot = { resourceId: cap.id, date: day, score };
+        bestSlot = { resourceId: cap.id, date: day, score, timeWindowMatched: dayTimeWindowMatched };
       }
     }
   }
   
   return bestSlot;
+}
+
+function getWeekNumber(date: Date): number {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNum = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
 }
 
 export async function autoScheduleOrders(
@@ -632,7 +669,10 @@ export async function autoScheduleOrders(
   const assignments: ScheduleAssignment[] = [];
   
   for (const order of sortedOrders) {
-    const slot = findBestSlot(order, capacities, weekDays, context.clusters, context.resources);
+    // Hämta tidsfönster för denna order om tillgängliga
+    const orderTimeWindows = context.timeWindows?.[order.id] || [];
+    
+    const slot = findBestSlot(order, capacities, weekDays, context.clusters, context.resources, orderTimeWindows);
     
     if (slot) {
       // Uppdatera kapaciteten
@@ -645,13 +685,20 @@ export async function autoScheduleOrders(
       const resource = context.resources.find(r => r.id === slot.resourceId);
       const cluster = context.clusters.find(c => c.id === order.clusterId);
       
+      // Bygg förklaring - lägg bara till tidsfönsterinfo om det faktiskt matchade
+      let reason = cluster 
+        ? `Placerad hos ${resource?.name || "resurs"} i kluster ${cluster.name}`
+        : `Placerad hos ${resource?.name || "resurs"} baserat på tillgänglighet`;
+      
+      if (slot.timeWindowMatched) {
+        reason += ` (tidsfönster respekterat)`;
+      }
+      
       assignments.push({
         workOrderId: order.id,
         resourceId: slot.resourceId,
         scheduledDate: slot.date,
-        reason: cluster 
-          ? `Placerad hos ${resource?.name || "resurs"} i kluster ${cluster.name}`
-          : `Placerad hos ${resource?.name || "resurs"} baserat på tillgänglighet`,
+        reason,
         confidence: Math.min(100, slot.score + 10)
       });
     }
@@ -1025,7 +1072,10 @@ async function autoScheduleOrdersWithWeather(
   const assignments: ScheduleAssignment[] = [];
   
   for (const order of sortedOrders) {
-    const slot = findBestSlotWithWeather(order, capacities, weekDays, context.clusters, context.resources, weatherImpacts);
+    // Hämta tidsfönster för denna order om tillgängliga
+    const orderTimeWindows = context.timeWindows?.[order.id] || [];
+    
+    const slot = findBestSlotWithWeather(order, capacities, weekDays, context.clusters, context.resources, weatherImpacts, orderTimeWindows);
     
     if (slot) {
       // Uppdatera kapaciteten
@@ -1042,6 +1092,10 @@ async function autoScheduleOrdersWithWeather(
       let reason = cluster 
         ? `${resource?.name || "Resurs"} i kluster ${cluster.name}`
         : `${resource?.name || "Resurs"} baserat på tillgänglighet`;
+      
+      if (slot.timeWindowMatched) {
+        reason += ` (tidsfönster respekterat)`;
+      }
       
       if (weatherImpact && weatherImpact.impactLevel !== "none") {
         reason += ` (väder: ${weatherImpact.reason})`;
@@ -1132,15 +1186,16 @@ function calculateResourceCapacityWithWeather(
   return capacities;
 }
 
-// Hitta bästa slot med väder-hänsyn
+// Hitta bästa slot med väder-hänsyn och tidsfönster
 function findBestSlotWithWeather(
   order: WorkOrder,
   capacities: ResourceCapacity[],
   weekDays: string[],
   clusters: Cluster[],
   resources: Resource[],
-  weatherImpacts: WeatherImpact[]
-): { resourceId: string; date: string; score: number } | null {
+  weatherImpacts: WeatherImpact[],
+  timeWindows?: TaskDesiredTimewindow[]
+): { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null {
   const orderDuration = getOrderDuration(order) / 60;
   const orderClusterId = order.clusterId;
   const orderPriority = getOrderPriority(order);
@@ -1149,7 +1204,7 @@ function findBestSlotWithWeather(
     ? clusters.find(c => c.id === orderClusterId) 
     : null;
   
-  let bestSlot: { resourceId: string; date: string; score: number } | null = null;
+  let bestSlot: { resourceId: string; date: string; score: number; timeWindowMatched?: boolean } | null = null;
   
   for (const cap of capacities) {
     for (const day of weekDays) {
@@ -1164,6 +1219,7 @@ function findBestSlotWithWeather(
       if (availableHours < orderDuration) continue;
       
       let score = 50; // Baspoäng
+      let dayTimeWindowMatched = false;
       
       // Områdesmatchning: +30 poäng om resursen betjänar klustret
       if (orderCluster) {
@@ -1197,8 +1253,28 @@ function findBestSlotWithWeather(
         score += 10; // Ingen väderdata = anta normalt väder
       }
       
+      // Tidsfönstermatchning: +25 poäng om dagen matchar önskat tidsfönster
+      if (timeWindows && timeWindows.length > 0) {
+        const dayDate = new Date(day);
+        const dayOfWeek = dayDate.getDay();
+        const weekNum = getWeekNumber(dayDate);
+        
+        for (const tw of timeWindows) {
+          if (tw.weekNumber && tw.weekNumber !== weekNum) continue;
+          if (tw.weekday) {
+            const twWeekday = tw.weekday;
+            const jsWeekday = dayOfWeek === 0 ? 7 : dayOfWeek;
+            if (twWeekday !== jsWeekday) continue;
+          }
+          const priorityBonus = tw.priority ? Math.max(0, 30 - (tw.priority - 1) * 5) : 25;
+          score += priorityBonus;
+          dayTimeWindowMatched = true;
+          break;
+        }
+      }
+      
       if (!bestSlot || score > bestSlot.score) {
-        bestSlot = { resourceId: cap.id, date: day, score };
+        bestSlot = { resourceId: cap.id, date: day, score, timeWindowMatched: dayTimeWindowMatched };
       }
     }
   }
