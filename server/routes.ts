@@ -5282,6 +5282,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  app.post("/api/task-dependencies/batch", async (req, res) => {
+    try {
+      const { workOrderIds } = req.body as { workOrderIds: string[] };
+      if (!Array.isArray(workOrderIds)) {
+        return res.status(400).json({ error: "workOrderIds must be an array" });
+      }
+      const result = await storage.getTaskDependenciesBatch(workOrderIds);
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to fetch batch dependencies:", error);
+      res.status(500).json({ error: "Failed to fetch batch dependencies" });
+    }
+  });
+
   // ============================================
   // TASK INFORMATION - Bilagor och info
   // ============================================
@@ -5413,6 +5427,64 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed to delete structural article:", error);
       res.status(500).json({ error: "Failed to delete structural article" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/expand-structural", async (req, res) => {
+    try {
+      const workOrder = await storage.getWorkOrder(req.params.workOrderId);
+      if (!workOrder) {
+        return res.status(404).json({ error: "Work order not found" });
+      }
+
+      const articleIds = (workOrder.articleIds as string[]) || [];
+      if (articleIds.length === 0) {
+        return res.json({ expanded: [], message: "Ingen strukturartikel att expandera" });
+      }
+
+      const allStructuralArticles = await storage.getStructuralArticles(DEFAULT_TENANT_ID);
+      const structuralArticlesMap = new Map<string, typeof allStructuralArticles>();
+      
+      for (const sa of allStructuralArticles) {
+        const existing = structuralArticlesMap.get(sa.parentArticleId) || [];
+        existing.push(sa);
+        structuralArticlesMap.set(sa.parentArticleId, existing);
+      }
+
+      const structuralArticleIds = articleIds.filter(id => structuralArticlesMap.has(id));
+      
+      if (structuralArticleIds.length === 0) {
+        return res.json({ expanded: [], message: "Inga strukturartiklar hittades" });
+      }
+
+      const allArticles = await storage.getArticlesByTenant(DEFAULT_TENANT_ID);
+      const articlesMap = new Map(allArticles.map(a => [a.id, a]));
+
+      const { expandStructuralArticle } = await import("./ai-planner");
+
+      const results = [];
+      for (const structuralArticleId of structuralArticleIds) {
+        const children = structuralArticlesMap.get(structuralArticleId) || [];
+        
+        const result = await expandStructuralArticle(
+          workOrder,
+          structuralArticleId,
+          children,
+          articlesMap,
+          async (data) => storage.createWorkOrder({ ...data, tenantId: workOrder.tenantId } as InsertWorkOrder),
+          async (data) => storage.createTaskDependency(data)
+        );
+        
+        results.push(result);
+      }
+
+      res.json({
+        expanded: results,
+        message: `${results.reduce((sum, r) => sum + r.createdWorkOrders.length, 0)} deluppgifter skapades`
+      });
+    } catch (error) {
+      console.error("Failed to expand structural articles:", error);
+      res.status(500).json({ error: "Kunde inte expandera strukturartiklar" });
     }
   });
 

@@ -9,13 +9,13 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
+import type { Resource, WorkOrderWithObject, Customer, TaskDependency } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -189,6 +189,22 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+  });
+
+  const workOrderIds = useMemo(() => workOrders.map(wo => wo.id), [workOrders]);
+
+  const { data: dependenciesData } = useQuery<{
+    dependencies: Record<string, TaskDependency[]>;
+    dependents: Record<string, TaskDependency[]>;
+  }>({
+    queryKey: ["/api/task-dependencies/batch", workOrderIds.join(",")],
+    queryFn: async () => {
+      if (workOrderIds.length === 0) return { dependencies: {}, dependents: {} };
+      const res = await apiRequest("POST", "/api/task-dependencies/batch", { workOrderIds });
+      return res.json();
+    },
+    enabled: workOrderIds.length > 0,
+    staleTime: 120000,
   });
 
   const workOrdersQueryKey = ["/api/work-orders", dateRange.startDate, dateRange.endDate];
@@ -636,6 +652,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const execIndex = executionStatusOrder.indexOf(execStatus);
     const execProgress = ((execIndex + 1) / executionStatusOrder.length) * 100;
     
+    const jobDependencies = dependenciesData?.dependencies?.[job.id] || [];
+    const jobDependents = dependenciesData?.dependents?.[job.id] || [];
+    const hasDependencies = jobDependencies.length > 0;
+    const hasDependents = jobDependents.length > 0;
+    
     return (
       <DraggableJobCard key={job.id} id={job.id}>
         <Card
@@ -655,6 +676,36 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   </TooltipContent>
                 </Tooltip>
                 <span className="text-xs font-medium truncate">{job.title}</span>
+                {(hasDependencies || hasDependents) && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="flex items-center gap-0.5 shrink-0">
+                        {hasDependencies && (
+                          <Link2 className="h-3 w-3 text-orange-500" />
+                        )}
+                        {hasDependents && (
+                          <ArrowRight className="h-3 w-3 text-blue-500" />
+                        )}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <div className="text-xs space-y-1">
+                        {hasDependencies && (
+                          <p className="flex items-center gap-1">
+                            <Link2 className="h-3 w-3 text-orange-500" />
+                            Beroende av {jobDependencies.length} uppgift{jobDependencies.length > 1 ? "er" : ""}
+                          </p>
+                        )}
+                        {hasDependents && (
+                          <p className="flex items-center gap-1">
+                            <ArrowRight className="h-3 w-3 text-blue-500" />
+                            Blockerar {jobDependents.length} uppgift{jobDependents.length > 1 ? "er" : ""}
+                          </p>
+                        )}
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               </div>
               <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
               {!compact && (

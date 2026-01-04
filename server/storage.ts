@@ -287,6 +287,10 @@ export interface IStorage {
   // Task Dependencies
   getTaskDependencies(workOrderId: string): Promise<TaskDependency[]>;
   getTaskDependents(workOrderId: string): Promise<TaskDependency[]>;
+  getTaskDependenciesBatch(workOrderIds: string[]): Promise<{
+    dependencies: Record<string, TaskDependency[]>;
+    dependents: Record<string, TaskDependency[]>;
+  }>;
   createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency>;
   deleteTaskDependency(id: string, tenantId: string): Promise<void>;
   
@@ -2178,6 +2182,42 @@ export class DatabaseStorage implements IStorage {
   async getTaskDependents(workOrderId: string): Promise<TaskDependency[]> {
     return db.select().from(taskDependencies)
       .where(eq(taskDependencies.dependsOnWorkOrderId, workOrderId));
+  }
+
+  async getTaskDependenciesBatch(workOrderIds: string[]): Promise<{
+    dependencies: Record<string, TaskDependency[]>;
+    dependents: Record<string, TaskDependency[]>;
+  }> {
+    if (workOrderIds.length === 0) {
+      return { dependencies: {}, dependents: {} };
+    }
+    
+    const [allDependencies, allDependents] = await Promise.all([
+      db.select().from(taskDependencies)
+        .where(inArray(taskDependencies.workOrderId, workOrderIds)),
+      db.select().from(taskDependencies)
+        .where(inArray(taskDependencies.dependsOnWorkOrderId, workOrderIds))
+    ]);
+    
+    const dependencies: Record<string, TaskDependency[]> = {};
+    const dependents: Record<string, TaskDependency[]> = {};
+    
+    workOrderIds.forEach(id => {
+      dependencies[id] = [];
+      dependents[id] = [];
+    });
+    
+    allDependencies.forEach(dep => {
+      if (!dependencies[dep.workOrderId]) dependencies[dep.workOrderId] = [];
+      dependencies[dep.workOrderId].push(dep);
+    });
+    
+    allDependents.forEach(dep => {
+      if (!dependents[dep.dependsOnWorkOrderId]) dependents[dep.dependsOnWorkOrderId] = [];
+      dependents[dep.dependsOnWorkOrderId].push(dep);
+    });
+    
+    return { dependencies, dependents };
   }
 
   async createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency> {

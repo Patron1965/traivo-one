@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDesiredTimewindow } from "@shared/schema";
+import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDesiredTimewindow, StructuralArticle, Article, InsertWorkOrder, InsertTaskDependency } from "@shared/schema";
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
 
@@ -2004,4 +2004,131 @@ Svara i JSON-format:
       severity: "low"
     };
   }
+}
+
+// ============ Structural Article Expansion ============
+
+export interface ExpandedSubtask {
+  title: string;
+  description: string;
+  articleId: string;
+  articleName: string;
+  sequenceOrder: number;
+  stepName: string;
+  taskType: string | null;
+  estimatedDuration: number;
+}
+
+export interface StructuralExpansionResult {
+  parentWorkOrderId: string;
+  structuralArticleId: string;
+  structuralArticleName: string;
+  subtasks: ExpandedSubtask[];
+  createdWorkOrders: WorkOrder[];
+  createdDependencies: { fromId: string; toId: string; type: string }[];
+}
+
+export async function expandStructuralArticle(
+  parentWorkOrder: WorkOrder,
+  structuralArticleId: string,
+  structuralArticleChildren: StructuralArticle[],
+  articles: Map<string, Article>,
+  createWorkOrder: (data: Partial<InsertWorkOrder>) => Promise<WorkOrder>,
+  createDependency: (data: InsertTaskDependency) => Promise<unknown>
+): Promise<StructuralExpansionResult> {
+  const parentArticle = articles.get(structuralArticleId);
+  
+  if (!parentArticle || structuralArticleChildren.length === 0) {
+    return {
+      parentWorkOrderId: parentWorkOrder.id,
+      structuralArticleId,
+      structuralArticleName: parentArticle?.name || "Okänd artikel",
+      subtasks: [],
+      createdWorkOrders: [],
+      createdDependencies: []
+    };
+  }
+
+  const sortedChildren = [...structuralArticleChildren].sort((a, b) => 
+    (a.sequenceOrder || 1) - (b.sequenceOrder || 1)
+  );
+
+  const subtasks: ExpandedSubtask[] = [];
+  const createdWorkOrders: WorkOrder[] = [];
+  const createdDependencies: { fromId: string; toId: string; type: string }[] = [];
+
+  let previousWorkOrderId: string | null = null;
+
+  for (const child of sortedChildren) {
+    const childArticle = articles.get(child.childArticleId);
+    if (!childArticle) continue;
+
+    const stepName = child.stepName || `Steg ${child.sequenceOrder}`;
+    const subtaskTitle = `${stepName}: ${childArticle.name}`;
+    
+    const subtask: ExpandedSubtask = {
+      title: subtaskTitle,
+      description: `Deluppgift av ${parentArticle.name}`,
+      articleId: child.childArticleId,
+      articleName: childArticle.name,
+      sequenceOrder: child.sequenceOrder || 1,
+      stepName,
+      taskType: child.taskType || null,
+      estimatedDuration: 30
+    };
+    subtasks.push(subtask);
+
+    const newWorkOrder = await createWorkOrder({
+      tenantId: parentWorkOrder.tenantId,
+      title: subtaskTitle,
+      description: `Deluppgift av ${parentArticle.name} för ${parentWorkOrder.title}`,
+      customerId: parentWorkOrder.customerId,
+      objectId: parentWorkOrder.objectId,
+      articleIds: [child.childArticleId],
+      status: "draft",
+      orderStatus: "skapad",
+      priority: parentWorkOrder.priority,
+      taskType: child.taskType || parentWorkOrder.taskType,
+      estimatedDuration: 30,
+      parentWorkOrderId: parentWorkOrder.id,
+      creationMethod: "structural_expansion"
+    });
+    createdWorkOrders.push(newWorkOrder);
+
+    if (previousWorkOrderId) {
+      await createDependency({
+        tenantId: parentWorkOrder.tenantId,
+        workOrderId: newWorkOrder.id,
+        dependsOnWorkOrderId: previousWorkOrderId,
+        dependencyType: "structural",
+        structuralArticleId: structuralArticleId
+      });
+      createdDependencies.push({
+        fromId: newWorkOrder.id,
+        toId: previousWorkOrderId,
+        type: "structural"
+      });
+    }
+
+    previousWorkOrderId = newWorkOrder.id;
+  }
+
+  return {
+    parentWorkOrderId: parentWorkOrder.id,
+    structuralArticleId,
+    structuralArticleName: parentArticle.name,
+    subtasks,
+    createdWorkOrders,
+    createdDependencies
+  };
+}
+
+export function identifyStructuralArticles(
+  articleIds: string[],
+  structuralArticlesMap: Map<string, StructuralArticle[]>
+): string[] {
+  return articleIds.filter(id => {
+    const children = structuralArticlesMap.get(id);
+    return children && children.length > 0;
+  });
 }
