@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, KeyboardSensor, closestCenter, useDraggable, useDroppable, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,11 +11,14 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths } from "date-fns";
+import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer, TaskDependency } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -121,6 +126,92 @@ function DroppableCell({ id, children, className = "" }: { id: string; children:
   );
 }
 
+function SortableRouteItem({ 
+  job, 
+  index, 
+  totalCount, 
+  customer, 
+  travelToNext, 
+  isSelected, 
+  onSelect 
+}: { 
+  job: WorkOrderWithObject; 
+  index: number; 
+  totalCount: number;
+  customer?: { name: string };
+  travelToNext?: number;
+  isSelected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: job.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <Card
+        className={`p-3 cursor-pointer hover-elevate ${isSelected ? "ring-2 ring-primary" : ""}`}
+        onClick={() => onSelect(job.id)}
+        data-testid={`route-job-${job.id}`}
+      >
+        <div className="flex items-start gap-2">
+          <div 
+            className="cursor-grab touch-none text-muted-foreground hover:text-foreground"
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="h-4 w-4" />
+          </div>
+          <div 
+            className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0 ${
+              index === 0 ? "bg-green-500" : index === totalCount - 1 ? "bg-red-500" : "bg-blue-500"
+            }`}
+          >
+            {index + 1}
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate">{job.title}</div>
+            <div className="text-xs text-muted-foreground truncate">{job.objectName}</div>
+            {customer && (
+              <div className="text-xs text-muted-foreground truncate">{customer.name}</div>
+            )}
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              {job.scheduledStartTime !== undefined && job.scheduledStartTime !== null && (
+                <Badge variant="outline" className="text-[10px]">
+                  {String(Math.floor(job.scheduledStartTime / 60)).padStart(2, "0")}:{String(job.scheduledStartTime % 60).padStart(2, "0")}
+                </Badge>
+              )}
+              <Badge variant="secondary" className="text-[10px]">
+                {((job.estimatedDuration || 0) / 60).toFixed(1)}h
+              </Badge>
+            </div>
+          </div>
+        </div>
+      </Card>
+      {travelToNext !== undefined && (
+        <div className="flex items-center gap-2 py-1.5 pl-3 text-xs text-muted-foreground">
+          <div className="w-4" />
+          <div className="w-6 flex justify-center">
+            <div className="w-0.5 h-4 bg-blue-300" />
+          </div>
+          <span>~{travelToNext} min körning</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface WeekPlannerProps {
   onAddJob?: () => void;
   onSelectJob?: (jobId: string) => void;
@@ -128,7 +219,7 @@ interface WeekPlannerProps {
   onToggleAIPanel?: () => void;
 }
 
-type ViewMode = "day" | "week" | "month";
+type ViewMode = "day" | "week" | "month" | "route";
 
 export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("week");
@@ -142,6 +233,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [undoStack, setUndoStack] = useState<PlannerAction[]>([]);
   const [redoStack, setRedoStack] = useState<PlannerAction[]>([]);
   const [activeDragJob, setActiveDragJob] = useState<WorkOrderWithObject | null>(null);
+  const [routeViewResourceId, setRouteViewResourceId] = useState<string | null>(null);
+  const [routeJobOrder, setRouteJobOrder] = useState<string[]>([]);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -309,6 +402,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
+  const routeJobsForView = useMemo(() => {
+    if (viewMode !== "route" || !routeViewResourceId) return [];
+    const dateKey = format(currentDate, "yyyy-MM-dd");
+    const baseRouteJobs = (resourceDayJobMap.jobs[routeViewResourceId]?.[dateKey] || [])
+      .filter(j => j.taskLatitude && j.taskLongitude)
+      .sort((a, b) => (a.scheduledStartTime || 0) - (b.scheduledStartTime || 0));
+    
+    return routeJobOrder.length > 0 && routeJobOrder.every(id => baseRouteJobs.some(j => j.id === id))
+      ? routeJobOrder.map(id => baseRouteJobs.find(j => j.id === id)!).filter(Boolean)
+      : baseRouteJobs;
+  }, [viewMode, routeViewResourceId, currentDate, resourceDayJobMap, routeJobOrder]);
+
   const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
   
   const unscheduledJobs = useMemo(() => {
@@ -368,7 +473,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   }, [filteredScheduledJobs]);
 
   const navigate = (direction: "prev" | "next") => {
-    if (viewMode === "day") {
+    if (viewMode === "day" || viewMode === "route") {
       const newDate = addDays(currentDate, direction === "next" ? 1 : -1);
       setCurrentDate(newDate);
       setCurrentWeekStart(startOfWeek(newDate, { weekStartsOn: 1 }));
@@ -403,7 +508,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   };
 
   const getHeaderLabel = () => {
-    if (viewMode === "day") {
+    if (viewMode === "day" || viewMode === "route") {
       return format(currentDate, "EEEE d MMMM yyyy", { locale: sv });
     } else if (viewMode === "week") {
       return `Vecka ${format(currentWeekStart, "w", { locale: sv })} - ${format(currentWeekStart, "MMMM yyyy", { locale: sv })}`;
@@ -451,6 +556,37 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const jobId = active.id as string;
     const dropId = over.id as string;
     
+    if (viewMode === "route" && routeJobsForView.length > 0) {
+      const isRouteJob = routeJobsForView.some(j => j.id === jobId);
+      const isDropOnRouteJob = routeJobsForView.some(j => j.id === dropId);
+      
+      if (isRouteJob && isDropOnRouteJob && jobId !== dropId) {
+        const oldIndex = routeJobsForView.findIndex(j => j.id === jobId);
+        const newIndex = routeJobsForView.findIndex(j => j.id === dropId);
+        
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newOrder = arrayMove(routeJobsForView, oldIndex, newIndex);
+          setRouteJobOrder(newOrder.map(j => j.id));
+          
+          newOrder.forEach((job, idx) => {
+            const baseStartTime = 480;
+            const newStartTime = baseStartTime + idx * 60;
+            
+            updateWorkOrderMutation.mutate({
+              id: job.id,
+              updates: { scheduledStartTime: newStartTime }
+            });
+          });
+          
+          toast({
+            title: "Körordning uppdaterad",
+            description: `${newOrder.length} stopp har fått ny ordning`,
+          });
+        }
+        return;
+      }
+    }
+    
     const job = workOrders.find(j => j.id === jobId);
     if (!job) return;
     
@@ -497,7 +633,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       scheduledDate: dateStr,
       scheduledStartTime,
     });
-  }, [workOrders, updateWorkOrderMutation, addToUndoStack]);
+  }, [workOrders, updateWorkOrderMutation, addToUndoStack, viewMode, routeJobsForView, toast]);
 
   const applyActionMutation = useMutation({
     mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => {
@@ -970,6 +1106,216 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     );
   };
 
+  const createNumberedIcon = (number: number, isFirst: boolean, isLast: boolean) => {
+    const color = isFirst ? "#22c55e" : isLast ? "#ef4444" : "#3b82f6";
+    return L.divIcon({
+      className: "custom-marker",
+      html: `<div style="
+        background-color: ${color};
+        color: white;
+        border-radius: 50%;
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: bold;
+        font-size: 12px;
+        border: 2px solid white;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      ">${number}</div>`,
+      iconSize: [28, 28],
+      iconAnchor: [14, 14],
+    });
+  };
+
+  const MapFitBounds = ({ positions }: { positions: [number, number][] }) => {
+    const map = useMap();
+    useEffect(() => {
+      if (positions.length > 0) {
+        const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
+        map.fitBounds(bounds, { padding: [40, 40] });
+      }
+    }, [map, positions.length]);
+    return null;
+  };
+
+  const calculateTravelTime = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    const distance = R * c;
+    const avgSpeedKmH = 40;
+    return Math.round((distance / avgSpeedKmH) * 60);
+  };
+
+  const renderRouteMapView = () => {
+    const selectedResource = routeViewResourceId ? resources.find(r => r.id === routeViewResourceId) : null;
+    const routeJobs = routeJobsForView;
+    
+    const positions: [number, number][] = routeJobs.map(j => [j.taskLatitude!, j.taskLongitude!]);
+    const defaultCenter: [number, number] = positions[0] || [59.3293, 18.0686];
+    
+    let totalTravelTime = 0;
+    const segments: { from: number; to: number; time: number }[] = [];
+    for (let i = 0; i < routeJobs.length - 1; i++) {
+      const time = calculateTravelTime(
+        routeJobs[i].taskLatitude!,
+        routeJobs[i].taskLongitude!,
+        routeJobs[i + 1].taskLatitude!,
+        routeJobs[i + 1].taskLongitude!
+      );
+      totalTravelTime += time;
+      segments.push({ from: i, to: i + 1, time });
+    }
+    
+    const totalWorkTime = routeJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0);
+
+    return (
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex items-center gap-4 p-3 border-b bg-muted/30 flex-wrap">
+          <div className="flex items-center gap-2">
+            <MapPin className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Välj resurs:</span>
+          </div>
+          <Select value={routeViewResourceId || ""} onValueChange={(v) => { setRouteViewResourceId(v); setRouteJobOrder([]); }}>
+            <SelectTrigger className="w-[200px]" data-testid="select-route-resource">
+              <SelectValue placeholder="Välj resurs..." />
+            </SelectTrigger>
+            <SelectContent>
+              {resources.map((resource) => (
+                <SelectItem key={resource.id} value={resource.id}>
+                  {resource.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedResource && routeJobs.length > 0 && (
+            <div className="flex items-center gap-3 text-sm flex-wrap">
+              <Badge variant="secondary" className="text-xs">
+                <Navigation className="h-3 w-3 mr-1" />
+                {routeJobs.length} stopp
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                <Clock className="h-3 w-3 mr-1" />
+                {Math.round(totalTravelTime)} min körtid
+              </Badge>
+              <Badge variant="outline" className="text-xs">
+                {(totalWorkTime / 60).toFixed(1)}h arbete
+              </Badge>
+            </div>
+          )}
+        </div>
+        
+        {!selectedResource ? (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="text-center space-y-2">
+              <MapPin className="h-12 w-12 mx-auto opacity-30" />
+              <p>Välj en resurs för att visa dagens rutt</p>
+            </div>
+          </div>
+        ) : routeJobs.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+            <div className="text-center space-y-2">
+              <AlertTriangle className="h-12 w-12 mx-auto opacity-30" />
+              <p>Inga schemalagda jobb med koordinater för {selectedResource.name} denna dag</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex-1 flex">
+            <div className="flex-1 relative">
+              <MapContainer
+                center={defaultCenter}
+                zoom={12}
+                className="h-full w-full"
+                scrollWheelZoom={true}
+              >
+                <TileLayer
+                  attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                  url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+                <MapFitBounds positions={positions} />
+                
+                {positions.length > 1 && (
+                  <Polyline
+                    positions={positions}
+                    color="#3b82f6"
+                    weight={3}
+                    opacity={0.7}
+                    dashArray="8,8"
+                  />
+                )}
+                
+                {routeJobs.map((job, index) => (
+                  <Marker
+                    key={job.id}
+                    position={[job.taskLatitude!, job.taskLongitude!]}
+                    icon={createNumberedIcon(index + 1, index === 0, index === routeJobs.length - 1)}
+                  >
+                    <Popup>
+                      <div className="text-sm space-y-1 min-w-[180px]">
+                        <div className="font-medium">{index + 1}. {job.title}</div>
+                        <div className="text-muted-foreground">{job.objectName}</div>
+                        {job.scheduledStartTime !== undefined && job.scheduledStartTime !== null && (
+                          <div className="text-xs">
+                            Starttid: {String(Math.floor(job.scheduledStartTime / 60)).padStart(2, "0")}:{String(job.scheduledStartTime % 60).padStart(2, "0")}
+                          </div>
+                        )}
+                        <div className="text-xs">
+                          Uppskattat: {((job.estimatedDuration || 0) / 60).toFixed(1)}h
+                        </div>
+                        {segments[index] && (
+                          <div className="text-xs text-blue-600 pt-1 border-t">
+                            Nästa stopp: ~{segments[index].time} min
+                          </div>
+                        )}
+                      </div>
+                    </Popup>
+                  </Marker>
+                ))}
+              </MapContainer>
+            </div>
+            
+            <div className="w-[280px] border-l bg-muted/20 flex flex-col">
+              <div className="p-3 border-b">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <Navigation className="h-4 w-4" />
+                    Körordning
+                  </div>
+                  <Badge variant="outline" className="text-[10px]">
+                    <GripVertical className="h-3 w-3 mr-1" />
+                    Dra för att ändra
+                  </Badge>
+                </div>
+              </div>
+              <ScrollArea className="flex-1">
+                <SortableContext items={routeJobs.map(j => j.id)} strategy={verticalListSortingStrategy}>
+                  <div className="p-2 space-y-1">
+                    {routeJobs.map((job, index) => (
+                      <SortableRouteItem
+                        key={job.id}
+                        job={job}
+                        index={index}
+                        totalCount={routeJobs.length}
+                        customer={customerMap.get(job.customerId)}
+                        travelToNext={segments[index]?.time}
+                        isSelected={selectedJob === job.id}
+                        onSelect={handleJobClick}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </ScrollArea>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <DndContext
       sensors={sensors}
@@ -1138,6 +1484,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 <Calendar className="h-4 w-4 mr-1" />
                 <span className="hidden sm:inline">Månad</span>
               </ToggleGroupItem>
+              <ToggleGroupItem value="route" aria-label="Ruttvy" data-testid="toggle-route">
+                <MapPin className="h-4 w-4 mr-1" />
+                <span className="hidden sm:inline">Rutt</span>
+              </ToggleGroupItem>
             </ToggleGroup>
             <Button onClick={() => { onAddJob?.(); }} data-testid="button-add-job">
               <Plus className="h-4 w-4 mr-2" />
@@ -1159,6 +1509,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         {viewMode === "day" && renderDayTimelineView()}
         {viewMode === "week" && renderWeekView()}
         {viewMode === "month" && renderMonthView()}
+        {viewMode === "route" && renderRouteMapView()}
 
         <div className="p-3 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-4 text-xs">
