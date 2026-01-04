@@ -1167,15 +1167,19 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const selectedResource = routeViewResourceId ? resources.find(r => r.id === routeViewResourceId) : null;
     const routeJobs = routeJobsForView;
     
-    // Find first date with scheduled jobs for this resource
-    const getFirstDateWithJobs = () => {
-      if (!routeViewResourceId || !resourceDayJobMap.jobs[routeViewResourceId]) return null;
-      const dates = Object.keys(resourceDayJobMap.jobs[routeViewResourceId]).sort();
-      if (dates.length === 0) return null;
-      return dates[0]; // Return earliest date with jobs
-    };
+    // Find first date with scheduled jobs for this resource (search all work orders)
+    const resourceJobDates = workOrders
+      .filter(j => j.resourceId === routeViewResourceId && j.scheduledDate)
+      .map(j => {
+        const dateStr = typeof j.scheduledDate === 'string' 
+          ? j.scheduledDate 
+          : (j.scheduledDate as Date).toISOString();
+        return dateStr.split("T")[0];
+      })
+      .filter((v, i, a) => a.indexOf(v) === i) // unique dates
+      .sort();
     
-    const firstJobDate = getFirstDateWithJobs();
+    const firstJobDate = resourceJobDates.length > 0 ? resourceJobDates[0] : null;
     const handleJumpToDate = () => {
       if (firstJobDate) {
         const date = new Date(firstJobDate + "T12:00:00Z");
