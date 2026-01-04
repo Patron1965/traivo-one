@@ -55,6 +55,10 @@ import {
   User
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
+import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
+import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
+import { TaskDependenciesView } from "@/components/TaskDependenciesView";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
 
@@ -951,133 +955,167 @@ export default function OrderStockPage() {
       </Dialog>
 
       <Dialog open={showLinesDialog} onOpenChange={(open) => !open && handleCloseLinesDialog()}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5" />
-              Orderrader
+              Orderdetaljer
             </DialogTitle>
-            <DialogDescription>
+            <DialogDescription className="flex items-center gap-2">
               {selectedOrderForLines?.title}
+              {selectedOrderForLines?.executionStatus && (
+                <ExecutionStatusTracker 
+                  status={selectedOrderForLines.executionStatus} 
+                  variant="badge" 
+                />
+              )}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
-            <div className="flex items-end gap-2 flex-wrap">
-              <div className="flex-1 min-w-[200px]">
-                <Label htmlFor="article-select">Artikel</Label>
-                <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
-                  <SelectTrigger id="article-select" data-testid="select-article">
-                    <SelectValue placeholder="Välj artikel..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {articles.map(article => (
-                      <SelectItem key={article.id} value={article.id}>
-                        {article.articleNumber} - {article.name} ({formatCurrency(article.listPrice)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="w-24">
-                <Label htmlFor="quantity-input">Antal</Label>
-                <Input
-                  id="quantity-input"
-                  type="number"
-                  min={1}
-                  value={lineQuantity}
-                  onChange={e => setLineQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                  data-testid="input-quantity"
-                />
-              </div>
-              <Button
-                onClick={handleAddLine}
-                disabled={!selectedArticleId || addLineMutation.isPending}
-                className="gap-1"
-                data-testid="button-add-line"
-              >
-                {addLineMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="h-4 w-4" />
-                )}
-                Lägg till
-              </Button>
-            </div>
+          <Tabs defaultValue="lines" className="flex-1 overflow-hidden flex flex-col">
+            <TabsList className="shrink-0">
+              <TabsTrigger value="lines" data-testid="tab-lines">Orderrader</TabsTrigger>
+              <TabsTrigger value="timewindows" data-testid="tab-timewindows">Tidsfönster</TabsTrigger>
+              <TabsTrigger value="dependencies" data-testid="tab-dependencies">Beroenden</TabsTrigger>
+            </TabsList>
 
-            <Separator />
+            <TabsContent value="lines" className="flex-1 overflow-auto mt-4">
+              <div className="space-y-4">
+                <div className="flex items-end gap-2 flex-wrap">
+                  <div className="flex-1 min-w-[200px]">
+                    <Label htmlFor="article-select">Artikel</Label>
+                    <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
+                      <SelectTrigger id="article-select" data-testid="select-article">
+                        <SelectValue placeholder="Välj artikel..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {articles.map(article => (
+                          <SelectItem key={article.id} value={article.id}>
+                            {article.articleNumber} - {article.name} ({formatCurrency(article.listPrice)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-24">
+                    <Label htmlFor="quantity-input">Antal</Label>
+                    <Input
+                      id="quantity-input"
+                      type="number"
+                      min={1}
+                      value={lineQuantity}
+                      onChange={e => setLineQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                      data-testid="input-quantity"
+                    />
+                  </div>
+                  <Button
+                    onClick={handleAddLine}
+                    disabled={!selectedArticleId || addLineMutation.isPending}
+                    className="gap-1"
+                    data-testid="button-add-line"
+                  >
+                    {addLineMutation.isPending ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Plus className="h-4 w-4" />
+                    )}
+                    Lägg till
+                  </Button>
+                </div>
 
-            <div className="space-y-2">
-              <Label>Orderrader</Label>
-              {linesLoading ? (
+                <Separator />
+
                 <div className="space-y-2">
-                  <Skeleton className="h-12" />
-                  <Skeleton className="h-12" />
+                  <Label>Orderrader</Label>
+                  {linesLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-12" />
+                      <Skeleton className="h-12" />
+                    </div>
+                  ) : orderLines.length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-4 text-center">
+                      Inga orderrader tillagda ännu
+                    </p>
+                  ) : (
+                    <div className="divide-y rounded-md border">
+                      {orderLines.map(line => {
+                        const article = articleMap.get(line.articleId);
+                        return (
+                          <div 
+                            key={line.id} 
+                            className="p-3 flex items-center gap-4"
+                            data-testid={`row-line-${line.id}`}
+                          >
+                            <div className="flex-1">
+                              <div className="font-medium">
+                                {article?.name || "Okänd artikel"}
+                              </div>
+                              <div className="text-sm text-muted-foreground">
+                                {article?.articleNumber} | Antal: {line.quantity}
+                              </div>
+                            </div>
+                            <div className="text-right text-sm">
+                              <div>{formatCurrency(line.resolvedPrice)}</div>
+                              <div className="text-muted-foreground">
+                                {line.resolvedProductionMinutes}min
+                              </div>
+                            </div>
+                            <Badge variant="outline" className="text-xs">
+                              {line.priceSource}
+                            </Badge>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => deleteLineMutation.mutate({ lineId: line.id, workOrderId: selectedOrderForLines!.id })}
+                              disabled={deleteLineMutation.isPending}
+                              data-testid={`button-delete-line-${line.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
-              ) : orderLines.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-4 text-center">
-                  Inga orderrader tillagda ännu
-                </p>
-              ) : (
-                <div className="divide-y rounded-md border">
-                  {orderLines.map(line => {
-                    const article = articleMap.get(line.articleId);
-                    return (
-                      <div 
-                        key={line.id} 
-                        className="p-3 flex items-center gap-4"
-                        data-testid={`row-line-${line.id}`}
-                      >
-                        <div className="flex-1">
-                          <div className="font-medium">
-                            {article?.name || "Okänd artikel"}
-                          </div>
-                          <div className="text-sm text-muted-foreground">
-                            {article?.articleNumber} | Antal: {line.quantity}
-                          </div>
-                        </div>
-                        <div className="text-right text-sm">
-                          <div>{formatCurrency(line.resolvedPrice)}</div>
-                          <div className="text-muted-foreground">
-                            {line.resolvedProductionMinutes}min
-                          </div>
-                        </div>
-                        <Badge variant="outline" className="text-xs">
-                          {line.priceSource}
-                        </Badge>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => deleteLineMutation.mutate({ lineId: line.id, workOrderId: selectedOrderForLines!.id })}
-                          disabled={deleteLineMutation.isPending}
-                          data-testid={`button-delete-line-${line.id}`}
-                        >
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
 
-            {orderLines.length > 0 && (
-              <div className="flex justify-end gap-6 pt-2 border-t">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Totalt värde: </span>
-                  <span className="font-medium">
-                    {formatCurrency(orderLines.reduce((sum, l) => sum + (l.resolvedPrice || 0) * l.quantity, 0))}
-                  </span>
-                </div>
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Total tid: </span>
-                  <span className="font-medium">
-                    {formatMinutes(orderLines.reduce((sum, l) => sum + (l.resolvedProductionMinutes || 0) * l.quantity, 0))}
-                  </span>
-                </div>
+                {orderLines.length > 0 && (
+                  <div className="flex justify-end gap-6 pt-2 border-t">
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Totalt värde: </span>
+                      <span className="font-medium">
+                        {formatCurrency(orderLines.reduce((sum, l) => sum + (l.resolvedPrice || 0) * l.quantity, 0))}
+                      </span>
+                    </div>
+                    <div className="text-sm">
+                      <span className="text-muted-foreground">Total tid: </span>
+                      <span className="font-medium">
+                        {formatMinutes(orderLines.reduce((sum, l) => sum + (l.resolvedProductionMinutes || 0) * l.quantity, 0))}
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </TabsContent>
+
+            <TabsContent value="timewindows" className="flex-1 overflow-auto mt-4">
+              {selectedOrderForLines && (
+                <TaskTimewindowsEditor
+                  workOrderId={selectedOrderForLines.id}
+                  tenantId={selectedOrderForLines.tenantId}
+                />
+              )}
+            </TabsContent>
+
+            <TabsContent value="dependencies" className="flex-1 overflow-auto mt-4">
+              {selectedOrderForLines && (
+                <TaskDependenciesView
+                  workOrderId={selectedOrderForLines.id}
+                  tenantId={selectedOrderForLines.tenantId}
+                />
+              )}
+            </TabsContent>
+          </Tabs>
 
           <DialogFooter>
             <Button variant="outline" onClick={handleCloseLinesDialog}>

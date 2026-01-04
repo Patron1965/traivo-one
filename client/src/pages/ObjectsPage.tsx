@@ -22,6 +22,8 @@ import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
+import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
+import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -561,6 +563,8 @@ export default function ObjectsPage() {
                   </TooltipTrigger>
                   <TooltipContent><p>Visa historik</p></TooltipContent>
                 </Tooltip>
+                <ObjectContactsDialog object={obj} />
+                <ObjectImagesDialog object={obj} />
                 <ObjectMetadataPanel object={obj} />
                 <ObjectPayersPanel object={obj} />
                 <ObjectApplicableArticlesPanel object={obj} />
