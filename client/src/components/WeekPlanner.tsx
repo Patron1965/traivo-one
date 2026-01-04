@@ -1557,6 +1557,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           <div className="flex-1 flex">
             <div className="flex-1 relative">
               <MapContainer
+                key={`route-map-${routeViewResourceId}-${format(currentDate, "yyyy-MM-dd")}`}
                 center={defaultCenter}
                 zoom={12}
                 className="h-full w-full"
