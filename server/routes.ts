@@ -9,7 +9,9 @@ import {
   insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema,
   insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema,
   insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertClusterSchema,
-  insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema
+  insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema,
+  insertObjectImageSchema, insertObjectContactSchema, insertTaskDesiredTimewindowSchema,
+  insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -5022,6 +5024,388 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       }
       console.error("Failed to update Fortnox export:", error);
       res.status(500).json({ error: "Failed to update Fortnox export" });
+    }
+  });
+
+  // ============================================
+  // OBJECT IMAGES - Bildgalleri per objekt
+  // ============================================
+
+  app.get("/api/objects/:objectId/images", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const images = await storage.getObjectImages(req.params.objectId);
+      res.json(images);
+    } catch (error) {
+      console.error("Failed to fetch object images:", error);
+      res.status(500).json({ error: "Failed to fetch object images" });
+    }
+  });
+
+  app.post("/api/objects/:objectId/images", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const data = insertObjectImageSchema.parse({
+        ...req.body,
+        tenantId: DEFAULT_TENANT_ID,
+        objectId: req.params.objectId
+      });
+      const image = await storage.createObjectImage(data);
+      res.status(201).json(image);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create object image:", error);
+      res.status(500).json({ error: "Failed to create object image" });
+    }
+  });
+
+  app.delete("/api/objects/:objectId/images/:id", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      await storage.deleteObjectImage(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete object image:", error);
+      res.status(500).json({ error: "Failed to delete object image" });
+    }
+  });
+
+  // ============================================
+  // OBJECT CONTACTS - Kontakter med arvslogik
+  // ============================================
+
+  app.get("/api/objects/:objectId/contacts", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const withInheritance = req.query.inheritance === "true";
+      const contacts = withInheritance
+        ? await storage.getObjectContactsWithInheritance(req.params.objectId, DEFAULT_TENANT_ID)
+        : await storage.getObjectContacts(req.params.objectId);
+      res.json(contacts);
+    } catch (error) {
+      console.error("Failed to fetch object contacts:", error);
+      res.status(500).json({ error: "Failed to fetch object contacts" });
+    }
+  });
+
+  app.post("/api/objects/:objectId/contacts", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const data = insertObjectContactSchema.parse({
+        ...req.body,
+        tenantId: DEFAULT_TENANT_ID,
+        objectId: req.params.objectId
+      });
+      const contact = await storage.createObjectContact(data);
+      res.status(201).json(contact);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create object contact:", error);
+      res.status(500).json({ error: "Failed to create object contact" });
+    }
+  });
+
+  app.patch("/api/objects/:objectId/contacts/:id", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const updateSchema = z.object({
+        name: z.string().optional(),
+        phone: z.string().nullable().optional(),
+        email: z.string().nullable().optional(),
+        role: z.string().nullable().optional(),
+        contactType: z.string().optional(),
+        isInheritable: z.boolean().optional(),
+        notes: z.string().nullable().optional(),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const contact = await storage.updateObjectContact(req.params.id, req.params.objectId, DEFAULT_TENANT_ID, updateData);
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+      res.json(contact);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to update object contact:", error);
+      res.status(500).json({ error: "Failed to update object contact" });
+    }
+  });
+
+  app.delete("/api/objects/:objectId/contacts/:id", async (req, res) => {
+    try {
+      if (!await verifyObjectTenant(req.params.objectId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      await storage.deleteObjectContact(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete object contact:", error);
+      res.status(500).json({ error: "Failed to delete object contact" });
+    }
+  });
+
+  // ============================================
+  // TASK TIMEWINDOWS - Flera önskade tidsfönster per uppgift
+  // ============================================
+
+  app.get("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
+    try {
+      const timewindows = await storage.getTaskTimewindows(req.params.workOrderId);
+      res.json(timewindows);
+    } catch (error) {
+      console.error("Failed to fetch task timewindows:", error);
+      res.status(500).json({ error: "Failed to fetch task timewindows" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
+    try {
+      const data = insertTaskDesiredTimewindowSchema.parse({
+        ...req.body,
+        tenantId: DEFAULT_TENANT_ID,
+        workOrderId: req.params.workOrderId
+      });
+      const timewindow = await storage.createTaskTimewindow(data);
+      res.status(201).json(timewindow);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create task timewindow:", error);
+      res.status(500).json({ error: "Failed to create task timewindow" });
+    }
+  });
+
+  app.patch("/api/work-orders/:workOrderId/timewindows/:id", async (req, res) => {
+    try {
+      const updateSchema = z.object({
+        weekNumber: z.number().nullable().optional(),
+        dayOfWeek: z.string().nullable().optional(),
+        startTime: z.string().nullable().optional(),
+        endTime: z.string().nullable().optional(),
+        priority: z.number().optional(),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const timewindow = await storage.updateTaskTimewindow(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID, updateData);
+      if (!timewindow) return res.status(404).json({ error: "Timewindow not found" });
+      res.json(timewindow);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to update task timewindow:", error);
+      res.status(500).json({ error: "Failed to update task timewindow" });
+    }
+  });
+
+  app.delete("/api/work-orders/:workOrderId/timewindows/:id", async (req, res) => {
+    try {
+      await storage.deleteTaskTimewindow(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete task timewindow:", error);
+      res.status(500).json({ error: "Failed to delete task timewindow" });
+    }
+  });
+
+  // ============================================
+  // TASK DEPENDENCIES - Beroendelogik
+  // ============================================
+
+  app.get("/api/work-orders/:workOrderId/dependencies", async (req, res) => {
+    try {
+      const dependencies = await storage.getTaskDependencies(req.params.workOrderId);
+      res.json(dependencies);
+    } catch (error) {
+      console.error("Failed to fetch task dependencies:", error);
+      res.status(500).json({ error: "Failed to fetch task dependencies" });
+    }
+  });
+
+  app.get("/api/work-orders/:workOrderId/dependents", async (req, res) => {
+    try {
+      const dependents = await storage.getTaskDependents(req.params.workOrderId);
+      res.json(dependents);
+    } catch (error) {
+      console.error("Failed to fetch task dependents:", error);
+      res.status(500).json({ error: "Failed to fetch task dependents" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/dependencies", async (req, res) => {
+    try {
+      const data = insertTaskDependencySchema.parse({
+        ...req.body,
+        tenantId: DEFAULT_TENANT_ID,
+        workOrderId: req.params.workOrderId
+      });
+      const dependency = await storage.createTaskDependency(data);
+      res.status(201).json(dependency);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create task dependency:", error);
+      res.status(500).json({ error: "Failed to create task dependency" });
+    }
+  });
+
+  app.delete("/api/work-orders/:workOrderId/dependencies/:id", async (req, res) => {
+    try {
+      await storage.deleteTaskDependency(req.params.id, DEFAULT_TENANT_ID);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete task dependency:", error);
+      res.status(500).json({ error: "Failed to delete task dependency" });
+    }
+  });
+
+  // ============================================
+  // TASK INFORMATION - Bilagor och info
+  // ============================================
+
+  app.get("/api/work-orders/:workOrderId/information", async (req, res) => {
+    try {
+      const information = await storage.getTaskInformation(req.params.workOrderId);
+      res.json(information);
+    } catch (error) {
+      console.error("Failed to fetch task information:", error);
+      res.status(500).json({ error: "Failed to fetch task information" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/information", async (req, res) => {
+    try {
+      const data = insertTaskInformationSchema.parse({
+        ...req.body,
+        tenantId: DEFAULT_TENANT_ID,
+        workOrderId: req.params.workOrderId
+      });
+      const info = await storage.createTaskInformation(data);
+      res.status(201).json(info);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create task information:", error);
+      res.status(500).json({ error: "Failed to create task information" });
+    }
+  });
+
+  app.patch("/api/work-orders/:workOrderId/information/:id", async (req, res) => {
+    try {
+      const updateSchema = z.object({
+        infoValue: z.string().nullable().optional(),
+        hasLogic: z.boolean().optional(),
+        linkedArticleId: z.string().nullable().optional(),
+        quantity: z.number().nullable().optional(),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const info = await storage.updateTaskInformation(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID, updateData);
+      if (!info) return res.status(404).json({ error: "Information not found" });
+      res.json(info);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to update task information:", error);
+      res.status(500).json({ error: "Failed to update task information" });
+    }
+  });
+
+  app.delete("/api/work-orders/:workOrderId/information/:id", async (req, res) => {
+    try {
+      await storage.deleteTaskInformation(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete task information:", error);
+      res.status(500).json({ error: "Failed to delete task information" });
+    }
+  });
+
+  // ============================================
+  // STRUCTURAL ARTICLES - Artiklar med beroendeuppgifter
+  // ============================================
+
+  app.get("/api/structural-articles", async (req, res) => {
+    try {
+      const articles = await storage.getStructuralArticles(DEFAULT_TENANT_ID);
+      res.json(articles);
+    } catch (error) {
+      console.error("Failed to fetch structural articles:", error);
+      res.status(500).json({ error: "Failed to fetch structural articles" });
+    }
+  });
+
+  app.get("/api/articles/:articleId/structural-children", async (req, res) => {
+    try {
+      const children = await storage.getStructuralArticlesByParent(req.params.articleId);
+      res.json(children);
+    } catch (error) {
+      console.error("Failed to fetch structural article children:", error);
+      res.status(500).json({ error: "Failed to fetch structural article children" });
+    }
+  });
+
+  app.post("/api/structural-articles", async (req, res) => {
+    try {
+      const data = insertStructuralArticleSchema.parse({
+        ...req.body,
+        tenantId: DEFAULT_TENANT_ID
+      });
+      const article = await storage.createStructuralArticle(data);
+      res.status(201).json(article);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create structural article:", error);
+      res.status(500).json({ error: "Failed to create structural article" });
+    }
+  });
+
+  app.patch("/api/structural-articles/:id", async (req, res) => {
+    try {
+      const updateSchema = z.object({
+        sequenceOrder: z.number().optional(),
+        stepName: z.string().nullable().optional(),
+        taskType: z.string().nullable().optional(),
+      });
+      const updateData = updateSchema.parse(req.body);
+      const article = await storage.updateStructuralArticle(req.params.id, DEFAULT_TENANT_ID, updateData);
+      if (!article) return res.status(404).json({ error: "Structural article not found" });
+      res.json(article);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to update structural article:", error);
+      res.status(500).json({ error: "Failed to update structural article" });
+    }
+  });
+
+  app.delete("/api/structural-articles/:id", async (req, res) => {
+    try {
+      await storage.deleteStructuralArticle(req.params.id, DEFAULT_TENANT_ID);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete structural article:", error);
+      res.status(500).json({ error: "Failed to delete structural article" });
     }
   });
 

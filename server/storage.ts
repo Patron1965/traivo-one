@@ -36,6 +36,12 @@ import {
   type FortnoxConfig, type InsertFortnoxConfig,
   type FortnoxMapping, type InsertFortnoxMapping,
   type FortnoxInvoiceExport, type InsertFortnoxInvoiceExport,
+  type ObjectImage, type InsertObjectImage,
+  type ObjectContact, type InsertObjectContact,
+  type TaskDesiredTimewindow, type InsertTaskDesiredTimewindow,
+  type TaskDependency, type InsertTaskDependency,
+  type TaskInformation, type InsertTaskInformation,
+  type StructuralArticle, type InsertStructuralArticle,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -43,7 +49,8 @@ import {
   vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
   resourcePositions,
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
-  metadataDefinitions, objectMetadata, objectPayers
+  metadataDefinitions, objectMetadata, objectPayers,
+  objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql } from "drizzle-orm";
@@ -256,6 +263,44 @@ export interface IStorage {
   getFortnoxInvoiceExport(id: string): Promise<FortnoxInvoiceExport | undefined>;
   createFortnoxInvoiceExport(invoiceExport: InsertFortnoxInvoiceExport): Promise<FortnoxInvoiceExport>;
   updateFortnoxInvoiceExport(id: string, tenantId: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined>;
+  
+  // Object Images
+  getObjectImages(objectId: string): Promise<ObjectImage[]>;
+  getObjectImage(id: string): Promise<ObjectImage | undefined>;
+  createObjectImage(image: InsertObjectImage): Promise<ObjectImage>;
+  deleteObjectImage(id: string, objectId: string, tenantId: string): Promise<void>;
+  
+  // Object Contacts (with inheritance support)
+  getObjectContacts(objectId: string): Promise<ObjectContact[]>;
+  getObjectContactsWithInheritance(objectId: string, tenantId: string): Promise<ObjectContact[]>;
+  createObjectContact(contact: InsertObjectContact): Promise<ObjectContact>;
+  updateObjectContact(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectContact>): Promise<ObjectContact | undefined>;
+  deleteObjectContact(id: string, objectId: string, tenantId: string): Promise<void>;
+  
+  // Task Desired Timewindows
+  getTaskTimewindows(workOrderId: string): Promise<TaskDesiredTimewindow[]>;
+  createTaskTimewindow(timewindow: InsertTaskDesiredTimewindow): Promise<TaskDesiredTimewindow>;
+  updateTaskTimewindow(id: string, workOrderId: string, tenantId: string, data: Partial<InsertTaskDesiredTimewindow>): Promise<TaskDesiredTimewindow | undefined>;
+  deleteTaskTimewindow(id: string, workOrderId: string, tenantId: string): Promise<void>;
+  
+  // Task Dependencies
+  getTaskDependencies(workOrderId: string): Promise<TaskDependency[]>;
+  getTaskDependents(workOrderId: string): Promise<TaskDependency[]>;
+  createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency>;
+  deleteTaskDependency(id: string, tenantId: string): Promise<void>;
+  
+  // Task Information
+  getTaskInformation(workOrderId: string): Promise<TaskInformation[]>;
+  createTaskInformation(info: InsertTaskInformation): Promise<TaskInformation>;
+  updateTaskInformation(id: string, workOrderId: string, tenantId: string, data: Partial<InsertTaskInformation>): Promise<TaskInformation | undefined>;
+  deleteTaskInformation(id: string, workOrderId: string, tenantId: string): Promise<void>;
+  
+  // Structural Articles
+  getStructuralArticles(tenantId: string): Promise<StructuralArticle[]>;
+  getStructuralArticlesByParent(parentArticleId: string): Promise<StructuralArticle[]>;
+  createStructuralArticle(article: InsertStructuralArticle): Promise<StructuralArticle>;
+  updateStructuralArticle(id: string, tenantId: string, data: Partial<InsertStructuralArticle>): Promise<StructuralArticle | undefined>;
+  deleteStructuralArticle(id: string, tenantId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1961,6 +2006,244 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(fortnoxInvoiceExports.id, id), eq(fortnoxInvoiceExports.tenantId, tenantId)))
       .returning();
     return result || undefined;
+  }
+
+  // ============================================
+  // Object Images
+  // ============================================
+  
+  async getObjectImages(objectId: string): Promise<ObjectImage[]> {
+    return db.select().from(objectImages)
+      .where(eq(objectImages.objectId, objectId))
+      .orderBy(desc(objectImages.imageDate));
+  }
+
+  async getObjectImage(id: string): Promise<ObjectImage | undefined> {
+    const [image] = await db.select().from(objectImages).where(eq(objectImages.id, id));
+    return image || undefined;
+  }
+
+  async createObjectImage(image: InsertObjectImage): Promise<ObjectImage> {
+    const [result] = await db.insert(objectImages).values(image).returning();
+    return result;
+  }
+
+  async deleteObjectImage(id: string, objectId: string, tenantId: string): Promise<void> {
+    await db.delete(objectImages).where(and(
+      eq(objectImages.id, id),
+      eq(objectImages.objectId, objectId),
+      eq(objectImages.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Object Contacts (with inheritance support)
+  // ============================================
+  
+  async getObjectContacts(objectId: string): Promise<ObjectContact[]> {
+    return db.select().from(objectContacts).where(eq(objectContacts.objectId, objectId));
+  }
+
+  async getObjectContactsWithInheritance(objectId: string, tenantId: string): Promise<ObjectContact[]> {
+    const result: ObjectContact[] = [];
+    const seenTypes = new Set<string>();
+    
+    const ancestorChain: string[] = [objectId];
+    let currentObj = await this.getObject(objectId);
+    
+    if (currentObj?.tenantId !== tenantId) {
+      return [];
+    }
+    
+    while (currentObj?.parentId) {
+      const parentObj = await this.getObject(currentObj.parentId);
+      if (!parentObj || parentObj.tenantId !== tenantId) {
+        break;
+      }
+      ancestorChain.push(currentObj.parentId);
+      currentObj = parentObj;
+    }
+    
+    for (const ancestorId of ancestorChain) {
+      const contacts = await db.select().from(objectContacts)
+        .where(and(
+          eq(objectContacts.objectId, ancestorId),
+          eq(objectContacts.tenantId, tenantId)
+        ));
+      
+      for (const contact of contacts) {
+        const typeKey = contact.contactType || 'primary';
+        if (!seenTypes.has(typeKey)) {
+          if (ancestorId === objectId) {
+            result.push(contact);
+          } else if (contact.isInheritable) {
+            result.push({ ...contact, inheritedFromObjectId: ancestorId });
+          }
+          seenTypes.add(typeKey);
+        }
+      }
+    }
+    
+    return result;
+  }
+
+  async createObjectContact(contact: InsertObjectContact): Promise<ObjectContact> {
+    const [result] = await db.insert(objectContacts).values(contact).returning();
+    return result;
+  }
+
+  async updateObjectContact(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectContact>): Promise<ObjectContact | undefined> {
+    const [result] = await db.update(objectContacts)
+      .set(data)
+      .where(and(
+        eq(objectContacts.id, id),
+        eq(objectContacts.objectId, objectId),
+        eq(objectContacts.tenantId, tenantId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteObjectContact(id: string, objectId: string, tenantId: string): Promise<void> {
+    await db.delete(objectContacts).where(and(
+      eq(objectContacts.id, id),
+      eq(objectContacts.objectId, objectId),
+      eq(objectContacts.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Task Desired Timewindows
+  // ============================================
+  
+  async getTaskTimewindows(workOrderId: string): Promise<TaskDesiredTimewindow[]> {
+    return db.select().from(taskDesiredTimewindows)
+      .where(eq(taskDesiredTimewindows.workOrderId, workOrderId))
+      .orderBy(taskDesiredTimewindows.priority);
+  }
+
+  async createTaskTimewindow(timewindow: InsertTaskDesiredTimewindow): Promise<TaskDesiredTimewindow> {
+    const [result] = await db.insert(taskDesiredTimewindows).values(timewindow).returning();
+    return result;
+  }
+
+  async updateTaskTimewindow(id: string, workOrderId: string, tenantId: string, data: Partial<InsertTaskDesiredTimewindow>): Promise<TaskDesiredTimewindow | undefined> {
+    const [result] = await db.update(taskDesiredTimewindows)
+      .set(data)
+      .where(and(
+        eq(taskDesiredTimewindows.id, id),
+        eq(taskDesiredTimewindows.workOrderId, workOrderId),
+        eq(taskDesiredTimewindows.tenantId, tenantId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteTaskTimewindow(id: string, workOrderId: string, tenantId: string): Promise<void> {
+    await db.delete(taskDesiredTimewindows).where(and(
+      eq(taskDesiredTimewindows.id, id),
+      eq(taskDesiredTimewindows.workOrderId, workOrderId),
+      eq(taskDesiredTimewindows.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Task Dependencies
+  // ============================================
+  
+  async getTaskDependencies(workOrderId: string): Promise<TaskDependency[]> {
+    return db.select().from(taskDependencies)
+      .where(eq(taskDependencies.workOrderId, workOrderId));
+  }
+
+  async getTaskDependents(workOrderId: string): Promise<TaskDependency[]> {
+    return db.select().from(taskDependencies)
+      .where(eq(taskDependencies.dependsOnWorkOrderId, workOrderId));
+  }
+
+  async createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency> {
+    const [result] = await db.insert(taskDependencies).values(dependency).returning();
+    return result;
+  }
+
+  async deleteTaskDependency(id: string, tenantId: string): Promise<void> {
+    await db.delete(taskDependencies).where(and(
+      eq(taskDependencies.id, id),
+      eq(taskDependencies.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Task Information
+  // ============================================
+  
+  async getTaskInformation(workOrderId: string): Promise<TaskInformation[]> {
+    return db.select().from(taskInformation)
+      .where(eq(taskInformation.workOrderId, workOrderId));
+  }
+
+  async createTaskInformation(info: InsertTaskInformation): Promise<TaskInformation> {
+    const [result] = await db.insert(taskInformation).values(info).returning();
+    return result;
+  }
+
+  async updateTaskInformation(id: string, workOrderId: string, tenantId: string, data: Partial<InsertTaskInformation>): Promise<TaskInformation | undefined> {
+    const [result] = await db.update(taskInformation)
+      .set(data)
+      .where(and(
+        eq(taskInformation.id, id),
+        eq(taskInformation.workOrderId, workOrderId),
+        eq(taskInformation.tenantId, tenantId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteTaskInformation(id: string, workOrderId: string, tenantId: string): Promise<void> {
+    await db.delete(taskInformation).where(and(
+      eq(taskInformation.id, id),
+      eq(taskInformation.workOrderId, workOrderId),
+      eq(taskInformation.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Structural Articles
+  // ============================================
+  
+  async getStructuralArticles(tenantId: string): Promise<StructuralArticle[]> {
+    return db.select().from(structuralArticles)
+      .where(eq(structuralArticles.tenantId, tenantId))
+      .orderBy(structuralArticles.parentArticleId, structuralArticles.sequenceOrder);
+  }
+
+  async getStructuralArticlesByParent(parentArticleId: string): Promise<StructuralArticle[]> {
+    return db.select().from(structuralArticles)
+      .where(eq(structuralArticles.parentArticleId, parentArticleId))
+      .orderBy(structuralArticles.sequenceOrder);
+  }
+
+  async createStructuralArticle(article: InsertStructuralArticle): Promise<StructuralArticle> {
+    const [result] = await db.insert(structuralArticles).values(article).returning();
+    return result;
+  }
+
+  async updateStructuralArticle(id: string, tenantId: string, data: Partial<InsertStructuralArticle>): Promise<StructuralArticle | undefined> {
+    const [result] = await db.update(structuralArticles)
+      .set(data)
+      .where(and(
+        eq(structuralArticles.id, id),
+        eq(structuralArticles.tenantId, tenantId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteStructuralArticle(id: string, tenantId: string): Promise<void> {
+    await db.delete(structuralArticles).where(and(
+      eq(structuralArticles.id, id),
+      eq(structuralArticles.tenantId, tenantId)
+    ));
   }
 }
 

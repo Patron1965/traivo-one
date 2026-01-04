@@ -198,6 +198,26 @@ export const workOrders = pgTable("work_orders", {
   impossibleAt: timestamp("impossible_at"),           // När markerad som omöjlig
   impossibleBy: varchar("impossible_by").references(() => resources.id), // Vem markerade
   impossiblePhotoUrl: text("impossible_photo_url"),   // Bild som bevis
+  // ============================================
+  // UTÖKADE METADATAFÄLT (Fas 1B)
+  // ============================================
+  // 8-stegs utförandestatus: not_planned, planned_rough, planned_fine, on_way, on_site, completed, inspected, invoiced
+  executionStatus: text("execution_status").default("not_planned"),
+  // Skapandemetod: manual, import, external_report, performer, automatic
+  creationMethod: text("creation_method").default("manual"),
+  // Strukturartikel-ID om uppgiften skapades av en strukturartikel
+  structuralArticleId: varchar("structural_article_id"),
+  // What3Words-position (3x3m precision)
+  what3words: text("what3words"),
+  // GPS-koordinater för uppgiftsspecifik position (om annan än objektets)
+  taskLatitude: real("task_latitude"),
+  taskLongitude: real("task_longitude"),
+  // Extern referens (kundportals-ID, felanmälans-ID etc.)
+  externalReference: text("external_reference"),
+  // Tidsstämplar för statusflöde
+  onWayAt: timestamp("on_way_at"),
+  onSiteAt: timestamp("on_site_at"),
+  inspectedAt: timestamp("inspected_at"),
   // Planeringsmetadata
   plannedBy: varchar("planned_by"),
   plannedNotes: text("planned_notes"),
@@ -1263,8 +1283,199 @@ export const objectMetadata = pgTable("object_metadata", {
 ]);
 
 // ============================================
+// OBJEKTBILDER - Bildgalleri per objekt
+// ============================================
+
+export const objectImages = pgTable("object_images", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  imageUrl: text("image_url").notNull(),
+  imageDate: timestamp("image_date").defaultNow().notNull(),
+  description: text("description"),
+  // Typ: photo, document, drawing, manual
+  imageType: varchar("image_type", { length: 50 }).default("photo"),
+  uploadedBy: varchar("uploaded_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_object_images_object").on(table.objectId),
+  index("idx_object_images_date").on(table.imageDate),
+]);
+
+// ============================================
+// OBJEKTKONTAKTER - Kontakter kopplade till objekt med arv
+// ============================================
+
+export const objectContacts = pgTable("object_contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Kontaktperson
+  name: text("name").notNull(),
+  phone: text("phone"),
+  email: text("email"),
+  role: text("role"), // Vaktmästare, Styrelseordförande, etc.
+  // Kontakttyp: primary, secondary, billing, technical, emergency
+  contactType: varchar("contact_type", { length: 50 }).default("primary"),
+  // Ärvd från annat objekt (null om egen)
+  inheritedFromObjectId: varchar("inherited_from_object_id").references(() => objects.id),
+  // Om true: ärvs till barnobjekt
+  isInheritable: boolean("is_inheritable").default(true),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_object_contacts_object").on(table.objectId),
+  index("idx_object_contacts_type").on(table.contactType),
+]);
+
+// ============================================
+// UPPGIFT/ORDER TIDSFÖNSTER - Flera önskade leveranstider
+// ============================================
+
+export const taskDesiredTimewindows = pgTable("task_desired_timewindows", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  // Veckonummer
+  weekNumber: integer("week_number"),
+  // Veckodag: monday, tuesday, wednesday, thursday, friday, saturday, sunday
+  dayOfWeek: varchar("day_of_week", { length: 20 }),
+  // Starttid (format: HH:MM)
+  startTime: text("start_time"),
+  // Sluttid (format: HH:MM)
+  endTime: text("end_time"),
+  // Prioritet (1 = högst)
+  priority: integer("priority").default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_task_timewindows_work_order").on(table.workOrderId),
+  index("idx_task_timewindows_week").on(table.weekNumber),
+]);
+
+// ============================================
+// UPPGIFTSBEROENDEN - Beroendelogik mellan uppgifter
+// ============================================
+
+export const TASK_DEPENDENCY_TYPES = [
+  "sequential",   // Sekventiell - måste utföras i ordning
+  "structural",   // Strukturartikel - del av större struktur
+  "automatic"     // Automatisk - systemgenererad
+] as const;
+export type TaskDependencyType = typeof TASK_DEPENDENCY_TYPES[number];
+
+export const taskDependencies = pgTable("task_dependencies", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Uppgiften som är beroende
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  // Uppgiften som måste slutföras först
+  dependsOnWorkOrderId: varchar("depends_on_work_order_id").references(() => workOrders.id).notNull(),
+  // Typ av beroende: sequential, structural, automatic
+  dependencyType: varchar("dependency_type", { length: 50 }).default("sequential"),
+  // Om strukturartikel: vilken artikel?
+  structuralArticleId: varchar("structural_article_id").references(() => articles.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_task_dependencies_work_order").on(table.workOrderId),
+  index("idx_task_dependencies_depends_on").on(table.dependsOnWorkOrderId),
+]);
+
+// ============================================
+// UPPGIFTSINFORMATION - Bilagor och information
+// ============================================
+
+export const TASK_INFO_TYPES = [
+  "text",         // Fritext
+  "image",        // Bild/foto
+  "file",         // Dokument
+  "article_link"  // Koppling till artikel (med logik)
+] as const;
+export type TaskInfoType = typeof TASK_INFO_TYPES[number];
+
+export const taskInformation = pgTable("task_information", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  // Typ: text, image, file, article_link
+  infoType: varchar("info_type", { length: 50 }).default("text").notNull(),
+  // Värde (text, URL, etc.)
+  infoValue: text("info_value"),
+  // Har logik (för artikel-kopplingar)
+  hasLogic: boolean("has_logic").default(false),
+  // Kopplad artikel (för article_link typ)
+  linkedArticleId: varchar("linked_article_id").references(() => articles.id),
+  // Mängd (för artikel-kopplingar)
+  quantity: integer("quantity"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_task_info_work_order").on(table.workOrderId),
+  index("idx_task_info_type").on(table.infoType),
+]);
+
+// ============================================
+// STRUKTURARTIKLAR - Artiklar som skapar beroendeuppgifter
+// ============================================
+
+export const structuralArticles = pgTable("structural_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Huvudartikeln (strukturartikeln)
+  parentArticleId: varchar("parent_article_id").references(() => articles.id).notNull(),
+  // Delartikeln
+  childArticleId: varchar("child_article_id").references(() => articles.id).notNull(),
+  // Ordningsföljd (1 = först)
+  sequenceOrder: integer("sequence_order").default(1).notNull(),
+  // Namn på steget (t.ex. "Föravisering", "Hämtning")
+  stepName: text("step_name"),
+  // Typ av uppgift för detta steg
+  taskType: text("task_type"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_structural_articles_parent").on(table.parentArticleId),
+  index("idx_structural_articles_sequence").on(table.parentArticleId, table.sequenceOrder),
+]);
+
+// ============================================
 // RELATIONS FOR NEW TABLES
 // ============================================
+
+export const objectImagesRelations = relations(objectImages, ({ one }) => ({
+  tenant: one(tenants, { fields: [objectImages.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [objectImages.objectId], references: [objects.id] }),
+  uploadedByUser: one(users, { fields: [objectImages.uploadedBy], references: [users.id] }),
+}));
+
+export const objectContactsRelations = relations(objectContacts, ({ one }) => ({
+  tenant: one(tenants, { fields: [objectContacts.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [objectContacts.objectId], references: [objects.id] }),
+  inheritedFromObject: one(objects, { fields: [objectContacts.inheritedFromObjectId], references: [objects.id] }),
+}));
+
+export const taskDesiredTimewindowsRelations = relations(taskDesiredTimewindows, ({ one }) => ({
+  tenant: one(tenants, { fields: [taskDesiredTimewindows.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [taskDesiredTimewindows.workOrderId], references: [workOrders.id] }),
+}));
+
+export const taskDependenciesRelations = relations(taskDependencies, ({ one }) => ({
+  tenant: one(tenants, { fields: [taskDependencies.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [taskDependencies.workOrderId], references: [workOrders.id] }),
+  dependsOnWorkOrder: one(workOrders, { fields: [taskDependencies.dependsOnWorkOrderId], references: [workOrders.id] }),
+  structuralArticle: one(articles, { fields: [taskDependencies.structuralArticleId], references: [articles.id] }),
+}));
+
+export const taskInformationRelations = relations(taskInformation, ({ one }) => ({
+  tenant: one(tenants, { fields: [taskInformation.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [taskInformation.workOrderId], references: [workOrders.id] }),
+  linkedArticle: one(articles, { fields: [taskInformation.linkedArticleId], references: [articles.id] }),
+  createdByUser: one(users, { fields: [taskInformation.createdBy], references: [users.id] }),
+}));
+
+export const structuralArticlesRelations = relations(structuralArticles, ({ one }) => ({
+  tenant: one(tenants, { fields: [structuralArticles.tenantId], references: [tenants.id] }),
+  parentArticle: one(articles, { fields: [structuralArticles.parentArticleId], references: [articles.id] }),
+  childArticle: one(articles, { fields: [structuralArticles.childArticleId], references: [articles.id] }),
+}));
 
 export const fortnoxConfigRelations = relations(fortnoxConfig, ({ one }) => ({
   tenant: one(tenants, { fields: [fortnoxConfig.tenantId], references: [tenants.id] }),
@@ -1306,6 +1517,12 @@ export const insertFortnoxInvoiceExportSchema = createInsertSchema(fortnoxInvoic
 export const insertObjectPayerSchema = createInsertSchema(objectPayers).omit({ id: true, createdAt: true });
 export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true });
 export const insertObjectMetadataSchema = createInsertSchema(objectMetadata).omit({ id: true, createdAt: true });
+export const insertObjectImageSchema = createInsertSchema(objectImages).omit({ id: true, createdAt: true });
+export const insertObjectContactSchema = createInsertSchema(objectContacts).omit({ id: true, createdAt: true });
+export const insertTaskDesiredTimewindowSchema = createInsertSchema(taskDesiredTimewindows).omit({ id: true, createdAt: true });
+export const insertTaskDependencySchema = createInsertSchema(taskDependencies).omit({ id: true, createdAt: true });
+export const insertTaskInformationSchema = createInsertSchema(taskInformation).omit({ id: true, createdAt: true });
+export const insertStructuralArticleSchema = createInsertSchema(structuralArticles).omit({ id: true, createdAt: true });
 
 // ============================================
 // TYPES FOR NEW TABLES
@@ -1323,3 +1540,63 @@ export type MetadataDefinition = typeof metadataDefinitions.$inferSelect;
 export type InsertMetadataDefinition = z.infer<typeof insertMetadataDefinitionSchema>;
 export type ObjectMetadata = typeof objectMetadata.$inferSelect;
 export type InsertObjectMetadata = z.infer<typeof insertObjectMetadataSchema>;
+export type ObjectImage = typeof objectImages.$inferSelect;
+export type InsertObjectImage = z.infer<typeof insertObjectImageSchema>;
+export type ObjectContact = typeof objectContacts.$inferSelect;
+export type InsertObjectContact = z.infer<typeof insertObjectContactSchema>;
+export type TaskDesiredTimewindow = typeof taskDesiredTimewindows.$inferSelect;
+export type InsertTaskDesiredTimewindow = z.infer<typeof insertTaskDesiredTimewindowSchema>;
+export type TaskDependency = typeof taskDependencies.$inferSelect;
+export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
+export type TaskInformation = typeof taskInformation.$inferSelect;
+export type InsertTaskInformation = z.infer<typeof insertTaskInformationSchema>;
+export type StructuralArticle = typeof structuralArticles.$inferSelect;
+export type InsertStructuralArticle = z.infer<typeof insertStructuralArticleSchema>;
+
+// ============================================
+// UTÖKADE ORDER STATUSAR (8 nivåer enligt spec)
+// ============================================
+
+export const EXECUTION_STATUSES = [
+  "not_planned",      // Ej planerad
+  "planned_rough",    // Grovplanerad (tilldelad vecka/team)
+  "planned_fine",     // Finplanerad (tilldelad resurs)
+  "on_way",           // På väg
+  "on_site",          // På plats
+  "completed",        // Utförd
+  "inspected",        // Kontrollerad
+  "invoiced"          // Fakturerad
+] as const;
+export type ExecutionStatus = typeof EXECUTION_STATUSES[number];
+
+export const EXECUTION_STATUS_LABELS: Record<ExecutionStatus, string> = {
+  not_planned: "Ej planerad",
+  planned_rough: "Grovplanerad",
+  planned_fine: "Finplanerad",
+  on_way: "På väg",
+  on_site: "På plats",
+  completed: "Utförd",
+  inspected: "Kontrollerad",
+  invoiced: "Fakturerad"
+};
+
+// ============================================
+// UPPGIFTSSKAPANDEMETODER
+// ============================================
+
+export const TASK_CREATION_METHODS = [
+  "manual",           // Manuellt skapad
+  "import",           // Importerad (från Modus etc.)
+  "external_report",  // Extern felanmälan (kundportal)
+  "performer",        // Utförare-skapad
+  "automatic"         // Automatik (abonnemang, strukturartikel)
+] as const;
+export type TaskCreationMethod = typeof TASK_CREATION_METHODS[number];
+
+export const TASK_CREATION_METHOD_LABELS: Record<TaskCreationMethod, string> = {
+  manual: "Manuell",
+  import: "Import",
+  external_report: "Extern felanmälan",
+  performer: "Utförare",
+  automatic: "Automatik"
+};
