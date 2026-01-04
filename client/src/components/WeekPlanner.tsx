@@ -187,9 +187,9 @@ function SortableRouteItem({
               <div className="text-xs text-muted-foreground truncate">{customer.name}</div>
             )}
             <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {job.scheduledStartTime !== undefined && job.scheduledStartTime !== null && (
+              {job.scheduledStartTime && (
                 <Badge variant="outline" className="text-[10px]">
-                  {String(Math.floor(job.scheduledStartTime / 60)).padStart(2, "0")}:{String(job.scheduledStartTime % 60).padStart(2, "0")}
+                  {job.scheduledStartTime}
                 </Badge>
               )}
               <Badge variant="secondary" className="text-[10px]">
@@ -402,18 +402,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const customerMap = useMemo(() => new Map(customers.map(c => [c.id, c])), [customers]);
 
-  const routeJobsForView = useMemo(() => {
-    if (viewMode !== "route" || !routeViewResourceId) return [];
-    const dateKey = format(currentDate, "yyyy-MM-dd");
-    const baseRouteJobs = (resourceDayJobMap.jobs[routeViewResourceId]?.[dateKey] || [])
-      .filter(j => j.taskLatitude && j.taskLongitude)
-      .sort((a, b) => (a.scheduledStartTime || 0) - (b.scheduledStartTime || 0));
-    
-    return routeJobOrder.length > 0 && routeJobOrder.every(id => baseRouteJobs.some(j => j.id === id))
-      ? routeJobOrder.map(id => baseRouteJobs.find(j => j.id === id)!).filter(Boolean)
-      : baseRouteJobs;
-  }, [viewMode, routeViewResourceId, currentDate, resourceDayJobMap, routeJobOrder]);
-
   const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
   
   const unscheduledJobs = useMemo(() => {
@@ -471,6 +459,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     
     return { jobs: map, hours: hoursMap };
   }, [filteredScheduledJobs]);
+
+  const routeJobsForView = useMemo(() => {
+    if (viewMode !== "route" || !routeViewResourceId) return [];
+    const dateKey = format(currentDate, "yyyy-MM-dd");
+    const baseRouteJobs = (resourceDayJobMap.jobs[routeViewResourceId]?.[dateKey] || [])
+      .filter(j => j.taskLatitude && j.taskLongitude)
+      .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+    
+    return routeJobOrder.length > 0 && routeJobOrder.every(id => baseRouteJobs.some(j => j.id === id))
+      ? routeJobOrder.map(id => baseRouteJobs.find(j => j.id === id)!).filter(Boolean)
+      : baseRouteJobs;
+  }, [viewMode, routeViewResourceId, currentDate, resourceDayJobMap, routeJobOrder]);
 
   const navigate = (direction: "prev" | "next") => {
     if (viewMode === "day" || viewMode === "route") {
@@ -569,12 +569,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           setRouteJobOrder(newOrder.map(j => j.id));
           
           newOrder.forEach((job, idx) => {
-            const baseStartTime = 480;
-            const newStartTime = baseStartTime + idx * 60;
+            const baseHour = 8 + idx;
+            const newStartTime = `${String(baseHour).padStart(2, "0")}:00`;
+            const dateStr = format(currentDate, "yyyy-MM-dd");
             
             updateWorkOrderMutation.mutate({
               id: job.id,
-              updates: { scheduledStartTime: newStartTime }
+              resourceId: job.resourceId!,
+              scheduledDate: dateStr,
+              scheduledStartTime: newStartTime
             });
           });
           
@@ -1258,9 +1261,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                       <div className="text-sm space-y-1 min-w-[180px]">
                         <div className="font-medium">{index + 1}. {job.title}</div>
                         <div className="text-muted-foreground">{job.objectName}</div>
-                        {job.scheduledStartTime !== undefined && job.scheduledStartTime !== null && (
+                        {job.scheduledStartTime && (
                           <div className="text-xs">
-                            Starttid: {String(Math.floor(job.scheduledStartTime / 60)).padStart(2, "0")}:{String(job.scheduledStartTime % 60).padStart(2, "0")}
+                            Starttid: {job.scheduledStartTime}
                           </div>
                         )}
                         <div className="text-xs">
