@@ -96,8 +96,9 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="ghost" size="icon" data-testid={`button-metadata-${object.id}`}>
-            <Database className="h-4 w-4" />
+          <Button variant="ghost" size="sm" data-testid={`button-metadata-${object.id}`}>
+            <Database className="h-4 w-4 mr-1" />
+            Metadata
           </Button>
         )}
       </DialogTrigger>

@@ -362,8 +362,9 @@ export function ObjectContactsDialog({ object, trigger }: ObjectContactsDialogPr
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button variant="ghost" size="icon" data-testid={`button-contacts-${object.id}`}>
-            <User className="h-4 w-4" />
+          <Button variant="ghost" size="sm" data-testid={`button-contacts-${object.id}`}>
+            <User className="h-4 w-4 mr-1" />
+            Kontakter
           </Button>
         )}
       </DialogTrigger>

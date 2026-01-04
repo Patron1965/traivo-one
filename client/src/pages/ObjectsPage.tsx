@@ -539,30 +539,18 @@ export default function ObjectsPage() {
                     <TooltipContent><p>Redigera kod</p></TooltipContent>
                   </Tooltip>
                 )}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "avgSetupTime"); }} data-testid={`button-edit-setup-${obj.id}`}>
-                      <Edit2 className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Redigera ställtid</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleCopyObject(obj); }} data-testid={`button-copy-${obj.id}`}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Kopiera</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); showHistory(obj); }} data-testid={`button-history-${obj.id}`}>
-                      <Clock className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Visa historik</p></TooltipContent>
-                </Tooltip>
+                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleQuickEdit(obj, "avgSetupTime"); }} data-testid={`button-edit-setup-${obj.id}`}>
+                  <Edit2 className="h-4 w-4 mr-1" />
+                  Redigera
+                </Button>
+                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); handleCopyObject(obj); }} data-testid={`button-copy-${obj.id}`}>
+                  <Copy className="h-4 w-4 mr-1" />
+                  Kopiera
+                </Button>
+                <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); showHistory(obj); }} data-testid={`button-history-${obj.id}`}>
+                  <Clock className="h-4 w-4 mr-1" />
+                  Historik
+                </Button>
                 <ObjectContactsDialog object={obj} />
                 <ObjectImagesDialog object={obj} />
                 <ObjectMetadataPanel object={obj} />
