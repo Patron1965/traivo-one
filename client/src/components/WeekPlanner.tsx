@@ -1174,7 +1174,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         const dateStr = typeof j.scheduledDate === 'string' 
           ? j.scheduledDate 
           : (j.scheduledDate as Date).toISOString();
-        return dateStr.split("T")[0];
+        return dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.split(" ")[0];
       })
       .filter((v, i, a) => a.indexOf(v) === i) // unique dates
       .sort();
