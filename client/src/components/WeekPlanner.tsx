@@ -1207,7 +1207,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const totalWorkTime = routeJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0);
 
     return (
-      <div className="flex-1 flex flex-col min-h-[400px] border-2 border-blue-500">
+      <div className="flex-1 flex flex-col min-h-[400px]">
         <div className="flex items-center gap-4 p-3 border-b bg-muted/30 flex-wrap">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-muted-foreground" />
