@@ -58,6 +58,33 @@ const statusBadgeVariant: Record<string, "default" | "secondary" | "outline"> = 
   in_progress: "secondary",
 };
 
+const executionStatusLabels: Record<string, string> = {
+  not_planned: "Ej planerad",
+  planned_rough: "Grovplanerad",
+  planned_fine: "Finplanerad",
+  on_way: "På väg",
+  on_site: "På plats",
+  completed: "Utförd",
+  inspected: "Kontrollerad",
+  invoiced: "Fakturerad",
+};
+
+const executionStatusColors: Record<string, string> = {
+  not_planned: "bg-gray-400",
+  planned_rough: "bg-yellow-500",
+  planned_fine: "bg-blue-500",
+  on_way: "bg-purple-500",
+  on_site: "bg-indigo-500",
+  completed: "bg-green-500",
+  inspected: "bg-teal-500",
+  invoiced: "bg-emerald-600",
+};
+
+const executionStatusOrder = [
+  "not_planned", "planned_rough", "planned_fine", "on_way", 
+  "on_site", "completed", "inspected", "invoiced"
+];
+
 const HOURS_IN_DAY = 8;
 const DAY_START_HOUR = 7;
 const DAY_END_HOUR = 17;
@@ -605,6 +632,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   };
 
   const renderJobCard = (job: WorkOrderWithObject, compact = false) => {
+    const execStatus = (job as { executionStatus?: string }).executionStatus || "not_planned";
+    const execIndex = executionStatusOrder.indexOf(execStatus);
+    const execProgress = ((execIndex + 1) / executionStatusOrder.length) * 100;
+    
     return (
       <DraggableJobCard key={job.id} id={job.id}>
         <Card
@@ -615,15 +646,35 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           <div className="flex items-start justify-between gap-1">
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${executionStatusColors[execStatus] || "bg-gray-400"}`} />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-xs">{executionStatusLabels[execStatus] || execStatus}</p>
+                  </TooltipContent>
+                </Tooltip>
                 <span className="text-xs font-medium truncate">{job.title}</span>
               </div>
               <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
-              {!compact && job.scheduledStartTime && (
-                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                  <Clock className="h-3 w-3" />
-                  {job.scheduledStartTime}
-                </div>
+              {!compact && (
+                <>
+                  {job.scheduledStartTime && (
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                      <Clock className="h-3 w-3" />
+                      {job.scheduledStartTime}
+                    </div>
+                  )}
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className="flex-1 h-1 bg-muted rounded-full overflow-hidden">
+                      <div 
+                        className={`h-full ${executionStatusColors[execStatus] || "bg-gray-400"} transition-all`}
+                        style={{ width: `${execProgress}%` }}
+                      />
+                    </div>
+                    <span className="text-[9px] text-muted-foreground">{execIndex + 1}/8</span>
+                  </div>
+                </>
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
