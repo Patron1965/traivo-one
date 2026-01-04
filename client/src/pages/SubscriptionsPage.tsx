@@ -53,13 +53,20 @@ import {
   Building2,
   MapPin,
   Play,
+  Eye,
+  Phone,
+  Image,
+  Package,
 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, addDays } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Subscription, Customer, Article } from "@shared/schema";
+import type { Subscription, Customer, Article, ServiceObject } from "@shared/schema";
 import { PageHelp, HelpTooltip } from "@/components/ui/help-tooltip";
+import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
+import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 
 const periodicityOptions = [
   { value: "vecka", label: "Varje vecka" },
@@ -120,6 +127,8 @@ export default function SubscriptionsPage() {
   const [editing, setEditing] = useState<Subscription | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ id: string; name: string } | null>(null);
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
+  const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
+  const [objectDialogOpen, setObjectDialogOpen] = useState(false);
 
   const form = useForm<SubscriptionFormValues>({
     resolver: zodResolver(subscriptionFormSchema),
@@ -151,6 +160,10 @@ export default function SubscriptionsPage() {
   const { data: objects = [] } = useQuery<ObjectOption[]>({
     queryKey: ["/api/objects"],
     select: (data: any[]) => data.map((o) => ({ id: o.id, name: o.name, objectNumber: o.objectNumber })),
+  });
+
+  const { data: fullObjects = [] } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects"],
   });
 
   const { data: articles = [] } = useQuery<Article[]>({
@@ -277,6 +290,14 @@ export default function SubscriptionsPage() {
     return obj?.name || "Okänt objekt";
   };
 
+  const handleViewObject = (objectId: string) => {
+    const obj = fullObjects.find((o) => o.id === objectId);
+    if (obj) {
+      setSelectedObject(obj);
+      setObjectDialogOpen(true);
+    }
+  };
+
   const getPeriodicityLabel = (value: string) => {
     return periodicityOptions.find((p) => p.value === value)?.label || value;
   };
@@ -367,7 +388,16 @@ export default function SubscriptionsPage() {
                   </div>
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <MapPin className="h-3 w-3" />
-                    {getObjectName(sub.objectId)}
+                    <span className="flex-1">{getObjectName(sub.objectId)}</span>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-6 w-6"
+                      onClick={() => handleViewObject(sub.objectId)}
+                      data-testid={`button-view-object-${sub.objectId}`}
+                    >
+                      <Eye className="h-3 w-3" />
+                    </Button>
                   </div>
                 </div>
 
@@ -754,6 +784,87 @@ export default function SubscriptionsPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={objectDialogOpen} onOpenChange={setObjectDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Objektdetaljer
+            </DialogTitle>
+            {selectedObject && (
+              <DialogDescription>
+                {selectedObject.name} - {selectedObject.address || "Ingen adress"}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {selectedObject && (
+            <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
+              <TabsList className="shrink-0">
+                <TabsTrigger value="info">Information</TabsTrigger>
+                <TabsTrigger value="contacts" data-testid="tab-object-contacts">
+                  <Phone className="h-3 w-3 mr-1" />
+                  Kontakter
+                </TabsTrigger>
+                <TabsTrigger value="images" data-testid="tab-object-images">
+                  <Image className="h-3 w-3 mr-1" />
+                  Bilder
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="info" className="flex-1 overflow-auto mt-4">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Typ</div>
+                      <div className="font-medium">{selectedObject.objectType}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Adress</div>
+                      <div className="font-medium">{selectedObject.address || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Stad</div>
+                      <div className="font-medium">{selectedObject.city || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Tillgångstyp</div>
+                      <Badge variant="secondary">{selectedObject.accessType || "open"}</Badge>
+                    </div>
+                    {selectedObject.accessCode && (
+                      <div>
+                        <div className="text-sm text-muted-foreground">Åtkomstkod</div>
+                        <div className="font-medium">{selectedObject.accessCode}</div>
+                      </div>
+                    )}
+                  </div>
+                  {selectedObject.notes && (
+                    <div>
+                      <div className="text-sm text-muted-foreground">Anteckningar</div>
+                      <div className="text-sm mt-1 p-3 bg-muted rounded-md">{selectedObject.notes}</div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="contacts" className="flex-1 overflow-auto mt-4">
+                <ObjectContactsPanel
+                  objectId={selectedObject.id}
+                  tenantId={selectedObject.tenantId}
+                />
+              </TabsContent>
+
+              <TabsContent value="images" className="flex-1 overflow-auto mt-4">
+                <ObjectImagesGallery
+                  objectId={selectedObject.id}
+                  tenantId={selectedObject.tenantId}
+                />
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

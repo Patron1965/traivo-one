@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Link } from "wouter";
 import {
   Calendar,
@@ -27,12 +29,18 @@ import {
   User,
   X,
   Sparkles,
+  Eye,
+  Phone,
+  Image,
+  Package,
 } from "lucide-react";
 import { format, isToday, isTomorrow, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
 import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
 import { ProactiveTips } from "@/components/ProactiveTips";
+import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
+import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 
 interface AIMessage {
   id: string;
@@ -260,7 +268,15 @@ function QuickActionCard({
   );
 }
 
-function TodaysOrdersList({ orders, objectMap }: { orders: WorkOrder[]; objectMap: Map<string, ServiceObject> }) {
+function TodaysOrdersList({ 
+  orders, 
+  objectMap, 
+  onViewObject 
+}: { 
+  orders: WorkOrder[]; 
+  objectMap: Map<string, ServiceObject>; 
+  onViewObject?: (object: ServiceObject) => void;
+}) {
   const todaysOrders = orders.filter(order => {
     if (!order.scheduledDate) return false;
     return isToday(new Date(order.scheduledDate));
@@ -307,6 +323,16 @@ function TodaysOrdersList({ orders, objectMap }: { orders: WorkOrder[]; objectMa
                order.status === "in_progress" ? "Pågår" : 
                order.status === "scheduled" ? "Planerad" : "Ny"}
             </Badge>
+            {object && onViewObject && (
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => onViewObject(object)}
+                data-testid={`button-view-object-${object.id}`}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         );
       })}
@@ -316,6 +342,8 @@ function TodaysOrdersList({ orders, objectMap }: { orders: WorkOrder[]; objectMa
 
 export default function MyTasksPage() {
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
+  const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
+  const [objectDialogOpen, setObjectDialogOpen] = useState(false);
   const today = new Date();
   const weekStart = startOfWeek(today, { weekStartsOn: 1 });
   const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
@@ -353,6 +381,11 @@ export default function MyTasksPage() {
 
   const completedThisWeek = thisWeekOrders.filter(o => o.status === "completed").length;
   const activeResources = resources.filter(r => r.status === "active").length;
+
+  const handleViewObject = (obj: ServiceObject) => {
+    setSelectedObject(obj);
+    setObjectDialogOpen(true);
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -475,7 +508,7 @@ export default function MyTasksPage() {
                 ))}
               </div>
             ) : (
-              <TodaysOrdersList orders={orders} objectMap={objectMap} />
+              <TodaysOrdersList orders={orders} objectMap={objectMap} onViewObject={handleViewObject} />
             )}
           </CardContent>
         </Card>
@@ -523,6 +556,87 @@ export default function MyTasksPage() {
         todaysOrders={todaysOrders}
         thisWeekOrders={thisWeekOrders}
       />
+
+      <Dialog open={objectDialogOpen} onOpenChange={setObjectDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Objektdetaljer
+            </DialogTitle>
+            {selectedObject && (
+              <DialogDescription>
+                {selectedObject.name} - {selectedObject.address || "Ingen adress"}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {selectedObject && (
+            <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
+              <TabsList className="shrink-0">
+                <TabsTrigger value="info">Information</TabsTrigger>
+                <TabsTrigger value="contacts" data-testid="tab-object-contacts">
+                  <Phone className="h-3 w-3 mr-1" />
+                  Kontakter
+                </TabsTrigger>
+                <TabsTrigger value="images" data-testid="tab-object-images">
+                  <Image className="h-3 w-3 mr-1" />
+                  Bilder
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="info" className="flex-1 overflow-auto mt-4">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Typ</div>
+                      <div className="font-medium">{selectedObject.objectType}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Adress</div>
+                      <div className="font-medium">{selectedObject.address || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Stad</div>
+                      <div className="font-medium">{selectedObject.city || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Tillgångstyp</div>
+                      <Badge variant="secondary">{selectedObject.accessType || "open"}</Badge>
+                    </div>
+                    {selectedObject.accessCode && (
+                      <div>
+                        <div className="text-sm text-muted-foreground">Åtkomstkod</div>
+                        <div className="font-medium">{selectedObject.accessCode}</div>
+                      </div>
+                    )}
+                  </div>
+                  {selectedObject.notes && (
+                    <div>
+                      <div className="text-sm text-muted-foreground">Anteckningar</div>
+                      <div className="text-sm mt-1 p-3 bg-muted rounded-md">{selectedObject.notes}</div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="contacts" className="flex-1 overflow-auto mt-4">
+                <ObjectContactsPanel
+                  objectId={selectedObject.id}
+                  tenantId={selectedObject.tenantId}
+                />
+              </TabsContent>
+
+              <TabsContent value="images" className="flex-1 overflow-auto mt-4">
+                <ObjectImagesGallery
+                  objectId={selectedObject.id}
+                  tenantId={selectedObject.tenantId}
+                />
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

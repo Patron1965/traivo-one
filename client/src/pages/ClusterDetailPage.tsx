@@ -47,6 +47,10 @@ import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
+import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
+import { Eye, Phone, Image } from "lucide-react";
 import type { Cluster, ServiceObject, WorkOrder, Subscription } from "@shared/schema";
 
 interface ClusterWithStats extends Cluster {
@@ -222,6 +226,14 @@ export default function ClusterDetailPage() {
     queryKey: ["/api/clusters", clusterId, "subscriptions"],
     enabled: !!clusterId,
   });
+
+  const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
+  const [objectDialogOpen, setObjectDialogOpen] = useState(false);
+
+  const handleViewObject = (obj: ServiceObject) => {
+    setSelectedObject(obj);
+    setObjectDialogOpen(true);
+  };
 
   if (!match || !clusterId) {
     return (
@@ -579,6 +591,7 @@ export default function ClusterDetailPage() {
                       <TableHead>Typ</TableHead>
                       <TableHead>Adress</TableHead>
                       <TableHead>Tillgång</TableHead>
+                      <TableHead className="w-[80px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -594,11 +607,21 @@ export default function ClusterDetailPage() {
                         <TableCell>
                           <Badge variant="secondary">{obj.accessType || "open"}</Badge>
                         </TableCell>
+                        <TableCell>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleViewObject(obj)}
+                            data-testid={`button-view-object-${obj.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                     {clusterObjects.length > 20 && (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                        <TableCell colSpan={5} className="text-center text-muted-foreground">
                           ... och {clusterObjects.length - 20} till
                         </TableCell>
                       </TableRow>
@@ -718,6 +741,91 @@ export default function ClusterDetailPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <Dialog open={objectDialogOpen} onOpenChange={setObjectDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5" />
+              Objektdetaljer
+            </DialogTitle>
+            {selectedObject && (
+              <DialogDescription>
+                {selectedObject.name} - {selectedObject.address || "Ingen adress"}
+              </DialogDescription>
+            )}
+          </DialogHeader>
+
+          {selectedObject && (
+            <Tabs defaultValue="info" className="flex-1 overflow-hidden flex flex-col">
+              <TabsList className="shrink-0">
+                <TabsTrigger value="info">Information</TabsTrigger>
+                <TabsTrigger value="contacts" data-testid="tab-object-contacts">
+                  <Phone className="h-3 w-3 mr-1" />
+                  Kontakter
+                </TabsTrigger>
+                <TabsTrigger value="images" data-testid="tab-object-images">
+                  <Image className="h-3 w-3 mr-1" />
+                  Bilder
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="info" className="flex-1 overflow-auto mt-4">
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm text-muted-foreground">Typ</div>
+                      <div className="font-medium">{selectedObject.objectType}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Hierarki</div>
+                      <div className="font-medium">{HIERARCHY_LEVELS[selectedObject.hierarchyLevel || "fastighet"]?.label || selectedObject.hierarchyLevel}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Adress</div>
+                      <div className="font-medium">{selectedObject.address || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Stad</div>
+                      <div className="font-medium">{selectedObject.city || "-"}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm text-muted-foreground">Tillgångstyp</div>
+                      <Badge variant="secondary">{selectedObject.accessType || "open"}</Badge>
+                    </div>
+                    {selectedObject.accessCode && (
+                      <div>
+                        <div className="text-sm text-muted-foreground">Åtkomstkod</div>
+                        <div className="font-medium">{selectedObject.accessCode}</div>
+                      </div>
+                    )}
+                  </div>
+                  {selectedObject.notes && (
+                    <div>
+                      <div className="text-sm text-muted-foreground">Anteckningar</div>
+                      <div className="text-sm mt-1 p-3 bg-muted rounded-md">{selectedObject.notes}</div>
+                    </div>
+                  )}
+                </div>
+              </TabsContent>
+
+              <TabsContent value="contacts" className="flex-1 overflow-auto mt-4">
+                <ObjectContactsPanel
+                  objectId={selectedObject.id}
+                  tenantId={selectedObject.tenantId}
+                />
+              </TabsContent>
+
+              <TabsContent value="images" className="flex-1 overflow-auto mt-4">
+                <ObjectImagesGallery
+                  objectId={selectedObject.id}
+                  tenantId={selectedObject.tenantId}
+                />
+              </TabsContent>
+            </Tabs>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
