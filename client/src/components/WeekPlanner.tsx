@@ -568,10 +568,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           const newOrder = arrayMove(routeJobsForView, oldIndex, newIndex);
           setRouteJobOrder(newOrder.map(j => j.id));
           
+          // Calculate cumulative start times based on durations and travel time
+          let currentMinutes = 8 * 60; // Start at 08:00 (480 minutes)
+          const dateStr = format(currentDate, "yyyy-MM-dd");
+          
           newOrder.forEach((job, idx) => {
-            const baseHour = 8 + idx;
-            const newStartTime = `${String(baseHour).padStart(2, "0")}:00`;
-            const dateStr = format(currentDate, "yyyy-MM-dd");
+            const hours = Math.floor(currentMinutes / 60);
+            const mins = currentMinutes % 60;
+            const newStartTime = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
             
             updateWorkOrderMutation.mutate({
               id: job.id,
@@ -579,6 +583,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               scheduledDate: dateStr,
               scheduledStartTime: newStartTime
             });
+            
+            // Add job duration and estimated travel time (5 min) to next stop
+            const jobDuration = job.estimatedDuration || 30;
+            const travelBuffer = idx < newOrder.length - 1 ? 5 : 0;
+            currentMinutes += jobDuration + travelBuffer;
           });
           
           toast({
@@ -1158,6 +1167,23 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const selectedResource = routeViewResourceId ? resources.find(r => r.id === routeViewResourceId) : null;
     const routeJobs = routeJobsForView;
     
+    // Find first date with scheduled jobs for this resource
+    const getFirstDateWithJobs = () => {
+      if (!routeViewResourceId || !resourceDayJobMap.jobs[routeViewResourceId]) return null;
+      const dates = Object.keys(resourceDayJobMap.jobs[routeViewResourceId]).sort();
+      if (dates.length === 0) return null;
+      return dates[0]; // Return earliest date with jobs
+    };
+    
+    const firstJobDate = getFirstDateWithJobs();
+    const handleJumpToDate = () => {
+      if (firstJobDate) {
+        const date = new Date(firstJobDate + "T12:00:00Z");
+        setCurrentDate(date);
+        setCurrentWeekStart(startOfWeek(date, { weekStartsOn: 1 }));
+      }
+    };
+    
     const positions: [number, number][] = routeJobs.map(j => [j.taskLatitude!, j.taskLongitude!]);
     const defaultCenter: [number, number] = positions[0] || [59.3293, 18.0686];
     
@@ -1213,17 +1239,29 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         </div>
         
         {!selectedResource ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
+          <div className="flex-1 flex items-center justify-center text-muted-foreground min-h-[300px]">
             <div className="text-center space-y-2">
               <MapPin className="h-12 w-12 mx-auto opacity-30" />
               <p>Välj en resurs för att visa dagens rutt</p>
             </div>
           </div>
         ) : routeJobs.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground">
-            <div className="text-center space-y-2">
+          <div className="flex-1 flex items-center justify-center text-muted-foreground min-h-[300px]">
+            <div className="text-center space-y-3">
               <AlertTriangle className="h-12 w-12 mx-auto opacity-30" />
               <p>Inga schemalagda jobb med koordinater för {selectedResource.name} denna dag</p>
+              <p className="text-xs">Navigera till ett datum med schemalagda jobb eller schemalägg nya jobb först</p>
+              {firstJobDate && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={handleJumpToDate}
+                  data-testid="button-jump-to-jobs"
+                >
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Gå till {format(new Date(firstJobDate + "T12:00:00Z"), "d MMMM yyyy", { locale: sv })}
+                </Button>
+              )}
             </div>
           </div>
         ) : (
