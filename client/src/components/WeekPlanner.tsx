@@ -443,7 +443,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       const dateStr = typeof job.scheduledDate === 'string' 
         ? job.scheduledDate 
         : (job.scheduledDate as Date).toISOString();
-      const dayKey = dateStr.split("T")[0];
+      const dayKey = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.split(" ")[0];
       
       if (!map[resourceId]) {
         map[resourceId] = {};
