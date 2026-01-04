@@ -1207,7 +1207,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const totalWorkTime = routeJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0);
 
     return (
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 flex flex-col min-h-[400px]">
         <div className="flex items-center gap-4 p-3 border-b bg-muted/30 flex-wrap">
           <div className="flex items-center gap-2">
             <MapPin className="h-4 w-4 text-muted-foreground" />
@@ -1243,22 +1243,22 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         </div>
         
         {!selectedResource ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground min-h-[300px]">
-            <div className="text-center space-y-2">
-              <MapPin className="h-12 w-12 mx-auto opacity-30" />
-              <p>Välj en resurs för att visa dagens rutt</p>
+          <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 bg-muted/20">
+            <div className="text-center space-y-3">
+              <MapPin className="h-16 w-16 mx-auto opacity-30" />
+              <p className="text-lg">Välj en resurs för att visa dagens rutt</p>
+              <p className="text-sm">Välj en resurs i dropdown-menyn ovan för att se schemalagda jobb på kartan</p>
             </div>
           </div>
         ) : routeJobs.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-muted-foreground min-h-[300px]">
-            <div className="text-center space-y-3">
-              <AlertTriangle className="h-12 w-12 mx-auto opacity-30" />
-              <p>Inga schemalagda jobb med koordinater för {selectedResource.name} denna dag</p>
-              <p className="text-xs">Navigera till ett datum med schemalagda jobb eller schemalägg nya jobb först</p>
+          <div className="flex-1 flex items-center justify-center text-muted-foreground p-8 bg-muted/20">
+            <div className="text-center space-y-4">
+              <AlertTriangle className="h-16 w-16 mx-auto opacity-30" />
+              <p className="text-lg">Inga schemalagda jobb med koordinater för {selectedResource.name} denna dag</p>
+              <p className="text-sm">Navigera till ett datum med schemalagda jobb eller schemalägg nya jobb först</p>
               {firstJobDate && (
                 <Button 
-                  variant="outline" 
-                  size="sm" 
+                  variant="default" 
                   onClick={handleJumpToDate}
                   data-testid="button-jump-to-jobs"
                 >
