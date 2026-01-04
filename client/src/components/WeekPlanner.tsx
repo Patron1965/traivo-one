@@ -11,7 +11,7 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -235,6 +235,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [activeDragJob, setActiveDragJob] = useState<WorkOrderWithObject | null>(null);
   const [routeViewResourceId, setRouteViewResourceId] = useState<string | null>(null);
   const [routeJobOrder, setRouteJobOrder] = useState<string[]>([]);
+  const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isSendingToMobile, setIsSendingToMobile] = useState(false);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -535,6 +537,238 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     setSelectedJob(jobId);
     onSelectJob?.(jobId);
   }, [onSelectJob]);
+
+  // Route optimization and export handlers
+  const handleOptimizeRoute = useCallback(async () => {
+    if (routeJobsForView.length < 2) return;
+    
+    setIsOptimizing(true);
+    try {
+      const stops = routeJobsForView.map(j => ({
+        workOrderId: j.id,
+        objectId: j.objectId || "",
+        objectName: j.objectName || j.title,
+        latitude: j.taskLatitude || 0,
+        longitude: j.taskLongitude || 0,
+        estimatedDuration: j.estimatedDuration || 0,
+        scheduledStartTime: j.scheduledStartTime || undefined
+      }));
+      
+      const response = await apiRequest("POST", "/api/route/optimize", { stops });
+      const result = await response.json();
+      
+      if (result.optimizedStops) {
+        const newOrder = result.optimizedStops.map((s: { workOrderId: string }) => s.workOrderId);
+        setRouteJobOrder(newOrder);
+        
+        toast({
+          title: "Rutt optimerad",
+          description: `Körsträcka minskad med ${result.savingsPercent}% (${result.originalDistance} km → ${result.optimizedDistance} km)`,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to optimize route:", error);
+      toast({
+        title: "Fel vid optimering",
+        description: "Kunde inte optimera rutten",
+        variant: "destructive"
+      });
+    } finally {
+      setIsOptimizing(false);
+    }
+  }, [routeJobsForView, toast]);
+
+  const handleOpenGoogleMaps = useCallback(async () => {
+    try {
+      const stops = routeJobsForView.map(j => ({
+        workOrderId: j.id,
+        objectId: j.objectId || "",
+        objectName: j.objectName || j.title,
+        latitude: j.taskLatitude || 0,
+        longitude: j.taskLongitude || 0,
+        estimatedDuration: j.estimatedDuration || 0
+      }));
+      
+      const response = await apiRequest("POST", "/api/route/google-maps-url", { stops });
+      const result = await response.json();
+      
+      if (result.url) {
+        window.open(result.url, "_blank");
+      }
+    } catch (error) {
+      console.error("Failed to generate Google Maps URL:", error);
+      toast({
+        title: "Fel",
+        description: "Kunde inte öppna Google Maps",
+        variant: "destructive"
+      });
+    }
+  }, [routeJobsForView, toast]);
+
+  const handlePrintRoute = useCallback(() => {
+    const selectedResource = routeViewResourceId ? resources.find(r => r.id === routeViewResourceId) : null;
+    const dateStr = format(currentDate, "yyyy-MM-dd");
+    const printWindow = window.open("", "_blank");
+    
+    if (!printWindow) {
+      toast({ title: "Fel", description: "Kunde inte öppna utskriftsfönster", variant: "destructive" });
+      return;
+    }
+    
+    // Calculate total travel time
+    let totalTravelTime = 0;
+    for (let i = 0; i < routeJobsForView.length - 1; i++) {
+      const lat1 = routeJobsForView[i].taskLatitude || 0;
+      const lon1 = routeJobsForView[i].taskLongitude || 0;
+      const lat2 = routeJobsForView[i + 1].taskLatitude || 0;
+      const lon2 = routeJobsForView[i + 1].taskLongitude || 0;
+      
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distance = R * c;
+      totalTravelTime += Math.round((distance / 40) * 60);
+    }
+    
+    // Generate Google Maps URL for QR code
+    const validStops = routeJobsForView.filter(j => j.taskLatitude && j.taskLongitude);
+    let googleMapsUrl = "";
+    if (validStops.length > 0) {
+      const origin = `${validStops[0].taskLatitude},${validStops[0].taskLongitude}`;
+      const destination = validStops.length > 1 
+        ? `${validStops[validStops.length - 1].taskLatitude},${validStops[validStops.length - 1].taskLongitude}`
+        : origin;
+      const waypoints = validStops.slice(1, -1).map(s => `${s.taskLatitude},${s.taskLongitude}`).join("|");
+      googleMapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+      if (waypoints) googleMapsUrl += `&waypoints=${encodeURIComponent(waypoints)}`;
+    }
+    
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Rutt - ${selectedResource?.name || "Resurs"} - ${dateStr}</title>
+        <style>
+          body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+          h1 { font-size: 24px; margin-bottom: 8px; }
+          .header { margin-bottom: 20px; }
+          .meta { color: #666; font-size: 14px; margin-bottom: 4px; }
+          .summary { background: #f5f5f5; padding: 12px; border-radius: 4px; margin-bottom: 20px; display: flex; gap: 20px; }
+          .summary-item { text-align: center; }
+          .summary-value { font-size: 20px; font-weight: bold; }
+          .summary-label { font-size: 12px; color: #666; }
+          .stop { border: 1px solid #ddd; border-radius: 4px; padding: 12px; margin-bottom: 8px; display: flex; align-items: flex-start; gap: 12px; }
+          .stop-number { width: 28px; height: 28px; background: #3b82f6; color: white; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px; flex-shrink: 0; }
+          .stop-number.first { background: #22c55e; }
+          .stop-number.last { background: #ef4444; }
+          .stop-content { flex: 1; }
+          .stop-title { font-weight: 600; margin-bottom: 4px; }
+          .stop-address { color: #666; font-size: 13px; }
+          .stop-time { font-size: 12px; color: #888; margin-top: 4px; }
+          .google-maps { margin-top: 20px; padding: 12px; background: #e3f2fd; border-radius: 4px; }
+          .google-maps a { color: #1976d2; font-weight: 500; }
+          @media print { 
+            body { padding: 0; } 
+            .no-print { display: none; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>Körschema: ${selectedResource?.name || "Resurs"}</h1>
+          <div class="meta">Datum: ${format(currentDate, "EEEE d MMMM yyyy", { locale: sv })}</div>
+          <div class="meta">Utskrivet: ${format(new Date(), "yyyy-MM-dd HH:mm", { locale: sv })}</div>
+        </div>
+        
+        <div class="summary">
+          <div class="summary-item">
+            <div class="summary-value">${routeJobsForView.length}</div>
+            <div class="summary-label">Stopp</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value">${totalTravelTime} min</div>
+            <div class="summary-label">Uppskattad körtid</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value">${(routeJobsForView.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0) / 60).toFixed(1)}h</div>
+            <div class="summary-label">Arbetstid</div>
+          </div>
+        </div>
+        
+        ${routeJobsForView.map((job, idx) => `
+          <div class="stop">
+            <div class="stop-number ${idx === 0 ? "first" : idx === routeJobsForView.length - 1 ? "last" : ""}">${idx + 1}</div>
+            <div class="stop-content">
+              <div class="stop-title">${job.title}</div>
+              <div class="stop-address">${job.objectName || ""}</div>
+              ${job.scheduledStartTime ? `<div class="stop-time">Planerad start: ${job.scheduledStartTime}</div>` : ""}
+              ${job.estimatedDuration ? `<div class="stop-time">Uppskattad tid: ${(job.estimatedDuration / 60).toFixed(1)}h</div>` : ""}
+            </div>
+          </div>
+        `).join("")}
+        
+        ${googleMapsUrl ? `
+          <div class="google-maps">
+            <strong>Öppna rutten i Google Maps:</strong><br/>
+            <a href="${googleMapsUrl}" target="_blank">${googleMapsUrl.substring(0, 80)}...</a>
+          </div>
+        ` : ""}
+        
+        <script>window.print();</script>
+      </body>
+      </html>
+    `;
+    
+    printWindow.document.write(html);
+    printWindow.document.close();
+  }, [routeJobsForView, routeViewResourceId, resources, currentDate, toast]);
+
+  const handleSendToMobile = useCallback(async () => {
+    if (!routeViewResourceId || routeJobsForView.length === 0) return;
+    
+    setIsSendingToMobile(true);
+    try {
+      const stops = routeJobsForView.map(j => ({
+        workOrderId: j.id,
+        objectId: j.objectId || "",
+        objectName: j.objectName || j.title,
+        title: j.title,
+        latitude: j.taskLatitude || 0,
+        longitude: j.taskLongitude || 0,
+        estimatedDuration: j.estimatedDuration || 0,
+        scheduledStartTime: j.scheduledStartTime || undefined
+      }));
+      
+      // Generate Google Maps URL
+      const urlResponse = await apiRequest("POST", "/api/route/google-maps-url", { stops });
+      const { url: googleMapsUrl } = await urlResponse.json();
+      
+      // Send to mobile app
+      await apiRequest("POST", "/api/route/send-to-mobile", {
+        resourceId: routeViewResourceId,
+        stops,
+        date: format(currentDate, "yyyy-MM-dd"),
+        googleMapsUrl
+      });
+      
+      const selectedResource = resources.find(r => r.id === routeViewResourceId);
+      toast({
+        title: "Rutt skickad",
+        description: `Rutten har skickats till ${selectedResource?.name || "resursen"}s mobilapp`,
+      });
+    } catch (error) {
+      console.error("Failed to send route to mobile:", error);
+      toast({
+        title: "Fel",
+        description: "Kunde inte skicka rutt till mobilappen",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSendingToMobile(false);
+    }
+  }, [routeViewResourceId, routeJobsForView, currentDate, resources, toast]);
 
   const addToUndoStack = useCallback((action: PlannerAction) => {
     setUndoStack(prev => [...prev.slice(-19), action]);
@@ -1226,19 +1460,69 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             </SelectContent>
           </Select>
           {selectedResource && routeJobs.length > 0 && (
-            <div className="flex items-center gap-3 text-sm flex-wrap">
-              <Badge variant="secondary" className="text-xs">
-                <Navigation className="h-3 w-3 mr-1" />
-                {routeJobs.length} stopp
-              </Badge>
-              <Badge variant="outline" className="text-xs">
-                <Clock className="h-3 w-3 mr-1" />
-                {Math.round(totalTravelTime)} min körtid
-              </Badge>
-              <Badge variant="outline" className="text-xs">
-                {(totalWorkTime / 60).toFixed(1)}h arbete
-              </Badge>
-            </div>
+            <>
+              <div className="flex items-center gap-3 text-sm flex-wrap">
+                <Badge variant="secondary" className="text-xs">
+                  <Navigation className="h-3 w-3 mr-1" />
+                  {routeJobs.length} stopp
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  <Clock className="h-3 w-3 mr-1" />
+                  {Math.round(totalTravelTime)} min körtid
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  {(totalWorkTime / 60).toFixed(1)}h arbete
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 ml-auto flex-wrap">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOptimizeRoute}
+                  disabled={isOptimizing || routeJobs.length < 2}
+                  data-testid="button-optimize-route"
+                >
+                  {isOptimizing ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Wand2 className="h-4 w-4 mr-1" />
+                  )}
+                  Optimera
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOpenGoogleMaps}
+                  data-testid="button-google-maps"
+                >
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                  Google Maps
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handlePrintRoute}
+                  data-testid="button-print-route"
+                >
+                  <FileText className="h-4 w-4 mr-1" />
+                  Skriv ut
+                </Button>
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={handleSendToMobile}
+                  disabled={isSendingToMobile}
+                  data-testid="button-send-to-mobile"
+                >
+                  {isSendingToMobile ? (
+                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4 mr-1" />
+                  )}
+                  Skicka till mobil
+                </Button>
+              </div>
+            </>
           )}
         </div>
         

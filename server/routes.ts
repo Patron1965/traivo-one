@@ -5488,5 +5488,76 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Route Optimization API
+  app.post("/api/route/optimize", async (req, res) => {
+    try {
+      const { stops } = req.body;
+      
+      if (!stops || !Array.isArray(stops)) {
+        return res.status(400).json({ error: "Stops array krävs" });
+      }
+      
+      const { optimizeRoute } = await import("./ai-planner");
+      
+      const result = await optimizeRoute(stops);
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to optimize route:", error);
+      res.status(500).json({ error: "Kunde inte optimera rutt" });
+    }
+  });
+
+  // Generate Google Maps URL for route
+  app.post("/api/route/google-maps-url", async (req, res) => {
+    try {
+      const { stops } = req.body;
+      
+      if (!stops || !Array.isArray(stops)) {
+        return res.status(400).json({ error: "Stops array krävs" });
+      }
+      
+      const { generateGoogleMapsUrl } = await import("./ai-planner");
+      
+      const url = generateGoogleMapsUrl(stops);
+      
+      res.json({ url });
+    } catch (error) {
+      console.error("Failed to generate Google Maps URL:", error);
+      res.status(500).json({ error: "Kunde inte generera Google Maps-länk" });
+    }
+  });
+
+  // Send route to mobile app via WebSocket
+  app.post("/api/route/send-to-mobile", async (req, res) => {
+    try {
+      const { resourceId, stops, date, googleMapsUrl } = req.body;
+      
+      if (!resourceId || !stops) {
+        return res.status(400).json({ error: "ResourceId och stops krävs" });
+      }
+      
+      // Send notification to the specific resource's mobile app
+      notificationService.sendToResource(resourceId, {
+        type: "route_update",
+        title: "Ny rutt tilldelad",
+        message: `Du har fått en rutt med ${stops.length} stopp för ${date}`,
+        data: {
+          stops,
+          googleMapsUrl,
+          date
+        }
+      });
+      
+      res.json({ 
+        success: true, 
+        message: `Rutt skickad till resurs ${resourceId}` 
+      });
+    } catch (error) {
+      console.error("Failed to send route to mobile:", error);
+      res.status(500).json({ error: "Kunde inte skicka rutt till mobilapp" });
+    }
+  });
+
   return httpServer;
 }

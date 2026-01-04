@@ -2132,3 +2132,236 @@ export function identifyStructuralArticles(
     return children && children.length > 0;
   });
 }
+
+// ============================================
+// ROUTE OPTIMIZATION
+// ============================================
+
+interface RouteStop {
+  workOrderId: string;
+  objectId: string;
+  objectName: string;
+  latitude: number;
+  longitude: number;
+  estimatedDuration: number;
+  scheduledStartTime?: string;
+}
+
+function calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + 
+            Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+            Math.sin(dLon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function calculateTotalDistance(stops: RouteStop[]): number {
+  let total = 0;
+  for (let i = 0; i < stops.length - 1; i++) {
+    total += calculateDistance(
+      stops[i].latitude, stops[i].longitude,
+      stops[i + 1].latitude, stops[i + 1].longitude
+    );
+  }
+  return total;
+}
+
+// Nearest neighbor heuristic starting from a specific stop
+function nearestNeighborFromStart(stops: RouteStop[], startIdx: number): RouteStop[] {
+  if (stops.length <= 2) return stops;
+  
+  const optimized: RouteStop[] = [];
+  const remaining = [...stops];
+  
+  // Start with the specified starting stop
+  optimized.push(remaining.splice(startIdx, 1)[0]);
+  
+  while (remaining.length > 0) {
+    const lastStop = optimized[optimized.length - 1];
+    let nearestIdx = 0;
+    let nearestDist = Infinity;
+    
+    for (let i = 0; i < remaining.length; i++) {
+      const dist = calculateDistance(
+        lastStop.latitude, lastStop.longitude,
+        remaining[i].latitude, remaining[i].longitude
+      );
+      if (dist < nearestDist) {
+        nearestDist = dist;
+        nearestIdx = i;
+      }
+    }
+    
+    optimized.push(remaining.splice(nearestIdx, 1)[0]);
+  }
+  
+  return optimized;
+}
+
+// Try all possible starting points and pick the best one
+function nearestNeighborOptimization(stops: RouteStop[]): RouteStop[] {
+  if (stops.length <= 2) return stops;
+  
+  let bestRoute = stops;
+  let bestDistance = calculateTotalDistance(stops);
+  
+  // Try each stop as a starting point
+  for (let startIdx = 0; startIdx < stops.length; startIdx++) {
+    const route = nearestNeighborFromStart(stops, startIdx);
+    const distance = calculateTotalDistance(route);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      bestRoute = route;
+    }
+  }
+  
+  return bestRoute;
+}
+
+// 2-opt improvement for route optimization (full route, including first stop)
+function twoOptImprove(stops: RouteStop[]): RouteStop[] {
+  if (stops.length <= 3) return stops;
+  
+  let improved = true;
+  let route = [...stops];
+  
+  while (improved) {
+    improved = false;
+    // Start from 0 to allow full permutation including first stop
+    for (let i = 0; i < route.length - 1; i++) {
+      for (let j = i + 1; j < route.length; j++) {
+        const newRoute = twoOptSwap(route, i, j);
+        if (calculateTotalDistance(newRoute) < calculateTotalDistance(route)) {
+          route = newRoute;
+          improved = true;
+        }
+      }
+    }
+  }
+  
+  return route;
+}
+
+function twoOptSwap(route: RouteStop[], i: number, j: number): RouteStop[] {
+  const newRoute = route.slice(0, i);
+  const reversed = route.slice(i, j + 1).reverse();
+  const rest = route.slice(j + 1);
+  return [...newRoute, ...reversed, ...rest];
+}
+
+export async function optimizeRoute(
+  stops: RouteStop[],
+  useAI: boolean = true
+): Promise<{
+  optimizedStops: RouteStop[];
+  originalDistance: number;
+  optimizedDistance: number;
+  savingsPercent: number;
+  method: string;
+}> {
+  if (stops.length <= 1) {
+    return {
+      optimizedStops: stops,
+      originalDistance: 0,
+      optimizedDistance: 0,
+      savingsPercent: 0,
+      method: "no_optimization_needed"
+    };
+  }
+  
+  const validStops = stops.filter(s => s.latitude && s.longitude);
+  if (validStops.length <= 1) {
+    return {
+      optimizedStops: stops,
+      originalDistance: 0,
+      optimizedDistance: 0,
+      savingsPercent: 0,
+      method: "insufficient_coordinates"
+    };
+  }
+  
+  const originalDistance = calculateTotalDistance(validStops);
+  
+  // First apply nearest neighbor heuristic
+  let optimized = nearestNeighborOptimization(validStops);
+  
+  // Then apply 2-opt improvement
+  optimized = twoOptImprove(optimized);
+  
+  const optimizedDistance = calculateTotalDistance(optimized);
+  const savingsPercent = originalDistance > 0 
+    ? Math.round((1 - optimizedDistance / originalDistance) * 100) 
+    : 0;
+  
+  // If AI is enabled and we have OpenAI, try to get additional insights
+  if (useAI && process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Du är en ruttoptimerings-assistent för fältservice. Analysera rutten och ge eventuella ytterligare rekommendationer på svenska."
+          },
+          {
+            role: "user",
+            content: `Jag har optimerat en rutt med ${validStops.length} stopp.
+              
+Original körsträcka: ${originalDistance.toFixed(1)} km
+Optimerad körsträcka: ${optimizedDistance.toFixed(1)} km
+Besparing: ${savingsPercent}%
+
+Stopp i optimerad ordning:
+${optimized.map((s, i) => `${i + 1}. ${s.objectName}`).join('\n')}
+
+Ge kort feedback om optimeringen är bra eller om det finns ytterligare att tänka på.`
+          }
+        ],
+        max_completion_tokens: 200
+      });
+      
+      // Just log AI feedback, the optimization is algorithmic
+      console.log("AI route feedback:", response.choices[0]?.message?.content);
+    } catch (error) {
+      console.log("AI feedback skipped:", error);
+    }
+  }
+  
+  return {
+    optimizedStops: optimized,
+    originalDistance: Math.round(originalDistance * 10) / 10,
+    optimizedDistance: Math.round(optimizedDistance * 10) / 10,
+    savingsPercent,
+    method: "nearest_neighbor_2opt"
+  };
+}
+
+export function generateGoogleMapsUrl(stops: RouteStop[]): string {
+  if (stops.length === 0) return "";
+  
+  const validStops = stops.filter(s => s.latitude && s.longitude);
+  if (validStops.length === 0) return "";
+  
+  // Google Maps directions URL format
+  // origin -> waypoints -> destination
+  const origin = `${validStops[0].latitude},${validStops[0].longitude}`;
+  const destination = validStops.length > 1 
+    ? `${validStops[validStops.length - 1].latitude},${validStops[validStops.length - 1].longitude}`
+    : origin;
+  
+  // Waypoints (exclude first and last)
+  const waypoints = validStops.slice(1, -1)
+    .map(s => `${s.latitude},${s.longitude}`)
+    .join('|');
+  
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=driving`;
+  
+  if (waypoints) {
+    url += `&waypoints=${encodeURIComponent(waypoints)}`;
+  }
+  
+  return url;
+}
