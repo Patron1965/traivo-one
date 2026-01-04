@@ -1,5 +1,6 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, KeyboardSensor, closestCenter, useDraggable, useDroppable, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +62,38 @@ const HOURS_IN_DAY = 8;
 const DAY_START_HOUR = 7;
 const DAY_END_HOUR = 17;
 
+function DraggableJobCard({ id, children, disabled = false }: { id: string; children: JSX.Element; disabled?: boolean }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id,
+    disabled,
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 1000 : 'auto',
+  } : undefined;
+
+  return (
+    <div ref={setNodeRef} style={style as React.CSSProperties} {...listeners} {...attributes}>
+      {children}
+    </div>
+  );
+}
+
+function DroppableCell({ id, children, className = "" }: { id: string; children: JSX.Element; className?: string }) {
+  const { isOver, setNodeRef } = useDroppable({ id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`${className} ${isOver ? "ring-2 ring-primary ring-inset bg-primary/10" : ""}`}
+    >
+      {children}
+    </div>
+  );
+}
+
 interface WeekPlannerProps {
   onAddJob?: () => void;
   onSelectJob?: (jobId: string) => void;
@@ -75,14 +108,23 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
-  const [dragOverCell, setDragOverCell] = useState<string | null>(null);
   const [showUnscheduled, setShowUnscheduled] = useState(true);
   const [filterCustomer, setFilterCustomer] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<PlannerAction[]>([]);
   const [redoStack, setRedoStack] = useState<PlannerAction[]>([]);
+  const [activeDragJob, setActiveDragJob] = useState<WorkOrderWithObject | null>(null);
   const { toast } = useToast();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor)
+  );
 
   const visibleDates = useMemo((): Date[] => {
     if (viewMode === "day") {
@@ -121,8 +163,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
-
-  const dragOverCellRef = useRef<string | null>(null);
 
   const workOrdersQueryKey = ["/api/work-orders", dateRange.startDate, dateRange.endDate];
   
@@ -348,53 +388,42 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     onSelectJob?.(jobId);
   }, [onSelectJob]);
 
-  const handleDragStart = useCallback((e: React.DragEvent, jobId: string) => {
-    e.dataTransfer.setData("jobId", jobId);
-    e.dataTransfer.effectAllowed = "move";
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent, cellId: string) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    if (dragOverCellRef.current !== cellId) {
-      dragOverCellRef.current = cellId;
-      setDragOverCell(cellId);
-    }
-  }, []);
-
-  const handleDragLeave = useCallback(() => {
-    dragOverCellRef.current = null;
-    setDragOverCell(null);
-  }, []);
-
   const addToUndoStack = useCallback((action: PlannerAction) => {
     setUndoStack(prev => [...prev.slice(-19), action]);
     setRedoStack([]);
   }, []);
 
-  const handleDrop = useCallback((e: React.DragEvent, resourceId: string, day: Date, hour?: number) => {
-    e.preventDefault();
-    dragOverCellRef.current = null;
-    setDragOverCell(null);
-    
-    const jobId = e.dataTransfer.getData("jobId");
-    console.log("DROP: jobId =", jobId, "isPending =", updateWorkOrderMutation.isPending);
-    if (!jobId) return;
-
+  const handleDndDragStart = useCallback((event: DragStartEvent) => {
+    const jobId = event.active.id as string;
     const job = workOrders.find(j => j.id === jobId);
-    if (!job) {
-      console.log("DROP: job not found");
-      return;
-    }
+    setActiveDragJob(job || null);
+  }, [workOrders]);
 
+  const handleDndDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveDragJob(null);
+    
+    const { active, over } = event;
+    if (!over) return;
+    
+    const jobId = active.id as string;
+    const dropId = over.id as string;
+    
+    const job = workOrders.find(j => j.id === jobId);
+    if (!job) return;
+    
+    const parts = dropId.split("|");
+    if (parts.length < 2) return;
+    
+    const resourceId = parts[0];
+    const dateStr = parts[1];
+    const hour = parts[2] ? parseInt(parts[2], 10) : undefined;
+    const day = new Date(dateStr + "T12:00:00Z");
+    
     const isSameResourceAndDay = job.resourceId === resourceId && 
       job.scheduledDate && isSameDay(new Date(job.scheduledDate), day);
     
-    if (isSameResourceAndDay && !hour) {
-      console.log("DROP: same resource and day, skipping");
-      return;
-    }
-
+    if (isSameResourceAndDay && hour === undefined) return;
+    
     const scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
     const previousDateStr = job.scheduledDate 
       ? format(new Date(job.scheduledDate), "yyyy-MM-dd")
@@ -412,18 +441,17 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       },
       newState: {
         resourceId,
-        scheduledDate: format(day, "yyyy-MM-dd"),
+        scheduledDate: dateStr,
         scheduledStartTime: scheduledStartTime || null,
         status: "scheduled",
         orderStatus: "planerad_resurs",
       },
     });
 
-    console.log("DROP: calling mutate for", jobId, "to", resourceId, format(day, "yyyy-MM-dd"));
     updateWorkOrderMutation.mutate({
       id: jobId,
       resourceId,
-      scheduledDate: format(day, "yyyy-MM-dd"),
+      scheduledDate: dateStr,
       scheduledStartTime,
     });
   }, [workOrders, updateWorkOrderMutation, addToUndoStack]);
@@ -578,49 +606,48 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const renderJobCard = (job: WorkOrderWithObject, compact = false) => {
     return (
-      <Card
-        key={job.id}
-        draggable
-        onDragStart={(e) => handleDragStart(e, job.id)}
-        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${selectedJob === job.id ? "ring-2 ring-primary" : ""} group`}
-        onClick={() => handleJobClick(job.id)}
-        data-testid={`job-card-${job.id}`}
-      >
-        <div className="flex items-start justify-between gap-1">
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
-              <span className="text-xs font-medium truncate">{job.title}</span>
-            </div>
-            <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
-            {!compact && job.scheduledStartTime && (
-              <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                <Clock className="h-3 w-3" />
-                {job.scheduledStartTime}
+      <DraggableJobCard key={job.id} id={job.id}>
+        <Card
+          className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${selectedJob === job.id ? "ring-2 ring-primary" : ""} group touch-none`}
+          onClick={() => handleJobClick(job.id)}
+          data-testid={`job-card-${job.id}`}
+        >
+          <div className="flex items-start justify-between gap-1">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
+                <span className="text-xs font-medium truncate">{job.title}</span>
               </div>
-            )}
+              <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
+              {!compact && job.scheduledStartTime && (
+                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                  <Clock className="h-3 w-3" />
+                  {job.scheduledStartTime}
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                    onClick={(e) => handleUnschedule(e, job.id)}
+                    data-testid={`button-unschedule-${job.id}`}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Avschemalägg</TooltipContent>
+              </Tooltip>
+              <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px]">
+                {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
+              </Badge>
+            </div>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button 
-                  size="icon" 
-                  variant="ghost" 
-                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                  onClick={(e) => handleUnschedule(e, job.id)}
-                  data-testid={`button-unschedule-${job.id}`}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Avschemalägg</TooltipContent>
-            </Tooltip>
-            <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px]">
-              {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
-            </Badge>
-          </div>
-        </div>
-      </Card>
+        </Card>
+      </DraggableJobCard>
     );
   };
 
@@ -664,22 +691,19 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   const jobHour = parseInt(job.scheduledStartTime.split(":")[0], 10);
                   return jobHour === hour;
                 });
-                const cellId = `${resource.id}-${hour}`;
-                const isDragOver = dragOverCell === cellId;
+                const dayStr = format(day, "yyyy-MM-dd");
+                const droppableId = `${resource.id}|${dayStr}|${hour}`;
 
                 return (
-                  <div
+                  <DroppableCell
                     key={resource.id}
-                    className={`p-2 border-r last:border-r-0 min-h-[60px] transition-colors ${isDragOver ? "bg-primary/10" : "bg-muted/20"}`}
-                    onDragOver={(e) => handleDragOver(e, cellId)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, resource.id, day, hour)}
-                    data-testid={`drop-zone-${resource.id}-${hour}`}
+                    id={droppableId}
+                    className="p-2 border-r last:border-r-0 min-h-[60px] transition-colors bg-muted/20"
                   >
-                    <div className="space-y-1">
+                    <div className="space-y-1" data-testid={`drop-zone-${resource.id}-${hour}`}>
                       {jobs.map((job) => renderJobCard(job))}
                     </div>
-                  </div>
+                  </DroppableCell>
                 );
               })}
             </div>
@@ -735,34 +759,33 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 const dayHours = getResourceDayHours(resource.id, day);
                 const isOverbooked = dayHours > HOURS_IN_DAY;
                 const capacityPct = getCapacityPercentage(dayHours);
-                const cellId = `${resource.id}-${dayIndex}`;
-                const isDragOver = dragOverCell === cellId;
+                const dayStr = format(day, "yyyy-MM-dd");
+                const droppableId = `${resource.id}|${dayStr}`;
 
                 return (
-                  <div 
+                  <DroppableCell 
                     key={dayIndex} 
-                    className={`p-2 border-r last:border-r-0 min-h-[120px] transition-colors ${isDragOver ? "bg-primary/10" : "bg-muted/30"}`}
-                    onDragOver={(e) => handleDragOver(e, cellId)}
-                    onDragLeave={handleDragLeave}
-                    onDrop={(e) => handleDrop(e, resource.id, day)}
-                    data-testid={`drop-zone-${resource.id}-${format(day, "yyyy-MM-dd")}`}
+                    id={droppableId}
+                    className="p-2 border-r last:border-r-0 min-h-[120px] transition-colors bg-muted/30"
                   >
-                    <div className="flex items-center gap-1 mb-2">
-                      <Progress value={capacityPct} className={`h-1.5 flex-1 ${isOverbooked ? "[&>div]:bg-orange-500" : ""}`} />
-                      <span className={`text-[10px] ${isOverbooked ? "text-orange-600" : "text-muted-foreground"}`}>
-                        {dayHours.toFixed(1).replace(".", ",")} h
-                      </span>
-                    </div>
-                    {isOverbooked && (
-                      <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        <span>Överbokning</span>
+                    <div data-testid={`drop-zone-${resource.id}-${dayStr}`}>
+                      <div className="flex items-center gap-1 mb-2">
+                        <Progress value={capacityPct} className={`h-1.5 flex-1 ${isOverbooked ? "[&>div]:bg-orange-500" : ""}`} />
+                        <span className={`text-[10px] ${isOverbooked ? "text-orange-600" : "text-muted-foreground"}`}>
+                          {dayHours.toFixed(1).replace(".", ",")} h
+                        </span>
                       </div>
-                    )}
-                    <div className="space-y-1">
-                      {jobs.map((job) => renderJobCard(job, true))}
+                      {isOverbooked && (
+                        <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          <span>Överbokning</span>
+                        </div>
+                      )}
+                      <div className="space-y-1">
+                        {jobs.map((job) => renderJobCard(job, true))}
+                      </div>
                     </div>
-                  </div>
+                  </DroppableCell>
                 );
               })}
             </div>
@@ -827,7 +850,31 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     </div>
   );
 
+  const renderDragOverlay = () => {
+    if (!activeDragJob) return null;
+    return (
+      <Card className="p-3 shadow-lg border-primary/50 bg-background/95 backdrop-blur-sm w-[250px] rotate-2">
+        <div className="space-y-1">
+          <div className="flex items-center gap-1.5">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[activeDragJob.priority]}`} />
+            <span className="text-sm font-medium">{activeDragJob.title}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">{activeDragJob.objectName || "Okänt objekt"}</div>
+          <Badge variant="secondary" className="text-[10px]">
+            {((activeDragJob.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
+          </Badge>
+        </div>
+      </Card>
+    );
+  };
+
   return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDndDragStart}
+      onDragEnd={handleDndDragEnd}
+    >
     <div className="flex h-full">
       <Collapsible open={showUnscheduled} onOpenChange={setShowUnscheduled} className="flex">
         <CollapsibleContent className="w-[280px] border-r bg-muted/20 flex flex-col">
@@ -873,33 +920,32 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 unscheduledJobs.map((job) => {
                   const customer = customerMap.get(job.customerId);
                   return (
-                    <Card
-                      key={job.id}
-                      draggable
-                      onDragStart={(e) => handleDragStart(e, job.id)}
-                      className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
-                      onClick={() => handleJobClick(job.id)}
-                      data-testid={`unscheduled-job-${job.id}`}
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
-                          <span className="text-sm font-medium">{job.title}</span>
+                    <DraggableJobCard key={job.id} id={job.id}>
+                      <Card
+                        className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
+                        onClick={() => handleJobClick(job.id)}
+                        data-testid={`unscheduled-job-${job.id}`}
+                      >
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
+                            <span className="text-sm font-medium">{job.title}</span>
+                          </div>
+                          <div className="text-xs text-muted-foreground">{job.objectName || "Okänt objekt"}</div>
+                          {customer && (
+                            <div className="text-xs text-muted-foreground">{customer.name}</div>
+                          )}
+                          <div className="flex items-center gap-2 pt-1">
+                            <Badge variant="outline" className="text-[10px]">
+                              {priorityLabels[job.priority] || job.priority}
+                            </Badge>
+                            <Badge variant="secondary" className="text-[10px]">
+                              {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
+                            </Badge>
+                          </div>
                         </div>
-                        <div className="text-xs text-muted-foreground">{job.objectName || "Okänt objekt"}</div>
-                        {customer && (
-                          <div className="text-xs text-muted-foreground">{customer.name}</div>
-                        )}
-                        <div className="flex items-center gap-2 pt-1">
-                          <Badge variant="outline" className="text-[10px]">
-                            {priorityLabels[job.priority] || job.priority}
-                          </Badge>
-                          <Badge variant="secondary" className="text-[10px]">
-                            {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
-                          </Badge>
-                        </div>
-                      </div>
-                    </Card>
+                      </Card>
+                    </DraggableJobCard>
                   );
                 })
               )}
@@ -1088,8 +1134,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                     const dayJobs = activeResourceJobsByDay[dayKey] || [];
                     const dayHours = dayJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0) / 60, 0);
                     const isToday = isSameDay(day, new Date());
-                    const panelDropCellId = `panel-${activeResourceId}-${dayKey}`;
-                    const isDragOver = dragOverCell === panelDropCellId;
+                    const panelDroppableId = `${activeResourceId}|${dayKey}`;
 
                     return (
                       <div key={dayKey} className="space-y-2">
@@ -1101,25 +1146,22 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                             {dayHours.toFixed(1)}h
                           </Badge>
                         </div>
-                        <div
-                          className={`min-h-[80px] border border-dashed rounded-md p-2 transition-colors ${
-                            isDragOver ? "border-primary bg-primary/10" : "border-border"
-                          }`}
-                          onDragOver={(e) => handleDragOver(e, panelDropCellId)}
-                          onDragLeave={handleDragLeave}
-                          onDrop={(e) => handleDrop(e, activeResourceId!, day)}
-                          data-testid={`panel-drop-zone-${dayKey}`}
+                        <DroppableCell
+                          id={panelDroppableId}
+                          className="min-h-[80px] border border-dashed rounded-md p-2 transition-colors"
                         >
-                          {dayJobs.length === 0 ? (
-                            <div className="text-xs text-muted-foreground text-center py-4">
-                              Dra jobb hit för att schemalägga
-                            </div>
-                          ) : (
-                            <div className="space-y-2">
-                              {dayJobs.map((job) => renderJobCard(job))}
-                            </div>
-                          )}
-                        </div>
+                          <div data-testid={`panel-drop-zone-${dayKey}`}>
+                            {dayJobs.length === 0 ? (
+                              <div className="text-xs text-muted-foreground text-center py-4">
+                                Dra jobb hit för att schemalägga
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {dayJobs.map((job) => renderJobCard(job))}
+                              </div>
+                            )}
+                          </div>
+                        </DroppableCell>
                       </div>
                     );
                   })}
@@ -1130,5 +1172,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         </SheetContent>
       </Sheet>
     </div>
+    <DragOverlay dropAnimation={{
+      duration: 200,
+      easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
+    }}>
+      {renderDragOverlay()}
+    </DragOverlay>
+    </DndContext>
   );
 }

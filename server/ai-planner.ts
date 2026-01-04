@@ -156,20 +156,20 @@ export function calculatePlanningKPIs(
   });
   
   // === Kostnadsanomalier - beräknas baserat på estimatedValue ===
-  const ordersWithValue = completedOrders.filter(o => o.estimatedValue && o.estimatedValue > 0);
+  const ordersWithValue = completedOrders.filter(o => (o as any).estimatedValue && (o as any).estimatedValue > 0);
   const avgCost = ordersWithValue.length > 0
-    ? ordersWithValue.reduce((sum, o) => sum + (o.estimatedValue || 0), 0) / ordersWithValue.length
+    ? ordersWithValue.reduce((sum, o) => sum + ((o as any).estimatedValue || 0), 0) / ordersWithValue.length
     : 0;
   
   const costAnomalies = ordersWithValue
-    .filter(o => o.estimatedValue && o.estimatedValue > avgCost * 1.5)
+    .filter(o => (o as any).estimatedValue && (o as any).estimatedValue > avgCost * 1.5)
     .slice(0, 5)
     .map(o => ({
       orderId: o.id,
       title: o.title || `Order ${o.id.slice(0, 8)}`,
-      cost: o.estimatedValue || 0,
+      cost: (o as any).estimatedValue || 0,
       avgCost: Math.round(avgCost),
-      deviation: avgCost > 0 ? Math.round(((o.estimatedValue || 0) - avgCost) / avgCost * 100) : 0
+      deviation: avgCost > 0 ? Math.round((((o as any).estimatedValue || 0) - avgCost) / avgCost * 100) : 0
     }));
   
   return {
@@ -1753,7 +1753,7 @@ export async function generateAutoClusterSuggestions(
   postalGroups.forEach((groupObjects, prefix) => {
     if (groupObjects.length < 3) return;
     
-    const postalCodes = [...new Set(groupObjects.map(o => o.postalCode!))];
+    const postalCodes = Array.from(new Set(groupObjects.map(o => o.postalCode!)));
     const center = calculateCenter(groupObjects);
     const radius = calculateRadius(groupObjects, center);
     
@@ -1763,7 +1763,7 @@ export async function generateAutoClusterSuggestions(
         cityCount.set(o.city, (cityCount.get(o.city) || 0) + 1);
       }
     });
-    const dominantCity = [...cityCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || "Okänd";
+    const dominantCity = Array.from(cityCount.entries()).sort((a, b) => b[1] - a[1])[0]?.[0] || "Okänd";
     
     const suggestedName = `${dominantCity} ${prefix}`;
     
