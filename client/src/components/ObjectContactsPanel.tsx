@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, Phone, Mail, User, Building2, ArrowDown, Trash2, Edit2 } from "lucide-react";
 import type { ObjectContact, ServiceObject } from "@shared/schema";
@@ -360,14 +361,18 @@ export function ObjectContactsDialog({ object, trigger }: ObjectContactsDialogPr
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        {trigger || (
-          <Button variant="ghost" size="sm" data-testid={`button-contacts-${object.id}`}>
-            <User className="h-4 w-4 mr-1" />
-            Kontakter
-          </Button>
-        )}
-      </DialogTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            {trigger || (
+              <Button variant="ghost" size="icon" data-testid={`button-contacts-${object.id}`}>
+                <User className="h-4 w-4" />
+              </Button>
+            )}
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent><p>Kontakter</p></TooltipContent>
+      </Tooltip>
       <DialogContent className="max-w-lg max-h-[80vh] overflow-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

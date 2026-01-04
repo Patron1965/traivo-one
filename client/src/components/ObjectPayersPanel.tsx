@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Users, Plus, Trash2, Edit2, Save, X, Percent, Package } from "lucide-react";
 import {
   Dialog,
@@ -125,17 +126,16 @@ export function ObjectPayersPanel({ object }: ObjectPayersPanelProps) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button variant="ghost" size="sm" data-testid={`button-payers-${object.id}`}>
-          <Users className="w-4 h-4 mr-1" />
-          Betalare
-          {payers.length > 0 && (
-            <Badge variant="secondary" className="ml-1">
-              {payers.length}
-            </Badge>
-          )}
-        </Button>
-      </SheetTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="icon" data-testid={`button-payers-${object.id}`}>
+              <Users className="w-4 h-4" />
+            </Button>
+          </SheetTrigger>
+        </TooltipTrigger>
+        <TooltipContent><p>Betalare{payers.length > 0 ? ` (${payers.length})` : ""}</p></TooltipContent>
+      </Tooltip>
       <SheetContent className="w-[500px] sm:max-w-[500px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">

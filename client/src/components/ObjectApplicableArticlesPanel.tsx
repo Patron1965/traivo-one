@@ -4,6 +4,7 @@ import type { ServiceObject, Article } from "@shared/schema";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Package, Loader2, Clock, DollarSign, Link2 } from "lucide-react";
 
 interface ObjectApplicableArticlesPanelProps {
@@ -40,16 +41,20 @@ export function ObjectApplicableArticlesPanel({ object }: ObjectApplicableArticl
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button
-          size="sm"
-          variant="ghost"
-          data-testid={`button-applicable-articles-${object.id}`}
-        >
-          <Link2 className="h-4 w-4 mr-1" />
-          Artiklar
-        </Button>
-      </SheetTrigger>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <SheetTrigger asChild>
+            <Button
+              size="icon"
+              variant="ghost"
+              data-testid={`button-applicable-articles-${object.id}`}
+            >
+              <Link2 className="h-4 w-4" />
+            </Button>
+          </SheetTrigger>
+        </TooltipTrigger>
+        <TooltipContent><p>Fasthakade artiklar</p></TooltipContent>
+      </Tooltip>
 
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader>
