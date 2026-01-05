@@ -19,7 +19,12 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - **Frontend:** React, TypeScript, Vite.
 - **Backend:** Express.js.
 - **Database:** PostgreSQL with Drizzle ORM.
-- **Multi-tenancy:** Supported at the database level.
+- **Multi-tenancy:** Full tenant isolation at database and API level with:
+  - Tenant middleware (`server/tenant-middleware.ts`) validates user-tenant membership
+  - All API routes use dynamic tenant from user session
+  - Tenant ownership verification on all read/update/delete endpoints (106+ verifyTenantOwnership checks)
+  - Role-based access control (owner, admin, user) for administrative endpoints
+  - Users must be explicitly assigned to tenants by administrators
 - **MCP Server (Model Context Protocol):** Enables external AI assistants to interact with Unicorn data via SSE.
 - **Modus 2.0 Import System:** Dedicated `/import` page for CSV imports with data transformation and validation.
 - **Lazy Object Loading:** Performance optimization using `useObjectsByIds` and `useObjectSearch` hooks.

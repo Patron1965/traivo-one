@@ -4697,7 +4697,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // Tenant Branding - Update or create branding
-  app.put("/api/system/tenant-branding", async (req, res) => {
+  app.put("/api/system/tenant-branding", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const { templateId, ...brandingData } = req.body;
@@ -4748,8 +4748,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  // Tenant Branding - Publish branding
-  app.post("/api/system/tenant-branding/publish", async (req, res) => {
+  // Tenant Branding - Publish branding (admin only)
+  app.post("/api/system/tenant-branding/publish", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const result = await storage.publishTenantBranding(tenantId);
@@ -4772,8 +4772,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  // User Tenant Roles - List all users with roles for current tenant
-  app.get("/api/system/user-roles", async (req, res) => {
+  // User Tenant Roles - List all users with roles for current tenant (admin only)
+  app.get("/api/system/user-roles", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const roles = await storage.getUserTenantRoles(tenantId);
@@ -4784,8 +4784,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  // User Tenant Roles - Create new user role
-  app.post("/api/system/user-roles", async (req, res) => {
+  // User Tenant Roles - Create new user role (admin only)
+  app.post("/api/system/user-roles", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const { userId, name, role, permissions, password } = req.body;
@@ -4837,8 +4837,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  // User Tenant Roles - Update role
-  app.patch("/api/system/user-roles/:id", async (req, res) => {
+  // User Tenant Roles - Update role (admin only)
+  app.patch("/api/system/user-roles/:id", requireAdmin, async (req, res) => {
     try {
       const { role, permissions, isActive, password } = req.body;
       
@@ -4882,7 +4882,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // User Tenant Roles - Import users from CSV data
-  app.post("/api/system/user-roles/import", async (req, res) => {
+  app.post("/api/system/user-roles/import", requireAdmin, async (req, res) => {
     try {
       const { users } = req.body;
       
@@ -4954,7 +4954,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // User Tenant Roles - Delete role
-  app.delete("/api/system/user-roles/:id", async (req, res) => {
+  app.delete("/api/system/user-roles/:id", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       await storage.createAuditLog({
@@ -5065,7 +5065,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // Send project report via email
-  app.post("/api/system/send-project-report", async (req, res) => {
+  app.post("/api/system/send-project-report", requireAdmin, async (req, res) => {
     try {
       const { to, pdfBase64 } = req.body;
       
@@ -5132,7 +5132,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  app.post("/api/metadata-definitions", async (req, res) => {
+  app.post("/api/metadata-definitions", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const data = insertMetadataDefinitionSchema.parse({ ...req.body, tenantId });
@@ -5147,7 +5147,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  app.patch("/api/metadata-definitions/:id", async (req, res) => {
+  app.patch("/api/metadata-definitions/:id", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const existing = await storage.getMetadataDefinition(req.params.id);
@@ -5176,7 +5176,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  app.delete("/api/metadata-definitions/:id", async (req, res) => {
+  app.delete("/api/metadata-definitions/:id", requireAdmin, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const existing = await storage.getMetadataDefinition(req.params.id);
