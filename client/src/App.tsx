@@ -7,6 +7,8 @@ import { TopNav } from "@/components/layout/TopNav";
 import { FloatingActionButton } from "@/components/layout/FloatingActionButton";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAuth } from "@/hooks/use-auth";
+import { ThemeProvider, useTheme } from "@/hooks/use-theme";
+import { CommandPalette } from "@/components/CommandPalette";
 import NotFound from "@/pages/not-found";
 import WeekPlannerPage from "@/pages/WeekPlannerPage";
 import RoutesPage from "@/pages/RoutesPage";
@@ -108,6 +110,8 @@ function AppContent() {
 }
 
 function AuthenticatedApp() {
+  const { theme, toggleTheme } = useTheme();
+  
   return (
     <TenantBrandingProvider>
       <div className="flex flex-col min-h-screen bg-background">
@@ -118,6 +122,7 @@ function AuthenticatedApp() {
           </ErrorBoundary>
         </main>
         <FloatingActionButton />
+        <CommandPalette onThemeToggle={toggleTheme} currentTheme={theme} />
       </div>
     </TenantBrandingProvider>
   );
@@ -126,10 +131,12 @@ function AuthenticatedApp() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <AppContent />
-        <Toaster />
-      </TooltipProvider>
+      <ThemeProvider>
+        <TooltipProvider>
+          <AppContent />
+          <Toaster />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

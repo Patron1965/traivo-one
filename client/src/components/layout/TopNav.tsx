@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -6,7 +5,6 @@ import { GlobalAIButton } from "@/components/GlobalAIButton";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,11 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import {
   Calendar,
   Map,
@@ -148,44 +141,28 @@ function NavDropdown({ label, items, icon: Icon, colorClass }: NavDropdownProps)
 }
 
 function GlobalSearch() {
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  const openCommandPalette = () => {
+    const event = new KeyboardEvent("keydown", {
+      key: "k",
+      metaKey: true,
+      bubbles: true,
+    });
+    document.dispatchEvent(event);
+  };
 
   return (
-    <Popover open={searchOpen} onOpenChange={setSearchOpen}>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          className="w-64 justify-start text-muted-foreground gap-2"
-          data-testid="button-global-search"
-        >
-          <Search className="h-4 w-4" />
-          <span className="hidden sm:inline">Sök i Unicorn...</span>
-          <kbd className="pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:flex">
-            ⌘K
-          </kbd>
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-80 p-0" align="start">
-        <div className="p-3">
-          <Input
-            placeholder="Sök kunder, objekt, ordrar..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full"
-            autoFocus
-            data-testid="input-global-search"
-          />
-        </div>
-        {searchQuery && (
-          <div className="border-t p-2">
-            <p className="text-xs text-muted-foreground px-2 py-1">
-              Sökfunktion kommer i nästa version
-            </p>
-          </div>
-        )}
-      </PopoverContent>
-    </Popover>
+    <Button
+      variant="outline"
+      className="w-64 justify-start text-muted-foreground gap-2"
+      onClick={openCommandPalette}
+      data-testid="button-global-search"
+    >
+      <Search className="h-4 w-4" />
+      <span className="hidden sm:inline">Sök i Unicorn...</span>
+      <kbd className="pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:flex">
+        ⌘K
+      </kbd>
+    </Button>
   );
 }
 

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Progress } from "@/components/ui/progress";
 import { Link } from "wouter";
 import {
   Calendar,
@@ -33,6 +34,10 @@ import {
   Phone,
   Image,
   Package,
+  History,
+  Building2,
+  Target,
+  Route,
 } from "lucide-react";
 import { format, isToday, isTomorrow, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -268,6 +273,107 @@ function QuickActionCard({
   );
 }
 
+const recentPageMap: Record<string, { title: string; icon: React.ElementType; color: string }> = {
+  "/": { title: "Start", icon: Calendar, color: "text-blue-500" },
+  "/home": { title: "Start", icon: Calendar, color: "text-blue-500" },
+  "/objects": { title: "Objekt", icon: Building2, color: "text-emerald-500" },
+  "/resources": { title: "Resurser", icon: Users, color: "text-purple-500" },
+  "/vehicles": { title: "Fordon", icon: Truck, color: "text-orange-500" },
+  "/clusters": { title: "Kluster", icon: Target, color: "text-cyan-500" },
+  "/planner": { title: "Veckoplanering", icon: Calendar, color: "text-green-500" },
+  "/order-stock": { title: "Orderstock", icon: FileText, color: "text-indigo-500" },
+  "/routes": { title: "Rutter", icon: Route, color: "text-amber-500" },
+  "/dashboard": { title: "Dashboard", icon: BarChart3, color: "text-pink-500" },
+  "/mobile": { title: "Mobilapp", icon: Smartphone, color: "text-teal-500" },
+};
+
+function RecentPages() {
+  const [recentUrls, setRecentUrls] = useState<string[]>([]);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("unicorn-recent-pages");
+    if (stored) {
+      try {
+        const urls = JSON.parse(stored) as string[];
+        setRecentUrls(urls.filter((url) => url !== "/" && url !== "/home").slice(0, 4));
+      } catch {
+        setRecentUrls([]);
+      }
+    }
+  }, []);
+
+  if (recentUrls.length === 0) return null;
+
+  return (
+    <Card className="mb-8">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <History className="h-4 w-4 text-muted-foreground" />
+          Senast besökta
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex flex-wrap gap-2">
+          {recentUrls.map((url) => {
+            const page = recentPageMap[url];
+            if (!page) return null;
+            const Icon = page.icon;
+            return (
+              <Link key={url} href={url}>
+                <Button variant="secondary" size="sm" className="gap-2" data-testid={`recent-page-${url.replace("/", "") || "home"}`}>
+                  <Icon className={`h-4 w-4 ${page.color}`} />
+                  {page.title}
+                </Button>
+              </Link>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function DailyProgress({ orders }: { orders: WorkOrder[] }) {
+  const todaysOrders = orders.filter((order) => {
+    if (!order.scheduledDate) return false;
+    return isToday(new Date(order.scheduledDate));
+  });
+
+  const completedToday = todaysOrders.filter((o) => o.status === "completed").length;
+  const total = todaysOrders.length;
+  const percentage = total > 0 ? Math.round((completedToday / total) * 100) : 0;
+
+  if (total === 0) return null;
+
+  return (
+    <Card className="mb-8 bg-gradient-to-r from-primary/5 to-primary/10 border-primary/20">
+      <CardContent className="py-6">
+        <div className="flex items-center justify-between gap-4 mb-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="font-semibold">Dagens framsteg</p>
+              <p className="text-sm text-muted-foreground">
+                {completedToday} av {total} ordrar klara
+              </p>
+            </div>
+          </div>
+          <div className="text-3xl font-bold text-primary">{percentage}%</div>
+        </div>
+        <Progress value={percentage} className="h-2" />
+        {percentage === 100 && (
+          <p className="text-sm text-primary mt-3 font-medium flex items-center gap-2">
+            <Sparkles className="h-4 w-4" />
+            Fantastiskt! Alla dagens ordrar är klara!
+          </p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 function TodaysOrdersList({ 
   orders, 
   objectMap, 
@@ -481,6 +587,12 @@ export default function MyTasksPage() {
             />
           )}
         </div>
+
+        {/* Daily Progress */}
+        {!ordersLoading && <DailyProgress orders={orders} />}
+
+        {/* Recent Pages */}
+        <RecentPages />
 
         {/* Proactive AI Tips */}
         <div className="mb-6">
