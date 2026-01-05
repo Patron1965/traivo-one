@@ -3,8 +3,22 @@
  * 
  * Tests the /api/me/tenant endpoint behavior for:
  * 1. Unauthenticated users - should return default tenant info
- * 2. Authenticated but unassigned users - should return null tenant with message
- * 3. Protected API routes - should reject unauthenticated requests with 401
+ * 2. Protected API routes - should reject unauthenticated requests with 401
+ * 
+ * Note: Authenticated user tests require session management which is complex
+ * to set up in integration tests. The following scenarios are documented
+ * but require manual testing or E2E testing with a real browser:
+ * 
+ * - Authenticated but unassigned users: Should receive response with
+ *   tenantId: null and a Swedish message explaining they need admin assignment
+ * - Authenticated and assigned users: Should receive their tenant info
+ *   including tenantId, role, tenantName, and list of all tenant memberships
+ * - Admin routes: Authenticated non-admin users should get 403, admins should succeed
+ * 
+ * To add authenticated tests, implement one of:
+ * - Session cookie mocking in test setup
+ * - Test-specific authentication bypass endpoint
+ * - E2E testing framework (Playwright/Cypress) with real Replit Auth flow
  */
 
 const BASE_URL = process.env.TEST_BASE_URL || 'http://localhost:5000';
@@ -100,6 +114,50 @@ async function runTests(): Promise<void> {
       body: JSON.stringify({ name: 'Test' }),
     });
     assertEqual(response.status, 401, 'Admin route should return 401 for unauthenticated user');
+  });
+
+  await test('DELETE on protected routes returns 401', async () => {
+    const response = await fetch(`${BASE_URL}/api/customers/test-id`, {
+      method: 'DELETE',
+    });
+    assertEqual(response.status, 401, 'DELETE on protected route should return 401');
+  });
+
+  await test('PATCH on protected routes returns 401', async () => {
+    const response = await fetch(`${BASE_URL}/api/customers/test-id`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Updated' }),
+    });
+    assertEqual(response.status, 401, 'PATCH on protected route should return 401');
+  });
+
+  await test('Tenant branding update (admin) returns 401', async () => {
+    const response = await fetch(`${BASE_URL}/api/tenant-branding`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companyName: 'Test' }),
+    });
+    assertEqual(response.status, 401, 'Tenant branding update should return 401');
+  });
+
+  await test('User tenant assignment (admin) returns 401', async () => {
+    const response = await fetch(`${BASE_URL}/api/users/test-user/tenant-assignment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenantId: 'test', role: 'user' }),
+    });
+    assertEqual(response.status, 401, 'User tenant assignment should return 401');
+  });
+
+  await test('Tenant discovery response has correct structure', async () => {
+    const response = await fetch(`${BASE_URL}/api/me/tenant`);
+    const data: TenantDiscoveryResponse = await response.json();
+    
+    assert('tenantId' in data, 'Response should have tenantId field');
+    assert('role' in data, 'Response should have role field');
+    assert('tenants' in data, 'Response should have tenants field');
+    assert(Array.isArray(data.tenants), 'tenants should be an array');
   });
 
   console.log('\n📊 Test Results Summary\n');
