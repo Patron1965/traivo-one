@@ -21,6 +21,8 @@ import {
   Download
 } from "lucide-react";
 import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
+import { useRef, useState } from "react";
 
 function ArchitectureBox({ 
   title, 
@@ -71,161 +73,76 @@ function ConnectionArrow({ direction = "down" }: { direction?: "down" | "right" 
   );
 }
 
-function generatePDF() {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 20;
-
-  doc.setFontSize(24);
-  doc.setFont("helvetica", "bold");
-  doc.text("Unicorn Systemarkitektur", pageWidth / 2, y, { align: "center" });
-  y += 10;
-
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "normal");
-  doc.text("AI-driven faltserviceplattform for nordisk avfallshantering", pageWidth / 2, y, { align: "center" });
-  y += 20;
-
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Anvandargranssnitt", 20, y);
-  y += 8;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  const uiFeatures = [
-    "Webbplanerare: Drag-and-drop veckoplanering, Interaktiv kartvy med GPS, Dashboard med KPI:er",
-    "Mobil Faltapp: Touch-optimerat granssnitt, Digital signatur, Materialloggning, Push-notiser",
-    "Admin & Rapporter: Anvandarrollhantering, Tenant-konfiguration, CSV-import, PDF-generering"
-  ];
-  uiFeatures.forEach(feature => {
-    doc.text("  - " + feature, 20, y);
-    y += 6;
+async function generateVisualPDF(contentRef: React.RefObject<HTMLDivElement>) {
+  if (!contentRef.current) return;
+  
+  const element = contentRef.current;
+  
+  const canvas = await html2canvas(element, {
+    scale: 2,
+    useCORS: true,
+    logging: false,
+    backgroundColor: '#ffffff'
   });
-  y += 10;
-
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Backend (Express.js)", 20, y);
-  y += 8;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  const backendFeatures = [
-    "API-lager: RESTful API (200+ endpoints), WebSocket realtidsnotiser, MCP Server for AI",
-    "Sakerhetslager: Multi-tenant middleware, 106+ ownership-verifieringar, Rollbaserad atkomstkontroll",
-    "Ordrar & Planering: 8-stegs arbetsflode, Resursallokering, Prenumerationer",
-    "Objekthierarki: Omrade - Fastighet - Rum, Metadata-arv, Artikelfasthakning",
-    "Flotta & Resurser: Fordonshantering, Kompetenser, Tillganglighetsschema"
-  ];
-  backendFeatures.forEach(feature => {
-    doc.text("  - " + feature, 20, y);
-    y += 6;
-  });
-  y += 10;
-
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("AI-motor", 20, y);
-  y += 8;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  const aiFeatures = [
-    "OpenAI Integration: GPT-4o for komplexa beslut, GPT-4o-mini for snabbanalyser",
-    "AI-funktioner: Planeringsassistent, Auto-schemalaeggning, Anomalidetektering, Ruttoptimering"
-  ];
-  aiFeatures.forEach(feature => {
-    doc.text("  - " + feature, 20, y);
-    y += 6;
-  });
-  y += 10;
-
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Databas", 20, y);
-  y += 8;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  doc.text("  - PostgreSQL + Drizzle ORM: 50+ tabeller, Multi-tenant isolering, Transaktionssakerhet", 20, y);
-  y += 15;
-
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Externa Tjanster", 20, y);
-  y += 8;
-
-  doc.setFontSize(10);
-  doc.setFont("helvetica", "normal");
-  const externalServices = [
-    "Fortnox: OAuth-integration, Fakturaexport, Kundsynkronisering, Artikelmappning",
-    "Karttjanster: OpenRouteService (rutter), Nominatim (geocoding), What3Words, Leaflet",
-    "Ovriga: Open-Meteo (vader), Resend (e-post), Object Storage"
-  ];
-  externalServices.forEach(feature => {
-    doc.text("  - " + feature, 20, y);
-    y += 6;
-  });
-  y += 15;
-
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Teknisk Sammanfattning", 20, y);
-  y += 10;
-
-  doc.setFontSize(12);
-  doc.setFont("helvetica", "normal");
-  doc.text("200+ API Endpoints  |  106+ Sakerhetskontroller  |  50+ Databastabeller  |  5 AI-funktioner", 20, y);
-  y += 15;
-
-  doc.setFontSize(16);
-  doc.setFont("helvetica", "bold");
-  doc.text("Kostnadsjamforelse", 20, y);
-  y += 10;
-
-  doc.setFontSize(11);
-  doc.setFont("helvetica", "bold");
-  doc.text("Replit Agent:", 20, y);
-  doc.setFont("helvetica", "normal");
-  doc.text("~1.2 MSEK, 2-3 manader, 1 person + AI", 65, y);
-  y += 7;
-
-  doc.setFont("helvetica", "bold");
-  doc.text("Traditionell Byra:", 20, y);
-  doc.setFont("helvetica", "normal");
-  doc.text("3.2-4.2 MSEK, 9-12 manader, 3-5 dev + PM + QA", 65, y);
-  y += 10;
-
-  doc.setFontSize(14);
-  doc.setFont("helvetica", "bold");
-  doc.text("Besparing: 60-70% och 3-4x snabbare leverans", pageWidth / 2, y, { align: "center" });
-  y += 15;
-
-  doc.setFontSize(9);
-  doc.setFont("helvetica", "normal");
-  doc.text("Teknologier: React 18, TypeScript, Express.js, PostgreSQL, Drizzle ORM, OpenAI GPT-4,", 20, y);
-  y += 5;
-  doc.text("WebSocket, Leaflet, Tailwind CSS, shadcn/ui", 20, y);
-
+  
+  const imgData = canvas.toDataURL('image/png');
+  const imgWidth = 210;
+  const pageHeight = 297;
+  const imgHeight = (canvas.height * imgWidth) / canvas.width;
+  
+  const doc = new jsPDF('p', 'mm', 'a4');
+  let heightLeft = imgHeight;
+  let position = 0;
+  
+  doc.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+  heightLeft -= pageHeight;
+  
+  while (heightLeft > 0) {
+    position = heightLeft - imgHeight;
+    doc.addPage();
+    doc.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+    heightLeft -= pageHeight;
+  }
+  
   doc.save("unicorn-systemarkitektur.pdf");
 }
 
 export default function ArchitecturePage() {
+  const contentRef = useRef<HTMLDivElement>(null);
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    setIsGenerating(true);
+    try {
+      await generateVisualPDF(contentRef);
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
-      <div className="text-center space-y-2 mb-8">
-        <div className="flex items-center justify-center gap-4">
-          <h1 className="text-3xl font-bold">Unicorn Systemarkitektur</h1>
-          <Button onClick={generatePDF} variant="outline" className="gap-2" data-testid="button-download-pdf">
-            <Download className="h-4 w-4" />
-            Ladda ner PDF
-          </Button>
-        </div>
-        <p className="text-muted-foreground">AI-driven fältserviceplattform för nordisk avfallshantering</p>
+      <div className="flex items-center justify-between mb-4">
+        <div></div>
+        <Button 
+          onClick={handleDownloadPDF} 
+          variant="outline" 
+          className="gap-2" 
+          disabled={isGenerating}
+          data-testid="button-download-pdf"
+        >
+          <Download className="h-4 w-4" />
+          {isGenerating ? "Genererar..." : "Ladda ner PDF"}
+        </Button>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div ref={contentRef} className="bg-background space-y-6 p-4">
+        <div className="text-center space-y-2 mb-8">
+          <h1 className="text-3xl font-bold">Unicorn Systemarkitektur</h1>
+          <p className="text-muted-foreground">AI-driven fältserviceplattform för nordisk avfallshantering</p>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-3">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg flex items-center gap-2">
@@ -387,9 +304,9 @@ export default function ArchitecturePage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+        </div>
 
-      <Card className="mt-8">
+        <Card className="mt-8">
         <CardHeader>
           <CardTitle className="text-lg">Teknisk Sammanfattning</CardTitle>
         </CardHeader>
@@ -476,7 +393,8 @@ export default function ArchitecturePage() {
             <span className="text-sm text-muted-foreground ml-2">och 3-4x snabbare leverans</span>
           </div>
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }
