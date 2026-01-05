@@ -23,6 +23,7 @@ import {
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import { useRef, useState } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 function ArchitectureBox({ 
   title, 
@@ -110,11 +111,23 @@ async function generateVisualPDF(contentRef: React.RefObject<HTMLDivElement>) {
 export default function ArchitecturePage() {
   const contentRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const { toast } = useToast();
 
   const handleDownloadPDF = async () => {
     setIsGenerating(true);
     try {
       await generateVisualPDF(contentRef);
+      toast({
+        title: "PDF genererad",
+        description: "Arkitekturdiagrammet har laddats ner.",
+      });
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      toast({
+        title: "Kunde inte generera PDF",
+        description: "Ett fel uppstod vid PDF-genereringen. Försök igen.",
+        variant: "destructive",
+      });
     } finally {
       setIsGenerating(false);
     }

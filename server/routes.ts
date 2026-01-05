@@ -65,7 +65,43 @@ export async function registerRoutes(
   
   await ensureDefaultTenant();
 
-  // Apply tenant middleware to all API routes
+  // Tenant discovery endpoint - must be registered BEFORE tenant middleware
+  // so authenticated-but-unassigned users can discover their tenant assignments
+  app.get("/api/me/tenant", async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user?.claims?.sub) {
+        // Unauthenticated: return default tenant info for demo/initial access
+        return res.json({ tenantId: "default-tenant", role: "user", tenants: [] });
+      }
+      
+      const tenants = await getUserTenants(user.claims.sub);
+      
+      // If user has tenant assignment, return their primary tenant
+      if (tenants.length > 0) {
+        res.json({
+          tenantId: tenants[0].tenantId,
+          role: tenants[0].role,
+          tenantName: tenants[0].tenantName,
+          tenants,
+        });
+      } else {
+        // Authenticated but not assigned to any tenant - allow them to see they need assignment
+        res.json({
+          tenantId: null,
+          role: null,
+          tenantName: null,
+          tenants: [],
+          message: "Du är inte kopplad till någon organisation ännu. Kontakta administratör."
+        });
+      }
+    } catch (error) {
+      console.error("Failed to fetch tenant info:", error);
+      res.status(500).json({ error: "Failed to fetch tenant info" });
+    }
+  });
+
+  // Apply tenant middleware to all other API routes
   app.use("/api", requireTenantWithFallback);
 
   // Helper function to verify tenant ownership of a resource
@@ -79,27 +115,6 @@ export async function registerRoutes(
     }
     return resource;
   }
-
-  // Tenant info endpoint
-  app.get("/api/me/tenant", async (req, res) => {
-    try {
-      const user = req.user as any;
-      if (!user?.claims?.sub) {
-        return res.json({ tenantId: getTenantIdWithFallback(req), role: "user", tenants: [] });
-      }
-      
-      const tenants = await getUserTenants(user.claims.sub);
-      res.json({
-        tenantId: req.tenantId,
-        role: req.tenantRole,
-        tenantName: req.tenantName,
-        tenants,
-      });
-    } catch (error) {
-      console.error("Failed to fetch tenant info:", error);
-      res.status(500).json({ error: "Failed to fetch tenant info" });
-    }
-  });
 
   // Object Storage routes for file uploads
   registerObjectStorageRoutes(app);
@@ -434,7 +449,7 @@ export async function registerRoutes(
       
       // Get existing order to detect changes and verify ownership
       const existingOrder = await storage.getWorkOrder(req.params.id);
-      if (!verifyTenantOwnership(existingOrder, tenantId)) {
+      if (!existingOrder || !verifyTenantOwnership(existingOrder, tenantId)) {
         return res.status(404).json({ error: "Work order not found" });
       }
       
@@ -605,7 +620,7 @@ export async function registerRoutes(
     try {
       const tenantId = getTenantIdWithFallback(req);
       const workOrder = await storage.getWorkOrder(req.params.workOrderId);
-      if (!verifyTenantOwnership(workOrder, tenantId)) {
+      if (!workOrder || !verifyTenantOwnership(workOrder, tenantId)) {
         return res.status(404).json({ error: "Work order not found" });
       }
       
@@ -866,7 +881,7 @@ export async function registerRoutes(
     try {
       const tenantId = getTenantIdWithFallback(req);
       const workOrder = await storage.getWorkOrder(req.params.id);
-      if (!verifyTenantOwnership(workOrder, tenantId)) {
+      if (!workOrder || !verifyTenantOwnership(workOrder, tenantId)) {
         return res.status(404).json({ error: "Work order not found" });
       }
       
@@ -3117,10 +3132,10 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
       
       // Parse suggested follow-up questions
       let suggestedQuestions: string[] = [];
-      const followUpMatch = rawAnswer.match(/FÖLJDFRÅGOR:(.+?)$/s);
+      const followUpMatch = rawAnswer.match(/FÖLJDFRÅGOR:([\s\S]+?)$/);
       if (followUpMatch) {
         suggestedQuestions = followUpMatch[1].split("|").map(q => q.trim()).filter(q => q.length > 0);
-        rawAnswer = rawAnswer.replace(/\n*FÖLJDFRÅGOR:.+$/s, "").trim();
+        rawAnswer = rawAnswer.replace(/\n*FÖLJDFRÅGOR:[\s\S]+$/, "").trim();
       }
       
       res.json({ 
@@ -3499,10 +3514,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       // Parse suggested follow-up questions
       let suggestedQuestions: string[] = [];
-      const followUpMatch = rawAnswer.match(/FÖLJDFRÅGOR:(.+?)$/s);
+      const followUpMatch = rawAnswer.match(/FÖLJDFRÅGOR:([\s\S]+?)$/);
       if (followUpMatch) {
         suggestedQuestions = followUpMatch[1].split("|").map(q => q.trim()).filter(q => q.length > 0);
-        rawAnswer = rawAnswer.replace(/\n*FÖLJDFRÅGOR:.+$/s, "").trim();
+        rawAnswer = rawAnswer.replace(/\n*FÖLJDFRÅGOR:[\s\S]+$/, "").trim();
       }
       
       res.json({ 
@@ -3519,8 +3534,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   app.get("/api/ai/predictive-maintenance", isAuthenticated, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const orders = await storage.getWorkOrders({ tenantId });
-      const objects = await storage.getObjects({ tenantId });
+      const orders = await storage.getWorkOrders(tenantId);
+      const objects = await storage.getObjects(tenantId);
       
       // Build object service history map
       const objectHistory: Map<string, { lastService: Date | null; avgDaysBetweenServices: number; serviceCount: number; objectName: string }> = new Map();
@@ -3614,8 +3629,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     try {
       const tenantId = getTenantIdWithFallback(req);
       // Fetch current operational data
-      const orders = await storage.getWorkOrders({ tenantId });
-      const resources = await storage.getResources({ tenantId });
+      const orders = await storage.getWorkOrders(tenantId);
+      const resources = await storage.getResources(tenantId);
       
       const today = new Date();
       const todayStr = today.toISOString().split("T")[0];
@@ -3642,11 +3657,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       // Check for today's workload
       const todayOrders = orders.filter(o => 
-        o.scheduledDate?.split("T")[0] === todayStr && 
+        o.scheduledDate && o.scheduledDate.toISOString().split("T")[0] === todayStr && 
         o.status !== "completed" && 
         o.status !== "cancelled"
       );
-      const activeResources = resources.filter(r => r.isActive);
+      const activeResources = resources.filter(r => r.status === "active");
       if (todayOrders.length > 0 && activeResources.length > 0) {
         const ordersPerResource = todayOrders.length / activeResources.length;
         if (ordersPerResource > 8) {
@@ -4059,7 +4074,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     try {
       const tenantId = getTenantIdWithFallback(req);
       const cluster = await storage.getCluster(req.params.clusterId);
-      if (!verifyTenantOwnership(cluster, tenantId)) {
+      if (!cluster || !verifyTenantOwnership(cluster, tenantId)) {
         return res.status(404).json({ error: "Kluster hittades inte" });
       }
       
@@ -4110,6 +4125,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       const createdClusters = [];
       const errors: string[] = [];
+      
+      const tenantId = getTenantIdWithFallback(req);
       
       for (const suggestion of suggestions) {
         if (!suggestion.suggestedName || typeof suggestion.suggestedName !== "string") {
@@ -6116,14 +6133,16 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     try {
       const tenantId = getTenantIdWithFallback(req);
       const workOrder = await storage.getWorkOrder(req.params.workOrderId);
-      if (!verifyTenantOwnership(workOrder, tenantId)) {
+      if (!workOrder || !verifyTenantOwnership(workOrder, tenantId)) {
         return res.status(404).json({ error: "Work order not found" });
       }
 
-      const articleIds = (workOrder.articleIds as string[]) || [];
-      if (articleIds.length === 0) {
+      // Use structuralArticleId from work order
+      const structuralArticleId = workOrder.structuralArticleId;
+      if (!structuralArticleId) {
         return res.json({ expanded: [], message: "Ingen strukturartikel att expandera" });
       }
+      
       const allStructuralArticles = await storage.getStructuralArticles(tenantId);
       const structuralArticlesMap = new Map<string, typeof allStructuralArticles>();
       
@@ -6133,36 +6152,29 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         structuralArticlesMap.set(sa.parentArticleId, existing);
       }
 
-      const structuralArticleIds = articleIds.filter(id => structuralArticlesMap.has(id));
-      
-      if (structuralArticleIds.length === 0) {
+      if (!structuralArticlesMap.has(structuralArticleId)) {
         return res.json({ expanded: [], message: "Inga strukturartiklar hittades" });
       }
 
-      const allArticles = await storage.getArticlesByTenant(tenantId);
+      const allArticles = await storage.getArticles(tenantId);
       const articlesMap = new Map(allArticles.map(a => [a.id, a]));
 
       const { expandStructuralArticle } = await import("./ai-planner");
 
-      const results = [];
-      for (const structuralArticleId of structuralArticleIds) {
-        const children = structuralArticlesMap.get(structuralArticleId) || [];
-        
-        const result = await expandStructuralArticle(
-          workOrder,
-          structuralArticleId,
-          children,
-          articlesMap,
-          async (data) => storage.createWorkOrder({ ...data, tenantId: workOrder.tenantId } as InsertWorkOrder),
-          async (data) => storage.createTaskDependency(data)
-        );
-        
-        results.push(result);
-      }
+      const children = structuralArticlesMap.get(structuralArticleId) || [];
+      
+      const result = await expandStructuralArticle(
+        workOrder,
+        structuralArticleId,
+        children,
+        articlesMap,
+        async (data: Record<string, unknown>) => storage.createWorkOrder({ ...data, tenantId: workOrder.tenantId } as typeof insertWorkOrderSchema._type),
+        async (data: Record<string, unknown>) => storage.createTaskDependency(data as typeof insertTaskDependencySchema._type)
+      );
 
       res.json({
-        expanded: results,
-        message: `${results.reduce((sum, r) => sum + r.createdWorkOrders.length, 0)} deluppgifter skapades`
+        expanded: [result],
+        message: `${result.createdWorkOrders.length} deluppgifter skapades`
       });
     } catch (error) {
       console.error("Failed to expand structural articles:", error);

@@ -27,7 +27,8 @@ export type NotificationType =
   | "anomaly_alert" 
   | "schedule_changed"
   | "priority_changed"
-  | "position_update";
+  | "position_update"
+  | "route_update";
 
 export interface Notification {
   id: string;
@@ -383,7 +384,7 @@ class NotificationService {
   broadcastSystemAlert(notification: Omit<Notification, "id" | "timestamp">) {
     const fullNotification: Notification = {
       ...notification,
-      id: this.generateNotificationId(),
+      id: this.generateId(),
       timestamp: new Date().toISOString()
     };
 
