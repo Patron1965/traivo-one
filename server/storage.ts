@@ -121,12 +121,14 @@ export interface IStorage {
   
   // Price List Articles
   getPriceListArticles(priceListId: string): Promise<PriceListArticle[]>;
+  getPriceListArticle(id: string): Promise<PriceListArticle | undefined>;
   createPriceListArticle(priceListArticle: InsertPriceListArticle): Promise<PriceListArticle>;
   updatePriceListArticle(id: string, data: Partial<InsertPriceListArticle>): Promise<PriceListArticle | undefined>;
   deletePriceListArticle(id: string): Promise<void>;
   
   // Resource Articles (tidsverk)
   getResourceArticles(resourceId: string): Promise<ResourceArticle[]>;
+  getResourceArticle(id: string): Promise<ResourceArticle | undefined>;
   createResourceArticle(resourceArticle: InsertResourceArticle): Promise<ResourceArticle>;
   updateResourceArticle(id: string, data: Partial<InsertResourceArticle>): Promise<ResourceArticle | undefined>;
   deleteResourceArticle(id: string): Promise<void>;
@@ -841,6 +843,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(priceListArticles).where(eq(priceListArticles.priceListId, priceListId));
   }
 
+  async getPriceListArticle(id: string): Promise<PriceListArticle | undefined> {
+    const [pla] = await db.select().from(priceListArticles).where(eq(priceListArticles.id, id));
+    return pla || undefined;
+  }
+
   async createPriceListArticle(insertPriceListArticle: InsertPriceListArticle): Promise<PriceListArticle> {
     const [pla] = await db.insert(priceListArticles).values(insertPriceListArticle).returning();
     return pla;
@@ -858,6 +865,11 @@ export class DatabaseStorage implements IStorage {
   // Resource Articles (tidsverk)
   async getResourceArticles(resourceId: string): Promise<ResourceArticle[]> {
     return db.select().from(resourceArticles).where(eq(resourceArticles.resourceId, resourceId));
+  }
+
+  async getResourceArticle(id: string): Promise<ResourceArticle | undefined> {
+    const [ra] = await db.select().from(resourceArticles).where(eq(resourceArticles.id, id));
+    return ra || undefined;
   }
 
   async createResourceArticle(insertResourceArticle: InsertResourceArticle): Promise<ResourceArticle> {
