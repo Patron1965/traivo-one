@@ -68,6 +68,18 @@ export async function registerRoutes(
   // Apply tenant middleware to all API routes
   app.use("/api", requireTenantWithFallback);
 
+  // Helper function to verify tenant ownership of a resource
+  function verifyTenantOwnership<T extends { tenantId: string }>(
+    resource: T | undefined,
+    requestTenantId: string
+  ): T | null {
+    if (!resource) return null;
+    if (resource.tenantId !== requestTenantId) {
+      return null; // Return null to trigger 404 - don't reveal existence to other tenants
+    }
+    return resource;
+  }
+
   // Tenant info endpoint
   app.get("/api/me/tenant", async (req, res) => {
     try {
@@ -109,9 +121,11 @@ export async function registerRoutes(
 
   app.get("/api/customers/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const customer = await storage.getCustomer(req.params.id);
-      if (!customer) return res.status(404).json({ error: "Customer not found" });
-      res.json(customer);
+      const verified = verifyTenantOwnership(customer, tenantId);
+      if (!verified) return res.status(404).json({ error: "Customer not found" });
+      res.json(verified);
     } catch (error) {
       console.error("Failed to fetch customer:", error);
       res.status(500).json({ error: "Failed to fetch customer" });
@@ -135,7 +149,13 @@ export async function registerRoutes(
 
   app.patch("/api/customers/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      // Verify ownership before update
+      const existing = await storage.getCustomer(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const customer = await storage.updateCustomer(req.params.id, updateData);
       if (!customer) return res.status(404).json({ error: "Customer not found" });
       res.json(customer);
@@ -147,6 +167,12 @@ export async function registerRoutes(
 
   app.delete("/api/customers/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      // Verify ownership before delete
+      const existing = await storage.getCustomer(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Customer not found" });
+      }
       await storage.deleteCustomer(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -191,9 +217,11 @@ export async function registerRoutes(
 
   app.get("/api/objects/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const object = await storage.getObject(req.params.id);
-      if (!object) return res.status(404).json({ error: "Object not found" });
-      res.json(object);
+      const verified = verifyTenantOwnership(object, tenantId);
+      if (!verified) return res.status(404).json({ error: "Object not found" });
+      res.json(verified);
     } catch (error) {
       console.error("Failed to fetch object:", error);
       res.status(500).json({ error: "Failed to fetch object" });
@@ -226,7 +254,12 @@ export async function registerRoutes(
 
   app.patch("/api/objects/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const object = await storage.updateObject(req.params.id, updateData);
       if (!object) return res.status(404).json({ error: "Object not found" });
       res.json(object);
@@ -238,6 +271,11 @@ export async function registerRoutes(
 
   app.delete("/api/objects/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
       await storage.deleteObject(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -258,9 +296,11 @@ export async function registerRoutes(
 
   app.get("/api/resources/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const resource = await storage.getResource(req.params.id);
-      if (!resource) return res.status(404).json({ error: "Resource not found" });
-      res.json(resource);
+      const verified = verifyTenantOwnership(resource, tenantId);
+      if (!verified) return res.status(404).json({ error: "Resource not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch resource" });
     }
@@ -283,7 +323,12 @@ export async function registerRoutes(
 
   app.patch("/api/resources/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getResource(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Resource not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const resource = await storage.updateResource(req.params.id, updateData);
       if (!resource) return res.status(404).json({ error: "Resource not found" });
       res.json(resource);
@@ -295,6 +340,11 @@ export async function registerRoutes(
 
   app.delete("/api/resources/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getResource(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Resource not found" });
+      }
       await storage.deleteResource(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -320,9 +370,11 @@ export async function registerRoutes(
 
   app.get("/api/work-orders/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const workOrder = await storage.getWorkOrder(req.params.id);
-      if (!workOrder) return res.status(404).json({ error: "Work order not found" });
-      res.json(workOrder);
+      const verified = verifyTenantOwnership(workOrder, tenantId);
+      if (!verified) return res.status(404).json({ error: "Work order not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch work order" });
     }
@@ -367,11 +419,14 @@ export async function registerRoutes(
 
   app.patch("/api/work-orders/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       
-      // Get existing order to detect changes
+      // Get existing order to detect changes and verify ownership
       const existingOrder = await storage.getWorkOrder(req.params.id);
-      if (!existingOrder) return res.status(404).json({ error: "Work order not found" });
+      if (!verifyTenantOwnership(existingOrder, tenantId)) {
+        return res.status(404).json({ error: "Work order not found" });
+      }
       
       // Convert scheduledDate string to Date object if present (use UTC to prevent timezone shift)
       if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {
@@ -441,6 +496,11 @@ export async function registerRoutes(
 
   app.delete("/api/work-orders/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getWorkOrder(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Work order not found" });
+      }
       await storage.deleteWorkOrder(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -639,9 +699,11 @@ export async function registerRoutes(
 
   app.get("/api/simulation-scenarios/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const scenario = await storage.getSimulationScenario(req.params.id);
-      if (!scenario) return res.status(404).json({ error: "Simulation scenario not found" });
-      res.json(scenario);
+      const verified = verifyTenantOwnership(scenario, tenantId);
+      if (!verified) return res.status(404).json({ error: "Simulation scenario not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch simulation scenario" });
     }
@@ -663,7 +725,12 @@ export async function registerRoutes(
 
   app.patch("/api/simulation-scenarios/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getSimulationScenario(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Simulation scenario not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const scenario = await storage.updateSimulationScenario(req.params.id, updateData);
       if (!scenario) return res.status(404).json({ error: "Simulation scenario not found" });
       res.json(scenario);
@@ -674,6 +741,11 @@ export async function registerRoutes(
 
   app.delete("/api/simulation-scenarios/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getSimulationScenario(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Simulation scenario not found" });
+      }
       await storage.deleteSimulationScenario(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -806,9 +878,11 @@ export async function registerRoutes(
 
   app.get("/api/procurements/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const procurement = await storage.getProcurement(req.params.id);
-      if (!procurement) return res.status(404).json({ error: "Procurement not found" });
-      res.json(procurement);
+      const verified = verifyTenantOwnership(procurement, tenantId);
+      if (!verified) return res.status(404).json({ error: "Procurement not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch procurement" });
     }
@@ -830,7 +904,12 @@ export async function registerRoutes(
 
   app.patch("/api/procurements/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getProcurement(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Procurement not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const procurement = await storage.updateProcurement(req.params.id, updateData);
       if (!procurement) return res.status(404).json({ error: "Procurement not found" });
       res.json(procurement);
@@ -841,6 +920,11 @@ export async function registerRoutes(
 
   app.delete("/api/procurements/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getProcurement(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Procurement not found" });
+      }
       await storage.deleteProcurement(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1630,9 +1714,11 @@ export async function registerRoutes(
 
   app.get("/api/articles/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const article = await storage.getArticle(req.params.id);
-      if (!article) return res.status(404).json({ error: "Article not found" });
-      res.json(article);
+      const verified = verifyTenantOwnership(article, tenantId);
+      if (!verified) return res.status(404).json({ error: "Article not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch article" });
     }
@@ -1654,7 +1740,12 @@ export async function registerRoutes(
 
   app.patch("/api/articles/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getArticle(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Article not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const article = await storage.updateArticle(req.params.id, updateData);
       if (!article) return res.status(404).json({ error: "Article not found" });
       res.json(article);
@@ -1665,6 +1756,11 @@ export async function registerRoutes(
 
   app.delete("/api/articles/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getArticle(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Article not found" });
+      }
       await storage.deleteArticle(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1700,9 +1796,11 @@ export async function registerRoutes(
 
   app.get("/api/price-lists/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const priceList = await storage.getPriceList(req.params.id);
-      if (!priceList) return res.status(404).json({ error: "Price list not found" });
-      res.json(priceList);
+      const verified = verifyTenantOwnership(priceList, tenantId);
+      if (!verified) return res.status(404).json({ error: "Price list not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch price list" });
     }
@@ -1724,7 +1822,12 @@ export async function registerRoutes(
 
   app.patch("/api/price-lists/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getPriceList(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Price list not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const priceList = await storage.updatePriceList(req.params.id, updateData);
       if (!priceList) return res.status(404).json({ error: "Price list not found" });
       res.json(priceList);
@@ -1735,6 +1838,11 @@ export async function registerRoutes(
 
   app.delete("/api/price-lists/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getPriceList(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Price list not found" });
+      }
       await storage.deletePriceList(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1841,9 +1949,11 @@ export async function registerRoutes(
 
   app.get("/api/vehicles/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const vehicle = await storage.getVehicle(req.params.id);
-      if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
-      res.json(vehicle);
+      const verified = verifyTenantOwnership(vehicle, tenantId);
+      if (!verified) return res.status(404).json({ error: "Vehicle not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch vehicle" });
     }
@@ -1865,7 +1975,12 @@ export async function registerRoutes(
 
   app.patch("/api/vehicles/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getVehicle(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Vehicle not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const vehicle = await storage.updateVehicle(req.params.id, updateData);
       if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
       res.json(vehicle);
@@ -1876,6 +1991,11 @@ export async function registerRoutes(
 
   app.delete("/api/vehicles/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getVehicle(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Vehicle not found" });
+      }
       await storage.deleteVehicle(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -1896,9 +2016,11 @@ export async function registerRoutes(
 
   app.get("/api/equipment/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const equipment = await storage.getEquipmentById(req.params.id);
-      if (!equipment) return res.status(404).json({ error: "Equipment not found" });
-      res.json(equipment);
+      const verified = verifyTenantOwnership(equipment, tenantId);
+      if (!verified) return res.status(404).json({ error: "Equipment not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch equipment" });
     }
@@ -1920,7 +2042,12 @@ export async function registerRoutes(
 
   app.patch("/api/equipment/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getEquipmentById(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Equipment not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const equipment = await storage.updateEquipment(req.params.id, updateData);
       if (!equipment) return res.status(404).json({ error: "Equipment not found" });
       res.json(equipment);
@@ -1931,6 +2058,11 @@ export async function registerRoutes(
 
   app.delete("/api/equipment/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getEquipmentById(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Equipment not found" });
+      }
       await storage.deleteEquipment(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -2067,9 +2199,11 @@ export async function registerRoutes(
 
   app.get("/api/subscriptions/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const subscription = await storage.getSubscription(req.params.id);
-      if (!subscription) return res.status(404).json({ error: "Subscription not found" });
-      res.json(subscription);
+      const verified = verifyTenantOwnership(subscription, tenantId);
+      if (!verified) return res.status(404).json({ error: "Subscription not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch subscription" });
     }
@@ -2091,7 +2225,12 @@ export async function registerRoutes(
 
   app.patch("/api/subscriptions/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getSubscription(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Subscription not found" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const subscription = await storage.updateSubscription(req.params.id, updateData);
       if (!subscription) return res.status(404).json({ error: "Subscription not found" });
       res.json(subscription);
@@ -2102,6 +2241,11 @@ export async function registerRoutes(
 
   app.delete("/api/subscriptions/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getSubscription(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Subscription not found" });
+      }
       await storage.deleteSubscription(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -2201,9 +2345,11 @@ export async function registerRoutes(
 
   app.get("/api/teams/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const team = await storage.getTeam(req.params.id);
-      if (!team) return res.status(404).json({ error: "Team not found" });
-      res.json(team);
+      const verified = verifyTenantOwnership(team, tenantId);
+      if (!verified) return res.status(404).json({ error: "Team not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch team" });
     }
@@ -2225,6 +2371,11 @@ export async function registerRoutes(
 
   app.patch("/api/teams/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getTeam(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Team not found" });
+      }
       const updateSchema = insertTeamSchema.partial().omit({ tenantId: true });
       const parseResult = updateSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -2241,6 +2392,11 @@ export async function registerRoutes(
 
   app.delete("/api/teams/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getTeam(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Team not found" });
+      }
       await storage.deleteTeam(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -2314,9 +2470,11 @@ export async function registerRoutes(
 
   app.get("/api/planning-parameters/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const param = await storage.getPlanningParameter(req.params.id);
-      if (!param) return res.status(404).json({ error: "Planning parameter not found" });
-      res.json(param);
+      const verified = verifyTenantOwnership(param, tenantId);
+      if (!verified) return res.status(404).json({ error: "Planning parameter not found" });
+      res.json(verified);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch planning parameter" });
     }
@@ -2338,6 +2496,11 @@ export async function registerRoutes(
 
   app.patch("/api/planning-parameters/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getPlanningParameter(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Planning parameter not found" });
+      }
       const updateSchema = insertPlanningParameterSchema.partial().omit({ tenantId: true });
       const parseResult = updateSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -2354,6 +2517,11 @@ export async function registerRoutes(
 
   app.delete("/api/planning-parameters/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getPlanningParameter(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Planning parameter not found" });
+      }
       await storage.deletePlanningParameter(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -2461,9 +2629,11 @@ export async function registerRoutes(
 
   app.get("/api/clusters/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const cluster = await storage.getClusterWithStats(req.params.id);
-      if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
-      res.json(cluster);
+      const verified = verifyTenantOwnership(cluster, tenantId);
+      if (!verified) return res.status(404).json({ error: "Kluster hittades inte" });
+      res.json(verified);
     } catch (error) {
       console.error("Failed to fetch cluster:", error);
       res.status(500).json({ error: "Kunde inte hämta kluster" });
@@ -2487,7 +2657,12 @@ export async function registerRoutes(
 
   app.patch("/api/clusters/:id", async (req, res) => {
     try {
-      const { tenantId, id, createdAt, deletedAt, ...updateData } = req.body;
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getCluster(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Kluster hittades inte" });
+      }
+      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
       const cluster = await storage.updateCluster(req.params.id, updateData);
       if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
       res.json(cluster);
@@ -2499,6 +2674,11 @@ export async function registerRoutes(
 
   app.delete("/api/clusters/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getCluster(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Kluster hittades inte" });
+      }
       await storage.deleteCluster(req.params.id);
       res.status(204).send();
     } catch (error) {
@@ -4646,9 +4826,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.get("/api/metadata-definitions/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const definition = await storage.getMetadataDefinition(req.params.id);
-      if (!definition) return res.status(404).json({ error: "Definition not found" });
-      res.json(definition);
+      const verified = verifyTenantOwnership(definition, tenantId);
+      if (!verified) return res.status(404).json({ error: "Definition not found" });
+      res.json(verified);
     } catch (error) {
       console.error("Failed to fetch metadata definition:", error);
       res.status(500).json({ error: "Failed to fetch metadata definition" });
@@ -4672,6 +4854,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.patch("/api/metadata-definitions/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getMetadataDefinition(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Definition not found" });
+      }
       // Only allow updating safe fields - never tenantId, id, fieldKey, or createdAt
       const updateSchema = z.object({
         fieldLabel: z.string().optional(),
@@ -4696,6 +4883,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/metadata-definitions/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getMetadataDefinition(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Definition not found" });
+      }
       await storage.deleteMetadataDefinition(req.params.id);
       res.status(204).send();
     } catch (error) {

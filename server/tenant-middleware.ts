@@ -141,9 +141,16 @@ export async function getUserTenants(userId: string): Promise<TenantContext[]> {
 
 const DEFAULT_TENANT_ID = "default-tenant";
 
+/**
+ * Tenant middleware with fallback for backward compatibility.
+ * - Unauthenticated users get read-only access to default tenant (for demo purposes)
+ * - Authenticated users without tenant membership get 403 (must be explicitly assigned)
+ * - Authenticated users with tenant membership get their assigned tenant
+ */
 export const requireTenantWithFallback: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
   
+  // Unauthenticated users: allow read-only access to default tenant for demo/backwards compatibility
   if (!user || !user.claims?.sub) {
     req.tenantId = DEFAULT_TENANT_ID;
     req.tenantRole = "user";
@@ -153,16 +160,13 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
   const userId = user.claims.sub;
   const tenantContext = await getUserTenantRole(userId);
 
+  // Authenticated users without tenant membership: reject (security improvement)
+  // They must be explicitly assigned to a tenant by an admin
   if (!tenantContext) {
-    req.tenantId = DEFAULT_TENANT_ID;
-    req.tenantRole = "user";
-    
-    try {
-      await assignUserToTenant(userId, DEFAULT_TENANT_ID, "user");
-    } catch (e) {
-    }
-    
-    return next();
+    return res.status(403).json({ 
+      error: "Ingen organisation kopplad", 
+      message: "Din användare är inte kopplad till någon organisation. Kontakta administratör för att bli tilldelad en organisation." 
+    });
   }
 
   req.tenantId = tenantContext.tenantId;
