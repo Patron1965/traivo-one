@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { 
   Truck, 
   Clock, 
@@ -10,7 +11,15 @@ import {
   Route, 
   Smartphone,
   ChevronRight,
-  Zap
+  Zap,
+  Shield,
+  Bell,
+  Cloud,
+  FileText,
+  Building2,
+  Globe,
+  Layers,
+  Calendar
 } from "lucide-react";
 
 export default function LandingPage() {
@@ -23,6 +32,7 @@ export default function LandingPage() {
               <Sparkles className="h-5 w-5 text-white" />
             </div>
             <span className="font-bold text-xl">Unicorn</span>
+            <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
             <Button asChild data-testid="button-login">
@@ -43,12 +53,12 @@ export default function LandingPage() {
               </div>
               
               <h1 className="text-5xl md:text-6xl font-bold mb-6 bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text" data-testid="text-hero-title">
-                Transformera din fältservice med AI
+                Nästa generations fältserviceplattform
               </h1>
               
               <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto" data-testid="text-hero-description">
-                Minska ställtider, optimera rutter och öka produktiviteten. 
-                Unicorn hjälper nordiska fältserviceföretag att leverera bättre service med mindre resurser.
+                Multi-tenant SaaS för nordiska fältserviceföretag. 
+                AI-optimerad planering, realtidsspårning och fullständig Fortnox-integration.
               </p>
               
               <div className="flex flex-wrap items-center justify-center gap-4">
@@ -67,20 +77,20 @@ export default function LandingPage() {
           <div className="container mx-auto px-4 py-12">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               <div>
-                <div className="text-3xl font-bold text-purple-600 mb-1">15-25%</div>
-                <div className="text-sm text-muted-foreground">Minskad ställtid</div>
+                <div className="text-3xl font-bold text-purple-600 mb-1">Multi-tenant</div>
+                <div className="text-sm text-muted-foreground">Fullständig dataisolering</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-blue-600 mb-1">30%</div>
-                <div className="text-sm text-muted-foreground">Kortare körtider</div>
+                <div className="text-3xl font-bold text-blue-600 mb-1">Real-time</div>
+                <div className="text-sm text-muted-foreground">GPS & notifieringar</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-green-600 mb-1">40%</div>
-                <div className="text-sm text-muted-foreground">Bättre kapacitetsutnyttjande</div>
+                <div className="text-3xl font-bold text-green-600 mb-1">AI-driven</div>
+                <div className="text-sm text-muted-foreground">Väderbaserad planering</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-orange-600 mb-1">100%</div>
-                <div className="text-sm text-muted-foreground">AI-drivna beslut</div>
+                <div className="text-3xl font-bold text-orange-600 mb-1">Fortnox</div>
+                <div className="text-sm text-muted-foreground">Komplett integration</div>
               </div>
             </div>
           </div>
@@ -89,9 +99,9 @@ export default function LandingPage() {
         <section className="py-20">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-              <h2 className="text-3xl font-bold mb-4">Komplett plattform för fältservice</h2>
+              <h2 className="text-3xl font-bold mb-4">Plattformens kärnfunktioner</h2>
               <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-                Från planering till utförande - Unicorn optimerar varje steg i din fältserviceverksamhet
+                En komplett lösning byggd för nordiska fältserviceföretag med fokus på avfallshantering
               </p>
             </div>
 
@@ -99,11 +109,11 @@ export default function LandingPage() {
               <Card className="group">
                 <CardContent className="p-6">
                   <div className="h-12 w-12 rounded-lg bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
-                    <Sparkles className="h-6 w-6 text-purple-600" />
+                    <Shield className="h-6 w-6 text-purple-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">AI-driven planering</h3>
+                  <h3 className="font-semibold text-lg mb-2">Multi-tenant säkerhet</h3>
                   <p className="text-muted-foreground">
-                    Intelligenta förslag för schemaläggning baserat på väder, kapacitet och prioritet.
+                    Fullständig dataisolering mellan organisationer med rollbaserad åtkomstkontroll (RBAC).
                   </p>
                 </CardContent>
               </Card>
@@ -111,11 +121,11 @@ export default function LandingPage() {
               <Card className="group">
                 <CardContent className="p-6">
                   <div className="h-12 w-12 rounded-lg bg-blue-500/10 flex items-center justify-center mb-4 group-hover:bg-blue-500/20 transition-colors">
-                    <Route className="h-6 w-6 text-blue-600" />
+                    <MapPin className="h-6 w-6 text-blue-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">Ruttoptimering</h3>
+                  <h3 className="font-semibold text-lg mb-2">GPS-spårning i realtid</h3>
                   <p className="text-muted-foreground">
-                    Minimera körtider med smart geografisk planering och trafikprognoser.
+                    Följ resurser live med breadcrumb-historik och WebSocket-uppdateringar.
                   </p>
                 </CardContent>
               </Card>
@@ -123,11 +133,11 @@ export default function LandingPage() {
               <Card className="group">
                 <CardContent className="p-6">
                   <div className="h-12 w-12 rounded-lg bg-green-500/10 flex items-center justify-center mb-4 group-hover:bg-green-500/20 transition-colors">
-                    <MapPin className="h-6 w-6 text-green-600" />
+                    <Sparkles className="h-6 w-6 text-green-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">Klusterhantering</h3>
+                  <h3 className="font-semibold text-lg mb-2">AI-schemaläggning</h3>
                   <p className="text-muted-foreground">
-                    Organisera objekt geografiskt för effektivare arbetsdagar och mindre spill.
+                    Väderbaserad kapacitetsplanering med 7-dagars prognos från Open-Meteo.
                   </p>
                 </CardContent>
               </Card>
@@ -135,11 +145,11 @@ export default function LandingPage() {
               <Card className="group">
                 <CardContent className="p-6">
                   <div className="h-12 w-12 rounded-lg bg-orange-500/10 flex items-center justify-center mb-4 group-hover:bg-orange-500/20 transition-colors">
-                    <Smartphone className="h-6 w-6 text-orange-600" />
+                    <FileText className="h-6 w-6 text-orange-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">Fältapp med röststöd</h3>
+                  <h3 className="font-semibold text-lg mb-2">Fortnox-integration</h3>
                   <p className="text-muted-foreground">
-                    Mobil app för tekniker med AI-assistent, röstinmatning och realtidsnotiser.
+                    OAuth, kundsynk, artikelmappning och automatisk fakturaexport.
                   </p>
                 </CardContent>
               </Card>
@@ -147,11 +157,11 @@ export default function LandingPage() {
               <Card className="group">
                 <CardContent className="p-6">
                   <div className="h-12 w-12 rounded-lg bg-cyan-500/10 flex items-center justify-center mb-4 group-hover:bg-cyan-500/20 transition-colors">
-                    <Users className="h-6 w-6 text-cyan-600" />
+                    <Bell className="h-6 w-6 text-cyan-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">Resurshantering</h3>
+                  <h3 className="font-semibold text-lg mb-2">Realtidsnotifieringar</h3>
                   <p className="text-muted-foreground">
-                    Tilldela rätt tekniker baserat på kompetens, tillgänglighet och plats.
+                    WebSocket-baserade push-notiser och automatisk anomaliövervakning.
                   </p>
                 </CardContent>
               </Card>
@@ -159,11 +169,47 @@ export default function LandingPage() {
               <Card className="group">
                 <CardContent className="p-6">
                   <div className="h-12 w-12 rounded-lg bg-rose-500/10 flex items-center justify-center mb-4 group-hover:bg-rose-500/20 transition-colors">
-                    <BarChart3 className="h-6 w-6 text-rose-600" />
+                    <Smartphone className="h-6 w-6 text-rose-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">Analys och insikter</h3>
+                  <h3 className="font-semibold text-lg mb-2">Mobil fältapp</h3>
                   <p className="text-muted-foreground">
-                    Dashboard med KPI:er, trender och AI-drivna rekommendationer.
+                    Dedikerade API:er för mobil inloggning, statusuppdatering och anteckningar.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="group">
+                <CardContent className="p-6">
+                  <div className="h-12 w-12 rounded-lg bg-indigo-500/10 flex items-center justify-center mb-4 group-hover:bg-indigo-500/20 transition-colors">
+                    <Layers className="h-6 w-6 text-indigo-600" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-2">Hierarkisk objektstruktur</h3>
+                  <p className="text-muted-foreground">
+                    Område, Fastighet, Rum med ärvd information och metadatapropagering.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="group">
+                <CardContent className="p-6">
+                  <div className="h-12 w-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/20 transition-colors">
+                    <Route className="h-6 w-6 text-amber-600" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-2">Ruttoptimering</h3>
+                  <p className="text-muted-foreground">
+                    Geografisk klusterplanering med interaktiv kartvy och OpenRouteService.
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="group">
+                <CardContent className="p-6">
+                  <div className="h-12 w-12 rounded-lg bg-teal-500/10 flex items-center justify-center mb-4 group-hover:bg-teal-500/20 transition-colors">
+                    <Calendar className="h-6 w-6 text-teal-600" />
+                  </div>
+                  <h3 className="font-semibold text-lg mb-2">Abonnemangshantering</h3>
+                  <p className="text-muted-foreground">
+                    Återkommande tjänster med automatisk ordergenerering.
                   </p>
                 </CardContent>
               </Card>
@@ -183,26 +229,32 @@ export default function LandingPage() {
                   <h2 className="text-3xl font-bold mb-4">Utvecklat tillsammans med Kinab</h2>
                   <p className="text-muted-foreground mb-6">
                     Unicorn utvecklas i nära samarbete med Kinab AB, ledande inom avfallshantering i Norden. 
-                    Tillsammans skapar vi en plattform som löser verkliga utmaningar i fältservicebranschen.
+                    En plattform byggd för att lösa verkliga utmaningar.
                   </p>
                   <ul className="space-y-3">
                     <li className="flex items-center gap-3">
                       <div className="h-6 w-6 rounded-full bg-green-500/10 flex items-center justify-center">
-                        <Clock className="h-3 w-3 text-green-600" />
+                        <Globe className="h-3 w-3 text-green-600" />
                       </div>
-                      <span className="text-sm">Beprövade processer från avfallsbranschen</span>
+                      <span className="text-sm">MCP-server för AI-assistentintegration</span>
                     </li>
                     <li className="flex items-center gap-3">
                       <div className="h-6 w-6 rounded-full bg-green-500/10 flex items-center justify-center">
                         <Truck className="h-3 w-3 text-green-600" />
                       </div>
-                      <span className="text-sm">Stöd för komplexa fordons- och utrustningskrav</span>
+                      <span className="text-sm">Modus 2.0 CSV-import med validering</span>
                     </li>
                     <li className="flex items-center gap-3">
                       <div className="h-6 w-6 rounded-full bg-green-500/10 flex items-center justify-center">
-                        <MapPin className="h-3 w-3 text-green-600" />
+                        <Building2 className="h-3 w-3 text-green-600" />
                       </div>
-                      <span className="text-sm">Anpassat för nordiska förhållanden</span>
+                      <span className="text-sm">Prisssystem med tre nivåer</span>
+                    </li>
+                    <li className="flex items-center gap-3">
+                      <div className="h-6 w-6 rounded-full bg-green-500/10 flex items-center justify-center">
+                        <Users className="h-3 w-3 text-green-600" />
+                      </div>
+                      <span className="text-sm">Kompetensbaserad resursallokering</span>
                     </li>
                   </ul>
                 </div>
@@ -219,15 +271,55 @@ export default function LandingPage() {
         </section>
 
         <section className="py-20">
+          <div className="container mx-auto px-4">
+            <div className="text-center mb-12">
+              <h2 className="text-3xl font-bold mb-4">Teknisk arkitektur</h2>
+              <p className="text-lg text-muted-foreground max-w-xl mx-auto">
+                Modern stack byggd för skalbarhet och säkerhet
+              </p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mx-auto mb-4">
+                    <Cloud className="h-6 w-6" />
+                  </div>
+                  <h3 className="font-semibold mb-2">Frontend</h3>
+                  <p className="text-sm text-muted-foreground">React, TypeScript, Vite, shadcn/ui, Leaflet</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mx-auto mb-4">
+                    <BarChart3 className="h-6 w-6" />
+                  </div>
+                  <h3 className="font-semibold mb-2">Backend</h3>
+                  <p className="text-sm text-muted-foreground">Express.js, Drizzle ORM, PostgreSQL, WebSocket</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="p-6 text-center">
+                  <div className="h-12 w-12 rounded-lg bg-muted flex items-center justify-center mx-auto mb-4">
+                    <Sparkles className="h-6 w-6" />
+                  </div>
+                  <h3 className="font-semibold mb-2">AI & Integration</h3>
+                  <p className="text-sm text-muted-foreground">OpenAI GPT-4, OpenRouteService, Fortnox API</p>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </section>
+
+        <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4 text-center">
-            <h2 className="text-3xl font-bold mb-4">Redo att optimera din fältservice?</h2>
+            <h2 className="text-3xl font-bold mb-4">Redo att testa Unicorn?</h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
-              Börja använda Unicorn idag och se hur AI kan transformera din verksamhet.
+              Logga in för att utforska plattformens alla funktioner.
             </p>
             <div className="flex flex-wrap items-center justify-center gap-4">
               <Button size="lg" className="gap-2" asChild>
                 <a href="/api/login">
-                  Kom igång nu
+                  Logga in
                   <ChevronRight className="h-4 w-4" />
                 </a>
               </Button>
@@ -244,9 +336,10 @@ export default function LandingPage() {
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
               <span className="font-semibold">Unicorn</span>
+              <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              AI-driven fältserviceoptimering för nordiska företag
+              Multi-tenant fältserviceplattform för nordiska företag
             </p>
           </div>
         </div>
