@@ -15,6 +15,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
+import { requireTenantWithFallback, getTenantIdWithFallback, requireAdmin, getUserTenants } from "./tenant-middleware";
 import multer from "multer";
 import Papa from "papaparse";
 import { notificationService } from "./notifications";
@@ -64,6 +65,30 @@ export async function registerRoutes(
   
   await ensureDefaultTenant();
 
+  // Apply tenant middleware to all API routes
+  app.use("/api", requireTenantWithFallback);
+
+  // Tenant info endpoint
+  app.get("/api/me/tenant", async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user?.claims?.sub) {
+        return res.json({ tenantId: getTenantIdWithFallback(req), role: "user", tenants: [] });
+      }
+      
+      const tenants = await getUserTenants(user.claims.sub);
+      res.json({
+        tenantId: req.tenantId,
+        role: req.tenantRole,
+        tenantName: req.tenantName,
+        tenants,
+      });
+    } catch (error) {
+      console.error("Failed to fetch tenant info:", error);
+      res.status(500).json({ error: "Failed to fetch tenant info" });
+    }
+  });
+
   // Object Storage routes for file uploads
   registerObjectStorageRoutes(app);
 
@@ -73,7 +98,8 @@ export async function registerRoutes(
 
   app.get("/api/customers", async (req, res) => {
     try {
-      const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const customers = await storage.getCustomers(tenantId);
       res.json(customers);
     } catch (error) {
       console.error("Failed to fetch customers:", error);
@@ -94,7 +120,8 @@ export async function registerRoutes(
 
   app.post("/api/customers", async (req, res) => {
     try {
-      const data = insertCustomerSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertCustomerSchema.parse({ ...req.body, tenantId });
       const customer = await storage.createCustomer(data);
       res.status(201).json(customer);
     } catch (error) {
@@ -130,6 +157,7 @@ export async function registerRoutes(
 
   app.get("/api/objects", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
       const search = req.query.search as string || "";
@@ -140,7 +168,7 @@ export async function registerRoutes(
       if (ids) {
         const idArray = ids.split(",").filter(id => id.trim());
         if (idArray.length > 0) {
-          const objects = await storage.getObjectsByIds(DEFAULT_TENANT_ID, idArray);
+          const objects = await storage.getObjectsByIds(tenantId, idArray);
           res.json(objects);
           return;
         }
@@ -148,11 +176,11 @@ export async function registerRoutes(
       
       // If paginated request
       if (req.query.limit || req.query.offset || req.query.search || req.query.customerId) {
-        const result = await storage.getObjectsPaginated(DEFAULT_TENANT_ID, limit, offset, search, customerId);
+        const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerId);
         res.json(result);
       } else {
         // Legacy: return all objects (for backward compatibility)
-        const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+        const objects = await storage.getObjects(tenantId);
         res.json(objects);
       }
     } catch (error) {
@@ -183,7 +211,8 @@ export async function registerRoutes(
 
   app.post("/api/objects", async (req, res) => {
     try {
-      const data = insertObjectSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertObjectSchema.parse({ ...req.body, tenantId });
       const object = await storage.createObject(data);
       res.status(201).json(object);
     } catch (error) {
@@ -219,7 +248,8 @@ export async function registerRoutes(
 
   app.get("/api/resources", async (req, res) => {
     try {
-      const resources = await storage.getResources(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const resources = await storage.getResources(tenantId);
       res.json(resources);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch resources" });
@@ -238,7 +268,8 @@ export async function registerRoutes(
 
   app.post("/api/resources", async (req, res) => {
     try {
-      const data = insertResourceSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertResourceSchema.parse({ ...req.body, tenantId });
       const resource = await storage.createResource(data);
       res.status(201).json(resource);
     } catch (error) {
@@ -274,12 +305,13 @@ export async function registerRoutes(
 
   app.get("/api/work-orders", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       const includeUnscheduled = req.query.includeUnscheduled === 'true';
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
       
-      const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID, startDate, endDate, includeUnscheduled, limit);
+      const workOrders = await storage.getWorkOrders(tenantId, startDate, endDate, includeUnscheduled, limit);
       res.json(workOrders);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch work orders" });
@@ -309,12 +341,13 @@ export async function registerRoutes(
 
   app.post("/api/work-orders", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       // Default orderStatus to 'skapad' for new orders
       const data = insertWorkOrderSchema.parse({ 
         orderStatus: 'skapad',
         isSimulated: false,
         ...req.body, 
-        tenantId: DEFAULT_TENANT_ID 
+        tenantId 
       });
       const workOrder = await storage.createWorkOrder(data);
       
@@ -418,6 +451,7 @@ export async function registerRoutes(
   // Order Stock - aggregated view with filters and server-side pagination
   app.get("/api/order-stock", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const includeSimulated = req.query.includeSimulated === "true";
       const scenarioId = req.query.scenarioId as string | undefined;
       const orderStatus = req.query.orderStatus as OrderStatus | undefined;
@@ -427,7 +461,7 @@ export async function registerRoutes(
       const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 50;
       const search = req.query.search as string | undefined;
       
-      const { orders, total, byStatus, aggregates } = await storage.getOrderStock(DEFAULT_TENANT_ID, {
+      const { orders, total, byStatus, aggregates } = await storage.getOrderStock(tenantId, {
         includeSimulated,
         scenarioId,
         orderStatus,
@@ -497,15 +531,16 @@ export async function registerRoutes(
         return res.status(400).json({ error: "articleId is required" });
       }
       
+      const tenantId = getTenantIdWithFallback(req);
       // Resolve price using the hierarchy
       const priceInfo = await storage.resolveArticlePrice(
-        DEFAULT_TENANT_ID,
+        tenantId,
         articleId,
         workOrder.customerId
       );
       
       const lineData = insertWorkOrderLineSchema.parse({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         workOrderId: req.params.workOrderId,
         articleId,
         quantity,
@@ -571,6 +606,7 @@ export async function registerRoutes(
   // Price Resolution API
   app.get("/api/resolve-price", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const { articleId, customerId, date } = req.query;
       
       if (!articleId || !customerId) {
@@ -578,7 +614,7 @@ export async function registerRoutes(
       }
       
       const priceInfo = await storage.resolveArticlePrice(
-        DEFAULT_TENANT_ID,
+        tenantId,
         articleId as string,
         customerId as string,
         date ? new Date(date as string) : undefined
@@ -593,7 +629,8 @@ export async function registerRoutes(
   // Simulation Scenarios
   app.get("/api/simulation-scenarios", async (req, res) => {
     try {
-      const scenarios = await storage.getSimulationScenarios(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const scenarios = await storage.getSimulationScenarios(tenantId);
       res.json(scenarios);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch simulation scenarios" });
@@ -612,7 +649,8 @@ export async function registerRoutes(
 
   app.post("/api/simulation-scenarios", async (req, res) => {
     try {
-      const data = insertSimulationScenarioSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertSimulationScenarioSchema.parse({ ...req.body, tenantId });
       const scenario = await storage.createSimulationScenario(data);
       res.status(201).json(scenario);
     } catch (error) {
@@ -657,9 +695,10 @@ export async function registerRoutes(
         const original = await storage.getWorkOrder(orderId);
         if (!original) continue;
         
+        const tenantId = getTenantIdWithFallback(req);
         // Clone the order with simulation flag
         const clonedOrder = await storage.createWorkOrder({
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
           customerId: original.customerId,
           objectId: original.objectId,
           resourceId: original.resourceId,
@@ -681,7 +720,7 @@ export async function registerRoutes(
         const lines = await storage.getWorkOrderLines(orderId);
         for (const line of lines) {
           await storage.createWorkOrderLine({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             workOrderId: clonedOrder.id,
             articleId: line.articleId,
             quantity: line.quantity,
@@ -732,7 +771,8 @@ export async function registerRoutes(
 
   app.post("/api/setup-time-logs", async (req, res) => {
     try {
-      const data = insertSetupTimeLogSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertSetupTimeLogSchema.parse({ ...req.body, tenantId });
       const log = await storage.createSetupTimeLog(data);
       res.status(201).json(log);
     } catch (error) {
@@ -745,8 +785,9 @@ export async function registerRoutes(
 
   app.get("/api/setup-time-logs", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const objectId = req.query.objectId as string | undefined;
-      const logs = await storage.getSetupTimeLogs(DEFAULT_TENANT_ID, objectId);
+      const logs = await storage.getSetupTimeLogs(tenantId, objectId);
       res.json(logs);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch setup time logs" });
@@ -755,7 +796,8 @@ export async function registerRoutes(
 
   app.get("/api/procurements", async (req, res) => {
     try {
-      const procurements = await storage.getProcurements(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const procurements = await storage.getProcurements(tenantId);
       res.json(procurements);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch procurements" });
@@ -774,7 +816,8 @@ export async function registerRoutes(
 
   app.post("/api/procurements", async (req, res) => {
     try {
-      const data = insertProcurementSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertProcurementSchema.parse({ ...req.body, tenantId });
       const procurement = await storage.createProcurement(data);
       res.status(201).json(procurement);
     } catch (error) {
@@ -824,8 +867,9 @@ export async function registerRoutes(
       
       for (const row of result.data as Record<string, string>[]) {
         try {
+          const tenantId = getTenantIdWithFallback(req);
           const customerData = {
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             name: row.name || row.namn || row.Namn || "",
             customerNumber: row.customerNumber || row.kundnummer || row.Kundnummer || null,
             contactPerson: row.contactPerson || row.kontaktperson || row.Kontaktperson || null,
@@ -873,8 +917,9 @@ export async function registerRoutes(
       
       for (const row of result.data as Record<string, string>[]) {
         try {
+          const tenantId = getTenantIdWithFallback(req);
           const resourceData = {
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             name: row.name || row.namn || row.Namn || "",
             initials: row.initials || row.initialer || row.Initialer || null,
             phone: row.phone || row.telefon || row.Telefon || null,
@@ -918,7 +963,8 @@ export async function registerRoutes(
       }
       
       // First, get all customers to map names to IDs
-      const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const customers = await storage.getCustomers(tenantId);
       const customerMap = new Map(customers.map(c => [c.name.toLowerCase(), c.id]));
       
       // Track created objects by objectNumber for parent lookups
@@ -951,7 +997,7 @@ export async function registerRoutes(
           }
           
           const objectData = {
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             customerId,
             parentId,
             name: row.name || row.namn || row.Namn || "",
@@ -1001,7 +1047,8 @@ export async function registerRoutes(
   // Tenant settings
   app.get("/api/tenant/settings", async (req, res) => {
     try {
-      const tenant = await storage.getTenant(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const tenant = await storage.getTenant(tenantId);
       if (!tenant) {
         return res.status(404).json({ error: "Tenant not found" });
       }
@@ -1013,12 +1060,13 @@ export async function registerRoutes(
 
   app.patch("/api/tenant/settings", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const settingsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())]));
       const parseResult = settingsSchema.safeParse(req.body);
       if (!parseResult.success) {
         return res.status(400).json({ error: parseResult.error.errors });
       }
-      const tenant = await storage.updateTenantSettings(DEFAULT_TENANT_ID, parseResult.data);
+      const tenant = await storage.updateTenantSettings(tenantId, parseResult.data);
       if (!tenant) {
         return res.status(404).json({ error: "Tenant not found" });
       }
@@ -1036,8 +1084,9 @@ export async function registerRoutes(
       let data: Record<string, unknown>[] = [];
       let headers: string[] = [];
 
+      const tenantId = getTenantIdWithFallback(req);
       if (type === "customers") {
-        const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+        const customers = await storage.getCustomers(tenantId);
         headers = ["namn", "kundnummer", "kontaktperson", "epost", "telefon", "adress", "stad", "postnummer"];
         data = customers.map(c => ({
           namn: c.name,
@@ -1050,7 +1099,7 @@ export async function registerRoutes(
           postnummer: c.postalCode || "",
         }));
       } else if (type === "resources") {
-        const resources = await storage.getResources(DEFAULT_TENANT_ID);
+        const resources = await storage.getResources(tenantId);
         headers = ["namn", "initialer", "telefon", "epost", "hemort", "timmar", "kompetenser"];
         data = resources.map(r => ({
           namn: r.name,
@@ -1062,8 +1111,8 @@ export async function registerRoutes(
           kompetenser: (r.competencies || []).join(", "),
         }));
       } else if (type === "objects") {
-        const objects = await storage.getObjects(DEFAULT_TENANT_ID);
-        const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+        const objects = await storage.getObjects(tenantId);
+        const customers = await storage.getCustomers(tenantId);
         const customerMap = new Map(customers.map(c => [c.id, c.name]));
         
         headers = ["namn", "objektnummer", "typ", "nivå", "kund", "adress", "stad", "tillgång", "tillgångskod", "kärl"];
@@ -1204,13 +1253,14 @@ export async function registerRoutes(
       }
 
       // Create customers that don't exist
-      const existingCustomers = await storage.getCustomers(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const existingCustomers = await storage.getCustomers(tenantId);
       const customerMap = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c.id]));
       
       for (const name of Array.from(customerNames)) {
         if (!customerMap.has(name.toLowerCase())) {
           const newCustomer = await storage.createCustomer({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             name: name,
           });
           customerMap.set(name.toLowerCase(), newCustomer.id);
@@ -1310,7 +1360,7 @@ export async function registerRoutes(
               objectType === "matafall" || objectType === "atervinning") objectLevel = 3;
           
           const objectData = {
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             customerId,
             parentId: null as string | null,
             name,
@@ -1388,14 +1438,15 @@ export async function registerRoutes(
       }
 
       // Get existing objects and customers
-      const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const objects = await storage.getObjects(tenantId);
       const objectMap = new Map(objects.map(o => [o.objectNumber, o]));
       
-      const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+      const customers = await storage.getCustomers(tenantId);
       const customerMap = new Map(customers.map(c => [c.name.toLowerCase(), c.id]));
       
       // Get or create resources from Team field
-      const resources = await storage.getResources(DEFAULT_TENANT_ID);
+      const resources = await storage.getResources(tenantId);
       const resourceMap = new Map(resources.map(r => [r.name.toLowerCase(), r.id]));
       
       const imported: string[] = [];
@@ -1429,7 +1480,7 @@ export async function registerRoutes(
             resourceId = resourceMap.get(team.toLowerCase());
             if (!resourceId) {
               const newResource = await storage.createResource({
-                tenantId: DEFAULT_TENANT_ID,
+                tenantId,
                 name: team,
                 initials: team.substring(0, 3).toUpperCase(),
               });
@@ -1456,7 +1507,7 @@ export async function registerRoutes(
           else if (status === "not_started" || status === "scheduled") mappedStatus = "scheduled";
           
           const workOrderData = {
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             customerId: object.customerId,
             objectId: object.id,
             resourceId,
@@ -1569,7 +1620,8 @@ export async function registerRoutes(
   // ============== ARTICLES ==============
   app.get("/api/articles", async (req, res) => {
     try {
-      const articles = await storage.getArticles(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const articles = await storage.getArticles(tenantId);
       res.json(articles);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch articles" });
@@ -1588,7 +1640,8 @@ export async function registerRoutes(
 
   app.post("/api/articles", async (req, res) => {
     try {
-      const data = insertArticleSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertArticleSchema.parse({ ...req.body, tenantId });
       const article = await storage.createArticle(data);
       res.status(201).json(article);
     } catch (error) {
@@ -1622,8 +1675,9 @@ export async function registerRoutes(
   // Fasthakning: Hämta applicerbara artiklar för ett objekt baserat på hookLevel
   app.get("/api/objects/:objectId/applicable-articles", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const applicableArticles = await storage.getApplicableArticlesForObject(
-        DEFAULT_TENANT_ID,
+        tenantId,
         req.params.objectId
       );
       res.json(applicableArticles);
@@ -1636,7 +1690,8 @@ export async function registerRoutes(
   // ============== PRICE LISTS ==============
   app.get("/api/price-lists", async (req, res) => {
     try {
-      const priceLists = await storage.getPriceLists(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const priceLists = await storage.getPriceLists(tenantId);
       res.json(priceLists);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch price lists" });
@@ -1655,7 +1710,8 @@ export async function registerRoutes(
 
   app.post("/api/price-lists", async (req, res) => {
     try {
-      const data = insertPriceListSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertPriceListSchema.parse({ ...req.body, tenantId });
       const priceList = await storage.createPriceList(data);
       res.status(201).json(priceList);
     } catch (error) {
@@ -1775,7 +1831,8 @@ export async function registerRoutes(
   // ============== VEHICLES ==============
   app.get("/api/vehicles", async (req, res) => {
     try {
-      const vehicles = await storage.getVehicles(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const vehicles = await storage.getVehicles(tenantId);
       res.json(vehicles);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch vehicles" });
@@ -1794,7 +1851,8 @@ export async function registerRoutes(
 
   app.post("/api/vehicles", async (req, res) => {
     try {
-      const data = insertVehicleSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertVehicleSchema.parse({ ...req.body, tenantId });
       const vehicle = await storage.createVehicle(data);
       res.status(201).json(vehicle);
     } catch (error) {
@@ -1828,7 +1886,8 @@ export async function registerRoutes(
   // ============== EQUIPMENT ==============
   app.get("/api/equipment", async (req, res) => {
     try {
-      const equipment = await storage.getEquipment(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const equipment = await storage.getEquipment(tenantId);
       res.json(equipment);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch equipment" });
@@ -1847,7 +1906,8 @@ export async function registerRoutes(
 
   app.post("/api/equipment", async (req, res) => {
     try {
-      const data = insertEquipmentSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertEquipmentSchema.parse({ ...req.body, tenantId });
       const equipment = await storage.createEquipment(data);
       res.status(201).json(equipment);
     } catch (error) {
@@ -1900,9 +1960,10 @@ export async function registerRoutes(
 
   app.post("/api/resource-availability/:resourceId", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const data = insertResourceAvailabilitySchema.parse({ 
         ...req.body, 
-        tenantId: DEFAULT_TENANT_ID, 
+        tenantId, 
         resourceId: req.params.resourceId 
       });
       const item = await storage.createResourceAvailability(data);
@@ -1957,9 +2018,10 @@ export async function registerRoutes(
 
   app.post("/api/vehicle-schedule/:vehicleId", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const data = insertVehicleScheduleSchema.parse({ 
         ...req.body, 
-        tenantId: DEFAULT_TENANT_ID, 
+        tenantId, 
         vehicleId: req.params.vehicleId 
       });
       const item = await storage.createVehicleSchedule(data);
@@ -1995,7 +2057,8 @@ export async function registerRoutes(
   // ============== SUBSCRIPTIONS ==============
   app.get("/api/subscriptions", async (req, res) => {
     try {
-      const subscriptions = await storage.getSubscriptions(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const subscriptions = await storage.getSubscriptions(tenantId);
       res.json(subscriptions);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch subscriptions" });
@@ -2014,7 +2077,8 @@ export async function registerRoutes(
 
   app.post("/api/subscriptions", async (req, res) => {
     try {
-      const data = insertSubscriptionSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertSubscriptionSchema.parse({ ...req.body, tenantId });
       const subscription = await storage.createSubscription(data);
       res.status(201).json(subscription);
     } catch (error) {
@@ -2048,7 +2112,8 @@ export async function registerRoutes(
   // Generate orders from active subscriptions
   app.post("/api/subscriptions/generate-orders", async (req, res) => {
     try {
-      const subscriptions = await storage.getSubscriptions(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const subscriptions = await storage.getSubscriptions(tenantId);
       const now = new Date();
       let generatedCount = 0;
 
@@ -2064,7 +2129,7 @@ export async function registerRoutes(
         if (nextGenDate <= generateThreshold) {
           // Create work order from subscription
           const workOrder = await storage.createWorkOrder({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             customerId: sub.customerId,
             objectId: sub.objectId,
             title: sub.name,
@@ -2126,7 +2191,8 @@ export async function registerRoutes(
   // ============== TEAMS ==============
   app.get("/api/teams", async (req, res) => {
     try {
-      const teams = await storage.getTeams(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const teams = await storage.getTeams(tenantId);
       res.json(teams);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch teams" });
@@ -2145,7 +2211,8 @@ export async function registerRoutes(
 
   app.post("/api/teams", async (req, res) => {
     try {
-      const data = insertTeamSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertTeamSchema.parse({ ...req.body, tenantId });
       const team = await storage.createTeam(data);
       res.status(201).json(team);
     } catch (error) {
@@ -2237,7 +2304,8 @@ export async function registerRoutes(
   // ============== PLANNING PARAMETERS ==============
   app.get("/api/planning-parameters", async (req, res) => {
     try {
-      const params = await storage.getPlanningParameters(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const params = await storage.getPlanningParameters(tenantId);
       res.json(params);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch planning parameters" });
@@ -2256,7 +2324,8 @@ export async function registerRoutes(
 
   app.post("/api/planning-parameters", async (req, res) => {
     try {
-      const data = insertPlanningParameterSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertPlanningParameterSchema.parse({ ...req.body, tenantId });
       const param = await storage.createPlanningParameter(data);
       res.status(201).json(param);
     } catch (error) {
@@ -2381,7 +2450,8 @@ export async function registerRoutes(
   // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
   app.get("/api/clusters", async (req, res) => {
     try {
-      const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const clusters = await storage.getClusters(tenantId);
       res.json(clusters);
     } catch (error) {
       console.error("Failed to fetch clusters:", error);
@@ -2402,7 +2472,8 @@ export async function registerRoutes(
 
   app.post("/api/clusters", async (req, res) => {
     try {
-      const data = insertClusterSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertClusterSchema.parse({ ...req.body, tenantId });
       const cluster = await storage.createCluster(data);
       res.status(201).json(cluster);
     } catch (error) {
@@ -2509,26 +2580,27 @@ export async function registerRoutes(
       }
 
       try {
+        const tenantId = getTenantIdWithFallback(req);
         if (modulePath.startsWith("/economics")) {
-          const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+          const workOrders = await storage.getWorkOrders(tenantId);
           const completed = workOrders.filter(wo => wo.status === "completed" || wo.orderStatus === "utford").length;
           const pending = workOrders.filter(wo => wo.status !== "completed" && wo.orderStatus !== "utford").length;
           moduleData = `Ekonomisk översikt: ${workOrders.length} ordrar totalt, ${completed} utförda, ${pending} väntande`;
         } else if (modulePath.startsWith("/vehicles")) {
-          const vehicles = await storage.getVehicles(DEFAULT_TENANT_ID);
+          const vehicles = await storage.getVehicles(tenantId);
           moduleData = `Fordonsflotta: ${vehicles.length} fordon registrerade`;
         } else if (modulePath.startsWith("/weather")) {
           moduleData = "Väderplanering: AI-stöd för att anpassa schemaläggning baserat på väderförhållanden";
         } else if (modulePath.startsWith("/subscriptions")) {
-          const subscriptions = await storage.getSubscriptions(DEFAULT_TENANT_ID);
+          const subscriptions = await storage.getSubscriptions(tenantId);
           const active = subscriptions.filter(s => s.status === "active").length;
           moduleData = `Abonnemang: ${subscriptions.length} totalt, ${active} aktiva`;
         } else if (modulePath.startsWith("/articles")) {
-          const articles = await storage.getArticles(DEFAULT_TENANT_ID);
+          const articles = await storage.getArticles(tenantId);
           moduleData = `Artiklar: ${articles.length} artiklar i systemet`;
         } else {
-          const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
-          const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+          const clusters = await storage.getClusters(tenantId);
+          const workOrders = await storage.getWorkOrders(tenantId);
           moduleData = `System: ${clusters.length} kluster, ${workOrders.length} ordrar`;
         }
       } catch (e) {
@@ -2691,6 +2763,7 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
       ];
 
       // Tool execution helper
+      const tenantId = getTenantIdWithFallback(req);
       const executeTool = async (name: string, args: Record<string, unknown>): Promise<string> => {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
@@ -2704,8 +2777,8 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
 
         switch (name) {
           case "get_todays_orders": {
-            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
-            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const orders = await storage.getWorkOrders(tenantId);
+            const objects = await storage.getObjects(tenantId);
             const objectMap = new Map(objects.map(o => [o.id, o]));
             
             const todaysOrders = orders.filter(o => {
@@ -2726,8 +2799,8 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
           }
           
           case "get_weeks_orders": {
-            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
-            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const orders = await storage.getWorkOrders(tenantId);
+            const objects = await storage.getObjects(tenantId);
             const objectMap = new Map(objects.map(o => [o.id, o]));
             
             const weekOrders = orders.filter(o => {
@@ -2750,8 +2823,8 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
           }
           
           case "get_pending_orders": {
-            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
-            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const orders = await storage.getWorkOrders(tenantId);
+            const objects = await storage.getObjects(tenantId);
             const objectMap = new Map(objects.map(o => [o.id, o]));
             
             const pending = orders.filter(o => o.status !== "completed" && o.status !== "cancelled");
@@ -2767,8 +2840,8 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
           }
           
           case "get_urgent_orders": {
-            const orders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
-            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const orders = await storage.getWorkOrders(tenantId);
+            const objects = await storage.getObjects(tenantId);
             const objectMap = new Map(objects.map(o => [o.id, o]));
             
             const urgent = orders.filter(o => o.priority === "high" && o.status !== "completed" && o.status !== "cancelled");
@@ -2784,7 +2857,7 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
           }
           
           case "get_resources": {
-            const resources = await storage.getResources(DEFAULT_TENANT_ID);
+            const resources = await storage.getResources(tenantId);
             return JSON.stringify({
               totalt: resources.length,
               aktiva: resources.filter(r => r.status === "active").length,
@@ -2799,7 +2872,7 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
           
           case "search_objects": {
             const query = (args.query as string || "").toLowerCase();
-            const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+            const objects = await storage.getObjects(tenantId);
             const matching = objects.filter(o => 
               o.name?.toLowerCase().includes(query) || 
               o.address?.toLowerCase().includes(query)
@@ -2834,7 +2907,7 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
           }
           
           case "get_customers": {
-            const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+            const customers = await storage.getCustomers(tenantId);
             return JSON.stringify({
               antal: customers.length,
               kunder: customers.slice(0, 20).map(c => ({
@@ -2849,11 +2922,11 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
           
           case "get_system_stats": {
             const [orders, resources, objects, customers, clusters] = await Promise.all([
-              storage.getWorkOrders(DEFAULT_TENANT_ID),
-              storage.getResources(DEFAULT_TENANT_ID),
-              storage.getObjects(DEFAULT_TENANT_ID),
-              storage.getCustomers(DEFAULT_TENANT_ID),
-              storage.getClusters(DEFAULT_TENANT_ID)
+              storage.getWorkOrders(tenantId),
+              storage.getResources(tenantId),
+              storage.getObjects(tenantId),
+              storage.getCustomers(tenantId),
+              storage.getClusters(tenantId)
             ]);
             
             const completed = orders.filter(o => o.status === "completed").length;
@@ -2971,7 +3044,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // AI Predictive Maintenance - analyze order history to predict service needs
   app.get("/api/ai/predictive-maintenance", isAuthenticated, async (req, res) => {
     try {
-      const tenantId = (req.user as any)?.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = getTenantIdWithFallback(req);
       const orders = await storage.getWorkOrders({ tenantId });
       const objects = await storage.getObjects({ tenantId });
       
@@ -3065,7 +3138,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // AI Proactive Tips - background anomaly analysis for proactive suggestions
   app.get("/api/ai/proactive-tips", isAuthenticated, async (req, res) => {
     try {
-      const tenantId = (req.user as any)?.tenantId || DEFAULT_TENANT_ID;
+      const tenantId = getTenantIdWithFallback(req);
       // Fetch current operational data
       const orders = await storage.getWorkOrders({ tenantId });
       const resources = await storage.getResources({ tenantId });
@@ -3158,11 +3231,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("./ai-planner");
       const { weekStart, weekEnd } = req.body;
       
+      const tenantId = getTenantIdWithFallback(req);
       const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
-        storage.getWorkOrders(DEFAULT_TENANT_ID),
-        storage.getResources(DEFAULT_TENANT_ID),
-        storage.getClusters(DEFAULT_TENANT_ID),
-        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getClusters(tenantId),
+        storage.getSetupTimeLogs(tenantId),
       ]);
       
       // Pre-calculate KPIs so they can be reused
@@ -3189,12 +3263,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   app.get("/api/ai/kpis", async (req, res) => {
     try {
       const { calculatePlanningKPIs } = await import("./ai-planner");
+      const tenantId = getTenantIdWithFallback(req);
       
       const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
-        storage.getWorkOrders(DEFAULT_TENANT_ID),
-        storage.getResources(DEFAULT_TENANT_ID),
-        storage.getClusters(DEFAULT_TENANT_ID),
-        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getClusters(tenantId),
+        storage.getSetupTimeLogs(tenantId),
       ]);
       
       const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
@@ -3229,11 +3304,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const { aiEnhancedSchedule } = await import("./ai-planner");
       const { weekStart, weekEnd } = req.body;
       
+      const tenantId = getTenantIdWithFallback(req);
       const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
-        storage.getWorkOrders(DEFAULT_TENANT_ID),
-        storage.getResources(DEFAULT_TENANT_ID),
-        storage.getClusters(DEFAULT_TENANT_ID),
-        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getClusters(tenantId),
+        storage.getSetupTimeLogs(tenantId),
       ]);
       
       // Hämta tidsfönster för alla oschemalagda ordrar
@@ -3269,10 +3345,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         return res.status(400).json({ error: "date krävs" });
       }
       
+      const tenantId = getTenantIdWithFallback(req);
       const [workOrders, resources, objects] = await Promise.all([
-        storage.getWorkOrders(DEFAULT_TENANT_ID),
-        storage.getResources(DEFAULT_TENANT_ID),
-        storage.getObjects(DEFAULT_TENANT_ID),
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getObjects(tenantId),
       ]);
       
       const result = await optimizeDayRoutes(date, workOrders, resources, objects);
@@ -3289,11 +3366,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const { optimizeRoutesVRP } = await import("./route-optimizer");
       const { date, clusterId } = req.body;
       
+      const tenantId = getTenantIdWithFallback(req);
       const [workOrders, resources, objects, clusters] = await Promise.all([
-        storage.getWorkOrders(DEFAULT_TENANT_ID),
-        storage.getResources(DEFAULT_TENANT_ID),
-        storage.getObjects(DEFAULT_TENANT_ID),
-        storage.getClusters(DEFAULT_TENANT_ID),
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getObjects(tenantId),
+        storage.getClusters(tenantId),
       ]);
       
       // Filter orders if specific date or cluster provided
@@ -3371,10 +3449,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const { analyzeWorkloadImbalances } = await import("./ai-planner");
       const { weekStart, weekEnd } = req.body;
       
+      const tenantId = getTenantIdWithFallback(req);
       const [workOrders, resources, clusters] = await Promise.all([
-        storage.getWorkOrders(DEFAULT_TENANT_ID),
-        storage.getResources(DEFAULT_TENANT_ID),
-        storage.getClusters(DEFAULT_TENANT_ID),
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getClusters(tenantId),
       ]);
       
       const analysis = analyzeWorkloadImbalances({
@@ -3397,10 +3476,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     try {
       const { analyzeSetupTimeLogs } = await import("./ai-planner");
       
+      const tenantId = getTenantIdWithFallback(req);
       const [logs, objects, clusters] = await Promise.all([
-        storage.getSetupTimeLogs(DEFAULT_TENANT_ID),
-        storage.getObjects(DEFAULT_TENANT_ID),
-        storage.getClusters(DEFAULT_TENANT_ID),
+        storage.getSetupTimeLogs(tenantId),
+        storage.getObjects(tenantId),
+        storage.getClusters(tenantId),
       ]);
       
       const analysis = analyzeSetupTimeLogs(logs, objects, clusters);
@@ -3462,9 +3542,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const weeksAhead = parseInt(req.query.weeksAhead as string) || 4;
       
       const { generatePredictivePlanning } = await import("./ai-planner");
-      const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID, undefined, undefined, true, 5000);
-      const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
-      const resources = await storage.getResources(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true, 5000);
+      const clusters = await storage.getClusters(tenantId);
+      const resources = await storage.getResources(tenantId);
       
       const validClusters = clusters.filter(c => c.postalCodes && c.postalCodes.length > 0);
       
@@ -3530,8 +3611,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const targetSize = parseInt(req.query.targetSize as string) || 50;
       
       const { generateAutoClusterSuggestions } = await import("./ai-planner");
-      const objects = await storage.getObjects(DEFAULT_TENANT_ID);
-      const clusters = await storage.getClusters(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const objects = await storage.getObjects(tenantId);
+      const clusters = await storage.getClusters(tenantId);
       
       const result = await generateAutoClusterSuggestions(objects, clusters, targetSize);
       
@@ -3566,7 +3648,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         
         try {
           const cluster = await storage.createCluster({
-            tenantId: DEFAULT_TENANT_ID,
+            tenantId,
             name: String(suggestion.suggestedName).trim(),
             description: String(suggestion.rationale || "").trim() || null,
             centerLatitude: typeof suggestion.centerLatitude === "number" ? suggestion.centerLatitude : null,
@@ -3602,27 +3684,28 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {
       const { type } = req.params;
+      const tenantId = getTenantIdWithFallback(req);
       
       if (type === "customers") {
-        const customers = await storage.getCustomers(DEFAULT_TENANT_ID);
+        const customers = await storage.getCustomers(tenantId);
         for (const c of customers) {
           await storage.deleteCustomer(c.id);
         }
         res.json({ deleted: customers.length });
       } else if (type === "resources") {
-        const resources = await storage.getResources(DEFAULT_TENANT_ID);
+        const resources = await storage.getResources(tenantId);
         for (const r of resources) {
           await storage.deleteResource(r.id);
         }
         res.json({ deleted: resources.length });
       } else if (type === "objects") {
-        const objects = await storage.getObjects(DEFAULT_TENANT_ID);
+        const objects = await storage.getObjects(tenantId);
         for (const o of objects) {
           await storage.deleteObject(o.id);
         }
         res.json({ deleted: objects.length });
       } else if (type === "work-orders") {
-        const workOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+        const workOrders = await storage.getWorkOrders(tenantId);
         for (const wo of workOrders) {
           await storage.deleteWorkOrder(wo.id);
         }
@@ -3655,7 +3738,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       // Verify resource belongs to the same tenant
       // In production, you might also verify that the authenticated user
       // is allowed to access this specific resource
-      if (resource.tenantId !== DEFAULT_TENANT_ID) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (resource.tenantId !== tenantId) {
         console.log(`[notifications] Token request denied: resource ${resourceId} belongs to different tenant`);
         return res.status(403).json({ error: "Not authorized to access this resource" });
       }
@@ -3727,7 +3811,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       }
       
       // Find resource by email
-      const resources = await storage.getResources(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const resources = await storage.getResources(tenantId);
       const resource = resources.find(r => 
         r.email?.toLowerCase() === email.toLowerCase() && r.status === 'active'
       );
@@ -3814,7 +3899,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const dateParam = req.query.date as string;
       
       // Get all work orders for this resource
-      const allOrders = await storage.getWorkOrders(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const allOrders = await storage.getWorkOrders(tenantId);
       
       // Filter by resource
       let orders = allOrders.filter(o => o.resourceId === resourceId);
@@ -4126,7 +4212,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Tenant Branding - Get current tenant branding
   app.get("/api/system/tenant-branding", async (req, res) => {
     try {
-      const branding = await storage.getTenantBranding(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const branding = await storage.getTenantBranding(tenantId);
       res.json(branding || null);
     } catch (error) {
       console.error("Failed to fetch tenant branding:", error);
@@ -4137,9 +4224,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Tenant Branding - Update or create branding
   app.put("/api/system/tenant-branding", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const { templateId, ...brandingData } = req.body;
       
-      let existing = await storage.getTenantBranding(DEFAULT_TENANT_ID);
+      let existing = await storage.getTenantBranding(tenantId);
       
       // If using a template, fetch and merge template colors
       if (templateId) {
@@ -4161,17 +4249,17 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       let result;
       if (existing) {
-        result = await storage.updateTenantBranding(DEFAULT_TENANT_ID, brandingData);
+        result = await storage.updateTenantBranding(tenantId, brandingData);
       } else {
         result = await storage.createTenantBranding({ 
-          tenantId: DEFAULT_TENANT_ID, 
+          tenantId, 
           ...brandingData 
         });
       }
       
       // Create audit log
       await storage.createAuditLog({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         action: existing ? "update_branding" : "create_branding",
         resourceType: "tenant_branding",
         resourceId: result?.id,
@@ -4188,14 +4276,15 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Tenant Branding - Publish branding
   app.post("/api/system/tenant-branding/publish", async (req, res) => {
     try {
-      const result = await storage.publishTenantBranding(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const result = await storage.publishTenantBranding(tenantId);
       
       if (!result) {
         return res.status(404).json({ error: "Branding not found" });
       }
       
       await storage.createAuditLog({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         action: "publish_branding",
         resourceType: "tenant_branding",
         resourceId: result.id,
@@ -4211,7 +4300,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // User Tenant Roles - List all users with roles for current tenant
   app.get("/api/system/user-roles", async (req, res) => {
     try {
-      const roles = await storage.getUserTenantRoles(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const roles = await storage.getUserTenantRoles(tenantId);
       res.json(roles);
     } catch (error) {
       console.error("Failed to fetch user roles:", error);
@@ -4222,6 +4312,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // User Tenant Roles - Create new user role
   app.post("/api/system/user-roles", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const { userId, name, role, permissions, password } = req.body;
       
       if (!userId || !role) {
@@ -4229,7 +4320,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       }
       
       // Check if user already has a role
-      const existing = await storage.getUserTenantRole(userId, DEFAULT_TENANT_ID);
+      const existing = await storage.getUserTenantRole(userId, tenantId);
       if (existing) {
         return res.status(400).json({ error: "User already has a role in this tenant" });
       }
@@ -4250,14 +4341,14 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       const result = await storage.createUserTenantRole({
         userId,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         role,
         permissions: permissions || [],
         isActive: true,
       });
       
       await storage.createAuditLog({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         action: "create_user_role",
         resourceType: "user_tenant_roles",
         resourceId: result.id,
@@ -4299,8 +4390,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         }
       }
       
+      const tenantId = getTenantIdWithFallback(req);
       await storage.createAuditLog({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         action: "update_user_role",
         resourceType: "user_tenant_roles",
         resourceId: result.id,
@@ -4333,9 +4425,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         }
         
         const userId = `email:${user.email}`;
+        const tenantId = getTenantIdWithFallback(req);
         
         // Check if user already has a role
-        const existing = await storage.getUserTenantRole(userId, DEFAULT_TENANT_ID);
+        const existing = await storage.getUserTenantRole(userId, tenantId);
         if (existing) {
           skipped++;
           continue;
@@ -4362,7 +4455,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         
         await storage.createUserTenantRole({
           userId,
-          tenantId: DEFAULT_TENANT_ID,
+          tenantId,
           role,
           permissions: [],
           isActive: true,
@@ -4370,8 +4463,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         imported++;
       }
       
+      const tenantIdForLog = getTenantIdWithFallback(req);
       await storage.createAuditLog({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId: tenantIdForLog,
         action: "import_users",
         resourceType: "user_tenant_roles",
         changes: { imported, skipped, total: users.length },
@@ -4387,8 +4481,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // User Tenant Roles - Delete role
   app.delete("/api/system/user-roles/:id", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       await storage.createAuditLog({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         action: "delete_user_role",
         resourceType: "user_tenant_roles",
         resourceId: req.params.id,
@@ -4410,7 +4505,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const action = req.query.action as string;
       const userId = req.query.userId as string;
       
-      const logs = await storage.getAuditLogs(DEFAULT_TENANT_ID, { limit, offset, action, userId });
+      const tenantId = getTenantIdWithFallback(req);
+      const logs = await storage.getAuditLogs(tenantId, { limit, offset, action, userId });
       res.json(logs);
     } catch (error) {
       console.error("Failed to fetch audit logs:", error);
@@ -4539,7 +4635,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // ============== METADATA DEFINITIONS ==============
   app.get("/api/metadata-definitions", async (req, res) => {
     try {
-      const definitions = await storage.getMetadataDefinitions(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const definitions = await storage.getMetadataDefinitions(tenantId);
       res.json(definitions);
     } catch (error) {
       console.error("Failed to fetch metadata definitions:", error);
@@ -4560,7 +4657,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/metadata-definitions", async (req, res) => {
     try {
-      const data = insertMetadataDefinitionSchema.parse({ ...req.body, tenantId: DEFAULT_TENANT_ID });
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertMetadataDefinitionSchema.parse({ ...req.body, tenantId });
       const definition = await storage.createMetadataDefinition(data);
       res.status(201).json(definition);
     } catch (error) {
@@ -4608,14 +4706,15 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   // ============== OBJECT METADATA ==============
   // Helper to verify object belongs to current tenant
-  async function verifyObjectTenant(objectId: string): Promise<boolean> {
+  async function verifyObjectTenant(objectId: string, tenantId: string): Promise<boolean> {
     const obj = await storage.getObject(objectId);
-    return obj?.tenantId === DEFAULT_TENANT_ID;
+    return obj?.tenantId === tenantId;
   }
 
   app.get("/api/objects/:objectId/metadata", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const metadata = await storage.getObjectMetadata(req.params.objectId);
@@ -4628,12 +4727,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/objects/:objectId/metadata", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const data = insertObjectMetadataSchema.parse({ 
         ...req.body, 
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         objectId: req.params.objectId 
       });
       const metadata = await storage.createObjectMetadata(data);
@@ -4649,7 +4749,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.patch("/api/objects/:objectId/metadata/:id", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const updateSchema = z.object({
@@ -4658,7 +4759,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       });
       const updateData = updateSchema.parse(req.body);
       // Storage method enforces objectId and tenantId match at DB level
-      const metadata = await storage.updateObjectMetadata(req.params.id, req.params.objectId, DEFAULT_TENANT_ID, updateData);
+      const metadata = await storage.updateObjectMetadata(req.params.id, req.params.objectId, tenantId, updateData);
       if (!metadata) return res.status(404).json({ error: "Metadata not found or does not belong to this object" });
       res.json(metadata);
     } catch (error) {
@@ -4672,11 +4773,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/objects/:objectId/metadata/:id", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       // Storage method enforces objectId and tenantId match at DB level
-      await storage.deleteObjectMetadata(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
+      await storage.deleteObjectMetadata(req.params.id, req.params.objectId, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete object metadata:", error);
@@ -4687,10 +4789,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Get effective metadata for an object (including inherited values)
   app.get("/api/objects/:objectId/effective-metadata", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
-      const effectiveMetadata = await storage.getEffectiveMetadata(req.params.objectId, DEFAULT_TENANT_ID);
+      const effectiveMetadata = await storage.getEffectiveMetadata(req.params.objectId, tenantId);
       res.json(effectiveMetadata);
     } catch (error) {
       console.error("Failed to fetch effective metadata:", error);
@@ -4701,7 +4804,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // ============== OBJECT PAYERS ==============
   app.get("/api/objects/:objectId/payers", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const payers = await storage.getObjectPayers(req.params.objectId);
@@ -4714,12 +4818,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/objects/:objectId/payers", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const data = insertObjectPayerSchema.parse({
         ...req.body,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         objectId: req.params.objectId
       });
       const payer = await storage.createObjectPayer(data);
@@ -4735,7 +4840,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.patch("/api/objects/:objectId/payers/:id", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const updateSchema = z.object({
@@ -4751,7 +4857,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         notes: z.string().optional(),
       });
       const updateData = updateSchema.parse(req.body);
-      const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, DEFAULT_TENANT_ID, updateData);
+      const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, tenantId, updateData);
       if (!payer) return res.status(404).json({ error: "Payer not found or does not belong to this object" });
       res.json(payer);
     } catch (error) {
@@ -4765,10 +4871,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/objects/:objectId/payers/:id", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
-      await storage.deleteObjectPayer(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
+      await storage.deleteObjectPayer(req.params.id, req.params.objectId, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete object payer:", error);
@@ -4785,9 +4892,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Fortnox OAuth Authorization
   app.get("/api/fortnox/authorize", async (req, res) => {
     try {
-      const client = createFortnoxClient(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const client = createFortnoxClient(tenantId);
       const redirectUri = `${req.protocol}://${req.get("host")}/api/fortnox/callback`;
-      const state = Buffer.from(JSON.stringify({ tenantId: DEFAULT_TENANT_ID, timestamp: Date.now() })).toString("base64");
+      const state = Buffer.from(JSON.stringify({ tenantId, timestamp: Date.now() })).toString("base64");
       
       const authUrl = await client.getAuthorizationUrlWithConfig(redirectUri, state);
       if (!authUrl) {
@@ -4836,9 +4944,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Fortnox Connection Status
   app.get("/api/fortnox/status", async (req, res) => {
     try {
-      const client = createFortnoxClient(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const client = createFortnoxClient(tenantId);
       const isConnected = await client.isConnected();
-      const config = await storage.getFortnoxConfig(DEFAULT_TENANT_ID);
+      const config = await storage.getFortnoxConfig(tenantId);
       
       res.json({
         isConnected,
@@ -4854,7 +4963,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Process Fortnox Export (send to Fortnox API)
   app.post("/api/fortnox/exports/:id/process", async (req, res) => {
     try {
-      const result = await exportWorkOrderToFortnox(DEFAULT_TENANT_ID, req.params.id);
+      const tenantId = getTenantIdWithFallback(req);
+      const result = await exportWorkOrderToFortnox(tenantId, req.params.id);
       
       if (result.success) {
         res.json({ success: true, invoiceNumber: result.invoiceNumber });
@@ -4870,7 +4980,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Fortnox Config
   app.get("/api/fortnox/config", async (req, res) => {
     try {
-      const config = await storage.getFortnoxConfig(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const config = await storage.getFortnoxConfig(tenantId);
       res.json(config || null);
     } catch (error) {
       console.error("Failed to fetch Fortnox config:", error);
@@ -4880,14 +4991,15 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/fortnox/config", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const { clientId, clientSecret } = req.body;
       if (!clientId || !clientSecret) {
         return res.status(400).json({ error: "Client ID and Secret required" });
       }
 
-      const existing = await storage.getFortnoxConfig(DEFAULT_TENANT_ID);
+      const existing = await storage.getFortnoxConfig(tenantId);
       if (existing) {
-        const updated = await storage.updateFortnoxConfig(DEFAULT_TENANT_ID, {
+        const updated = await storage.updateFortnoxConfig(tenantId, {
           clientId,
           clientSecret,
           isActive: true
@@ -4896,7 +5008,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       }
 
       const config = await storage.createFortnoxConfig({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         clientId,
         clientSecret,
         isActive: true
@@ -4919,7 +5031,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         tokenExpiresAt: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
       });
       const updateData = updateSchema.parse(req.body);
-      const config = await storage.updateFortnoxConfig(DEFAULT_TENANT_ID, updateData);
+      const tenantId = getTenantIdWithFallback(req);
+      const config = await storage.updateFortnoxConfig(tenantId, updateData);
       if (!config) return res.status(404).json({ error: "Config not found" });
       res.json(config);
     } catch (error) {
@@ -4934,8 +5047,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Fortnox Mappings
   app.get("/api/fortnox/mappings", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const entityType = req.query.entityType as string | undefined;
-      const mappings = await storage.getFortnoxMappings(DEFAULT_TENANT_ID, entityType);
+      const mappings = await storage.getFortnoxMappings(tenantId, entityType);
       res.json(mappings);
     } catch (error) {
       console.error("Failed to fetch Fortnox mappings:", error);
@@ -4945,19 +5059,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/fortnox/mappings", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const { entityType, unicornId, fortnoxId } = req.body;
       if (!entityType || !unicornId || !fortnoxId) {
         return res.status(400).json({ error: "All fields required" });
       }
 
-      const existing = await storage.getFortnoxMapping(DEFAULT_TENANT_ID, entityType, unicornId);
+      const existing = await storage.getFortnoxMapping(tenantId, entityType, unicornId);
       if (existing) {
-        const updated = await storage.updateFortnoxMapping(existing.id, DEFAULT_TENANT_ID, { fortnoxId, lastSyncedAt: new Date() });
+        const updated = await storage.updateFortnoxMapping(existing.id, tenantId, { fortnoxId, lastSyncedAt: new Date() });
         return res.json(updated);
       }
 
       const mapping = await storage.createFortnoxMapping({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         entityType,
         unicornId,
         fortnoxId
@@ -4971,7 +5086,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/fortnox/mappings/:id", async (req, res) => {
     try {
-      await storage.deleteFortnoxMapping(req.params.id, DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteFortnoxMapping(req.params.id, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete Fortnox mapping:", error);
@@ -4982,8 +5098,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Fortnox Invoice Exports
   app.get("/api/fortnox/exports", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const status = req.query.status as string | undefined;
-      const exports = await storage.getFortnoxInvoiceExports(DEFAULT_TENANT_ID, status);
+      const exports = await storage.getFortnoxInvoiceExports(tenantId, status);
       res.json(exports);
     } catch (error) {
       console.error("Failed to fetch Fortnox exports:", error);
@@ -4998,8 +5115,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         return res.status(400).json({ error: "Work order ID required" });
       }
 
+      const tenantId = getTenantIdWithFallback(req);
       const invoiceExport = await storage.createFortnoxInvoiceExport({
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         workOrderId,
         payerId: payerId || null,
         costCenter: costCenter || null,
@@ -5022,7 +5140,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         exportedAt: z.string().nullable().optional().transform(v => v ? new Date(v) : null),
       });
       const updateData = updateSchema.parse(req.body);
-      const invoiceExport = await storage.updateFortnoxInvoiceExport(req.params.id, DEFAULT_TENANT_ID, updateData);
+      const tenantId = getTenantIdWithFallback(req);
+      const invoiceExport = await storage.updateFortnoxInvoiceExport(req.params.id, tenantId, updateData);
       if (!invoiceExport) return res.status(404).json({ error: "Export not found" });
       res.json(invoiceExport);
     } catch (error) {
@@ -5040,7 +5159,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.get("/api/objects/:objectId/images", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const images = await storage.getObjectImages(req.params.objectId);
@@ -5053,12 +5173,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/objects/:objectId/images", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const data = insertObjectImageSchema.parse({
         ...req.body,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         objectId: req.params.objectId
       });
       const image = await storage.createObjectImage(data);
@@ -5074,10 +5195,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/objects/:objectId/images/:id", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
-      await storage.deleteObjectImage(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
+      await storage.deleteObjectImage(req.params.id, req.params.objectId, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete object image:", error);
@@ -5091,12 +5213,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.get("/api/objects/:objectId/contacts", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const withInheritance = req.query.inheritance === "true";
       const contacts = withInheritance
-        ? await storage.getObjectContactsWithInheritance(req.params.objectId, DEFAULT_TENANT_ID)
+        ? await storage.getObjectContactsWithInheritance(req.params.objectId, tenantId)
         : await storage.getObjectContacts(req.params.objectId);
       res.json(contacts);
     } catch (error) {
@@ -5107,12 +5230,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/objects/:objectId/contacts", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const data = insertObjectContactSchema.parse({
         ...req.body,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         objectId: req.params.objectId
       });
       const contact = await storage.createObjectContact(data);
@@ -5128,7 +5252,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.patch("/api/objects/:objectId/contacts/:id", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
       const updateSchema = z.object({
@@ -5141,7 +5266,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         notes: z.string().nullable().optional(),
       });
       const updateData = updateSchema.parse(req.body);
-      const contact = await storage.updateObjectContact(req.params.id, req.params.objectId, DEFAULT_TENANT_ID, updateData);
+      const contact = await storage.updateObjectContact(req.params.id, req.params.objectId, tenantId, updateData);
       if (!contact) return res.status(404).json({ error: "Contact not found" });
       res.json(contact);
     } catch (error) {
@@ -5155,10 +5280,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/objects/:objectId/contacts/:id", async (req, res) => {
     try {
-      if (!await verifyObjectTenant(req.params.objectId)) {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
         return res.status(403).json({ error: "Access denied" });
       }
-      await storage.deleteObjectContact(req.params.id, req.params.objectId, DEFAULT_TENANT_ID);
+      await storage.deleteObjectContact(req.params.id, req.params.objectId, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete object contact:", error);
@@ -5182,9 +5308,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const data = insertTaskDesiredTimewindowSchema.parse({
         ...req.body,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         workOrderId: req.params.workOrderId
       });
       const timewindow = await storage.createTaskTimewindow(data);
@@ -5208,7 +5335,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         priority: z.number().optional(),
       });
       const updateData = updateSchema.parse(req.body);
-      const timewindow = await storage.updateTaskTimewindow(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID, updateData);
+      const tenantId = getTenantIdWithFallback(req);
+      const timewindow = await storage.updateTaskTimewindow(req.params.id, req.params.workOrderId, tenantId, updateData);
       if (!timewindow) return res.status(404).json({ error: "Timewindow not found" });
       res.json(timewindow);
     } catch (error) {
@@ -5222,7 +5350,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/work-orders/:workOrderId/timewindows/:id", async (req, res) => {
     try {
-      await storage.deleteTaskTimewindow(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteTaskTimewindow(req.params.id, req.params.workOrderId, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete task timewindow:", error);
@@ -5256,9 +5385,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/work-orders/:workOrderId/dependencies", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const data = insertTaskDependencySchema.parse({
         ...req.body,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         workOrderId: req.params.workOrderId
       });
       const dependency = await storage.createTaskDependency(data);
@@ -5274,7 +5404,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/work-orders/:workOrderId/dependencies/:id", async (req, res) => {
     try {
-      await storage.deleteTaskDependency(req.params.id, DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteTaskDependency(req.params.id, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete task dependency:", error);
@@ -5312,9 +5443,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/work-orders/:workOrderId/information", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const data = insertTaskInformationSchema.parse({
         ...req.body,
-        tenantId: DEFAULT_TENANT_ID,
+        tenantId,
         workOrderId: req.params.workOrderId
       });
       const info = await storage.createTaskInformation(data);
@@ -5337,7 +5469,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         quantity: z.number().nullable().optional(),
       });
       const updateData = updateSchema.parse(req.body);
-      const info = await storage.updateTaskInformation(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID, updateData);
+      const tenantId = getTenantIdWithFallback(req);
+      const info = await storage.updateTaskInformation(req.params.id, req.params.workOrderId, tenantId, updateData);
       if (!info) return res.status(404).json({ error: "Information not found" });
       res.json(info);
     } catch (error) {
@@ -5351,7 +5484,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/work-orders/:workOrderId/information/:id", async (req, res) => {
     try {
-      await storage.deleteTaskInformation(req.params.id, req.params.workOrderId, DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteTaskInformation(req.params.id, req.params.workOrderId, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete task information:", error);
@@ -5365,7 +5499,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.get("/api/structural-articles", async (req, res) => {
     try {
-      const articles = await storage.getStructuralArticles(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const articles = await storage.getStructuralArticles(tenantId);
       res.json(articles);
     } catch (error) {
       console.error("Failed to fetch structural articles:", error);
@@ -5385,9 +5520,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.post("/api/structural-articles", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
       const data = insertStructuralArticleSchema.parse({
         ...req.body,
-        tenantId: DEFAULT_TENANT_ID
+        tenantId
       });
       const article = await storage.createStructuralArticle(data);
       res.status(201).json(article);
@@ -5408,7 +5544,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         taskType: z.string().nullable().optional(),
       });
       const updateData = updateSchema.parse(req.body);
-      const article = await storage.updateStructuralArticle(req.params.id, DEFAULT_TENANT_ID, updateData);
+      const tenantId = getTenantIdWithFallback(req);
+      const article = await storage.updateStructuralArticle(req.params.id, tenantId, updateData);
       if (!article) return res.status(404).json({ error: "Structural article not found" });
       res.json(article);
     } catch (error) {
@@ -5422,7 +5559,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.delete("/api/structural-articles/:id", async (req, res) => {
     try {
-      await storage.deleteStructuralArticle(req.params.id, DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteStructuralArticle(req.params.id, tenantId);
       res.status(204).send();
     } catch (error) {
       console.error("Failed to delete structural article:", error);
@@ -5442,7 +5580,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         return res.json({ expanded: [], message: "Ingen strukturartikel att expandera" });
       }
 
-      const allStructuralArticles = await storage.getStructuralArticles(DEFAULT_TENANT_ID);
+      const tenantId = getTenantIdWithFallback(req);
+      const allStructuralArticles = await storage.getStructuralArticles(tenantId);
       const structuralArticlesMap = new Map<string, typeof allStructuralArticles>();
       
       for (const sa of allStructuralArticles) {
@@ -5457,7 +5596,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         return res.json({ expanded: [], message: "Inga strukturartiklar hittades" });
       }
 
-      const allArticles = await storage.getArticlesByTenant(DEFAULT_TENANT_ID);
+      const allArticles = await storage.getArticlesByTenant(tenantId);
       const articlesMap = new Map(allArticles.map(a => [a.id, a]));
 
       const { expandStructuralArticle } = await import("./ai-planner");
