@@ -297,3 +297,30 @@
     inset: -1px;
   }
 }
+
+/* Mobile safe area support for notched devices */
+.safe-area-bottom {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+.safe-area-top {
+  padding-top: env(safe-area-inset-top, 0);
+}
+
+/* Mobile touch feedback improvements */
+@media (max-width: 768px) {
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Larger tap targets for buttons on mobile */
+  button, a, [role="button"] {
+    touch-action: manipulation;
+  }
+  
+  /* Pull to refresh support */
+  .pull-to-refresh {
+    overscroll-behavior-y: contain;
+  }
+}
