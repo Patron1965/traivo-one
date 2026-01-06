@@ -193,7 +193,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
 
     const articlesToAdd = applicableArticles
       .filter(a => selectedArticleIds.has(a.id))
-      .map(a => ({ id: a.id, name: a.name, price: a.price }));
+      .map(a => ({ id: a.id, name: a.name, price: a.listPrice }));
 
     createWorkOrderMutation.mutate({
       title: formData.title,
@@ -453,7 +453,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                           )}
                         </label>
                         <span className="text-sm text-muted-foreground">
-                          {article.price ? `${article.price} kr` : "-"}
+                          {article.listPrice ? `${article.listPrice} kr` : "-"}
                         </span>
                       </div>
                     ))}
