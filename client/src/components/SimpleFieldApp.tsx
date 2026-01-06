@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { usePullToRefresh } from "@/hooks/usePullToRefresh";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -23,6 +24,7 @@ import { MaterialLog, type MaterialItem } from "@/components/MaterialLog";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
 import { Textarea } from "@/components/ui/textarea";
+import { DailyProgressCard } from "@/components/DailyProgressCard";
 import {
   Dialog,
   DialogContent,
@@ -106,6 +108,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         description: "Synkroniserar data...",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    },
+  });
+
+  const { scrollContainerRef, isRefreshing, pullDistance, shouldTrigger } = usePullToRefresh({
+    onRefresh: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({ title: "Uppdaterat", description: "Schemat har uppdaterats." });
     },
   });
 
@@ -731,7 +740,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="p-4 border-b bg-card">
+      <div className="p-4 border-b bg-card space-y-3">
         <div className="flex items-center justify-between gap-4">
           <div>
             <h1 className="text-xl font-bold">Dagens schema</h1>
@@ -739,7 +748,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               {format(today, "EEEE d MMMM", { locale: sv })}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {!isOnline && (
               <Badge 
                 variant="destructive"
@@ -759,8 +768,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "..."}
               </Badge>
             )}
-            <Badge variant="secondary">{todayJobs.length} kvar</Badge>
-            <Badge variant="outline" className="text-green-600">{completedCount} klara</Badge>
             <Button 
               variant="ghost" 
               size="icon"
@@ -771,6 +778,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Button>
           </div>
         </div>
+        <DailyProgressCard 
+          completed={completedCount} 
+          total={completedCount + todayJobs.length} 
+          compact 
+        />
       </div>
 
       <FieldAIAssistant 
@@ -784,7 +796,29 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         } : undefined}
       />
 
-      <div className="flex-1 overflow-auto p-4 space-y-3">
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 overflow-auto p-4 space-y-3 pull-to-refresh"
+      >
+        {pullDistance > 0 && (
+          <div 
+            className="flex items-center justify-center transition-all"
+            style={{ height: pullDistance }}
+          >
+            <div className={`flex items-center gap-2 text-sm text-muted-foreground ${isRefreshing ? "animate-pulse" : ""}`}>
+              {isRefreshing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Uppdaterar...</span>
+                </>
+              ) : shouldTrigger ? (
+                <span>Släpp för att uppdatera</span>
+              ) : (
+                <span>Dra ner för att uppdatera</span>
+              )}
+            </div>
+          </div>
+        )}
         {todayJobs.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full gap-3 text-center py-12">
             <CheckCircle className="h-16 w-16 text-green-500" />
