@@ -60,7 +60,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 import { Eye, Phone, Image } from "lucide-react";
-import type { Cluster, ServiceObject, WorkOrder, Subscription } from "@shared/schema";
+import type { Cluster, ServiceObject, WorkOrder, Subscription, ObjectContact } from "@shared/schema";
 
 interface ClusterWithStats extends Cluster {
   objectCount: number;
@@ -97,6 +97,8 @@ interface TreeNode {
   children: TreeNode[];
 }
 
+type ContactsByObjectId = Record<string, ObjectContact[]>;
+
 function buildObjectTree(objects: ServiceObject[]): TreeNode[] {
   const objectMap = new Map<string, ServiceObject>();
   const childrenMap = new Map<string, ServiceObject[]>();
@@ -123,7 +125,15 @@ function buildObjectTree(objects: ServiceObject[]): TreeNode[] {
   return rootObjects.map(buildNode);
 }
 
-function ObjectTreeNode({ node, level = 0 }: { node: TreeNode; level?: number }) {
+function ObjectTreeNode({ 
+  node, 
+  level = 0,
+  contactsByObjectId = {}
+}: { 
+  node: TreeNode; 
+  level?: number;
+  contactsByObjectId?: ContactsByObjectId;
+}) {
   const [isOpen, setIsOpen] = useState(level < 2);
   const hasChildren = node.children.length > 0;
   const hierarchyInfo = HIERARCHY_LEVELS[node.object.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
@@ -141,6 +151,10 @@ function ObjectTreeNode({ node, level = 0 }: { node: TreeNode; level?: number })
   if (obj.accessInfoInherited) inheritedFields.push("Åtkomstinfo");
   if (obj.pricingRulesInherited) inheritedFields.push("Prisregler");
   if (obj.serviceConfigInherited) inheritedFields.push("Servicekonfiguration");
+
+  // Get contacts for this object
+  const objectContacts = contactsByObjectId[node.object.id] || [];
+  const primaryContact = objectContacts.find(c => c.contactType === "primary") || objectContacts[0];
   
   return (
     <div className="select-none">
@@ -164,6 +178,48 @@ function ObjectTreeNode({ node, level = 0 }: { node: TreeNode; level?: number })
           )}
           <Icon className={`h-4 w-4 ${hierarchyInfo.color}`} />
           <span className="text-sm font-medium flex-1 truncate">{node.object.name}</span>
+          
+          {/* Contact info display */}
+          {primaryContact && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div 
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                  data-testid={`contact-info-${node.object.id}`}
+                >
+                  <Phone className="h-3 w-3" />
+                  <span className="truncate max-w-[120px]">{primaryContact.name}</span>
+                  {primaryContact.inheritedFromObjectId && (
+                    <GitBranch className="h-3 w-3 text-blue-500" />
+                  )}
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                <div className="space-y-1">
+                  <p className="font-medium flex items-center gap-2">
+                    {primaryContact.name}
+                    {primaryContact.inheritedFromObjectId && (
+                      <Badge variant="secondary" className="text-[10px]">Ärvd</Badge>
+                    )}
+                  </p>
+                  {primaryContact.role && (
+                    <p className="text-xs text-muted-foreground">{primaryContact.role}</p>
+                  )}
+                  {primaryContact.phone && (
+                    <p className="text-xs">{primaryContact.phone}</p>
+                  )}
+                  {primaryContact.email && (
+                    <p className="text-xs">{primaryContact.email}</p>
+                  )}
+                  {objectContacts.length > 1 && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      +{objectContacts.length - 1} fler kontakter
+                    </p>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          )}
           
           {hasInheritedValues && inheritedFields.length > 0 && (
             <Tooltip>
@@ -195,7 +251,12 @@ function ObjectTreeNode({ node, level = 0 }: { node: TreeNode; level?: number })
         {hasChildren && (
           <CollapsibleContent>
             {node.children.map(child => (
-              <ObjectTreeNode key={child.object.id} node={child} level={level + 1} />
+              <ObjectTreeNode 
+                key={child.object.id} 
+                node={child} 
+                level={level + 1}
+                contactsByObjectId={contactsByObjectId}
+              />
             ))}
           </CollapsibleContent>
         )}
@@ -265,6 +326,11 @@ export default function ClusterDetailPage() {
 
   const { data: subscriptions = [], isLoading: subsLoading } = useQuery<Subscription[]>({
     queryKey: ["/api/clusters", clusterId, "subscriptions"],
+    enabled: !!clusterId,
+  });
+
+  const { data: objectContacts = {} } = useQuery<ContactsByObjectId>({
+    queryKey: ["/api/clusters", clusterId, "object-contacts"],
     enabled: !!clusterId,
   });
 
@@ -565,7 +631,11 @@ export default function ClusterDetailPage() {
                   </div>
                   <div className="max-h-[500px] overflow-y-auto">
                     {buildObjectTree(clusterObjects).map(node => (
-                      <ObjectTreeNode key={node.object.id} node={node} />
+                      <ObjectTreeNode 
+                        key={node.object.id} 
+                        node={node} 
+                        contactsByObjectId={objectContacts}
+                      />
                     ))}
                   </div>
                 </>

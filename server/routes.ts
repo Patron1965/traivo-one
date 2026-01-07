@@ -3139,6 +3139,29 @@ export async function registerRoutes(
     }
   });
 
+  // Get all contacts for objects in a cluster (including inherited)
+  app.get("/api/clusters/:id/object-contacts", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const cluster = await storage.getCluster(req.params.id);
+      if (!verifyTenantOwnership(cluster, tenantId)) {
+        return res.status(404).json({ error: "Kluster hittades inte" });
+      }
+      const objects = await storage.getClusterObjects(req.params.id);
+      
+      // Get contacts for all objects including inherited ones
+      const contactsByObject: Record<string, any[]> = {};
+      for (const obj of objects) {
+        const contacts = await storage.getObjectContactsWithInheritance(obj.id, tenantId);
+        contactsByObject[obj.id] = contacts;
+      }
+      res.json(contactsByObject);
+    } catch (error) {
+      console.error("Error fetching cluster object contacts:", error);
+      res.status(500).json({ error: "Kunde inte hämta kontakter för objekt i kluster" });
+    }
+  });
+
   app.post("/api/clusters/:id/refresh-cache", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
