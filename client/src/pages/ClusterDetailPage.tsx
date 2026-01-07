@@ -1,6 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { useState } from "react";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +20,12 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { GitBranch } from "lucide-react";
 import {
   ArrowLeft,
   Package,
@@ -120,6 +128,19 @@ function ObjectTreeNode({ node, level = 0 }: { node: TreeNode; level?: number })
   const hierarchyInfo = HIERARCHY_LEVELS[node.object.hierarchyLevel || "fastighet"] || HIERARCHY_LEVELS.fastighet;
   const Icon = hierarchyInfo.icon;
   
+  const obj = node.object as any;
+  const hasInheritedValues = 
+    obj.accessInfoInherited || 
+    obj.pricingRulesInherited || 
+    obj.serviceConfigInherited ||
+    obj.resolvedAccessInfo ||
+    obj.resolvedPricingRules;
+  
+  const inheritedFields: string[] = [];
+  if (obj.accessInfoInherited) inheritedFields.push("Åtkomstinfo");
+  if (obj.pricingRulesInherited) inheritedFields.push("Prisregler");
+  if (obj.serviceConfigInherited) inheritedFields.push("Servicekonfiguration");
+  
   return (
     <div className="select-none">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -142,6 +163,25 @@ function ObjectTreeNode({ node, level = 0 }: { node: TreeNode; level?: number })
           )}
           <Icon className={`h-4 w-4 ${hierarchyInfo.color}`} />
           <span className="text-sm font-medium flex-1 truncate">{node.object.name}</span>
+          
+          {hasInheritedValues && inheritedFields.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center">
+                  <GitBranch className="h-3 w-3 text-blue-500" />
+                </div>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs font-medium">Ärvda värden:</p>
+                <ul className="text-xs text-muted-foreground">
+                  {inheritedFields.map((field) => (
+                    <li key={field}>{field}</li>
+                  ))}
+                </ul>
+              </TooltipContent>
+            </Tooltip>
+          )}
+          
           <Badge variant="outline" className="text-[10px]">
             {hierarchyInfo.label}
           </Badge>
@@ -229,6 +269,28 @@ export default function ClusterDetailPage() {
 
   const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
   const [objectDialogOpen, setObjectDialogOpen] = useState(false);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const recalculateInheritanceMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/clusters/${clusterId}/recalculate-inheritance`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/clusters", clusterId, "objects"] });
+      toast({
+        title: "Arv omräknat",
+        description: "Alla ärvda värden har uppdaterats för objekten i klustret.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Fel",
+        description: "Kunde inte räkna om ärvda värden.",
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleViewObject = (obj: ServiceObject) => {
     setSelectedObject(obj);
@@ -299,6 +361,20 @@ export default function ClusterDetailPage() {
             <p className="text-muted-foreground mt-1">{cluster.description}</p>
           )}
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => recalculateInheritanceMutation.mutate()}
+          disabled={recalculateInheritanceMutation.isPending}
+          data-testid="button-recalculate-inheritance"
+        >
+          {recalculateInheritanceMutation.isPending ? (
+            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          ) : (
+            <RefreshCw className="h-4 w-4 mr-2" />
+          )}
+          Räkna om arv
+        </Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">

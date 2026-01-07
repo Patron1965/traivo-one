@@ -24,6 +24,7 @@ import { hashPassword } from "./password";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { anomalyMonitor } from "./anomaly-monitor";
 import { sendEmail } from "./replit_integrations/resend";
+import { createInheritanceProcessor } from "./inheritance-processor";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -301,6 +302,115 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to delete object:", error);
       res.status(500).json({ error: "Failed to delete object" });
+    }
+  });
+
+  // === ÄRVNINGS-API (Inheritance) ===
+  
+  // Hämta objekt med resolved/ärvda värden och ursprungsinformation
+  app.get("/api/objects/:id/resolved", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      
+      const processor = await createInheritanceProcessor(tenantId);
+      const objectWithInheritance = await processor.getObjectWithResolvedValues(req.params.id);
+      
+      if (!objectWithInheritance) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      
+      res.json(objectWithInheritance);
+    } catch (error) {
+      console.error("Failed to get resolved object:", error);
+      res.status(500).json({ error: "Kunde inte hämta objekt med ärvda värden" });
+    }
+  });
+
+  // Hämta hela ärvningskedjan (ancestors) för ett objekt
+  app.get("/api/objects/:id/ancestors", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      
+      const processor = await createInheritanceProcessor(tenantId);
+      const ancestors = await processor.getAncestorChain(req.params.id);
+      
+      res.json(ancestors);
+    } catch (error) {
+      console.error("Failed to get ancestors:", error);
+      res.status(500).json({ error: "Kunde inte hämta ärvningskedja" });
+    }
+  });
+
+  // Hämta alla ättlingar (descendants) för ett objekt
+  app.get("/api/objects/:id/descendants", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      
+      const processor = await createInheritanceProcessor(tenantId);
+      const descendants = await processor.getDescendants(req.params.id);
+      
+      res.json(descendants);
+    } catch (error) {
+      console.error("Failed to get descendants:", error);
+      res.status(500).json({ error: "Kunde inte hämta ättlingar" });
+    }
+  });
+
+  // Uppdatera resolved-värden för ett objekt och alla dess ättlingar
+  app.post("/api/objects/:id/recalculate-inheritance", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      
+      const processor = await createInheritanceProcessor(tenantId);
+      await processor.updateResolvedValues(req.params.id);
+      const descendantsUpdated = await processor.updateDescendants(req.params.id);
+      
+      res.json({ 
+        success: true, 
+        message: `Uppdaterade ärvning för objektet och ${descendantsUpdated} ättlingar` 
+      });
+    } catch (error) {
+      console.error("Failed to recalculate inheritance:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera ärvning" });
+    }
+  });
+
+  // Processa ärvning för hela klusterhierarkin
+  app.post("/api/clusters/:id/process-inheritance", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const cluster = await storage.getCluster(req.params.id);
+      if (!verifyTenantOwnership(cluster, tenantId)) {
+        return res.status(404).json({ error: "Kluster hittades inte" });
+      }
+      
+      const processor = await createInheritanceProcessor(tenantId);
+      const result = await processor.processClusterHierarchy(req.params.id);
+      
+      res.json({
+        success: true,
+        processed: result.processed,
+        errors: result.errors
+      });
+    } catch (error) {
+      console.error("Failed to process cluster inheritance:", error);
+      res.status(500).json({ error: "Kunde inte bearbeta klusterärvning" });
     }
   });
 

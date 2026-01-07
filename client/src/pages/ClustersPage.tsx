@@ -69,7 +69,7 @@ import { AICard } from "@/components/AICard";
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import type { Cluster, Team } from "@shared/schema";
+import type { Cluster, Team, Customer } from "@shared/schema";
 
 const SLA_LEVELS = [
   { value: "standard", label: "Standard", color: "bg-muted text-muted-foreground" },
@@ -86,6 +86,7 @@ const SLA_COLORS: Record<string, string> = {
 const clusterFormSchema = z.object({
   name: z.string().min(1, "Namn krävs"),
   description: z.string().optional(),
+  rootCustomerId: z.string().optional(),
   centerLatitude: z.string().optional(),
   centerLongitude: z.string().optional(),
   radiusKm: z.string().optional(),
@@ -157,6 +158,7 @@ export default function ClustersPage() {
     defaultValues: {
       name: "",
       description: "",
+      rootCustomerId: "",
       centerLatitude: "",
       centerLongitude: "",
       radiusKm: "5",
@@ -172,6 +174,10 @@ export default function ClustersPage() {
 
   const { data: teams = [] } = useQuery<Team[]>({
     queryKey: ["/api/teams"],
+  });
+
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
   });
 
   const createMutation = useMutation({
@@ -231,6 +237,7 @@ export default function ClustersPage() {
     form.reset({
       name: "",
       description: "",
+      rootCustomerId: "",
       centerLatitude: "",
       centerLongitude: "",
       radiusKm: "5",
@@ -246,6 +253,7 @@ export default function ClustersPage() {
     form.reset({
       name: cluster.name,
       description: cluster.description || "",
+      rootCustomerId: (cluster as any).rootCustomerId || "",
       centerLatitude: cluster.centerLatitude?.toString() || "",
       centerLongitude: cluster.centerLongitude?.toString() || "",
       radiusKm: cluster.radiusKm?.toString() || "5",
@@ -260,6 +268,7 @@ export default function ClustersPage() {
     const payload = {
       name: values.name,
       description: values.description || null,
+      rootCustomerId: values.rootCustomerId === "none" ? null : values.rootCustomerId || null,
       centerLatitude: values.centerLatitude ? parseFloat(values.centerLatitude) : null,
       centerLongitude: values.centerLongitude ? parseFloat(values.centerLongitude) : null,
       radiusKm: values.radiusKm ? parseFloat(values.radiusKm) : null,
@@ -292,6 +301,12 @@ export default function ClustersPage() {
     return team?.name || null;
   };
 
+  const getCustomerName = (customerId: string | null) => {
+    if (!customerId) return null;
+    const customer = customers.find((c) => c.id === customerId);
+    return customer?.name || null;
+  };
+
   const filteredClusters = clusters.filter((cluster) =>
     cluster.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -319,7 +334,7 @@ export default function ClustersPage() {
         <div>
           <h1 className="text-2xl font-semibold">Kluster</h1>
           <p className="text-muted-foreground">
-            Geografiska kluster - navet i verksamheten
+            Kundhierarkier med dataärvning - navet i verksamheten
           </p>
         </div>
         <Button onClick={handleOpenCreate} data-testid="button-create-cluster">
@@ -333,9 +348,9 @@ export default function ClustersPage() {
         variant="compact"
         defaultExpanded={false}
         insights={[
-          { type: "optimization", title: "Klusteroptimering", description: "AI kan analysera geografisk spridning och föreslå bättre klusterindelning" },
-          { type: "suggestion", title: "Kapacitetsbalansering", description: "Identifiera kluster med ojämn arbetsbelastning" },
-          { type: "info", title: "Automatisk klusterbildning", description: "Låt AI föreslå nya kluster baserat på objektplaceringar" },
+          { type: "optimization", title: "Hierarkioptimering", description: "AI kan analysera kundhierarkier och föreslå bättre strukturer" },
+          { type: "suggestion", title: "Ärvningsanalys", description: "Identifiera objekt som saknar ärvd data" },
+          { type: "info", title: "Automatisk ärvning", description: "Bearbeta ärvning för alla objekt i klustret" },
         ]}
       />
 
@@ -374,7 +389,7 @@ export default function ClustersPage() {
             <Target className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
             <h3 className="text-lg font-medium mb-2">Inga kluster</h3>
             <p className="text-muted-foreground mb-4">
-              Skapa ditt första kluster för att organisera objekt geografiskt
+              Skapa ditt första kluster för att bygga kundhierarkier med dataärvning
             </p>
             <Button onClick={handleOpenCreate}>
               <Plus className="mr-2 h-4 w-4" />
@@ -510,6 +525,7 @@ export default function ClustersPage() {
           {filteredClusters.map((cluster) => {
             const sla = getSlaInfo(cluster.slaLevel);
             const teamName = getTeamName(cluster.primaryTeamId);
+            const customerName = getCustomerName(cluster.rootCustomerId || null);
             return (
               <Card
                 key={cluster.id}
@@ -519,8 +535,13 @@ export default function ClustersPage() {
                 <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
                   <div className="flex-1 min-w-0">
                     <CardTitle className="text-base truncate">{cluster.name}</CardTitle>
-                    {cluster.description && (
+                    {customerName && (
                       <p className="text-sm text-muted-foreground truncate mt-1">
+                        Rotkund: {customerName}
+                      </p>
+                    )}
+                    {cluster.description && (
+                      <p className="text-xs text-muted-foreground truncate mt-0.5">
                         {cluster.description}
                       </p>
                     )}
@@ -634,8 +655,8 @@ export default function ClustersPage() {
             </DialogTitle>
             <DialogDescription>
               {editingCluster
-                ? "Uppdatera klusterinformation"
-                : "Skapa ett nytt geografiskt kluster"}
+                ? "Uppdatera klusterinformation och kundhierarki"
+                : "Skapa ett nytt kluster med kundhierarki och dataärvning"}
             </DialogDescription>
           </DialogHeader>
           <Form {...form}>
@@ -676,6 +697,44 @@ export default function ClustersPage() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="rootCustomerId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Rotkund (hierarkitopp)</FormLabel>
+                    <Select
+                      value={field.value || "none"}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-root-customer">
+                          <SelectValue placeholder="Välj kund som äger hierarkin" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Ingen kund vald</SelectItem>
+                        {customers.map((customer) => (
+                          <SelectItem key={customer.id} value={customer.id}>
+                            {customer.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Kunden som sitter högst upp i hierarkin. Data ärvs nedåt.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <div className="border-t pt-4 mt-4">
+                <p className="text-sm font-medium text-muted-foreground mb-3">
+                  Geografisk data (valfritt - för ruttoptimering)
+                </p>
+              </div>
 
               <div>
                 <FormLabel className="mb-2 block">Sök adress (centrum)</FormLabel>

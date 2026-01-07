@@ -67,33 +67,60 @@ export const objects = pgTable("objects", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
-  // Kluster som objektet tillhör - navet i verksamheten
+  // Kluster som objektet tillhör - kundbaserad hierarki
   clusterId: varchar("cluster_id"),
   parentId: varchar("parent_id").references((): any => objects.id),
   name: text("name").notNull(),
   objectNumber: text("object_number"),
   objectType: text("object_type").default("omrade").notNull(),
-  // Hierarkinivå enligt Mats klusterfilosofi: koncern, brf, fastighet, rum, karl
+  // Hierarkinivå: koncern, brf, fastighet, rum, karl
   hierarchyLevel: text("hierarchy_level").default("fastighet"),
   // Legacy - numerisk nivå (1=överst, 5=kärl)
   objectLevel: integer("object_level").default(1).notNull(),
+  
+  // === ADRESS & POSITION ===
   address: text("address"),
   city: text("city"),
   postalCode: text("postal_code"),
+  // GPS-koordinater (läggs till vid geokodning/ruttoptimering)
   latitude: real("latitude"),
   longitude: real("longitude"),
+  
+  // === ÅTKOMSTINFORMATION (kan ärvas) ===
   accessType: text("access_type").default("open"),
   accessCode: text("access_code"),
   keyNumber: text("key_number"),
   accessInfo: jsonb("access_info").default({}),
+  // Markerar om värdet är explicit satt eller ärvt från förälder
+  accessCodeInherited: boolean("access_code_inherited").default(false),
+  keyNumberInherited: boolean("key_number_inherited").default(false),
+  accessInfoInherited: boolean("access_info_inherited").default(false),
+  
+  // === TIDSPREFERENSER (kan ärvas) ===
   preferredTime1: text("preferred_time_1"),
   preferredTime2: text("preferred_time_2"),
+  preferredTimeInherited: boolean("preferred_time_inherited").default(false),
+  
+  // === KÄRLINFORMATION ===
   containerCount: integer("container_count").default(0),
   containerCountK2: integer("container_count_k2").default(0),
   containerCountK3: integer("container_count_k3").default(0),
   containerCountK4: integer("container_count_k4").default(0),
   servicePeriods: jsonb("service_periods").default({}),
   avgSetupTime: integer("avg_setup_time").default(0),
+  
+  // === RESOLVED/BERÄKNADE VÄRDEN ===
+  // Dessa fylls i av ärvningsprocessorn med slutgiltiga värden
+  resolvedAccessCode: text("resolved_access_code"),
+  resolvedKeyNumber: text("resolved_key_number"),
+  resolvedAccessInfo: jsonb("resolved_access_info").default({}),
+  resolvedPreferredTime1: text("resolved_preferred_time_1"),
+  resolvedPreferredTime2: text("resolved_preferred_time_2"),
+  // Djup i hierarkin (0 = rot, 1 = barn till rot, etc.)
+  hierarchyDepth: integer("hierarchy_depth").default(0),
+  // Fullständig sökväg i hierarkin (array av object IDs från rot)
+  hierarchyPath: text("hierarchy_path").array().default([]),
+  
   status: text("status").default("active").notNull(),
   notes: text("notes"),
   lastServiceDate: timestamp("last_service_date"),
@@ -555,32 +582,50 @@ export const resourcePositions = pgTable("resource_positions", {
   index("idx_resource_positions_resource_date").on(table.resourceId, table.recordedAt)
 ]);
 
-// Kluster - kärnan i verksamheten, samlar objekt, team, resurser och flöden
+// Kluster - kundbaserad hierarki med dataärvning (inte primärt geografiskt)
+// Kunden sitter högst upp i trädstrukturen, data ärvs nedåt
 export const clusters = pgTable("clusters", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Rotkund som äger hierarkin - obligatorisk koppling
+  rootCustomerId: varchar("root_customer_id").references(() => customers.id),
   name: text("name").notNull(),
   description: text("description"),
-  // Geografiskt centrum
-  centerLatitude: real("center_latitude"),
-  centerLongitude: real("center_longitude"),
-  // Geografisk radie i km
-  radiusKm: real("radius_km").default(5),
-  // Postnummerområden som ingår i klustret
-  postalCodes: text("postal_codes").array().default([]),
   // Ansvarigt team för klustret
   primaryTeamId: varchar("primary_team_id"),
-  // SLA-nivå för klustret: standard, premium, express
+  // SLA-nivå för klustret: standard, premium, enterprise
   slaLevel: text("sla_level").default("standard"),
   // Planerad servicefrekvens
   defaultPeriodicity: text("default_periodicity").default("vecka"),
   // Färgkod för visualisering
   color: text("color").default("#3B82F6"),
-  // Cachade värden för snabb uppföljning
+  
+  // === ÄRVNINGSKONFIGURATION ===
+  // Vilka fält som ärvs nedåt i hierarkin (fallande ärvning)
+  inheritableFields: text("inheritable_fields").array().default([
+    "accessCode", "keyNumber", "accessInfo", "preferredTime1", "preferredTime2"
+  ]),
+  // Standardvärden som ärvs om inget annat anges på objektnivå
+  defaultAccessInfo: jsonb("default_access_info").default({}),
+  defaultPreferredTime: text("default_preferred_time"),
+  
+  // === GEOGRAFISK DATA (valfritt - för ruttoptimering) ===
+  // Dessa fält används endast vid ruttoptimering, inte vid klusterhantering
+  geoData: jsonb("geo_data").default({}), // { centerLat, centerLng, radiusKm, postalCodes }
+  // Legacy-fält för bakåtkompatibilitet
+  centerLatitude: real("center_latitude"),
+  centerLongitude: real("center_longitude"),
+  radiusKm: real("radius_km").default(5),
+  postalCodes: text("postal_codes").array().default([]),
+  
+  // === CACHADE VÄRDEN ===
   cachedObjectCount: integer("cached_object_count").default(0),
   cachedActiveOrders: integer("cached_active_orders").default(0),
   cachedMonthlyValue: integer("cached_monthly_value").default(0),
   cachedAvgSetupTime: integer("cached_avg_setup_time").default(0),
+  // Antal nivåer i hierarkin (beräknas automatiskt)
+  cachedHierarchyDepth: integer("cached_hierarchy_depth").default(0),
+  
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -762,6 +807,7 @@ export const subscriptionsRelations = relations(subscriptions, ({ one }) => ({
 
 export const clustersRelations = relations(clusters, ({ one, many }) => ({
   tenant: one(tenants, { fields: [clusters.tenantId], references: [tenants.id] }),
+  rootCustomer: one(customers, { fields: [clusters.rootCustomerId], references: [customers.id] }),
   objects: many(objects),
   teams: many(teams),
   workOrders: many(workOrders),
