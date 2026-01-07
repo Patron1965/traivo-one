@@ -1008,14 +1008,31 @@ function AddObjectsToClusterDialog({
         </DialogHeader>
 
         <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
-          <input
-            type="text"
-            placeholder="Sök objekt..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full px-3 py-2 border rounded-md bg-background"
-            data-testid="input-search-objects"
-          />
+          <div className="flex gap-2">
+            <input
+              type="text"
+              placeholder="Sök objekt..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="flex-1 px-3 py-2 border rounded-md bg-background"
+              data-testid="input-search-objects"
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const allIds = filteredObjects.slice(0, 50).map(o => o.id);
+                if (selectedIds.size === allIds.length) {
+                  setSelectedIds(new Set());
+                } else {
+                  setSelectedIds(new Set(allIds));
+                }
+              }}
+              data-testid="button-select-all"
+            >
+              {selectedIds.size === filteredObjects.slice(0, 50).length ? "Avmarkera alla" : "Välj alla"}
+            </Button>
+          </div>
 
           <div className="flex-1 overflow-y-auto border rounded-md">
             {isLoading ? (
