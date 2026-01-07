@@ -36,13 +36,16 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - **Advanced Task & Object Features:** Includes tables for object images, object contacts (with inheritance), task desired timewindows, task dependencies, task information, and structural articles. Work orders now support an 8-step execution status workflow, creation method tracking, what3words locations, and GPS coordinates for execution.
 
 ### Feature Specifications
-- **Clusters:** Core concept for geographic organization, visualized with lists and interactive maps.
+- **Clusters:** Core concept representing **customer-based hierarchy with data inheritance**, not primarily geographic groupings. The customer sits at the top of the tree structure, and data flows downward through the hierarchy. Geographic coordinates (geocoding) are added later during route optimization, not at cluster creation. Visualized with lists and interactive maps.
 - **Order Management:** Comprehensive workflow with status tracking, cost/value tracking, and simulation.
 - **Pricing System:** Three-tier hierarchy (general, customer, discount letter) for articles and services.
 - **Fleet & Resource Management:** Tracking of vehicles, equipment, resource allocation with competencies, and availability scheduling.
 - **Subscription Management:** Handles recurring services and automatic order generation.
 - **Planning Parameters:** Configuration of SLA levels and time slots.
-- **Hierarchical Object Structure:** `Område → Fastighet → Rum` (Area → Property → Room) for managing customer locations, with inherited information and metadata propagation rules (fixed, falling, dynamic).
+- **Hierarchical Object Structure:** Customer-centric tree structure: `Koncern → BRF → Fastighet → Rum → Kärl` (Corporate → Housing Association → Property → Room → Container). Data inheritance flows top-down with configurable propagation rules:
+  - **Fixed (fast):** Values that never change or inherit
+  - **Falling (fallande):** Values inherited from parent unless explicitly overridden at child level
+  - **Dynamic (dynamisk):** Values calculated at runtime based on context
 - **Article Hook System:** Enables automatic article suggestions for objects based on their hierarchy level and conditions (e.g., container types, access codes).
 - **Fortnox Integration:** Full integration with the Fortnox accounting system, including OAuth, entity mapping (cost centers, projects, customers, articles), and an invoice export pipeline with multi-payer support and error handling.
 
