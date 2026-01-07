@@ -48,6 +48,7 @@ import {
   Home,
   Trash2,
   Container,
+  Plus,
 } from "lucide-react";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { format } from "date-fns";
@@ -269,6 +270,7 @@ export default function ClusterDetailPage() {
 
   const [selectedObject, setSelectedObject] = useState<ServiceObject | null>(null);
   const [objectDialogOpen, setObjectDialogOpen] = useState(false);
+  const [addObjectsDialogOpen, setAddObjectsDialogOpen] = useState(false);
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -533,8 +535,18 @@ export default function ClusterDetailPage() {
                   <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
                 </div>
               ) : clusterObjects.length === 0 ? (
-                <div className="py-8 text-center text-muted-foreground">
-                  Inga objekt i detta kluster
+                <div className="py-8 text-center space-y-4">
+                  <div className="text-muted-foreground">
+                    Inga objekt i detta kluster
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={() => setAddObjectsDialogOpen(true)}
+                    data-testid="button-add-objects-empty"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Lägg till objekt
+                  </Button>
                 </div>
               ) : (
                 <>
@@ -902,6 +914,184 @@ export default function ClusterDetailPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      <AddObjectsToClusterDialog
+        open={addObjectsDialogOpen}
+        onOpenChange={setAddObjectsDialogOpen}
+        clusterId={clusterId || ""}
+        rootCustomerId={cluster?.rootCustomerId || null}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["/api/clusters", clusterId, "objects"] });
+          toast({
+            title: "Objekt tillagda",
+            description: "Objekten har lagts till i klustret.",
+          });
+        }}
+      />
     </div>
+  );
+}
+
+function AddObjectsToClusterDialog({
+  open,
+  onOpenChange,
+  clusterId,
+  rootCustomerId,
+  onSuccess
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  clusterId: string;
+  rootCustomerId: string | null;
+  onSuccess: () => void;
+}) {
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+
+  const { data: availableObjects = [], isLoading } = useQuery<ServiceObject[]>({
+    queryKey: ["/api/objects", "available-for-cluster", clusterId, rootCustomerId],
+    queryFn: async () => {
+      let url = "/api/objects?limit=100";
+      if (rootCustomerId) {
+        url += `&customerId=${rootCustomerId}`;
+      }
+      url += "&noCluster=true";
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch objects");
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  const addMutation = useMutation({
+    mutationFn: async () => {
+      const promises = Array.from(selectedIds).map(id =>
+        apiRequest("PATCH", `/api/objects/${id}`, { clusterId })
+      );
+      await Promise.all(promises);
+    },
+    onSuccess: () => {
+      onSuccess();
+      setSelectedIds(new Set());
+      onOpenChange(false);
+    },
+  });
+
+  const filteredObjects = availableObjects.filter(obj =>
+    !search || obj.name?.toLowerCase().includes(search.toLowerCase()) ||
+    obj.address?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleSelection = (id: string) => {
+    const newSet = new Set(selectedIds);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Plus className="h-5 w-5" />
+            Lägg till objekt i klustret
+          </DialogTitle>
+          <DialogDescription>
+            {rootCustomerId 
+              ? "Välj objekt från kundens hierarki att lägga till" 
+              : "Välj objekt att lägga till i klustret"}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 flex-1 overflow-hidden flex flex-col">
+          <input
+            type="text"
+            placeholder="Sök objekt..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full px-3 py-2 border rounded-md bg-background"
+            data-testid="input-search-objects"
+          />
+
+          <div className="flex-1 overflow-y-auto border rounded-md">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : filteredObjects.length === 0 ? (
+              <div className="py-8 text-center text-muted-foreground">
+                {availableObjects.length === 0 
+                  ? "Inga tillgängliga objekt att lägga till" 
+                  : "Inga objekt matchar sökningen"}
+              </div>
+            ) : (
+              <div className="divide-y">
+                {filteredObjects.slice(0, 50).map(obj => {
+                  const levelInfo = HIERARCHY_LEVELS[obj.hierarchyLevel || "fastighet"];
+                  const Icon = levelInfo?.icon || Package;
+                  return (
+                    <div
+                      key={obj.id}
+                      className={`flex items-center gap-3 p-3 cursor-pointer hover-elevate ${
+                        selectedIds.has(obj.id) ? "bg-primary/10" : ""
+                      }`}
+                      onClick={() => toggleSelection(obj.id)}
+                      data-testid={`row-object-select-${obj.id}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(obj.id)}
+                        onChange={() => toggleSelection(obj.id)}
+                        className="h-4 w-4"
+                      />
+                      <Icon className={`h-4 w-4 ${levelInfo?.color || ""}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium truncate">{obj.name}</div>
+                        <div className="text-sm text-muted-foreground truncate">
+                          {obj.address || obj.city || "Ingen adress"}
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="shrink-0">
+                        {levelInfo?.label || obj.hierarchyLevel}
+                      </Badge>
+                    </div>
+                  );
+                })}
+                {filteredObjects.length > 50 && (
+                  <div className="p-3 text-center text-sm text-muted-foreground">
+                    Visar 50 av {filteredObjects.length} objekt
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between pt-2 border-t">
+            <div className="text-sm text-muted-foreground">
+              {selectedIds.size} objekt valda
+            </div>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => onOpenChange(false)}>
+                Avbryt
+              </Button>
+              <Button
+                onClick={() => addMutation.mutate()}
+                disabled={selectedIds.size === 0 || addMutation.isPending}
+                data-testid="button-add-selected-objects"
+              >
+                {addMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Lägg till {selectedIds.size > 0 ? `(${selectedIds.size})` : ""}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

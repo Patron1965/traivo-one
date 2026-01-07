@@ -205,6 +205,7 @@ export async function registerRoutes(
       const search = req.query.search as string || "";
       const customerId = req.query.customerId as string || undefined;
       const ids = req.query.ids as string || undefined;
+      const noCluster = req.query.noCluster === "true";
       
       // If requesting specific IDs - batch fetch
       if (ids) {
@@ -217,9 +218,16 @@ export async function registerRoutes(
       }
       
       // If paginated request
-      if (req.query.limit || req.query.offset || req.query.search || req.query.customerId) {
+      if (req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster) {
         const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerId);
-        res.json(result);
+        
+        // Filter out objects that already have a cluster
+        if (noCluster) {
+          const filtered = result.objects.filter((obj: any) => !obj.clusterId);
+          res.json(filtered);
+        } else {
+          res.json(result);
+        }
       } else {
         // Legacy: return all objects (for backward compatibility)
         const objects = await storage.getObjects(tenantId);
