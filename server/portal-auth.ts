@@ -135,9 +135,17 @@ export async function sendPortalMagicLinkEmail(
   companyName: string
 ): Promise<boolean> {
   try {
-    const { sendEmail } = await import("./replit_integrations/resend");
-
-    const result = await sendEmail({
+    const { Resend } = await import("resend");
+    
+    const apiKey = process.env.RESEND_API_KEY;
+    if (!apiKey) {
+      console.error("[portal] RESEND_API_KEY not configured");
+      return false;
+    }
+    
+    const resend = new Resend(apiKey);
+    const result = await resend.emails.send({
+      from: "Unicorn <onboarding@resend.dev>",
       to: email,
       subject: `Logga in på kundportalen - ${companyName}`,
       html: `
@@ -186,7 +194,7 @@ export async function sendPortalMagicLinkEmail(
     });
 
     console.log("[portal] Magic link email result:", JSON.stringify(result));
-    const success = !!(result.data?.id || result.id);
+    const success = !!(result.data?.id);
     console.log("[portal] Magic link email sent successfully to", email, "success:", success);
     return success;
   } catch (error) {
