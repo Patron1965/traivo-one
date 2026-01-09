@@ -77,6 +77,7 @@ const filterOperatorOptions = [
   { value: "starts_with", label: "Börjar med" },
   { value: "greater_than", label: "Större än" },
   { value: "less_than", label: "Mindre än" },
+  { value: "in_list", label: "Finns i lista" },
   { value: "exists", label: "Finns" },
   { value: "not_exists", label: "Finns inte" },
 ];
