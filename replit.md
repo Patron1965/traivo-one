@@ -105,10 +105,10 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 
 - **Customer Notifications (E-post):**
   - Email notification system via Resend integration (`server/customer-notifications.ts`)
-  - Automatic "technician on the way" notifications with estimated arrival time
+  - Manuellt utlösta "tekniker på väg"-notifieringar med beräknad ankomsttid (chauffören styr)
   - Notification button in mobile field app (SimpleFieldApp) for one-tap customer alerts
   - API endpoints: `/api/notifications/technician-on-way/:workOrderId`, `/api/notifications/job-completed/:workOrderId`
-  - Note: SMS via Twilio available but not configured - can be added when needed
+  - Note: SMS ska kopplas senare med kundens befintliga SMS-leverantör (ej Twilio)
 
 - **Customer Portal:**
   - Staff view: CustomerPortalPage (`/customer-portal`) allows staff to view customer orders
