@@ -7678,6 +7678,90 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Portal Messages - Get all messages
+  app.get("/api/portal/messages", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const messages = await storage.getPortalMessages(session.tenantId, session.customerId);
+      await storage.markPortalMessagesAsRead(session.tenantId, session.customerId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Failed to get portal messages:", error);
+      res.status(500).json({ error: "Kunde inte hämta meddelanden" });
+    }
+  });
+
+  // Portal Messages - Send a message
+  app.post("/api/portal/messages", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const { message } = req.body;
+      if (!message || typeof message !== "string" || message.trim().length === 0) {
+        return res.status(400).json({ error: "Meddelande krävs" });
+      }
+
+      const newMessage = await storage.createPortalMessage({
+        tenantId: session.tenantId,
+        customerId: session.customerId,
+        sender: "customer",
+        message: message.trim()
+      });
+
+      res.json(newMessage);
+    } catch (error) {
+      console.error("Failed to send portal message:", error);
+      res.status(500).json({ error: "Kunde inte skicka meddelande" });
+    }
+  });
+
+  // Portal Messages - Get unread count
+  app.get("/api/portal/messages/unread-count", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const count = await storage.getUnreadMessageCount(session.tenantId, session.customerId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Failed to get unread count:", error);
+      res.status(500).json({ error: "Kunde inte hämta antal olästa" });
+    }
+  });
+
   app.post("/api/portal/logout", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;

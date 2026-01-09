@@ -49,6 +49,7 @@ import {
   type CustomerPortalToken, type InsertCustomerPortalToken,
   type CustomerPortalSession, type InsertCustomerPortalSession,
   type CustomerBookingRequest, type InsertCustomerBookingRequest,
+  type CustomerPortalMessage, type InsertCustomerPortalMessage,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -59,7 +60,7 @@ import {
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
   orderConcepts, conceptFilters, assignments, assignmentArticles,
-  customerPortalTokens, customerPortalSessions, customerBookingRequests
+  customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
@@ -2665,6 +2666,52 @@ export class DatabaseStorage implements IStorage {
         isNull(workOrders.deletedAt)
       ))
       .orderBy(desc(workOrders.scheduledDate));
+  }
+
+  // ============================================
+  // Customer Portal Messages
+  // ============================================
+  
+  async getPortalMessages(tenantId: string, customerId: string): Promise<CustomerPortalMessage[]> {
+    return db.select().from(customerPortalMessages)
+      .where(and(
+        eq(customerPortalMessages.tenantId, tenantId),
+        eq(customerPortalMessages.customerId, customerId)
+      ))
+      .orderBy(customerPortalMessages.createdAt);
+  }
+
+  async createPortalMessage(message: InsertCustomerPortalMessage): Promise<CustomerPortalMessage> {
+    const [result] = await db.insert(customerPortalMessages).values(message).returning();
+    return result;
+  }
+
+  async markPortalMessagesAsRead(tenantId: string, customerId: string): Promise<void> {
+    await db.update(customerPortalMessages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(customerPortalMessages.tenantId, tenantId),
+        eq(customerPortalMessages.customerId, customerId),
+        eq(customerPortalMessages.sender, "staff"),
+        isNull(customerPortalMessages.readAt)
+      ));
+  }
+
+  async getUnreadMessageCount(tenantId: string, customerId?: string): Promise<number> {
+    const conditions = [
+      eq(customerPortalMessages.tenantId, tenantId),
+      isNull(customerPortalMessages.readAt)
+    ];
+    if (customerId) {
+      conditions.push(eq(customerPortalMessages.customerId, customerId));
+      conditions.push(eq(customerPortalMessages.sender, "staff"));
+    } else {
+      conditions.push(eq(customerPortalMessages.sender, "customer"));
+    }
+    const result = await db.select({ count: sql<number>`count(*)` })
+      .from(customerPortalMessages)
+      .where(and(...conditions));
+    return Number(result[0]?.count || 0);
   }
 }
 

@@ -1976,9 +1976,21 @@ export const customerBookingRequests = pgTable("customer_booking_requests", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+export const customerPortalMessages = pgTable("customer_portal_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  sender: text("sender").notNull(), // "customer" or "staff"
+  senderUserId: varchar("sender_user_id").references(() => users.id),
+  message: text("message").notNull(),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertCustomerPortalTokenSchema = createInsertSchema(customerPortalTokens).omit({ id: true, requestedAt: true });
 export const insertCustomerPortalSessionSchema = createInsertSchema(customerPortalSessions).omit({ id: true, createdAt: true, lastAccessedAt: true });
 export const insertCustomerBookingRequestSchema = createInsertSchema(customerBookingRequests).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertCustomerPortalMessageSchema = createInsertSchema(customerPortalMessages).omit({ id: true, createdAt: true });
 
 export type CustomerPortalToken = typeof customerPortalTokens.$inferSelect;
 export type InsertCustomerPortalToken = z.infer<typeof insertCustomerPortalTokenSchema>;
@@ -1986,3 +1998,5 @@ export type CustomerPortalSession = typeof customerPortalSessions.$inferSelect;
 export type InsertCustomerPortalSession = z.infer<typeof insertCustomerPortalSessionSchema>;
 export type CustomerBookingRequest = typeof customerBookingRequests.$inferSelect;
 export type InsertCustomerBookingRequest = z.infer<typeof insertCustomerBookingRequestSchema>;
+export type CustomerPortalMessage = typeof customerPortalMessages.$inferSelect;
+export type InsertCustomerPortalMessage = z.infer<typeof insertCustomerPortalMessageSchema>;

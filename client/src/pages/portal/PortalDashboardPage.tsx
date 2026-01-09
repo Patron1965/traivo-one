@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -101,6 +101,8 @@ function BookingRequestStatusBadge({ status }: { status: string }) {
 export default function PortalDashboardPage() {
   const [, setLocation] = useLocation();
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessage, setChatMessage] = useState("");
   const queryClient = useQueryClient();
   const customer = getCustomer();
   const tenant = getTenant();
@@ -133,6 +135,25 @@ export default function PortalDashboardPage() {
     queryKey: ["/api/portal/booking-requests"],
     queryFn: () => portalFetch("/api/portal/booking-requests"),
     enabled: !!getSessionToken(),
+  });
+
+  const messagesQuery = useQuery<Array<{ id: string; message: string; sender: "customer" | "staff"; createdAt: string }>>({
+    queryKey: ["/api/portal/messages"],
+    queryFn: () => portalFetch("/api/portal/messages"),
+    enabled: !!getSessionToken() && chatOpen,
+    refetchInterval: chatOpen ? 10000 : false,
+  });
+
+  const sendMessageMutation = useMutation({
+    mutationFn: (message: string) =>
+      portalFetch("/api/portal/messages", {
+        method: "POST",
+        body: JSON.stringify({ message }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/portal/messages"] });
+      setChatMessage("");
+    },
   });
 
   const createBookingMutation = useMutation({
@@ -194,11 +215,15 @@ export default function PortalDashboardPage() {
       </header>
 
       <main className="container py-6 space-y-6">
+        <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
+          <CardContent className="py-6">
+            <h2 className="text-2xl font-bold">Välkommen till {tenant?.name || "Kundportalen"}!</h2>
+            <p className="text-muted-foreground mt-1">Hej {customer?.name}, här kan du se dina bokningar, skicka önskemål och kontakta oss.</p>
+          </CardContent>
+        </Card>
+
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl font-bold">Välkommen, {customer?.name}</h2>
-            <p className="text-muted-foreground">Här kan du se dina bokningar och göra förfrågningar</p>
-          </div>
+          <div></div>
           <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-new-booking">
@@ -554,7 +579,129 @@ export default function PortalDashboardPage() {
             )}
           </TabsContent>
         </Tabs>
+
+        {objects.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <MapPin className="h-5 w-5" />
+                Mina platser
+              </CardTitle>
+              <CardDescription>Dina registrerade objekt och adresser</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {objects.map((obj: any) => (
+                  <div key={obj.id} className="p-3 border rounded-md space-y-2" data-testid={`object-${obj.id}`}>
+                    <p className="font-medium">{obj.name}</p>
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MapPin className="h-3 w-3" />
+                      <span>{obj.address}</span>
+                    </div>
+                    {obj.what3words && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Grid3X3 className="h-3 w-3 text-red-500" />
+                        <a 
+                          href={`https://what3words.com/${obj.what3words}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-red-600 hover:underline font-mono text-xs"
+                        >
+                          ///{obj.what3words}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </main>
+
+      {/* Floating Chat Button */}
+      <Button
+        size="icon"
+        className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50"
+        onClick={() => setChatOpen(!chatOpen)}
+        data-testid="button-chat"
+      >
+        <MessageCircle className="h-6 w-6" />
+      </Button>
+
+      {/* Chat Panel */}
+      {chatOpen && (
+        <div className="fixed bottom-24 right-6 w-80 sm:w-96 bg-background border rounded-lg shadow-xl z-50 flex flex-col max-h-[60vh]">
+          <div className="p-4 border-b flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold">Chatta med oss</h3>
+              <p className="text-xs text-muted-foreground">Vi svarar så snart vi kan</p>
+            </div>
+            <Button variant="ghost" size="sm" onClick={() => setChatOpen(false)} data-testid="button-close-chat">
+              ✕
+            </Button>
+          </div>
+          
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-[200px]" data-testid="chat-messages">
+            {messagesQuery.isLoading ? (
+              <div className="text-center text-muted-foreground py-8">
+                <p className="text-sm">Laddar meddelanden...</p>
+              </div>
+            ) : (messagesQuery.data || []).length === 0 ? (
+              <div className="text-center text-muted-foreground py-8">
+                <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Skriv ett meddelande för att starta en konversation</p>
+              </div>
+            ) : (
+              (messagesQuery.data || []).map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex ${msg.sender === "customer" ? "justify-end" : "justify-start"}`}
+                  data-testid={`message-${msg.id}`}
+                >
+                  <div
+                    className={`max-w-[80%] p-3 rounded-lg text-sm ${
+                      msg.sender === "customer"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
+                    }`}
+                  >
+                    {msg.message}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="p-3 border-t">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!chatMessage.trim() || sendMessageMutation.isPending) return;
+                sendMessageMutation.mutate(chatMessage.trim());
+              }}
+              className="flex gap-2"
+            >
+              <Input
+                value={chatMessage}
+                onChange={(e) => setChatMessage(e.target.value)}
+                placeholder="Skriv ditt meddelande..."
+                className="flex-1"
+                data-testid="input-chat"
+                disabled={sendMessageMutation.isPending}
+              />
+              <Button 
+                type="submit" 
+                size="icon" 
+                data-testid="button-send-chat"
+                disabled={sendMessageMutation.isPending}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
