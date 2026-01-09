@@ -103,8 +103,14 @@ export async function registerRoutes(
     }
   });
 
-  // Apply tenant middleware to all other API routes
-  app.use("/api", requireTenantWithFallback);
+  // Apply tenant middleware to all API routes EXCEPT portal routes
+  // Portal routes use their own token-based authentication
+  app.use("/api", (req, res, next) => {
+    if (req.path.startsWith("/portal")) {
+      return next();
+    }
+    return requireTenantWithFallback(req, res, next);
+  });
 
   // Helper function to verify tenant ownership of a resource
   function verifyTenantOwnership<T extends { tenantId: string }>(
