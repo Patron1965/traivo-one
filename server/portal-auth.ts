@@ -185,8 +185,10 @@ export async function sendPortalMagicLinkEmail(
       `,
     });
 
-    console.log("[portal] Magic link email sent successfully to", email);
-    return !!result.data?.id;
+    console.log("[portal] Magic link email result:", JSON.stringify(result));
+    const success = !!(result.data?.id || result.id);
+    console.log("[portal] Magic link email sent successfully to", email, "success:", success);
+    return success;
   } catch (error) {
     console.error("[portal] Failed to send portal magic link email:", error);
     console.error("[portal] Error details:", error instanceof Error ? error.message : String(error));
