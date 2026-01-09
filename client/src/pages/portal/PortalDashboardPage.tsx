@@ -349,7 +349,10 @@ export default function PortalDashboardPage() {
                     <div className="text-2xl font-bold">{objects.length}</div>
                     <div className="text-xs text-muted-foreground">Dina platser</div>
                   </div>
-                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="flex flex-col items-end">
+                    <ArrowRight className="h-4 w-4 text-purple-500" />
+                    <span className="text-xs text-purple-500 font-medium">Visa alla</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -487,9 +490,25 @@ export default function PortalDashboardPage() {
         )}
 
         {/* Main Content - Mina ärenden Section */}
-        <div className="space-y-4">
-          <div className="flex flex-row items-center justify-between gap-4 flex-wrap">
-            <h3 className="text-lg font-semibold">Mina ärenden</h3>
+        <Tabs defaultValue="upcoming" className="space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+              <h3 className="text-lg font-semibold shrink-0">Mina ärenden</h3>
+              <TabsList>
+                <TabsTrigger value="upcoming" data-testid="tab-upcoming">
+                  <CalendarDays className="h-4 w-4 mr-2" />
+                  Kommande
+                </TabsTrigger>
+                <TabsTrigger value="history" data-testid="tab-history">
+                  <History className="h-4 w-4 mr-2" />
+                  Historik
+                </TabsTrigger>
+                <TabsTrigger value="requests" data-testid="tab-requests">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Förfrågningar
+                </TabsTrigger>
+              </TabsList>
+            </div>
             <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
               <DialogTrigger asChild>
                 <Button data-testid="button-new-booking">
@@ -497,7 +516,7 @@ export default function PortalDashboardPage() {
                   Ny förfrågan
                 </Button>
               </DialogTrigger>
-            <DialogContent className="sm:max-w-[500px]">
+              <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>Ny bokningsförfrågan</DialogTitle>
                 <DialogDescription>
@@ -661,22 +680,6 @@ export default function PortalDashboardPage() {
             </DialogContent>
             </Dialog>
           </div>
-
-          <Tabs defaultValue="upcoming" className="space-y-4">
-            <TabsList>
-              <TabsTrigger value="upcoming" data-testid="tab-upcoming">
-                <CalendarDays className="h-4 w-4 mr-2" />
-                Kommande
-              </TabsTrigger>
-              <TabsTrigger value="history" data-testid="tab-history">
-                <History className="h-4 w-4 mr-2" />
-                Historik
-              </TabsTrigger>
-              <TabsTrigger value="requests" data-testid="tab-requests">
-                <FileText className="h-4 w-4 mr-2" />
-                Mina förfrågningar
-              </TabsTrigger>
-            </TabsList>
 
           <TabsContent value="upcoming" className="space-y-4">
             {ordersQuery.isLoading ? (
@@ -875,8 +878,7 @@ export default function PortalDashboardPage() {
               </div>
             )}
           </TabsContent>
-          </Tabs>
-        </div>
+        </Tabs>
 
         {objects.length > 0 && (
           <Card>
