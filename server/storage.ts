@@ -611,9 +611,13 @@ export class DatabaseStorage implements IStorage {
       inspectedAt: workOrders.inspectedAt,
       objectName: objects.name,
       objectAddress: objects.address,
+      objectAccessCode: objects.resolvedAccessCode,
+      objectKeyNumber: objects.resolvedKeyNumber,
+      customerName: customers.name,
     })
     .from(workOrders)
     .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
     .where(and(...conditions))
     .orderBy(desc(workOrders.scheduledDate));
     

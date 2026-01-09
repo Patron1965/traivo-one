@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -1079,10 +1079,16 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               <div className="flex items-center gap-1.5">
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${executionStatusColors[execStatus] || "bg-gray-400"}`} />
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${executionStatusColors[execStatus] || "bg-gray-400"} ${
+                      (execStatus === "on_way" || execStatus === "on_site") ? "animate-pulse" : ""
+                    }`} />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p className="text-xs">{executionStatusLabels[execStatus] || execStatus}</p>
+                    <div className="text-xs">
+                      <p className="font-medium">{executionStatusLabels[execStatus] || execStatus}</p>
+                      {execStatus === "on_way" && <p className="text-muted-foreground">Fältarbetaren är på väg</p>}
+                      {execStatus === "on_site" && <p className="text-muted-foreground">Fältarbetaren är på plats</p>}
+                    </div>
                   </TooltipContent>
                 </Tooltip>
                 <span className="text-xs font-medium truncate">{job.title}</span>
@@ -1118,6 +1124,33 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 )}
               </div>
               <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
+              {/* Åtkomstinformation */}
+              {(job.objectAccessCode || job.objectKeyNumber) && (
+                <div className="flex items-center gap-2 mt-0.5">
+                  {job.objectAccessCode && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                          <DoorOpen className="h-2.5 w-2.5" />
+                          {job.objectAccessCode}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Portkod</TooltipContent>
+                    </Tooltip>
+                  )}
+                  {job.objectKeyNumber && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400">
+                          <Key className="h-2.5 w-2.5" />
+                          {job.objectKeyNumber}
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>Nyckelnummer</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
+              )}
               {!compact && (
                 <>
                   {job.scheduledStartTime && (
@@ -1743,6 +1776,23 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                           {customer && (
                             <div className="text-xs text-muted-foreground">{customer.name}</div>
                           )}
+                          {/* Åtkomstinformation på oschemalagda jobb */}
+                          {(job.objectAccessCode || job.objectKeyNumber) && (
+                            <div className="flex items-center gap-2 mt-1">
+                              {job.objectAccessCode && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400">
+                                  <DoorOpen className="h-2.5 w-2.5" />
+                                  {job.objectAccessCode}
+                                </span>
+                              )}
+                              {job.objectKeyNumber && (
+                                <span className="flex items-center gap-0.5 text-[10px] text-blue-600 dark:text-blue-400">
+                                  <Key className="h-2.5 w-2.5" />
+                                  {job.objectKeyNumber}
+                                </span>
+                              )}
+                            </div>
+                          )}
                           <div className="flex items-center gap-2 pt-1">
                             <Badge variant="outline" className="text-[10px]">
                               {priorityLabels[job.priority] || job.priority}
@@ -1875,6 +1925,42 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             )}
           </div>
         </div>
+
+        {/* Kapacitetsöversikt */}
+        {viewMode === "week" && (
+          <div className="px-4 py-2 border-b bg-muted/20">
+            <div className="flex items-center gap-3 text-xs flex-wrap">
+              <div className="flex items-center gap-1.5">
+                <Activity className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-medium">Kapacitet:</span>
+              </div>
+              {resources.slice(0, 6).map((resource) => {
+                const weekHours = visibleDates.reduce((sum, day) => sum + getResourceDayHours(resource.id, day), 0);
+                const weekCapacity = (resource.weeklyHours || 40);
+                const utilization = Math.round((weekHours / weekCapacity) * 100);
+                const isOverbooked = utilization > 100;
+                const isLow = utilization < 50;
+                return (
+                  <div key={resource.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-background border">
+                    <span className="font-medium">{resource.initials || resource.name.split(" ")[0]}</span>
+                    <div className="w-12 h-1.5 bg-muted rounded overflow-hidden">
+                      <div 
+                        className={`h-full transition-all ${isOverbooked ? "bg-red-500" : isLow ? "bg-yellow-500" : "bg-green-500"}`}
+                        style={{ width: `${Math.min(utilization, 100)}%` }}
+                      />
+                    </div>
+                    <span className={`${isOverbooked ? "text-red-600" : isLow ? "text-yellow-600" : "text-green-600"}`}>
+                      {utilization}%
+                    </span>
+                  </div>
+                );
+              })}
+              {resources.length > 6 && (
+                <span className="text-muted-foreground">+{resources.length - 6} till</span>
+              )}
+            </div>
+          </div>
+        )}
 
         {viewMode === "day" && renderDayTimelineView()}
         {viewMode === "week" && renderWeekView()}

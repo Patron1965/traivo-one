@@ -919,6 +919,11 @@ export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
 export type WorkOrderWithObject = WorkOrder & {
   objectName: string | null;
   objectAddress: string | null;
+  // Åtkomstinformation från objektet
+  objectAccessCode: string | null;
+  objectKeyNumber: string | null;
+  // Kundnamn för snabb referens
+  customerName: string | null;
 };
 export type SetupTimeLog = typeof setupTimeLogs.$inferSelect;
 export type InsertSetupTimeLog = z.infer<typeof insertSetupTimeLogSchema>;

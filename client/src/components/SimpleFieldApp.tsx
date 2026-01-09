@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { 
   MapPin, Play, CheckCircle, ArrowLeft,
   Loader2, AlertTriangle, Navigation, Phone,
-  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X
+  HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
+  Key, DoorOpen, ListChecks, CircleDot, Circle
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -392,6 +393,79 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-4">
+          {/* Arbetsflödesindikator */}
+          <Card className="bg-muted/30">
+            <CardContent className="py-3">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                  <ListChecks className="h-3.5 w-3.5" />
+                  Arbetsflöde
+                </span>
+                <Badge variant={jobStarted ? "default" : "outline"} className="text-[10px]">
+                  {!jobStarted ? "Väntar på start" : "Pågår"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between">
+                {[
+                  { label: "Åka dit", done: true },
+                  { label: "Starta", done: jobStarted },
+                  { label: "Utför", done: jobStarted && elapsedSeconds > 60 },
+                  { label: "Slutför", done: false }
+                ].map((step, idx, arr) => (
+                  <div key={step.label} className="flex items-center gap-1">
+                    <div className="flex flex-col items-center">
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                        step.done ? "bg-green-500 text-white" : "bg-muted border-2 border-muted-foreground/30"
+                      }`}>
+                        {step.done ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : (
+                          <Circle className="h-4 w-4" />
+                        )}
+                      </div>
+                      <span className="text-[10px] mt-1 text-muted-foreground">{step.label}</span>
+                    </div>
+                    {idx < arr.length - 1 && (
+                      <div className={`w-8 h-0.5 -mt-4 ${step.done ? "bg-green-500" : "bg-muted-foreground/30"}`} />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Åtkomstinformation - stort och tydligt */}
+          {(selectedJob.objectAccessCode || selectedJob.objectKeyNumber || accessInfo.gateCode) && (
+            <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
+              <CardContent className="py-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <DoorOpen className="h-4 w-4 text-amber-600" />
+                  <span className="text-xs font-medium text-amber-800 dark:text-amber-400">Åtkomstinformation</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {(selectedJob.objectAccessCode || accessInfo.gateCode) && (
+                    <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                      <p className="text-[10px] text-muted-foreground uppercase">Portkod</p>
+                      <p className="text-2xl font-mono font-bold">{selectedJob.objectAccessCode || accessInfo.gateCode}</p>
+                    </div>
+                  )}
+                  {selectedJob.objectKeyNumber && (
+                    <div className="text-center p-2 bg-white dark:bg-background rounded border">
+                      <p className="text-[10px] text-muted-foreground uppercase flex items-center justify-center gap-1">
+                        <Key className="h-3 w-3" />
+                        Nyckel
+                      </p>
+                      <p className="text-2xl font-mono font-bold">{selectedJob.objectKeyNumber}</p>
+                    </div>
+                  )}
+                </div>
+                {accessInfo.keyLocation && (
+                  <p className="text-xs text-muted-foreground mt-2">Nyckelplats: {accessInfo.keyLocation}</p>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             {selectedJob.objectAddress && (
               <Button
@@ -642,15 +716,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               materials={materials}
               onMaterialsChange={setMaterials}
             />
-          )}
-
-          {accessInfo.gateCode && (
-            <Card className="border-green-200 dark:border-green-800">
-              <CardContent className="py-4">
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Portkod</p>
-                <p className="text-3xl font-mono font-bold text-center mt-1">{accessInfo.gateCode}</p>
-              </CardContent>
-            </Card>
           )}
 
           {accessInfo.specialInstructions && (
