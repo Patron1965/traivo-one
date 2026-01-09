@@ -490,32 +490,23 @@ export default function PortalDashboardPage() {
         )}
 
         {/* Main Content - Mina ärenden Section */}
-        <Tabs defaultValue="upcoming" className="space-y-4">
+        <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <h3 className="text-lg font-semibold shrink-0">Mina ärenden</h3>
-              <TabsList>
-                <TabsTrigger value="upcoming" data-testid="tab-upcoming">
-                  <CalendarDays className="h-4 w-4 mr-2" />
-                  Kommande
-                </TabsTrigger>
-                <TabsTrigger value="history" data-testid="tab-history">
-                  <History className="h-4 w-4 mr-2" />
-                  Historik
-                </TabsTrigger>
-                <TabsTrigger value="requests" data-testid="tab-requests">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Förfrågningar
-                </TabsTrigger>
-              </TabsList>
-            </div>
-            <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
-              <DialogTrigger asChild>
-                <Button data-testid="button-new-booking">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Ny förfrågan
+            <h3 className="text-lg font-semibold">Mina ärenden</h3>
+            <div className="flex items-center gap-2">
+              <Link href="/portal/clusters">
+                <Button variant="outline" data-testid="button-view-clusters">
+                  <TreeDeciduous className="h-4 w-4 mr-2" />
+                  Visa kluster
                 </Button>
-              </DialogTrigger>
+              </Link>
+              <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button data-testid="button-new-booking">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Ny förfrågan
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>Ny bokningsförfrågan</DialogTitle>
@@ -678,10 +669,27 @@ export default function PortalDashboardPage() {
                 </form>
               </Form>
             </DialogContent>
-            </Dialog>
+              </Dialog>
+            </div>
           </div>
 
-          <TabsContent value="upcoming" className="space-y-4">
+          <Tabs defaultValue="upcoming" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="upcoming" data-testid="tab-upcoming">
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Kommande
+              </TabsTrigger>
+              <TabsTrigger value="history" data-testid="tab-history">
+                <History className="h-4 w-4 mr-2" />
+                Historik
+              </TabsTrigger>
+              <TabsTrigger value="requests" data-testid="tab-requests">
+                <FileText className="h-4 w-4 mr-2" />
+                Förfrågningar
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="upcoming" className="space-y-4">
             {ordersQuery.isLoading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -878,7 +886,8 @@ export default function PortalDashboardPage() {
               </div>
             )}
           </TabsContent>
-        </Tabs>
+          </Tabs>
+        </div>
 
         {objects.length > 0 && (
           <Card>
