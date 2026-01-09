@@ -11,7 +11,10 @@ import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -237,6 +240,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [routeJobOrder, setRouteJobOrder] = useState<string[]>([]);
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [isSendingToMobile, setIsSendingToMobile] = useState(false);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [jobToAssign, setJobToAssign] = useState<WorkOrderWithObject | null>(null);
+  const [assignDate, setAssignDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
+  const [assignResourceId, setAssignResourceId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -537,6 +544,27 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     setSelectedJob(jobId);
     onSelectJob?.(jobId);
   }, [onSelectJob]);
+
+  const handleOpenAssignDialog = useCallback((job: WorkOrderWithObject, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setJobToAssign(job);
+    setAssignDate(format(currentDate, "yyyy-MM-dd"));
+    setAssignResourceId(null);
+    setAssignDialogOpen(true);
+  }, [currentDate]);
+
+  const handleQuickAssign = useCallback(() => {
+    if (!jobToAssign || !assignResourceId || !assignDate) return;
+    
+    updateWorkOrderMutation.mutate({
+      id: jobToAssign.id,
+      resourceId: assignResourceId,
+      scheduledDate: assignDate,
+    });
+    setAssignDialogOpen(false);
+    setJobToAssign(null);
+    setAssignResourceId(null);
+  }, [jobToAssign, assignResourceId, assignDate, updateWorkOrderMutation]);
 
   // Route optimization and export handlers
   const handleOptimizeRoute = useCallback(async () => {
@@ -1723,6 +1751,16 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                               {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
                             </Badge>
                           </div>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="w-full mt-2"
+                            onClick={(e) => handleOpenAssignDialog(job, e)}
+                            data-testid={`button-assign-job-${job.id}`}
+                          >
+                            <UserPlus className="h-3 w-3 mr-1" />
+                            Tilldela resurs
+                          </Button>
                         </div>
                       </Card>
                     </DraggableJobCard>
@@ -1963,6 +2001,65 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     }}>
       {renderDragOverlay()}
     </DragOverlay>
+    
+    {/* Quick Assign Dialog */}
+    <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Tilldela resurs</DialogTitle>
+          <DialogDescription>
+            Välj resurs och datum för: {jobToAssign?.title}
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          <div className="space-y-2">
+            <Label>Datum</Label>
+            <Input
+              type="date"
+              value={assignDate}
+              onChange={(e) => setAssignDate(e.target.value)}
+              data-testid="input-assign-date"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Resurs</Label>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
+              {resources.map((resource) => (
+                <div
+                  key={resource.id}
+                  className={`p-3 rounded-md border cursor-pointer hover-elevate ${
+                    assignResourceId === resource.id ? "ring-2 ring-primary" : ""
+                  }`}
+                  onClick={() => setAssignResourceId(resource.id)}
+                  data-testid={`assign-resource-${resource.id}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <User className="h-4 w-4 text-muted-foreground" />
+                    <span className="font-medium">{resource.name}</span>
+                    <Badge variant="secondary" className="text-xs ml-auto">
+                      {resource.resourceType}
+                    </Badge>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+            Avbryt
+          </Button>
+          <Button 
+            onClick={handleQuickAssign}
+            disabled={!assignResourceId || updateWorkOrderMutation.isPending}
+            data-testid="button-confirm-assign"
+          >
+            {updateWorkOrderMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+            Tilldela
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
     </DndContext>
   );
 }
