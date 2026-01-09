@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Mail, CheckCircle, Loader2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Ange en giltig e-postadress"),
+  tenantId: z.string().optional(),
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
@@ -19,21 +21,43 @@ export default function PortalLoginPage() {
   const [emailSent, setEmailSent] = useState(false);
   const [sentEmail, setSentEmail] = useState("");
 
+  const tenantsQuery = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/portal/tenants"],
+    queryFn: async () => {
+      const res = await fetch("/api/portal/tenants");
+      if (!res.ok) return [];
+      return res.json();
+    },
+  });
+
+  const tenants = tenantsQuery.data || [];
+  const isLoadingTenants = tenantsQuery.isLoading;
+  const hasMultipleTenants = tenants.length > 1;
+
   const form = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
       email: "",
+      tenantId: "",
     },
   });
 
+  useEffect(() => {
+    if (tenants.length === 1) {
+      form.setValue("tenantId", tenants[0].id);
+    }
+  }, [tenants, form]);
+
   const requestLinkMutation = useMutation({
     mutationFn: async (data: LoginForm) => {
+      const effectiveTenantId = data.tenantId || (tenants.length === 1 ? tenants[0].id : undefined);
+
       const res = await fetch("/api/portal/auth/request-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: data.email,
-          tenantId: "default-tenant",
+          tenantId: effectiveTenantId,
         }),
       });
       if (!res.ok) {
@@ -101,6 +125,33 @@ export default function PortalLoginPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              {hasMultipleTenants && (
+                <FormField
+                  control={form.control}
+                  name="tenantId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Företag</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-tenant">
+                            <SelectValue placeholder="Välj företag" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {tenants.map((tenant) => (
+                            <SelectItem key={tenant.id} value={tenant.id}>
+                              {tenant.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
+
               <FormField
                 control={form.control}
                 name="email"
@@ -130,13 +181,18 @@ export default function PortalLoginPage() {
               <Button
                 type="submit"
                 className="w-full"
-                disabled={requestLinkMutation.isPending}
+                disabled={requestLinkMutation.isPending || isLoadingTenants}
                 data-testid="button-submit"
               >
                 {requestLinkMutation.isPending ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                     Skickar...
+                  </>
+                ) : isLoadingTenants ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Laddar...
                   </>
                 ) : (
                   "Skicka inloggningslänk"

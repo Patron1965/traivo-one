@@ -7372,12 +7372,34 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     return true;
   }
 
+  app.get("/api/portal/tenants", async (req, res) => {
+    try {
+      const tenants = await storage.getPublicTenants();
+      res.json(tenants.map(t => ({ id: t.id, name: t.name })));
+    } catch (error) {
+      console.error("Failed to get tenants:", error);
+      res.status(500).json({ error: "Kunde inte hämta företag" });
+    }
+  });
+
   app.post("/api/portal/auth/request-link", async (req, res) => {
     try {
-      const { email, tenantId } = req.body;
+      const { email } = req.body;
+      let { tenantId } = req.body;
       
-      if (!email || !tenantId) {
-        return res.status(400).json({ error: "E-post och tenant krävs" });
+      if (!email) {
+        return res.status(400).json({ error: "E-postadress krävs" });
+      }
+
+      if (!tenantId) {
+        const tenants = await storage.getPublicTenants();
+        if (tenants.length === 1) {
+          tenantId = tenants[0].id;
+        } else if (tenants.length === 0) {
+          return res.status(400).json({ error: "Ingen aktiv tenant hittades" });
+        } else {
+          return res.status(400).json({ error: "Välj ett företag" });
+        }
       }
 
       const ip = req.ip || req.socket.remoteAddress || "unknown";

@@ -105,6 +105,11 @@ export async function validateSession(sessionToken: string): Promise<{
     return { valid: false };
   }
 
+  if (new Date() > session.expiresAt) {
+    await storage.deletePortalSession(session.id);
+    return { valid: false };
+  }
+
   await storage.updatePortalSessionAccess(session.id);
   const customer = await storage.getCustomer(session.customerId);
 

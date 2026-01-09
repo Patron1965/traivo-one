@@ -71,6 +71,7 @@ export interface IStorage {
   upsertUser(user: Partial<UpsertUser> & { id: string; email: string }): Promise<User>;
   
   getTenant(id: string): Promise<Tenant | undefined>;
+  getPublicTenants(): Promise<Tenant[]>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   ensureTenant(id: string, defaultData: Omit<InsertTenant, 'id'>): Promise<Tenant>;
   updateTenantSettings(id: string, settings: Record<string, unknown>): Promise<Tenant | undefined>;
@@ -390,6 +391,10 @@ export class DatabaseStorage implements IStorage {
   async getTenant(id: string): Promise<Tenant | undefined> {
     const [tenant] = await db.select().from(tenants).where(and(eq(tenants.id, id), isNull(tenants.deletedAt)));
     return tenant || undefined;
+  }
+
+  async getPublicTenants(): Promise<Tenant[]> {
+    return db.select().from(tenants).where(isNull(tenants.deletedAt));
   }
 
   async createTenant(insertTenant: InsertTenant): Promise<Tenant> {
