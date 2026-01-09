@@ -7350,8 +7350,329 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // ============================================
-  // CUSTOMER PORTAL - Authenticated API för kundportal
-  // Kräver inloggad användare med tenant-kontext
+  // CUSTOMER PORTAL - Self-Service Portal
+  // Token-baserad autentisering för kunder
+  // ============================================
+
+  const portalRateLimits = new Map<string, { count: number; resetAt: number }>();
+  const PORTAL_RATE_LIMIT = 5;
+  const PORTAL_RATE_WINDOW = 15 * 60 * 1000;
+
+  function checkPortalRateLimit(key: string): boolean {
+    const now = Date.now();
+    const limit = portalRateLimits.get(key);
+    if (!limit || now > limit.resetAt) {
+      portalRateLimits.set(key, { count: 1, resetAt: now + PORTAL_RATE_WINDOW });
+      return true;
+    }
+    if (limit.count >= PORTAL_RATE_LIMIT) {
+      return false;
+    }
+    limit.count++;
+    return true;
+  }
+
+  app.post("/api/portal/auth/request-link", async (req, res) => {
+    try {
+      const { email, tenantId } = req.body;
+      
+      if (!email || !tenantId) {
+        return res.status(400).json({ error: "E-post och tenant krävs" });
+      }
+
+      const ip = req.ip || req.socket.remoteAddress || "unknown";
+      if (!checkPortalRateLimit(`${ip}:${email}`)) {
+        return res.status(429).json({ error: "För många inloggningsförsök. Försök igen om 15 minuter." });
+      }
+
+      const { requestMagicLink, sendPortalMagicLinkEmail } = await import("./portal-auth");
+      const result = await requestMagicLink(
+        email,
+        tenantId,
+        ip,
+        req.headers["user-agent"]
+      );
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      const tenant = await storage.getTenant(tenantId);
+      const companyName = tenant?.name || "Unicorn";
+      
+      const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : `https://${req.headers.host}`;
+      const magicLinkUrl = `${baseUrl}/portal/verify?token=${result.token}`;
+
+      const emailSent = await sendPortalMagicLinkEmail(
+        email,
+        magicLinkUrl,
+        result.customer?.name || result.customer?.contactPerson || "Kund",
+        companyName
+      );
+
+      if (!emailSent) {
+        console.warn("Magic link email not sent - RESEND_API_KEY may be missing");
+      }
+
+      res.json({ 
+        success: true, 
+        message: "Inloggningslänk skickad till din e-post",
+        emailSent,
+      });
+    } catch (error) {
+      console.error("Failed to request magic link:", error);
+      res.status(500).json({ error: "Kunde inte skicka inloggningslänk" });
+    }
+  });
+
+  app.post("/api/portal/auth/verify", async (req, res) => {
+    try {
+      const { token } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({ error: "Token krävs" });
+      }
+
+      const { verifyMagicLink } = await import("./portal-auth");
+      const ip = req.ip || req.socket.remoteAddress;
+      const result = await verifyMagicLink(token, ip, req.headers["user-agent"]);
+
+      if (!result.success) {
+        return res.status(400).json({ error: result.error });
+      }
+
+      res.json({
+        success: true,
+        sessionToken: result.session?.token,
+        customer: {
+          id: result.session?.customer?.id,
+          name: result.session?.customer?.name,
+          email: result.session?.customer?.email,
+        },
+        tenant: {
+          id: result.session?.tenant?.id,
+          name: result.session?.tenant?.name,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to verify magic link:", error);
+      res.status(500).json({ error: "Kunde inte verifiera inloggning" });
+    }
+  });
+
+  app.get("/api/portal/me", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const tenant = await storage.getTenant(session.tenantId!);
+
+      res.json({
+        customer: {
+          id: session.customer?.id,
+          name: session.customer?.name,
+          email: session.customer?.email,
+          phone: session.customer?.phone,
+        },
+        tenant: {
+          id: tenant?.id,
+          name: tenant?.name,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to get portal user:", error);
+      res.status(500).json({ error: "Kunde inte hämta användarinfo" });
+    }
+  });
+
+  app.get("/api/portal/orders", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const workOrders = await storage.getWorkOrdersByCustomer(session.customerId, session.tenantId);
+      const objects = await storage.getObjects(session.tenantId);
+      const objectMap = new Map(objects.map(o => [o.id, o]));
+      const resources = await storage.getResources(session.tenantId);
+      const resourceMap = new Map(resources.map(r => [r.id, r]));
+
+      const enrichedOrders = workOrders.map(order => {
+        const obj = order.objectId ? objectMap.get(order.objectId) : undefined;
+        const resource = order.resourceId ? resourceMap.get(order.resourceId) : undefined;
+        return {
+          id: order.id,
+          title: order.title,
+          description: order.description,
+          status: order.orderStatus || order.status,
+          scheduledDate: order.scheduledDate,
+          scheduledTime: order.scheduledStartTime,
+          completedAt: order.completedAt,
+          objectAddress: obj?.address,
+          objectName: obj?.name,
+          resourceName: resource?.name,
+        };
+      });
+
+      const upcoming = enrichedOrders
+        .filter(o => !["utford", "fakturerad", "completed", "invoiced"].includes(o.status))
+        .sort((a, b) => {
+          if (!a.scheduledDate) return 1;
+          if (!b.scheduledDate) return -1;
+          return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+        });
+
+      const history = enrichedOrders
+        .filter(o => ["utford", "fakturerad", "completed", "invoiced"].includes(o.status))
+        .sort((a, b) => {
+          if (!a.completedAt) return 1;
+          if (!b.completedAt) return -1;
+          return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
+        })
+        .slice(0, 20);
+
+      res.json({ upcoming, history });
+    } catch (error) {
+      console.error("Failed to get portal orders:", error);
+      res.status(500).json({ error: "Kunde inte hämta ordrar" });
+    }
+  });
+
+  app.get("/api/portal/objects", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const objects = await storage.getObjectsByCustomer(session.customerId);
+      
+      res.json(objects.map(o => ({
+        id: o.id,
+        name: o.name,
+        address: o.address,
+        city: o.city,
+        objectType: o.objectType,
+      })));
+    } catch (error) {
+      console.error("Failed to get portal objects:", error);
+      res.status(500).json({ error: "Kunde inte hämta objekt" });
+    }
+  });
+
+  app.post("/api/portal/booking-requests", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const { objectId, workOrderId, requestType, preferredDate1, preferredDate2, preferredTimeSlot, customerNotes } = req.body;
+
+      if (!requestType) {
+        return res.status(400).json({ error: "Typ av förfrågan krävs" });
+      }
+
+      const bookingRequest = await storage.createBookingRequest({
+        tenantId: session.tenantId,
+        customerId: session.customerId,
+        objectId: objectId || null,
+        workOrderId: workOrderId || null,
+        requestType,
+        status: "pending",
+        preferredDate1: preferredDate1 ? new Date(preferredDate1) : null,
+        preferredDate2: preferredDate2 ? new Date(preferredDate2) : null,
+        preferredTimeSlot: preferredTimeSlot || null,
+        customerNotes: customerNotes || null,
+        staffNotes: null,
+        handledBy: null,
+        handledAt: null,
+      });
+
+      res.json({ success: true, bookingRequest });
+    } catch (error) {
+      console.error("Failed to create booking request:", error);
+      res.status(500).json({ error: "Kunde inte skapa bokningsförfrågan" });
+    }
+  });
+
+  app.get("/api/portal/booking-requests", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      const requests = await storage.getBookingRequests(session.tenantId, session.customerId);
+      res.json(requests);
+    } catch (error) {
+      console.error("Failed to get booking requests:", error);
+      res.status(500).json({ error: "Kunde inte hämta bokningsförfrågningar" });
+    }
+  });
+
+  app.post("/api/portal/logout", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith("Bearer ")) {
+        const sessionToken = authHeader.substring(7);
+        const { logout } = await import("./portal-auth");
+        await logout(sessionToken);
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to logout:", error);
+      res.status(500).json({ error: "Kunde inte logga ut" });
+    }
+  });
+
+  // ============================================
+  // CUSTOMER PORTAL - Staff API (authenticated staff)
   // ============================================
   
   app.get("/api/portal/customer/:customerId/orders", async (req, res) => {
