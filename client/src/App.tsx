@@ -49,6 +49,7 @@ import AssignmentsPage from "@/pages/AssignmentsPage";
 import PortalLoginPage from "@/pages/portal/PortalLoginPage";
 import PortalVerifyPage from "@/pages/portal/PortalVerifyPage";
 import PortalDashboardPage from "@/pages/portal/PortalDashboardPage";
+import PortalClusterOverviewPage from "@/pages/portal/PortalClusterOverviewPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -104,6 +105,7 @@ function PortalRouter() {
       <Route path="/portal" component={PortalLoginPage} />
       <Route path="/portal/verify" component={PortalVerifyPage} />
       <Route path="/portal/dashboard" component={PortalDashboardPage} />
+      <Route path="/portal/clusters" component={PortalClusterOverviewPage} />
       <Route component={NotFound} />
     </Switch>
   );

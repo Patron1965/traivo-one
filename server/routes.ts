@@ -7611,6 +7611,130 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Portal cluster/objects hierarchy overview
+  app.get("/api/portal/clusters", async (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      if (!authHeader?.startsWith("Bearer ")) {
+        return res.status(401).json({ error: "Autentisering krävs" });
+      }
+
+      const sessionToken = authHeader.substring(7);
+      const { validateSession } = await import("./portal-auth");
+      const session = await validateSession(sessionToken);
+
+      if (!session.valid || !session.customerId || !session.tenantId) {
+        return res.status(401).json({ error: "Ogiltig session" });
+      }
+
+      // Get all objects for this customer with hierarchy info
+      const customerObjects = await storage.getObjectsByCustomer(session.customerId);
+      
+      // Create a set of customer's object IDs for filtering
+      const customerObjectIds = new Set(customerObjects.map(obj => obj.id));
+      
+      // Get upcoming work orders for these objects
+      const now = new Date();
+      const futureDate = new Date();
+      futureDate.setMonth(futureDate.getMonth() + 3);
+      const allWorkOrders = await storage.getWorkOrders(session.tenantId, now, futureDate, false, 500);
+      
+      // Filter to only include work orders for this customer's objects
+      const workOrders = allWorkOrders.filter((wo: any) => wo.objectId && customerObjectIds.has(wo.objectId));
+      
+      // Get completed work orders for history
+      const pastDate = new Date();
+      pastDate.setMonth(pastDate.getMonth() - 6);
+      const allHistoryOrders = await storage.getWorkOrders(session.tenantId, pastDate, now, false, 500);
+      
+      // Filter to only include work orders for this customer's objects
+      const historyOrders = allHistoryOrders.filter((wo: any) => wo.objectId && customerObjectIds.has(wo.objectId));
+      
+      // Create a map of object IDs to their work order info
+      const objectVisitInfo: Record<string, { nextVisit?: Date; lastVisit?: Date }> = {};
+      
+      workOrders.forEach((wo: any) => {
+        if (wo.objectId && wo.scheduledDate) {
+          if (!objectVisitInfo[wo.objectId]) {
+            objectVisitInfo[wo.objectId] = {};
+          }
+          const date = new Date(wo.scheduledDate);
+          if (!objectVisitInfo[wo.objectId].nextVisit || date < objectVisitInfo[wo.objectId].nextVisit!) {
+            objectVisitInfo[wo.objectId].nextVisit = date;
+          }
+        }
+      });
+      
+      historyOrders.forEach((wo: any) => {
+        if (wo.objectId && (wo.completedAt || wo.scheduledDate)) {
+          if (!objectVisitInfo[wo.objectId]) {
+            objectVisitInfo[wo.objectId] = {};
+          }
+          const date = new Date(wo.completedAt || wo.scheduledDate);
+          if (!objectVisitInfo[wo.objectId].lastVisit || date > objectVisitInfo[wo.objectId].lastVisit!) {
+            objectVisitInfo[wo.objectId].lastVisit = date;
+          }
+        }
+      });
+
+      // Build hierarchy tree
+      const objectMap = new Map<string, any>();
+      const rootObjects: any[] = [];
+
+      // First pass: create all node objects with enriched data
+      customerObjects.forEach(obj => {
+        const visitInfo = objectVisitInfo[obj.id] || {};
+        objectMap.set(obj.id, {
+          id: obj.id,
+          name: obj.name,
+          objectType: obj.objectType,
+          hierarchyLevel: obj.hierarchyLevel || "fastighet",
+          address: obj.address,
+          city: obj.city,
+          postalCode: obj.postalCode,
+          accessCode: obj.accessCode,
+          keyNumber: obj.keyNumber,
+          accessInfo: obj.accessInfo,
+          latitude: obj.latitude,
+          longitude: obj.longitude,
+          parentId: obj.parentId,
+          nextVisit: visitInfo.nextVisit?.toISOString() || null,
+          lastVisit: visitInfo.lastVisit?.toISOString() || null,
+          children: [],
+        });
+      });
+
+      // Second pass: build parent-child relationships
+      customerObjects.forEach(obj => {
+        const node = objectMap.get(obj.id);
+        if (obj.parentId && objectMap.has(obj.parentId)) {
+          objectMap.get(obj.parentId).children.push(node);
+        } else {
+          rootObjects.push(node);
+        }
+      });
+
+      // Sort children at each level by name
+      const sortChildren = (nodes: any[]) => {
+        nodes.sort((a, b) => a.name.localeCompare(b.name, 'sv'));
+        nodes.forEach(node => {
+          if (node.children.length > 0) {
+            sortChildren(node.children);
+          }
+        });
+      };
+      sortChildren(rootObjects);
+
+      res.json({
+        total: customerObjects.length,
+        tree: rootObjects,
+      });
+    } catch (error) {
+      console.error("Failed to get portal clusters:", error);
+      res.status(500).json({ error: "Kunde inte hämta klusteröversikt" });
+    }
+  });
+
   app.post("/api/portal/booking-requests", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;

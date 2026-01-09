@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useLocation } from "wouter";
+import { useLocation, Link } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -339,19 +339,22 @@ export default function PortalDashboardPage() {
               </div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-purple-500/10 to-transparent">
-            <CardContent className="p-5">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-purple-500/20 rounded-lg">
-                  <Package className="h-5 w-5 text-purple-500" />
+          <Link href="/portal/clusters">
+            <Card className="bg-gradient-to-br from-purple-500/10 to-transparent hover-elevate cursor-pointer group" data-testid="card-cluster-overview">
+              <CardContent className="p-5">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-500/20 rounded-lg group-hover:bg-purple-500/30 transition-colors">
+                    <TreeDeciduous className="h-5 w-5 text-purple-500" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="text-2xl font-bold">{objects.length}</div>
+                    <div className="text-xs text-muted-foreground">Dina platser</div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
-                <div>
-                  <div className="text-2xl font-bold">{objects.length}</div>
-                  <div className="text-xs text-muted-foreground">Dina platser</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </Link>
           <Card className="bg-gradient-to-br from-orange-500/10 to-transparent">
             <CardContent className="p-5">
               <div className="flex items-center gap-3">
