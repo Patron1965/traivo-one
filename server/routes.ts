@@ -6583,6 +6583,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const createdAssignments = [];
       const scheduledDate = req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined;
       
+      // Fetch article once before loop if concept has articleId
+      let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> = null;
+      if (concept.articleId) {
+        linkedArticle = await storage.getArticle(concept.articleId);
+      }
+
       for (const obj of matchingObjects) {
         // Cross-pollination: multiply by metadata field if specified
         let quantity = 1;
@@ -6595,13 +6601,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         let totalValue = 0;
         let totalCost = 0;
         
-        if (concept.articleId) {
-          const article = await storage.getArticle(concept.articleId);
-          if (article) {
-            estimatedDuration = (article.productionTime || 0) * quantity;
-            totalValue = (article.listPrice || 0) * quantity;
-            totalCost = (article.cost || 0) * quantity;
-          }
+        if (linkedArticle) {
+          estimatedDuration = (linkedArticle.productionTime || 0) * quantity;
+          totalValue = (linkedArticle.listPrice || 0) * quantity;
+          totalCost = (linkedArticle.cost || 0) * quantity;
         }
 
         const assignment = await storage.createAssignment({
@@ -6626,23 +6629,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         });
 
         // If an article is linked, create assignment article
-        if (concept.articleId) {
-          const article = await storage.getArticle(concept.articleId);
-          if (article) {
-            await storage.createAssignmentArticle({
-              assignmentId: assignment.id,
-              articleId: concept.articleId,
-              quantity,
-              unitPrice: article.listPrice || 0,
-              totalPrice: (article.listPrice || 0) * quantity,
-              unitCost: article.cost || 0,
-              totalCost: (article.cost || 0) * quantity,
-              unitTime: article.productionTime || 0,
-              totalTime: (article.productionTime || 0) * quantity,
-              sequenceOrder: 1,
-              status: "pending"
-            });
-          }
+        if (linkedArticle && concept.articleId) {
+          await storage.createAssignmentArticle({
+            assignmentId: assignment.id,
+            articleId: concept.articleId,
+            quantity,
+            unitPrice: linkedArticle.listPrice || 0,
+            totalPrice: (linkedArticle.listPrice || 0) * quantity,
+            unitCost: linkedArticle.cost || 0,
+            totalCost: (linkedArticle.cost || 0) * quantity,
+            unitTime: linkedArticle.productionTime || 0,
+            totalTime: (linkedArticle.productionTime || 0) * quantity,
+            sequenceOrder: 1,
+            status: "pending"
+          });
         }
 
         createdAssignments.push(assignment);
