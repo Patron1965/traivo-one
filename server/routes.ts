@@ -4141,14 +4141,14 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         });
       }
       
-      // Route optimization recommendations
-      const unoptimizedOrders = todaysOrders.filter(o => !o.sequenceOrder || o.sequenceOrder === 0);
-      if (unoptimizedOrders.length > 3) {
+      // Route optimization recommendations - check for unassigned orders
+      const unassignedOrders = todaysOrders.filter(o => !o.resourceId);
+      if (unassignedOrders.length > 3) {
         recommendations.push({
           type: "optimization",
           priority: "medium",
-          title: "Rutter ej optimerade",
-          description: `${unoptimizedOrders.length} ordrar saknar optimerad körordning.`,
+          title: "Ordrar ej tilldelade",
+          description: `${unassignedOrders.length} ordrar saknar tilldelad resurs.`,
           actionable: "Kör VRP-optimering för bättre rutter",
         });
       }
@@ -4212,9 +4212,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       for (const route of routes) {
         for (const stop of route.stops) {
           try {
+            // Update work order with resource assignment only
+            // (sequenceOrder is tracked on assignment_articles, not work_orders)
             const updated = await storage.updateWorkOrder(stop.orderId, {
               resourceId: route.resourceId,
-              sequenceOrder: stop.sequence,
             });
             results.push({ orderId: stop.orderId, success: !!updated });
           } catch (err) {
@@ -6615,12 +6616,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     try {
       const tenantId = getTenantIdWithFallback(req);
       const concept = await storage.getOrderConcept(req.params.id);
-      if (!verifyTenantOwnership(concept, tenantId)) {
+      const verifiedConcept = verifyTenantOwnership(concept, tenantId);
+      if (!verifiedConcept) {
         return res.status(404).json({ error: "Orderkoncept hittades inte" });
       }
       
-      const filters = await storage.getConceptFilters(concept.id);
-      res.json({ ...concept, filters });
+      const filters = await storage.getConceptFilters(verifiedConcept.id);
+      res.json({ ...verifiedConcept, filters });
     } catch (error) {
       console.error("Failed to get order concept:", error);
       res.status(500).json({ error: "Kunde inte hämta orderkoncept" });
@@ -6733,8 +6735,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     try {
       const tenantId = getTenantIdWithFallback(req);
       const userId = req.session?.user?.id;
-      const concept = await storage.getOrderConcept(req.params.id);
-      if (!verifyTenantOwnership(concept, tenantId)) {
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) {
         return res.status(404).json({ error: "Orderkoncept hittades inte" });
       }
 
@@ -6752,7 +6755,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       // Apply filters to find matching objects
       const matchingObjects = targetObjects.filter(obj => {
         return filters.every(filter => {
-          const metadataValue = obj.metadata?.[filter.metadataKey];
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
           const filterValue = filter.filterValue;
           
           switch (filter.operator) {
@@ -6785,16 +6789,17 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const scheduledDate = req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined;
       
       // Fetch article once before loop if concept has articleId
-      let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> = null;
+      let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
       if (concept.articleId) {
         linkedArticle = await storage.getArticle(concept.articleId);
       }
 
       for (const obj of matchingObjects) {
         // Cross-pollination: multiply by metadata field if specified
+        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
         let quantity = 1;
-        if (concept.crossPollinationField && obj.metadata?.[concept.crossPollinationField]) {
-          quantity = Number(obj.metadata[concept.crossPollinationField]) || 1;
+        if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
+          quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
         }
 
         // Calculate estimated duration from linked article
@@ -7916,8 +7921,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const tenantId = getTenantIdWithFallback(req);
       const { customerId } = req.params;
       
-      const customer = await storage.getCustomer(customerId);
-      if (!verifyTenantOwnership(customer, tenantId)) {
+      const rawCustomer = await storage.getCustomer(customerId);
+      const customer = verifyTenantOwnership(rawCustomer, tenantId);
+      if (!customer) {
         return res.status(404).json({ error: "Kund hittades inte" });
       }
       
@@ -8029,8 +8035,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const tenantId = getTenantIdWithFallback(req);
       const { customerId } = req.params;
       
-      const customer = await storage.getCustomer(customerId);
-      if (!verifyTenantOwnership(customer, tenantId)) {
+      const rawCustomer = await storage.getCustomer(customerId);
+      const customer = verifyTenantOwnership(rawCustomer, tenantId);
+      if (!customer) {
         return res.status(404).json({ error: "Kund hittades inte" });
       }
 
