@@ -46,6 +46,9 @@ import {
   type ConceptFilter, type InsertConceptFilter,
   type Assignment, type InsertAssignment,
   type AssignmentArticle, type InsertAssignmentArticle,
+  type CustomerPortalToken, type InsertCustomerPortalToken,
+  type CustomerPortalSession, type InsertCustomerPortalSession,
+  type CustomerBookingRequest, type InsertCustomerBookingRequest,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -55,7 +58,8 @@ import {
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
-  orderConcepts, conceptFilters, assignments, assignmentArticles
+  orderConcepts, conceptFilters, assignments, assignmentArticles,
+  customerPortalTokens, customerPortalSessions, customerBookingRequests
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
@@ -2546,6 +2550,116 @@ export class DatabaseStorage implements IStorage {
       eq(assignmentArticles.id, id),
       eq(assignmentArticles.assignmentId, assignmentId)
     ));
+  }
+
+  // ============================================
+  // Customer Portal Tokens
+  // ============================================
+  
+  async createPortalToken(token: InsertCustomerPortalToken): Promise<CustomerPortalToken> {
+    const [result] = await db.insert(customerPortalTokens).values(token).returning();
+    return result;
+  }
+
+  async getPortalTokenByHash(tokenHash: string): Promise<CustomerPortalToken | undefined> {
+    const [token] = await db.select().from(customerPortalTokens)
+      .where(eq(customerPortalTokens.tokenHash, tokenHash));
+    return token || undefined;
+  }
+
+  async markPortalTokenUsed(id: string): Promise<void> {
+    await db.update(customerPortalTokens)
+      .set({ usedAt: new Date() })
+      .where(eq(customerPortalTokens.id, id));
+  }
+
+  async getCustomerByEmail(email: string, tenantId: string): Promise<Customer | undefined> {
+    const [customer] = await db.select().from(customers)
+      .where(and(
+        eq(customers.email, email),
+        eq(customers.tenantId, tenantId),
+        isNull(customers.deletedAt)
+      ));
+    return customer || undefined;
+  }
+
+  // ============================================
+  // Customer Portal Sessions
+  // ============================================
+  
+  async createPortalSession(session: InsertCustomerPortalSession): Promise<CustomerPortalSession> {
+    const [result] = await db.insert(customerPortalSessions).values(session).returning();
+    return result;
+  }
+
+  async getPortalSessionByToken(sessionToken: string): Promise<CustomerPortalSession | undefined> {
+    const [session] = await db.select().from(customerPortalSessions)
+      .where(and(
+        eq(customerPortalSessions.sessionToken, sessionToken),
+        gte(customerPortalSessions.expiresAt, new Date())
+      ));
+    return session || undefined;
+  }
+
+  async updatePortalSessionAccess(id: string): Promise<void> {
+    await db.update(customerPortalSessions)
+      .set({ lastAccessedAt: new Date() })
+      .where(eq(customerPortalSessions.id, id));
+  }
+
+  async deletePortalSession(id: string): Promise<void> {
+    await db.delete(customerPortalSessions)
+      .where(eq(customerPortalSessions.id, id));
+  }
+
+  // ============================================
+  // Customer Booking Requests
+  // ============================================
+  
+  async getBookingRequests(tenantId: string, customerId?: string): Promise<CustomerBookingRequest[]> {
+    if (customerId) {
+      return db.select().from(customerBookingRequests)
+        .where(and(
+          eq(customerBookingRequests.tenantId, tenantId),
+          eq(customerBookingRequests.customerId, customerId)
+        ))
+        .orderBy(desc(customerBookingRequests.createdAt));
+    }
+    return db.select().from(customerBookingRequests)
+      .where(eq(customerBookingRequests.tenantId, tenantId))
+      .orderBy(desc(customerBookingRequests.createdAt));
+  }
+
+  async getBookingRequest(id: string): Promise<CustomerBookingRequest | undefined> {
+    const [request] = await db.select().from(customerBookingRequests)
+      .where(eq(customerBookingRequests.id, id));
+    return request || undefined;
+  }
+
+  async createBookingRequest(request: InsertCustomerBookingRequest): Promise<CustomerBookingRequest> {
+    const [result] = await db.insert(customerBookingRequests).values(request).returning();
+    return result;
+  }
+
+  async updateBookingRequest(id: string, tenantId: string, data: Partial<InsertCustomerBookingRequest>): Promise<CustomerBookingRequest | undefined> {
+    const [result] = await db.update(customerBookingRequests)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(
+        eq(customerBookingRequests.id, id),
+        eq(customerBookingRequests.tenantId, tenantId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async getWorkOrdersByCustomer(customerId: string, tenantId: string): Promise<WorkOrder[]> {
+    return db.select().from(workOrders)
+      .where(and(
+        eq(workOrders.customerId, customerId),
+        eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt)
+      ))
+      .orderBy(desc(workOrders.scheduledDate));
   }
 }
 

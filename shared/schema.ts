@@ -1911,3 +1911,78 @@ export const TASK_CREATION_METHOD_LABELS: Record<TaskCreationMethod, string> = {
   performer: "Utförare",
   automatic: "Automatik"
 };
+
+// ============================================
+// CUSTOMER PORTAL (Kundportal)
+// ============================================
+
+export const customerPortalTokens = pgTable("customer_portal_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  tokenHash: text("token_hash").notNull(),
+  email: text("email").notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+});
+
+export const customerPortalSessions = pgTable("customer_portal_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  sessionToken: text("session_token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastAccessedAt: timestamp("last_accessed_at").defaultNow().notNull(),
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+});
+
+export const BOOKING_REQUEST_STATUSES = [
+  "pending",      // Väntar på handläggning
+  "confirmed",    // Bekräftad
+  "rejected",     // Avvisad
+  "cancelled"     // Avbokad av kund
+] as const;
+export type BookingRequestStatus = typeof BOOKING_REQUEST_STATUSES[number];
+
+export const BOOKING_REQUEST_TYPES = [
+  "new_booking",      // Ny bokning
+  "reschedule",       // Omboka befintlig
+  "cancel",           // Avboka
+  "extra_service"     // Extra tjänst
+] as const;
+export type BookingRequestType = typeof BOOKING_REQUEST_TYPES[number];
+
+export const customerBookingRequests = pgTable("customer_booking_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  requestType: text("request_type").notNull(),
+  status: text("status").default("pending").notNull(),
+  preferredDate1: timestamp("preferred_date_1"),
+  preferredDate2: timestamp("preferred_date_2"),
+  preferredTimeSlot: text("preferred_time_slot"),
+  customerNotes: text("customer_notes"),
+  staffNotes: text("staff_notes"),
+  handledBy: varchar("handled_by").references(() => users.id),
+  handledAt: timestamp("handled_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertCustomerPortalTokenSchema = createInsertSchema(customerPortalTokens).omit({ id: true, requestedAt: true });
+export const insertCustomerPortalSessionSchema = createInsertSchema(customerPortalSessions).omit({ id: true, createdAt: true, lastAccessedAt: true });
+export const insertCustomerBookingRequestSchema = createInsertSchema(customerBookingRequests).omit({ id: true, createdAt: true, updatedAt: true });
+
+export type CustomerPortalToken = typeof customerPortalTokens.$inferSelect;
+export type InsertCustomerPortalToken = z.infer<typeof insertCustomerPortalTokenSchema>;
+export type CustomerPortalSession = typeof customerPortalSessions.$inferSelect;
+export type InsertCustomerPortalSession = z.infer<typeof insertCustomerPortalSessionSchema>;
+export type CustomerBookingRequest = typeof customerBookingRequests.$inferSelect;
+export type InsertCustomerBookingRequest = z.infer<typeof insertCustomerBookingRequestSchema>;
