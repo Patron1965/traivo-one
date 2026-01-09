@@ -345,6 +345,31 @@ export interface IStorage {
   createAssignmentArticle(article: InsertAssignmentArticle): Promise<AssignmentArticle>;
   updateAssignmentArticle(id: string, assignmentId: string, data: Partial<InsertAssignmentArticle>): Promise<AssignmentArticle | undefined>;
   deleteAssignmentArticle(id: string, assignmentId: string): Promise<void>;
+  
+  // Customer Portal - Tokens and Sessions
+  createPortalToken(token: InsertCustomerPortalToken): Promise<CustomerPortalToken>;
+  getPortalTokenByHash(tokenHash: string): Promise<CustomerPortalToken | undefined>;
+  deletePortalToken(id: string): Promise<void>;
+  createPortalSession(session: InsertCustomerPortalSession): Promise<CustomerPortalSession>;
+  getPortalSessionByToken(sessionToken: string): Promise<CustomerPortalSession | undefined>;
+  updatePortalSessionAccess(id: string): Promise<void>;
+  deletePortalSession(id: string): Promise<void>;
+  
+  // Customer Portal - Booking Requests
+  getBookingRequests(tenantId: string, customerId?: string): Promise<CustomerBookingRequest[]>;
+  getBookingRequest(id: string): Promise<CustomerBookingRequest | undefined>;
+  createBookingRequest(request: InsertCustomerBookingRequest): Promise<CustomerBookingRequest>;
+  updateBookingRequest(id: string, tenantId: string, data: Partial<InsertCustomerBookingRequest>): Promise<CustomerBookingRequest | undefined>;
+  getWorkOrdersByCustomer(customerId: string, tenantId: string): Promise<WorkOrder[]>;
+  
+  // Customer Portal - Messages
+  getPortalMessages(tenantId: string, customerId: string): Promise<CustomerPortalMessage[]>;
+  createPortalMessage(message: InsertCustomerPortalMessage): Promise<CustomerPortalMessage>;
+  markPortalMessagesAsRead(tenantId: string, customerId: string): Promise<void>;
+  getUnreadMessageCount(tenantId: string, customerId?: string): Promise<number>;
+  getAllPortalMessagesForStaff(tenantId: string): Promise<CustomerPortalMessage[]>;
+  getCustomersWithMessages(tenantId: string): Promise<string[]>;
+  markStaffMessagesAsRead(tenantId: string, customerId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2712,6 +2737,30 @@ export class DatabaseStorage implements IStorage {
       .from(customerPortalMessages)
       .where(and(...conditions));
     return Number(result[0]?.count || 0);
+  }
+
+  async getAllPortalMessagesForStaff(tenantId: string): Promise<CustomerPortalMessage[]> {
+    return db.select().from(customerPortalMessages)
+      .where(eq(customerPortalMessages.tenantId, tenantId))
+      .orderBy(desc(customerPortalMessages.createdAt));
+  }
+
+  async getCustomersWithMessages(tenantId: string): Promise<string[]> {
+    const result = await db.selectDistinct({ customerId: customerPortalMessages.customerId })
+      .from(customerPortalMessages)
+      .where(eq(customerPortalMessages.tenantId, tenantId));
+    return result.map(r => r.customerId);
+  }
+
+  async markStaffMessagesAsRead(tenantId: string, customerId: string): Promise<void> {
+    await db.update(customerPortalMessages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(customerPortalMessages.tenantId, tenantId),
+        eq(customerPortalMessages.customerId, customerId),
+        eq(customerPortalMessages.sender, "customer"),
+        isNull(customerPortalMessages.readAt)
+      ));
   }
 }
 

@@ -7848,5 +7848,108 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // ============================================
+  // CUSTOMER PORTAL - Staff Messages API
+  // ============================================
+
+  // Get all customers with messages (for staff inbox)
+  app.get("/api/staff/portal-messages", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const customerIds = await storage.getCustomersWithMessages(tenantId);
+      const customers = await Promise.all(
+        customerIds.map(id => storage.getCustomer(id))
+      );
+      
+      const customerMessages = await Promise.all(
+        customerIds.map(async (customerId) => {
+          const messages = await storage.getPortalMessages(tenantId, customerId);
+          const customer = customers.find(c => c?.id === customerId);
+          const unreadCount = messages.filter(m => m.sender === "customer" && !m.readAt).length;
+          const lastMessage = messages[messages.length - 1];
+          return {
+            customerId,
+            customerName: customer?.name || "Okänd kund",
+            customerEmail: customer?.email,
+            unreadCount,
+            lastMessage: lastMessage?.message || "",
+            lastMessageAt: lastMessage?.createdAt,
+            messageCount: messages.length,
+          };
+        })
+      );
+
+      customerMessages.sort((a, b) => {
+        if (a.unreadCount !== b.unreadCount) return b.unreadCount - a.unreadCount;
+        const dateA = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+        const dateB = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+        return dateB - dateA;
+      });
+
+      res.json(customerMessages);
+    } catch (error) {
+      console.error("Failed to get portal messages for staff:", error);
+      res.status(500).json({ error: "Kunde inte hämta meddelanden" });
+    }
+  });
+
+  // Get messages for a specific customer (staff view)
+  app.get("/api/staff/portal-messages/:customerId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { customerId } = req.params;
+      
+      const customer = await storage.getCustomer(customerId);
+      if (!verifyTenantOwnership(customer, tenantId)) {
+        return res.status(404).json({ error: "Kund hittades inte" });
+      }
+
+      const messages = await storage.getPortalMessages(tenantId, customerId);
+      await storage.markStaffMessagesAsRead(tenantId, customerId);
+      
+      res.json({
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+        },
+        messages,
+      });
+    } catch (error) {
+      console.error("Failed to get customer messages:", error);
+      res.status(500).json({ error: "Kunde inte hämta kundmeddelanden" });
+    }
+  });
+
+  // Send message to customer (staff)
+  app.post("/api/staff/portal-messages/:customerId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { customerId } = req.params;
+      const { message } = req.body;
+
+      if (!message || typeof message !== "string" || message.trim().length === 0) {
+        return res.status(400).json({ error: "Meddelande krävs" });
+      }
+
+      const customer = await storage.getCustomer(customerId);
+      if (!verifyTenantOwnership(customer, tenantId)) {
+        return res.status(404).json({ error: "Kund hittades inte" });
+      }
+
+      const newMessage = await storage.createPortalMessage({
+        tenantId,
+        customerId,
+        sender: "staff",
+        message: message.trim(),
+      });
+
+      res.json(newMessage);
+    } catch (error) {
+      console.error("Failed to send message to customer:", error);
+      res.status(500).json({ error: "Kunde inte skicka meddelande" });
+    }
+  });
+
   return httpServer;
 }

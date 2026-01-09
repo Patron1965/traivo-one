@@ -36,6 +36,7 @@ import PredictivePlanningPage from "@/pages/PredictivePlanningPage";
 import AutoClusterPage from "@/pages/AutoClusterPage";
 import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import CustomerPortalPage from "@/pages/CustomerPortalPage";
+import PortalMessagesPage from "@/pages/PortalMessagesPage";
 import SystemDashboardPage from "@/pages/SystemDashboardPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
 import ProjectReportPage from "@/pages/ProjectReportPage";
@@ -78,6 +79,7 @@ function Router() {
       <Route path="/auto-cluster" component={AutoClusterPage} />
       <Route path="/weather" component={WeatherPlanningPage} />
       <Route path="/customer-portal" component={CustomerPortalPage} />
+      <Route path="/portal-messages" component={PortalMessagesPage} />
       <Route path="/import" component={ImportPage} />
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />
