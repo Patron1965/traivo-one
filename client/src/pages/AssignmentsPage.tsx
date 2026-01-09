@@ -47,6 +47,7 @@ import {
   Receipt,
   DollarSign,
   Timer,
+  UserPlus,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -100,6 +101,13 @@ function getStatusColor(status: string): string {
   }
 }
 
+interface ResourceCandidate {
+  resource: Resource;
+  score: number;
+  available: boolean;
+  reasons: string[];
+}
+
 export default function AssignmentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -108,6 +116,9 @@ export default function AssignmentsPage() {
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [statusUpdateOpen, setStatusUpdateOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<string>("");
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [assignmentToAssign, setAssignmentToAssign] = useState<Assignment | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string>("");
 
   const { toast } = useToast();
 
@@ -140,6 +151,32 @@ export default function AssignmentsPage() {
     },
   });
 
+  // Candidates query - only enabled when dialog is open
+  const { data: candidates = [], isLoading: candidatesLoading } = useQuery<ResourceCandidate[]>({
+    queryKey: ["/api/assignments", assignmentToAssign?.id, "candidates", selectedDate],
+    queryFn: async () => {
+      const params = selectedDate ? `?date=${selectedDate}` : "";
+      const res = await fetch(`/api/assignments/${assignmentToAssign?.id}/candidates${params}`);
+      if (!res.ok) throw new Error("Failed to fetch candidates");
+      return res.json();
+    },
+    enabled: assignDialogOpen && !!assignmentToAssign?.id,
+  });
+
+  const assignResourceMutation = useMutation({
+    mutationFn: ({ assignmentId, resourceId, scheduledDate }: { assignmentId: string; resourceId: string; scheduledDate?: string }) =>
+      apiRequest("POST", `/api/assignments/${assignmentId}/assign`, { resourceId, scheduledDate }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/assignments"] });
+      setAssignDialogOpen(false);
+      setAssignmentToAssign(null);
+      toast({ title: "Resurs tilldelad" });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte tilldela resurs", variant: "destructive" });
+    },
+  });
+
   const handleViewDetails = (assignment: Assignment) => {
     setSelectedAssignment(assignment);
     setDetailDialogOpen(true);
@@ -149,6 +186,14 @@ export default function AssignmentsPage() {
     setSelectedAssignment(assignment);
     setNewStatus(assignment.status);
     setStatusUpdateOpen(true);
+  };
+
+  const handleAssignResource = (assignment: Assignment) => {
+    setAssignmentToAssign(assignment);
+    setSelectedDate(assignment.scheduledDate 
+      ? new Date(assignment.scheduledDate).toISOString().split("T")[0] 
+      : new Date().toISOString().split("T")[0]);
+    setAssignDialogOpen(true);
   };
 
   const filteredAssignments = assignments.filter((a) => {
@@ -385,6 +430,15 @@ export default function AssignmentsPage() {
                       <div className="flex items-center justify-end gap-1">
                         <Button
                           size="sm"
+                          variant={!resource ? "default" : "ghost"}
+                          onClick={() => handleAssignResource(assignment)}
+                          data-testid={`button-assign-${assignment.id}`}
+                        >
+                          <UserPlus className="h-3 w-3 mr-1" />
+                          {resource ? "Ändra" : "Tilldela"}
+                        </Button>
+                        <Button
+                          size="sm"
                           variant="ghost"
                           onClick={() => handleUpdateStatus(assignment)}
                           data-testid={`button-status-${assignment.id}`}
@@ -554,6 +608,91 @@ export default function AssignmentsPage() {
             >
               {updateStatusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Spara
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Assign Resource Dialog */}
+      <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Tilldela resurs</DialogTitle>
+            <DialogDescription>
+              Välj en resurs för uppgiften: {assignmentToAssign?.title}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Datum</Label>
+              <Input
+                type="date"
+                value={selectedDate}
+                onChange={(e) => setSelectedDate(e.target.value)}
+                data-testid="input-assign-date"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Tillgängliga resurser</Label>
+              {candidatesLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : candidates.length === 0 ? (
+                <p className="text-sm text-muted-foreground py-4">Inga resurser hittades</p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-y-auto">
+                  {candidates.map((candidate) => (
+                    <div
+                      key={candidate.resource.id}
+                      className={`p-3 rounded-md border ${
+                        candidate.available 
+                          ? "hover-elevate cursor-pointer" 
+                          : "opacity-50 cursor-not-allowed"
+                      }`}
+                      onClick={() => {
+                        if (candidate.available && assignmentToAssign) {
+                          assignResourceMutation.mutate({
+                            assignmentId: assignmentToAssign.id,
+                            resourceId: candidate.resource.id,
+                            scheduledDate: selectedDate
+                          });
+                        }
+                      }}
+                      data-testid={`candidate-${candidate.resource.id}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4 text-muted-foreground" />
+                          <span className="font-medium">{candidate.resource.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {candidate.available ? (
+                            <Badge variant="outline" className="bg-green-50 text-green-700">
+                              Tillgänglig
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-red-50 text-red-700">
+                              Ej tillgänglig
+                            </Badge>
+                          )}
+                          <Badge variant="secondary">{candidate.score} poäng</Badge>
+                        </div>
+                      </div>
+                      {candidate.reasons.length > 0 && (
+                        <div className="mt-1 text-xs text-muted-foreground">
+                          {candidate.reasons.join(" • ")}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignDialogOpen(false)}>
+              Avbryt
             </Button>
           </DialogFooter>
         </DialogContent>
