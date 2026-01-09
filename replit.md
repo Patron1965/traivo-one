@@ -69,3 +69,23 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - **shadcn/ui:** UI component library.
 - **Open-Meteo API:** Provides weather forecast data for AI auto-scheduling.
 - **Fortnox API:** Integration with the Fortnox accounting system.
+
+## Development Progress
+
+### Sprint 1 (Completed)
+- Full order concept and assignment system with 8-step status workflow
+- 9-operator filter management for advanced filtering
+
+### Sprint 2 (Completed)
+- Intelligent task generation with economic calculations
+- Execute endpoint calculates cachedValue, cachedCost, estimatedDuration from article data
+- Frontend displays economic summary cards, value column in table, and detailed breakdown
+
+### Sprint 3 (Completed)
+- Resource scheduling and management features
+- Candidate resource endpoint with availability checking and scoring
+- Assignment endpoint for resource allocation with date scheduling
+- Schedule endpoint combining assignments and availability for week planning
+- Frontend: Resource assignment dialog with scored candidate list in Assignments page
+- Assign/reassign button in assignments table for quick resource assignment
+- Navigation updated: OrderConceptsPage and AssignmentsPage under "Planering" menu
