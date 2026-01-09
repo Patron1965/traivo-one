@@ -3,6 +3,14 @@ import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDes
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
 
+// ============================================
+// AI PLANNING SERVICE - MODELLKONFIGURATION
+// ============================================
+// Använder gpt-4o-mini för kostnadseffektivitet
+// Se server/routes.ts (AI Field Assistant) för fullständig prislista
+// och uppgraderingsmöjligheter
+// ============================================
+
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,

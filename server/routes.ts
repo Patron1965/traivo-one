@@ -3290,7 +3290,27 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
     }
   });
 
-  // AI Field Assistant - conversational AI with full system data access via function calling
+  // ============================================
+  // AI FIELD ASSISTANT
+  // ============================================
+  // Conversational AI with full system data access via function calling
+  //
+  // MODELLVAL (aktuell: gpt-4o-mini - mest kostnadseffektiv)
+  // -------------------------------------------------------
+  // | Modell         | Pris/1M in | Pris/1M ut | Användning                    |
+  // |----------------|------------|------------|-------------------------------|
+  // | gpt-4o-mini    | $0.15      | $0.60      | Standard - enklare frågor     |
+  // | gpt-4o         | $2.50      | $10.00     | Premium - djupare analys      |
+  // | gpt-4o-vision  | $2.50      | $10.00     | Enterprise - bildanalys       |
+  // | gpt-4.5        | ~$5.00     | ~$15.00    | Pro - avancerad planering     |
+  //
+  // UPPGRADERINGSMÖJLIGHETER:
+  // - Premium (gpt-4o): Bättre resonemang, optimeringsförslag för hela veckan
+  // - Enterprise (gpt-4o + vision): Analysera foton av skadade kärl, automatisk rapport
+  // - Pro (gpt-4.5): Prediktiv analys, automatisk omplanering vid sjukdom
+  //
+  // Byt modell genom att ändra "model: gpt-4o-mini" till önskad modell nedan
+  // ============================================
   app.post("/api/ai/field-assistant", async (req, res) => {
     try {
       const { question, jobContext, conversationHistory = [] } = req.body;
