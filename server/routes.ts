@@ -6590,6 +6590,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           quantity = Number(obj.metadata[concept.crossPollinationField]) || 1;
         }
 
+        // Calculate estimated duration from linked article
+        let estimatedDuration = 60; // default 60 minutes
+        let totalValue = 0;
+        let totalCost = 0;
+        
+        if (concept.articleId) {
+          const article = await storage.getArticle(concept.articleId);
+          if (article) {
+            estimatedDuration = (article.productionTime || 0) * quantity;
+            totalValue = (article.listPrice || 0) * quantity;
+            totalCost = (article.cost || 0) * quantity;
+          }
+        }
+
         const assignment = await storage.createAssignment({
           tenantId,
           orderConceptId: concept.id,
@@ -6605,16 +6619,19 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           latitude: obj.latitude || undefined,
           longitude: obj.longitude || undefined,
           creationMethod: "automatic",
-          createdBy: userId
+          createdBy: userId,
+          estimatedDuration,
+          cachedValue: totalValue,
+          cachedCost: totalCost
         });
 
         // If an article is linked, create assignment article
-        if (concept!.articleId) {
-          const article = await storage.getArticle(concept!.articleId);
+        if (concept.articleId) {
+          const article = await storage.getArticle(concept.articleId);
           if (article) {
             await storage.createAssignmentArticle({
               assignmentId: assignment.id,
-              articleId: concept!.articleId,
+              articleId: concept.articleId,
               quantity,
               unitPrice: article.listPrice || 0,
               totalPrice: (article.listPrice || 0) * quantity,

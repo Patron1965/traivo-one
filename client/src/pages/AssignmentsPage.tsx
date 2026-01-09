@@ -45,12 +45,19 @@ import {
   ClipboardCheck,
   FileCheck,
   Receipt,
+  DollarSign,
+  Timer,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { Assignment, Resource, Cluster, ServiceObject } from "@shared/schema";
+import type { Assignment, Resource, Cluster, ServiceObject, Article, AssignmentArticle } from "@shared/schema";
 import { ASSIGNMENT_STATUS_LABELS, type AssignmentStatus } from "@shared/schema";
 import { PageHelp } from "@/components/ui/help-tooltip";
+
+function formatCurrency(value: number | null | undefined): string {
+  if (!value) return "0 kr";
+  return new Intl.NumberFormat("sv-SE", { style: "currency", currency: "SEK", maximumFractionDigits: 0 }).format(value / 100);
+}
 
 const statusOptions: { value: AssignmentStatus; label: string; icon: typeof Circle }[] = [
   { value: "not_planned", label: "Ej planerad", icon: Circle },
@@ -159,6 +166,13 @@ export default function AssignmentsPage() {
     return acc;
   }, {} as Record<string, number>);
 
+  // Calculate totals
+  const totals = filteredAssignments.reduce((acc, a) => ({
+    value: acc.value + (a.cachedValue || 0),
+    cost: acc.cost + (a.cachedCost || 0),
+    time: acc.time + (a.estimatedDuration || 0),
+  }), { value: 0, cost: 0, time: 0 });
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64" data-testid="loading-assignments">
@@ -180,6 +194,46 @@ export default function AssignmentsPage() {
           title="Uppgifter (Assignments)"
           description="Uppgifter genereras automatiskt från orderkoncept eller skapas manuellt. De följer ett 8-stegs arbetsflöde från 'Ej planerad' till 'Fakturerad'."
         />
+      </div>
+
+      {/* Economic Summary */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Package className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground">Antal uppgifter</span>
+            </div>
+            <div className="text-2xl font-bold mt-1">{filteredAssignments.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-green-600" />
+              <span className="text-sm text-muted-foreground">Totalt värde</span>
+            </div>
+            <div className="text-2xl font-bold mt-1 text-green-600">{formatCurrency(totals.value)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-red-600" />
+              <span className="text-sm text-muted-foreground">Total kostnad</span>
+            </div>
+            <div className="text-2xl font-bold mt-1 text-red-600">{formatCurrency(totals.cost)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2">
+              <Timer className="h-4 w-4 text-blue-600" />
+              <span className="text-sm text-muted-foreground">Total tid</span>
+            </div>
+            <div className="text-2xl font-bold mt-1 text-blue-600">{Math.round(totals.time / 60)} tim</div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Status Overview Cards */}
@@ -263,9 +317,9 @@ export default function AssignmentsPage() {
               <TableRow>
                 <TableHead>Uppgift</TableHead>
                 <TableHead>Objekt</TableHead>
-                <TableHead>Adress</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Prioritet</TableHead>
+                <TableHead>Värde</TableHead>
+                <TableHead>Tid</TableHead>
                 <TableHead>Resurs</TableHead>
                 <TableHead>Planerad</TableHead>
                 <TableHead className="text-right">Åtgärder</TableHead>
@@ -293,27 +347,19 @@ export default function AssignmentsPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="text-sm truncate max-w-[200px]">
-                        {assignment.address || <span className="text-muted-foreground">-</span>}
-                      </div>
-                    </TableCell>
-                    <TableCell>
                       <Badge className={getStatusColor(assignment.status)}>
                         {ASSIGNMENT_STATUS_LABELS[assignment.status as AssignmentStatus] || assignment.status}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge
-                        variant={
-                          assignment.priority === "urgent"
-                            ? "destructive"
-                            : assignment.priority === "high"
-                            ? "default"
-                            : "outline"
-                        }
-                      >
-                        {priorityOptions.find((p) => p.value === assignment.priority)?.label || assignment.priority}
-                      </Badge>
+                      <span className="text-sm font-medium text-green-600">
+                        {formatCurrency(assignment.cachedValue)}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <span className="text-sm text-muted-foreground">
+                        {assignment.estimatedDuration || 60} min
+                      </span>
                     </TableCell>
                     <TableCell>
                       {resource ? (
@@ -433,6 +479,30 @@ export default function AssignmentsPage() {
                   <p className="text-sm">
                     {new Date(selectedAssignment.createdAt).toLocaleDateString("sv-SE")}
                   </p>
+                </div>
+              </div>
+              {/* Economic summary */}
+              <div className="border-t pt-4">
+                <Label className="text-muted-foreground">Ekonomi</Label>
+                <div className="grid grid-cols-3 gap-4 mt-2">
+                  <div className="bg-green-50 dark:bg-green-900/20 p-3 rounded-md">
+                    <div className="text-xs text-muted-foreground">Värde</div>
+                    <div className="font-medium text-green-700 dark:text-green-400">
+                      {formatCurrency(selectedAssignment.cachedValue)}
+                    </div>
+                  </div>
+                  <div className="bg-red-50 dark:bg-red-900/20 p-3 rounded-md">
+                    <div className="text-xs text-muted-foreground">Kostnad</div>
+                    <div className="font-medium text-red-700 dark:text-red-400">
+                      {formatCurrency(selectedAssignment.cachedCost)}
+                    </div>
+                  </div>
+                  <div className="bg-blue-50 dark:bg-blue-900/20 p-3 rounded-md">
+                    <div className="text-xs text-muted-foreground">Marginal</div>
+                    <div className="font-medium text-blue-700 dark:text-blue-400">
+                      {formatCurrency((selectedAssignment.cachedValue || 0) - (selectedAssignment.cachedCost || 0))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
