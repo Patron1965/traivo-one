@@ -606,29 +606,35 @@ export default function MyTasksPage() {
           )}
         </div>
 
-        {/* Daily Progress */}
-        {!ordersLoading && <DailyProgress orders={orders} />}
-
-        {/* Recent Pages */}
-        <RecentPages />
-
-        {/* Proactive AI Tips */}
-        <div className="mb-6">
-          <ProactiveTips />
-        </div>
-
-        <Card className="mb-8">
+        {/* Dagens jobb - huvudfokus */}
+        <Card className="mb-6">
           <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
             <div>
-              <CardTitle>Dagens arbete</CardTitle>
-              <CardDescription>Ordrar planerade för idag</CardDescription>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-primary" />
+                Dagens jobb
+              </CardTitle>
+              <CardDescription>
+                {todaysOrders.length > 0 
+                  ? `${todaysOrders.filter(o => o.status !== "completed").length} jobb kvar att utföra`
+                  : 'Inga jobb schemalagda för idag'
+                }
+              </CardDescription>
             </div>
-            <Link href="/planner">
-              <Button variant="outline" size="sm" data-testid="button-view-planner">
-                Se hela planeringen
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Button>
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/mobile">
+                <Button size="sm" data-testid="button-start-field-work">
+                  <Smartphone className="h-4 w-4 mr-2" />
+                  Starta fältarbete
+                </Button>
+              </Link>
+              <Link href="/planner">
+                <Button variant="outline" size="sm" data-testid="button-view-planner">
+                  Veckoplanering
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              </Link>
+            </div>
           </CardHeader>
           <CardContent>
             {ordersLoading ? (
@@ -643,41 +649,14 @@ export default function MyTasksPage() {
           </CardContent>
         </Card>
 
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold mb-4">Snabbval</h2>
-          <p className="text-muted-foreground mb-6">Gå direkt till de vanligaste funktionerna</p>
-        </div>
+        {/* Daily Progress */}
+        {!ordersLoading && <DailyProgress orders={orders} />}
 
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <QuickActionCard
-            title="Veckoplanering"
-            description="Planera och fördela arbete för veckan"
-            icon={Calendar}
-            href="/planner"
-            testId="quick-action-planner"
-          />
-          <QuickActionCard
-            title="Mobilapp"
-            description="Starta fältarbete på mobilen"
-            icon={Smartphone}
-            href="/mobile"
-            testId="quick-action-mobile"
-          />
-          <QuickActionCard
-            title="Dashboard"
-            description="Se nyckeltal och statistik"
-            icon={BarChart3}
-            href="/dashboard"
-            testId="quick-action-dashboard"
-          />
-          <QuickActionCard
-            title="Orderstock"
-            description="Hantera alla ordrar"
-            icon={FileText}
-            href="/order-stock"
-            testId="quick-action-orders"
-          />
-        </div>
+        {/* Recent Pages - compact */}
+        <RecentPages />
+
+        {/* Proactive AI Tips - smaller */}
+        <ProactiveTips />
       </div>
 
       <AIAssistantPanel 
