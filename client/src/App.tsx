@@ -43,6 +43,8 @@ import MetadataPage from "@/pages/MetadataPage";
 import FortnoxSettingsPage from "@/pages/FortnoxSettingsPage";
 import MyTasksPage from "@/pages/MyTasksPage";
 import ArchitecturePage from "@/pages/architecture";
+import OrderConceptsPage from "@/pages/OrderConceptsPage";
+import AssignmentsPage from "@/pages/AssignmentsPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -84,6 +86,8 @@ function Router() {
       <Route path="/metadata" component={MetadataPage} />
       <Route path="/fortnox" component={FortnoxSettingsPage} />
       <Route path="/architecture" component={ArchitecturePage} />
+      <Route path="/order-concepts" component={OrderConceptsPage} />
+      <Route path="/assignments" component={AssignmentsPage} />
       <Route component={NotFound} />
     </Switch>
   );

@@ -11,7 +11,8 @@ import {
   insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertClusterSchema,
   insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema,
   insertObjectImageSchema, insertObjectContactSchema, insertTaskDesiredTimewindowSchema,
-  insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema
+  insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
+  type ServiceObject
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -6526,6 +6527,128 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Execute order concept - generates assignments from filters
+  app.post("/api/order-concepts/:id/execute", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = req.session?.user?.id;
+      const concept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(concept, tenantId)) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+
+      const filters = await storage.getConceptFilters(concept.id);
+      
+      // Get all objects in the cluster hierarchy
+      let targetObjects: ServiceObject[] = [];
+      if (concept.targetClusterId) {
+        const clusterObjects = await storage.getClusterObjects(concept.targetClusterId);
+        targetObjects = clusterObjects;
+      } else {
+        targetObjects = await storage.getObjects(tenantId);
+      }
+
+      // Apply filters to find matching objects
+      const matchingObjects = targetObjects.filter(obj => {
+        return filters.every(filter => {
+          const metadataValue = obj.metadata?.[filter.metadataKey];
+          const filterValue = filter.filterValue;
+          
+          switch (filter.operator) {
+            case "equals":
+              return metadataValue === filterValue;
+            case "not_equals":
+              return metadataValue !== filterValue;
+            case "contains":
+              return String(metadataValue || "").includes(String(filterValue));
+            case "starts_with":
+              return String(metadataValue || "").startsWith(String(filterValue));
+            case "greater_than":
+              return Number(metadataValue) > Number(filterValue);
+            case "less_than":
+              return Number(metadataValue) < Number(filterValue);
+            case "in_list":
+              return Array.isArray(filterValue) && filterValue.includes(metadataValue);
+            case "exists":
+              return metadataValue !== undefined && metadataValue !== null;
+            case "not_exists":
+              return metadataValue === undefined || metadataValue === null;
+            default:
+              return true;
+          }
+        });
+      });
+
+      // Generate assignments for each matching object
+      const createdAssignments = [];
+      const scheduledDate = req.body.scheduledDate ? new Date(req.body.scheduledDate) : undefined;
+      
+      for (const obj of matchingObjects) {
+        // Cross-pollination: multiply by metadata field if specified
+        let quantity = 1;
+        if (concept.crossPollinationField && obj.metadata?.[concept.crossPollinationField]) {
+          quantity = Number(obj.metadata[concept.crossPollinationField]) || 1;
+        }
+
+        const assignment = await storage.createAssignment({
+          tenantId,
+          orderConceptId: concept.id,
+          objectId: obj.id,
+          clusterId: obj.clusterId || undefined,
+          title: concept.name,
+          description: concept.description || undefined,
+          status: "not_planned",
+          priority: concept.priority || "normal",
+          scheduledDate,
+          quantity,
+          address: obj.address || undefined,
+          latitude: obj.latitude || undefined,
+          longitude: obj.longitude || undefined,
+          creationMethod: "automatic",
+          createdBy: userId
+        });
+
+        // If an article is linked, create assignment article
+        if (concept!.articleId) {
+          const article = await storage.getArticle(concept!.articleId);
+          if (article) {
+            await storage.createAssignmentArticle({
+              assignmentId: assignment.id,
+              articleId: concept!.articleId,
+              quantity,
+              unitPrice: article.listPrice || 0,
+              totalPrice: (article.listPrice || 0) * quantity,
+              unitCost: article.cost || 0,
+              totalCost: (article.cost || 0) * quantity,
+              unitTime: article.productionTime || 0,
+              totalTime: (article.productionTime || 0) * quantity,
+              sequenceOrder: 1,
+              status: "pending"
+            });
+          }
+        }
+
+        createdAssignments.push(assignment);
+      }
+
+      // Update last run date
+      await storage.updateOrderConcept(concept.id, tenantId, {
+        lastRunDate: new Date()
+      });
+
+      res.json({
+        success: true,
+        message: `Skapade ${createdAssignments.length} uppgifter från ${matchingObjects.length} matchande objekt`,
+        assignmentsCreated: createdAssignments.length,
+        objectsMatched: matchingObjects.length,
+        assignments: createdAssignments
+      });
+    } catch (error) {
+      console.error("Failed to execute order concept:", error);
+      res.status(500).json({ error: "Kunde inte köra orderkoncept" });
+    }
+  });
+
   // ============================================
   // ASSIGNMENTS API
   // ============================================
@@ -6557,7 +6680,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         return res.status(404).json({ error: "Uppgift hittades inte" });
       }
       
-      const articles = await storage.getAssignmentArticles(assignment.id);
+      const articles = await storage.getAssignmentArticles(assignment!.id);
       res.json({ ...assignment, articles });
     } catch (error) {
       console.error("Failed to get assignment:", error);
