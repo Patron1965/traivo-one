@@ -1483,8 +1483,258 @@ export const structuralArticles = pgTable("structural_articles", {
 ]);
 
 // ============================================
+// ORDERKONCEPT - Intelligenta arbetsordergeneratorer
+// ============================================
+
+export const DEPENDENCY_TYPES = [
+  "before",     // Måste göras innan huvuduppgift
+  "after",      // Måste göras efter huvuduppgift
+  "parallel"    // Kan göras samtidigt
+] as const;
+export type DependencyType = typeof DEPENDENCY_TYPES[number];
+
+export const orderConcepts = pgTable("order_concepts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  // Kluster som konceptet pekas in på (söker nedåt i hierarkin)
+  targetClusterId: varchar("target_cluster_id").references(() => clusters.id),
+  // Huvudartikel som ska utföras
+  articleId: varchar("article_id").references(() => articles.id),
+  // Korsbefruktning: multiplicera med metadata-värde (t.ex. "containerCount")
+  crossPollinationField: text("cross_pollination_field"),
+  // Aggregera uppgifter per nivå (t.ex. "fastighet" = en uppgift per fastighet)
+  aggregationLevel: text("aggregation_level"),
+  // Schematyp: once, recurring, subscription
+  scheduleType: text("schedule_type").default("once").notNull(),
+  // För recurring: intervall i dagar
+  intervalDays: integer("interval_days"),
+  // Nästa planerade körning
+  nextRunDate: timestamp("next_run_date"),
+  // Senaste körning
+  lastRunDate: timestamp("last_run_date"),
+  // Prioritet vid generering
+  priority: text("priority").default("normal"),
+  status: text("status").default("active").notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_order_concepts_tenant").on(table.tenantId),
+  index("idx_order_concepts_cluster").on(table.targetClusterId),
+]);
+
+export const insertOrderConceptSchema = createInsertSchema(orderConcepts).omit({
+  id: true,
+  createdAt: true,
+  deletedAt: true,
+});
+
+// Filter för orderkoncept - matchar metadata på objekt
+export const FILTER_OPERATORS = [
+  "equals",       // Exakt matchning
+  "not_equals",   // Ej lika med
+  "contains",     // Innehåller (text)
+  "starts_with",  // Börjar med
+  "greater_than", // Större än (numeriskt)
+  "less_than",    // Mindre än (numeriskt)
+  "in_list",      // Ingår i lista
+  "exists",       // Fältet finns
+  "not_exists"    // Fältet finns inte
+] as const;
+export type FilterOperator = typeof FILTER_OPERATORS[number];
+
+export const conceptFilters = pgTable("concept_filters", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id).notNull(),
+  // Hierarkinivå som filtret gäller för (koncern, brf, fastighet, rum, karl)
+  targetLevel: text("target_level"),
+  // Metadata-nyckel att matcha (t.ex. "objectType", "containerType")
+  metadataKey: text("metadata_key").notNull(),
+  // Operator för matchning
+  operator: text("operator").default("equals").notNull(),
+  // Värde att matcha mot (JSON för flexibilitet)
+  filterValue: jsonb("filter_value").notNull(),
+  // Prioritet (högre = viktigare)
+  priority: integer("priority").default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_concept_filters_concept").on(table.orderConceptId),
+]);
+
+export const insertConceptFilterSchema = createInsertSchema(conceptFilters).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ============================================
+// ASSIGNMENTS - Genererade uppgifter från orderkoncept
+// ============================================
+
+export const ASSIGNMENT_STATUSES = [
+  "not_planned",      // Ej planerad
+  "planned_rough",    // Grovplanerad (tilldelad vecka/team)
+  "planned_fine",     // Finplanerad (tilldelad resurs)
+  "on_way",           // På väg
+  "on_site",          // På plats
+  "completed",        // Utförd
+  "inspected",        // Kontrollerad
+  "invoiced"          // Fakturerad
+] as const;
+export type AssignmentStatus = typeof ASSIGNMENT_STATUSES[number];
+
+export const ASSIGNMENT_STATUS_LABELS: Record<AssignmentStatus, string> = {
+  not_planned: "Ej planerad",
+  planned_rough: "Grovplanerad",
+  planned_fine: "Finplanerad",
+  on_way: "På väg",
+  on_site: "På plats",
+  completed: "Utförd",
+  inspected: "Kontrollerad",
+  invoiced: "Fakturerad"
+};
+
+export const assignments = pgTable("assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Orderkoncept som genererade uppgiften
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id),
+  // Objekt som uppgiften gäller
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Kluster för enkel filtrering
+  clusterId: varchar("cluster_id").references(() => clusters.id),
+  // Tilldelad resurs
+  resourceId: varchar("resource_id").references(() => resources.id),
+  // Team för förplanering
+  teamId: varchar("team_id").references(() => teams.id),
+  // Rubrik
+  title: text("title").notNull(),
+  description: text("description"),
+  // Status (8-stegs workflow)
+  status: text("status").default("not_planned").notNull(),
+  // Prioritet
+  priority: text("priority").default("normal").notNull(),
+  // Planerad tidpunkt
+  scheduledDate: timestamp("scheduled_date"),
+  scheduledStartTime: text("scheduled_start_time"),
+  scheduledEndTime: text("scheduled_end_time"),
+  // Tidsfönster
+  plannedWindowStart: timestamp("planned_window_start"),
+  plannedWindowEnd: timestamp("planned_window_end"),
+  // Tidsuppskattning (minuter)
+  estimatedDuration: integer("estimated_duration").default(60),
+  actualDuration: integer("actual_duration"),
+  // Etableringstid
+  setupTime: integer("setup_time"),
+  // Adress (kan vara ärvd eller manuell)
+  address: text("address"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  what3words: text("what3words"),
+  // Korsbefruktning: antal (t.ex. antal kärl)
+  quantity: integer("quantity").default(1),
+  // Beräknade värden
+  cachedValue: integer("cached_value").default(0),
+  cachedCost: integer("cached_cost").default(0),
+  // Foton
+  photoBeforeId: varchar("photo_before_id"),
+  photoAfterId: varchar("photo_after_id"),
+  photoBeforeRequired: boolean("photo_before_required").default(true),
+  photoAfterRequired: boolean("photo_after_required").default(true),
+  // Tidsstämplar
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+  invoicedAt: timestamp("invoiced_at"),
+  // Skapandemetod
+  creationMethod: text("creation_method").default("automatic"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_assignments_tenant").on(table.tenantId),
+  index("idx_assignments_object").on(table.objectId),
+  index("idx_assignments_cluster").on(table.clusterId),
+  index("idx_assignments_resource").on(table.resourceId),
+  index("idx_assignments_status").on(table.status),
+  index("idx_assignments_scheduled").on(table.scheduledDate),
+]);
+
+export const insertAssignmentSchema = createInsertSchema(assignments).omit({
+  id: true,
+  createdAt: true,
+  deletedAt: true,
+});
+
+// Artiklar kopplade till en assignment
+export const assignmentArticles = pgTable("assignment_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  assignmentId: varchar("assignment_id").references(() => assignments.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  // Antal (t.ex. 10 kärl)
+  quantity: integer("quantity").default(1).notNull(),
+  // Pris per enhet
+  unitPrice: integer("unit_price").default(0),
+  // Totalt belopp
+  totalPrice: integer("total_price").default(0),
+  // Kostnad per enhet
+  unitCost: integer("unit_cost").default(0),
+  // Total kostnad
+  totalCost: integer("total_cost").default(0),
+  // Produktionstid per enhet (minuter)
+  unitTime: integer("unit_time").default(0),
+  // Total produktionstid
+  totalTime: integer("total_time").default(0),
+  // Beroendetyp (för strukturartiklar)
+  dependencyType: text("dependency_type"),
+  // Ordningsföljd
+  sequenceOrder: integer("sequence_order").default(1),
+  // Status för denna delartikel
+  status: text("status").default("pending"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_assignment_articles_assignment").on(table.assignmentId),
+  index("idx_assignment_articles_article").on(table.articleId),
+]);
+
+export const insertAssignmentArticleSchema = createInsertSchema(assignmentArticles).omit({
+  id: true,
+  createdAt: true,
+});
+
+// ============================================
 // RELATIONS FOR NEW TABLES
 // ============================================
+
+export const orderConceptsRelations = relations(orderConcepts, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [orderConcepts.tenantId], references: [tenants.id] }),
+  targetCluster: one(clusters, { fields: [orderConcepts.targetClusterId], references: [clusters.id] }),
+  article: one(articles, { fields: [orderConcepts.articleId], references: [articles.id] }),
+  createdByUser: one(users, { fields: [orderConcepts.createdBy], references: [users.id] }),
+  filters: many(conceptFilters),
+  assignments: many(assignments),
+}));
+
+export const conceptFiltersRelations = relations(conceptFilters, ({ one }) => ({
+  orderConcept: one(orderConcepts, { fields: [conceptFilters.orderConceptId], references: [orderConcepts.id] }),
+}));
+
+export const assignmentsRelations = relations(assignments, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [assignments.tenantId], references: [tenants.id] }),
+  orderConcept: one(orderConcepts, { fields: [assignments.orderConceptId], references: [orderConcepts.id] }),
+  object: one(objects, { fields: [assignments.objectId], references: [objects.id] }),
+  cluster: one(clusters, { fields: [assignments.clusterId], references: [clusters.id] }),
+  resource: one(resources, { fields: [assignments.resourceId], references: [resources.id] }),
+  team: one(teams, { fields: [assignments.teamId], references: [teams.id] }),
+  createdByUser: one(users, { fields: [assignments.createdBy], references: [users.id] }),
+  articles: many(assignmentArticles),
+}));
+
+export const assignmentArticlesRelations = relations(assignmentArticles, ({ one }) => ({
+  assignment: one(assignments, { fields: [assignmentArticles.assignmentId], references: [assignments.id] }),
+  article: one(articles, { fields: [assignmentArticles.articleId], references: [articles.id] }),
+}));
 
 export const objectImagesRelations = relations(objectImages, ({ one }) => ({
   tenant: one(tenants, { fields: [objectImages.tenantId], references: [tenants.id] }),
@@ -1598,6 +1848,16 @@ export type TaskInformation = typeof taskInformation.$inferSelect;
 export type InsertTaskInformation = z.infer<typeof insertTaskInformationSchema>;
 export type StructuralArticle = typeof structuralArticles.$inferSelect;
 export type InsertStructuralArticle = z.infer<typeof insertStructuralArticleSchema>;
+
+// Order concepts and assignments types
+export type OrderConcept = typeof orderConcepts.$inferSelect;
+export type InsertOrderConcept = z.infer<typeof insertOrderConceptSchema>;
+export type ConceptFilter = typeof conceptFilters.$inferSelect;
+export type InsertConceptFilter = z.infer<typeof insertConceptFilterSchema>;
+export type Assignment = typeof assignments.$inferSelect;
+export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
+export type AssignmentArticle = typeof assignmentArticles.$inferSelect;
+export type InsertAssignmentArticle = z.infer<typeof insertAssignmentArticleSchema>;
 
 // ============================================
 // UTÖKADE ORDER STATUSAR (8 nivåer enligt spec)
