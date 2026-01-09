@@ -34,116 +34,210 @@ export default function PitchPage() {
     const contentWidth = pageWidth - (margin * 2);
     let y = 15;
 
+    // PAGE 1: Header and Problems
     pdf.setFillColor(15, 23, 42);
-    pdf.rect(0, 0, pageWidth, 40, "F");
+    pdf.rect(0, 0, pageWidth, 45, "F");
 
     pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(24);
+    pdf.setFontSize(28);
     pdf.setFont("helvetica", "bold");
-    pdf.text("UNICORN", margin, 24);
+    pdf.text("UNICORN", margin, 26);
     
-    pdf.setFontSize(10);
+    pdf.setFontSize(11);
     pdf.setFont("helvetica", "normal");
-    pdf.text("AI-driven fältserviceplanering för Norden", margin, 33);
+    pdf.text("AI-driven fältserviceplanering för Norden", margin, 38);
 
-    y = 52;
+    y = 58;
     pdf.setTextColor(15, 23, 42);
-    pdf.setFontSize(14);
+    pdf.setFontSize(16);
     pdf.setFont("helvetica", "bold");
-    pdf.text("Problemet", margin, y);
+    pdf.text("Problemen idag - Varför förändring behövs", margin, y);
     
     y += 8;
     pdf.setFontSize(10);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(71, 85, 105);
-    const problemText = "Fältserviceföretag kämpar med Excel, papperslistor och fragmenterade system - ineffektiva rutter, missnöjda kunder.";
-    const problemLines = pdf.splitTextToSize(problemText, contentWidth);
-    pdf.text(problemLines, margin, y);
+    const introText = "Avfallshantering och fältservice i Norden står inför stora utmaningar. De flesta företag arbetar med föråldrade metoder som kostar tid, pengar och kundnöjdhet.";
+    const introLines = pdf.splitTextToSize(introText, contentWidth);
+    pdf.text(introLines, margin, y);
 
     y += 18;
-    pdf.setTextColor(15, 23, 42);
-    pdf.setFontSize(14);
-    pdf.setFont("helvetica", "bold");
-    pdf.text("Lösningen: Unicorn", margin, y);
-
-    y += 10;
-    pdf.setFontSize(9);
-    pdf.setFont("helvetica", "normal");
     
-    const features = [
-      { title: "AI-schemaläggning", desc: "Väderanpassad kapacitetsplanering" },
-      { title: "Kundportal", desc: "Magic link - kunder bokar om utan att ringa" },
-      { title: "Förarstyrd notis", desc: "Chauffören bestämmer när kunden meddelas" },
-      { title: "Dataärving", desc: "Information flödar nedåt i hierarkin" },
-      { title: "Fortnox-integration", desc: "Direkt faktureringsexport" },
-      { title: "Realtids-GPS", desc: "Live-spårning av alla resurser" }
+    // Problem categories
+    const problemCategories = [
+      {
+        title: "Planering & Schemaläggning",
+        problems: [
+          { bold: "Excel och papperslistor", text: " - Manuell planering tar timmar. Ändringar kräver att hela schemat görs om." },
+          { bold: "Ingen väderanpassning", text: " - Regn och snö orsakar kaos utan hänsyn till väderförhållanden." },
+          { bold: "Ineffektiva rutter", text: " - Chaufförer kör i sicksack. 20-30% onödig körsträcka." }
+        ]
+      },
+      {
+        title: "Kundkommunikation",
+        problems: [
+          { bold: "Telefonstorm varje dag", text: " - 'När kommer ni?' Kundtjänst spenderar 50%+ på samma fråga." },
+          { bold: "Ingen självbetjäning", text: " - Kunder måste ringa för att boka om eller avboka." },
+          { bold: "Orealistiska tider", text: " - 'Vi kommer mellan 08-17' - kunden väntar hela dagen." }
+        ]
+      },
+      {
+        title: "System & Fältarbete",
+        problems: [
+          { bold: "Fragmenterade system", text: " - Planering, fakturering och kundregister på olika ställen." },
+          { bold: "Pappersprotokoll", text: " - Chaufförer fyller i papper som skrivs in manuellt." },
+          { bold: "Ingen realtidsöversikt", text: " - Ledningen vet inte var fordonen är." }
+        ]
+      }
     ];
 
-    const colWidth = contentWidth / 2 - 3;
-    features.forEach((feature, index) => {
-      const col = index % 2;
-      const xPos = margin + (col * (colWidth + 6));
-      
-      if (col === 0 && index > 0) y += 12;
-      
-      pdf.setFillColor(241, 245, 249);
-      pdf.roundedRect(xPos, y - 3, colWidth, 10, 1.5, 1.5, "F");
-      
-      pdf.setTextColor(15, 23, 42);
+    problemCategories.forEach((category) => {
+      pdf.setTextColor(185, 28, 28);
+      pdf.setFontSize(11);
       pdf.setFont("helvetica", "bold");
-      pdf.text(`${feature.title}`, xPos + 2, y + 2);
+      pdf.text(category.title, margin, y);
+      y += 6;
       
-      pdf.setTextColor(71, 85, 105);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8);
-      pdf.text(feature.desc, xPos + 2, y + 6);
-      pdf.setFontSize(9);
+      category.problems.forEach((problem) => {
+        pdf.setTextColor(185, 28, 28);
+        pdf.setFontSize(9);
+        pdf.text("×", margin, y);
+        
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(problem.bold, margin + 5, y);
+        
+        const boldWidth = pdf.getTextWidth(problem.bold);
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(71, 85, 105);
+        pdf.text(problem.text, margin + 5 + boldWidth, y);
+        y += 5;
+      });
+      y += 4;
     });
 
-    y += 20;
+    // Footer page 1
+    pdf.setTextColor(148, 163, 184);
+    pdf.setFontSize(8);
+    pdf.text("Sida 1/2 | © 2026 Unicorn", margin, pageHeight - 10);
+
+    // PAGE 2: Solutions and Benefits
+    pdf.addPage();
+    y = 15;
+
+    pdf.setFillColor(34, 197, 94);
+    pdf.rect(0, 0, pageWidth, 35, "F");
+
+    pdf.setTextColor(255, 255, 255);
+    pdf.setFontSize(20);
+    pdf.setFont("helvetica", "bold");
+    pdf.text("Unicorn - En komplett lösning", margin, 22);
+
+    y = 48;
+    pdf.setTextColor(15, 23, 42);
+    pdf.setFontSize(10);
+    pdf.setFont("helvetica", "normal");
+    pdf.setTextColor(71, 85, 105);
+    pdf.text("Unicorn löser alla dessa problem i en enda plattform - byggd specifikt för nordiska fältserviceföretag.", margin, y);
+
+    y += 12;
+
+    // Solution categories
+    const solutionCategories = [
+      {
+        title: "AI-driven planering",
+        solutions: [
+          { bold: "Automatisk schemaläggning", text: " - AI skapar optimala scheman på sekunder." },
+          { bold: "Väderintegrerad kapacitet", text: " - Systemet justerar vid regn, snö och värme." },
+          { bold: "Optimerade rutter", text: " - AI beräknar kortaste vägen - sparar 15-25% bränsle." }
+        ]
+      },
+      {
+        title: "Kundportal med självbetjäning",
+        solutions: [
+          { bold: "Magic link-inloggning", text: " - Inga lösenord, kunder loggar in via e-post." },
+          { bold: "Boka om själv", text: " - Kunder hanterar ombokning och avbokning utan att ringa." },
+          { bold: "'Tekniker på väg'-notis", text: " - Chauffören skickar notis med realistisk ankomsttid." }
+        ]
+      },
+      {
+        title: "Nordisk integration & Realtid",
+        solutions: [
+          { bold: "Fortnox-koppling", text: " - Fakturor exporteras direkt, ingen manuell inmatning." },
+          { bold: "GPS-spårning", text: " - Se alla fordon live på kartan." },
+          { bold: "Digital rapportering", text: " - Chaufförer rapporterar direkt i appen." }
+        ]
+      }
+    ];
+
+    solutionCategories.forEach((category) => {
+      pdf.setTextColor(21, 128, 61);
+      pdf.setFontSize(11);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(category.title, margin, y);
+      y += 6;
+      
+      category.solutions.forEach((solution) => {
+        pdf.setTextColor(21, 128, 61);
+        pdf.setFontSize(9);
+        pdf.text("✓", margin, y);
+        
+        pdf.setTextColor(15, 23, 42);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(solution.bold, margin + 5, y);
+        
+        const boldWidth = pdf.getTextWidth(solution.bold);
+        pdf.setFont("helvetica", "normal");
+        pdf.setTextColor(71, 85, 105);
+        pdf.text(solution.text, margin + 5 + boldWidth, y);
+        y += 5;
+      });
+      y += 4;
+    });
+
+    y += 8;
     pdf.setTextColor(15, 23, 42);
     pdf.setFontSize(14);
     pdf.setFont("helvetica", "bold");
-    pdf.text("Konkreta vinster", margin, y);
+    pdf.text("Konkreta vinster för ert företag", margin, y);
 
     y += 10;
-    pdf.setFontSize(10);
-    
     const benefits = [
-      { metric: "30-50%", text: "färre samtal - kunder hanterar bokningar själva" },
-      { metric: "15-25%", text: "minskad körsträcka genom optimerade rutter" },
-      { metric: "50%", text: "snabbare fakturering med Fortnox-export" },
-      { metric: "90%", text: "färre missade jobb med väderplanering" }
+      { metric: "30-50%", text: "färre inkommande samtal - kunder hanterar bokningar själva" },
+      { metric: "15-25%", text: "minskad körsträcka genom AI-optimerade rutter" },
+      { metric: "50%", text: "snabbare fakturering med direkt Fortnox-export" },
+      { metric: "90%", text: "färre missade jobb med väderanpassad planering" }
     ];
 
     benefits.forEach((benefit) => {
       pdf.setTextColor(34, 197, 94);
+      pdf.setFontSize(12);
       pdf.setFont("helvetica", "bold");
       pdf.text(benefit.metric, margin, y);
       
       pdf.setTextColor(71, 85, 105);
+      pdf.setFontSize(10);
       pdf.setFont("helvetica", "normal");
-      pdf.text(benefit.text, margin + 18, y);
-      
-      y += 7;
+      pdf.text(benefit.text, margin + 20, y);
+      y += 8;
     });
 
-    y += 8;
-    pdf.setFillColor(34, 197, 94);
-    pdf.roundedRect(margin, y - 4, contentWidth, 20, 2, 2, "F");
+    y += 10;
+    pdf.setFillColor(15, 23, 42);
+    pdf.roundedRect(margin, y - 4, contentWidth, 25, 3, 3, "F");
     
     pdf.setTextColor(255, 255, 255);
-    pdf.setFontSize(12);
+    pdf.setFontSize(14);
     pdf.setFont("helvetica", "bold");
-    pdf.text("Redo att effektivisera er verksamhet?", margin + 8, y + 4);
+    pdf.text("Redo att effektivisera er verksamhet?", margin + 10, y + 6);
     
     pdf.setFontSize(10);
     pdf.setFont("helvetica", "normal");
-    pdf.text("Kontakta oss för en kostnadsfri demonstration", margin + 8, y + 11);
+    pdf.text("Kontakta oss för en kostnadsfri demonstration", margin + 10, y + 14);
 
     pdf.setTextColor(148, 163, 184);
     pdf.setFontSize(8);
-    pdf.text("© 2026 Unicorn | www.unicorn.se | info@unicorn.se", margin, pageHeight - 10);
+    pdf.text("Sida 2/2 | © 2026 Unicorn | www.unicorn.se | info@unicorn.se", margin, pageHeight - 10);
 
     pdf.save("unicorn-pitch.pdf");
     setIsGenerating(false);
@@ -179,71 +273,225 @@ export default function PitchPage() {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Zap className="h-5 w-5 text-amber-500" />
-              Problemet
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-muted-foreground">
-              Fältserviceföretag i Norden kämpar med:
-            </p>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-start gap-2">
-                <span className="text-red-500 mt-1">×</span>
-                Excel och papperslistor för planering
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-500 mt-1">×</span>
-                Fragmenterade system som inte kommunicerar
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-500 mt-1">×</span>
-                Manuell kundkommunikation via telefon
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-red-500 mt-1">×</span>
-                Ineffektiva rutter och bortkastad körtid
-              </li>
-            </ul>
-          </CardContent>
-        </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <Zap className="h-6 w-6 text-amber-500" />
+            Problemen idag - Varför förändring behövs
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-muted-foreground">
+            Avfallshantering och fältservice i Norden står inför stora utmaningar. De flesta företag arbetar fortfarande med föråldrade metoder som kostar tid, pengar och kundnöjdhet.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h3 className="font-semibold text-red-600 dark:text-red-400">Planering & Schemaläggning</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Excel och papperslistor</strong>
+                    <p className="text-muted-foreground">Manuell planering tar timmar varje dag. Ändringar kräver att hela schemat görs om.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Ingen väderanpassning</strong>
+                    <p className="text-muted-foreground">Regn och snö orsakar kaos - planering sker utan hänsyn till väderförhållanden.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Ineffektiva rutter</strong>
+                    <p className="text-muted-foreground">Chaufförer kör i sicksack istället för optimerade rutter. 20-30% onödig körsträcka.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="font-semibold text-red-600 dark:text-red-400">Kundkommunikation</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Telefonstorm varje dag</strong>
+                    <p className="text-muted-foreground">"När kommer ni?" - Kundtjänst spenderar 50%+ av tiden på att svara samma fråga.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Ingen självbetjäning</strong>
+                    <p className="text-muted-foreground">Kunder måste ringa för att boka om, avboka eller beställa extra tjänster.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Orealistiska tidsuppskattningar</strong>
+                    <p className="text-muted-foreground">"Vi kommer mellan 08-17" - Kunder väntar hela dagen utan besked.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="font-semibold text-red-600 dark:text-red-400">System & Integration</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Fragmenterade system</strong>
+                    <p className="text-muted-foreground">Planering i ett system, fakturering i ett annat, kundregister på tredje stället.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Dubbelinmatning överallt</strong>
+                    <p className="text-muted-foreground">Samma information matas in flera gånger - fel och tidsslöseri.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="font-semibold text-red-600 dark:text-red-400">Fältarbete</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Pappersprotokoll</strong>
+                    <p className="text-muted-foreground">Chaufförer fyller i papper som sedan ska skrivas in manuellt på kontoret.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-red-500 mt-0.5 font-bold">×</span>
+                  <div>
+                    <strong>Ingen realtidsöversikt</strong>
+                    <p className="text-muted-foreground">Ledningen vet inte var fordonen är eller hur dagen fortskrider.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-              Lösningen
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <p className="text-muted-foreground">
-              Unicorn erbjuder allt i en plattform:
-            </p>
-            <ul className="space-y-2 text-sm">
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 mt-1">✓</span>
-                AI-driven schemaläggning med väderdata
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 mt-1">✓</span>
-                Kundportal för självbetjäning
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 mt-1">✓</span>
-                Realtidsnotifieringar till kunder
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-green-500 mt-1">✓</span>
-                Fortnox-integration för fakturering
-              </li>
-            </ul>
-          </CardContent>
-        </Card>
-      </div>
+      <Card className="border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-xl text-green-700 dark:text-green-400">
+            <CheckCircle2 className="h-6 w-6" />
+            Unicorn - En komplett lösning
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <p className="text-muted-foreground">
+            Unicorn löser alla dessa problem i en enda plattform - byggd specifikt för nordiska fältserviceföretag.
+          </p>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <h3 className="font-semibold text-green-700 dark:text-green-400">AI-driven planering</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Automatisk schemaläggning</strong>
+                    <p className="text-muted-foreground">AI skapar optimala scheman på sekunder. Ändringar hanteras automatiskt.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Väderintegrerad kapacitet</strong>
+                    <p className="text-muted-foreground">Systemet justerar automatiskt vid regn, snö och extrem värme.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Optimerade rutter</strong>
+                    <p className="text-muted-foreground">AI beräknar kortaste vägen - sparar 15-25% bränsle och tid.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="font-semibold text-green-700 dark:text-green-400">Kundportal med självbetjäning</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Magic link-inloggning</strong>
+                    <p className="text-muted-foreground">Inga lösenord - kunder loggar in via e-postlänk på sekunder.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Boka om själv</strong>
+                    <p className="text-muted-foreground">Kunder hanterar ombokning, avbokning och extra tjänster utan att ringa.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>"Tekniker på väg"-notis</strong>
+                    <p className="text-muted-foreground">Chauffören skickar notis när det passar - kunden får realistisk ankomsttid.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="font-semibold text-green-700 dark:text-green-400">Nordisk integration</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Fortnox-koppling</strong>
+                    <p className="text-muted-foreground">Fakturor exporteras direkt - ingen manuell inmatning.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Svenska adresser</strong>
+                    <p className="text-muted-foreground">Inbyggt stöd för svenska adresser, postnummer och geocoding.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+            
+            <div className="space-y-4">
+              <h3 className="font-semibold text-green-700 dark:text-green-400">Realtidsöversikt</h3>
+              <ul className="space-y-3 text-sm">
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>GPS-spårning</strong>
+                    <p className="text-muted-foreground">Se alla fordon live på kartan med positionshistorik.</p>
+                  </div>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="text-green-600 mt-0.5 font-bold">✓</span>
+                  <div>
+                    <strong>Digital rapportering</strong>
+                    <p className="text-muted-foreground">Chaufförer rapporterar direkt i appen - data finns omedelbart.</p>
+                  </div>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <div>
         <h2 className="text-xl font-semibold mb-4">Unika funktioner</h2>
