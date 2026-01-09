@@ -4055,6 +4055,181 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // AI Route Recommendations - weather and history based suggestions
+  app.get("/api/ai/route-recommendations", async (req, res) => {
+    try {
+      const { fetchWeatherForecast } = await import("./weather-service");
+      const tenantId = getTenantIdWithFallback(req);
+      const date = req.query.date as string || new Date().toISOString().split("T")[0];
+      
+      const [workOrders, resources, objects, clusters] = await Promise.all([
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getObjects(tenantId),
+        storage.getClusters(tenantId),
+      ]);
+      
+      // Get weather for default location (Umeå)
+      const weather = await fetchWeatherForecast(63.826, 20.263, 7);
+      const todayWeather = weather.forecasts.find(f => f.date === date);
+      const todayImpact = weather.impacts.find(i => i.date === date);
+      
+      // Filter today's orders - check both legacy status and new orderStatus fields
+      const isCompleted = (o: typeof workOrders[0]) => 
+        o.orderStatus === "utford" || o.orderStatus === "fakturerad" ||
+        o.status === "utford" || o.status === "fakturerad";
+      
+      const todaysOrders = workOrders.filter(o => {
+        if (!o.scheduledDate) return false;
+        const orderDate = o.scheduledDate instanceof Date 
+          ? o.scheduledDate.toISOString().split("T")[0]
+          : String(o.scheduledDate).split("T")[0];
+        return orderDate === date && !isCompleted(o);
+      });
+      
+      // Calculate historical stats
+      const completedOrders = workOrders.filter(isCompleted);
+      const avgDuration = completedOrders.length > 0
+        ? completedOrders.reduce((sum, o) => sum + (o.actualDuration || o.estimatedDuration || 60), 0) / completedOrders.length
+        : 60;
+      
+      // Generate AI recommendations
+      const recommendations: Array<{
+        type: "weather" | "optimization" | "capacity" | "historical";
+        priority: "high" | "medium" | "low";
+        title: string;
+        description: string;
+        actionable?: string;
+      }> = [];
+      
+      // Weather-based recommendations
+      if (todayImpact && todayImpact.impactLevel !== "none") {
+        recommendations.push({
+          type: "weather",
+          priority: todayImpact.impactLevel === "severe" || todayImpact.impactLevel === "high" ? "high" : "medium",
+          title: `Vädervarning: ${todayImpact.reason}`,
+          description: todayImpact.recommendations.join(". ") || "Anpassa planering efter väderförhållanden.",
+          actionable: `Kapacitet justerad till ${Math.round(todayImpact.capacityMultiplier * 100)}%`,
+        });
+      }
+      
+      // Capacity recommendations
+      const ordersPerResource: Record<string, number> = {};
+      todaysOrders.forEach(o => {
+        if (o.resourceId) {
+          ordersPerResource[o.resourceId] = (ordersPerResource[o.resourceId] || 0) + 1;
+        }
+      });
+      
+      const maxOrders = Math.max(...Object.values(ordersPerResource), 0);
+      const minOrders = Math.min(...Object.values(ordersPerResource).filter(n => n > 0), maxOrders);
+      
+      if (maxOrders > 0 && maxOrders - minOrders > 3) {
+        const overloadedResource = resources.find(r => ordersPerResource[r.id] === maxOrders);
+        recommendations.push({
+          type: "capacity",
+          priority: "medium",
+          title: "Ojämn arbetsbelastning",
+          description: `${overloadedResource?.name || "En resurs"} har ${maxOrders} ordrar medan andra har färre.`,
+          actionable: "Omfördela ordrar för bättre balans",
+        });
+      }
+      
+      // Route optimization recommendations
+      const unoptimizedOrders = todaysOrders.filter(o => !o.sequenceOrder || o.sequenceOrder === 0);
+      if (unoptimizedOrders.length > 3) {
+        recommendations.push({
+          type: "optimization",
+          priority: "medium",
+          title: "Rutter ej optimerade",
+          description: `${unoptimizedOrders.length} ordrar saknar optimerad körordning.`,
+          actionable: "Kör VRP-optimering för bättre rutter",
+        });
+      }
+      
+      // Historical insights
+      if (avgDuration > 90) {
+        recommendations.push({
+          type: "historical",
+          priority: "low",
+          title: "Längre genomsnittlig tid",
+          description: `Genomsnittlig ordertid är ${Math.round(avgDuration)} min. Överväg att planera mer tid per order.`,
+        });
+      }
+      
+      res.json({
+        date,
+        weather: todayWeather ? {
+          temperature: todayWeather.temperature,
+          precipitation: todayWeather.precipitation,
+          windSpeed: todayWeather.windSpeed,
+          description: todayWeather.weatherDescription,
+          impact: todayImpact?.impactLevel || "none",
+          capacityMultiplier: todayImpact?.capacityMultiplier || 1.0,
+        } : null,
+        statistics: {
+          totalOrders: todaysOrders.length,
+          assignedOrders: todaysOrders.filter(o => o.resourceId).length,
+          activeResources: Object.keys(ordersPerResource).length,
+          avgDurationMinutes: Math.round(avgDuration),
+        },
+        recommendations,
+        summary: recommendations.length > 0 
+          ? `${recommendations.filter(r => r.priority === "high").length} höga, ${recommendations.filter(r => r.priority === "medium").length} medel prioriterade förslag`
+          : "Inga särskilda rekommendationer för idag",
+      });
+    } catch (error) {
+      console.error("Route recommendations error:", error);
+      res.status(500).json({ error: "Kunde inte hämta rekommendationer" });
+    }
+  });
+
+  // Apply VRP optimization - update order sequence
+  app.post("/api/ai/optimize-vrp/apply", async (req, res) => {
+    try {
+      const { routes } = req.body as { 
+        routes: Array<{
+          resourceId: string;
+          stops: Array<{
+            orderId: string;
+            sequence: number;
+          }>;
+        }>;
+      };
+      
+      if (!Array.isArray(routes)) {
+        return res.status(400).json({ error: "routes måste vara en array" });
+      }
+      
+      const results: Array<{ orderId: string; success: boolean; error?: string }> = [];
+      
+      for (const route of routes) {
+        for (const stop of route.stops) {
+          try {
+            const updated = await storage.updateWorkOrder(stop.orderId, {
+              resourceId: route.resourceId,
+              sequenceOrder: stop.sequence,
+            });
+            results.push({ orderId: stop.orderId, success: !!updated });
+          } catch (err) {
+            results.push({ orderId: stop.orderId, success: false, error: String(err) });
+          }
+        }
+      }
+      
+      const successCount = results.filter(r => r.success).length;
+      res.json({ 
+        applied: successCount, 
+        total: results.length,
+        message: `${successCount} ordrar uppdaterade med optimerad sekvens`,
+        results 
+      });
+    } catch (error) {
+      console.error("Apply VRP optimization error:", error);
+      res.status(500).json({ error: "Kunde inte tillämpa VRP-optimering" });
+    }
+  });
+
   // Apply auto-schedule assignments
   app.post("/api/ai/auto-schedule/apply", async (req, res) => {
     try {
