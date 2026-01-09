@@ -60,7 +60,9 @@ const grunddataItems = [
 
 const planeringItems = [
   { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
-  { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: "Alla ordrar" },
+  { title: "Orderkoncept", url: "/order-concepts", icon: Layers, description: "Intelligenta ordergeneratorer" },
+  { title: "Uppgifter", url: "/assignments", icon: ClipboardList, description: "Genererade uppgifter" },
+  { title: "Orderstock", url: "/order-stock", icon: Package, description: "Alla ordrar" },
   { title: "Mobilapp", url: "/mobile", icon: Smartphone, description: "Fältarbete" },
   { title: "Rutter", url: "/routes", icon: Map, description: "Körvägar" },
 ];
