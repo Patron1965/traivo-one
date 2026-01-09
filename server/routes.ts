@@ -7253,5 +7253,173 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // ============================================
+  // CUSTOMER NOTIFICATIONS - E-post notifieringar till kunder
+  // ============================================
+  
+  app.post("/api/notifications/send", async (req, res) => {
+    try {
+      const { sendCustomerNotification } = await import("./customer-notifications");
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId, notificationType, estimatedArrivalMinutes, customMessage } = req.body;
+      
+      if (!workOrderId || !notificationType) {
+        return res.status(400).json({ error: "workOrderId och notificationType krävs" });
+      }
+      
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      }
+      
+      const results = await sendCustomerNotification(tenantId, {
+        workOrderId,
+        notificationType,
+        estimatedArrivalMinutes,
+        customMessage,
+      });
+      
+      const successCount = results.filter(r => r.success).length;
+      res.json({
+        success: successCount > 0,
+        sent: successCount,
+        total: results.length,
+        results,
+        message: successCount > 0 
+          ? `Notifiering skickad till ${successCount} mottagare`
+          : "Kunde inte skicka notifiering",
+      });
+    } catch (error) {
+      console.error("Failed to send notification:", error);
+      res.status(500).json({ error: "Kunde inte skicka notifiering" });
+    }
+  });
+  
+  app.post("/api/notifications/technician-on-way/:workOrderId", async (req, res) => {
+    try {
+      const { notifyTechnicianOnWay } = await import("./customer-notifications");
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId } = req.params;
+      const { estimatedMinutes } = req.body;
+      
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      }
+      
+      const results = await notifyTechnicianOnWay(tenantId, workOrderId, estimatedMinutes);
+      const successCount = results.filter(r => r.success).length;
+      
+      res.json({
+        success: successCount > 0,
+        sent: successCount,
+        results,
+        message: successCount > 0 
+          ? `Kunden notifierad om att tekniker är på väg`
+          : "Kunde inte skicka notifiering",
+      });
+    } catch (error) {
+      console.error("Failed to send technician-on-way notification:", error);
+      res.status(500).json({ error: "Kunde inte skicka notifiering" });
+    }
+  });
+  
+  app.post("/api/notifications/job-completed/:workOrderId", async (req, res) => {
+    try {
+      const { notifyJobCompleted } = await import("./customer-notifications");
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId } = req.params;
+      
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      }
+      
+      const results = await notifyJobCompleted(tenantId, workOrderId);
+      const successCount = results.filter(r => r.success).length;
+      
+      res.json({
+        success: successCount > 0,
+        sent: successCount,
+        results,
+      });
+    } catch (error) {
+      console.error("Failed to send job-completed notification:", error);
+      res.status(500).json({ error: "Kunde inte skicka notifiering" });
+    }
+  });
+
+  // ============================================
+  // CUSTOMER PORTAL - Authenticated API för kundportal
+  // Kräver inloggad användare med tenant-kontext
+  // ============================================
+  
+  app.get("/api/portal/customer/:customerId/orders", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { customerId } = req.params;
+      
+      const customer = await storage.getCustomer(customerId);
+      if (!verifyTenantOwnership(customer, tenantId)) {
+        return res.status(404).json({ error: "Kund hittades inte" });
+      }
+      
+      const workOrders = await storage.getWorkOrders(tenantId);
+      const customerOrders = workOrders.filter(o => o.customerId === customerId);
+      
+      const objects = await storage.getObjects(tenantId);
+      const objectMap = new Map(objects.map(o => [o.id, o]));
+      const resources = await storage.getResources(tenantId);
+      const resourceMap = new Map(resources.map(r => [r.id, r]));
+      
+      const enrichedOrders = customerOrders.map(order => {
+        const obj = order.objectId ? objectMap.get(order.objectId) : undefined;
+        const resource = order.resourceId ? resourceMap.get(order.resourceId) : undefined;
+        return {
+          id: order.id,
+          title: order.title,
+          description: order.description,
+          status: order.orderStatus || order.status,
+          scheduledDate: order.scheduledDate,
+          scheduledTime: order.scheduledStartTime,
+          completedAt: order.completedAt,
+          objectAddress: obj?.address,
+          objectName: obj?.name,
+          resourceName: resource?.name,
+        };
+      });
+      
+      const upcoming = enrichedOrders
+        .filter(o => !["utford", "fakturerad"].includes(o.status))
+        .sort((a, b) => {
+          if (!a.scheduledDate) return 1;
+          if (!b.scheduledDate) return -1;
+          return new Date(a.scheduledDate).getTime() - new Date(b.scheduledDate).getTime();
+        });
+        
+      const history = enrichedOrders
+        .filter(o => ["utford", "fakturerad"].includes(o.status))
+        .sort((a, b) => {
+          if (!a.completedAt) return 1;
+          if (!b.completedAt) return -1;
+          return new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime();
+        })
+        .slice(0, 20);
+      
+      res.json({
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+        },
+        upcoming,
+        history,
+      });
+    } catch (error) {
+      console.error("Failed to get portal orders:", error);
+      res.status(500).json({ error: "Kunde inte hämta ordrar" });
+    }
+  });
+
   return httpServer;
 }

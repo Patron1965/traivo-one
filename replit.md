@@ -95,3 +95,28 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
   - Pulsing real-time status indicators for active field workers (on_way/on_site)
   - 4-step workflow indicator in mobile app (Åka dit→Starta→Utför→Slutför)
   - Enhanced access code display with dedicated cards in SimpleFieldApp
+
+### Sprint 4 (In Progress)
+- **Route Optimization Enhancements:**
+  - VRP route visualization with OptimizedRouteMap showing numbered stops and polylines
+  - "Apply optimization" endpoint to persist optimized order sequences to database
+  - AI route recommendations with weather-based suggestions via Open-Meteo API
+  - Weather impact cards showing temperature, precipitation, wind speed, and capacity adjustments
+
+- **Customer Notifications (E-post):**
+  - Email notification system via Resend integration (`server/customer-notifications.ts`)
+  - Automatic "technician on the way" notifications with estimated arrival time
+  - Notification button in mobile field app (SimpleFieldApp) for one-tap customer alerts
+  - API endpoints: `/api/notifications/technician-on-way/:workOrderId`, `/api/notifications/job-completed/:workOrderId`
+  - Note: SMS via Twilio available but not configured - can be added when needed
+
+- **Customer Portal:**
+  - Existing CustomerPortalPage (`/customer-portal`) allows staff to view customer orders
+  - Authenticated API endpoint `/api/portal/customer/:customerId/orders` for secure order retrieval
+  - Shows upcoming visits and historical order data per customer
+
+- **Fortnox Integration (Previously Implemented):**
+  - Full OAuth flow for Fortnox authentication
+  - Entity mapping (customers, articles, cost centers, projects)
+  - Invoice export pipeline from completed work orders
+  - FortnoxSettingsPage (`/fortnox-settings`) for configuration

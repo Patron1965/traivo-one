@@ -8,7 +8,7 @@ import {
   MapPin, Play, CheckCircle, ArrowLeft,
   Loader2, AlertTriangle, Navigation, Phone,
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
-  Key, DoorOpen, ListChecks, CircleDot, Circle
+  Key, DoorOpen, ListChecks, CircleDot, Circle, Mail
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -299,6 +299,36 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     },
   });
 
+  const notifyCustomerMutation = useMutation({
+    mutationFn: async ({ workOrderId, estimatedMinutes }: { workOrderId: string; estimatedMinutes?: number }) => {
+      const response = await apiRequest("POST", `/api/notifications/technician-on-way/${workOrderId}`, {
+        estimatedMinutes: estimatedMinutes || 30,
+      });
+      return response.json();
+    },
+    onSuccess: (data: { success: boolean; sent: number; message?: string }) => {
+      if (data.success) {
+        toast({ 
+          title: "Kund notifierad", 
+          description: data.message || `Notifiering skickad till ${data.sent} mottagare`,
+        });
+      } else {
+        toast({ 
+          title: "Notifiering ej skickad", 
+          description: "Ingen e-postadress registrerad för kunden.",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: () => {
+      toast({ 
+        title: "Fel", 
+        description: "Kunde inte skicka notifiering till kund.", 
+        variant: "destructive" 
+      });
+    },
+  });
+
   const handleSelectJob = (jobId: string) => {
     setSelectedJobId(jobId);
     setView("job");
@@ -512,6 +542,24 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             >
               <AlertTriangle className="h-5 w-5 text-orange-500" />
               <span className="text-xs">Problem</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto py-3 flex-col gap-1"
+              onClick={() => {
+                if (selectedJobId) {
+                  notifyCustomerMutation.mutate({ workOrderId: selectedJobId, estimatedMinutes: 30 });
+                }
+              }}
+              disabled={notifyCustomerMutation.isPending || !selectedCustomer?.email}
+              data-testid="button-notify-customer"
+            >
+              {notifyCustomerMutation.isPending ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Mail className="h-5 w-5 text-teal-500" />
+              )}
+              <span className="text-xs">Meddela</span>
             </Button>
           </div>
 
