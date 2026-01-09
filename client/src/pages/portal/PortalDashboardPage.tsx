@@ -10,7 +10,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -221,73 +221,145 @@ export default function PortalDashboardPage() {
         </div>
       </header>
 
-      <main className="container py-6 space-y-6">
-        {/* Welcome Header with Stats */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary/20">
-            <CardContent className="py-6">
-              <h2 className="text-2xl font-bold">{getGreeting()}, {customer?.name?.split(" ")[0]}!</h2>
-              <p className="text-muted-foreground mt-1">
-                Välkommen till {tenant?.name || "kundportalen"}. Här kan du hantera dina bokningar och kontakta oss.
-              </p>
-              
-              {/* Quick Action Buttons */}
-              <div className="flex flex-wrap gap-2 mt-4">
-                <Button 
-                  variant="default" 
-                  size="sm" 
-                  onClick={() => {
-                    form.setValue("requestType", "extra_service");
-                    setBookingDialogOpen(true);
-                  }}
-                  data-testid="button-quick-extra"
-                >
-                  <Truck className="h-4 w-4 mr-2" />
-                  Boka extratömning
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => {
-                    form.setValue("requestType", "reschedule");
-                    setBookingDialogOpen(true);
-                  }}
-                  data-testid="button-quick-reschedule"
-                >
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Ändra tid
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setChatOpen(true)}
-                  data-testid="button-quick-contact"
-                >
-                  <MessageCircle className="h-4 w-4 mr-2" />
-                  Kontakta oss
-                </Button>
+      <main className="container py-8 space-y-8">
+        {/* Welcome Hero Section */}
+        <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-background border border-primary/20 p-6 sm:p-8">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
+          <div className="relative z-10">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <span className="text-sm font-medium text-primary">Kundportal</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold mb-2">{getGreeting()}, {customer?.name?.split(" ")[0]}!</h2>
+            <p className="text-muted-foreground max-w-xl">
+              Välkommen till {tenant?.name || "kundportalen"}. Här kan du enkelt hantera dina tjänster, 
+              boka extra tömningar och kontakta oss.
+            </p>
+          </div>
+        </div>
+
+        {/* Quick Actions Grid */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card 
+            className="hover-elevate cursor-pointer group"
+            onClick={() => {
+              form.setValue("requestType", "extra_service");
+              setBookingDialogOpen(true);
+            }}
+            data-testid="card-quick-extra"
+          >
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
+                <Truck className="h-6 w-6 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Boka extratömning</h3>
+                <p className="text-sm text-muted-foreground">Behöver du extra hämtning?</p>
               </div>
             </CardContent>
           </Card>
+          
+          <Card 
+            className="hover-elevate cursor-pointer group"
+            onClick={() => {
+              form.setValue("requestType", "reschedule");
+              setBookingDialogOpen(true);
+            }}
+            data-testid="card-quick-reschedule"
+          >
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-blue-500/10 group-hover:bg-blue-500/20 transition-colors">
+                <RefreshCw className="h-6 w-6 text-blue-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Ändra bokning</h3>
+                <p className="text-sm text-muted-foreground">Flytta eller ändra tid</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card 
+            className="hover-elevate cursor-pointer group"
+            onClick={() => setChatOpen(true)}
+            data-testid="card-quick-contact"
+          >
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-green-500/10 group-hover:bg-green-500/20 transition-colors">
+                <MessageCircle className="h-6 w-6 text-green-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Kontakta oss</h3>
+                <p className="text-sm text-muted-foreground">Chatta med kundtjänst</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card 
+            className="hover-elevate cursor-pointer group"
+            onClick={() => setBookingDialogOpen(true)}
+            data-testid="card-quick-new"
+          >
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-purple-500/10 group-hover:bg-purple-500/20 transition-colors">
+                <Plus className="h-6 w-6 text-purple-500" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Ny förfrågan</h3>
+                <p className="text-sm text-muted-foreground">Skicka önskemål till oss</p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
-          {/* Statistics Card */}
-          <Card>
-            <CardContent className="py-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-primary">{history.length}</div>
+        {/* Statistics Row */}
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+          <Card className="bg-gradient-to-br from-green-500/10 to-transparent">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-500/20 rounded-lg">
+                  <CheckCircle2 className="h-5 w-5 text-green-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{history.length}</div>
                   <div className="text-xs text-muted-foreground">Utförda besök</div>
                 </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-primary">{upcoming.length}</div>
-                  <div className="text-xs text-muted-foreground">Kommande</div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-blue-500/10 to-transparent">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-500/20 rounded-lg">
+                  <CalendarDays className="h-5 w-5 text-blue-500" />
                 </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-primary">{objects.length}</div>
-                  <div className="text-xs text-muted-foreground">Platser</div>
+                <div>
+                  <div className="text-2xl font-bold">{upcoming.length}</div>
+                  <div className="text-xs text-muted-foreground">Kommande besök</div>
                 </div>
-                <div className="text-center p-3 bg-muted/50 rounded-lg">
-                  <div className="text-2xl font-bold text-primary">
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-purple-500/10 to-transparent">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-purple-500/20 rounded-lg">
+                  <Package className="h-5 w-5 text-purple-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{objects.length}</div>
+                  <div className="text-xs text-muted-foreground">Dina platser</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-orange-500/10 to-transparent">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-orange-500/20 rounded-lg">
+                  <FileText className="h-5 w-5 text-orange-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">
                     {bookingRequests.filter((r: any) => r.status === "pending").length}
                   </div>
                   <div className="text-xs text-muted-foreground">Öppna ärenden</div>
@@ -609,10 +681,31 @@ export default function PortalDashboardPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : upcoming.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <CalendarDays className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Inga kommande besök</p>
+              <Card className="bg-gradient-to-br from-muted/30 to-transparent">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="p-4 bg-primary/10 rounded-full mb-4">
+                    <Recycle className="h-10 w-10 text-primary" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Inga kommande besök just nu</h3>
+                  <p className="text-muted-foreground max-w-sm mb-6">
+                    Det finns inga planerade tömningar. Behöver du boka en extra tömning eller annan tjänst?
+                  </p>
+                  <div className="flex gap-2">
+                    <Button
+                      onClick={() => {
+                        form.setValue("requestType", "extra_service");
+                        setBookingDialogOpen(true);
+                      }}
+                      data-testid="button-book-empty"
+                    >
+                      <Truck className="h-4 w-4 mr-2" />
+                      Boka extratömning
+                    </Button>
+                    <Button variant="outline" onClick={() => setChatOpen(true)}>
+                      <MessageCircle className="h-4 w-4 mr-2" />
+                      Kontakta oss
+                    </Button>
+                  </div>
                 </CardContent>
               </Card>
             ) : (
@@ -670,10 +763,15 @@ export default function PortalDashboardPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : history.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <History className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Ingen historik än</p>
+              <Card className="bg-gradient-to-br from-muted/30 to-transparent">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="p-4 bg-green-500/10 rounded-full mb-4">
+                    <History className="h-10 w-10 text-green-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Ingen historik ännu</h3>
+                  <p className="text-muted-foreground max-w-sm">
+                    Här visas dina tidigare utförda besök och tömningar när de har slutförts.
+                  </p>
                 </CardContent>
               </Card>
             ) : (
@@ -714,12 +812,17 @@ export default function PortalDashboardPage() {
                 <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
               </div>
             ) : bookingRequests.length === 0 ? (
-              <Card>
-                <CardContent className="flex flex-col items-center justify-center py-12">
-                  <FileText className="h-12 w-12 text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground">Inga förfrågningar</p>
+              <Card className="bg-gradient-to-br from-muted/30 to-transparent">
+                <CardContent className="flex flex-col items-center justify-center py-16 text-center">
+                  <div className="p-4 bg-purple-500/10 rounded-full mb-4">
+                    <FileText className="h-10 w-10 text-purple-500" />
+                  </div>
+                  <h3 className="text-lg font-semibold mb-2">Inga förfrågningar ännu</h3>
+                  <p className="text-muted-foreground max-w-sm mb-6">
+                    Här visas dina inskickade önskemål och bokningsförfrågningar.
+                  </p>
                   <Button
-                    variant="outline"
+                    variant="default"
                     className="mt-4"
                     onClick={() => setBookingDialogOpen(true)}
                   >
