@@ -6667,6 +6667,122 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // ============================================
+  // SCHEDULE API (Week Planning)
+  // ============================================
+
+  app.get("/api/schedule", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { startDate, endDate } = req.query;
+
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "startDate och endDate krävs" });
+      }
+
+      const start = new Date(startDate as string);
+      const end = new Date(endDate as string);
+
+      // Get all resources
+      const resources = await storage.getResources(tenantId);
+      const activeResources = resources.filter(r => r.status === "active");
+
+      // Get all assignments in date range
+      const assignments = await storage.getAssignments(tenantId, {
+        startDate: start,
+        endDate: end
+      });
+
+      // Build schedule data per resource per day
+      const schedule = await Promise.all(activeResources.map(async (resource) => {
+        // Get availability entries for this resource
+        const availabilityEntries = await storage.getResourceAvailability(resource.id);
+
+        // Group assignments by date
+        const resourceAssignments = assignments.filter(a => a.resourceId === resource.id);
+        const assignmentsByDate: Record<string, typeof assignments> = {};
+        
+        resourceAssignments.forEach(a => {
+          if (a.scheduledDate) {
+            const dateKey = new Date(a.scheduledDate).toISOString().split("T")[0];
+            if (!assignmentsByDate[dateKey]) assignmentsByDate[dateKey] = [];
+            assignmentsByDate[dateKey].push(a);
+          }
+        });
+
+        // Build daily data
+        const days: Array<{
+          date: string;
+          available: boolean;
+          availabilityType?: string;
+          assignments: typeof assignments;
+          totalTime: number;
+          totalValue: number;
+        }> = [];
+
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          const dateStr = d.toISOString().split("T")[0];
+          
+          // Check availability
+          let available = true;
+          let availabilityType = "available";
+          
+          // Check resource.availability JSON field
+          if (resource.availability) {
+            const dayAvail = (resource.availability as Record<string, string>)[dateStr];
+            if (dayAvail && dayAvail !== "available") {
+              available = false;
+              availabilityType = dayAvail;
+            }
+          }
+
+          // Check resource_availability table
+          const blockingEntry = availabilityEntries.find(entry => {
+            if (entry.date) {
+              const entryDate = new Date(entry.date).toISOString().split("T")[0];
+              return entryDate === dateStr && !entry.isAvailable;
+            }
+            return false;
+          });
+          if (blockingEntry) {
+            available = false;
+            availabilityType = blockingEntry.availabilityType || "blocked";
+          }
+
+          const dayAssignments = assignmentsByDate[dateStr] || [];
+          const totalTime = dayAssignments.reduce((sum, a) => sum + (a.estimatedDuration || 60), 0);
+          const totalValue = dayAssignments.reduce((sum, a) => sum + (a.cachedValue || 0), 0);
+
+          days.push({
+            date: dateStr,
+            available,
+            availabilityType,
+            assignments: dayAssignments,
+            totalTime,
+            totalValue
+          });
+        }
+
+        return {
+          resource,
+          days
+        };
+      }));
+
+      // Also return unassigned assignments in the date range
+      const unassignedAssignments = assignments.filter(a => !a.resourceId);
+
+      res.json({
+        schedule,
+        unassignedAssignments,
+        dateRange: { start: start.toISOString(), end: end.toISOString() }
+      });
+    } catch (error) {
+      console.error("Failed to get schedule:", error);
+      res.status(500).json({ error: "Kunde inte hämta schema" });
+    }
+  });
+
+  // ============================================
   // ASSIGNMENTS API
   // ============================================
   
@@ -6752,6 +6868,141 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed to delete assignment:", error);
       res.status(500).json({ error: "Kunde inte radera uppgift" });
+    }
+  });
+
+  // Get candidate resources for an assignment
+  app.get("/api/assignments/:id/candidates", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const assignment = await storage.getAssignment(req.params.id);
+      if (!verifyTenantOwnership(assignment, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+
+      // Get all active resources for the tenant
+      const allResources = await storage.getResources(tenantId);
+      const activeResources = allResources.filter(r => r.status === "active");
+
+      // Get the scheduled date from assignment or query param
+      const targetDate = req.query.date 
+        ? new Date(req.query.date as string)
+        : assignment!.scheduledDate;
+      const dateStr = targetDate ? targetDate.toISOString().split("T")[0] : null;
+
+      // Score each resource
+      const candidates = await Promise.all(activeResources.map(async (resource) => {
+        let score = 50; // Base score
+        let available = true;
+        let reasons: string[] = [];
+
+        // Check availability from resource's availability field (JSON)
+        if (dateStr && resource.availability) {
+          const dayAvailability = (resource.availability as Record<string, string>)[dateStr];
+          if (dayAvailability && dayAvailability !== "available") {
+            available = false;
+            reasons.push(`Ej tillgänglig: ${dayAvailability}`);
+            score -= 100;
+          }
+        }
+
+        // Check resource_availability table entries
+        if (dateStr) {
+          const availabilityEntries = await storage.getResourceAvailability(resource.id);
+          const dateConflict = availabilityEntries.find(entry => {
+            if (entry.date) {
+              const entryDate = new Date(entry.date).toISOString().split("T")[0];
+              return entryDate === dateStr && !entry.isAvailable;
+            }
+            return false;
+          });
+          if (dateConflict) {
+            available = false;
+            reasons.push(`Blockerad: ${dateConflict.notes || dateConflict.availabilityType}`);
+            score -= 100;
+          }
+        }
+
+        // Check existing assignments for the date (workload)
+        if (dateStr) {
+          const resourceAssignments = await storage.getAssignments(tenantId, {
+            resourceId: resource.id,
+            startDate: new Date(dateStr),
+            endDate: new Date(dateStr)
+          });
+          const workload = resourceAssignments.length;
+          if (workload > 0) {
+            reasons.push(`${workload} uppgifter redan planerade`);
+            score -= workload * 5; // Reduce score per existing assignment
+          }
+          if (workload >= 10) {
+            available = false;
+            reasons.push("Fullbokat");
+            score -= 50;
+          }
+        }
+
+        // Bonus for matching cluster/area
+        if (assignment!.clusterId && resource.serviceArea) {
+          // Simple check if service area matches cluster
+          score += 10;
+        }
+
+        return {
+          resource,
+          score: Math.max(0, score),
+          available,
+          reasons
+        };
+      }));
+
+      // Sort by score (highest first), then by availability
+      candidates.sort((a, b) => {
+        if (a.available !== b.available) return a.available ? -1 : 1;
+        return b.score - a.score;
+      });
+
+      res.json(candidates);
+    } catch (error) {
+      console.error("Failed to get candidate resources:", error);
+      res.status(500).json({ error: "Kunde inte hämta kandidatresurser" });
+    }
+  });
+
+  // Assign resource to assignment
+  app.post("/api/assignments/:id/assign", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const assignment = await storage.getAssignment(req.params.id);
+      if (!verifyTenantOwnership(assignment, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+
+      const { resourceId, scheduledDate, scheduledStartTime, scheduledEndTime } = req.body;
+      
+      if (!resourceId) {
+        return res.status(400).json({ error: "ResourceId krävs" });
+      }
+
+      // Verify resource exists and belongs to tenant
+      const resource = await storage.getResource(resourceId);
+      if (!verifyTenantOwnership(resource, tenantId)) {
+        return res.status(404).json({ error: "Resurs hittades inte" });
+      }
+
+      // Update assignment with resource and scheduling info
+      const updatedAssignment = await storage.updateAssignment(req.params.id, tenantId, {
+        resourceId,
+        scheduledDate: scheduledDate ? new Date(scheduledDate) : assignment!.scheduledDate,
+        scheduledStartTime: scheduledStartTime || undefined,
+        scheduledEndTime: scheduledEndTime || undefined,
+        status: scheduledDate ? "planned_fine" : "planned_rough"
+      });
+
+      res.json(updatedAssignment);
+    } catch (error) {
+      console.error("Failed to assign resource:", error);
+      res.status(500).json({ error: "Kunde inte tilldela resurs" });
     }
   });
 
