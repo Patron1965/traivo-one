@@ -10,12 +10,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3 } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { format } from "date-fns";
+import { format, differenceInDays, isAfter } from "date-fns";
 import { sv } from "date-fns/locale";
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 10) return "God morgon";
+  if (hour < 18) return "Hej";
+  return "God kväll";
+}
 
 const bookingSchema = z.object({
   requestType: z.string().min(1, "Välj typ av förfrågan"),
@@ -215,15 +222,199 @@ export default function PortalDashboardPage() {
       </header>
 
       <main className="container py-6 space-y-6">
-        <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
-          <CardContent className="py-6">
-            <h2 className="text-2xl font-bold">Välkommen till {tenant?.name || "Kundportalen"}!</h2>
-            <p className="text-muted-foreground mt-1">Hej {customer?.name}, här kan du se dina bokningar, skicka önskemål och kontakta oss.</p>
-          </CardContent>
-        </Card>
+        {/* Welcome Header with Stats */}
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-primary/20">
+            <CardContent className="py-6">
+              <h2 className="text-2xl font-bold">{getGreeting()}, {customer?.name?.split(" ")[0]}!</h2>
+              <p className="text-muted-foreground mt-1">
+                Välkommen till {tenant?.name || "kundportalen"}. Här kan du hantera dina bokningar och kontakta oss.
+              </p>
+              
+              {/* Quick Action Buttons */}
+              <div className="flex flex-wrap gap-2 mt-4">
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={() => {
+                    form.setValue("requestType", "extra_service");
+                    setBookingDialogOpen(true);
+                  }}
+                  data-testid="button-quick-extra"
+                >
+                  <Truck className="h-4 w-4 mr-2" />
+                  Boka extratömning
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    form.setValue("requestType", "reschedule");
+                    setBookingDialogOpen(true);
+                  }}
+                  data-testid="button-quick-reschedule"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Ändra tid
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => setChatOpen(true)}
+                  data-testid="button-quick-contact"
+                >
+                  <MessageCircle className="h-4 w-4 mr-2" />
+                  Kontakta oss
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
+          {/* Statistics Card */}
+          <Card>
+            <CardContent className="py-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="text-center p-3 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-primary">{history.length}</div>
+                  <div className="text-xs text-muted-foreground">Utförda besök</div>
+                </div>
+                <div className="text-center p-3 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-primary">{upcoming.length}</div>
+                  <div className="text-xs text-muted-foreground">Kommande</div>
+                </div>
+                <div className="text-center p-3 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-primary">{objects.length}</div>
+                  <div className="text-xs text-muted-foreground">Platser</div>
+                </div>
+                <div className="text-center p-3 bg-muted/50 rounded-lg">
+                  <div className="text-2xl font-bold text-primary">
+                    {bookingRequests.filter((r: any) => r.status === "pending").length}
+                  </div>
+                  <div className="text-xs text-muted-foreground">Öppna ärenden</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Next Visit Highlight Card */}
+        {upcoming.length > 0 && (
+          <Card className="bg-gradient-to-r from-primary/10 to-transparent border-primary/30">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-primary" />
+                  <CardTitle className="text-lg">Nästa planerade besök</CardTitle>
+                </div>
+                <StatusBadge status={upcoming[0].status} />
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-primary/10 rounded-full">
+                    <CalendarDays className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-muted-foreground">Datum</div>
+                    <div className="font-medium">
+                      {upcoming[0].scheduledDate 
+                        ? format(new Date(upcoming[0].scheduledDate), "EEEE d MMMM", { locale: sv })
+                        : "Ej bestämt"
+                      }
+                    </div>
+                    {upcoming[0].scheduledDate && (
+                      <div className="text-xs text-muted-foreground">
+                        {(() => {
+                          const days = differenceInDays(new Date(upcoming[0].scheduledDate), new Date());
+                          if (days === 0) return "Idag!";
+                          if (days === 1) return "Imorgon";
+                          if (days < 0) return "";
+                          return `Om ${days} dagar`;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+                
+                {upcoming[0].scheduledTime && (
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-full">
+                      <Clock className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Tid</div>
+                      <div className="font-medium">{upcoming[0].scheduledTime}</div>
+                    </div>
+                  </div>
+                )}
+
+                {upcoming[0].objectAddress && (
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-full">
+                      <MapPin className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Adress</div>
+                      <div className="font-medium line-clamp-1">{upcoming[0].objectAddress}</div>
+                    </div>
+                  </div>
+                )}
+
+                {upcoming[0].resourceName && (
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-primary/10 rounded-full">
+                      <User className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted-foreground">Tekniker</div>
+                      <div className="font-medium">{upcoming[0].resourceName}</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {upcoming[0].title && (
+                <div className="mt-4 pt-3 border-t">
+                  <span className="text-sm font-medium">{upcoming[0].title}</span>
+                  {upcoming[0].description && (
+                    <span className="text-sm text-muted-foreground ml-2">— {upcoming[0].description}</span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-2 mt-4">
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => {
+                    form.setValue("requestType", "reschedule");
+                    setBookingDialogOpen(true);
+                  }}
+                  data-testid="button-reschedule-next"
+                >
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Ändra tid
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => {
+                    form.setValue("requestType", "cancel");
+                    setBookingDialogOpen(true);
+                  }}
+                  data-testid="button-cancel-next"
+                >
+                  Avboka
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Main Content Header with New Request Button */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div></div>
+          <h3 className="text-lg font-semibold">Mina ärenden</h3>
           <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
             <DialogTrigger asChild>
               <Button data-testid="button-new-booking">
@@ -591,28 +782,65 @@ export default function PortalDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {objects.map((obj: any) => (
-                  <div key={obj.id} className="p-3 border rounded-md space-y-2" data-testid={`object-${obj.id}`}>
-                    <p className="font-medium">{obj.name}</p>
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-3 w-3" />
-                      <span>{obj.address}</span>
-                    </div>
-                    {obj.what3words && (
-                      <div className="flex items-center gap-2 text-sm">
-                        <Grid3X3 className="h-3 w-3 text-red-500" />
-                        <a 
-                          href={`https://what3words.com/${obj.what3words}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-red-600 hover:underline font-mono text-xs"
-                        >
-                          ///{obj.what3words}
-                        </a>
+                {objects.map((obj: any) => {
+                  const objectUpcoming = upcoming.filter((o: any) => o.objectId === obj.id || o.objectAddress === obj.address);
+                  const objectHistory = history.filter((o: any) => o.objectId === obj.id || o.objectAddress === obj.address);
+                  const lastVisit = objectHistory[0];
+                  const nextVisit = objectUpcoming[0];
+                  
+                  return (
+                    <div key={obj.id} className="p-4 border rounded-lg space-y-3 hover-elevate" data-testid={`object-${obj.id}`}>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="font-medium">{obj.name}</p>
+                        {obj.type && (
+                          <Badge variant="secondary" className="text-xs">{obj.type}</Badge>
+                        )}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        <span className="line-clamp-1">{obj.address}</span>
+                      </div>
+                      {obj.what3words && (
+                        <div className="flex items-center gap-2 text-sm">
+                          <Grid3X3 className="h-3 w-3 text-red-500 shrink-0" />
+                          <a 
+                            href={`https://what3words.com/${obj.what3words}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-red-600 hover:underline font-mono text-xs"
+                          >
+                            ///{obj.what3words}
+                          </a>
+                        </div>
+                      )}
+                      
+                      <div className="pt-2 border-t space-y-1">
+                        {lastVisit ? (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            <span>Senast: {format(new Date(lastVisit.completedAt || lastVisit.scheduledDate), "d MMM", { locale: sv })}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Clock className="h-3 w-3" />
+                            <span>Inget tidigare besök</span>
+                          </div>
+                        )}
+                        {nextVisit ? (
+                          <div className="flex items-center gap-2 text-xs font-medium text-primary">
+                            <ArrowRight className="h-3 w-3" />
+                            <span>Nästa: {format(new Date(nextVisit.scheduledDate), "d MMM", { locale: sv })}</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <CalendarDays className="h-3 w-3" />
+                            <span>Inget planerat</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
