@@ -42,6 +42,10 @@ import {
   type TaskDependency, type InsertTaskDependency,
   type TaskInformation, type InsertTaskInformation,
   type StructuralArticle, type InsertStructuralArticle,
+  type OrderConcept, type InsertOrderConcept,
+  type ConceptFilter, type InsertConceptFilter,
+  type Assignment, type InsertAssignment,
+  type AssignmentArticle, type InsertAssignmentArticle,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -50,7 +54,8 @@ import {
   resourcePositions,
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
   metadataDefinitions, objectMetadata, objectPayers,
-  objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles
+  objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
+  orderConcepts, conceptFilters, assignments, assignmentArticles
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
@@ -308,6 +313,32 @@ export interface IStorage {
   createStructuralArticle(article: InsertStructuralArticle): Promise<StructuralArticle>;
   updateStructuralArticle(id: string, tenantId: string, data: Partial<InsertStructuralArticle>): Promise<StructuralArticle | undefined>;
   deleteStructuralArticle(id: string, tenantId: string): Promise<void>;
+  
+  // Order Concepts
+  getOrderConcepts(tenantId: string): Promise<OrderConcept[]>;
+  getOrderConcept(id: string): Promise<OrderConcept | undefined>;
+  createOrderConcept(concept: InsertOrderConcept): Promise<OrderConcept>;
+  updateOrderConcept(id: string, tenantId: string, data: Partial<InsertOrderConcept>): Promise<OrderConcept | undefined>;
+  deleteOrderConcept(id: string, tenantId: string): Promise<void>;
+  
+  // Concept Filters
+  getConceptFilters(orderConceptId: string): Promise<ConceptFilter[]>;
+  createConceptFilter(filter: InsertConceptFilter): Promise<ConceptFilter>;
+  updateConceptFilter(id: string, orderConceptId: string, data: Partial<InsertConceptFilter>): Promise<ConceptFilter | undefined>;
+  deleteConceptFilter(id: string, orderConceptId: string): Promise<void>;
+  
+  // Assignments
+  getAssignments(tenantId: string, options?: { status?: string; resourceId?: string; clusterId?: string; startDate?: Date; endDate?: Date }): Promise<Assignment[]>;
+  getAssignment(id: string): Promise<Assignment | undefined>;
+  createAssignment(assignment: InsertAssignment): Promise<Assignment>;
+  updateAssignment(id: string, tenantId: string, data: Partial<InsertAssignment>): Promise<Assignment | undefined>;
+  deleteAssignment(id: string, tenantId: string): Promise<void>;
+  
+  // Assignment Articles
+  getAssignmentArticles(assignmentId: string): Promise<AssignmentArticle[]>;
+  createAssignmentArticle(article: InsertAssignmentArticle): Promise<AssignmentArticle>;
+  updateAssignmentArticle(id: string, assignmentId: string, data: Partial<InsertAssignmentArticle>): Promise<AssignmentArticle | undefined>;
+  deleteAssignmentArticle(id: string, assignmentId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2324,6 +2355,192 @@ export class DatabaseStorage implements IStorage {
     await db.delete(structuralArticles).where(and(
       eq(structuralArticles.id, id),
       eq(structuralArticles.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Order Concepts
+  // ============================================
+  
+  async getOrderConcepts(tenantId: string): Promise<OrderConcept[]> {
+    return db.select().from(orderConcepts)
+      .where(and(
+        eq(orderConcepts.tenantId, tenantId),
+        isNull(orderConcepts.deletedAt)
+      ))
+      .orderBy(desc(orderConcepts.createdAt));
+  }
+
+  async getOrderConcept(id: string): Promise<OrderConcept | undefined> {
+    const [result] = await db.select().from(orderConcepts)
+      .where(and(
+        eq(orderConcepts.id, id),
+        isNull(orderConcepts.deletedAt)
+      ));
+    return result || undefined;
+  }
+
+  async createOrderConcept(concept: InsertOrderConcept): Promise<OrderConcept> {
+    const [result] = await db.insert(orderConcepts).values(concept).returning();
+    return result;
+  }
+
+  async updateOrderConcept(id: string, tenantId: string, data: Partial<InsertOrderConcept>): Promise<OrderConcept | undefined> {
+    const [result] = await db.update(orderConcepts)
+      .set(data)
+      .where(and(
+        eq(orderConcepts.id, id),
+        eq(orderConcepts.tenantId, tenantId),
+        isNull(orderConcepts.deletedAt)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteOrderConcept(id: string, tenantId: string): Promise<void> {
+    await db.update(orderConcepts)
+      .set({ deletedAt: new Date() })
+      .where(and(
+        eq(orderConcepts.id, id),
+        eq(orderConcepts.tenantId, tenantId)
+      ));
+  }
+
+  // ============================================
+  // Concept Filters
+  // ============================================
+  
+  async getConceptFilters(orderConceptId: string): Promise<ConceptFilter[]> {
+    return db.select().from(conceptFilters)
+      .where(eq(conceptFilters.orderConceptId, orderConceptId))
+      .orderBy(desc(conceptFilters.priority));
+  }
+
+  async createConceptFilter(filter: InsertConceptFilter): Promise<ConceptFilter> {
+    const [result] = await db.insert(conceptFilters).values(filter).returning();
+    return result;
+  }
+
+  async updateConceptFilter(id: string, orderConceptId: string, data: Partial<InsertConceptFilter>): Promise<ConceptFilter | undefined> {
+    const [result] = await db.update(conceptFilters)
+      .set(data)
+      .where(and(
+        eq(conceptFilters.id, id),
+        eq(conceptFilters.orderConceptId, orderConceptId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteConceptFilter(id: string, orderConceptId: string): Promise<void> {
+    await db.delete(conceptFilters).where(and(
+      eq(conceptFilters.id, id),
+      eq(conceptFilters.orderConceptId, orderConceptId)
+    ));
+  }
+
+  // ============================================
+  // Assignments
+  // ============================================
+  
+  async getAssignments(tenantId: string, options?: { 
+    status?: string; 
+    resourceId?: string; 
+    clusterId?: string; 
+    startDate?: Date; 
+    endDate?: Date 
+  }): Promise<Assignment[]> {
+    const conditions = [
+      eq(assignments.tenantId, tenantId),
+      isNull(assignments.deletedAt)
+    ];
+    
+    if (options?.status) {
+      conditions.push(eq(assignments.status, options.status));
+    }
+    if (options?.resourceId) {
+      conditions.push(eq(assignments.resourceId, options.resourceId));
+    }
+    if (options?.clusterId) {
+      conditions.push(eq(assignments.clusterId, options.clusterId));
+    }
+    if (options?.startDate) {
+      conditions.push(gte(assignments.scheduledDate, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(assignments.scheduledDate, options.endDate));
+    }
+    
+    return db.select().from(assignments)
+      .where(and(...conditions))
+      .orderBy(desc(assignments.createdAt));
+  }
+
+  async getAssignment(id: string): Promise<Assignment | undefined> {
+    const [result] = await db.select().from(assignments)
+      .where(and(
+        eq(assignments.id, id),
+        isNull(assignments.deletedAt)
+      ));
+    return result || undefined;
+  }
+
+  async createAssignment(assignment: InsertAssignment): Promise<Assignment> {
+    const [result] = await db.insert(assignments).values(assignment).returning();
+    return result;
+  }
+
+  async updateAssignment(id: string, tenantId: string, data: Partial<InsertAssignment>): Promise<Assignment | undefined> {
+    const [result] = await db.update(assignments)
+      .set(data)
+      .where(and(
+        eq(assignments.id, id),
+        eq(assignments.tenantId, tenantId),
+        isNull(assignments.deletedAt)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteAssignment(id: string, tenantId: string): Promise<void> {
+    await db.update(assignments)
+      .set({ deletedAt: new Date() })
+      .where(and(
+        eq(assignments.id, id),
+        eq(assignments.tenantId, tenantId)
+      ));
+  }
+
+  // ============================================
+  // Assignment Articles
+  // ============================================
+  
+  async getAssignmentArticles(assignmentId: string): Promise<AssignmentArticle[]> {
+    return db.select().from(assignmentArticles)
+      .where(eq(assignmentArticles.assignmentId, assignmentId))
+      .orderBy(assignmentArticles.sequenceOrder);
+  }
+
+  async createAssignmentArticle(article: InsertAssignmentArticle): Promise<AssignmentArticle> {
+    const [result] = await db.insert(assignmentArticles).values(article).returning();
+    return result;
+  }
+
+  async updateAssignmentArticle(id: string, assignmentId: string, data: Partial<InsertAssignmentArticle>): Promise<AssignmentArticle | undefined> {
+    const [result] = await db.update(assignmentArticles)
+      .set(data)
+      .where(and(
+        eq(assignmentArticles.id, id),
+        eq(assignmentArticles.assignmentId, assignmentId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteAssignmentArticle(id: string, assignmentId: string): Promise<void> {
+    await db.delete(assignmentArticles).where(and(
+      eq(assignmentArticles.id, id),
+      eq(assignmentArticles.assignmentId, assignmentId)
     ));
   }
 }

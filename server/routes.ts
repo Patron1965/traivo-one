@@ -6394,5 +6394,278 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // ============================================
+  // ORDER CONCEPTS API
+  // ============================================
+  
+  app.get("/api/order-concepts", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const concepts = await storage.getOrderConcepts(tenantId);
+      res.json(concepts);
+    } catch (error) {
+      console.error("Failed to get order concepts:", error);
+      res.status(500).json({ error: "Kunde inte hämta orderkoncept" });
+    }
+  });
+
+  app.get("/api/order-concepts/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const concept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(concept, tenantId)) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+      
+      const filters = await storage.getConceptFilters(concept.id);
+      res.json({ ...concept, filters });
+    } catch (error) {
+      console.error("Failed to get order concept:", error);
+      res.status(500).json({ error: "Kunde inte hämta orderkoncept" });
+    }
+  });
+
+  app.post("/api/order-concepts", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = req.session?.user?.id;
+      
+      const concept = await storage.createOrderConcept({
+        ...req.body,
+        tenantId,
+        createdBy: userId
+      });
+      res.status(201).json(concept);
+    } catch (error) {
+      console.error("Failed to create order concept:", error);
+      res.status(500).json({ error: "Kunde inte skapa orderkoncept" });
+    }
+  });
+
+  app.patch("/api/order-concepts/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+      
+      const concept = await storage.updateOrderConcept(req.params.id, tenantId, req.body);
+      res.json(concept);
+    } catch (error) {
+      console.error("Failed to update order concept:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera orderkoncept" });
+    }
+  });
+
+  app.delete("/api/order-concepts/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+      
+      await storage.deleteOrderConcept(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete order concept:", error);
+      res.status(500).json({ error: "Kunde inte radera orderkoncept" });
+    }
+  });
+
+  // Concept Filters
+  app.get("/api/order-concepts/:conceptId/filters", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const concept = await storage.getOrderConcept(req.params.conceptId);
+      if (!verifyTenantOwnership(concept, tenantId)) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+      
+      const filters = await storage.getConceptFilters(req.params.conceptId);
+      res.json(filters);
+    } catch (error) {
+      console.error("Failed to get concept filters:", error);
+      res.status(500).json({ error: "Kunde inte hämta filter" });
+    }
+  });
+
+  app.post("/api/order-concepts/:conceptId/filters", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const concept = await storage.getOrderConcept(req.params.conceptId);
+      if (!verifyTenantOwnership(concept, tenantId)) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+      
+      const filter = await storage.createConceptFilter({
+        ...req.body,
+        orderConceptId: req.params.conceptId
+      });
+      res.status(201).json(filter);
+    } catch (error) {
+      console.error("Failed to create concept filter:", error);
+      res.status(500).json({ error: "Kunde inte skapa filter" });
+    }
+  });
+
+  app.delete("/api/order-concepts/:conceptId/filters/:filterId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const concept = await storage.getOrderConcept(req.params.conceptId);
+      if (!verifyTenantOwnership(concept, tenantId)) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+      
+      await storage.deleteConceptFilter(req.params.filterId, req.params.conceptId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete concept filter:", error);
+      res.status(500).json({ error: "Kunde inte radera filter" });
+    }
+  });
+
+  // ============================================
+  // ASSIGNMENTS API
+  // ============================================
+  
+  app.get("/api/assignments", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { status, resourceId, clusterId, startDate, endDate } = req.query;
+      
+      const assignments = await storage.getAssignments(tenantId, {
+        status: status as string | undefined,
+        resourceId: resourceId as string | undefined,
+        clusterId: clusterId as string | undefined,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined
+      });
+      res.json(assignments);
+    } catch (error) {
+      console.error("Failed to get assignments:", error);
+      res.status(500).json({ error: "Kunde inte hämta uppgifter" });
+    }
+  });
+
+  app.get("/api/assignments/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const assignment = await storage.getAssignment(req.params.id);
+      if (!verifyTenantOwnership(assignment, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const articles = await storage.getAssignmentArticles(assignment.id);
+      res.json({ ...assignment, articles });
+    } catch (error) {
+      console.error("Failed to get assignment:", error);
+      res.status(500).json({ error: "Kunde inte hämta uppgift" });
+    }
+  });
+
+  app.post("/api/assignments", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = req.session?.user?.id;
+      
+      const assignment = await storage.createAssignment({
+        ...req.body,
+        tenantId,
+        createdBy: userId,
+        creationMethod: req.body.creationMethod || "manual"
+      });
+      res.status(201).json(assignment);
+    } catch (error) {
+      console.error("Failed to create assignment:", error);
+      res.status(500).json({ error: "Kunde inte skapa uppgift" });
+    }
+  });
+
+  app.patch("/api/assignments/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getAssignment(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const assignment = await storage.updateAssignment(req.params.id, tenantId, req.body);
+      res.json(assignment);
+    } catch (error) {
+      console.error("Failed to update assignment:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera uppgift" });
+    }
+  });
+
+  app.delete("/api/assignments/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getAssignment(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      await storage.deleteAssignment(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete assignment:", error);
+      res.status(500).json({ error: "Kunde inte radera uppgift" });
+    }
+  });
+
+  // Assignment Articles
+  app.get("/api/assignments/:assignmentId/articles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const assignment = await storage.getAssignment(req.params.assignmentId);
+      if (!verifyTenantOwnership(assignment, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const articles = await storage.getAssignmentArticles(req.params.assignmentId);
+      res.json(articles);
+    } catch (error) {
+      console.error("Failed to get assignment articles:", error);
+      res.status(500).json({ error: "Kunde inte hämta artiklar" });
+    }
+  });
+
+  app.post("/api/assignments/:assignmentId/articles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const assignment = await storage.getAssignment(req.params.assignmentId);
+      if (!verifyTenantOwnership(assignment, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const article = await storage.createAssignmentArticle({
+        ...req.body,
+        assignmentId: req.params.assignmentId
+      });
+      res.status(201).json(article);
+    } catch (error) {
+      console.error("Failed to create assignment article:", error);
+      res.status(500).json({ error: "Kunde inte lägga till artikel" });
+    }
+  });
+
+  app.delete("/api/assignments/:assignmentId/articles/:articleId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const assignment = await storage.getAssignment(req.params.assignmentId);
+      if (!verifyTenantOwnership(assignment, tenantId)) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      await storage.deleteAssignmentArticle(req.params.articleId, req.params.assignmentId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete assignment article:", error);
+      res.status(500).json({ error: "Kunde inte radera artikel" });
+    }
+  });
+
   return httpServer;
 }
