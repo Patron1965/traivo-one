@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -45,6 +45,9 @@ import MyTasksPage from "@/pages/MyTasksPage";
 import ArchitecturePage from "@/pages/architecture";
 import OrderConceptsPage from "@/pages/OrderConceptsPage";
 import AssignmentsPage from "@/pages/AssignmentsPage";
+import PortalLoginPage from "@/pages/portal/PortalLoginPage";
+import PortalVerifyPage from "@/pages/portal/PortalVerifyPage";
+import PortalDashboardPage from "@/pages/portal/PortalDashboardPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -93,8 +96,28 @@ function Router() {
   );
 }
 
+function PortalRouter() {
+  return (
+    <Switch>
+      <Route path="/portal" component={PortalLoginPage} />
+      <Route path="/portal/verify" component={PortalVerifyPage} />
+      <Route path="/portal/dashboard" component={PortalDashboardPage} />
+      <Route component={NotFound} />
+    </Switch>
+  );
+}
+
 function AppContent() {
+  const [location] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
+
+  if (location.startsWith("/portal")) {
+    return (
+      <ErrorBoundary>
+        <PortalRouter />
+      </ErrorBoundary>
+    );
+  }
 
   if (isLoading) {
     return (
