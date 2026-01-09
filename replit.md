@@ -117,13 +117,17 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 
 - **Customer Self-Service Portal (Sprint 5):**
   - Token-based magic link authentication (no passwords) via email
-  - Portal routes: `/portal` (login), `/portal/verify` (token verification), `/portal/dashboard`
+  - Portal routes: `/portal` (login), `/portal/verify` (token verification), `/portal/dashboard`, `/portal/clusters`
   - Backend services in `server/portal-auth.ts` for secure token generation/validation
   - Database tables: `customer_portal_tokens`, `customer_portal_sessions`, `customer_booking_requests`
-  - Security features: Rate limiting (5 requests/15 min per IP+email), SHA-256 token hashing, 15-min token expiry, 30-day session expiry with proper expiration enforcement
-  - Customer features: View upcoming visits and history, submit booking requests (new/reschedule/cancel/extra service), select preferred dates and time slots
+  - Security features:
+    - Rate limiting (5 requests/15 min per IP+email) on login endpoint
+    - SHA-256 token hashing, 15-min token expiry, 30-day session expiry
+    - Centralized `requirePortalAuth` middleware for all portal data endpoints
+    - Zod validation on booking requests with predefined time slots and request types
+  - Customer features: View upcoming visits and history, submit booking requests (new/reschedule/cancel/extra service), cluster hierarchy overview, in-app messaging
   - Multi-tenant support: Dynamic tenant selection from `/api/portal/tenants` endpoint
-  - API endpoints: `/api/portal/auth/*` (authentication), `/api/portal/orders`, `/api/portal/objects`, `/api/portal/booking-requests`
+  - API endpoints: `/api/portal/auth/*`, `/api/portal/orders`, `/api/portal/objects`, `/api/portal/clusters`, `/api/portal/booking-requests`, `/api/portal/booking-options`, `/api/portal/messages`
 
 - **Fortnox Integration (Previously Implemented):**
   - Full OAuth flow for Fortnox authentication

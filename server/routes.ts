@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request as ExpressRequest, Response as ExpressResponse } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { 
@@ -7383,6 +7383,36 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     return true;
   }
 
+  // Portal auth middleware - validates session for all protected portal data endpoints
+  interface PortalSession {
+    valid: boolean;
+    customerId?: string;
+    customerName?: string;
+    email?: string;
+    tenantId?: string;
+    tenantName?: string;
+    sessionId?: string;
+  }
+
+  async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Promise<PortalSession | null> {
+    const authHeader = req.headers.authorization;
+    if (!authHeader?.startsWith("Bearer ")) {
+      res.status(401).json({ error: "Autentisering krävs" });
+      return null;
+    }
+
+    const sessionToken = authHeader.substring(7);
+    const { validateSession } = await import("./portal-auth");
+    const session = await validateSession(sessionToken);
+
+    if (!session.valid || !session.customerId || !session.tenantId) {
+      res.status(401).json({ error: "Ogiltig session" });
+      return null;
+    }
+
+    return session as PortalSession;
+  }
+
   app.get("/api/portal/tenants", async (req, res) => {
     try {
       const tenants = await storage.getPublicTenants();
@@ -7532,23 +7562,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.get("/api/portal/orders", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
-      }
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
 
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
-
-      const workOrders = await storage.getWorkOrdersByCustomer(session.customerId, session.tenantId);
-      const objects = await storage.getObjects(session.tenantId);
+      const workOrders = await storage.getWorkOrdersByCustomer(session.customerId!, session.tenantId!);
+      const objects = await storage.getObjects(session.tenantId!);
       const objectMap = new Map(objects.map(o => [o.id, o]));
-      const resources = await storage.getResources(session.tenantId);
+      const resources = await storage.getResources(session.tenantId!);
       const resourceMap = new Map(resources.map(r => [r.id, r]));
 
       const enrichedOrders = workOrders.map(order => {
@@ -7594,20 +7614,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.get("/api/portal/objects", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
-      }
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
 
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
-
-      const objects = await storage.getObjectsByCustomer(session.customerId);
+      const objects = await storage.getObjectsByCustomer(session.customerId!);
       
       res.json(objects.map(o => ({
         id: o.id,
@@ -7625,21 +7635,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Portal cluster/objects hierarchy overview
   app.get("/api/portal/clusters", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
-      }
-
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
 
       // Get all objects for this customer with hierarchy info
-      const customerObjects = await storage.getObjectsByCustomer(session.customerId);
+      const customerObjects = await storage.getObjectsByCustomer(session.customerId!);
       
       // Create a set of customer's object IDs for filtering
       const customerObjectIds = new Set(customerObjects.map(obj => obj.id));
@@ -7648,7 +7648,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const now = new Date();
       const futureDate = new Date();
       futureDate.setMonth(futureDate.getMonth() + 3);
-      const allWorkOrders = await storage.getWorkOrders(session.tenantId, now, futureDate, false, 500);
+      const allWorkOrders = await storage.getWorkOrders(session.tenantId!, now, futureDate, false, 500);
       
       // Filter to only include work orders for this customer's objects
       const workOrders = allWorkOrders.filter((wo: any) => wo.objectId && customerObjectIds.has(wo.objectId));
@@ -7656,7 +7656,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       // Get completed work orders for history
       const pastDate = new Date();
       pastDate.setMonth(pastDate.getMonth() - 6);
-      const allHistoryOrders = await storage.getWorkOrders(session.tenantId, pastDate, now, false, 500);
+      const allHistoryOrders = await storage.getWorkOrders(session.tenantId!, pastDate, now, false, 500);
       
       // Filter to only include work orders for this customer's objects
       const historyOrders = allHistoryOrders.filter((wo: any) => wo.objectId && customerObjectIds.has(wo.objectId));
@@ -7746,30 +7746,64 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Predefined time slots for booking requests
+  const VALID_TIME_SLOTS = ["morning", "afternoon", "all_day"] as const;
+  const VALID_REQUEST_TYPES = ["new", "reschedule", "cancel", "extra_service"] as const;
+
+  // Endpoint to get available time slots and request types for booking
+  app.get("/api/portal/booking-options", async (req, res) => {
+    res.json({
+      timeSlots: [
+        { value: "morning", label: "Förmiddag (08:00-12:00)" },
+        { value: "afternoon", label: "Eftermiddag (12:00-17:00)" },
+        { value: "all_day", label: "Heldag (08:00-17:00)" },
+      ],
+      requestTypes: [
+        { value: "new", label: "Ny bokning" },
+        { value: "reschedule", label: "Ombokning" },
+        { value: "cancel", label: "Avbokning" },
+        { value: "extra_service", label: "Tilläggstjänst" },
+      ],
+    });
+  });
+
+  // Flexible date validation that accepts ISO date strings (YYYY-MM-DD) or datetime strings
+  const flexibleDateSchema = z.string().refine(
+    (val) => !val || /^\d{4}-\d{2}-\d{2}(T.*)?$/.test(val),
+    { message: "Ogiltigt datumformat" }
+  ).optional().nullable();
+
+  // Zod schema for booking request validation
+  const portalBookingRequestSchema = z.object({
+    objectId: z.string().uuid().optional().nullable(),
+    workOrderId: z.string().uuid().optional().nullable(),
+    requestType: z.enum(VALID_REQUEST_TYPES, {
+      errorMap: () => ({ message: "Ogiltig typ av förfrågan. Välj: ny bokning, ombokning, avbokning eller tilläggstjänst." })
+    }),
+    preferredDate1: flexibleDateSchema,
+    preferredDate2: flexibleDateSchema,
+    preferredTimeSlot: z.enum(VALID_TIME_SLOTS, {
+      errorMap: () => ({ message: "Ogiltig tidslucka. Välj: förmiddag, eftermiddag eller heldag." })
+    }).optional().nullable(),
+    customerNotes: z.string().max(2000, "Meddelande får max vara 2000 tecken").optional().nullable(),
+  });
+
   app.post("/api/portal/booking-requests", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const parseResult = portalBookingRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        const errorMessage = parseResult.error.errors.map(e => e.message).join(", ");
+        return res.status(400).json({ error: errorMessage });
       }
 
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
-
-      const { objectId, workOrderId, requestType, preferredDate1, preferredDate2, preferredTimeSlot, customerNotes } = req.body;
-
-      if (!requestType) {
-        return res.status(400).json({ error: "Typ av förfrågan krävs" });
-      }
+      const { objectId, workOrderId, requestType, preferredDate1, preferredDate2, preferredTimeSlot, customerNotes } = parseResult.data;
 
       const bookingRequest = await storage.createBookingRequest({
-        tenantId: session.tenantId,
-        customerId: session.customerId,
+        tenantId: session.tenantId!,
+        customerId: session.customerId!,
         objectId: objectId || null,
         workOrderId: workOrderId || null,
         requestType,
@@ -7792,20 +7826,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
   app.get("/api/portal/booking-requests", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
-      }
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
 
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
-
-      const requests = await storage.getBookingRequests(session.tenantId, session.customerId);
+      const requests = await storage.getBookingRequests(session.tenantId!, session.customerId!);
       res.json(requests);
     } catch (error) {
       console.error("Failed to get booking requests:", error);
@@ -7816,21 +7840,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Portal Messages - Get all messages
   app.get("/api/portal/messages", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
-      }
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
 
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
-
-      const messages = await storage.getPortalMessages(session.tenantId, session.customerId);
-      await storage.markPortalMessagesAsRead(session.tenantId, session.customerId);
+      const messages = await storage.getPortalMessages(session.tenantId!, session.customerId!);
+      await storage.markPortalMessagesAsRead(session.tenantId!, session.customerId!);
       res.json(messages);
     } catch (error) {
       console.error("Failed to get portal messages:", error);
@@ -7841,18 +7855,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Portal Messages - Send a message
   app.post("/api/portal/messages", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
-      }
-
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
 
       const { message } = req.body;
       if (!message || typeof message !== "string" || message.trim().length === 0) {
@@ -7860,8 +7864,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       }
 
       const newMessage = await storage.createPortalMessage({
-        tenantId: session.tenantId,
-        customerId: session.customerId,
+        tenantId: session.tenantId!,
+        customerId: session.customerId!,
         sender: "customer",
         message: message.trim()
       });
@@ -7876,20 +7880,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Portal Messages - Get unread count
   app.get("/api/portal/messages/unread-count", async (req, res) => {
     try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader?.startsWith("Bearer ")) {
-        return res.status(401).json({ error: "Autentisering krävs" });
-      }
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
 
-      const sessionToken = authHeader.substring(7);
-      const { validateSession } = await import("./portal-auth");
-      const session = await validateSession(sessionToken);
-
-      if (!session.valid || !session.customerId || !session.tenantId) {
-        return res.status(401).json({ error: "Ogiltig session" });
-      }
-
-      const count = await storage.getUnreadMessageCount(session.tenantId, session.customerId);
+      const count = await storage.getUnreadMessageCount(session.tenantId!, session.customerId!);
       res.json({ count });
     } catch (error) {
       console.error("Failed to get unread count:", error);
