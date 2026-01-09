@@ -495,14 +495,14 @@ export default function OrderConceptsPage() {
               <div className="space-y-2">
                 <Label>Målkluster</Label>
                 <Select
-                  value={formData.targetClusterId}
-                  onValueChange={(v) => setFormData({ ...formData, targetClusterId: v })}
+                  value={formData.targetClusterId || "__none__"}
+                  onValueChange={(v) => setFormData({ ...formData, targetClusterId: v === "__none__" ? "" : v })}
                 >
                   <SelectTrigger data-testid="select-target-cluster">
                     <SelectValue placeholder="Alla objekt" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Alla objekt</SelectItem>
+                    <SelectItem value="__none__">Alla objekt</SelectItem>
                     {clusters.map((c) => (
                       <SelectItem key={c.id} value={c.id}>
                         {c.name}
@@ -514,14 +514,14 @@ export default function OrderConceptsPage() {
               <div className="space-y-2">
                 <Label>Artikel</Label>
                 <Select
-                  value={formData.articleId}
-                  onValueChange={(v) => setFormData({ ...formData, articleId: v })}
+                  value={formData.articleId || "__none__"}
+                  onValueChange={(v) => setFormData({ ...formData, articleId: v === "__none__" ? "" : v })}
                 >
                   <SelectTrigger data-testid="select-article">
                     <SelectValue placeholder="Välj artikel" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Ingen artikel</SelectItem>
+                    <SelectItem value="__none__">Ingen artikel</SelectItem>
                     {articles.map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {a.name}
