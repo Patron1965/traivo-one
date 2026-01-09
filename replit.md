@@ -8,6 +8,7 @@ Unicorn is an AI-driven planning platform designed to optimize field service ope
 - **Design:** Clean, professional Nordic aesthetic
 - **Theme:** Dark/light mode support
 - **Font:** Inter for UI
+- **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet
 
 ## System Architecture
 The Unicorn platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
