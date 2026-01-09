@@ -206,18 +206,17 @@ export default function PortalDashboardPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
-          <div className="flex items-center gap-4">
-            <h1 className="text-lg font-semibold">{tenant?.name || "Kundportal"}</h1>
+          <div className="flex items-center gap-3">
+            <User className="h-5 w-5 text-primary" />
+            <div>
+              <h1 className="text-sm font-semibold leading-none">{customer?.name}</h1>
+              <span className="text-xs text-muted-foreground">{tenant?.name}</span>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <span className="text-sm text-muted-foreground hidden sm:block">
-              {customer?.name}
-            </span>
-            <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
-              <LogOut className="h-4 w-4 mr-2" />
-              Logga ut
-            </Button>
-          </div>
+          <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
+            <LogOut className="h-4 w-4 mr-2" />
+            Logga ut
+          </Button>
         </div>
       </header>
 
@@ -487,16 +486,17 @@ export default function PortalDashboardPage() {
           </Card>
         )}
 
-        {/* Main Content Header with New Request Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <h3 className="text-lg font-semibold">Mina ärenden</h3>
-          <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-new-booking">
-                <Plus className="h-4 w-4 mr-2" />
-                Ny förfrågan
-              </Button>
-            </DialogTrigger>
+        {/* Main Content - Mina ärenden Section */}
+        <div className="space-y-4">
+          <div className="flex flex-row items-center justify-between gap-4 flex-wrap">
+            <h3 className="text-lg font-semibold">Mina ärenden</h3>
+            <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-new-booking">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Ny förfrågan
+                </Button>
+              </DialogTrigger>
             <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>Ny bokningsförfrågan</DialogTitle>
@@ -659,24 +659,24 @@ export default function PortalDashboardPage() {
                 </form>
               </Form>
             </DialogContent>
-          </Dialog>
-        </div>
+            </Dialog>
+          </div>
 
-        <Tabs defaultValue="upcoming" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="upcoming" data-testid="tab-upcoming">
-              <CalendarDays className="h-4 w-4 mr-2" />
-              Kommande
-            </TabsTrigger>
-            <TabsTrigger value="history" data-testid="tab-history">
-              <History className="h-4 w-4 mr-2" />
-              Historik
-            </TabsTrigger>
-            <TabsTrigger value="requests" data-testid="tab-requests">
-              <FileText className="h-4 w-4 mr-2" />
-              Mina förfrågningar
-            </TabsTrigger>
-          </TabsList>
+          <Tabs defaultValue="upcoming" className="space-y-4">
+            <TabsList>
+              <TabsTrigger value="upcoming" data-testid="tab-upcoming">
+                <CalendarDays className="h-4 w-4 mr-2" />
+                Kommande
+              </TabsTrigger>
+              <TabsTrigger value="history" data-testid="tab-history">
+                <History className="h-4 w-4 mr-2" />
+                Historik
+              </TabsTrigger>
+              <TabsTrigger value="requests" data-testid="tab-requests">
+                <FileText className="h-4 w-4 mr-2" />
+                Mina förfrågningar
+              </TabsTrigger>
+            </TabsList>
 
           <TabsContent value="upcoming" className="space-y-4">
             {ordersQuery.isLoading ? (
@@ -875,7 +875,8 @@ export default function PortalDashboardPage() {
               </div>
             )}
           </TabsContent>
-        </Tabs>
+          </Tabs>
+        </div>
 
         {objects.length > 0 && (
           <Card>
