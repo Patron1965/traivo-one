@@ -89,3 +89,9 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - Frontend: Resource assignment dialog with scored candidate list in Assignments page
 - Assign/reassign button in assignments table for quick resource assignment
 - Navigation updated: OrderConceptsPage and AssignmentsPage under "Planering" menu
+- **UX Improvements:**
+  - Capacity overview heatmap in WeekPlanner showing resource utilization (green/yellow/red)
+  - Access information (portkod/nyckelnummer) displayed prominently on all job cards
+  - Pulsing real-time status indicators for active field workers (on_way/on_site)
+  - 4-step workflow indicator in mobile app (Åka dit→Starta→Utför→Slutför)
+  - Enhanced access code display with dedicated cards in SimpleFieldApp
