@@ -43,6 +43,7 @@ const navigationGroups = [
   {
     title: "Start",
     items: [
+      { title: "Dagens arbete", url: "/", icon: Calendar },
       { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     ],
   },

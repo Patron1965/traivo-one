@@ -498,12 +498,30 @@ export default function MyTasksPage() {
       <div className="container mx-auto px-4 py-8 max-w-7xl">
         <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold" data-testid="page-title">
-              Välkommen till Unicorn
-            </h1>
-            <p className="text-muted-foreground mt-2">
+            <p className="text-muted-foreground text-sm mb-1">
               {format(today, "EEEE d MMMM yyyy", { locale: sv })}
             </p>
+            {ordersLoading ? (
+              <>
+                <Skeleton className="h-9 w-64 mb-2" />
+                <Skeleton className="h-5 w-48" />
+              </>
+            ) : (
+              <>
+                <h1 className="text-3xl font-bold" data-testid="page-title">
+                  {todaysOrders.length > 0 
+                    ? `${todaysOrders.length} jobb att utföra idag`
+                    : 'Inga jobb schemalagda idag'
+                  }
+                </h1>
+                <p className="text-muted-foreground mt-2">
+                  {todaysOrders.length > 0 
+                    ? `${todaysOrders.filter(o => o.status === "completed").length} slutförda, ${todaysOrders.filter(o => o.status !== "completed").length} kvar`
+                    : 'Planera nya jobb eller se veckans överblick'
+                  }
+                </p>
+              </>
+            )}
           </div>
           <Button 
             onClick={() => setAiPanelOpen(true)}

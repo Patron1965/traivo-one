@@ -17,8 +17,9 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 
-// Start - snabb översikt
+// Start - dagens arbete och snabb översikt
 const startItems = [
+  { title: "Dagens arbete", url: "/", icon: Calendar },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
 ];
 
