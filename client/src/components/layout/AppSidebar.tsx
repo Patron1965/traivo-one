@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3 } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck } from "lucide-react";
 import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -17,7 +17,12 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 
-// Grunddata - stamdata som sätts upp en gång
+// Start - snabb översikt
+const startItems = [
+  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+];
+
+// Grunddata - stamdata som sätts upp en gång (logisk ordning: kunder → objekt → resurser → priser)
 const grunddataItems = [
   { title: "Kluster", url: "/clusters", icon: Target },
   { title: "Objekt", url: "/objects", icon: Building2 },
@@ -25,31 +30,32 @@ const grunddataItems = [
   { title: "Fordon", url: "/vehicles", icon: Truck },
   { title: "Artiklar", url: "/articles", icon: Package },
   { title: "Prislistor", url: "/price-lists", icon: Receipt },
-  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
 ];
 
-// Planering - operativt arbetsflöde i ordning
+// Planering - operativt arbetsflöde i kronologisk ordning
 const planeringItems = [
+  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
+  { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks },
+  { title: "Uppdrag", url: "/assignments", icon: UserCheck },
   { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
-  { title: "Veckoplanering", url: "/", icon: Calendar },
+  { title: "Veckoplanering", url: "/planner", icon: Calendar },
   { title: "Väderplanering", url: "/weather", icon: Cloud },
-  { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
   { title: "Ruttplanering", url: "/routes", icon: Map },
   { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
 ];
 
 // Analys - rapporter och insikter
 const analysItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Ekonomi", url: "/economics", icon: DollarSign },
   { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
   { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
 ];
 
-// System - administration och verktyg
+// System Avancerat - administration och verktyg
 const settingsItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
+  { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
   { title: "Upphandlingar", url: "/procurements", icon: FileText },
   { title: "Kundportal", url: "/customer-portal", icon: Building },
   { title: "Importera data", url: "/import", icon: Upload },
@@ -118,6 +124,24 @@ export function AppSidebar() {
       
       <SidebarContent>
         <SidebarGroup>
+          <SidebarGroupLabel>Start</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {startItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
+                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
           <SidebarGroupLabel>Grunddata</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
@@ -172,7 +196,7 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>System</SidebarGroupLabel>
+          <SidebarGroupLabel>System Avancerat</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {settingsItems.map((item) => (

@@ -35,68 +35,60 @@ import {
   Layers,
   Cloud,
   Building,
-  Briefcase,
-  Home,
-  Palette,
+  ListChecks,
+  UserCheck,
 } from "lucide-react";
 
 const navigationGroups = [
   {
     title: "Start",
     items: [
-      { title: "Startsidan", url: "/", icon: Home },
+      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
     ],
   },
   {
     title: "Grunddata",
     items: [
+      { title: "Kluster", url: "/clusters", icon: Target },
       { title: "Objekt", url: "/objects", icon: Building2 },
       { title: "Resurser", url: "/resources", icon: Users },
       { title: "Fordon", url: "/vehicles", icon: Truck },
       { title: "Artiklar", url: "/articles", icon: Package },
-      { title: "Kluster", url: "/clusters", icon: Target },
+      { title: "Prislistor", url: "/price-lists", icon: Receipt },
     ],
   },
   {
     title: "Planering",
     items: [
-      { title: "Veckoplanering", url: "/planner", icon: Calendar },
+      { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
+      { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks },
+      { title: "Uppdrag", url: "/assignments", icon: UserCheck },
       { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
-      { title: "Mobilapp", url: "/mobile", icon: Smartphone },
-      { title: "Rutter", url: "/routes", icon: Map },
+      { title: "Veckoplanering", url: "/planner", icon: Calendar },
+      { title: "Väderplanering", url: "/weather", icon: Cloud },
+      { title: "Ruttplanering", url: "/routes", icon: Map },
+      { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
     ],
   },
   {
     title: "Analys",
     items: [
-      { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
       { title: "Ekonomi", url: "/economics", icon: DollarSign },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { title: "Prislistor", url: "/price-lists", icon: Receipt },
-      { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
-      { title: "Fortnox", url: "/fortnox", icon: Receipt },
-      { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
-      { title: "Importera data", url: "/import", icon: Upload },
-      { title: "Inställningar", url: "/settings", icon: Settings },
-    ],
-  },
-  {
-    title: "Avancerat",
-    items: [
-      { title: "Väderplanering", url: "/weather", icon: Cloud },
-      { title: "AI-optimering", url: "/optimization", icon: Sparkles },
-      { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
-      { title: "Prediktiv planering", url: "/predictive-planning", icon: TrendingUp },
       { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
-      { title: "Metadata", url: "/metadata", icon: FileText },
-      { title: "Upphandlingar", url: "/procurements", icon: Briefcase },
+      { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
+    ],
+  },
+  {
+    title: "System Avancerat",
+    items: [
+      { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
+      { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
+      { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
+      { title: "Upphandlingar", url: "/procurements", icon: FileText },
       { title: "Kundportal", url: "/customer-portal", icon: Building },
+      { title: "Importera data", url: "/import", icon: Upload },
       { title: "Systemöversikt", url: "/system-overview", icon: FileText },
-      { title: "Admin", url: "/system-dashboard", icon: Palette },
+      { title: "Inställningar", url: "/settings", icon: Settings },
     ],
   },
 ];
