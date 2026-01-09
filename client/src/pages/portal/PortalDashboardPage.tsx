@@ -490,24 +490,25 @@ export default function PortalDashboardPage() {
         )}
 
         {/* Main Content - Mina ärenden Section */}
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-            <h3 className="text-lg font-semibold">Mina ärenden</h3>
-            <div className="flex items-center gap-2">
-              <Link href="/portal/clusters">
-                <Button variant="outline" data-testid="button-view-clusters">
-                  <TreeDeciduous className="h-4 w-4 mr-2" />
-                  Visa kluster
-                </Button>
-              </Link>
-              <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button data-testid="button-new-booking">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Ny förfrågan
+        <Card>
+          <CardHeader className="pb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <CardTitle className="text-lg">Mina ärenden</CardTitle>
+              <div className="flex items-center gap-2">
+                <Link href="/portal/clusters">
+                  <Button variant="outline" size="sm" data-testid="button-view-clusters">
+                    <TreeDeciduous className="h-4 w-4 mr-2" />
+                    Visa kluster
                   </Button>
-                </DialogTrigger>
-              <DialogContent className="sm:max-w-[500px]">
+                </Link>
+                <Dialog open={bookingDialogOpen} onOpenChange={setBookingDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm" data-testid="button-new-booking">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Ny förfrågan
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[500px]">
               <DialogHeader>
                 <DialogTitle>Ny bokningsförfrågan</DialogTitle>
                 <DialogDescription>
@@ -669,12 +670,13 @@ export default function PortalDashboardPage() {
                 </form>
               </Form>
             </DialogContent>
-              </Dialog>
+                </Dialog>
+              </div>
             </div>
-          </div>
-
-          <Tabs defaultValue="upcoming" className="space-y-4">
-            <TabsList>
+          </CardHeader>
+          <CardContent>
+            <Tabs defaultValue="upcoming" className="space-y-4">
+              <TabsList>
               <TabsTrigger value="upcoming" data-testid="tab-upcoming">
                 <CalendarDays className="h-4 w-4 mr-2" />
                 Kommande
@@ -886,8 +888,9 @@ export default function PortalDashboardPage() {
               </div>
             )}
           </TabsContent>
-          </Tabs>
-        </div>
+            </Tabs>
+          </CardContent>
+        </Card>
 
         {objects.length > 0 && (
           <Card>
