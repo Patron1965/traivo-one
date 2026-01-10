@@ -8,7 +8,18 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, CheckCircle, Loader2 } from "lucide-react";
+import { 
+  Mail, 
+  CheckCircle, 
+  Loader2, 
+  FileText, 
+  Calendar, 
+  Bell, 
+  MessageSquare,
+  Shield,
+  Clock,
+  Recycle
+} from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Ange en giltig e-postadress"),
@@ -16,6 +27,29 @@ const loginSchema = z.object({
 });
 
 type LoginForm = z.infer<typeof loginSchema>;
+
+const features = [
+  {
+    icon: FileText,
+    title: "Fakturor",
+    description: "Se och hantera dina fakturor online"
+  },
+  {
+    icon: Calendar,
+    title: "Bokningar",
+    description: "Boka och ändra hämtningar enkelt"
+  },
+  {
+    icon: Bell,
+    title: "Notiser",
+    description: "Få aviseringar när tekniker är på väg"
+  },
+  {
+    icon: MessageSquare,
+    title: "Support",
+    description: "Kontakta oss direkt via portalen"
+  }
+];
 
 export default function PortalLoginPage() {
   const [emailSent, setEmailSent] = useState(false);
@@ -78,7 +112,7 @@ export default function PortalLoginPage() {
 
   if (emailSent) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted p-4">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted p-4">
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900">
@@ -111,103 +145,164 @@ export default function PortalLoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-            <Mail className="h-6 w-6 text-primary" />
-          </div>
-          <CardTitle>Logga in på kundportalen</CardTitle>
-          <CardDescription>
-            Ange din e-postadress så skickar vi en inloggningslänk
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-              {hasMultipleTenants && (
-                <FormField
-                  control={form.control}
-                  name="tenantId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Företag</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-tenant">
-                            <SelectValue placeholder="Välj företag" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {tenants.map((tenant) => (
-                            <SelectItem key={tenant.id} value={tenant.id}>
-                              {tenant.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted">
+      <div className="container mx-auto px-4 py-8 lg:py-16">
+        <div className="grid lg:grid-cols-2 gap-12 items-center max-w-6xl mx-auto">
+          
+          <div className="space-y-8">
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+                  <Recycle className="h-6 w-6" />
+                </div>
+                <span className="text-2xl font-bold">Kundportal</span>
+              </div>
+              
+              <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">
+                Hantera dina tjänster enkelt online
+              </h1>
+              
+              <p className="text-lg text-muted-foreground">
+                Välkommen till kundportalen. Här kan du se fakturor, boka tjänster, 
+                följa leveranser och mycket mer – dygnet runt.
+              </p>
+            </div>
 
-              <FormField
-                control={form.control}
-                name="email"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>E-postadress</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder="din.epost@exempel.se"
-                        type="email"
-                        autoComplete="email"
-                        data-testid="input-email"
-                        {...field}
+            <div className="grid sm:grid-cols-2 gap-4">
+              {features.map((feature) => (
+                <div 
+                  key={feature.title}
+                  className="flex items-start gap-3 p-4 rounded-lg bg-card border"
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <feature.icon className="h-5 w-5 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">{feature.title}</h3>
+                    <p className="text-sm text-muted-foreground">{feature.description}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-6 text-sm text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Shield className="h-4 w-4" />
+                <span>Säker inloggning</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Clock className="h-4 w-4" />
+                <span>Tillgänglig 24/7</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="lg:pl-8">
+            <Card className="w-full max-w-md mx-auto shadow-lg">
+              <CardHeader className="text-center pb-4">
+                <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary/10">
+                  <Mail className="h-7 w-7 text-primary" />
+                </div>
+                <CardTitle className="text-xl">Logga in</CardTitle>
+                <CardDescription>
+                  Ange din e-postadress så skickar vi en säker inloggningslänk
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Form {...form}>
+                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+                    {hasMultipleTenants && (
+                      <FormField
+                        control={form.control}
+                        name="tenantId"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Företag</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger data-testid="select-tenant">
+                                  <SelectValue placeholder="Välj företag" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent>
+                                {tenants.map((tenant) => (
+                                  <SelectItem key={tenant.id} value={tenant.id}>
+                                    {tenant.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage />
+                          </FormItem>
+                        )}
                       />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    )}
 
-              {requestLinkMutation.error && (
-                <p className="text-sm text-destructive" data-testid="text-error">
-                  {requestLinkMutation.error.message}
-                </p>
-              )}
+                    <FormField
+                      control={form.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>E-postadress</FormLabel>
+                          <FormControl>
+                            <Input
+                              placeholder="din.epost@exempel.se"
+                              type="email"
+                              autoComplete="email"
+                              className="h-11"
+                              data-testid="input-email"
+                              {...field}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
 
-              <Button
-                type="submit"
-                className="w-full"
-                disabled={requestLinkMutation.isPending || isLoadingTenants}
-                data-testid="button-submit"
-              >
-                {requestLinkMutation.isPending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Skickar...
-                  </>
-                ) : isLoadingTenants ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Laddar...
-                  </>
-                ) : (
-                  "Skicka inloggningslänk"
-                )}
-              </Button>
-            </form>
-          </Form>
+                    {requestLinkMutation.error && (
+                      <p className="text-sm text-destructive" data-testid="text-error">
+                        {requestLinkMutation.error.message}
+                      </p>
+                    )}
 
-          <div className="mt-6 text-center">
-            <p className="text-xs text-muted-foreground">
-              Ingen registrering behövs. Vi skickar en säker länk till din e-post.
-            </p>
+                    <Button
+                      type="submit"
+                      className="w-full h-11"
+                      disabled={requestLinkMutation.isPending || isLoadingTenants}
+                      data-testid="button-submit"
+                    >
+                      {requestLinkMutation.isPending ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Skickar...
+                        </>
+                      ) : isLoadingTenants ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Laddar...
+                        </>
+                      ) : (
+                        "Skicka inloggningslänk"
+                      )}
+                    </Button>
+                  </form>
+                </Form>
+
+                <div className="mt-6 pt-4 border-t">
+                  <p className="text-xs text-center text-muted-foreground">
+                    Ingen registrering behövs. Vi skickar en säker länk till din e-post 
+                    som är giltig i 15 minuter.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+
+        <footer className="mt-16 text-center text-sm text-muted-foreground">
+          <p>Har du frågor? Kontakta kundtjänst på telefon eller e-post.</p>
+        </footer>
+      </div>
     </div>
   );
 }
