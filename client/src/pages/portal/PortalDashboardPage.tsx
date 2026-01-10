@@ -393,6 +393,94 @@ export default function PortalDashboardPage() {
           </Card>
         </div>
 
+        {/* AI Insights Card */}
+        <Card className="bg-gradient-to-r from-purple-500/10 via-blue-500/5 to-transparent border-purple-500/20" data-testid="card-ai-insights">
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-purple-500" />
+              <CardTitle className="text-lg">Smarta tips</CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {upcoming.length > 0 && upcoming[0]?.scheduledDate ? (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-next-visit">
+                  <div className="p-1.5 bg-blue-500/10 rounded-md">
+                    <CalendarDays className="h-4 w-4 text-blue-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Påminnelse</p>
+                    <p className="text-xs text-muted-foreground">
+                      Ditt nästa besök är planerat. Se till att kärlen är tillgängliga.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-no-visits">
+                  <div className="p-1.5 bg-green-500/10 rounded-md">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Allt klart just nu</p>
+                    <p className="text-xs text-muted-foreground">
+                      Inga kommande besök bokade. Vill du boka en tjänst?
+                    </p>
+                  </div>
+                </div>
+              )}
+              {history.length >= 3 ? (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-history">
+                  <div className="p-1.5 bg-green-500/10 rounded-md">
+                    <CheckCircle2 className="h-4 w-4 text-green-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Bra samarbete!</p>
+                    <p className="text-xs text-muted-foreground">
+                      Totalt {history.length} besök har genomförts. Tack för förtroendet!
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-welcome">
+                  <div className="p-1.5 bg-primary/10 rounded-md">
+                    <Sparkles className="h-4 w-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Välkommen!</p>
+                    <p className="text-xs text-muted-foreground">
+                      Här kan du hantera dina tjänster och se kommande besök.
+                    </p>
+                  </div>
+                </div>
+              )}
+              {objects.length > 1 && (
+                <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-objects">
+                  <div className="p-1.5 bg-purple-500/10 rounded-md">
+                    <Grid3X3 className="h-4 w-4 text-purple-500" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">Översikt</p>
+                    <p className="text-xs text-muted-foreground">
+                      Du har {objects.length} registrerade platser. Visa alla i klusteröversikten.
+                    </p>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start gap-3 p-3 rounded-lg bg-background/50" data-testid="insight-contact">
+                <div className="p-1.5 bg-amber-500/10 rounded-md">
+                  <Phone className="h-4 w-4 text-amber-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-medium">Kontaktinfo uppdaterad?</p>
+                  <p className="text-xs text-muted-foreground">
+                    Kontrollera att din e-post och telefon är korrekt för aviseringar.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Self-Service Navigation */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <Link href="/portal/invoices">
@@ -425,21 +513,20 @@ export default function PortalDashboardPage() {
             </Card>
           </Link>
           
-          <Card 
-            className="hover-elevate cursor-pointer group"
-            onClick={() => setIssueDialogOpen(true)}
-            data-testid="card-report-issue"
-          >
-            <CardContent className="p-5 flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
-                <AlertCircle className="h-6 w-6 text-red-500" />
-              </div>
-              <div className="flex-1">
-                <h3 className="font-semibold">Felanmälan</h3>
-                <p className="text-sm text-muted-foreground">Rapportera problem</p>
-              </div>
-            </CardContent>
-          </Card>
+          <Link href="/portal/issues">
+            <Card className="hover-elevate cursor-pointer group" data-testid="card-issues">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+                  <AlertCircle className="h-6 w-6 text-red-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Mina ärenden</h3>
+                  <p className="text-sm text-muted-foreground">Felanmälan och support</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
           
           <Link href="/portal/settings">
             <Card className="hover-elevate cursor-pointer group" data-testid="card-settings">

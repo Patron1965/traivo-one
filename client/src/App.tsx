@@ -59,6 +59,8 @@ import PortalClusterOverviewPage from "@/pages/portal/PortalClusterOverviewPage"
 import PortalInvoicesPage from "@/pages/portal/PortalInvoicesPage";
 import PortalContractsPage from "@/pages/portal/PortalContractsPage";
 import PortalSettingsPage from "@/pages/portal/PortalSettingsPage";
+import PortalIssuesPage from "@/pages/portal/PortalIssuesPage";
+import AIPlanningPage from "@/pages/AIPlanningPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -109,6 +111,7 @@ function Router() {
       <Route path="/workflow-guide" component={WorkflowGuidePage} />
       <Route path="/data-requirements" component={DataRequirementsPage} />
       <Route path="/investor-pitch" component={InvestorPitchPage} />
+      <Route path="/ai-planning" component={AIPlanningPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -124,6 +127,7 @@ function PortalRouter() {
       <Route path="/portal/invoices" component={PortalInvoicesPage} />
       <Route path="/portal/contracts" component={PortalContractsPage} />
       <Route path="/portal/settings" component={PortalSettingsPage} />
+      <Route path="/portal/issues" component={PortalIssuesPage} />
       <Route component={NotFound} />
     </Switch>
   );

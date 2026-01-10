@@ -64,9 +64,15 @@ export default function PortalInvoicesPage() {
 
   const invoices = invoicesQuery.data || [];
   const unpaidCount = invoices.filter(i => i.status === "unpaid" || i.status === "overdue").length;
+  const overdueCount = invoices.filter(i => i.status === "overdue").length;
+  const paidCount = invoices.filter(i => i.status === "paid").length;
   const totalUnpaid = invoices
     .filter(i => i.status === "unpaid" || i.status === "overdue")
     .reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const totalPaid = invoices
+    .filter(i => i.status === "paid")
+    .reduce((sum, i) => sum + (i.totalAmount || 0), 0);
+  const totalAmount = invoices.reduce((sum, i) => sum + (i.totalAmount || 0), 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -86,6 +92,106 @@ export default function PortalInvoicesPage() {
       </header>
 
       <main className="container py-8 space-y-6">
+        {/* Invoice Summary Stats */}
+        {invoicesQuery.isLoading ? (
+          <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+            {[1, 2, 3, 4].map((i) => (
+              <Card key={i} className="animate-pulse">
+                <CardContent className="p-5">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-muted rounded-lg h-9 w-9" />
+                    <div className="space-y-2">
+                      <div className="h-6 w-12 bg-muted rounded" />
+                      <div className="h-3 w-20 bg-muted rounded" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+        <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+          <Card className="bg-gradient-to-br from-primary/10 to-transparent" data-testid="card-stat-total">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-primary/20 rounded-lg">
+                  <FileText className="h-5 w-5 text-primary" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{invoices.length}</div>
+                  <div className="text-xs text-muted-foreground">Totalt fakturor</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-green-500/10 to-transparent" data-testid="card-stat-paid">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-green-500/20 rounded-lg">
+                  <CreditCard className="h-5 w-5 text-green-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{paidCount}</div>
+                  <div className="text-xs text-muted-foreground">Betalda</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-amber-500/10 to-transparent" data-testid="card-stat-unpaid">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-amber-500/20 rounded-lg">
+                  <Calendar className="h-5 w-5 text-amber-500" />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{unpaidCount}</div>
+                  <div className="text-xs text-muted-foreground">Obetalda</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <Card className={overdueCount > 0 ? "bg-gradient-to-br from-red-500/10 to-transparent border-red-500/30" : "bg-gradient-to-br from-slate-500/10 to-transparent"} data-testid="card-stat-overdue">
+            <CardContent className="p-5">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-lg ${overdueCount > 0 ? "bg-red-500/20" : "bg-slate-500/20"}`}>
+                  <AlertCircle className={`h-5 w-5 ${overdueCount > 0 ? "text-red-500" : "text-slate-500"}`} />
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{overdueCount}</div>
+                  <div className="text-xs text-muted-foreground">Förfallna</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+        )}
+
+        {/* Payment Summary */}
+        {invoices.length > 0 && (
+          <Card>
+            <CardContent className="p-5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm text-muted-foreground">Total fakturerat belopp</div>
+                  <div className="text-2xl font-bold">{totalAmount.toLocaleString("sv-SE")} SEK</div>
+                </div>
+                <div className="flex gap-6">
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Betalt</div>
+                    <div className="text-lg font-semibold text-green-600">{totalPaid.toLocaleString("sv-SE")} SEK</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-muted-foreground">Kvar att betala</div>
+                    <div className={`text-lg font-semibold ${totalUnpaid > 0 ? "text-amber-600" : "text-muted-foreground"}`}>
+                      {totalUnpaid.toLocaleString("sv-SE")} SEK
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {unpaidCount > 0 && (
           <Card className="border-amber-500/50 bg-amber-500/5">
             <CardContent className="p-5 flex items-center gap-4">
