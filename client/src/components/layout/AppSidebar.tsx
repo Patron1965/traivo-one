@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain, BookOpen } from "lucide-react";
 import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/use-auth";
 const startItems = [
   { title: "Dagens arbete", url: "/", icon: Calendar },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Arbetsflödesguide", url: "/workflow-guide", icon: BookOpen },
 ];
 
 // Grunddata - stamdata som sätts upp en gång (logisk ordning: kunder → objekt → resurser → priser)
