@@ -1,27 +1,32 @@
 import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Eraser, Check, X, Loader2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Eraser, Check, X, Loader2, User, FileSignature } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface SignatureCaptureProps {
   workOrderId: string;
-  onSignatureSaved?: (signaturePath: string) => void;
+  onSignatureSaved?: (signaturePath: string, signerName?: string) => void;
   onCancel?: () => void;
   existingSignature?: string | null;
+  existingSignerName?: string | null;
 }
 
 export function SignatureCapture({ 
   workOrderId, 
   onSignatureSaved, 
   onCancel,
-  existingSignature 
+  existingSignature,
+  existingSignerName
 }: SignatureCaptureProps) {
   const { toast } = useToast();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [signerName, setSignerName] = useState(existingSignerName || "");
   const lastPosRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
@@ -145,10 +150,10 @@ export function SignatureCapture({
 
       toast({
         title: "Signatur sparad",
-        description: "Kundens signatur har registrerats.",
+        description: signerName ? `Signatur från ${signerName} har registrerats.` : "Kundens signatur har registrerats.",
       });
 
-      onSignatureSaved?.(objectPath);
+      onSignatureSaved?.(objectPath, signerName || undefined);
     } catch (error) {
       console.error("Signature save error:", error);
       toast({
@@ -163,14 +168,20 @@ export function SignatureCapture({
 
   if (existingSignature) {
     return (
-      <Card>
+      <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Check className="h-4 w-4 text-green-500" />
             Signatur mottagen
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-2">
+          {existingSignerName && (
+            <div className="flex items-center gap-2 text-sm">
+              <User className="h-4 w-4 text-muted-foreground" />
+              <span>{existingSignerName}</span>
+            </div>
+          )}
           <img 
             src={existingSignature} 
             alt="Kundsignatur" 
@@ -185,9 +196,27 @@ export function SignatureCapture({
   return (
     <Card>
       <CardHeader className="pb-3">
-        <CardTitle className="text-base">Kundsignatur</CardTitle>
+        <CardTitle className="text-base flex items-center gap-2">
+          <FileSignature className="h-4 w-4" />
+          Kundsignatur
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
+        <div className="space-y-2">
+          <Label htmlFor="signer-name" className="text-xs">Namn på signerare</Label>
+          <div className="relative">
+            <User className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              id="signer-name"
+              placeholder="Kundens namn..."
+              value={signerName}
+              onChange={(e) => setSignerName(e.target.value)}
+              className="pl-8 h-9"
+              data-testid="input-signer-name"
+            />
+          </div>
+        </div>
+        
         <div className="border rounded-md bg-white overflow-hidden touch-none">
           <canvas
             ref={canvasRef}
@@ -203,7 +232,7 @@ export function SignatureCapture({
           />
         </div>
         <p className="text-xs text-muted-foreground text-center">
-          Rita kundens signatur ovan
+          Rita kundens signatur i rutan ovan
         </p>
         <div className="grid grid-cols-3 gap-2">
           <Button
