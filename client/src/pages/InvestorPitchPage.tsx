@@ -133,13 +133,13 @@ const slides = [
   {
     id: "roadmap",
     type: "roadmap",
-    title: "Roadmap 2025-2026",
+    title: "Roadmap 2026-2027",
     phases: [
-      { quarter: "Q1 2025", items: ["Kinab pilot live", "Grundläggande AI-planering", "Mobilapp v1"], status: "done" },
-      { quarter: "Q2 2025", items: ["Kundportal lansering", "Fortnox-integration", "Väderbaserad planering"], status: "current" },
-      { quarter: "Q3 2025", items: ["Första betalande kunder", "Prediktiv underhållsplanering", "API för tredjepartsintegrationer"], status: "planned" },
-      { quarter: "Q4 2025", items: ["Norge-expansion", "Advanced analytics", "Fleet management"], status: "planned" },
-      { quarter: "2026", items: ["Danmark & Finland", "Enterprise-funktioner", "Partnerprogram"], status: "future" },
+      { quarter: "Q1 2026", items: ["Kinab pilot live", "Grundläggande AI-planering", "Mobilapp v1"], status: "done" },
+      { quarter: "Q2 2026", items: ["Kundportal lansering", "Fortnox-integration", "Väderbaserad planering"], status: "current" },
+      { quarter: "Q3 2026", items: ["Första betalande kunder", "Prediktiv underhållsplanering", "API för tredjepartsintegrationer"], status: "planned" },
+      { quarter: "Q4 2026", items: ["Norge-expansion", "Advanced analytics", "Fleet management"], status: "planned" },
+      { quarter: "2027", items: ["Danmark & Finland", "Enterprise-funktioner", "Partnerprogram"], status: "future" },
     ]
   },
   {
@@ -166,10 +166,10 @@ const slides = [
     type: "financials",
     title: "Finansiell Plan",
     projections: [
-      { year: "2025", arr: "500K", customers: "5" },
-      { year: "2026", arr: "2.5M", customers: "25" },
-      { year: "2027", arr: "8M", customers: "70" },
-      { year: "2028", arr: "20M", customers: "150" },
+      { year: "2026", arr: "500K", customers: "5" },
+      { year: "2027", arr: "2.5M", customers: "25" },
+      { year: "2028", arr: "8M", customers: "70" },
+      { year: "2029", arr: "20M", customers: "150" },
     ],
     useOfFunds: [
       { category: "Produktutveckling", percent: 50 },
