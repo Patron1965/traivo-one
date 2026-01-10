@@ -48,6 +48,7 @@ import OrderConceptsPage from "@/pages/OrderConceptsPage";
 import AssignmentsPage from "@/pages/AssignmentsPage";
 import PitchPage from "@/pages/PitchPage";
 import AIAssistantPage from "@/pages/AIAssistantPage";
+import ReportingDashboardPage from "@/pages/ReportingDashboardPage";
 import PortalLoginPage from "@/pages/portal/PortalLoginPage";
 import PortalVerifyPage from "@/pages/portal/PortalVerifyPage";
 import PortalDashboardPage from "@/pages/portal/PortalDashboardPage";
@@ -101,6 +102,7 @@ function Router() {
       <Route path="/assignments" component={AssignmentsPage} />
       <Route path="/pitch" component={PitchPage} />
       <Route path="/ai-assistant" component={AIAssistantPage} />
+      <Route path="/reporting" component={ReportingDashboardPage} />
       <Route component={NotFound} />
     </Switch>
   );
