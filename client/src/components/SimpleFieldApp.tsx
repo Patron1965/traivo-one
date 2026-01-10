@@ -8,7 +8,8 @@ import {
   MapPin, Play, CheckCircle, ArrowLeft,
   Loader2, AlertTriangle, Navigation, Phone,
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
-  Key, DoorOpen, ListChecks, CircleDot, Circle, Mail
+  Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
+  User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -59,7 +60,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [impossibleReasonText, setImpossibleReasonText] = useState("");
   const [impossiblePhoto, setImpossiblePhoto] = useState<string | null>(null);
   const [isUploadingImpossiblePhoto, setIsUploadingImpossiblePhoto] = useState(false);
-
+  
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [jobNote, setJobNote] = useState("");
+  const [isOnBreak, setIsOnBreak] = useState(false);
+  const [breakStartTime, setBreakStartTime] = useState<Date | null>(null);
+  const [breakElapsedSeconds, setBreakElapsedSeconds] = useState(0);
+  const breakTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
+  const [showCompletedDialog, setShowCompletedDialog] = useState(false);
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
   
@@ -89,11 +98,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     handleNotificationRef.current?.(notification);
   }, []);
 
-  const { notifications, unreadCount, isConnected } = useNotifications({
+  const { notifications, unreadCount, isConnected, markAsRead } = useNotifications({
     resourceId: resourceId || "",
     onNotification: handleNotification,
     autoConnect: !!resourceId,
   });
+
+  const handleOpenNotificationsPanel = () => {
+    setShowNotificationsPanel(!showNotificationsPanel);
+    if (!showNotificationsPanel) {
+      notifications.filter(n => !n.read).forEach(n => markAsRead(n.id));
+    }
+  };
 
   const { isOnline, cacheWorkOrders } = useOfflineSupport({
     onOffline: () => {
@@ -120,9 +136,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   });
 
   useEffect(() => {
-    if (jobStarted && startTime) {
+    if (jobStarted && startTime && !isOnBreak) {
       timerRef.current = setInterval(() => {
-        setElapsedSeconds(Math.floor((Date.now() - startTime.getTime()) / 1000));
+        setElapsedSeconds(Math.floor((Date.now() - startTime.getTime()) / 1000) - breakElapsedSeconds);
       }, 1000);
     } else {
       if (timerRef.current) {
@@ -133,7 +149,23 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [jobStarted, startTime]);
+  }, [jobStarted, startTime, isOnBreak, breakElapsedSeconds]);
+
+  useEffect(() => {
+    if (isOnBreak && breakStartTime) {
+      breakTimerRef.current = setInterval(() => {
+        setBreakElapsedSeconds(prev => prev + 1);
+      }, 1000);
+    } else {
+      if (breakTimerRef.current) {
+        clearInterval(breakTimerRef.current);
+        breakTimerRef.current = null;
+      }
+    }
+    return () => {
+      if (breakTimerRef.current) clearInterval(breakTimerRef.current);
+    };
+  }, [isOnBreak, breakStartTime]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -147,6 +179,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+  });
+
+  const { data: weatherData } = useQuery<{ temperature: number; description: string; windSpeed: number }>({
+    queryKey: ["/api/weather/today"],
+    staleTime: 1000 * 60 * 30,
   });
 
   useEffect(() => {
@@ -247,11 +284,34 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       setJobStarted(false);
       setStartTime(null);
       setElapsedSeconds(0);
-      setView("jobs");
-      setSelectedJobId(null);
+      setBreakElapsedSeconds(0);
+      setIsOnBreak(false);
       setShowSignaturePanel(false);
       setCurrentSignature(null);
       setMaterials([]);
+      setJobNote("");
+      setShowCompletedDialog(true);
+    },
+  });
+
+  const saveNoteMutation = useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const job = workOrders.find(wo => wo.id === id);
+      const existingMetadata = (job?.metadata as Record<string, unknown>) || {};
+      const existingNotes = (existingMetadata.fieldNotes as string[]) || [];
+      
+      await apiRequest("PATCH", `/api/work-orders/${id}`, {
+        metadata: {
+          ...existingMetadata,
+          fieldNotes: [...existingNotes, { text: note, timestamp: new Date().toISOString() }],
+        },
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({ title: "Anteckning sparad" });
+      setJobNote("");
+      setShowNotesPanel(false);
     },
   });
 
@@ -371,6 +431,67 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     }
   };
 
+  const handleToggleBreak = () => {
+    if (isOnBreak) {
+      setIsOnBreak(false);
+      toast({ title: "Rast avslutad", description: `Rastade i ${formatTime(breakElapsedSeconds)}` });
+    } else {
+      setIsOnBreak(true);
+      setBreakStartTime(new Date());
+      toast({ title: "Rast startad", description: "Jobbtimern är pausad" });
+    }
+  };
+
+  const allTodayJobs = useMemo(() => {
+    const now = new Date();
+    const dayStart = startOfDay(now);
+    const dayEnd = endOfDay(now);
+    return workOrders.filter(wo => {
+      if (!wo.scheduledDate) return false;
+      if (resourceId && wo.resourceId !== resourceId) return false;
+      const scheduled = new Date(wo.scheduledDate);
+      return scheduled >= dayStart && scheduled <= dayEnd;
+    }).sort((a, b) => {
+      const timeA = a.scheduledStartTime || "00:00";
+      const timeB = b.scheduledStartTime || "00:00";
+      return timeA.localeCompare(timeB);
+    });
+  }, [workOrders, resourceId]);
+
+  const handleNextJob = () => {
+    setShowCompletedDialog(false);
+    const currentIndex = allTodayJobs.findIndex(j => j.id === selectedJobId);
+    const nextPendingJob = allTodayJobs.slice(currentIndex + 1).find(j => j.status !== "completed");
+    if (nextPendingJob) {
+      handleSelectJob(nextPendingJob.id);
+    } else {
+      setView("jobs");
+      setSelectedJobId(null);
+    }
+  };
+
+  const handleGoBackToJobs = () => {
+    setShowCompletedDialog(false);
+    setView("jobs");
+    setSelectedJobId(null);
+  };
+
+  const getNextJob = () => {
+    const currentIndex = allTodayJobs.findIndex(j => j.id === selectedJobId);
+    return allTodayJobs.slice(currentIndex + 1).find(j => j.status !== "completed") || null;
+  };
+
+  const getPriorityBadge = (priority?: string) => {
+    switch (priority) {
+      case "urgent":
+        return <Badge variant="destructive" className="text-[10px]"><Flag className="h-3 w-3 mr-0.5" />Brådskande</Badge>;
+      case "high":
+        return <Badge className="bg-orange-500 text-[10px]"><Flag className="h-3 w-3 mr-0.5" />Hög</Badge>;
+      default:
+        return null;
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 p-6">
@@ -411,15 +532,26 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             <ArrowLeft className="h-5 w-5" />
           </Button>
           <div className="flex-1 min-w-0">
-            <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-semibold truncate">{selectedJob.title}</h1>
+              {getPriorityBadge(selectedJob.priority)}
+            </div>
             <p className="text-sm text-muted-foreground truncate">{selectedJob.objectName}</p>
           </div>
-          {jobStarted && (
-            <Badge variant="secondary" className="font-mono text-base gap-1">
-              <Timer className="h-4 w-4" />
-              {formatTime(elapsedSeconds)}
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {isOnBreak && (
+              <Badge className="bg-amber-500 animate-pulse font-mono text-sm gap-1">
+                <Coffee className="h-3 w-3" />
+                Rast
+              </Badge>
+            )}
+            {jobStarted && (
+              <Badge variant="secondary" className="font-mono text-base gap-1">
+                <Timer className="h-4 w-4" />
+                {formatTime(elapsedSeconds)}
+              </Badge>
+            )}
+          </div>
         </div>
 
         <div className="flex-1 overflow-auto p-4 space-y-4">
@@ -496,7 +628,36 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Card>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          {selectedCustomer && (
+            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30">
+              <CardContent className="py-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <User className="h-4 w-4 text-blue-600" />
+                  <span className="text-xs font-medium text-blue-800 dark:text-blue-400">Kontaktperson</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="font-medium">{selectedCustomer.name}</p>
+                    {selectedCustomer.phone && (
+                      <p className="text-sm text-muted-foreground">{selectedCustomer.phone}</p>
+                    )}
+                  </div>
+                  {selectedCustomer.phone && (
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      onClick={() => window.open(`tel:${selectedCustomer.phone}`)}
+                      data-testid="button-call-contact"
+                    >
+                      <Phone className="h-4 w-4 text-green-500" />
+                    </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          <div className="grid grid-cols-3 gap-2">
             {selectedJob.objectAddress && (
               <Button
                 variant="outline"
@@ -508,41 +669,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 <span className="text-xs">Navigera</span>
               </Button>
             )}
-            {selectedCustomer?.phone && (
-              <Button
-                variant="outline"
-                className="h-auto py-3 flex-col gap-1"
-                onClick={() => window.open(`tel:${selectedCustomer.phone}`)}
-                data-testid="button-call"
-              >
-                <Phone className="h-5 w-5 text-green-500" />
-                <span className="text-xs">Ring kund</span>
-              </Button>
-            )}
-            <Button
-              variant="outline"
-              className="h-auto py-3 flex-col gap-1"
-              onClick={() => {
-                setShowAiPanel(!showAiPanel);
-                setShowProblemPanel(false);
-              }}
-              data-testid="button-ask-ai"
-            >
-              <HelpCircle className="h-5 w-5 text-purple-500" />
-              <span className="text-xs">AI-hjälp</span>
-            </Button>
-            <Button
-              variant="outline"
-              className="h-auto py-3 flex-col gap-1"
-              onClick={() => {
-                setShowProblemPanel(!showProblemPanel);
-                setShowAiPanel(false);
-              }}
-              data-testid="button-report-problem"
-            >
-              <AlertTriangle className="h-5 w-5 text-orange-500" />
-              <span className="text-xs">Problem</span>
-            </Button>
             <Button
               variant="outline"
               className="h-auto py-3 flex-col gap-1"
@@ -561,7 +687,106 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               )}
               <span className="text-xs">Meddela</span>
             </Button>
+            <Button
+              variant="outline"
+              className="h-auto py-3 flex-col gap-1"
+              onClick={() => {
+                setShowAiPanel(!showAiPanel);
+                setShowProblemPanel(false);
+                setShowNotesPanel(false);
+              }}
+              data-testid="button-ask-ai"
+            >
+              <HelpCircle className="h-5 w-5 text-purple-500" />
+              <span className="text-xs">AI-hjälp</span>
+            </Button>
           </div>
+
+          <div className="grid grid-cols-3 gap-2">
+            <Button
+              variant="outline"
+              className="h-auto py-3 flex-col gap-1"
+              onClick={() => {
+                setShowNotesPanel(!showNotesPanel);
+                setShowProblemPanel(false);
+                setShowAiPanel(false);
+              }}
+              data-testid="button-add-note"
+            >
+              <MessageSquare className="h-5 w-5 text-indigo-500" />
+              <span className="text-xs">Anteckning</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto py-3 flex-col gap-1"
+              onClick={() => {
+                setShowProblemPanel(!showProblemPanel);
+                setShowAiPanel(false);
+                setShowNotesPanel(false);
+              }}
+              data-testid="button-report-problem"
+            >
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              <span className="text-xs">Problem</span>
+            </Button>
+            {jobStarted && (
+              <Button
+                variant={isOnBreak ? "default" : "outline"}
+                className={`h-auto py-3 flex-col gap-1 ${isOnBreak ? "bg-amber-500 hover:bg-amber-600" : ""}`}
+                onClick={handleToggleBreak}
+                data-testid="button-toggle-break"
+              >
+                {isOnBreak ? (
+                  <>
+                    <Play className="h-5 w-5" />
+                    <span className="text-xs">Fortsätt</span>
+                  </>
+                ) : (
+                  <>
+                    <Coffee className="h-5 w-5 text-amber-500" />
+                    <span className="text-xs">Rast</span>
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+
+          {showNotesPanel && (
+            <Card className="border-indigo-200 dark:border-indigo-800">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4 text-indigo-500" />
+                  Lägg till anteckning
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <Textarea
+                  value={jobNote}
+                  onChange={(e) => setJobNote(e.target.value)}
+                  placeholder="Skriv din anteckning här..."
+                  className="min-h-[80px]"
+                  data-testid="input-job-note"
+                />
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => {
+                    if (selectedJobId && jobNote.trim()) {
+                      saveNoteMutation.mutate({ id: selectedJobId, note: jobNote.trim() });
+                    }
+                  }}
+                  disabled={!jobNote.trim() || saveNoteMutation.isPending}
+                  data-testid="button-save-note"
+                >
+                  {saveNoteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Send className="h-4 w-4" />
+                  )}
+                  Spara anteckning
+                </Button>
+              </CardContent>
+            </Card>
+          )}
 
 
           {showProblemPanel && (
@@ -744,6 +969,51 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </DialogContent>
           </Dialog>
 
+          <Dialog open={showCompletedDialog} onOpenChange={setShowCompletedDialog}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-500" />
+                  Jobb slutfört!
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <p className="text-sm text-muted-foreground">
+                  Bra jobbat! Vad vill du göra nu?
+                </p>
+                {getNextJob() && (
+                  <Card className="border-primary/20 bg-primary/5">
+                    <CardContent className="py-3">
+                      <p className="text-xs text-muted-foreground mb-1">Nästa jobb</p>
+                      <p className="font-medium">{getNextJob()?.title}</p>
+                      <p className="text-sm text-muted-foreground">{getNextJob()?.objectAddress}</p>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+              <DialogFooter className="flex-col gap-2 sm:flex-col">
+                {getNextJob() && (
+                  <Button 
+                    className="w-full gap-2"
+                    onClick={handleNextJob}
+                    data-testid="button-go-to-next-job"
+                  >
+                    <SkipForward className="h-4 w-4" />
+                    Gå till nästa jobb
+                  </Button>
+                )}
+                <Button 
+                  variant="outline"
+                  className="w-full"
+                  onClick={handleGoBackToJobs}
+                  data-testid="button-back-to-jobs-list"
+                >
+                  Tillbaka till jobbslistan
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
           <PhotoCapture 
             workOrderId={selectedJob.id}
             existingPhotos={(selectedJob.metadata as { photos?: string[] } | null)?.photos || []}
@@ -862,6 +1132,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            {weatherData && (
+              <Badge variant="outline" className="text-xs gap-1" data-testid="badge-weather">
+                <Thermometer className="h-3 w-3" />
+                {Math.round(weatherData.temperature)}°
+                {weatherData.windSpeed > 10 && (
+                  <>
+                    <Wind className="h-3 w-3 ml-1" />
+                    {Math.round(weatherData.windSpeed)}
+                  </>
+                )}
+              </Badge>
+            )}
             {!isOnline && (
               <Badge 
                 variant="destructive"
@@ -872,14 +1154,20 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               </Badge>
             )}
             {resourceId && isOnline && (
-              <Badge 
-                variant={isConnected ? "outline" : "secondary"} 
-                className={isConnected ? "text-green-600" : ""}
-                data-testid="badge-connection-status"
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 gap-1"
+                onClick={handleOpenNotificationsPanel}
+                data-testid="button-toggle-notifications"
               >
-                <Bell className="h-3 w-3 mr-1" />
-                {isConnected ? (unreadCount > 0 ? unreadCount : "Live") : "..."}
-              </Badge>
+                <Bell className={`h-4 w-4 ${isConnected ? "text-green-500" : "text-muted-foreground"}`} />
+                {unreadCount > 0 && (
+                  <span className="bg-red-500 text-white text-[10px] rounded-full h-4 w-4 flex items-center justify-center">
+                    {unreadCount}
+                  </span>
+                )}
+              </Button>
             )}
             <Button 
               variant="ghost" 
@@ -891,6 +1179,26 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </Button>
           </div>
         </div>
+
+        {showNotificationsPanel && notifications.length > 0 && (
+          <Card className="border-primary/20">
+            <CardHeader className="py-2 px-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                Notifikationer
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="py-2 px-3 max-h-40 overflow-auto space-y-2">
+              {notifications.slice(0, 5).map((notif, idx) => (
+                <div key={idx} className="text-sm border-l-2 border-primary pl-2">
+                  <p className="font-medium">{notif.title}</p>
+                  <p className="text-xs text-muted-foreground">{notif.message}</p>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+
         <DailyProgressCard 
           completed={completedCount} 
           total={completedCount + todayJobs.length} 
@@ -955,7 +1263,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-medium">{job.title}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium">{job.title}</p>
+                        {getPriorityBadge(job.priority)}
+                      </div>
                       {job.scheduledStartTime && (
                         <Badge variant="outline" className="shrink-0 text-xs">
                           <Clock className="h-3 w-3 mr-1" />
@@ -967,11 +1278,19 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       <MapPin className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{job.objectAddress || job.objectName}</span>
                     </div>
-                    {job.estimatedDuration && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Beräknad tid: {job.estimatedDuration} min
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      {job.estimatedDuration && (
+                        <span className="text-xs text-muted-foreground">
+                          {job.estimatedDuration} min
+                        </span>
+                      )}
+                      {(job.objectAccessCode || job.objectKeyNumber) && (
+                        <Badge variant="outline" className="text-[10px] gap-0.5">
+                          <Key className="h-2.5 w-2.5" />
+                          Kod
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>

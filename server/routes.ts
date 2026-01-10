@@ -4396,6 +4396,39 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Simple weather for today (mobile app)
+  app.get("/api/weather/today", async (_req, res) => {
+    try {
+      const { fetchWeatherForecast } = await import("./weather-service");
+      const result = await fetchWeatherForecast(63.826, 20.263, 1);
+      
+      if (result.forecasts && result.forecasts.length > 0) {
+        const today = result.forecasts[0];
+        res.json({
+          temperature: today.temperature,
+          description: today.weatherDescription,
+          windSpeed: today.windSpeed,
+          precipitation: today.precipitation,
+        });
+      } else {
+        res.json({
+          temperature: 5,
+          description: "Molnigt",
+          windSpeed: 8,
+          precipitation: 0,
+        });
+      }
+    } catch (error) {
+      console.error("Today weather error:", error);
+      res.json({
+        temperature: 5,
+        description: "Okänt",
+        windSpeed: 8,
+        precipitation: 0,
+      });
+    }
+  });
+
   // Weather forecast for capacity planning
   app.get("/api/weather/forecast", async (req, res) => {
     try {
