@@ -589,93 +589,568 @@ export default function InvestorPitchPage() {
     const doc = new jsPDF({ orientation: 'landscape' });
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
+    const primaryColor = [59, 130, 246]; // Blue
+    const textColor = [30, 30, 30];
+    const mutedColor = [100, 100, 100];
+
+    const addSlideHeader = (title: string, subtitle?: string) => {
+      doc.setFillColor(250, 250, 252);
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+      
+      // Header bar
+      doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+      doc.rect(0, 0, pageWidth, 8, 'F');
+      
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      doc.setFontSize(28);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, pageWidth / 2, 28, { align: "center" });
+      
+      if (subtitle) {
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+        doc.text(subtitle, pageWidth / 2, 38, { align: "center" });
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+      }
+    };
+
+    const addPageNumber = (index: number) => {
+      doc.setFontSize(10);
+      doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+      doc.text(`${index + 1} / ${slides.length}`, pageWidth - 15, pageHeight - 8);
+      doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+    };
 
     slides.forEach((slide, index) => {
       if (index > 0) doc.addPage();
-
-      doc.setFillColor(250, 250, 252);
-      doc.rect(0, 0, pageWidth, pageHeight, 'F');
-
-      doc.setFontSize(24);
-      doc.setFont("helvetica", "bold");
-      doc.text(slide.title, pageWidth / 2, 25, { align: "center" });
-
-      if ('subtitle' in slide && slide.subtitle) {
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "normal");
-        doc.text(slide.subtitle, pageWidth / 2, 35, { align: "center" });
-      }
-
-      doc.setFontSize(10);
-      doc.setTextColor(128, 128, 128);
-      doc.text(`${index + 1} / ${slides.length}`, pageWidth - 20, pageHeight - 10);
-      doc.setTextColor(0, 0, 0);
-
-      let yPos = 50;
+      
       const leftMargin = 25;
+      const rightCol = pageWidth / 2 + 10;
+      let yPos = 50;
 
-      if (slide.type === "problem" && slide.points) {
-        slide.points.forEach((point, i) => {
-          doc.setFontSize(12);
-          doc.text(`• ${point.text}`, leftMargin, yPos);
-          yPos += 8;
-          doc.setFontSize(10);
-          doc.setTextColor(220, 38, 38);
-          doc.text(`  ${point.highlight}`, leftMargin, yPos);
-          doc.setTextColor(0, 0, 0);
-          yPos += 12;
-        });
+      // Cover slide
+      if (slide.type === "cover") {
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(48);
+        doc.setFont("helvetica", "bold");
+        doc.text("UNICORN", pageWidth / 2, pageHeight / 2 - 20, { align: "center" });
+        
+        doc.setFontSize(20);
+        doc.setFont("helvetica", "normal");
+        doc.text(slide.subtitle || "", pageWidth / 2, pageHeight / 2 + 10, { align: "center" });
+        
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "italic");
+        doc.text(slide.tagline || "", pageWidth / 2, pageHeight / 2 + 30, { align: "center" });
+        
+        doc.setFontSize(12);
+        doc.text(`Investerarpresentation • ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, pageHeight - 20, { align: "center" });
+        addPageNumber(index);
+        return;
       }
 
-      if (slide.type === "solution" && slide.features) {
-        slide.features.forEach((feature, i) => {
+      // Problem slide
+      if (slide.type === "problem") {
+        addSlideHeader(slide.title);
+        yPos = 55;
+        
+        slide.points?.forEach((point) => {
+          doc.setFillColor(254, 242, 242);
+          doc.roundedRect(leftMargin, yPos - 6, pageWidth - 50, 22, 3, 3, 'F');
+          
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text(`• ${point.text}`, leftMargin + 5, yPos + 4);
+          
+          doc.setTextColor(220, 38, 38);
+          doc.setFontSize(10);
+          doc.text(point.highlight, leftMargin + 5, yPos + 12);
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          
+          yPos += 28;
+        });
+        
+        doc.setFillColor(254, 226, 226);
+        doc.roundedRect(leftMargin, yPos + 5, pageWidth - 50, 18, 3, 3, 'F');
+        doc.setTextColor(185, 28, 28);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(slide.bottomLine || "", pageWidth / 2, yPos + 16, { align: "center" });
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        addPageNumber(index);
+        return;
+      }
+
+      // Solution slide
+      if (slide.type === "solution") {
+        addSlideHeader(slide.title, slide.subtitle);
+        yPos = 55;
+        
+        const colWidth = (pageWidth - 60) / 2;
+        slide.features?.forEach((feature, i) => {
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          const x = leftMargin + col * (colWidth + 10);
+          const y = yPos + row * 45;
+          
+          doc.setFillColor(239, 246, 255);
+          doc.roundedRect(x, y, colWidth, 38, 3, 3, 'F');
+          
+          doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
           doc.setFontSize(14);
           doc.setFont("helvetica", "bold");
-          doc.text(feature.title, leftMargin, yPos);
-          yPos += 6;
+          doc.text(feature.title, x + 8, y + 14);
+          
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
           doc.setFontSize(11);
           doc.setFont("helvetica", "normal");
-          doc.text(feature.desc, leftMargin, yPos);
-          yPos += 12;
+          doc.text(feature.desc, x + 8, y + 28);
         });
+        addPageNumber(index);
+        return;
       }
 
+      // Market slide
       if (slide.type === "market") {
-        doc.setFontSize(16);
-        doc.text(`TAM: ${slide.tam?.value}`, leftMargin, yPos);
-        yPos += 10;
-        doc.text(`SAM: ${slide.sam?.value}`, leftMargin, yPos);
-        yPos += 10;
-        doc.text(`SOM: ${slide.som?.value}`, leftMargin, yPos);
-      }
-
-      if (slide.type === "traction" && slide.stats) {
-        let xPos = leftMargin;
-        slide.stats.forEach((stat) => {
-          doc.setFontSize(18);
+        addSlideHeader(slide.title);
+        yPos = 55;
+        
+        const boxWidth = (pageWidth - 80) / 3;
+        const markets = [
+          { label: slide.tam?.label, value: slide.tam?.value, color: [59, 130, 246] },
+          { label: slide.sam?.label, value: slide.sam?.value, color: [34, 197, 94] },
+          { label: slide.som?.label, value: slide.som?.value, color: [168, 85, 247] },
+        ];
+        
+        markets.forEach((m, i) => {
+          const x = leftMargin + i * (boxWidth + 15);
+          doc.setFillColor(m.color[0], m.color[1], m.color[2]);
+          doc.roundedRect(x, yPos, boxWidth, 45, 3, 3, 'F');
+          
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(22);
           doc.setFont("helvetica", "bold");
-          doc.text(stat.value, xPos, yPos);
+          doc.text(m.value || "", x + boxWidth / 2, yPos + 20, { align: "center" });
+          
           doc.setFontSize(10);
           doc.setFont("helvetica", "normal");
-          doc.text(stat.label, xPos, yPos + 8);
-          xPos += 60;
+          doc.text(m.label || "", x + boxWidth / 2, yPos + 35, { align: "center" });
         });
+        
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        yPos += 60;
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("Målsegment:", leftMargin, yPos);
+        yPos += 10;
+        
+        slide.segments?.forEach((segment) => {
+          doc.setFontSize(11);
+          doc.setFont("helvetica", "normal");
+          doc.text(`✓ ${segment}`, leftMargin + 5, yPos);
+          yPos += 8;
+        });
+        addPageNumber(index);
+        return;
       }
 
-      if (slide.type === "ask") {
-        doc.setFontSize(32);
-        doc.setFont("helvetica", "bold");
-        doc.text(slide.amount || "", pageWidth / 2, yPos + 20, { align: "center" });
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "normal");
-        doc.text(slide.valuation || "", pageWidth / 2, yPos + 35, { align: "center" });
+      // Product slide
+      if (slide.type === "product") {
+        addSlideHeader(slide.title);
+        yPos = 50;
+        
+        const colWidth = (pageWidth - 70) / 3;
+        slide.modules?.forEach((module, i) => {
+          const col = i % 3;
+          const row = Math.floor(i / 3);
+          const x = leftMargin + col * (colWidth + 10);
+          const y = yPos + row * 42;
+          
+          doc.setFillColor(245, 245, 245);
+          doc.roundedRect(x, y, colWidth, 35, 3, 3, 'F');
+          
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text(module.name, x + 5, y + 12);
+          
+          // Status badge
+          doc.setFillColor(34, 197, 94);
+          doc.roundedRect(x + colWidth - 30, y + 5, 25, 10, 2, 2, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(8);
+          doc.text(module.status, x + colWidth - 17, y + 12, { align: "center" });
+          
+          doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+          doc.setFontSize(9);
+          doc.setFont("helvetica", "normal");
+          doc.text(module.desc, x + 5, y + 25);
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        });
+        addPageNumber(index);
+        return;
       }
+
+      // Traction slide
+      if (slide.type === "traction") {
+        addSlideHeader(slide.title);
+        yPos = 55;
+        
+        const boxWidth = (pageWidth - 100) / 4;
+        slide.stats?.forEach((stat, i) => {
+          const x = leftMargin + i * (boxWidth + 15);
+          doc.setFillColor(239, 246, 255);
+          doc.roundedRect(x, yPos, boxWidth, 40, 3, 3, 'F');
+          
+          doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.setFontSize(24);
+          doc.setFont("helvetica", "bold");
+          doc.text(stat.value, x + boxWidth / 2, yPos + 18, { align: "center" });
+          
+          doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(stat.label, x + boxWidth / 2, yPos + 32, { align: "center" });
+        });
+        
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        yPos += 55;
+        
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(leftMargin, yPos, pageWidth - 50, 35, 3, 3, 'F');
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "italic");
+        doc.text(`"${slide.testimonial}"`, pageWidth / 2, yPos + 15, { align: "center" });
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.text(`— ${slide.company}`, pageWidth / 2, yPos + 27, { align: "center" });
+        addPageNumber(index);
+        return;
+      }
+
+      // Business model slide
+      if (slide.type === "business") {
+        addSlideHeader(slide.title);
+        yPos = 50;
+        
+        const boxWidth = (pageWidth - 70) / 3;
+        slide.pricing?.forEach((tier, i) => {
+          const x = leftMargin + i * (boxWidth + 10);
+          const isHighlighted = i === 1;
+          
+          if (isHighlighted) {
+            doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+            doc.roundedRect(x - 2, yPos - 2, boxWidth + 4, 74, 3, 3, 'F');
+          }
+          
+          doc.setFillColor(255, 255, 255);
+          doc.roundedRect(x, yPos, boxWidth, 70, 3, 3, 'F');
+          
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.setFontSize(14);
+          doc.setFont("helvetica", "bold");
+          doc.text(tier.tier, x + boxWidth / 2, yPos + 12, { align: "center" });
+          
+          doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.setFontSize(20);
+          doc.text(tier.price, x + boxWidth / 2, yPos + 28, { align: "center" });
+          
+          doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+          doc.setFontSize(9);
+          doc.text(tier.unit, x + boxWidth / 2, yPos + 36, { align: "center" });
+          
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.setFontSize(8);
+          tier.features.forEach((f, j) => {
+            doc.text(`✓ ${f}`, x + 8, yPos + 48 + j * 7);
+          });
+        });
+        
+        yPos += 85;
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("Nyckeltal:", leftMargin, yPos);
+        yPos += 8;
+        
+        slide.metrics?.forEach((metric) => {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(`${metric.label}: ${metric.value}`, leftMargin + 5, yPos);
+          yPos += 7;
+        });
+        addPageNumber(index);
+        return;
+      }
+
+      // Competitive slide
+      if (slide.type === "competitive") {
+        addSlideHeader(slide.title);
+        yPos = 55;
+        
+        const colWidth = (pageWidth - 60) / 2;
+        slide.advantages?.forEach((adv, i) => {
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          const x = leftMargin + col * (colWidth + 10);
+          const y = yPos + row * 35;
+          
+          doc.setFillColor(239, 246, 255);
+          doc.roundedRect(x, y, colWidth, 28, 3, 3, 'F');
+          
+          doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text(adv.title, x + 8, y + 12);
+          
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(adv.desc, x + 8, y + 22);
+        });
+        
+        yPos += 85;
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.roundedRect(leftMargin, yPos, pageWidth - 50, 20, 3, 3, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "bold");
+        doc.text(slide.differentiation || "", pageWidth / 2, yPos + 13, { align: "center" });
+        addPageNumber(index);
+        return;
+      }
+
+      // Roadmap slide
+      if (slide.type === "roadmap") {
+        addSlideHeader(slide.title);
+        yPos = 50;
+        
+        slide.phases?.forEach((phase) => {
+          const isCurrent = phase.status === 'current';
+          const isDone = phase.status === 'done';
+          
+          if (isCurrent) {
+            doc.setFillColor(239, 246, 255);
+          } else {
+            doc.setFillColor(248, 250, 252);
+          }
+          doc.roundedRect(leftMargin, yPos, pageWidth - 50, 18, 2, 2, 'F');
+          
+          if (isDone) {
+            doc.setTextColor(34, 197, 94);
+          } else if (isCurrent) {
+            doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          } else {
+            doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+          }
+          
+          doc.setFontSize(11);
+          doc.setFont("helvetica", "bold");
+          doc.text(phase.quarter, leftMargin + 5, yPos + 12);
+          
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.setFontSize(9);
+          doc.setFont("helvetica", "normal");
+          doc.text(phase.items.join(" • "), leftMargin + 45, yPos + 12);
+          
+          if (isDone) {
+            doc.setTextColor(34, 197, 94);
+            doc.text("✓", pageWidth - 35, yPos + 12);
+          }
+          
+          yPos += 22;
+        });
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        addPageNumber(index);
+        return;
+      }
+
+      // Team slide
+      if (slide.type === "team") {
+        addSlideHeader(slide.title);
+        yPos = 50;
+        
+        const colWidth = (pageWidth - 60) / 2;
+        
+        // Tech Stack
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(leftMargin, yPos, colWidth, 80, 3, 3, 'F');
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("Tech Stack", leftMargin + 10, yPos + 15);
+        
+        let techY = yPos + 25;
+        slide.techStack?.forEach((tech) => {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(`✓ ${tech}`, leftMargin + 10, techY);
+          techY += 9;
+        });
+        
+        // Highlights
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(rightCol - 10, yPos, colWidth, 80, 3, 3, 'F');
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("Utvecklingsfilosofi", rightCol, yPos + 15);
+        
+        let highY = yPos + 25;
+        slide.highlights?.forEach((h) => {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(`✓ ${h}`, rightCol, highY);
+          highY += 9;
+        });
+        addPageNumber(index);
+        return;
+      }
+
+      // Financials slide
+      if (slide.type === "financials") {
+        addSlideHeader(slide.title);
+        yPos = 55;
+        
+        const boxWidth = (pageWidth - 100) / 4;
+        slide.projections?.forEach((proj, i) => {
+          const x = leftMargin + i * (boxWidth + 15);
+          doc.setFillColor(239, 246, 255);
+          doc.roundedRect(x, yPos, boxWidth, 40, 3, 3, 'F');
+          
+          doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+          doc.setFontSize(12);
+          doc.text(proj.year, x + boxWidth / 2, yPos + 12, { align: "center" });
+          
+          doc.setTextColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.setFontSize(18);
+          doc.setFont("helvetica", "bold");
+          doc.text(proj.arr, x + boxWidth / 2, yPos + 26, { align: "center" });
+          
+          doc.setTextColor(mutedColor[0], mutedColor[1], mutedColor[2]);
+          doc.setFontSize(9);
+          doc.setFont("helvetica", "normal");
+          doc.text(`ARR • ${proj.customers} kunder`, x + boxWidth / 2, yPos + 35, { align: "center" });
+        });
+        
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        yPos += 55;
+        doc.setFontSize(14);
+        doc.setFont("helvetica", "bold");
+        doc.text("Användning av kapital:", leftMargin, yPos);
+        yPos += 12;
+        
+        slide.useOfFunds?.forEach((item) => {
+          doc.setFillColor(229, 231, 235);
+          doc.roundedRect(leftMargin, yPos, pageWidth - 50, 8, 2, 2, 'F');
+          
+          doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+          doc.roundedRect(leftMargin, yPos, (pageWidth - 50) * item.percent / 100, 8, 2, 2, 'F');
+          
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(`${item.category}: ${item.percent}%`, leftMargin, yPos + 15);
+          yPos += 20;
+        });
+        addPageNumber(index);
+        return;
+      }
+
+      // Ask slide
+      if (slide.type === "ask") {
+        addSlideHeader(slide.title);
+        yPos = 55;
+        
+        // Main ask box
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.roundedRect(leftMargin, yPos, (pageWidth - 60) / 2, 50, 5, 5, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(36);
+        doc.setFont("helvetica", "bold");
+        doc.text(slide.amount || "", leftMargin + (pageWidth - 60) / 4, yPos + 25, { align: "center" });
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "normal");
+        doc.text(slide.valuation || "", leftMargin + (pageWidth - 60) / 4, yPos + 42, { align: "center" });
+        
+        // Use of funds
+        doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+        const useX = rightCol - 10;
+        doc.setFillColor(248, 250, 252);
+        doc.roundedRect(useX, yPos, (pageWidth - 60) / 2, 50, 3, 3, 'F');
+        
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("Användning", useX + 10, yPos + 12);
+        
+        let useY = yPos + 22;
+        slide.use?.forEach((u) => {
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(`→ ${u}`, useX + 10, useY);
+          useY += 9;
+        });
+        
+        // Milestones
+        yPos += 65;
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("Milstolpar (12-24 månader):", leftMargin, yPos);
+        yPos += 10;
+        
+        const mileWidth = (pageWidth - 70) / 3;
+        slide.milestones?.forEach((m, i) => {
+          const x = leftMargin + i * (mileWidth + 10);
+          doc.setFillColor(248, 250, 252);
+          doc.roundedRect(x, yPos, mileWidth, 30, 3, 3, 'F');
+          
+          doc.setTextColor(34, 197, 94);
+          doc.setFontSize(14);
+          doc.text("✓", x + mileWidth / 2, yPos + 12, { align: "center" });
+          
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.setFontSize(9);
+          doc.setFont("helvetica", "normal");
+          const lines = doc.splitTextToSize(m, mileWidth - 10);
+          doc.text(lines, x + mileWidth / 2, yPos + 22, { align: "center" });
+        });
+        addPageNumber(index);
+        return;
+      }
+
+      // Closing slide
+      if (slide.type === "closing") {
+        doc.setFillColor(primaryColor[0], primaryColor[1], primaryColor[2]);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(48);
+        doc.setFont("helvetica", "bold");
+        doc.text(slide.title, pageWidth / 2, pageHeight / 2 - 25, { align: "center" });
+        
+        doc.setFontSize(20);
+        doc.setFont("helvetica", "normal");
+        doc.text(slide.subtitle || "", pageWidth / 2, pageHeight / 2 + 5, { align: "center" });
+        
+        doc.setFontSize(14);
+        doc.text(slide.cta || "", pageWidth / 2, pageHeight / 2 + 30, { align: "center" });
+        
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text(slide.contact || "", pageWidth / 2, pageHeight / 2 + 50, { align: "center" });
+        addPageNumber(index);
+        return;
+      }
+
+      // Default fallback
+      addSlideHeader(slide.title, 'subtitle' in slide ? slide.subtitle : undefined);
+      addPageNumber(index);
     });
 
     doc.save("Unicorn_Investor_Pitch.pdf");
     toast({
       title: "PDF nedladdad",
-      description: "Filen 'Unicorn_Investor_Pitch.pdf' har sparats."
+      description: "Filen 'Unicorn_Investor_Pitch.pdf' har sparats och är redo att mailas."
     });
   };
 
