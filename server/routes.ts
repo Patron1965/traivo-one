@@ -7891,6 +7891,172 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // ============================================
+  // PORTAL - INVOICES (Fakturor)
+  // ============================================
+  app.get("/api/portal/invoices", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const invoices = await storage.getCustomerInvoices(session.tenantId!, session.customerId!);
+      res.json(invoices);
+    } catch (error) {
+      console.error("Failed to get portal invoices:", error);
+      res.status(500).json({ error: "Kunde inte hämta fakturor" });
+    }
+  });
+
+  // ============================================
+  // PORTAL - ISSUE REPORTS (Felanmälningar)
+  // ============================================
+  app.get("/api/portal/issue-reports", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const reports = await storage.getCustomerIssueReports(session.tenantId!, session.customerId!);
+      res.json(reports);
+    } catch (error) {
+      console.error("Failed to get issue reports:", error);
+      res.status(500).json({ error: "Kunde inte hämta felanmälningar" });
+    }
+  });
+
+  app.post("/api/portal/issue-reports", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const { issueType, title, description, objectId, customerContact } = req.body;
+      
+      if (!issueType || !title) {
+        return res.status(400).json({ error: "Typ och rubrik krävs" });
+      }
+
+      const report = await storage.createCustomerIssueReport({
+        tenantId: session.tenantId!,
+        customerId: session.customerId!,
+        issueType,
+        title,
+        description: description || null,
+        objectId: objectId || null,
+        customerContact: customerContact || null,
+      });
+
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to create issue report:", error);
+      res.status(500).json({ error: "Kunde inte skapa felanmälan" });
+    }
+  });
+
+  // ============================================
+  // PORTAL - SERVICE CONTRACTS (Tjänsteavtal)
+  // ============================================
+  app.get("/api/portal/service-contracts", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const contracts = await storage.getCustomerServiceContracts(session.tenantId!, session.customerId!);
+      res.json(contracts);
+    } catch (error) {
+      console.error("Failed to get service contracts:", error);
+      res.status(500).json({ error: "Kunde inte hämta tjänsteavtal" });
+    }
+  });
+
+  // ============================================
+  // PORTAL - NOTIFICATION SETTINGS (Profil)
+  // ============================================
+  app.get("/api/portal/notification-settings", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      let settings = await storage.getCustomerNotificationSettings(session.tenantId!, session.customerId!);
+      
+      if (!settings) {
+        const customer = await storage.getCustomer(session.customerId!);
+        settings = {
+          id: "",
+          tenantId: session.tenantId!,
+          customerId: session.customerId!,
+          emailNotifications: true,
+          smsNotifications: false,
+          notifyOnTechnicianOnWay: true,
+          notifyOnJobCompleted: true,
+          notifyOnInvoice: true,
+          notifyOnBookingConfirmation: true,
+          preferredContactEmail: customer?.email || null,
+          preferredContactPhone: customer?.phone || null,
+          updatedAt: new Date(),
+        };
+      }
+
+      res.json(settings);
+    } catch (error) {
+      console.error("Failed to get notification settings:", error);
+      res.status(500).json({ error: "Kunde inte hämta inställningar" });
+    }
+  });
+
+  app.put("/api/portal/notification-settings", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const updates = req.body;
+      const settings = await storage.upsertCustomerNotificationSettings({
+        tenantId: session.tenantId!,
+        customerId: session.customerId!,
+        ...updates,
+      });
+
+      res.json(settings);
+    } catch (error) {
+      console.error("Failed to update notification settings:", error);
+      res.status(500).json({ error: "Kunde inte spara inställningar" });
+    }
+  });
+
+  // ============================================
+  // PORTAL - VISIT PROTOCOLS (Besöksprotokoll)
+  // ============================================
+  app.get("/api/portal/visit-protocols", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const workOrders = await storage.getWorkOrders(session.tenantId!);
+      const customerOrders = workOrders.filter(
+        o => o.customerId === session.customerId && 
+        ["utford", "fakturerad", "completed", "invoiced"].includes(o.orderStatus || o.status)
+      );
+
+      const protocols = customerOrders
+        .filter(o => o.completedAt)
+        .map(o => ({
+          id: o.id,
+          workOrderId: o.id,
+          title: o.title,
+          description: o.description,
+          completedAt: o.completedAt,
+          objectName: o.objectName,
+          objectAddress: o.objectAddress,
+          status: o.orderStatus || o.status,
+        }))
+        .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())
+        .slice(0, 50);
+
+      res.json(protocols);
+    } catch (error) {
+      console.error("Failed to get visit protocols:", error);
+      res.status(500).json({ error: "Kunde inte hämta protokoll" });
+    }
+  });
+
   app.post("/api/portal/logout", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;

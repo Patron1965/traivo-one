@@ -110,6 +110,13 @@ export default function PortalDashboardPage() {
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState("");
+  const [issueDialogOpen, setIssueDialogOpen] = useState(false);
+  const [issueForm, setIssueForm] = useState({
+    issueType: "",
+    title: "",
+    description: "",
+    objectId: "",
+  });
   const queryClient = useQueryClient();
   const customer = getCustomer();
   const tenant = getTenant();
@@ -173,6 +180,18 @@ export default function PortalDashboardPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/portal/booking-requests"] });
       setBookingDialogOpen(false);
       form.reset();
+    },
+  });
+
+  const createIssueReportMutation = useMutation({
+    mutationFn: (data: typeof issueForm) =>
+      portalFetch("/api/portal/issue-reports", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    onSuccess: () => {
+      setIssueDialogOpen(false);
+      setIssueForm({ issueType: "", title: "", description: "", objectId: "" });
     },
   });
 
@@ -372,6 +391,70 @@ export default function PortalDashboardPage() {
               </div>
             </CardContent>
           </Card>
+        </div>
+
+        {/* Self-Service Navigation */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Link href="/portal/invoices">
+            <Card className="hover-elevate cursor-pointer group" data-testid="card-invoices">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
+                  <FileText className="h-6 w-6 text-amber-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Fakturor</h3>
+                  <p className="text-sm text-muted-foreground">Visa och ladda ner</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+          
+          <Link href="/portal/contracts">
+            <Card className="hover-elevate cursor-pointer group" data-testid="card-contracts">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-teal-500/10 group-hover:bg-teal-500/20 transition-colors">
+                  <Package className="h-6 w-6 text-teal-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Tjänsteavtal</h3>
+                  <p className="text-sm text-muted-foreground">Dina abonnemang</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+          
+          <Card 
+            className="hover-elevate cursor-pointer group"
+            onClick={() => setIssueDialogOpen(true)}
+            data-testid="card-report-issue"
+          >
+            <CardContent className="p-5 flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-red-500/10 group-hover:bg-red-500/20 transition-colors">
+                <AlertCircle className="h-6 w-6 text-red-500" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold">Felanmälan</h3>
+                <p className="text-sm text-muted-foreground">Rapportera problem</p>
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Link href="/portal/settings">
+            <Card className="hover-elevate cursor-pointer group" data-testid="card-settings">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-slate-500/10 group-hover:bg-slate-500/20 transition-colors">
+                  <User className="h-6 w-6 text-slate-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Inställningar</h3>
+                  <p className="text-sm text-muted-foreground">Profil och notiser</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
         </div>
 
         {/* Next Visit Highlight Card */}
@@ -967,6 +1050,96 @@ export default function PortalDashboardPage() {
           </Card>
         )}
       </main>
+
+      {/* Issue Report Dialog */}
+      <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-red-500" />
+              Felanmälan
+            </DialogTitle>
+            <DialogDescription>
+              Rapportera ett problem med dina kärl eller tjänster
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Typ av fel</label>
+              <Select
+                value={issueForm.issueType}
+                onValueChange={(value) => setIssueForm({ ...issueForm, issueType: value })}
+              >
+                <SelectTrigger data-testid="select-issue-type">
+                  <SelectValue placeholder="Välj typ av fel" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="damaged_container">Skadat kärl</SelectItem>
+                  <SelectItem value="missed_pickup">Missad hämtning</SelectItem>
+                  <SelectItem value="access_problem">Åtkomstproblem</SelectItem>
+                  <SelectItem value="wrong_placement">Felplacerat kärl</SelectItem>
+                  <SelectItem value="other">Annat</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {objects.length > 0 && (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Berörd plats (valfritt)</label>
+                <Select
+                  value={issueForm.objectId}
+                  onValueChange={(value) => setIssueForm({ ...issueForm, objectId: value })}
+                >
+                  <SelectTrigger data-testid="select-issue-object">
+                    <SelectValue placeholder="Välj plats" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {objects.map((obj: any) => (
+                      <SelectItem key={obj.id} value={obj.id}>
+                        {obj.name} - {obj.address}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Rubrik</label>
+              <Input
+                value={issueForm.title}
+                onChange={(e) => setIssueForm({ ...issueForm, title: e.target.value })}
+                placeholder="Beskriv problemet kort"
+                data-testid="input-issue-title"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Detaljerad beskrivning</label>
+              <Textarea
+                value={issueForm.description}
+                onChange={(e) => setIssueForm({ ...issueForm, description: e.target.value })}
+                placeholder="Beskriv problemet mer utförligt..."
+                rows={3}
+                data-testid="input-issue-description"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-4">
+              <Button variant="outline" onClick={() => setIssueDialogOpen(false)}>
+                Avbryt
+              </Button>
+              <Button
+                onClick={() => createIssueReportMutation.mutate(issueForm)}
+                disabled={!issueForm.issueType || !issueForm.title || createIssueReportMutation.isPending}
+                data-testid="button-submit-issue"
+              >
+                {createIssueReportMutation.isPending ? "Skickar..." : "Skicka felanmälan"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Floating Chat Button */}
       <Button

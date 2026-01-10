@@ -50,6 +50,10 @@ import {
   type CustomerPortalSession, type InsertCustomerPortalSession,
   type CustomerBookingRequest, type InsertCustomerBookingRequest,
   type CustomerPortalMessage, type InsertCustomerPortalMessage,
+  type CustomerInvoice, type InsertCustomerInvoice,
+  type CustomerIssueReport, type InsertCustomerIssueReport,
+  type CustomerServiceContract, type InsertCustomerServiceContract,
+  type CustomerNotificationSettings, type InsertCustomerNotificationSettings,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -60,7 +64,8 @@ import {
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
   orderConcepts, conceptFilters, assignments, assignmentArticles,
-  customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages
+  customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
+  customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
@@ -370,6 +375,23 @@ export interface IStorage {
   getAllPortalMessagesForStaff(tenantId: string): Promise<CustomerPortalMessage[]>;
   getCustomersWithMessages(tenantId: string): Promise<string[]>;
   markStaffMessagesAsRead(tenantId: string, customerId: string): Promise<void>;
+  
+  // Customer Portal - Invoices
+  getCustomerInvoices(tenantId: string, customerId: string): Promise<CustomerInvoice[]>;
+  createCustomerInvoice(invoice: InsertCustomerInvoice): Promise<CustomerInvoice>;
+  
+  // Customer Portal - Issue Reports
+  getCustomerIssueReports(tenantId: string, customerId: string): Promise<CustomerIssueReport[]>;
+  createCustomerIssueReport(report: InsertCustomerIssueReport): Promise<CustomerIssueReport>;
+  updateCustomerIssueReport(id: string, tenantId: string, data: Partial<InsertCustomerIssueReport>): Promise<CustomerIssueReport | undefined>;
+  
+  // Customer Portal - Service Contracts
+  getCustomerServiceContracts(tenantId: string, customerId: string): Promise<CustomerServiceContract[]>;
+  createCustomerServiceContract(contract: InsertCustomerServiceContract): Promise<CustomerServiceContract>;
+  
+  // Customer Portal - Notification Settings
+  getCustomerNotificationSettings(tenantId: string, customerId: string): Promise<CustomerNotificationSettings | undefined>;
+  upsertCustomerNotificationSettings(settings: InsertCustomerNotificationSettings): Promise<CustomerNotificationSettings>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2761,6 +2783,99 @@ export class DatabaseStorage implements IStorage {
         eq(customerPortalMessages.sender, "customer"),
         isNull(customerPortalMessages.readAt)
       ));
+  }
+
+  // ============================================
+  // CUSTOMER PORTAL - INVOICES
+  // ============================================
+  
+  async getCustomerInvoices(tenantId: string, customerId: string): Promise<CustomerInvoice[]> {
+    return db.select().from(customerInvoices)
+      .where(and(
+        eq(customerInvoices.tenantId, tenantId),
+        eq(customerInvoices.customerId, customerId)
+      ))
+      .orderBy(desc(customerInvoices.invoiceDate));
+  }
+
+  async createCustomerInvoice(invoice: InsertCustomerInvoice): Promise<CustomerInvoice> {
+    const [result] = await db.insert(customerInvoices).values(invoice).returning();
+    return result;
+  }
+
+  // ============================================
+  // CUSTOMER PORTAL - ISSUE REPORTS
+  // ============================================
+  
+  async getCustomerIssueReports(tenantId: string, customerId: string): Promise<CustomerIssueReport[]> {
+    return db.select().from(customerIssueReports)
+      .where(and(
+        eq(customerIssueReports.tenantId, tenantId),
+        eq(customerIssueReports.customerId, customerId)
+      ))
+      .orderBy(desc(customerIssueReports.createdAt));
+  }
+
+  async createCustomerIssueReport(report: InsertCustomerIssueReport): Promise<CustomerIssueReport> {
+    const [result] = await db.insert(customerIssueReports).values(report).returning();
+    return result;
+  }
+
+  async updateCustomerIssueReport(id: string, tenantId: string, data: Partial<InsertCustomerIssueReport>): Promise<CustomerIssueReport | undefined> {
+    const [result] = await db.update(customerIssueReports)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(
+        eq(customerIssueReports.id, id),
+        eq(customerIssueReports.tenantId, tenantId)
+      ))
+      .returning();
+    return result;
+  }
+
+  // ============================================
+  // CUSTOMER PORTAL - SERVICE CONTRACTS
+  // ============================================
+  
+  async getCustomerServiceContracts(tenantId: string, customerId: string): Promise<CustomerServiceContract[]> {
+    return db.select().from(customerServiceContracts)
+      .where(and(
+        eq(customerServiceContracts.tenantId, tenantId),
+        eq(customerServiceContracts.customerId, customerId)
+      ))
+      .orderBy(desc(customerServiceContracts.createdAt));
+  }
+
+  async createCustomerServiceContract(contract: InsertCustomerServiceContract): Promise<CustomerServiceContract> {
+    const [result] = await db.insert(customerServiceContracts).values(contract).returning();
+    return result;
+  }
+
+  // ============================================
+  // CUSTOMER PORTAL - NOTIFICATION SETTINGS
+  // ============================================
+  
+  async getCustomerNotificationSettings(tenantId: string, customerId: string): Promise<CustomerNotificationSettings | undefined> {
+    const [result] = await db.select().from(customerNotificationSettings)
+      .where(and(
+        eq(customerNotificationSettings.tenantId, tenantId),
+        eq(customerNotificationSettings.customerId, customerId)
+      ));
+    return result;
+  }
+
+  async upsertCustomerNotificationSettings(settings: InsertCustomerNotificationSettings): Promise<CustomerNotificationSettings> {
+    const existing = await this.getCustomerNotificationSettings(settings.tenantId, settings.customerId);
+    
+    if (existing) {
+      const [result] = await db.update(customerNotificationSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(customerNotificationSettings.id, existing.id))
+        .returning();
+      return result;
+    }
+    
+    const [result] = await db.insert(customerNotificationSettings).values(settings).returning();
+    return result;
   }
 }
 

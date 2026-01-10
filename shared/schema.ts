@@ -2000,3 +2000,99 @@ export type CustomerBookingRequest = typeof customerBookingRequests.$inferSelect
 export type InsertCustomerBookingRequest = z.infer<typeof insertCustomerBookingRequestSchema>;
 export type CustomerPortalMessage = typeof customerPortalMessages.$inferSelect;
 export type InsertCustomerPortalMessage = z.infer<typeof insertCustomerPortalMessageSchema>;
+
+// === KUNDFAKTUROR (Customer Invoices) ===
+export const customerInvoices = pgTable("customer_invoices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  invoiceNumber: text("invoice_number").notNull(),
+  invoiceDate: timestamp("invoice_date").notNull(),
+  dueDate: timestamp("due_date").notNull(),
+  amount: real("amount").notNull(),
+  vatAmount: real("vat_amount").default(0),
+  totalAmount: real("total_amount").notNull(),
+  currency: text("currency").default("SEK"),
+  status: text("status").default("unpaid").notNull(), // unpaid, paid, overdue, cancelled
+  paidAt: timestamp("paid_at"),
+  pdfUrl: text("pdf_url"),
+  fortnoxInvoiceId: text("fortnox_invoice_id"),
+  description: text("description"),
+  workOrderIds: text("work_order_ids").array().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertCustomerInvoiceSchema = createInsertSchema(customerInvoices).omit({ id: true, createdAt: true });
+export type CustomerInvoice = typeof customerInvoices.$inferSelect;
+export type InsertCustomerInvoice = z.infer<typeof insertCustomerInvoiceSchema>;
+
+// === FELANMÄLNINGAR (Issue Reports) ===
+export const customerIssueReports = pgTable("customer_issue_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id),
+  issueType: text("issue_type").notNull(), // damaged_container, missed_pickup, access_problem, other
+  priority: text("priority").default("normal"), // low, normal, high, urgent
+  status: text("status").default("open").notNull(), // open, in_progress, resolved, closed
+  title: text("title").notNull(),
+  description: text("description"),
+  customerContact: text("customer_contact"),
+  imageUrls: text("image_urls").array().default([]),
+  staffNotes: text("staff_notes"),
+  assignedTo: varchar("assigned_to").references(() => users.id),
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolution: text("resolution"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertCustomerIssueReportSchema = createInsertSchema(customerIssueReports).omit({ id: true, createdAt: true, updatedAt: true });
+export type CustomerIssueReport = typeof customerIssueReports.$inferSelect;
+export type InsertCustomerIssueReport = z.infer<typeof insertCustomerIssueReportSchema>;
+
+// === TJÄNSTEAVTAL/ABONNEMANG (Service Contracts) ===
+export const customerServiceContracts = pgTable("customer_service_contracts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  contractNumber: text("contract_number"),
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status").default("active").notNull(), // active, paused, cancelled, expired
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  renewalType: text("renewal_type").default("auto"), // auto, manual, none
+  billingCycle: text("billing_cycle").default("monthly"), // monthly, quarterly, yearly
+  monthlyValue: real("monthly_value"),
+  objectIds: text("object_ids").array().default([]),
+  services: jsonb("services").default([]), // Array of service items included
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertCustomerServiceContractSchema = createInsertSchema(customerServiceContracts).omit({ id: true, createdAt: true, updatedAt: true });
+export type CustomerServiceContract = typeof customerServiceContracts.$inferSelect;
+export type InsertCustomerServiceContract = z.infer<typeof insertCustomerServiceContractSchema>;
+
+// === KUNDPROFIL/NOTIFIERINGSINSTÄLLNINGAR ===
+export const customerNotificationSettings = pgTable("customer_notification_settings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  emailNotifications: boolean("email_notifications").default(true),
+  smsNotifications: boolean("sms_notifications").default(false),
+  notifyOnTechnicianOnWay: boolean("notify_on_technician_on_way").default(true),
+  notifyOnJobCompleted: boolean("notify_on_job_completed").default(true),
+  notifyOnInvoice: boolean("notify_on_invoice").default(true),
+  notifyOnBookingConfirmation: boolean("notify_on_booking_confirmation").default(true),
+  preferredContactEmail: text("preferred_contact_email"),
+  preferredContactPhone: text("preferred_contact_phone"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertCustomerNotificationSettingsSchema = createInsertSchema(customerNotificationSettings).omit({ id: true, updatedAt: true });
+export type CustomerNotificationSettings = typeof customerNotificationSettings.$inferSelect;
+export type InsertCustomerNotificationSettings = z.infer<typeof insertCustomerNotificationSettingsSchema>;
