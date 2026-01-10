@@ -21,7 +21,6 @@ import { useAuth } from "@/hooks/use-auth";
 const startItems = [
   { title: "Dagens arbete", url: "/", icon: Calendar },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-  { title: "Arbetsflödesguide", url: "/workflow-guide", icon: BookOpen },
 ];
 
 // Grunddata - stamdata som sätts upp en gång (logisk ordning: kunder → objekt → resurser → priser)
@@ -57,6 +56,7 @@ const analysItems = [
 
 // System Avancerat - administration och verktyg
 const settingsItems = [
+  { title: "Arbetsflödesguide", url: "/workflow-guide", icon: BookOpen },
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
   { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
