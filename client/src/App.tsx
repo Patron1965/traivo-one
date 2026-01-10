@@ -51,6 +51,7 @@ import AIAssistantPage from "@/pages/AIAssistantPage";
 import ReportingDashboardPage from "@/pages/ReportingDashboardPage";
 import WorkflowGuidePage from "@/pages/WorkflowGuidePage";
 import DataRequirementsPage from "@/pages/DataRequirementsPage";
+import InvestorPitchPage from "@/pages/InvestorPitchPage";
 import PortalLoginPage from "@/pages/portal/PortalLoginPage";
 import PortalVerifyPage from "@/pages/portal/PortalVerifyPage";
 import PortalDashboardPage from "@/pages/portal/PortalDashboardPage";
@@ -107,6 +108,7 @@ function Router() {
       <Route path="/reporting" component={ReportingDashboardPage} />
       <Route path="/workflow-guide" component={WorkflowGuidePage} />
       <Route path="/data-requirements" component={DataRequirementsPage} />
+      <Route path="/investor-pitch" component={InvestorPitchPage} />
       <Route component={NotFound} />
     </Switch>
   );
