@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain } from "lucide-react";
 import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -47,6 +47,7 @@ const planeringItems = [
 
 // Analys - rapporter och insikter
 const analysItems = [
+  { title: "AI-Assistent", url: "/ai-assistant", icon: Brain },
   { title: "Ekonomi", url: "/economics", icon: DollarSign },
   { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
   { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },

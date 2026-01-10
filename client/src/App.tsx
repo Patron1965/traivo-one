@@ -47,6 +47,7 @@ import ArchitecturePage from "@/pages/architecture";
 import OrderConceptsPage from "@/pages/OrderConceptsPage";
 import AssignmentsPage from "@/pages/AssignmentsPage";
 import PitchPage from "@/pages/PitchPage";
+import AIAssistantPage from "@/pages/AIAssistantPage";
 import PortalLoginPage from "@/pages/portal/PortalLoginPage";
 import PortalVerifyPage from "@/pages/portal/PortalVerifyPage";
 import PortalDashboardPage from "@/pages/portal/PortalDashboardPage";
@@ -99,6 +100,7 @@ function Router() {
       <Route path="/order-concepts" component={OrderConceptsPage} />
       <Route path="/assignments" component={AssignmentsPage} />
       <Route path="/pitch" component={PitchPage} />
+      <Route path="/ai-assistant" component={AIAssistantPage} />
       <Route component={NotFound} />
     </Switch>
   );
