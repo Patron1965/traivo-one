@@ -49,6 +49,7 @@ import AssignmentsPage from "@/pages/AssignmentsPage";
 import PitchPage from "@/pages/PitchPage";
 import AIAssistantPage from "@/pages/AIAssistantPage";
 import ReportingDashboardPage from "@/pages/ReportingDashboardPage";
+import WorkflowGuidePage from "@/pages/WorkflowGuidePage";
 import PortalLoginPage from "@/pages/portal/PortalLoginPage";
 import PortalVerifyPage from "@/pages/portal/PortalVerifyPage";
 import PortalDashboardPage from "@/pages/portal/PortalDashboardPage";
@@ -103,6 +104,7 @@ function Router() {
       <Route path="/pitch" component={PitchPage} />
       <Route path="/ai-assistant" component={AIAssistantPage} />
       <Route path="/reporting" component={ReportingDashboardPage} />
+      <Route path="/workflow-guide" component={WorkflowGuidePage} />
       <Route component={NotFound} />
     </Switch>
   );
