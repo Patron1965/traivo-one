@@ -1400,18 +1400,23 @@ export function Dashboard() {
       </Card>
 
       {/* AI-möjligheter för framtida utveckling */}
-      <Card className="border-dashed border-2 border-primary/30 bg-gradient-to-br from-primary/5 to-transparent">
-        <CardHeader>
-          <CardTitle className="text-base flex items-center gap-2">
-            <Sparkles className="h-4 w-4 text-primary" />
-            AI-möjligheter - Framtida utveckling
-          </CardTitle>
+      <Card className="border border-primary/20 bg-gradient-to-br from-primary/5 via-transparent to-primary/5">
+        <CardHeader className="pb-4">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="p-2.5 rounded-xl bg-primary/10">
+              <Sparkles className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <CardTitle className="text-lg">AI-möjligheter</CardTitle>
+              <p className="text-xs text-muted-foreground">Framtida utveckling</p>
+            </div>
+          </div>
           <p className="text-sm text-muted-foreground">
             Potentiella AI-funktioner som kan integreras för att ytterligare optimera er verksamhet
           </p>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <AICapabilityCard
               icon={Route}
               title="Smart ruttoptimering"
@@ -1491,28 +1496,28 @@ function AICapabilityCard({ icon: Icon, title, description, impact, status }: AI
   };
   
   const statusColors = {
-    active: "bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300",
-    planned: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
-    coming: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300"
+    active: "bg-green-500/15 text-green-500 border-green-500/30",
+    planned: "bg-primary/15 text-primary border-primary/30",
+    coming: "bg-orange-500/15 text-orange-500 border-orange-500/30"
   };
 
   return (
-    <div className="p-4 rounded-md bg-card border hover-elevate">
-      <div className="flex items-start gap-3">
-        <div className="p-2 rounded-md bg-primary/10">
-          <Icon className="h-5 w-5 text-primary" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <h4 className="font-medium text-sm">{title}</h4>
-            <Badge variant="secondary" className={`text-[10px] ${statusColors[status]}`}>
-              {statusLabels[status]}
-            </Badge>
+    <div className="group p-5 rounded-xl bg-card/60 border border-border/50 hover:border-primary/30 hover:bg-card/80 transition-all duration-200">
+      <div className="flex flex-col h-full">
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="p-2.5 rounded-lg bg-primary/10 group-hover:bg-primary/15 transition-colors">
+            <Icon className="h-5 w-5 text-primary" />
           </div>
-          <p className="text-xs text-muted-foreground mb-2">{description}</p>
-          <div className="flex items-center gap-1 text-xs font-medium text-primary">
-            <Sparkles className="h-3 w-3" />
-            {impact}
+          <Badge variant="outline" className={`text-[10px] px-2 py-0.5 border ${statusColors[status]}`}>
+            {statusLabels[status]}
+          </Badge>
+        </div>
+        <h4 className="font-semibold text-sm mb-2 leading-tight">{title}</h4>
+        <p className="text-xs text-muted-foreground leading-relaxed flex-1 mb-4">{description}</p>
+        <div className="pt-3 border-t border-border/40">
+          <div className="flex items-center gap-1.5 text-xs font-medium text-primary">
+            <Sparkles className="h-3.5 w-3.5 shrink-0" />
+            <span className="leading-tight">{impact}</span>
           </div>
         </div>
       </div>
