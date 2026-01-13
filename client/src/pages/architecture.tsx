@@ -164,26 +164,37 @@ export default function ArchitecturePage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <ArchitectureBox title="Webbplanerare" icon={Monitor} color="bg-blue-50 dark:bg-blue-950/30" borderColor="border-blue-200 dark:border-blue-800">
                 <FeatureItem>Drag-and-drop veckoplanering</FeatureItem>
                 <FeatureItem>Interaktiv kartvyn med GPS</FeatureItem>
                 <FeatureItem>Dashboard med KPI:er</FeatureItem>
                 <FeatureItem>Klusterhantering</FeatureItem>
                 <FeatureItem>Order- och kundhantering</FeatureItem>
+                <FeatureItem>Artikelhantering på jobb</FeatureItem>
               </ArchitectureBox>
               
               <ArchitectureBox title="Mobil Fältapp" icon={Smartphone} color="bg-green-50 dark:bg-green-950/30" borderColor="border-green-200 dark:border-green-800">
                 <FeatureItem>Touch-optimerat gränssnitt</FeatureItem>
                 <FeatureItem>Digital signaturinsamling</FeatureItem>
+                <FeatureItem>Kategoriserad fotodokumentation</FeatureItem>
                 <FeatureItem>Materialloggning</FeatureItem>
                 <FeatureItem>Push-notifikationer</FeatureItem>
                 <FeatureItem>Offline-stöd</FeatureItem>
               </ArchitectureBox>
               
+              <ArchitectureBox title="Kundportal" icon={Globe} color="bg-teal-50 dark:bg-teal-950/30" borderColor="border-teal-200 dark:border-teal-800">
+                <FeatureItem>Magic link-inloggning</FeatureItem>
+                <FeatureItem>Visa kommande besök</FeatureItem>
+                <FeatureItem>Bokningsförfrågningar</FeatureItem>
+                <FeatureItem>Meddelandefunktion</FeatureItem>
+                <FeatureItem>Klusteröversikt</FeatureItem>
+              </ArchitectureBox>
+              
               <ArchitectureBox title="Admin & Rapporter" icon={BarChart3} color="bg-purple-50 dark:bg-purple-950/30" borderColor="border-purple-200 dark:border-purple-800">
                 <FeatureItem>Användarrollhantering</FeatureItem>
                 <FeatureItem>Tenant-konfiguration</FeatureItem>
+                <FeatureItem>Metadatakatalog (EAV)</FeatureItem>
                 <FeatureItem>CSV-import (Modus 2.0)</FeatureItem>
                 <FeatureItem>PDF-protokollgenerering</FeatureItem>
                 <FeatureItem>Fortnox-synkronisering</FeatureItem>
@@ -217,6 +228,8 @@ export default function ArchitecturePage() {
                 <FeatureItem>106+ ownership-verifieringar</FeatureItem>
                 <FeatureItem>Rollbaserad åtkomstkontroll</FeatureItem>
                 <FeatureItem>Session-autentisering</FeatureItem>
+                <FeatureItem>Magic link token-auth</FeatureItem>
+                <FeatureItem>Rate limiting</FeatureItem>
               </ArchitectureBox>
             </div>
             
@@ -224,12 +237,14 @@ export default function ArchitecturePage() {
               <ArchitectureBox title="Ordrar & Planering" icon={Calendar}>
                 <FeatureItem>8-stegs arbetsflöde</FeatureItem>
                 <FeatureItem>Resursallokering</FeatureItem>
+                <FeatureItem>Artikelrader med priser</FeatureItem>
                 <FeatureItem>Prenumerationer</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Objekthierarki" icon={Building2}>
-                <FeatureItem>Område → Fastighet → Rum</FeatureItem>
-                <FeatureItem>Metadata-arv</FeatureItem>
+              <ArchitectureBox title="Objekthierarki & EAV" icon={Building2}>
+                <FeatureItem>Koncern → BRF → Fastighet → Kärl</FeatureItem>
+                <FeatureItem>EAV metadatakatalog</FeatureItem>
+                <FeatureItem>Rekursivt metadata-arv</FeatureItem>
                 <FeatureItem>Artikelfasthakning</FeatureItem>
               </ArchitectureBox>
               
@@ -324,9 +339,9 @@ export default function ArchitecturePage() {
           <CardTitle className="text-lg">Teknisk Sammanfattning</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             <div className="text-center p-4 bg-muted/50 rounded-md">
-              <div className="text-2xl font-bold text-primary">200+</div>
+              <div className="text-2xl font-bold text-primary">250+</div>
               <div className="text-xs text-muted-foreground">API Endpoints</div>
             </div>
             <div className="text-center p-4 bg-muted/50 rounded-md">
@@ -334,12 +349,16 @@ export default function ArchitecturePage() {
               <div className="text-xs text-muted-foreground">Säkerhetskontroller</div>
             </div>
             <div className="text-center p-4 bg-muted/50 rounded-md">
-              <div className="text-2xl font-bold text-primary">50+</div>
+              <div className="text-2xl font-bold text-primary">60+</div>
               <div className="text-xs text-muted-foreground">Databastabeller</div>
             </div>
             <div className="text-center p-4 bg-muted/50 rounded-md">
               <div className="text-2xl font-bold text-primary">5</div>
               <div className="text-xs text-muted-foreground">AI-funktioner</div>
+            </div>
+            <div className="text-center p-4 bg-muted/50 rounded-md">
+              <div className="text-2xl font-bold text-primary">4</div>
+              <div className="text-xs text-muted-foreground">Portalgränssnitt</div>
             </div>
           </div>
           
