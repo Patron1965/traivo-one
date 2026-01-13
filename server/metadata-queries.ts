@@ -137,6 +137,7 @@ export async function getObjectWithAllMetadata(
       id: row.id,
       tenantId: tenantId,
       objektId: row.objekt_id,
+      workOrderId: null, // Object metadata doesn't have workOrderId
       metadataKatalogId: row.metadata_katalog_id,
       vardeString: row.varde_string,
       vardeInteger: row.varde_integer,

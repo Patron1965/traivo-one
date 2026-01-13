@@ -2173,10 +2173,12 @@ export const metadataKatalog = pgTable("metadata_katalog", {
 ]);
 
 // Metadatavärden - EAV-modell med typade värdefält och korsbefruktning
+// Supports both objects (objektId) and work orders (workOrderId) as targets
 export const metadataVarden = pgTable("metadata_varden", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  objektId: varchar("objekt_id").references(() => objects.id).notNull(),
+  objektId: varchar("objekt_id").references(() => objects.id), // Nullable - either objektId or workOrderId should be set
+  workOrderId: varchar("work_order_id").references(() => workOrders.id), // Nullable - for work order metadata
   metadataKatalogId: varchar("metadata_katalog_id").references(() => metadataKatalog.id).notNull(),
   
   // Värdefält - endast ett ska ha värde baserat på datatyp
@@ -2208,7 +2210,9 @@ export const metadataVarden = pgTable("metadata_varden", {
   index("idx_metadata_varden_objekt").on(table.objektId),
   index("idx_metadata_varden_katalog").on(table.metadataKatalogId),
   index("idx_metadata_varden_objekt_katalog").on(table.objektId, table.metadataKatalogId),
-  index("idx_metadata_varden_koppling").on(table.koppladTillMetadataId)
+  index("idx_metadata_varden_koppling").on(table.koppladTillMetadataId),
+  index("idx_metadata_varden_work_order").on(table.workOrderId),
+  index("idx_metadata_varden_work_order_katalog").on(table.workOrderId, table.metadataKatalogId)
 ]);
 
 // Relationer för det nya metadata-systemet
@@ -2220,6 +2224,7 @@ export const metadataKatalogRelations = relations(metadataKatalog, ({ one, many 
 export const metadataVardenRelations = relations(metadataVarden, ({ one, many }) => ({
   tenant: one(tenants, { fields: [metadataVarden.tenantId], references: [tenants.id] }),
   objekt: one(objects, { fields: [metadataVarden.objektId], references: [objects.id] }),
+  workOrder: one(workOrders, { fields: [metadataVarden.workOrderId], references: [workOrders.id] }),
   katalog: one(metadataKatalog, { fields: [metadataVarden.metadataKatalogId], references: [metadataKatalog.id] }),
   // Korsbefruktning via koppladTillMetadataId (self-reference handled separately)
 }));
