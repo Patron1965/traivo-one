@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
+import { JobDetailModal } from "@/components/JobDetailModal";
 import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { Button } from "@/components/ui/button";
 import { Sparkles, X } from "lucide-react";
@@ -8,6 +9,7 @@ import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
   const [showJobModal, setShowJobModal] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [showAIPanel, setShowAIPanel] = useState(() => {
     const saved = localStorage.getItem('weekplanner-ai-panel-open');
     return saved === 'true';
@@ -30,7 +32,7 @@ export default function WeekPlannerPage() {
       <div className="flex-1 min-w-0 overflow-auto">
         <WeekPlanner 
           onAddJob={() => setShowJobModal(true)}
-          onSelectJob={(id) => console.log("Selected job for detail:", id)}
+          onSelectJob={(id) => setSelectedJobId(id)}
           showAIPanel={showAIPanel}
           onToggleAIPanel={() => setShowAIPanel(!showAIPanel)}
         />
@@ -67,6 +69,12 @@ export default function WeekPlannerPage() {
         open={showJobModal}
         onClose={() => setShowJobModal(false)}
         onSubmit={(data) => console.log("New job created:", data)}
+      />
+
+      <JobDetailModal
+        open={selectedJobId !== null}
+        onClose={() => setSelectedJobId(null)}
+        workOrderId={selectedJobId}
       />
     </div>
   );

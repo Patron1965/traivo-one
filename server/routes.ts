@@ -868,6 +868,84 @@ export async function registerRoutes(
     }
   });
 
+  // Work Order Objects - multiple objects per work order
+  app.get("/api/work-orders/:workOrderId/objects", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.workOrderId);
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        return res.status(404).json({ error: "Work order not found" });
+      }
+      const objects = await storage.getWorkOrderObjects(req.params.workOrderId);
+      res.json(objects);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch work order objects" });
+    }
+  });
+
+  app.post("/api/work-orders/:workOrderId/objects", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.workOrderId);
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        return res.status(404).json({ error: "Work order not found" });
+      }
+      
+      const { objectId, isPrimary, sortOrder, notes } = req.body;
+      if (!objectId) {
+        return res.status(400).json({ error: "objectId is required" });
+      }
+      
+      // Verify the object belongs to the tenant
+      const object = await storage.getObject(objectId);
+      if (!verifyTenantOwnership(object, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      
+      // Check for duplicate before inserting
+      const existingObjects = await storage.getWorkOrderObjects(req.params.workOrderId);
+      const isDuplicate = existingObjects.some(o => o.objectId === objectId);
+      if (isDuplicate) {
+        return res.status(400).json({ error: "Object is already linked to this work order" });
+      }
+      
+      const workOrderObject = await storage.createWorkOrderObject({
+        tenantId,
+        workOrderId: req.params.workOrderId,
+        objectId,
+        isPrimary: isPrimary || false,
+        sortOrder: sortOrder || 0,
+        notes
+      });
+      
+      res.status(201).json(workOrderObject);
+    } catch (error) {
+      console.error("Failed to add object to work order:", error);
+      res.status(500).json({ error: "Failed to add object to work order" });
+    }
+  });
+
+  app.delete("/api/work-order-objects/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrderObject = await storage.getWorkOrderObject(req.params.id);
+      if (!workOrderObject) {
+        return res.status(404).json({ error: "Work order object not found" });
+      }
+      
+      // Verify via the work order
+      const workOrder = await storage.getWorkOrder(workOrderObject.workOrderId);
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        return res.status(404).json({ error: "Work order object not found" });
+      }
+      
+      await storage.deleteWorkOrderObject(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete work order object" });
+    }
+  });
+
   // Price Resolution API
   app.get("/api/resolve-price", async (req, res) => {
     try {

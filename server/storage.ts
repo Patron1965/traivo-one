@@ -12,6 +12,7 @@ import {
   type PriceListArticle, type InsertPriceListArticle,
   type ResourceArticle, type InsertResourceArticle,
   type WorkOrderLine, type InsertWorkOrderLine,
+  type WorkOrderObject, type InsertWorkOrderObject, workOrderObjects,
   type SimulationScenario, type InsertSimulationScenario,
   type Vehicle, type InsertVehicle,
   type Equipment, type InsertEquipment,
@@ -154,6 +155,13 @@ export interface IStorage {
   createWorkOrderLine(line: InsertWorkOrderLine): Promise<WorkOrderLine>;
   updateWorkOrderLine(id: string, data: Partial<InsertWorkOrderLine>): Promise<WorkOrderLine | undefined>;
   deleteWorkOrderLine(id: string): Promise<void>;
+  getWorkOrderLine(id: string): Promise<WorkOrderLine | undefined>;
+  
+  // Work Order Objects
+  getWorkOrderObjects(workOrderId: string): Promise<WorkOrderObject[]>;
+  getWorkOrderObject(id: string): Promise<WorkOrderObject | undefined>;
+  createWorkOrderObject(data: InsertWorkOrderObject): Promise<WorkOrderObject>;
+  deleteWorkOrderObject(id: string): Promise<void>;
   
   // Simulation Scenarios
   getSimulationScenarios(tenantId: string): Promise<SimulationScenario[]>;
@@ -1000,6 +1008,27 @@ export class DatabaseStorage implements IStorage {
 
   async deleteWorkOrderLine(id: string): Promise<void> {
     await db.delete(workOrderLines).where(eq(workOrderLines.id, id));
+  }
+
+  // Work Order Objects
+  async getWorkOrderObjects(workOrderId: string): Promise<WorkOrderObject[]> {
+    return db.select().from(workOrderObjects)
+      .where(eq(workOrderObjects.workOrderId, workOrderId))
+      .orderBy(workOrderObjects.sortOrder);
+  }
+
+  async getWorkOrderObject(id: string): Promise<WorkOrderObject | undefined> {
+    const [obj] = await db.select().from(workOrderObjects).where(eq(workOrderObjects.id, id));
+    return obj || undefined;
+  }
+
+  async createWorkOrderObject(data: InsertWorkOrderObject): Promise<WorkOrderObject> {
+    const [obj] = await db.insert(workOrderObjects).values(data).returning();
+    return obj;
+  }
+
+  async deleteWorkOrderObject(id: string): Promise<void> {
+    await db.delete(workOrderObjects).where(eq(workOrderObjects.id, id));
   }
 
   // Simulation Scenarios

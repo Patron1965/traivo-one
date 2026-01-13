@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, index } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, index, unique } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -279,6 +279,22 @@ export const workOrderLines = pgTable("work_order_lines", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_work_order_lines_work_order_id").on(table.workOrderId)
+]);
+
+// Länkning av flera objekt till en arbetsorder
+export const workOrderObjects = pgTable("work_order_objects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  isPrimary: boolean("is_primary").default(false),
+  sortOrder: integer("sort_order").default(0),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_work_order_objects_work_order_id").on(table.workOrderId),
+  index("idx_work_order_objects_object_id").on(table.objectId),
+  unique("unq_work_order_objects_tenant_order_object").on(table.tenantId, table.workOrderId, table.objectId)
 ]);
 
 export const setupTimeLogs = pgTable("setup_time_logs", {
@@ -868,6 +884,7 @@ export const workOrdersRelations = relations(workOrders, ({ one, many }) => ({
   team: one(teams, { fields: [workOrders.teamId], references: [teams.id] }),
   simulationScenario: one(simulationScenarios, { fields: [workOrders.simulationScenarioId], references: [simulationScenarios.id] }),
   lines: many(workOrderLines),
+  objects: many(workOrderObjects),
 }));
 
 export const workOrderLinesRelations = relations(workOrderLines, ({ one }) => ({
@@ -877,6 +894,12 @@ export const workOrderLinesRelations = relations(workOrderLines, ({ one }) => ({
   priceListUsed: one(priceLists, { fields: [workOrderLines.priceListIdUsed], references: [priceLists.id] }),
 }));
 
+export const workOrderObjectsRelations = relations(workOrderObjects, ({ one }) => ({
+  tenant: one(tenants, { fields: [workOrderObjects.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [workOrderObjects.workOrderId], references: [workOrders.id] }),
+  object: one(objects, { fields: [workOrderObjects.objectId], references: [objects.id] }),
+}));
+
 export const insertTenantSchema = createInsertSchema(tenants).omit({ id: true, createdAt: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, createdAt: true });
 export const insertCustomerSchema = createInsertSchema(customers).omit({ id: true, createdAt: true });
@@ -884,6 +907,7 @@ export const insertObjectSchema = createInsertSchema(objects).omit({ id: true, c
 export const insertResourceSchema = createInsertSchema(resources).omit({ id: true, createdAt: true });
 export const insertWorkOrderSchema = createInsertSchema(workOrders).omit({ id: true, createdAt: true });
 export const insertWorkOrderLineSchema = createInsertSchema(workOrderLines).omit({ id: true, createdAt: true });
+export const insertWorkOrderObjectSchema = createInsertSchema(workOrderObjects).omit({ id: true, createdAt: true });
 export const insertSimulationScenarioSchema = createInsertSchema(simulationScenarios).omit({ id: true, createdAt: true });
 export const insertSetupTimeLogSchema = createInsertSchema(setupTimeLogs).omit({ id: true, createdAt: true });
 export const insertProcurementSchema = createInsertSchema(procurements).omit({ id: true, createdAt: true });
@@ -939,6 +963,8 @@ export type ResourceArticle = typeof resourceArticles.$inferSelect;
 export type InsertResourceArticle = z.infer<typeof insertResourceArticleSchema>;
 export type WorkOrderLine = typeof workOrderLines.$inferSelect;
 export type InsertWorkOrderLine = z.infer<typeof insertWorkOrderLineSchema>;
+export type WorkOrderObject = typeof workOrderObjects.$inferSelect;
+export type InsertWorkOrderObject = z.infer<typeof insertWorkOrderObjectSchema>;
 export type SimulationScenario = typeof simulationScenarios.$inferSelect;
 export type InsertSimulationScenario = z.infer<typeof insertSimulationScenarioSchema>;
 export type Vehicle = typeof vehicles.$inferSelect;
