@@ -9,13 +9,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag } from "lucide-react";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog } from "@shared/schema";
+import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine } from "@shared/schema";
 
 interface JobDetailModalProps {
   open: boolean;
@@ -55,6 +55,11 @@ interface WorkOrderMetadata {
     kategori: string | null;
     icon: string | null;
   };
+}
+
+interface WorkOrderLineWithDetails extends WorkOrderLine {
+  articleName?: string;
+  articleDescription?: string;
 }
 
 export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalProps) {
@@ -125,6 +130,17 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
   });
 
   const searchObjects = searchObjectsResponse?.objects || [];
+
+  // Work order lines query
+  const { data: workOrderLines = [], isLoading: linesLoading } = useQuery<WorkOrderLineWithDetails[]>({
+    queryKey: ["/api/work-orders", workOrderId, "lines"],
+    queryFn: async () => {
+      const res = await fetch(`/api/work-orders/${workOrderId}/lines`);
+      if (!res.ok) throw new Error("Failed to fetch work order lines");
+      return res.json();
+    },
+    enabled: !!workOrderId && open,
+  });
 
   // Metadata queries
   const { data: metadataTypes = [] } = useQuery<MetadataKatalog[]>({
@@ -312,8 +328,78 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="font-medium flex items-center gap-2">
+                  <ShoppingCart className="h-4 w-4" />
+                  Artiklar
+                </h4>
+              </div>
+
+              {linesLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : workOrderLines.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center border rounded-md">
+                  Inga artiklar kopplade till detta jobb.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {workOrderLines.map((line) => (
+                    <div 
+                      key={line.id}
+                      className="flex items-center justify-between p-3 border rounded-md"
+                      data-testid={`article-line-${line.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                        <div>
+                          <div className="font-medium text-sm" data-testid={`text-article-name-${line.id}`}>{line.articleName || "Artikel"}</div>
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span data-testid={`text-article-quantity-${line.id}`}>Antal: {line.quantity}</span>
+                            {line.resolvedPrice !== null && line.resolvedPrice > 0 && (
+                              <span className="flex items-center gap-1" data-testid={`text-article-price-${line.id}`}>
+                                <DollarSign className="h-3 w-3" />
+                                {(line.resolvedPrice / 100).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr
+                              </span>
+                            )}
+                            {line.resolvedProductionMinutes !== null && line.resolvedProductionMinutes > 0 && (
+                              <span className="flex items-center gap-1" data-testid={`text-article-time-${line.id}`}>
+                                <Clock className="h-3 w-3" />
+                                {line.resolvedProductionMinutes} min
+                              </span>
+                            )}
+                          </div>
+                          {line.notes && (
+                            <div className="text-xs text-muted-foreground mt-1" data-testid={`text-article-notes-${line.id}`}>{line.notes}</div>
+                          )}
+                        </div>
+                      </div>
+                      {line.isOptional && (
+                        <Badge variant="outline" className="text-xs" data-testid={`badge-optional-${line.id}`}>Valfri</Badge>
+                      )}
+                    </div>
+                  ))}
+                  
+                  {workOrderLines.length > 0 && (
+                    <div className="flex justify-end gap-4 pt-2 text-sm font-medium">
+                      <span data-testid="text-articles-total">
+                        Totalt: {(workOrderLines.reduce((sum, l) => sum + (l.resolvedPrice || 0) * (l.quantity || 1), 0) / 100).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr
+                      </span>
+                      <span className="text-muted-foreground" data-testid="text-articles-time">
+                        {workOrderLines.reduce((sum, l) => sum + (l.resolvedProductionMinutes || 0) * (l.quantity || 1), 0)} min
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium flex items-center gap-2">
                   <Package className="h-4 w-4" />
-                  Kopplade objekt
+                  Kopplade objekt {linkedObjects.length > 0 && `(${linkedObjects.length})`}
                 </h4>
                 <Popover open={objectPopoverOpen} onOpenChange={setObjectPopoverOpen}>
                   <PopoverTrigger asChild>

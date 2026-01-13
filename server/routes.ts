@@ -773,7 +773,18 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Work order not found" });
       }
       const lines = await storage.getWorkOrderLines(req.params.workOrderId);
-      res.json(lines);
+      
+      // Enrich with article details
+      const enrichedLines = await Promise.all(lines.map(async (line) => {
+        const article = line.articleId ? await storage.getArticle(line.articleId) : null;
+        return {
+          ...line,
+          articleName: article?.name || "Okänd artikel",
+          articleDescription: article?.description,
+        };
+      }));
+      
+      res.json(enrichedLines);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch work order lines" });
     }
