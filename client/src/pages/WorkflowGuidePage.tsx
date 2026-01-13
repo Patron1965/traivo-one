@@ -100,9 +100,12 @@ export default function WorkflowGuidePage() {
 
               <Section title="Eftermiddag">
                 <Step number={8} icon={<CheckCircle />} title="Granska slutförda jobb">
-                  Kontrollera protokoll och signatur från fält
+                  Kontrollera protokoll, signatur och foton från fält
                 </Step>
-                <Step number={9} icon={<Calendar />} title="Förbered nästa dag">
+                <Step number={9} icon={<FileText />} title="Hantera artiklar">
+                  Lägg till eller justera artiklar på arbetsordern innan fakturering
+                </Step>
+                <Step number={10} icon={<Calendar />} title="Förbered nästa dag">
                   AI föreslår optimerad ordning för morgondagens rutter
                 </Step>
               </Section>
@@ -177,8 +180,8 @@ export default function WorkflowGuidePage() {
                   <FeatureCard icon={<Coffee />} title="Rast">
                     Timer för pauser med automatisk loggning
                   </FeatureCard>
-                  <FeatureCard icon={<Camera />} title="Bilder">
-                    Dokumentera med kameran vid behov
+                  <FeatureCard icon={<Camera />} title="Kategoriserade foton">
+                    Dokumentera före/under/efter med kameran
                   </FeatureCard>
                   <FeatureCard icon={<Send />} title="Notis till kund">
                     "Tekniker på väg" med beräknad ankomsttid
@@ -225,8 +228,17 @@ export default function WorkflowGuidePage() {
                 </Step>
               </Section>
 
+              <Section title="Metadata & Inställningar">
+                <Step number={7} icon={<Settings />} title="Hantera metadatakatalog">
+                  Skapa och konfigurera metadata-typer (EAV-system) för objekt och jobb
+                </Step>
+                <Step number={8} icon={<FileText />} title="Artiklar & Fasthakning">
+                  Konfigurera vilka artiklar som automatiskt föreslås på olika objektnivåer
+                </Step>
+              </Section>
+
               <Section title="Rapporter">
-                <Step number={7} icon={<BarChart3 />} title="Rapporterings-dashboard">
+                <Step number={9} icon={<BarChart3 />} title="Rapporterings-dashboard">
                   Analysera KPI:er:
                   <ul className="list-disc list-inside mt-2 text-sm text-muted-foreground space-y-1">
                     <li>Antal ordrar per status</li>
@@ -267,19 +279,29 @@ export default function WorkflowGuidePage() {
                     description="Översikt över kommande besök och historik"
                   />
                   <PortalFeature 
+                    icon={<Users />} 
+                    title="Klusteröversikt" 
+                    description="Se din objekthierarki och fastigheter"
+                  />
+                  <PortalFeature 
+                    icon={<Calendar />} 
+                    title="Bokningar" 
+                    description="Begär ny tid, flytta eller extra service"
+                  />
+                  <PortalFeature 
+                    icon={<MessageSquare />} 
+                    title="Meddelanden" 
+                    description="Kontakta kundtjänst direkt i appen"
+                  />
+                  <PortalFeature 
                     icon={<FileText />} 
                     title="Fakturor" 
                     description="Se och ladda ner fakturor online"
                   />
                   <PortalFeature 
-                    icon={<FileText />} 
-                    title="Kontrakt" 
-                    description="Visa aktiva tjänsteavtal"
-                  />
-                  <PortalFeature 
-                    icon={<Calendar />} 
-                    title="Bokningar" 
-                    description="Begär ändring eller extra service"
+                    icon={<CheckCircle />} 
+                    title="Protokoll" 
+                    description="Se besöksprotokoll från utförda jobb"
                   />
                   <PortalFeature 
                     icon={<AlertTriangle />} 
@@ -288,18 +310,8 @@ export default function WorkflowGuidePage() {
                   />
                   <PortalFeature 
                     icon={<Bell />} 
-                    title="Inställningar" 
+                    title="Notiser" 
                     description="Välj hur du vill bli aviserad"
-                  />
-                  <PortalFeature 
-                    icon={<MessageSquare />} 
-                    title="Meddelanden" 
-                    description="Kontakta kundtjänst direkt"
-                  />
-                  <PortalFeature 
-                    icon={<CheckCircle />} 
-                    title="Protokoll" 
-                    description="Se besöksprotokoll från utförda jobb"
                   />
                 </div>
               </Section>
