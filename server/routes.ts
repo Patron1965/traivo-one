@@ -548,11 +548,18 @@ export async function registerRoutes(
   app.post("/api/work-orders", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
+      
+      // Convert scheduledDate string to Date object if present (use UTC to prevent timezone shift)
+      const bodyData = { ...req.body };
+      if (bodyData.scheduledDate && typeof bodyData.scheduledDate === 'string') {
+        bodyData.scheduledDate = new Date(bodyData.scheduledDate + 'T12:00:00Z');
+      }
+      
       // Default orderStatus to 'skapad' for new orders
       const data = insertWorkOrderSchema.parse({ 
         orderStatus: 'skapad',
         isSimulated: false,
-        ...req.body, 
+        ...bodyData, 
         tenantId 
       });
       const workOrder = await storage.createWorkOrder(data);
