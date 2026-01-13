@@ -37,6 +37,7 @@ import {
   Building,
   ListChecks,
   UserCheck,
+  Database,
 } from "lucide-react";
 
 const navigationGroups = [
@@ -88,6 +89,7 @@ const navigationGroups = [
       { title: "Upphandlingar", url: "/procurements", icon: FileText },
       { title: "Kundportal", url: "/customer-portal", icon: Building },
       { title: "Importera data", url: "/import", icon: Upload },
+      { title: "Metadatainställningar", url: "/metadata-settings", icon: Database },
       { title: "Systemöversikt", url: "/system-overview", icon: FileText },
       { title: "Inställningar", url: "/settings", icon: Settings },
     ],

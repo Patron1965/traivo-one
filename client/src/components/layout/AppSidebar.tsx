@@ -65,7 +65,7 @@ const settingsItems = [
   { title: "Kundmeddelanden", url: "/portal-messages", icon: MessageCircle },
   { title: "Importera data", url: "/import", icon: Upload },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText },
-  { title: "Metadatakatalog", url: "/metadata-settings", icon: Database },
+  { title: "Metadatainställningar", url: "/metadata-settings", icon: Database },
   { title: "Inställningar", url: "/settings", icon: Settings },
 ];
 

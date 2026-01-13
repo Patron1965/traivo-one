@@ -94,7 +94,7 @@ const avanceratItems = [
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
   { title: "Prediktiv planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
   { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer, description: "Tidsanalys" },
-  { title: "Metadata", url: "/metadata", icon: FileText, description: "Anpassade fält" },
+  { title: "Metadatainställningar", url: "/metadata-settings", icon: Database, description: "Metadatakatalog" },
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, description: "Avtalshantering" },
   { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
