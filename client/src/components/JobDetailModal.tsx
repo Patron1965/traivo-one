@@ -69,6 +69,10 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
   const [metadataPopoverOpen, setMetadataPopoverOpen] = useState(false);
   const [selectedMetadataType, setSelectedMetadataType] = useState<string>("");
   const [metadataValue, setMetadataValue] = useState<string>("");
+  const [showAddArticleDialog, setShowAddArticleDialog] = useState(false);
+  const [articleSearch, setArticleSearch] = useState("");
+  const [selectedArticleId, setSelectedArticleId] = useState<string>("");
+  const [articleQuantity, setArticleQuantity] = useState(1);
 
   const { data: workOrder, isLoading: workOrderLoading } = useQuery<WorkOrderWithDetails>({
     queryKey: ["/api/work-orders", workOrderId],
@@ -246,6 +250,56 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
     addObjectMutation.mutate(objectId);
   };
 
+  // Articles query and mutation
+  interface Article {
+    id: string;
+    name: string;
+    description?: string;
+    articleNumber?: string;
+    unitPrice?: number;
+    productionMinutes?: number;
+  }
+
+  const { data: articles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles"],
+    enabled: showAddArticleDialog,
+  });
+
+  const filteredArticles = useMemo(() => {
+    if (!articleSearch.trim()) return articles;
+    const search = articleSearch.toLowerCase();
+    return articles.filter(a => 
+      a.name?.toLowerCase().includes(search) || 
+      a.articleNumber?.toLowerCase().includes(search) ||
+      a.description?.toLowerCase().includes(search)
+    );
+  }, [articles, articleSearch]);
+
+  const addArticleMutation = useMutation({
+    mutationFn: async ({ articleId, quantity }: { articleId: string; quantity: number }) => {
+      return apiRequest("POST", `/api/work-orders/${workOrderId}/lines`, { articleId, quantity });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "lines"] });
+      setShowAddArticleDialog(false);
+      setSelectedArticleId("");
+      setArticleQuantity(1);
+      setArticleSearch("");
+      toast({ title: "Artikel tillagd", description: "Artikeln har lagts till på jobbet." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Fel", description: error.message || "Kunde inte lägga till artikeln.", variant: "destructive" });
+    },
+  });
+
+  const handleAddArticle = () => {
+    if (!selectedArticleId) {
+      toast({ title: "Välj artikel", description: "Du måste välja en artikel att lägga till.", variant: "destructive" });
+      return;
+    }
+    addArticleMutation.mutate({ articleId: selectedArticleId, quantity: articleQuantity });
+  };
+
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
       draft: "Utkast",
@@ -331,6 +385,15 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                   <ShoppingCart className="h-4 w-4" />
                   Artiklar
                 </h4>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowAddArticleDialog(true)}
+                  data-testid="button-add-article"
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  Lägg till artikel
+                </Button>
               </div>
 
               {linesLoading ? (
@@ -655,6 +718,104 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
           </div>
         )}
       </DialogContent>
+
+      <Dialog open={showAddArticleDialog} onOpenChange={setShowAddArticleDialog}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Lägg till artikel</DialogTitle>
+            <DialogDescription>
+              Sök och välj en artikel att lägga till på jobbet.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Sök artikel</label>
+              <Input
+                placeholder="Sök på namn, artikelnummer..."
+                value={articleSearch}
+                onChange={(e) => setArticleSearch(e.target.value)}
+                data-testid="input-article-search"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Välj artikel</label>
+              <ScrollArea className="h-[200px] border rounded-md">
+                <div className="p-2 space-y-1">
+                  {filteredArticles.length === 0 ? (
+                    <div className="text-sm text-muted-foreground text-center py-4">
+                      {articles.length === 0 ? "Laddar artiklar..." : "Inga artiklar hittades."}
+                    </div>
+                  ) : (
+                    filteredArticles.map((article) => (
+                      <div
+                        key={article.id}
+                        className={cn(
+                          "flex items-center justify-between p-2 rounded-md cursor-pointer hover-elevate",
+                          selectedArticleId === article.id && "bg-primary/10 border border-primary"
+                        )}
+                        onClick={() => setSelectedArticleId(article.id)}
+                        data-testid={`article-option-${article.id}`}
+                      >
+                        <div>
+                          <div className="font-medium text-sm">{article.name}</div>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            {article.articleNumber && <span>#{article.articleNumber}</span>}
+                            {article.unitPrice && (
+                              <span>{(article.unitPrice / 100).toLocaleString('sv-SE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kr</span>
+                            )}
+                            {article.productionMinutes && <span>{article.productionMinutes} min</span>}
+                          </div>
+                        </div>
+                        {selectedArticleId === article.id && (
+                          <Check className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Antal</label>
+              <Input
+                type="number"
+                min={1}
+                value={articleQuantity}
+                onChange={(e) => setArticleQuantity(Math.max(1, parseInt(e.target.value) || 1))}
+                data-testid="input-article-quantity"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <Button 
+                variant="outline" 
+                className="flex-1"
+                onClick={() => {
+                  setShowAddArticleDialog(false);
+                  setSelectedArticleId("");
+                  setArticleQuantity(1);
+                  setArticleSearch("");
+                }}
+                data-testid="button-cancel-add-article"
+              >
+                Avbryt
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={handleAddArticle}
+                disabled={!selectedArticleId || addArticleMutation.isPending}
+                data-testid="button-confirm-add-article"
+              >
+                {addArticleMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Lägg till
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }
