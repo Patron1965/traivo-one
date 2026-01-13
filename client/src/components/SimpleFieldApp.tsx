@@ -175,6 +175,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   const { data: workOrders = [], isLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
+    refetchInterval: 30000, // Poll every 30 seconds for new jobs
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({
