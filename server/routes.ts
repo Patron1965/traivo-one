@@ -523,7 +523,21 @@ export async function registerRoutes(
       const workOrder = await storage.getWorkOrder(req.params.id);
       const verified = verifyTenantOwnership(workOrder, tenantId);
       if (!verified) return res.status(404).json({ error: "Work order not found" });
-      res.json(verified);
+      
+      // Enrich with customer and object information
+      const [customer, object] = await Promise.all([
+        verified.customerId ? storage.getCustomer(verified.customerId) : null,
+        verified.objectId ? storage.getObject(verified.objectId) : null,
+      ]);
+      
+      res.json({
+        ...verified,
+        customerName: customer?.name,
+        customerPhone: customer?.phone,
+        customerEmail: customer?.email,
+        objectName: object?.name,
+        objectAddress: object?.address,
+      });
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch work order" });
     }
