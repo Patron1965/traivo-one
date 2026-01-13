@@ -731,3 +731,211 @@ export async function seedDefaultMetadataTypes(tenantId: string): Promise<void> 
     });
   }
 }
+
+// ============================================================================
+// WORK ORDER METADATA - CRUD operations for work order metadata
+// ============================================================================
+
+export interface WorkOrderMetadataWithKatalog {
+  id: string;
+  tenantId: string;
+  workOrderId: string;
+  metadataKatalogId: string;
+  vardeString: string | null;
+  vardeInteger: number | null;
+  vardeDecimal: number | null;
+  vardeBoolean: boolean | null;
+  vardeDatetime: Date | null;
+  vardeJson: any | null;
+  vardeReferens: string | null;
+  skapadAv: string | null;
+  uppdateradAv: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  katalog: {
+    id: string;
+    namn: string;
+    beskrivning: string | null;
+    datatyp: string;
+    kategori: string | null;
+    sortOrder: number | null;
+    icon: string | null;
+  };
+}
+
+export async function getWorkOrderMetadata(
+  workOrderId: string,
+  tenantId: string
+): Promise<WorkOrderMetadataWithKatalog[]> {
+  const results = await db
+    .select({
+      id: metadataVarden.id,
+      tenantId: metadataVarden.tenantId,
+      workOrderId: metadataVarden.workOrderId,
+      metadataKatalogId: metadataVarden.metadataKatalogId,
+      vardeString: metadataVarden.vardeString,
+      vardeInteger: metadataVarden.vardeInteger,
+      vardeDecimal: metadataVarden.vardeDecimal,
+      vardeBoolean: metadataVarden.vardeBoolean,
+      vardeDatetime: metadataVarden.vardeDatetime,
+      vardeJson: metadataVarden.vardeJson,
+      vardeReferens: metadataVarden.vardeReferens,
+      skapadAv: metadataVarden.skapadAv,
+      uppdateradAv: metadataVarden.uppdateradAv,
+      createdAt: metadataVarden.createdAt,
+      updatedAt: metadataVarden.updatedAt,
+      katalogId: metadataKatalog.id,
+      katalogNamn: metadataKatalog.namn,
+      katalogBeskrivning: metadataKatalog.beskrivning,
+      katalogDatatyp: metadataKatalog.datatyp,
+      katalogKategori: metadataKatalog.kategori,
+      katalogSortOrder: metadataKatalog.sortOrder,
+      katalogIcon: metadataKatalog.icon,
+    })
+    .from(metadataVarden)
+    .innerJoin(metadataKatalog, eq(metadataVarden.metadataKatalogId, metadataKatalog.id))
+    .where(and(
+      eq(metadataVarden.workOrderId, workOrderId),
+      eq(metadataVarden.tenantId, tenantId)
+    ))
+    .orderBy(metadataKatalog.kategori, metadataKatalog.sortOrder);
+
+  return results.map(row => ({
+    id: row.id,
+    tenantId: row.tenantId,
+    workOrderId: row.workOrderId!,
+    metadataKatalogId: row.metadataKatalogId,
+    vardeString: row.vardeString,
+    vardeInteger: row.vardeInteger,
+    vardeDecimal: row.vardeDecimal,
+    vardeBoolean: row.vardeBoolean,
+    vardeDatetime: row.vardeDatetime,
+    vardeJson: row.vardeJson,
+    vardeReferens: row.vardeReferens,
+    skapadAv: row.skapadAv,
+    uppdateradAv: row.uppdateradAv,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    katalog: {
+      id: row.katalogId,
+      namn: row.katalogNamn,
+      beskrivning: row.katalogBeskrivning,
+      datatyp: row.katalogDatatyp,
+      kategori: row.katalogKategori,
+      sortOrder: row.katalogSortOrder,
+      icon: row.katalogIcon,
+    },
+  }));
+}
+
+export async function createWorkOrderMetadata(data: {
+  tenantId: string;
+  workOrderId: string;
+  metadataTypNamn: string;
+  varde: any;
+  skapadAv?: string;
+}): Promise<MetadataVarden> {
+  // Verify metadata type exists for this tenant
+  const [metadataTyp] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.namn, data.metadataTypNamn),
+      eq(metadataKatalog.tenantId, data.tenantId)
+    ));
+
+  if (!metadataTyp) {
+    throw new Error(`Metadata type "${data.metadataTypNamn}" not found for this tenant`);
+  }
+
+  const vardeFields: any = {
+    vardeString: null,
+    vardeInteger: null,
+    vardeDecimal: null,
+    vardeBoolean: null,
+    vardeDatetime: null,
+    vardeJson: null,
+    vardeReferens: null,
+  };
+
+  // VALIDATION: Strict datatype validation for all types
+  switch (metadataTyp.datatyp) {
+    case 'string':
+      vardeFields.vardeString = String(data.varde);
+      break;
+    case 'integer':
+      vardeFields.vardeInteger = parseInt(String(data.varde));
+      if (isNaN(vardeFields.vardeInteger)) {
+        throw new Error(`Invalid integer value: ${data.varde}`);
+      }
+      break;
+    case 'decimal':
+      vardeFields.vardeDecimal = parseFloat(String(data.varde));
+      if (isNaN(vardeFields.vardeDecimal)) {
+        throw new Error(`Invalid decimal value: ${data.varde}`);
+      }
+      break;
+    case 'boolean':
+      if (typeof data.varde === 'boolean') {
+        vardeFields.vardeBoolean = data.varde;
+      } else if (data.varde === 'true' || data.varde === '1') {
+        vardeFields.vardeBoolean = true;
+      } else if (data.varde === 'false' || data.varde === '0') {
+        vardeFields.vardeBoolean = false;
+      } else {
+        throw new Error(`Invalid boolean value: ${data.varde}`);
+      }
+      break;
+    case 'datetime':
+      vardeFields.vardeDatetime = new Date(data.varde);
+      if (isNaN(vardeFields.vardeDatetime.getTime())) {
+        throw new Error(`Invalid datetime value: ${data.varde}`);
+      }
+      break;
+    case 'json':
+      try {
+        vardeFields.vardeJson = typeof data.varde === 'string' ? JSON.parse(data.varde) : data.varde;
+      } catch (e) {
+        throw new Error(`Invalid JSON value: ${data.varde}`);
+      }
+      break;
+    case 'referens':
+      vardeFields.vardeReferens = String(data.varde);
+      break;
+    default:
+      throw new Error(`Unknown datatype: ${metadataTyp.datatyp}`);
+  }
+
+  const [newMetadata] = await db.insert(metadataVarden).values({
+    tenantId: data.tenantId,
+    objektId: null, // Work order metadata has no objektId
+    workOrderId: data.workOrderId,
+    metadataKatalogId: metadataTyp.id,
+    ...vardeFields,
+    arvsNedat: false, // Work order metadata doesn't inherit
+    skapadAv: data.skapadAv,
+  }).returning();
+
+  return newMetadata;
+}
+
+export async function deleteWorkOrderMetadata(
+  metadataId: string,
+  tenantId: string
+): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.id, metadataId),
+      eq(metadataVarden.tenantId, tenantId)
+    ));
+
+  if (!existing || !existing.workOrderId) {
+    throw new Error("Work order metadata not found");
+  }
+
+  await db.delete(metadataVarden).where(
+    and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId))
+  );
+}

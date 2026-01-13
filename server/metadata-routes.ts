@@ -15,6 +15,9 @@ import {
   findObjectsWithMetadata,
   getAllMetadataTypes,
   seedDefaultMetadataTypes,
+  getWorkOrderMetadata,
+  createWorkOrderMetadata,
+  deleteWorkOrderMetadata,
 } from "./metadata-queries";
 import { getTenantIdWithFallback } from "./tenant-middleware";
 
@@ -399,5 +402,84 @@ metadataRouter.patch("/:id/inheritance", async (req: Request, res: Response) => 
   } catch (error) {
     console.error("Error updating metadata inheritance:", error);
     res.status(500).json({ error: "Kunde inte uppdatera ärvning" });
+  }
+});
+
+// ============================================================================
+// WORK ORDER METADATA ENDPOINTS
+// ============================================================================
+
+metadataRouter.get("/work-orders/:workOrderId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { workOrderId } = req.params;
+    const metadata = await getWorkOrderMetadata(workOrderId, tenantId);
+    res.json(metadata);
+  } catch (error) {
+    console.error("Error fetching work order metadata:", error);
+    res.status(500).json({ error: "Kunde inte hämta arbetsordermetadata" });
+  }
+});
+
+const createWorkOrderMetadataSchema = z.object({
+  metadataTypNamn: z.string(),
+  varde: z.any(),
+  skapadAv: z.string().optional(),
+});
+
+metadataRouter.post("/work-orders/:workOrderId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { workOrderId } = req.params;
+    const validated = createWorkOrderMetadataSchema.parse(req.body);
+
+    const newMetadata = await createWorkOrderMetadata({
+      tenantId,
+      workOrderId,
+      ...validated,
+    });
+
+    res.status(201).json(newMetadata);
+  } catch (error: any) {
+    console.error("Error creating work order metadata:", error);
+    if (error instanceof ZodError) {
+      return res.status(400).json({ 
+        error: "Valideringsfel", 
+        details: error.errors 
+      });
+    }
+    if (error.message?.includes('Invalid') || 
+        error.message?.includes('not found') ||
+        error.message?.includes('Unknown datatype')) {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Kunde inte skapa arbetsordermetadata" });
+  }
+});
+
+metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { id } = req.params;
+    await deleteWorkOrderMetadata(id, tenantId);
+    res.status(204).send();
+  } catch (error: any) {
+    console.error("Error deleting work order metadata:", error);
+    if (error.message?.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Kunde inte radera arbetsordermetadata" });
   }
 });
