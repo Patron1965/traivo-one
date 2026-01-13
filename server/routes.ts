@@ -549,10 +549,18 @@ export async function registerRoutes(
     try {
       const tenantId = getTenantIdWithFallback(req);
       
-      // Convert scheduledDate string to Date object if present (use UTC to prevent timezone shift)
+      // Convert scheduledDate string to Date object if present
       const bodyData = { ...req.body };
       if (bodyData.scheduledDate && typeof bodyData.scheduledDate === 'string') {
-        bodyData.scheduledDate = new Date(bodyData.scheduledDate + 'T12:00:00Z');
+        // Handle both ISO strings and simple date strings
+        const dateStr = bodyData.scheduledDate;
+        if (dateStr.includes('T')) {
+          // Already an ISO string - parse directly
+          bodyData.scheduledDate = new Date(dateStr);
+        } else {
+          // Simple date string (YYYY-MM-DD) - add time to prevent timezone shift
+          bodyData.scheduledDate = new Date(dateStr + 'T12:00:00Z');
+        }
       }
       
       // Default orderStatus to 'skapad' for new orders
@@ -589,9 +597,14 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Work order not found" });
       }
       
-      // Convert scheduledDate string to Date object if present (use UTC to prevent timezone shift)
+      // Convert scheduledDate string to Date object if present
       if (updateData.scheduledDate && typeof updateData.scheduledDate === 'string') {
-        updateData.scheduledDate = new Date(updateData.scheduledDate + 'T12:00:00Z');
+        const dateStr = updateData.scheduledDate;
+        if (dateStr.includes('T')) {
+          updateData.scheduledDate = new Date(dateStr);
+        } else {
+          updateData.scheduledDate = new Date(dateStr + 'T12:00:00Z');
+        }
       }
       
       const workOrder = await storage.updateWorkOrder(req.params.id, updateData);
