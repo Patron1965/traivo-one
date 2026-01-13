@@ -7,13 +7,15 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject } from "@shared/schema";
+import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog } from "@shared/schema";
 
 interface JobDetailModalProps {
   open: boolean;
@@ -34,10 +36,34 @@ interface WorkOrderObjectWithDetails extends WorkOrderObject {
   objectType?: string;
 }
 
+interface WorkOrderMetadata {
+  id: string;
+  workOrderId: string;
+  metadataKatalogId: string;
+  vardeString: string | null;
+  vardeInteger: number | null;
+  vardeDecimal: number | null;
+  vardeBoolean: boolean | null;
+  vardeDatetime: string | null;
+  vardeJson: any | null;
+  vardeReferens: string | null;
+  katalog: {
+    id: string;
+    namn: string;
+    beskrivning: string | null;
+    datatyp: string;
+    kategori: string | null;
+    icon: string | null;
+  };
+}
+
 export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalProps) {
   const { toast } = useToast();
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
+  const [metadataPopoverOpen, setMetadataPopoverOpen] = useState(false);
+  const [selectedMetadataType, setSelectedMetadataType] = useState<string>("");
+  const [metadataValue, setMetadataValue] = useState<string>("");
 
   const { data: workOrder, isLoading: workOrderLoading } = useQuery<WorkOrderWithDetails>({
     queryKey: ["/api/work-orders", workOrderId],
@@ -99,6 +125,73 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
   });
 
   const searchObjects = searchObjectsResponse?.objects || [];
+
+  // Metadata queries
+  const { data: metadataTypes = [] } = useQuery<MetadataKatalog[]>({
+    queryKey: ["/api/metadata/types"],
+    enabled: open,
+  });
+
+  const { data: workOrderMetadata = [], isLoading: metadataLoading } = useQuery<WorkOrderMetadata[]>({
+    queryKey: ["/api/metadata/work-orders", workOrderId],
+    queryFn: async () => {
+      const res = await fetch(`/api/metadata/work-orders/${workOrderId}`);
+      if (!res.ok) throw new Error("Failed to fetch metadata");
+      return res.json();
+    },
+    enabled: !!workOrderId && open,
+  });
+
+  const addMetadataMutation = useMutation({
+    mutationFn: async ({ metadataTypNamn, varde }: { metadataTypNamn: string; varde: string }) => {
+      return apiRequest("POST", `/api/metadata/work-orders/${workOrderId}`, { metadataTypNamn, varde });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/work-orders", workOrderId] });
+      setSelectedMetadataType("");
+      setMetadataValue("");
+      setMetadataPopoverOpen(false);
+      toast({ title: "Metadata tillagd", description: "Metadata har lagts till på jobbet." });
+    },
+    onError: (error: any) => {
+      toast({ title: "Fel", description: error.message || "Kunde inte lägga till metadata.", variant: "destructive" });
+    },
+  });
+
+  const removeMetadataMutation = useMutation({
+    mutationFn: async (metadataId: string) => {
+      return apiRequest("DELETE", `/api/metadata/work-orders/metadata/${metadataId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/work-orders", workOrderId] });
+      toast({ title: "Metadata borttagen", description: "Metadata har tagits bort från jobbet." });
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte ta bort metadata.", variant: "destructive" });
+    },
+  });
+
+  const handleAddMetadata = () => {
+    if (!selectedMetadataType || !metadataValue.trim()) {
+      toast({ title: "Fyll i alla fält", description: "Välj metadatatyp och ange värde.", variant: "destructive" });
+      return;
+    }
+    addMetadataMutation.mutate({ metadataTypNamn: selectedMetadataType, varde: metadataValue });
+  };
+
+  const getMetadataDisplayValue = (metadata: WorkOrderMetadata) => {
+    const { katalog } = metadata;
+    switch (katalog.datatyp) {
+      case 'string': return metadata.vardeString || '';
+      case 'integer': return metadata.vardeInteger?.toString() || '';
+      case 'decimal': return metadata.vardeDecimal?.toString() || '';
+      case 'boolean': return metadata.vardeBoolean ? 'Ja' : 'Nej';
+      case 'datetime': return metadata.vardeDatetime ? format(new Date(metadata.vardeDatetime), 'PPP', { locale: sv }) : '';
+      case 'json': return JSON.stringify(metadata.vardeJson);
+      case 'referens': return metadata.vardeReferens || '';
+      default: return '';
+    }
+  };
 
   const addObjectMutation = useMutation({
     mutationFn: async (objectId: string) => {
@@ -335,6 +428,138 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                 <div className="text-xs text-muted-foreground">
                   Primärt objekt: {workOrder.objectName || workOrder.objectId}
                 </div>
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium flex items-center gap-2">
+                  <Tag className="h-4 w-4" />
+                  Metadata
+                </h4>
+                <Popover open={metadataPopoverOpen} onOpenChange={setMetadataPopoverOpen}>
+                  <PopoverTrigger asChild>
+                    <Button size="sm" variant="outline" data-testid="button-add-metadata">
+                      <Plus className="h-4 w-4 mr-1" />
+                      Lägg till metadata
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-[350px]" align="end">
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Metadatatyp</label>
+                        <Select value={selectedMetadataType} onValueChange={(val) => { setSelectedMetadataType(val); setMetadataValue(""); }}>
+                          <SelectTrigger data-testid="select-metadata-type">
+                            <SelectValue placeholder="Välj typ..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {metadataTypes.map((type) => (
+                              <SelectItem key={type.id} value={type.namn}>
+                                {type.namn}
+                                {type.beskrivning && (
+                                  <span className="text-muted-foreground ml-2">- {type.beskrivning}</span>
+                                )}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-sm font-medium">Värde</label>
+                        {(() => {
+                          const selectedType = metadataTypes.find(t => t.namn === selectedMetadataType);
+                          const datatype = selectedType?.datatyp || 'string';
+                          
+                          if (datatype === 'boolean') {
+                            return (
+                              <Select value={metadataValue} onValueChange={setMetadataValue}>
+                                <SelectTrigger data-testid="input-metadata-value">
+                                  <SelectValue placeholder="Välj värde..." />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="true">Ja</SelectItem>
+                                  <SelectItem value="false">Nej</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            );
+                          }
+                          
+                          return (
+                            <Input
+                              type={datatype === 'integer' || datatype === 'decimal' ? 'number' : 'text'}
+                              step={datatype === 'decimal' ? '0.01' : undefined}
+                              placeholder={
+                                datatype === 'integer' ? 'Ange heltal...' :
+                                datatype === 'decimal' ? 'Ange decimaltal...' :
+                                datatype === 'datetime' ? 'ÅÅÅÅ-MM-DD' :
+                                'Ange värde...'
+                              }
+                              value={metadataValue}
+                              onChange={(e) => setMetadataValue(e.target.value)}
+                              data-testid="input-metadata-value"
+                            />
+                          );
+                        })()}
+                      </div>
+                      <Button
+                        onClick={handleAddMetadata}
+                        disabled={addMetadataMutation.isPending || !selectedMetadataType || !metadataValue.trim()}
+                        className="w-full"
+                        data-testid="button-confirm-add-metadata"
+                      >
+                        {addMetadataMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        Lägg till
+                      </Button>
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              </div>
+
+              {metadataLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : workOrderMetadata.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center border rounded-md">
+                  Ingen metadata kopplad till detta jobb ännu.
+                  <br />
+                  <span className="text-xs">Klicka "Lägg till metadata" för att lägga till.</span>
+                </div>
+              ) : (
+                <ScrollArea className="h-[150px]">
+                  <div className="space-y-2">
+                    {workOrderMetadata.map((meta) => (
+                      <div 
+                        key={meta.id}
+                        className="flex items-center justify-between p-3 border rounded-md hover-elevate"
+                      >
+                        <div className="flex items-center gap-3">
+                          <Tag className="h-4 w-4 text-muted-foreground" />
+                          <div>
+                            <div className="font-medium text-sm">{meta.katalog.namn}</div>
+                            <div className="text-xs text-muted-foreground">{getMetadataDisplayValue(meta)}</div>
+                            {meta.katalog.kategori && (
+                              <Badge variant="outline" className="text-xs mt-1">
+                                {meta.katalog.kategori}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => removeMetadataMutation.mutate(meta.id)}
+                          disabled={removeMetadataMutation.isPending}
+                          data-testid={`button-remove-metadata-${meta.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
               )}
             </div>
           </div>

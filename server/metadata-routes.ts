@@ -256,7 +256,7 @@ metadataRouter.get("/objects/:objectId/crossfertilized/:typNamn", async (req: Re
 const createMetadataSchema = z.object({
   objektId: z.string(),
   metadataTypNamn: z.string(),
-  varde: z.any(),
+  varde: z.any().refine(val => val !== undefined, { message: "varde is required" }),
   arvsNedat: z.boolean().optional(),
   koppladTillMetadataId: z.string().nullable().optional(),
   skapadAv: z.string().optional(),
@@ -273,7 +273,12 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
 
     const newMetadata = await createMetadata({
       tenantId,
-      ...validated,
+      objektId: validated.objektId,
+      metadataTypNamn: validated.metadataTypNamn,
+      varde: validated.varde,
+      arvsNedat: validated.arvsNedat,
+      koppladTillMetadataId: validated.koppladTillMetadataId,
+      skapadAv: validated.skapadAv,
     });
 
     res.status(201).json(newMetadata);
@@ -427,7 +432,7 @@ metadataRouter.get("/work-orders/:workOrderId", async (req: Request, res: Respon
 
 const createWorkOrderMetadataSchema = z.object({
   metadataTypNamn: z.string(),
-  varde: z.any(),
+  varde: z.any().refine(val => val !== undefined, { message: "varde is required" }),
   skapadAv: z.string().optional(),
 });
 
@@ -444,7 +449,9 @@ metadataRouter.post("/work-orders/:workOrderId", async (req: Request, res: Respo
     const newMetadata = await createWorkOrderMetadata({
       tenantId,
       workOrderId,
-      ...validated,
+      metadataTypNamn: validated.metadataTypNamn,
+      varde: validated.varde,
+      skapadAv: validated.skapadAv,
     });
 
     res.status(201).json(newMetadata);
