@@ -26,6 +26,7 @@ import { registerObjectStorageRoutes } from "./replit_integrations/object_storag
 import { anomalyMonitor } from "./anomaly-monitor";
 import { sendEmail } from "./replit_integrations/resend";
 import { createInheritanceProcessor } from "./inheritance-processor";
+import { metadataRouter } from "./metadata-routes";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -130,6 +131,9 @@ export async function registerRoutes(
   // MCP Server endpoints
   app.get("/mcp/sse", handleMcpSse);
   app.post("/mcp/messages", handleMcpMessage);
+
+  // Metadata EAV routes (Mats vision)
+  app.use("/api/metadata", metadataRouter);
 
   app.get("/api/customers", async (req, res) => {
     try {

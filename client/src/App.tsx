@@ -41,6 +41,7 @@ import SystemDashboardPage from "@/pages/SystemDashboardPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
 import ProjectReportPage from "@/pages/ProjectReportPage";
 import MetadataPage from "@/pages/MetadataPage";
+import MetadataSettingsPage from "@/pages/MetadataSettingsPage";
 import FortnoxSettingsPage from "@/pages/FortnoxSettingsPage";
 import MyTasksPage from "@/pages/MyTasksPage";
 import ArchitecturePage from "@/pages/architecture";
@@ -101,6 +102,7 @@ function Router() {
       <Route path="/simple" component={MobileFieldPage} />
       <Route path="/project-report" component={ProjectReportPage} />
       <Route path="/metadata" component={MetadataPage} />
+      <Route path="/metadata-settings" component={MetadataSettingsPage} />
       <Route path="/fortnox" component={FortnoxSettingsPage} />
       <Route path="/architecture" component={ArchitecturePage} />
       <Route path="/order-concepts" component={OrderConceptsPage} />

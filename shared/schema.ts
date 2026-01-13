@@ -2096,3 +2096,143 @@ export const customerNotificationSettings = pgTable("customer_notification_setti
 export const insertCustomerNotificationSettingsSchema = createInsertSchema(customerNotificationSettings).omit({ id: true, updatedAt: true });
 export type CustomerNotificationSettings = typeof customerNotificationSettings.$inferSelect;
 export type InsertCustomerNotificationSettings = z.infer<typeof insertCustomerNotificationSettingsSchema>;
+
+// ============================================================================
+// MATS VISION: OBJEKTDATA & METADATA-SYSTEM (EAV-modell)
+// Separerar objektdata (minimalistisk container) från metadata (flexibel EAV)
+// Kompletterar det befintliga metadataDefinitions/objectMetadata-systemet
+// ============================================================================
+
+// Tillåtna datatyper för metadata
+export const METADATA_DATA_TYPES = [
+  'string',     // Textvärden
+  'integer',    // Heltal
+  'decimal',    // Decimaltal
+  'boolean',    // Sant/falskt
+  'datetime',   // Datum/tid
+  'json',       // JSON-objekt
+  'referens'    // Referens till annan tabell
+] as const;
+export type MetadataDataType = typeof METADATA_DATA_TYPES[number];
+
+// Metadatakatalog - utökad katalog över metadatatyper (Mats vision)
+export const metadataKatalog = pgTable("metadata_katalog", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  namn: varchar("namn", { length: 100 }).notNull(),
+  beskrivning: text("beskrivning"),
+  datatyp: text("datatyp").notNull(), // string, integer, decimal, boolean, datetime, json, referens
+  
+  // För referens-datatyper: vilken tabell pekar de på?
+  referensTabell: varchar("referens_tabell", { length: 100 }),
+  
+  // Är denna metadata logisk (används i systemlogik) eller ologisk (bara info)?
+  arLogisk: boolean("ar_logisk").default(true).notNull(),
+  
+  // Standardvärde för om metadata ska ärvas nedåt i hierarkin
+  standardArvs: boolean("standard_arvs").default(false).notNull(),
+  
+  // Kategori för gruppering i UI: geografi, kontakt, artikel, administrativ, beskrivning
+  kategori: text("kategori").default("annat"),
+  
+  // Ordning i UI
+  sortOrder: integer("sort_order").default(0),
+  
+  // Ikon för visualisering
+  icon: text("icon"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn)
+]);
+
+// Metadatavärden - EAV-modell med typade värdefält och korsbefruktning
+export const metadataVarden = pgTable("metadata_varden", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objektId: varchar("objekt_id").references(() => objects.id).notNull(),
+  metadataKatalogId: varchar("metadata_katalog_id").references(() => metadataKatalog.id).notNull(),
+  
+  // Värdefält - endast ett ska ha värde baserat på datatyp
+  vardeString: text("varde_string"),
+  vardeInteger: integer("varde_integer"),
+  vardeDecimal: real("varde_decimal"),
+  vardeBoolean: boolean("varde_boolean"),
+  vardeDatetime: timestamp("varde_datetime"),
+  vardeJson: jsonb("varde_json"),
+  vardeReferens: varchar("varde_referens", { length: 255 }),
+  
+  // === ÄRVNINGSKONFIGURATION ===
+  // Ska denna metadata ärvas nedåt till barn i hierarkin?
+  arvsNedat: boolean("arvs_nedat").default(false).notNull(),
+  // Stoppa vidare ärvning (överskriver förälderns värde men ärver inte vidare)
+  stoppaVidareArvning: boolean("stoppa_vidare_arvning").default(false).notNull(),
+  
+  // === KORSBEFRUKTNING ===
+  // Kan denna metadata kopplas till annan metadata? (t.ex. Antal kopplad till Artikel)
+  koppladTillMetadataId: varchar("kopplad_till_metadata_id"),
+  
+  // Vem skapade/uppdaterade
+  skapadAv: varchar("skapad_av", { length: 100 }),
+  uppdateradAv: varchar("uppdaterad_av", { length: 100 }),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_metadata_varden_objekt").on(table.objektId),
+  index("idx_metadata_varden_katalog").on(table.metadataKatalogId),
+  index("idx_metadata_varden_objekt_katalog").on(table.objektId, table.metadataKatalogId),
+  index("idx_metadata_varden_koppling").on(table.koppladTillMetadataId)
+]);
+
+// Relationer för det nya metadata-systemet
+export const metadataKatalogRelations = relations(metadataKatalog, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [metadataKatalog.tenantId], references: [tenants.id] }),
+  varden: many(metadataVarden),
+}));
+
+export const metadataVardenRelations = relations(metadataVarden, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [metadataVarden.tenantId], references: [tenants.id] }),
+  objekt: one(objects, { fields: [metadataVarden.objektId], references: [objects.id] }),
+  katalog: one(metadataKatalog, { fields: [metadataVarden.metadataKatalogId], references: [metadataKatalog.id] }),
+  // Korsbefruktning via koppladTillMetadataId (self-reference handled separately)
+}));
+
+// Schemas och types för det nya metadata-systemet
+export const insertMetadataKatalogSchema = createInsertSchema(metadataKatalog).omit({ id: true, createdAt: true });
+export type MetadataKatalog = typeof metadataKatalog.$inferSelect;
+export type InsertMetadataKatalog = z.infer<typeof insertMetadataKatalogSchema>;
+
+export const insertMetadataVardenSchema = createInsertSchema(metadataVarden).omit({ id: true, createdAt: true, updatedAt: true });
+export type MetadataVarden = typeof metadataVarden.$inferSelect;
+export type InsertMetadataVarden = z.infer<typeof insertMetadataVardenSchema>;
+
+// Utökade typer för metadata med ärvningsinformation
+export interface MetadataVardenWithKatalog extends MetadataVarden {
+  katalog: MetadataKatalog;
+  source: 'local' | 'inherited';
+  fromObject?: {
+    id: string;
+    namn: string;
+    level: number;
+  };
+}
+
+export interface ObjectWithAllMetadataEAV {
+  id: string;
+  name: string;
+  objectType: string;
+  parentId: string | null;
+  metadata: MetadataVardenWithKatalog[];
+}
+
+// Geografisk position med prioriteringsordning
+export interface GeographicPosition {
+  typ: 'GPS' | 'What3words' | 'Adress';
+  precision: 'exakt' | 'medel' | 'grov';
+  varde: string;
+  fromObject?: {
+    id: string;
+    namn: string;
+  };
+}
