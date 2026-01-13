@@ -100,7 +100,7 @@ const objectTypeLabels: Record<string, string> = Object.fromEntries(
 );
 
 const hookLevelOptions = [
-  { value: "", label: "Ingen fasthakning" },
+  { value: "none", label: "Ingen fasthakning" },
   { value: "koncern", label: "Koncern" },
   { value: "brf", label: "BRF" },
   { value: "fastighet", label: "Fastighet" },
@@ -113,7 +113,7 @@ const hookLevelOptions = [
 ];
 
 const hookLevelLabels: Record<string, string> = Object.fromEntries(
-  hookLevelOptions.filter(o => o.value).map(o => [o.value, o.label])
+  hookLevelOptions.filter(o => o.value !== "none").map(o => [o.value, o.label])
 );
 
 interface HookConditions {
@@ -424,7 +424,7 @@ export default function ArticlesPage() {
                 <SelectContent>
                   <SelectItem value="all">Alla</SelectItem>
                   <SelectItem value="none">Utan fasthakning</SelectItem>
-                  {hookLevelOptions.filter(o => o.value).map(level => (
+                  {hookLevelOptions.filter(o => o.value !== "none").map(level => (
                     <SelectItem key={level.value} value={level.value}>
                       {level.label}
                     </SelectItem>
@@ -693,7 +693,7 @@ export default function ArticlesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     {hookLevelOptions.map(level => (
-                      <SelectItem key={level.value || "none"} value={level.value}>
+                      <SelectItem key={level.value} value={level.value}>
                         {level.label}
                       </SelectItem>
                     ))}
