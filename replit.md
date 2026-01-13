@@ -49,6 +49,16 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
   - **Dynamic (dynamisk):** Values calculated at runtime based on context
 - **Article Hook System:** Enables automatic article suggestions for objects based on their hierarchy level and conditions (e.g., container types, access codes).
 - **Fortnox Integration:** Full integration with the Fortnox accounting system, including OAuth, entity mapping (cost centers, projects, customers, articles), and an invoice export pipeline with multi-payer support and error handling.
+- **EAV Metadata System (Mats's Vision):** Flexible Entity-Attribute-Value system for object metadata:
+  - **metadataKatalog:** Type definitions with support for string, integer, decimal, boolean, datetime, json, and referens datatypes
+  - **metadataVarden:** Actual values linked to objects with typed value columns
+  - **Inheritance:** Recursive CTE queries resolve metadata from parent objects respecting `arvsNedat` (inherit downward) and `stoppaVidareArvning` (stop further inheritance)
+  - **Korsbefruktning:** Cross-fertilization links metadata to other metadata via `koppladTillMetadataId`
+  - **Geographic Position Priority:** GPS (exakt) → What3words (medel) → Adress (grov)
+  - **MetadataPanel:** Component for viewing/editing metadata on objects with clear local/inherited distinction
+  - **MetadataSettingsPage:** Admin interface for managing the metadata catalog at `/metadata-settings`
+  - **Tenant Isolation:** Full security validation ensures objects and metadata types belong to user's tenant
+  - **Datatype Validation:** Strict parsing for all datatypes with proper error handling (400 responses)
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
