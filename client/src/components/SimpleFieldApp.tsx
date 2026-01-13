@@ -9,7 +9,7 @@ import {
   Loader2, AlertTriangle, Navigation, Phone,
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
-  User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind
+  User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { useOfflineSupport } from "@/hooks/useOfflineSupport";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import { PhotoCapture } from "@/components/PhotoCapture";
 import { SignatureCapture } from "@/components/SignatureCapture";
@@ -69,6 +70,24 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const breakTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [showCompletedDialog, setShowCompletedDialog] = useState(false);
+  const [dismissedInstallBanner, setDismissedInstallBanner] = useState(() => {
+    try {
+      return localStorage.getItem("unicorn_pwa_install_dismissed") === "true";
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissInstallBanner = () => {
+    setDismissedInstallBanner(true);
+    try {
+      localStorage.setItem("unicorn_pwa_install_dismissed", "true");
+    } catch {
+      // localStorage not available
+    }
+  };
+
+  const { canInstall, isInstalled, isIOS, promptInstall } = usePWAInstall();
 
   const handleNotificationRef = useRef<((notification: Notification) => void) | null>(null);
   
@@ -1205,6 +1224,61 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           total={completedCount + todayJobs.length} 
           compact 
         />
+
+        {/* PWA Install Banner */}
+        {!isInstalled && !dismissedInstallBanner && (canInstall || isIOS) && (
+          <Card className="bg-primary/10 border-primary/20">
+            <CardContent className="py-3 px-4">
+              <div className="flex items-center gap-3">
+                <div className="flex-shrink-0 w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                  <Download className="h-5 w-5 text-primary-foreground" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-sm">Installera fältappen</p>
+                  <p className="text-xs text-muted-foreground">
+                    {isIOS ? "Tryck dela → Lägg till på hemskärmen" : "Snabbare åtkomst från hemskärmen"}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {canInstall && (
+                    <Button
+                      size="sm"
+                      onClick={promptInstall}
+                      data-testid="button-install-pwa"
+                    >
+                      Installera
+                    </Button>
+                  )}
+                  {isIOS && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        toast({
+                          title: "Lägg till på hemskärmen",
+                          description: "Tryck på dela-ikonen längst ner och välj 'Lägg till på hemskärmen'",
+                        });
+                      }}
+                      data-testid="button-ios-install-help"
+                    >
+                      <Share className="h-4 w-4 mr-1" />
+                      Hur?
+                    </Button>
+                  )}
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={handleDismissInstallBanner}
+                    data-testid="button-dismiss-install-banner"
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       <FieldAIAssistant 

@@ -51,6 +51,10 @@ import {
   ChevronUp,
   Wrench,
   X,
+  Share2,
+  Copy,
+  Check,
+  Smartphone,
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -60,6 +64,122 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, startOfWeek, endOfWeek, addDays, isWithinInterval, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrder, Article, ResourceArticle } from "@shared/schema";
+
+function ShareFieldAppButton() {
+  const [copied, setCopied] = useState(false);
+  const [showDialog, setShowDialog] = useState(false);
+  const { toast } = useToast();
+  
+  const fieldAppUrl = `${window.location.origin}/field`;
+  
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(fieldAppUrl);
+      setCopied(true);
+      toast({ title: "Länk kopierad!", description: "Klistra in i SMS eller e-post" });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({ title: "Kunde inte kopiera", variant: "destructive" });
+    }
+  };
+  
+  const handleShare = async () => {
+    const shareData = {
+      title: "Unicorn Fältapp",
+      text: "Öppna Unicorn Fältapp",
+      url: fieldAppUrl,
+    };
+    
+    if (navigator.share && navigator.canShare?.(shareData)) {
+      try {
+        await navigator.share(shareData);
+      } catch (e) {
+        if ((e as Error).name !== "AbortError") {
+          handleCopy();
+        }
+      }
+    } else {
+      await handleCopy();
+      toast({
+        title: "Länk kopierad!",
+        description: "Klistra in länken i SMS eller e-post för att dela.",
+      });
+    }
+  };
+  
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button 
+            variant="outline" 
+            onClick={() => setShowDialog(true)}
+            data-testid="button-share-field-app"
+          >
+            <Smartphone className="h-4 w-4 mr-2" />
+            Dela fältappen
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>Skicka länk till chaufförer/tekniker</p>
+        </TooltipContent>
+      </Tooltip>
+      
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Smartphone className="h-5 w-5" />
+              Dela fältappen
+            </DialogTitle>
+            <DialogDescription>
+              Skicka denna länk till chaufförer och tekniker så de kan använda fältappen på sin mobil
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="flex items-center gap-2">
+              <Input 
+                value={fieldAppUrl} 
+                readOnly 
+                className="font-mono text-sm"
+                data-testid="input-field-app-url"
+              />
+              <Button 
+                size="icon" 
+                variant="outline" 
+                onClick={handleCopy}
+                data-testid="button-copy-field-url"
+              >
+                {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
+              </Button>
+            </div>
+            
+            <div className="flex flex-col gap-2">
+              <Button onClick={handleShare} variant="outline" className="w-full" data-testid="button-share-field-url">
+                <Share2 className="h-4 w-4 mr-2" />
+                Dela länk
+              </Button>
+              <Button onClick={handleCopy} className="w-full" data-testid="button-copy-field-url-2">
+                <Copy className="h-4 w-4 mr-2" />
+                Kopiera länk
+              </Button>
+            </div>
+            
+            <div className="rounded-lg bg-muted p-3 text-sm text-muted-foreground">
+              <p className="font-medium mb-1">Tips för chauffören:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Öppna länken i mobilen</li>
+                <li>Logga in med sitt konto</li>
+                <li>Tryck "Lägg till på hemskärmen" för app-känsla</li>
+              </ol>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
 
 const competencyOptions = [
   { value: "karltomning", label: "Kärltömning" },
@@ -425,10 +545,13 @@ export default function ResourcesPage() {
           <h1 className="text-2xl font-semibold">Resurser</h1>
           <p className="text-sm text-muted-foreground">{resources.length} tekniker registrerade</p>
         </div>
-        <Button onClick={openCreateDialog} data-testid="button-add-resource">
-          <Plus className="h-4 w-4 mr-2" />
-          Lägg till resurs
-        </Button>
+        <div className="flex gap-2">
+          <ShareFieldAppButton />
+          <Button onClick={openCreateDialog} data-testid="button-add-resource">
+            <Plus className="h-4 w-4 mr-2" />
+            Lägg till resurs
+          </Button>
+        </div>
       </div>
 
       <AICard

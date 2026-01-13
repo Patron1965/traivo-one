@@ -5,7 +5,7 @@ export default function MobileFieldPage() {
   const { user } = useAuth();
   
   return (
-    <div className="h-[calc(100vh-4rem)]">
+    <div className="h-screen">
       <SimpleFieldApp resourceId={user?.id} />
     </div>
   );

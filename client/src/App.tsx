@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -62,6 +63,7 @@ import PortalContractsPage from "@/pages/portal/PortalContractsPage";
 import PortalSettingsPage from "@/pages/portal/PortalSettingsPage";
 import PortalIssuesPage from "@/pages/portal/PortalIssuesPage";
 import AIPlanningPage from "@/pages/AIPlanningPage";
+import FieldLoginPage from "@/pages/FieldLoginPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -135,9 +137,47 @@ function PortalRouter() {
   );
 }
 
+function FieldAppContent() {
+  return (
+    <ErrorBoundary>
+      <div className="min-h-screen bg-background">
+        <MobileFieldPage />
+      </div>
+    </ErrorBoundary>
+  );
+}
+
+function useFieldLoginRedirect() {
+  const [location, setLocation] = useLocation();
+  const { isAuthenticated } = useAuth();
+  
+  useEffect(() => {
+    const fieldRedirect = sessionStorage.getItem("field_login_redirect");
+    if (fieldRedirect && isAuthenticated && location !== fieldRedirect) {
+      sessionStorage.removeItem("field_login_redirect");
+      setLocation(fieldRedirect);
+    }
+  }, [isAuthenticated, setLocation, location]);
+  
+  return sessionStorage.getItem("field_login_redirect") !== null;
+}
+
 function AppContent() {
   const [location] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
+  
+  const isPendingFieldRedirect = useFieldLoginRedirect();
+  
+  if (isPendingFieldRedirect) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="flex flex-col items-center gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-muted-foreground">Öppnar fältappen...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (location.startsWith("/portal")) {
     return (
@@ -145,6 +185,26 @@ function AppContent() {
         <PortalRouter />
       </ErrorBoundary>
     );
+  }
+
+  // Standalone field app - no navigation, just the field app
+  if (location === "/field" || location === "/mobile" || location === "/simple") {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Laddar fältappen...</p>
+          </div>
+        </div>
+      );
+    }
+    
+    if (!isAuthenticated) {
+      return <FieldLoginPage />;
+    }
+    
+    return <FieldAppContent />;
   }
 
   if (isLoading) {
