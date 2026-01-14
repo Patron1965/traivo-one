@@ -7519,6 +7519,39 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       res.status(500).json({ error: "Kunde inte skicka notifiering" });
     }
   });
+  
+  app.post("/api/notifications/send-schedule/:resourceId", async (req, res) => {
+    try {
+      const { sendScheduleToResource } = await import("./customer-notifications");
+      const tenantId = getTenantIdWithFallback(req);
+      const { resourceId } = req.params;
+      const { jobs, dateRange, fieldAppUrl } = req.body;
+      
+      const resource = await storage.getResource(resourceId);
+      if (!resource || !verifyTenantOwnership(resource, tenantId)) {
+        return res.status(404).json({ error: "Resurs hittades inte" });
+      }
+      
+      if (!resource.email) {
+        return res.status(400).json({ error: "Resursen har ingen e-postadress registrerad" });
+      }
+      
+      const result = await sendScheduleToResource(
+        tenantId,
+        resourceId,
+        resource.name,
+        resource.email,
+        jobs,
+        dateRange,
+        fieldAppUrl
+      );
+      
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to send schedule to resource:", error);
+      res.status(500).json({ error: "Kunde inte skicka schema till resurs" });
+    }
+  });
 
   // ============================================
   // CUSTOMER PORTAL - Self-Service Portal

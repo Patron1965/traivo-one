@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -244,6 +244,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [jobToAssign, setJobToAssign] = useState<WorkOrderWithObject | null>(null);
   const [assignDate, setAssignDate] = useState(() => format(new Date(), "yyyy-MM-dd"));
   const [assignResourceId, setAssignResourceId] = useState<string | null>(null);
+  const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
+  const [sendScheduleResource, setSendScheduleResource] = useState<Resource | null>(null);
+  const [sendScheduleCopied, setSendScheduleCopied] = useState(false);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -932,6 +935,145 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     },
   });
 
+  const sendScheduleMutation = useMutation({
+    mutationFn: async ({ resourceId, jobs, dateRange }: { 
+      resourceId: string; 
+      jobs: Array<{
+        id: string;
+        title: string;
+        objectName?: string;
+        objectAddress?: string;
+        scheduledDate: string;
+        scheduledStartTime?: string;
+        estimatedDuration?: number;
+        accessCode?: string;
+        keyNumber?: string;
+      }>;
+      dateRange: { start: string; end: string };
+    }) => {
+      const fieldAppUrl = `${window.location.origin}/field`;
+      const response = await apiRequest("POST", `/api/notifications/send-schedule/${resourceId}`, {
+        jobs,
+        dateRange,
+        fieldAppUrl,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      if (data.success) {
+        toast({
+          title: "Schema skickat!",
+          description: `Schemat har skickats till ${data.recipient}`,
+        });
+        setSendScheduleDialogOpen(false);
+      } else {
+        toast({
+          title: "Kunde inte skicka",
+          description: data.error || "Ett fel uppstod",
+          variant: "destructive",
+        });
+      }
+    },
+    onError: (error) => {
+      toast({
+        title: "Fel",
+        description: error instanceof Error ? error.message : "Kunde inte skicka schema",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const getResourceScheduleJobs = useCallback((resourceId: string) => {
+    const startDate = viewMode === "week" ? currentWeekStart : currentDate;
+    const endDate = viewMode === "week" 
+      ? addDays(currentWeekStart, 4) 
+      : viewMode === "month" 
+        ? addDays(startOfMonth(currentDate), getDaysInMonth(currentDate) - 1)
+        : currentDate;
+    
+    return workOrders
+      .filter(job => 
+        job.resourceId === resourceId && 
+        job.scheduledDate &&
+        new Date(job.scheduledDate) >= startDate &&
+        new Date(job.scheduledDate) <= endDate
+      )
+      .map(job => {
+        let dateStr = "";
+        if (job.scheduledDate) {
+          if (typeof job.scheduledDate === 'string') {
+            dateStr = job.scheduledDate;
+          } else if (job.scheduledDate instanceof Date) {
+            dateStr = job.scheduledDate.toISOString();
+          } else {
+            dateStr = new Date(job.scheduledDate as unknown as string).toISOString();
+          }
+        }
+        return {
+          id: job.id,
+          title: job.title,
+          objectName: job.objectName || undefined,
+          objectAddress: job.objectAddress || undefined,
+          scheduledDate: dateStr,
+          scheduledStartTime: job.scheduledStartTime || undefined,
+          estimatedDuration: job.estimatedDuration || undefined,
+          accessCode: job.objectAccessCode || undefined,
+          keyNumber: job.objectKeyNumber || undefined,
+        };
+      });
+  }, [workOrders, viewMode, currentWeekStart, currentDate]);
+
+  const handleSendSchedule = useCallback((resource: Resource) => {
+    setSendScheduleResource(resource);
+    setSendScheduleCopied(false);
+    setSendScheduleDialogOpen(true);
+  }, []);
+
+  const handleSendScheduleEmail = useCallback(() => {
+    if (!sendScheduleResource) return;
+    
+    const jobs = getResourceScheduleJobs(sendScheduleResource.id);
+    if (jobs.length === 0) {
+      toast({
+        title: "Inga jobb att skicka",
+        description: "Resursen har inga planerade jobb för denna period.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const startDate = viewMode === "week" ? format(currentWeekStart, "yyyy-MM-dd") : format(currentDate, "yyyy-MM-dd");
+    const endDate = viewMode === "week" 
+      ? format(addDays(currentWeekStart, 4), "yyyy-MM-dd")
+      : viewMode === "month"
+        ? format(addDays(startOfMonth(currentDate), getDaysInMonth(currentDate) - 1), "yyyy-MM-dd")
+        : format(currentDate, "yyyy-MM-dd");
+    
+    sendScheduleMutation.mutate({
+      resourceId: sendScheduleResource.id,
+      jobs,
+      dateRange: { start: startDate, end: endDate },
+    });
+  }, [sendScheduleResource, getResourceScheduleJobs, sendScheduleMutation, viewMode, currentWeekStart, currentDate, toast]);
+
+  const handleCopyFieldAppLink = useCallback(async () => {
+    const fieldAppUrl = `${window.location.origin}/field`;
+    try {
+      await navigator.clipboard.writeText(fieldAppUrl);
+      setSendScheduleCopied(true);
+      toast({
+        title: "Länk kopierad!",
+        description: "Klistra in i SMS eller meddelande.",
+      });
+      setTimeout(() => setSendScheduleCopied(false), 3000);
+    } catch {
+      toast({
+        title: "Kunde inte kopiera",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
   const handleUndo = useCallback(() => {
     if (undoStack.length === 0) return;
     
@@ -1298,6 +1440,23 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   <div className="text-sm font-medium truncate">{resource.name}</div>
                   <div className="text-xs text-muted-foreground">{resource.weeklyHours || 40}h/vecka</div>
                 </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      size="icon" 
+                      variant="ghost" 
+                      className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSendSchedule(resource);
+                      }}
+                      data-testid={`send-schedule-${resource.id}`}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Skicka schema till {resource.name}</TooltipContent>
+                </Tooltip>
               </div>
               {visibleDates.map((day, dayIndex) => {
                 const jobs = getJobsForResourceAndDay(resource.id, day);
@@ -2142,6 +2301,87 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           >
             {updateWorkOrderMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
             Tilldela
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    
+    {/* Send Schedule Dialog */}
+    <Dialog open={sendScheduleDialogOpen} onOpenChange={setSendScheduleDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Skicka schema</DialogTitle>
+          <DialogDescription>
+            Skicka schemat till {sendScheduleResource?.name} för aktuell period
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-4">
+          {sendScheduleResource && (
+            <>
+              <div className="p-4 bg-muted rounded-lg">
+                <div className="flex items-center gap-3 mb-3">
+                  <Avatar className="h-10 w-10">
+                    <AvatarFallback>{sendScheduleResource.initials || sendScheduleResource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <div className="font-medium">{sendScheduleResource.name}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {sendScheduleResource.email || "Ingen e-post"}
+                    </div>
+                  </div>
+                </div>
+                <div className="text-sm">
+                  <span className="text-muted-foreground">Antal jobb i period: </span>
+                  <span className="font-medium">{getResourceScheduleJobs(sendScheduleResource.id).length}</span>
+                </div>
+              </div>
+              
+              <div className="space-y-3">
+                <Button 
+                  className="w-full justify-start gap-3" 
+                  variant="outline"
+                  onClick={handleSendScheduleEmail}
+                  disabled={!sendScheduleResource.email || sendScheduleMutation.isPending}
+                  data-testid="button-send-schedule-email"
+                >
+                  {sendScheduleMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Mail className="h-4 w-4" />
+                  )}
+                  <div className="text-left flex-1">
+                    <div>Skicka via e-post</div>
+                    <div className="text-xs text-muted-foreground">
+                      {sendScheduleResource.email || "Ingen e-post registrerad"}
+                    </div>
+                  </div>
+                </Button>
+                
+                <Button 
+                  className="w-full justify-start gap-3" 
+                  variant="outline"
+                  onClick={handleCopyFieldAppLink}
+                  data-testid="button-copy-field-link"
+                >
+                  {sendScheduleCopied ? (
+                    <Check className="h-4 w-4 text-green-500" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                  <div className="text-left flex-1">
+                    <div>Kopiera länk till fältappen</div>
+                    <div className="text-xs text-muted-foreground">
+                      Klistra in i SMS eller meddelande
+                    </div>
+                  </div>
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => setSendScheduleDialogOpen(false)}>
+            Stäng
           </Button>
         </DialogFooter>
       </DialogContent>
