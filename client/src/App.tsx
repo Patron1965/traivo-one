@@ -64,6 +64,7 @@ import PortalSettingsPage from "@/pages/portal/PortalSettingsPage";
 import PortalIssuesPage from "@/pages/portal/PortalIssuesPage";
 import AIPlanningPage from "@/pages/AIPlanningPage";
 import FieldLoginPage from "@/pages/FieldLoginPage";
+import PublicReportPage from "@/pages/public-report";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -183,6 +184,15 @@ function AppContent() {
     return (
       <ErrorBoundary>
         <PortalRouter />
+      </ErrorBoundary>
+    );
+  }
+
+  // Public issue report page - no auth required
+  if (location.startsWith("/report/")) {
+    return (
+      <ErrorBoundary>
+        <PublicReportPage />
       </ErrorBoundary>
     );
   }

@@ -109,6 +109,15 @@ export const objects = pgTable("objects", {
   servicePeriods: jsonb("service_periods").default({}),
   avgSetupTime: integer("avg_setup_time").default(0),
   
+  // === INDIVIDHANTERING (för kärl) ===
+  serialNumber: text("serial_number"), // Unikt serienummer/individnummer
+  articleId: varchar("article_id"), // Kopplad artikeltyp
+  manufacturer: text("manufacturer"), // Tillverkare
+  purchaseDate: timestamp("purchase_date"), // Inköpsdatum
+  warrantyExpiry: timestamp("warranty_expiry"), // Garantiutgång
+  lastInspection: timestamp("last_inspection"), // Senaste besiktning
+  condition: text("condition").default("good"), // good, fair, poor, damaged
+  
   // === RESOLVED/BERÄKNADE VÄRDEN ===
   // Dessa fylls i av ärvningsprocessorn med slutgiltiga värden
   resolvedAccessCode: text("resolved_access_code"),
@@ -541,14 +550,24 @@ export const subscriptions = pgTable("subscriptions", {
   description: text("description"),
   // Artiklar som ingår i abonnemanget (JSON array av article IDs med kvantitet)
   articleIds: jsonb("article_ids").default([]),
-  // Periodicitet: vecka, varannan_vecka, manad, kvartal, halvar, ar
+  // Periodicitet: vecka, varannan_vecka, manad, kvartal, halvar, ar (legacy)
   periodicity: text("periodicity").default("manad").notNull(),
-  // Specifik veckodag (0=söndag, 1=måndag, etc.)
+  // Specifik veckodag (0=söndag, 1=måndag, etc.) - legacy
   preferredWeekday: integer("preferred_weekday"),
-  // Specifik dag i månaden (1-31)
+  // Specifik dag i månaden (1-31) - legacy
   preferredDayOfMonth: integer("preferred_day_of_month"),
   // Föredragen tid på dagen
   preferredTimeSlot: text("preferred_time_slot"),
+  
+  // === FLEXIBEL SCHEMALÄGGNING (ny) ===
+  // Ersätter periodicity för avancerade behov
+  flexibleFrequency: jsonb("flexible_frequency"), // FlexibleFrequency JSON
+  // Specifika veckodagar (snabbåtkomst för common case)
+  allowedWeekdays: integer("allowed_weekdays").array(), // [1,3,5] = Mån, Ons, Fre
+  // Exkluderade veckodagar
+  excludedWeekdays: integer("excluded_weekdays").array(), // [0,6] = Ej helger
+  // Säsong då abonnemanget är aktivt
+  activeSeason: text("active_season"),
   // Startdatum
   startDate: timestamp("start_date").notNull(),
   // Slutdatum (null = tillsvidare)
@@ -1507,6 +1526,27 @@ export const structuralArticles = pgTable("structural_articles", {
   stepName: text("step_name"),
   // Typ av uppgift för detta steg
   taskType: text("task_type"),
+  
+  // === DYNAMISKA VÄRDEN (Fas 1.2) ===
+  // Standardkvantitet för denna delåtgärd
+  defaultQuantity: integer("default_quantity").default(1),
+  // Standardtid i minuter för denna delåtgärd
+  defaultDurationMinutes: integer("default_duration_minutes"),
+  // Om true: kvantitet kan sättas till 0 (t.ex. snöröjning på sommaren)
+  allowZeroQuantity: boolean("allow_zero_quantity").default(false),
+  // Säsong då denna delåtgärd är relevant (null = hela året)
+  applicableSeason: text("applicable_season"), // Season type
+  // Om true: multiplicera med antalet objekt (containerCount, etc.)
+  multiplyByObjectCount: boolean("multiply_by_object_count").default(false),
+  // Metadatafält att multiplicera med (t.ex. "containerCount")
+  multiplyByMetadataField: text("multiply_by_metadata_field"),
+  // Om true: kräver individuell hantering (ett jobb per objekt med serienummer)
+  requiresIndividualHandling: boolean("requires_individual_handling").default(false),
+  // Om true: är valfri åtgärd (kan hoppas över)
+  isOptional: boolean("is_optional").default(false),
+  // Villkor för när åtgärden ska utföras (JSON-logik)
+  conditionalLogic: jsonb("conditional_logic"),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_structural_articles_parent").on(table.parentArticleId),
@@ -1539,8 +1579,17 @@ export const orderConcepts = pgTable("order_concepts", {
   aggregationLevel: text("aggregation_level"),
   // Schematyp: once, recurring, subscription
   scheduleType: text("schedule_type").default("once").notNull(),
-  // För recurring: intervall i dagar
+  // För recurring: intervall i dagar (legacy)
   intervalDays: integer("interval_days"),
+  
+  // === FLEXIBEL SCHEMALÄGGNING (ny) ===
+  flexibleFrequency: jsonb("flexible_frequency"), // FlexibleFrequency JSON
+  allowedWeekdays: integer("allowed_weekdays").array(), // [1,3,5] = Mån, Ons, Fre
+  excludedWeekdays: integer("excluded_weekdays").array(), // [0,6] = Ej helger
+  activeSeason: text("active_season"), // Säsong då konceptet ska generera ordrar
+  timesPerPeriod: integer("times_per_period"), // X gånger per vecka/månad
+  periodType: text("period_type"), // 'week', 'month', 'year'
+  
   // Nästa planerade körning
   nextRunDate: timestamp("next_run_date"),
   // Senaste körning
@@ -2266,4 +2315,512 @@ export interface GeographicPosition {
     id: string;
     namn: string;
   };
+}
+
+// ============================================
+// FLEXIBEL SCHEMALÄGGNING - Frekvenstyper
+// ============================================
+
+// Veckodagar för schemaläggning (0=söndag, 1=måndag, ..., 6=lördag)
+export const WEEKDAYS = {
+  SUNDAY: 0,
+  MONDAY: 1,
+  TUESDAY: 2,
+  WEDNESDAY: 3,
+  THURSDAY: 4,
+  FRIDAY: 5,
+  SATURDAY: 6,
+} as const;
+
+export const WEEKDAY_LABELS: Record<number, string> = {
+  0: 'Söndag',
+  1: 'Måndag',
+  2: 'Tisdag',
+  3: 'Onsdag',
+  4: 'Torsdag',
+  5: 'Fredag',
+  6: 'Lördag',
+};
+
+// Frekvenstyper för flexibel schemaläggning
+export const FREQUENCY_TYPES = [
+  'specific_weekdays',    // Specifika veckodagar (Mån, Ons, Fre)
+  'interval_days',        // Fast intervall i dagar
+  'times_per_week',       // X gånger per vecka (flexibel placering)
+  'times_per_month',      // X gånger per månad
+  'times_per_year',       // X gånger per år (årsstädning, etc.)
+  'on_demand',            // Vid behov
+] as const;
+export type FrequencyType = typeof FREQUENCY_TYPES[number];
+
+// Säsonger för säsongsbaserad schemaläggning
+export const SEASONS = [
+  'all_year',     // Hela året
+  'spring',       // Vår (mars-maj)
+  'summer',       // Sommar (juni-augusti)
+  'autumn',       // Höst (september-november)
+  'winter',       // Vinter (december-februari)
+  'not_winter',   // Ej vinter (mars-november)
+  'not_summer',   // Ej sommar
+] as const;
+export type Season = typeof SEASONS[number];
+
+// Flexibel frekvenskonfiguration - JSON-struktur för subscription/orderConcept
+export interface FlexibleFrequency {
+  type: FrequencyType;
+  
+  // För specific_weekdays: lista av veckodagar (0-6)
+  weekdays?: number[];
+  
+  // För interval_days: antal dagar mellan besök
+  intervalDays?: number;
+  
+  // För times_per_week/month/year: antal gånger
+  timesPerPeriod?: number;
+  
+  // Minimum dagar mellan besök (för times_per_week etc.)
+  minDaysBetween?: number;
+  
+  // Maximum dagar mellan besök
+  maxDaysBetween?: number;
+  
+  // Inkludera vardagar (måndag-fredag)
+  includeWeekdays?: boolean;
+  
+  // Inkludera helger (lördag-söndag)
+  includeWeekends?: boolean;
+  
+  // Exkludera specifika veckodagar
+  excludeWeekdays?: number[];
+  
+  // Önskade månader för årliga uppgifter
+  preferredMonths?: number[]; // 1-12
+  
+  // Föredraget tidsfönster
+  preferredTimeWindow?: {
+    start: string;  // "06:00"
+    end: string;    // "10:00"
+  };
+  
+  // Säsong då frekvensen gäller
+  season?: Season;
+  
+  // Prioritet för flexibel planering (1=hög, 3=låg)
+  flexibility?: 1 | 2 | 3;
+}
+
+// Zod-schema för validering av flexibel frekvens
+export const flexibleFrequencySchema = z.object({
+  type: z.enum(FREQUENCY_TYPES),
+  weekdays: z.array(z.number().min(0).max(6)).optional(),
+  intervalDays: z.number().positive().optional(),
+  timesPerPeriod: z.number().positive().optional(),
+  minDaysBetween: z.number().min(0).optional(),
+  maxDaysBetween: z.number().positive().optional(),
+  includeWeekdays: z.boolean().optional(),
+  includeWeekends: z.boolean().optional(),
+  excludeWeekdays: z.array(z.number().min(0).max(6)).optional(),
+  preferredMonths: z.array(z.number().min(1).max(12)).optional(),
+  preferredTimeWindow: z.object({
+    start: z.string(),
+    end: z.string(),
+  }).optional(),
+  season: z.enum(SEASONS).optional(),
+  flexibility: z.union([z.literal(1), z.literal(2), z.literal(3)]).optional(),
+});
+
+// ============================================
+// PROTOKOLL OCH RAPPORTER - Fas 1.3
+// ============================================
+
+// Protokolltyper
+export const PROTOCOL_TYPES = [
+  'cleaning',         // Städprotokoll
+  'inspection',       // Besiktningsprotokoll
+  'maintenance',      // Underhållsprotokoll
+  'container_wash',   // Behållartvätt
+  'annual_service',   // Årsstädning
+] as const;
+export type ProtocolType = typeof PROTOCOL_TYPES[number];
+
+export const PROTOCOL_TYPE_LABELS: Record<ProtocolType, string> = {
+  cleaning: 'Städprotokoll',
+  inspection: 'Besiktningsprotokoll',
+  maintenance: 'Underhållsprotokoll',
+  container_wash: 'Tvättprotokoll',
+  annual_service: 'Årsstädningsprotokoll',
+};
+
+// Avvikelsekategorier
+export const DEVIATION_CATEGORIES = [
+  'graffiti',         // Klotter
+  'damage',           // Skada
+  'spill',            // Spill/utsläpp
+  'lighting',         // Belysning
+  'fence',            // Inhägnad
+  'large_items',      // Stora föremål
+  'safety',           // Säkerhetsproblem
+  'functionality',    // Funktionsproblem
+  'other',            // Övrigt
+] as const;
+export type DeviationCategory = typeof DEVIATION_CATEGORIES[number];
+
+export const DEVIATION_CATEGORY_LABELS: Record<DeviationCategory, string> = {
+  graffiti: 'Klotter',
+  damage: 'Skada',
+  spill: 'Spill/utsläpp',
+  lighting: 'Belysning',
+  fence: 'Inhägnad',
+  large_items: 'Stora föremål',
+  safety: 'Säkerhetsproblem',
+  functionality: 'Funktionsproblem',
+  other: 'Övrigt',
+};
+
+// Allvarlighetsgrad
+export const SEVERITY_LEVELS = [
+  'low',       // Låg - kan vänta
+  'medium',    // Medel - bör åtgärdas snart
+  'high',      // Hög - bör åtgärdas inom kort
+  'critical',  // Kritisk - omedelbar åtgärd krävs
+] as const;
+export type SeverityLevel = typeof SEVERITY_LEVELS[number];
+
+export const SEVERITY_LEVEL_LABELS: Record<SeverityLevel, string> = {
+  low: 'Låg',
+  medium: 'Medel',
+  high: 'Hög',
+  critical: 'Kritisk',
+};
+
+// Besiktningsgrader / Assessment ratings
+export const ASSESSMENT_RATINGS = [
+  'rent',              // Rent och prydligt
+  'ok',                // Acceptabelt
+  'lite_skrapigt',     // Lite skräpigt
+  'skrapigt',          // Skräpigt
+  'mycket_skrapigt',   // Mycket skräpigt
+  'behover_atgard',    // Behöver åtgärd
+] as const;
+export type AssessmentRating = typeof ASSESSMENT_RATINGS[number];
+
+export const ASSESSMENT_RATING_LABELS: Record<AssessmentRating, string> = {
+  rent: 'Rent och prydligt',
+  ok: 'Acceptabelt',
+  lite_skrapigt: 'Lite skräpigt',
+  skrapigt: 'Skräpigt',
+  mycket_skrapigt: 'Mycket skräpigt',
+  behover_atgard: 'Behöver åtgärd',
+};
+
+export const ASSESSMENT_RATING_SCORES: Record<AssessmentRating, number> = {
+  rent: 5,
+  ok: 4,
+  lite_skrapigt: 3,
+  skrapigt: 2,
+  mycket_skrapigt: 1,
+  behover_atgard: 0,
+};
+
+// Protokolltabell - städprotokoll, besiktningsprotokoll, etc.
+export const protocols = pgTable("protocols", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Koppling till arbetsorder
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  // Koppling till objekt
+  objectId: varchar("object_id").references(() => objects.id),
+  // Protokolltyp
+  protocolType: text("protocol_type").notNull(), // ProtocolType
+  // Protokollnummer (för referens)
+  protocolNumber: text("protocol_number"),
+  
+  // Utförande
+  executedAt: timestamp("executed_at").notNull(),
+  executedBy: varchar("executed_by").references(() => users.id),
+  executedByName: text("executed_by_name"),
+  
+  // Utförda åtgärder (JSON array)
+  executedActions: jsonb("executed_actions").default([]),
+  // Beskrivning av utfört arbete
+  workDescription: text("work_description"),
+  
+  // Bedömning/rating (för besiktningar)
+  assessmentRating: text("assessment_rating"), // t.ex. "lite_skrapigt", "skrapigt", "mycket_skrapigt"
+  assessmentNotes: text("assessment_notes"),
+  
+  // Bilder
+  beforePhotoUrl: text("before_photo_url"),
+  afterPhotoUrl: text("after_photo_url"),
+  additionalPhotos: text("additional_photos").array(),
+  
+  // Total tid
+  totalDurationMinutes: integer("total_duration_minutes"),
+  
+  // Signatur (base64 eller URL)
+  signature: text("signature"),
+  signedAt: timestamp("signed_at"),
+  
+  // PDF-generering
+  pdfUrl: text("pdf_url"),
+  pdfGeneratedAt: timestamp("pdf_generated_at"),
+  
+  // Skickad till kund
+  sentToCustomer: boolean("sent_to_customer").default(false),
+  sentAt: timestamp("sent_at"),
+  
+  status: text("status").default("draft").notNull(), // draft, completed, sent
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_protocols_work_order").on(table.workOrderId),
+  index("idx_protocols_object").on(table.objectId),
+  index("idx_protocols_type").on(table.protocolType),
+]);
+
+// Avvikelserapporter
+export const deviationReports = pgTable("deviation_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Kan kopplas till antingen arbetsorder eller protokoll
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  protocolId: varchar("protocol_id").references(() => protocols.id),
+  // Objekt där avvikelsen upptäcktes
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  
+  // Avvikelseinformation
+  category: text("category").notNull(), // DeviationCategory
+  title: text("title").notNull(),
+  description: text("description"),
+  severityLevel: text("severity_level").default("medium").notNull(), // SeverityLevel
+  
+  // Vem upptäckte
+  reportedBy: varchar("reported_by").references(() => users.id),
+  reportedByName: text("reported_by_name"),
+  reportedAt: timestamp("reported_at").defaultNow().notNull(),
+  
+  // GPS-position vid upptäckt
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  
+  // Bilder
+  photos: text("photos").array(),
+  
+  // Föreslagen åtgärd
+  suggestedAction: text("suggested_action"),
+  estimatedCost: integer("estimated_cost"), // SEK
+  
+  // Kräver omedelbar åtgärd?
+  requiresImmediateAction: boolean("requires_immediate_action").default(false),
+  // Tidsfrist för åtgärd (om kund har krav)
+  actionDeadline: timestamp("action_deadline"),
+  
+  // Status och åtgärdshantering
+  status: text("status").default("reported").notNull(), // reported, acknowledged, in_progress, resolved, cancelled
+  resolvedAt: timestamp("resolved_at"),
+  resolvedBy: varchar("resolved_by").references(() => users.id),
+  resolutionNotes: text("resolution_notes"),
+  
+  // Kopplad order för åtgärd (om en separat order skapas)
+  linkedActionOrderId: varchar("linked_action_order_id"),
+  
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_deviation_object").on(table.objectId),
+  index("idx_deviation_status").on(table.status),
+  index("idx_deviation_category").on(table.category),
+  index("idx_deviation_severity").on(table.severityLevel),
+]);
+
+// Relation för protokoll och avvikelser
+export const protocolsRelations = relations(protocols, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [protocols.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [protocols.workOrderId], references: [workOrders.id] }),
+  object: one(objects, { fields: [protocols.objectId], references: [objects.id] }),
+  executedByUser: one(users, { fields: [protocols.executedBy], references: [users.id] }),
+  deviations: many(deviationReports),
+}));
+
+export const deviationReportsRelations = relations(deviationReports, ({ one }) => ({
+  tenant: one(tenants, { fields: [deviationReports.tenantId], references: [tenants.id] }),
+  workOrder: one(workOrders, { fields: [deviationReports.workOrderId], references: [workOrders.id] }),
+  protocol: one(protocols, { fields: [deviationReports.protocolId], references: [protocols.id] }),
+  object: one(objects, { fields: [deviationReports.objectId], references: [objects.id] }),
+  reportedByUser: one(users, { fields: [deviationReports.reportedBy], references: [users.id] }),
+  resolvedByUser: one(users, { fields: [deviationReports.resolvedBy], references: [users.id] }),
+}));
+
+// Insert schemas och typer
+export const insertProtocolSchema = createInsertSchema(protocols).omit({ id: true, createdAt: true });
+export type Protocol = typeof protocols.$inferSelect;
+export type InsertProtocol = z.infer<typeof insertProtocolSchema>;
+
+export const insertDeviationReportSchema = createInsertSchema(deviationReports).omit({ id: true, createdAt: true, updatedAt: true });
+export type DeviationReport = typeof deviationReports.$inferSelect;
+export type InsertDeviationReport = z.infer<typeof insertDeviationReportSchema>;
+
+// ============================================
+// QR-KOD FELANMÄLAN - Fas 2.1
+// ============================================
+
+// QR-kod länkade till objekt för publik felanmälan
+export const qrCodeLinks = pgTable("qr_code_links", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Unik kod för QR-URL
+  code: text("code").notNull().unique(),
+  // Beskrivning (visas för användaren)
+  label: text("label"),
+  // Aktiv/inaktiv
+  isActive: boolean("is_active").default(true).notNull(),
+  // Statistik
+  scanCount: integer("scan_count").default(0),
+  lastScannedAt: timestamp("last_scanned_at"),
+  // Skapad
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+}, (table) => [
+  index("idx_qr_code_object").on(table.objectId),
+  index("idx_qr_code_code").on(table.code),
+]);
+
+// Publika felanmälningar via QR-kod
+export const publicIssueReports = pgTable("public_issue_reports", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  // Koppling till QR-kod och objekt
+  qrCodeLinkId: varchar("qr_code_link_id").references(() => qrCodeLinks.id),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  // Anmälarens uppgifter (frivilligt)
+  reporterName: text("reporter_name"),
+  reporterEmail: text("reporter_email"),
+  reporterPhone: text("reporter_phone"),
+  // Problemkategori
+  category: text("category").notNull(), // Same as DeviationCategory
+  // Beskrivning
+  title: text("title").notNull(),
+  description: text("description"),
+  // Bilder (URLs eller base64)
+  photos: text("photos").array(),
+  // GPS-position vid anmälan
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  // IP-adress för spårning (GDPR-godkänd lagring)
+  ipAddress: text("ip_address"),
+  userAgent: text("user_agent"),
+  // Status
+  status: text("status").default("new").notNull(), // new, reviewed, converted, rejected
+  // Om konverterad till avvikelse eller arbetsorder
+  linkedDeviationId: varchar("linked_deviation_id").references(() => deviationReports.id),
+  linkedWorkOrderId: varchar("linked_work_order_id"),
+  // Granskad av
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_public_issue_object").on(table.objectId),
+  index("idx_public_issue_status").on(table.status),
+  index("idx_public_issue_qr").on(table.qrCodeLinkId),
+]);
+
+export const qrCodeLinksRelations = relations(qrCodeLinks, ({ one, many }) => ({
+  tenant: one(tenants, { fields: [qrCodeLinks.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [qrCodeLinks.objectId], references: [objects.id] }),
+  createdByUser: one(users, { fields: [qrCodeLinks.createdBy], references: [users.id] }),
+  issueReports: many(publicIssueReports),
+}));
+
+export const publicIssueReportsRelations = relations(publicIssueReports, ({ one }) => ({
+  tenant: one(tenants, { fields: [publicIssueReports.tenantId], references: [tenants.id] }),
+  qrCodeLink: one(qrCodeLinks, { fields: [publicIssueReports.qrCodeLinkId], references: [qrCodeLinks.id] }),
+  object: one(objects, { fields: [publicIssueReports.objectId], references: [objects.id] }),
+  linkedDeviation: one(deviationReports, { fields: [publicIssueReports.linkedDeviationId], references: [deviationReports.id] }),
+  reviewedByUser: one(users, { fields: [publicIssueReports.reviewedBy], references: [users.id] }),
+}));
+
+export const insertQrCodeLinkSchema = createInsertSchema(qrCodeLinks).omit({ id: true, createdAt: true, scanCount: true });
+export type QrCodeLink = typeof qrCodeLinks.$inferSelect;
+export type InsertQrCodeLink = z.infer<typeof insertQrCodeLinkSchema>;
+
+export const insertPublicIssueReportSchema = createInsertSchema(publicIssueReports).omit({ id: true, createdAt: true });
+export type PublicIssueReport = typeof publicIssueReports.$inferSelect;
+export type InsertPublicIssueReport = z.infer<typeof insertPublicIssueReportSchema>;
+
+// Utförd åtgärd-struktur (för protocols.executedActions)
+export interface ExecutedAction {
+  articleId?: string;
+  articleName: string;
+  stepName?: string;
+  quantity: number;
+  durationMinutes: number;
+  status: 'completed' | 'skipped' | 'not_applicable';
+  notes?: string;
+}
+
+// ============================================
+// MILJÖSTATISTIK - Fas 3.1
+// ============================================
+
+// Miljödata per arbetsorder - körsträcka, bränsle, kemikalier
+export const environmentalData = pgTable("environmental_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  vehicleId: varchar("vehicle_id"),
+  // Körsträcka
+  distanceKm: real("distance_km"),
+  odometerStart: integer("odometer_start"),
+  odometerEnd: integer("odometer_end"),
+  // Bränsle
+  fuelLiters: real("fuel_liters"),
+  fuelType: text("fuel_type"), // diesel, gasoline, electric, hybrid
+  // CO2 (automatberäknat eller manuellt)
+  co2Kg: real("co2_kg"),
+  co2CalculationMethod: text("co2_calculation_method").default("auto"), // auto, manual
+  // Kemikalier
+  chemicalsUsed: jsonb("chemicals_used").default([]), // [{name, quantity, unit}]
+  // Vikt (avfallsmängd)
+  wasteCollectedKg: real("waste_collected_kg"),
+  wasteType: text("waste_type"),
+  // Datum
+  recordedAt: timestamp("recorded_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+}, (table) => [
+  index("idx_env_work_order").on(table.workOrderId),
+  index("idx_env_resource").on(table.resourceId),
+  index("idx_env_date").on(table.recordedAt),
+]);
+
+// CO2-emissionsfaktorer per bränsletyp (kg CO2 per liter)
+export const CO2_EMISSION_FACTORS: Record<string, number> = {
+  diesel: 2.68,      // kg CO2 per liter
+  gasoline: 2.31,    // kg CO2 per liter
+  hvo100: 0.27,      // Förnybar diesel (ca 90% lägre)
+  electric: 0,       // Laddas separat per kWh
+  hybrid: 1.5,       // Ungefärligt genomsnitt
+};
+
+// CO2 per km för olika fordonstyper (default-värden)
+export const CO2_PER_KM_DEFAULTS: Record<string, number> = {
+  compact_truck: 0.25,   // kg CO2/km
+  medium_truck: 0.35,    // kg CO2/km
+  large_truck: 0.50,     // kg CO2/km
+  pickup: 0.20,          // kg CO2/km
+  van: 0.18,             // kg CO2/km
+  electric_van: 0.03,    // kg CO2/km (endast produktion)
+};
+
+export const insertEnvironmentalDataSchema = createInsertSchema(environmentalData).omit({ id: true, recordedAt: true });
+export type EnvironmentalData = typeof environmentalData.$inferSelect;
+export type InsertEnvironmentalData = z.infer<typeof insertEnvironmentalDataSchema>;
+
+// Kemikalie-användning struktur
+export interface ChemicalUsage {
+  name: string;
+  quantity: number;
+  unit: string; // liters, kg, ml, g
+  hazardClass?: string; // UN-klass eller liknande
 }

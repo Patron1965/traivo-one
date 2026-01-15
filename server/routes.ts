@@ -1,6 +1,8 @@
 import type { Express, Request as ExpressRequest, Response as ExpressResponse } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 import { 
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
   insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema,
@@ -2700,6 +2702,38 @@ export async function registerRoutes(
     }
   });
 
+  // Preview scheduled dates based on flexible frequency
+  app.post("/api/scheduling/preview-dates", async (req, res) => {
+    try {
+      const { frequency, startDate, endDate } = req.body;
+      
+      if (!frequency || !startDate || !endDate) {
+        return res.status(400).json({ error: "frequency, startDate, and endDate are required" });
+      }
+      
+      const { generateScheduleDates, formatFrequencyDescription } = await import('./scheduling-utils');
+      
+      const start = new Date(startDate);
+      const end = new Date(endDate);
+      
+      const dates = generateScheduleDates(frequency, start, end);
+      const description = formatFrequencyDescription(frequency);
+      
+      res.json({
+        dates: dates.map(d => d.toISOString()),
+        count: dates.length,
+        description,
+        period: {
+          start: start.toISOString(),
+          end: end.toISOString(),
+        }
+      });
+    } catch (error) {
+      console.error("Failed to preview dates:", error);
+      res.status(500).json({ error: "Failed to preview scheduled dates" });
+    }
+  });
+
   // Generate orders from active subscriptions
   app.post("/api/subscriptions/generate-orders", async (req, res) => {
     try {
@@ -2707,6 +2741,8 @@ export async function registerRoutes(
       const subscriptions = await storage.getSubscriptions(tenantId);
       const now = new Date();
       let generatedCount = 0;
+
+      const { generateScheduleDates, convertLegacyPeriodicity } = await import('./scheduling-utils');
 
       for (const sub of subscriptions) {
         if (sub.status !== "active" || !sub.autoGenerate) continue;
@@ -2734,27 +2770,41 @@ export async function registerRoutes(
 
           generatedCount++;
 
-          // Calculate next generation date
-          let nextDate = new Date(nextGenDate);
-          switch (sub.periodicity) {
-            case "vecka":
-              nextDate.setDate(nextDate.getDate() + 7);
-              break;
-            case "varannan_vecka":
-              nextDate.setDate(nextDate.getDate() + 14);
-              break;
-            case "manad":
-              nextDate.setMonth(nextDate.getMonth() + 1);
-              break;
-            case "kvartal":
-              nextDate.setMonth(nextDate.getMonth() + 3);
-              break;
-            case "halvar":
-              nextDate.setMonth(nextDate.getMonth() + 6);
-              break;
-            case "ar":
-              nextDate.setFullYear(nextDate.getFullYear() + 1);
-              break;
+          // Calculate next generation date - use flexible frequency if available
+          let nextDate: Date;
+          
+          if (sub.flexibleFrequency) {
+            // Use new flexible frequency system
+            const frequency = sub.flexibleFrequency as any;
+            const dates = generateScheduleDates(frequency, nextGenDate, generateThreshold);
+            // Find the next date after the current one
+            const futureDates = dates.filter(d => d > nextGenDate);
+            nextDate = futureDates.length > 0 ? futureDates[0] : new Date(nextGenDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+          } else {
+            // Fallback to legacy periodicity
+            nextDate = new Date(nextGenDate);
+            switch (sub.periodicity) {
+              case "vecka":
+                nextDate.setDate(nextDate.getDate() + 7);
+                break;
+              case "varannan_vecka":
+                nextDate.setDate(nextDate.getDate() + 14);
+                break;
+              case "manad":
+                nextDate.setMonth(nextDate.getMonth() + 1);
+                break;
+              case "kvartal":
+                nextDate.setMonth(nextDate.getMonth() + 3);
+                break;
+              case "halvar":
+                nextDate.setMonth(nextDate.getMonth() + 6);
+                break;
+              case "ar":
+                nextDate.setFullYear(nextDate.getFullYear() + 1);
+                break;
+              default:
+                nextDate.setMonth(nextDate.getMonth() + 1);
+            }
           }
 
           // Check if we've passed endDate
@@ -6633,6 +6683,55 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Preview dynamic structural article steps
+  app.post("/api/structural-articles/:parentArticleId/preview-tasks", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { parentArticleId } = req.params;
+      const { executionDate, objectMetadata, individualObjects } = req.body;
+      
+      // Get all structural articles for this parent
+      const allStructuralArticles = await storage.getStructuralArticles(tenantId);
+      const steps = allStructuralArticles.filter(sa => sa.parentArticleId === parentArticleId);
+      
+      if (steps.length === 0) {
+        return res.json({ 
+          tasks: [], 
+          totalDuration: 0, 
+          message: "Inga strukturartiklar hittades för denna artikel" 
+        });
+      }
+      
+      const { generateTasksFromStructuralArticle, calculateTotalDuration } = await import('./structural-article-utils');
+      
+      const date = executionDate ? new Date(executionDate) : new Date();
+      const metadata = objectMetadata || {};
+      const objects = individualObjects || [];
+      
+      const tasks = generateTasksFromStructuralArticle(steps, date, metadata, objects);
+      const totalDuration = calculateTotalDuration(tasks);
+      
+      // Get article names for display
+      const allArticles = await storage.getArticles(tenantId);
+      const articlesMap = new Map(allArticles.map(a => [a.id, a]));
+      
+      const tasksWithNames = tasks.map(task => ({
+        ...task,
+        articleName: articlesMap.get(task.articleId)?.name || 'Okänd artikel',
+      }));
+      
+      res.json({
+        tasks: tasksWithNames,
+        totalDuration,
+        applicableCount: tasks.filter(t => t.isApplicable).length,
+        skippedCount: tasks.filter(t => !t.isApplicable).length,
+      });
+    } catch (error) {
+      console.error("Failed to preview structural article tasks:", error);
+      res.status(500).json({ error: "Failed to preview structural article tasks" });
+    }
+  });
+
   app.post("/api/work-orders/:workOrderId/expand-structural", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -8438,6 +8537,1019 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed to send message to customer:", error);
       res.status(500).json({ error: "Kunde inte skicka meddelande" });
+    }
+  });
+
+  // ============================================
+  // QR CODE LINKS API
+  // ============================================
+  
+  app.get("/api/qr-code-links", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectId } = req.query;
+      
+      const links = await storage.getQrCodeLinks(tenantId, objectId as string);
+      res.json(links);
+    } catch (error) {
+      console.error("Failed to get QR code links:", error);
+      res.status(500).json({ error: "Kunde inte hämta QR-koder" });
+    }
+  });
+
+  app.get("/api/qr-code-links/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const link = await storage.getQrCodeLink(req.params.id);
+      
+      if (!link || !verifyTenantOwnership(link, tenantId)) {
+        return res.status(404).json({ error: "QR-kod hittades inte" });
+      }
+      
+      res.json(link);
+    } catch (error) {
+      console.error("Failed to get QR code link:", error);
+      res.status(500).json({ error: "Kunde inte hämta QR-kod" });
+    }
+  });
+
+  app.post("/api/qr-code-links", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const user = (req as any).user;
+      
+      // Generate unique code
+      const code = Math.random().toString(36).substring(2, 10).toUpperCase();
+      
+      const { insertQrCodeLinkSchema } = await import("@shared/schema");
+      const validated = insertQrCodeLinkSchema.parse({ 
+        ...req.body, 
+        tenantId,
+        code,
+        createdBy: user?.id,
+      });
+      
+      const link = await storage.createQrCodeLink(validated);
+      res.status(201).json(link);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create QR code link:", error);
+      res.status(500).json({ error: "Kunde inte skapa QR-kod" });
+    }
+  });
+
+  app.patch("/api/qr-code-links/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getQrCodeLink(req.params.id);
+      if (!existing || !verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "QR-kod hittades inte" });
+      }
+      
+      const link = await storage.updateQrCodeLink(req.params.id, tenantId, req.body);
+      res.json(link);
+    } catch (error) {
+      console.error("Failed to update QR code link:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera QR-kod" });
+    }
+  });
+
+  app.delete("/api/qr-code-links/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getQrCodeLink(req.params.id);
+      if (!existing || !verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "QR-kod hittades inte" });
+      }
+      
+      await storage.deleteQrCodeLink(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete QR code link:", error);
+      res.status(500).json({ error: "Kunde inte ta bort QR-kod" });
+    }
+  });
+
+  // ============================================
+  // PUBLIC ISSUE REPORTS API (Internal management)
+  // ============================================
+  
+  app.get("/api/public-issue-reports", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectId, status } = req.query;
+      
+      const reports = await storage.getPublicIssueReports(tenantId, {
+        objectId: objectId as string,
+        status: status as string,
+      });
+      
+      res.json(reports);
+    } catch (error) {
+      console.error("Failed to get public issue reports:", error);
+      res.status(500).json({ error: "Kunde inte hämta felanmälningar" });
+    }
+  });
+
+  app.get("/api/public-issue-reports/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const report = await storage.getPublicIssueReport(req.params.id);
+      
+      if (!report || !verifyTenantOwnership(report, tenantId)) {
+        return res.status(404).json({ error: "Felanmälan hittades inte" });
+      }
+      
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to get public issue report:", error);
+      res.status(500).json({ error: "Kunde inte hämta felanmälan" });
+    }
+  });
+
+  app.patch("/api/public-issue-reports/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getPublicIssueReport(req.params.id);
+      if (!existing || !verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Felanmälan hittades inte" });
+      }
+      
+      const report = await storage.updatePublicIssueReport(req.params.id, tenantId, req.body);
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to update public issue report:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera felanmälan" });
+    }
+  });
+
+  // Convert public issue report to deviation report
+  app.post("/api/public-issue-reports/:id/convert-to-deviation", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const user = (req as any).user;
+      
+      const report = await storage.getPublicIssueReport(req.params.id);
+      if (!report || !verifyTenantOwnership(report, tenantId)) {
+        return res.status(404).json({ error: "Felanmälan hittades inte" });
+      }
+      
+      // Create deviation report from public issue
+      const deviation = await storage.createDeviationReport({
+        tenantId,
+        objectId: report.objectId,
+        category: report.category,
+        title: report.title,
+        description: report.description || undefined,
+        severityLevel: 'medium',
+        reportedByName: report.reporterName || 'Publik anmälan',
+        latitude: report.latitude || undefined,
+        longitude: report.longitude || undefined,
+        photos: report.photos || undefined,
+      });
+      
+      // Update public issue report with link
+      await storage.updatePublicIssueReport(report.id, tenantId, {
+        status: 'converted',
+        linkedDeviationId: deviation.id,
+        reviewedBy: user?.id,
+        reviewedAt: new Date(),
+      });
+      
+      res.status(201).json({
+        deviation,
+        message: "Felanmälan konverterad till avvikelse",
+      });
+    } catch (error) {
+      console.error("Failed to convert public issue to deviation:", error);
+      res.status(500).json({ error: "Kunde inte konvertera felanmälan" });
+    }
+  });
+
+  // ============================================
+  // PUBLIC ISSUE REPORT API (No auth required - for QR code scanning)
+  // ============================================
+  
+  // Get object info and report form by QR code
+  app.get("/api/public/report/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      
+      const qrLink = await storage.getQrCodeLinkByCode(code);
+      if (!qrLink) {
+        return res.status(404).json({ error: "Ogiltig QR-kod" });
+      }
+      
+      if (!qrLink.isActive) {
+        return res.status(410).json({ error: "Denna QR-kod är inte längre aktiv" });
+      }
+      
+      // Increment scan count
+      await storage.incrementQrCodeScanCount(qrLink.id);
+      
+      // Get object info (limited)
+      const object = await storage.getObject(qrLink.objectId);
+      if (!object) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      
+      // Get tenant branding
+      const { tenantBranding } = await import("@shared/schema");
+      const [branding] = await db.select().from(tenantBranding)
+        .where(eq(tenantBranding.tenantId, qrLink.tenantId));
+      
+      // Return limited info for public display
+      res.json({
+        objectId: object.id,
+        objectName: object.name,
+        objectAddress: object.address,
+        qrLabel: qrLink.label,
+        tenantId: qrLink.tenantId,
+        companyName: branding?.companyName || 'Fältservice',
+        primaryColor: branding?.primaryColor || '#3B82F6',
+        categories: [
+          { id: 'graffiti', label: 'Klotter' },
+          { id: 'damage', label: 'Skada' },
+          { id: 'spill', label: 'Spill/utsläpp' },
+          { id: 'lighting', label: 'Belysning' },
+          { id: 'large_items', label: 'Stora föremål' },
+          { id: 'safety', label: 'Säkerhetsproblem' },
+          { id: 'other', label: 'Övrigt' },
+        ],
+      });
+    } catch (error) {
+      console.error("Failed to get public report info:", error);
+      res.status(500).json({ error: "Kunde inte ladda information" });
+    }
+  });
+
+  // Submit public issue report (no auth)
+  app.post("/api/public/report/:code", async (req, res) => {
+    try {
+      const { code } = req.params;
+      const { category, title, description, reporterName, reporterEmail, reporterPhone, photos, latitude, longitude } = req.body;
+      
+      const qrLink = await storage.getQrCodeLinkByCode(code);
+      if (!qrLink) {
+        return res.status(404).json({ error: "Ogiltig QR-kod" });
+      }
+      
+      if (!qrLink.isActive) {
+        return res.status(410).json({ error: "Denna QR-kod är inte längre aktiv" });
+      }
+      
+      if (!category || !title) {
+        return res.status(400).json({ error: "Kategori och titel krävs" });
+      }
+      
+      // Create public issue report
+      const report = await storage.createPublicIssueReport({
+        tenantId: qrLink.tenantId,
+        qrCodeLinkId: qrLink.id,
+        objectId: qrLink.objectId,
+        category,
+        title,
+        description: description || undefined,
+        reporterName: reporterName || undefined,
+        reporterEmail: reporterEmail || undefined,
+        reporterPhone: reporterPhone || undefined,
+        photos: photos || undefined,
+        latitude: latitude || undefined,
+        longitude: longitude || undefined,
+        ipAddress: req.ip || undefined,
+        userAgent: req.headers['user-agent'] || undefined,
+        status: 'new',
+      });
+      
+      res.status(201).json({
+        success: true,
+        reportId: report.id,
+        message: "Tack för din anmälan! Vi har tagit emot den och kommer att hantera ärendet.",
+      });
+    } catch (error) {
+      console.error("Failed to create public issue report:", error);
+      res.status(500).json({ error: "Kunde inte skicka anmälan" });
+    }
+  });
+
+  // ============================================
+  // PROTOCOLS API
+  // ============================================
+  
+  app.get("/api/protocols", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId, objectId, protocolType, status } = req.query;
+      
+      const protocols = await storage.getProtocols(tenantId, {
+        workOrderId: workOrderId as string,
+        objectId: objectId as string,
+        protocolType: protocolType as string,
+        status: status as string,
+      });
+      
+      res.json(protocols);
+    } catch (error) {
+      console.error("Failed to get protocols:", error);
+      res.status(500).json({ error: "Kunde inte hämta protokoll" });
+    }
+  });
+
+  app.get("/api/protocols/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const protocol = await storage.getProtocol(req.params.id);
+      
+      if (!protocol || !verifyTenantOwnership(protocol, tenantId)) {
+        return res.status(404).json({ error: "Protokoll hittades inte" });
+      }
+      
+      res.json(protocol);
+    } catch (error) {
+      console.error("Failed to get protocol:", error);
+      res.status(500).json({ error: "Kunde inte hämta protokoll" });
+    }
+  });
+
+  app.post("/api/protocols", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const { insertProtocolSchema } = await import("@shared/schema");
+      const validated = insertProtocolSchema.parse({ ...req.body, tenantId });
+      
+      const protocol = await storage.createProtocol(validated);
+      res.status(201).json(protocol);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create protocol:", error);
+      res.status(500).json({ error: "Kunde inte skapa protokoll" });
+    }
+  });
+
+  app.patch("/api/protocols/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getProtocol(req.params.id);
+      if (!existing || !verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Protokoll hittades inte" });
+      }
+      
+      const protocol = await storage.updateProtocol(req.params.id, tenantId, req.body);
+      res.json(protocol);
+    } catch (error) {
+      console.error("Failed to update protocol:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera protokoll" });
+    }
+  });
+
+  app.delete("/api/protocols/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getProtocol(req.params.id);
+      if (!existing || !verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Protokoll hittades inte" });
+      }
+      
+      await storage.deleteProtocol(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to delete protocol:", error);
+      res.status(500).json({ error: "Kunde inte ta bort protokoll" });
+    }
+  });
+
+  // Get assessment statistics for inspections
+  app.get("/api/protocols/statistics/assessments", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectId, startDate, endDate } = req.query;
+      
+      // Get all inspection protocols
+      const allProtocols = await storage.getProtocols(tenantId, {
+        protocolType: 'inspection',
+        objectId: objectId as string,
+      });
+      
+      // Filter by date if specified
+      let protocols = allProtocols;
+      if (startDate) {
+        const start = new Date(startDate as string);
+        protocols = protocols.filter(p => new Date(p.executedAt) >= start);
+      }
+      if (endDate) {
+        const end = new Date(endDate as string);
+        protocols = protocols.filter(p => new Date(p.executedAt) <= end);
+      }
+      
+      // Count by rating
+      const { ASSESSMENT_RATING_SCORES, ASSESSMENT_RATING_LABELS } = await import("@shared/schema");
+      
+      const ratingCounts: Record<string, number> = {};
+      let totalScore = 0;
+      let ratedCount = 0;
+      
+      for (const protocol of protocols) {
+        if (protocol.assessmentRating) {
+          ratingCounts[protocol.assessmentRating] = (ratingCounts[protocol.assessmentRating] || 0) + 1;
+          const score = ASSESSMENT_RATING_SCORES[protocol.assessmentRating as keyof typeof ASSESSMENT_RATING_SCORES];
+          if (score !== undefined) {
+            totalScore += score;
+            ratedCount++;
+          }
+        }
+      }
+      
+      // Calculate average score
+      const averageScore = ratedCount > 0 ? totalScore / ratedCount : null;
+      
+      // Build distribution with labels
+      const distribution = Object.entries(ratingCounts).map(([rating, count]) => ({
+        rating,
+        label: ASSESSMENT_RATING_LABELS[rating as keyof typeof ASSESSMENT_RATING_LABELS] || rating,
+        count,
+        percentage: protocols.length > 0 ? Math.round((count / protocols.length) * 100) : 0,
+      }));
+      
+      // Get trend data (last 6 months)
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      
+      const recentProtocols = allProtocols.filter(p => new Date(p.executedAt) >= sixMonthsAgo);
+      const monthlyData: Record<string, { count: number; totalScore: number }> = {};
+      
+      for (const protocol of recentProtocols) {
+        const monthKey = new Date(protocol.executedAt).toISOString().substring(0, 7);
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { count: 0, totalScore: 0 };
+        }
+        monthlyData[monthKey].count++;
+        if (protocol.assessmentRating) {
+          const score = ASSESSMENT_RATING_SCORES[protocol.assessmentRating as keyof typeof ASSESSMENT_RATING_SCORES];
+          if (score !== undefined) {
+            monthlyData[monthKey].totalScore += score;
+          }
+        }
+      }
+      
+      const trend = Object.entries(monthlyData)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([month, data]) => ({
+          month,
+          inspections: data.count,
+          averageScore: data.count > 0 ? Math.round((data.totalScore / data.count) * 10) / 10 : null,
+        }));
+      
+      res.json({
+        totalInspections: protocols.length,
+        averageScore: averageScore !== null ? Math.round(averageScore * 10) / 10 : null,
+        distribution,
+        trend,
+      });
+    } catch (error) {
+      console.error("Failed to get assessment statistics:", error);
+      res.status(500).json({ error: "Kunde inte hämta statistik" });
+    }
+  });
+
+  // Generate PDF for protocol
+  app.post("/api/protocols/:id/generate-pdf", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const protocol = await storage.getProtocol(req.params.id);
+      if (!protocol || !verifyTenantOwnership(protocol, tenantId)) {
+        return res.status(404).json({ error: "Protokoll hittades inte" });
+      }
+      
+      const { generateProtocolPdf } = await import('./protocol-pdf-generator');
+      
+      // Fetch related data
+      const workOrder = await storage.getWorkOrder(protocol.workOrderId);
+      const object = protocol.objectId ? await storage.getObject(protocol.objectId) : null;
+      const customer = workOrder?.customerId ? await storage.getCustomer(workOrder.customerId) : null;
+      const tenant = await storage.getTenant(tenantId);
+      
+      const pdfBuffer = await generateProtocolPdf(protocol, {
+        workOrder,
+        object,
+        customer,
+        tenant,
+      });
+      
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="protokoll-${protocol.protocolNumber || protocol.id}.pdf"`);
+      res.send(pdfBuffer);
+    } catch (error) {
+      console.error("Failed to generate protocol PDF:", error);
+      res.status(500).json({ error: "Kunde inte generera PDF" });
+    }
+  });
+
+  // Send protocol to customer via email
+  app.post("/api/protocols/:id/send-to-customer", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const protocol = await storage.getProtocol(req.params.id);
+      if (!protocol || !verifyTenantOwnership(protocol, tenantId)) {
+        return res.status(404).json({ error: "Protokoll hittades inte" });
+      }
+      
+      const { sendProtocolToCustomer } = await import('./protocol-email-service');
+      
+      const workOrder = await storage.getWorkOrder(protocol.workOrderId);
+      const object = protocol.objectId ? await storage.getObject(protocol.objectId) : null;
+      const customer = workOrder?.customerId ? await storage.getCustomer(workOrder.customerId) : null;
+      const tenant = await storage.getTenant(tenantId);
+      
+      if (!customer?.email) {
+        return res.status(400).json({ error: "Kunden har ingen e-postadress" });
+      }
+      
+      const result = await sendProtocolToCustomer(protocol, {
+        workOrder,
+        object,
+        customer,
+        tenant,
+      });
+      
+      // Update protocol status
+      await storage.updateProtocol(protocol.id, tenantId, {
+        sentToCustomer: true,
+        sentAt: new Date(),
+        status: 'sent',
+      });
+      
+      res.json({ success: true, message: "Protokoll skickat till kund" });
+    } catch (error) {
+      console.error("Failed to send protocol to customer:", error);
+      res.status(500).json({ error: "Kunde inte skicka protokoll" });
+    }
+  });
+
+  // ============================================
+  // DEVIATION REPORTS API
+  // ============================================
+  
+  app.get("/api/deviation-reports", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectId, status, category, severity } = req.query;
+      
+      const reports = await storage.getDeviationReports(tenantId, {
+        objectId: objectId as string,
+        status: status as string,
+        category: category as string,
+        severity: severity as string,
+      });
+      
+      res.json(reports);
+    } catch (error) {
+      console.error("Failed to get deviation reports:", error);
+      res.status(500).json({ error: "Kunde inte hämta avvikelserapporter" });
+    }
+  });
+
+  app.get("/api/deviation-reports/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const report = await storage.getDeviationReport(req.params.id);
+      
+      if (!report || !verifyTenantOwnership(report, tenantId)) {
+        return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      }
+      
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to get deviation report:", error);
+      res.status(500).json({ error: "Kunde inte hämta avvikelserapport" });
+    }
+  });
+
+  app.post("/api/deviation-reports", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const { insertDeviationReportSchema } = await import("@shared/schema");
+      const validated = insertDeviationReportSchema.parse({ ...req.body, tenantId });
+      
+      const report = await storage.createDeviationReport(validated);
+      res.status(201).json(report);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create deviation report:", error);
+      res.status(500).json({ error: "Kunde inte skapa avvikelserapport" });
+    }
+  });
+
+  app.patch("/api/deviation-reports/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getDeviationReport(req.params.id);
+      if (!existing || !verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      }
+      
+      const report = await storage.updateDeviationReport(req.params.id, tenantId, req.body);
+      res.json(report);
+    } catch (error) {
+      console.error("Failed to update deviation report:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera avvikelserapport" });
+    }
+  });
+
+  // Create work order from deviation report
+  app.post("/api/deviation-reports/:id/create-order", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const report = await storage.getDeviationReport(req.params.id);
+      if (!report || !verifyTenantOwnership(report, tenantId)) {
+        return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      }
+      
+      // Get object and customer info
+      const object = await storage.getObject(report.objectId);
+      if (!object) {
+        return res.status(400).json({ error: "Objekt hittades inte" });
+      }
+      
+      // Create new work order for fixing the deviation
+      const { DEVIATION_CATEGORY_LABELS, SEVERITY_LEVEL_LABELS } = await import("@shared/schema");
+      
+      const categoryLabel = DEVIATION_CATEGORY_LABELS[report.category as keyof typeof DEVIATION_CATEGORY_LABELS] || report.category;
+      const severityLabel = SEVERITY_LEVEL_LABELS[report.severityLevel as keyof typeof SEVERITY_LEVEL_LABELS] || report.severityLevel;
+      
+      const workOrder = await storage.createWorkOrder({
+        tenantId,
+        objectId: report.objectId,
+        customerId: object.customerId || '',
+        orderType: 'manual',
+        status: 'planned',
+        description: `Åtgärd: ${categoryLabel} - ${report.title}\n\nBeskrivning: ${report.description || ''}\n\nAllvarlighetsgrad: ${severityLabel}\n\nFöreslagen åtgärd: ${report.suggestedAction || 'Ej angiven'}`,
+        creationMethod: 'deviation_report',
+        latitude: report.latitude ? String(report.latitude) : undefined,
+        longitude: report.longitude ? String(report.longitude) : undefined,
+      });
+      
+      // Update deviation report with linked order
+      await storage.updateDeviationReport(report.id, tenantId, {
+        linkedActionOrderId: workOrder.id,
+        status: 'in_progress',
+      });
+      
+      res.status(201).json({
+        workOrder,
+        message: "Arbetsorder skapad för åtgärd av avvikelse",
+      });
+    } catch (error) {
+      console.error("Failed to create order from deviation:", error);
+      res.status(500).json({ error: "Kunde inte skapa arbetsorder" });
+    }
+  });
+
+  // Resolve deviation report
+  app.post("/api/deviation-reports/:id/resolve", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const user = (req as any).user;
+      const { resolutionNotes } = req.body;
+      
+      const report = await storage.getDeviationReport(req.params.id);
+      if (!report || !verifyTenantOwnership(report, tenantId)) {
+        return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      }
+      
+      const updated = await storage.updateDeviationReport(report.id, tenantId, {
+        status: 'resolved',
+        resolvedAt: new Date(),
+        resolvedBy: user?.id,
+        resolutionNotes,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to resolve deviation report:", error);
+      res.status(500).json({ error: "Kunde inte markera avvikelse som åtgärdad" });
+    }
+  });
+
+  // ============================================
+  // METADATA-TRIGGERS - Fas 3.2
+  // Lista objekt med klotter, avvikelser och problem
+  // ============================================
+
+  app.get("/api/objects/with-issues", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { issueType, status, customerId, limit } = req.query;
+      
+      const allObjects = await storage.getObjects(tenantId);
+      const deviations = await storage.getDeviationReports(tenantId, { 
+        status: status as string || undefined 
+      });
+      
+      type ObjectWithIssue = {
+        object: (typeof allObjects)[0];
+        issueType: string;
+        issueCount: number;
+        latestIssue: Date | null;
+        severity?: string;
+        details?: any[];
+      };
+      
+      const objectsWithIssues: ObjectWithIssue[] = [];
+      
+      const deviationsByObject = new Map<string, typeof deviations>();
+      for (const dev of deviations) {
+        const existing = deviationsByObject.get(dev.objectId) || [];
+        existing.push(dev);
+        deviationsByObject.set(dev.objectId, existing);
+      }
+      
+      for (const [objectId, devList] of deviationsByObject) {
+        const obj = allObjects.find(o => o.id === objectId);
+        if (!obj) continue;
+        if (customerId && obj.customerId !== customerId) continue;
+        
+        const byCategory = new Map<string, typeof devList>();
+        for (const dev of devList) {
+          const cat = dev.category || 'other';
+          const existing = byCategory.get(cat) || [];
+          existing.push(dev);
+          byCategory.set(cat, existing);
+        }
+        
+        for (const [category, categoryDevs] of byCategory) {
+          if (issueType && category !== issueType) continue;
+          
+          const sorted = categoryDevs.sort((a, b) => 
+            new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
+          );
+          const latest = sorted[0];
+          
+          objectsWithIssues.push({
+            object: obj,
+            issueType: category,
+            issueCount: categoryDevs.length,
+            latestIssue: new Date(latest.reportedAt),
+            severity: latest.severity || undefined,
+            details: sorted.slice(0, 5).map(d => ({
+              id: d.id,
+              title: d.title,
+              status: d.status,
+              reportedAt: d.reportedAt,
+              severity: d.severity,
+            })),
+          });
+        }
+      }
+      
+      objectsWithIssues.sort((a, b) => {
+        if (!a.latestIssue) return 1;
+        if (!b.latestIssue) return -1;
+        return b.latestIssue.getTime() - a.latestIssue.getTime();
+      });
+      
+      const limited = limit ? objectsWithIssues.slice(0, parseInt(limit as string)) : objectsWithIssues;
+      
+      const issueTypeCounts: Record<string, number> = {};
+      for (const item of objectsWithIssues) {
+        issueTypeCounts[item.issueType] = (issueTypeCounts[item.issueType] || 0) + 1;
+      }
+      
+      res.json({
+        totalObjectsWithIssues: objectsWithIssues.length,
+        issueTypes: issueTypeCounts,
+        objects: limited,
+      });
+    } catch (error) {
+      console.error("Failed to get objects with issues:", error);
+      res.status(500).json({ error: "Kunde inte hämta objekt med avvikelser" });
+    }
+  });
+
+  app.get("/api/objects/:id/issue-history", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const objectId = req.params.id;
+      
+      const obj = await storage.getObject(objectId);
+      if (!obj || !verifyTenantOwnership(obj, tenantId)) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      
+      const deviations = await storage.getDeviationReports(tenantId, { objectId });
+      const protocols = await storage.getProtocols(tenantId, { objectId, protocolType: 'inspection' });
+      const publicReports = await storage.getPublicIssueReports(tenantId, { objectId });
+      
+      const timeline: any[] = [];
+      
+      for (const dev of deviations) {
+        timeline.push({
+          type: 'deviation',
+          date: dev.reportedAt,
+          category: dev.category,
+          title: dev.title,
+          status: dev.status,
+          severity: dev.severity,
+          id: dev.id,
+        });
+      }
+      
+      for (const protocol of protocols) {
+        if (protocol.assessmentRating) {
+          timeline.push({
+            type: 'inspection',
+            date: protocol.executedAt,
+            rating: protocol.assessmentRating,
+            notes: protocol.assessmentNotes,
+            id: protocol.id,
+          });
+        }
+      }
+      
+      for (const report of publicReports) {
+        timeline.push({
+          type: 'public_report',
+          date: report.createdAt,
+          category: report.category,
+          title: report.title,
+          status: report.status,
+          id: report.id,
+        });
+      }
+      
+      timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      const byCategory: Record<string, number> = {};
+      const byMonth: Record<string, number> = {};
+      
+      for (const item of timeline) {
+        if (item.type === 'deviation' || item.type === 'public_report') {
+          byCategory[item.category] = (byCategory[item.category] || 0) + 1;
+          const month = new Date(item.date).toISOString().substring(0, 7);
+          byMonth[month] = (byMonth[month] || 0) + 1;
+        }
+      }
+      
+      res.json({
+        object: obj,
+        totalEvents: timeline.length,
+        categoryBreakdown: byCategory,
+        monthlyTrend: Object.entries(byMonth)
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([month, count]) => ({ month, count })),
+        timeline: timeline.slice(0, 50),
+      });
+    } catch (error) {
+      console.error("Failed to get object issue history:", error);
+      res.status(500).json({ error: "Kunde inte hämta problemhistorik" });
+    }
+  });
+
+  // ============================================
+  // ENVIRONMENTAL DATA - Fas 3.1
+  // ============================================
+
+  app.get("/api/environmental-data", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId, resourceId, startDate, endDate } = req.query;
+      
+      const data = await storage.getEnvironmentalData(tenantId, {
+        workOrderId: workOrderId as string,
+        resourceId: resourceId as string,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      });
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Failed to get environmental data:", error);
+      res.status(500).json({ error: "Kunde inte hämta miljödata" });
+    }
+  });
+
+  app.post("/api/environmental-data", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const user = (req as any).user;
+      
+      const { CO2_EMISSION_FACTORS } = await import("@shared/schema");
+      
+      let co2Kg = req.body.co2Kg;
+      if (req.body.co2CalculationMethod !== 'manual' && req.body.fuelLiters && req.body.fuelType) {
+        const factor = CO2_EMISSION_FACTORS[req.body.fuelType] || 0;
+        co2Kg = req.body.fuelLiters * factor;
+      } else if (req.body.co2CalculationMethod !== 'manual' && req.body.distanceKm && !co2Kg) {
+        co2Kg = req.body.distanceKm * 0.25;
+      }
+      
+      const data = await storage.createEnvironmentalData({
+        ...req.body,
+        tenantId,
+        co2Kg,
+        createdBy: user?.id,
+      });
+      
+      res.json(data);
+    } catch (error) {
+      console.error("Failed to create environmental data:", error);
+      res.status(500).json({ error: "Kunde inte spara miljödata" });
+    }
+  });
+
+  app.get("/api/environmental-data/statistics", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { startDate, endDate, resourceId } = req.query;
+      
+      const data = await storage.getEnvironmentalData(tenantId, {
+        resourceId: resourceId as string,
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      });
+      
+      let totalDistanceKm = 0;
+      let totalFuelLiters = 0;
+      let totalCo2Kg = 0;
+      let totalWasteKg = 0;
+      const chemicalsAggregated: Record<string, { quantity: number; unit: string }> = {};
+      const fuelByType: Record<string, number> = {};
+      const monthlyData: Record<string, { distanceKm: number; co2Kg: number; wasteKg: number }> = {};
+      
+      for (const record of data) {
+        if (record.distanceKm) totalDistanceKm += record.distanceKm;
+        if (record.fuelLiters) {
+          totalFuelLiters += record.fuelLiters;
+          if (record.fuelType) {
+            fuelByType[record.fuelType] = (fuelByType[record.fuelType] || 0) + record.fuelLiters;
+          }
+        }
+        if (record.co2Kg) totalCo2Kg += record.co2Kg;
+        if (record.wasteCollectedKg) totalWasteKg += record.wasteCollectedKg;
+        
+        if (record.chemicalsUsed && Array.isArray(record.chemicalsUsed)) {
+          for (const chem of record.chemicalsUsed as any[]) {
+            if (!chemicalsAggregated[chem.name]) {
+              chemicalsAggregated[chem.name] = { quantity: 0, unit: chem.unit || 'liters' };
+            }
+            chemicalsAggregated[chem.name].quantity += chem.quantity || 0;
+          }
+        }
+        
+        const monthKey = new Date(record.recordedAt).toISOString().substring(0, 7);
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { distanceKm: 0, co2Kg: 0, wasteKg: 0 };
+        }
+        monthlyData[monthKey].distanceKm += record.distanceKm || 0;
+        monthlyData[monthKey].co2Kg += record.co2Kg || 0;
+        monthlyData[monthKey].wasteKg += record.wasteCollectedKg || 0;
+      }
+      
+      const trend = Object.entries(monthlyData)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([month, stats]) => ({
+          month,
+          distanceKm: Math.round(stats.distanceKm),
+          co2Kg: Math.round(stats.co2Kg * 10) / 10,
+          wasteKg: Math.round(stats.wasteKg),
+        }));
+      
+      const chemicals = Object.entries(chemicalsAggregated).map(([name, data]) => ({
+        name,
+        quantity: Math.round(data.quantity * 100) / 100,
+        unit: data.unit,
+      }));
+      
+      res.json({
+        totalRecords: data.length,
+        totalDistanceKm: Math.round(totalDistanceKm),
+        totalFuelLiters: Math.round(totalFuelLiters * 10) / 10,
+        totalCo2Kg: Math.round(totalCo2Kg * 10) / 10,
+        totalWasteKg: Math.round(totalWasteKg),
+        fuelByType,
+        chemicals,
+        trend,
+        co2PerKm: totalDistanceKm > 0 ? Math.round((totalCo2Kg / totalDistanceKm) * 1000) / 1000 : null,
+      });
+    } catch (error) {
+      console.error("Failed to get environmental statistics:", error);
+      res.status(500).json({ error: "Kunde inte hämta miljöstatistik" });
     }
   });
 

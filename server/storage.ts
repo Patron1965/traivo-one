@@ -55,6 +55,11 @@ import {
   type CustomerIssueReport, type InsertCustomerIssueReport,
   type CustomerServiceContract, type InsertCustomerServiceContract,
   type CustomerNotificationSettings, type InsertCustomerNotificationSettings,
+  type Protocol, type InsertProtocol,
+  type DeviationReport, type InsertDeviationReport,
+  type QrCodeLink, type InsertQrCodeLink,
+  type PublicIssueReport, type InsertPublicIssueReport,
+  type EnvironmentalData, type InsertEnvironmentalData,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -66,7 +71,8 @@ import {
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
   orderConcepts, conceptFilters, assignments, assignmentArticles,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
-  customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings
+  customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
+  protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
@@ -400,6 +406,39 @@ export interface IStorage {
   // Customer Portal - Notification Settings
   getCustomerNotificationSettings(tenantId: string, customerId: string): Promise<CustomerNotificationSettings | undefined>;
   upsertCustomerNotificationSettings(settings: InsertCustomerNotificationSettings): Promise<CustomerNotificationSettings>;
+  
+  // Protocols
+  getProtocols(tenantId: string, options?: { workOrderId?: string; objectId?: string; protocolType?: string; status?: string }): Promise<Protocol[]>;
+  getProtocol(id: string): Promise<Protocol | undefined>;
+  createProtocol(protocol: InsertProtocol): Promise<Protocol>;
+  updateProtocol(id: string, tenantId: string, data: Partial<InsertProtocol>): Promise<Protocol | undefined>;
+  deleteProtocol(id: string, tenantId: string): Promise<void>;
+  
+  // Deviation Reports
+  getDeviationReports(tenantId: string, options?: { objectId?: string; status?: string; category?: string; severity?: string }): Promise<DeviationReport[]>;
+  getDeviationReport(id: string): Promise<DeviationReport | undefined>;
+  createDeviationReport(report: InsertDeviationReport): Promise<DeviationReport>;
+  updateDeviationReport(id: string, tenantId: string, data: Partial<InsertDeviationReport>): Promise<DeviationReport | undefined>;
+  
+  // QR Code Links
+  getQrCodeLinks(tenantId: string, objectId?: string): Promise<QrCodeLink[]>;
+  getQrCodeLinkByCode(code: string): Promise<QrCodeLink | undefined>;
+  getQrCodeLink(id: string): Promise<QrCodeLink | undefined>;
+  createQrCodeLink(link: InsertQrCodeLink): Promise<QrCodeLink>;
+  updateQrCodeLink(id: string, tenantId: string, data: Partial<InsertQrCodeLink>): Promise<QrCodeLink | undefined>;
+  incrementQrCodeScanCount(id: string): Promise<void>;
+  deleteQrCodeLink(id: string, tenantId: string): Promise<void>;
+  
+  // Public Issue Reports
+  getPublicIssueReports(tenantId: string, options?: { objectId?: string; status?: string }): Promise<PublicIssueReport[]>;
+  getPublicIssueReport(id: string): Promise<PublicIssueReport | undefined>;
+  createPublicIssueReport(report: InsertPublicIssueReport): Promise<PublicIssueReport>;
+  updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined>;
+  
+  // Environmental Data
+  getEnvironmentalData(tenantId: string, options?: { workOrderId?: string; resourceId?: string; startDate?: Date; endDate?: Date }): Promise<EnvironmentalData[]>;
+  createEnvironmentalData(data: InsertEnvironmentalData): Promise<EnvironmentalData>;
+  updateEnvironmentalData(id: string, tenantId: string, data: Partial<InsertEnvironmentalData>): Promise<EnvironmentalData | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2649,6 +2688,11 @@ export class DatabaseStorage implements IStorage {
     return token || undefined;
   }
 
+  async deletePortalToken(id: string): Promise<void> {
+    await db.delete(customerPortalTokens)
+      .where(eq(customerPortalTokens.id, id));
+  }
+
   async markPortalTokenUsed(id: string): Promise<void> {
     await db.update(customerPortalTokens)
       .set({ usedAt: new Date() })
@@ -2904,6 +2948,220 @@ export class DatabaseStorage implements IStorage {
     }
     
     const [result] = await db.insert(customerNotificationSettings).values(settings).returning();
+    return result;
+  }
+
+  // ============================================
+  // PROTOCOLS
+  // ============================================
+  
+  async getProtocols(tenantId: string, options?: { workOrderId?: string; objectId?: string; protocolType?: string; status?: string }): Promise<Protocol[]> {
+    const conditions = [eq(protocols.tenantId, tenantId)];
+    
+    if (options?.workOrderId) {
+      conditions.push(eq(protocols.workOrderId, options.workOrderId));
+    }
+    if (options?.objectId) {
+      conditions.push(eq(protocols.objectId, options.objectId));
+    }
+    if (options?.protocolType) {
+      conditions.push(eq(protocols.protocolType, options.protocolType));
+    }
+    if (options?.status) {
+      conditions.push(eq(protocols.status, options.status));
+    }
+    
+    return db.select().from(protocols)
+      .where(and(...conditions))
+      .orderBy(desc(protocols.executedAt));
+  }
+
+  async getProtocol(id: string): Promise<Protocol | undefined> {
+    const [result] = await db.select().from(protocols).where(eq(protocols.id, id));
+    return result;
+  }
+
+  async createProtocol(protocol: InsertProtocol): Promise<Protocol> {
+    const [result] = await db.insert(protocols).values(protocol).returning();
+    return result;
+  }
+
+  async updateProtocol(id: string, tenantId: string, data: Partial<InsertProtocol>): Promise<Protocol | undefined> {
+    const [result] = await db.update(protocols)
+      .set(data)
+      .where(and(eq(protocols.id, id), eq(protocols.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  async deleteProtocol(id: string, tenantId: string): Promise<void> {
+    await db.delete(protocols)
+      .where(and(eq(protocols.id, id), eq(protocols.tenantId, tenantId)));
+  }
+
+  // ============================================
+  // DEVIATION REPORTS
+  // ============================================
+  
+  async getDeviationReports(tenantId: string, options?: { objectId?: string; status?: string; category?: string; severity?: string }): Promise<DeviationReport[]> {
+    const conditions = [eq(deviationReports.tenantId, tenantId)];
+    
+    if (options?.objectId) {
+      conditions.push(eq(deviationReports.objectId, options.objectId));
+    }
+    if (options?.status) {
+      conditions.push(eq(deviationReports.status, options.status));
+    }
+    if (options?.category) {
+      conditions.push(eq(deviationReports.category, options.category));
+    }
+    if (options?.severity) {
+      conditions.push(eq(deviationReports.severityLevel, options.severity));
+    }
+    
+    return db.select().from(deviationReports)
+      .where(and(...conditions))
+      .orderBy(desc(deviationReports.reportedAt));
+  }
+
+  async getDeviationReport(id: string): Promise<DeviationReport | undefined> {
+    const [result] = await db.select().from(deviationReports).where(eq(deviationReports.id, id));
+    return result;
+  }
+
+  async createDeviationReport(report: InsertDeviationReport): Promise<DeviationReport> {
+    const [result] = await db.insert(deviationReports).values(report).returning();
+    return result;
+  }
+
+  async updateDeviationReport(id: string, tenantId: string, data: Partial<InsertDeviationReport>): Promise<DeviationReport | undefined> {
+    const [result] = await db.update(deviationReports)
+      .set({ ...data, updatedAt: new Date() })
+      .where(and(eq(deviationReports.id, id), eq(deviationReports.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  // ============================================
+  // QR CODE LINKS
+  // ============================================
+  
+  async getQrCodeLinks(tenantId: string, objectId?: string): Promise<QrCodeLink[]> {
+    const conditions = [eq(qrCodeLinks.tenantId, tenantId)];
+    if (objectId) {
+      conditions.push(eq(qrCodeLinks.objectId, objectId));
+    }
+    return db.select().from(qrCodeLinks)
+      .where(and(...conditions))
+      .orderBy(desc(qrCodeLinks.createdAt));
+  }
+
+  async getQrCodeLinkByCode(code: string): Promise<QrCodeLink | undefined> {
+    const [result] = await db.select().from(qrCodeLinks)
+      .where(eq(qrCodeLinks.code, code));
+    return result;
+  }
+
+  async getQrCodeLink(id: string): Promise<QrCodeLink | undefined> {
+    const [result] = await db.select().from(qrCodeLinks).where(eq(qrCodeLinks.id, id));
+    return result;
+  }
+
+  async createQrCodeLink(link: InsertQrCodeLink): Promise<QrCodeLink> {
+    const [result] = await db.insert(qrCodeLinks).values(link).returning();
+    return result;
+  }
+
+  async updateQrCodeLink(id: string, tenantId: string, data: Partial<InsertQrCodeLink>): Promise<QrCodeLink | undefined> {
+    const [result] = await db.update(qrCodeLinks)
+      .set(data)
+      .where(and(eq(qrCodeLinks.id, id), eq(qrCodeLinks.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  async incrementQrCodeScanCount(id: string): Promise<void> {
+    await db.update(qrCodeLinks)
+      .set({ 
+        scanCount: sql`${qrCodeLinks.scanCount} + 1`,
+        lastScannedAt: new Date()
+      })
+      .where(eq(qrCodeLinks.id, id));
+  }
+
+  async deleteQrCodeLink(id: string, tenantId: string): Promise<void> {
+    await db.delete(qrCodeLinks)
+      .where(and(eq(qrCodeLinks.id, id), eq(qrCodeLinks.tenantId, tenantId)));
+  }
+
+  // ============================================
+  // PUBLIC ISSUE REPORTS
+  // ============================================
+  
+  async getPublicIssueReports(tenantId: string, options?: { objectId?: string; status?: string }): Promise<PublicIssueReport[]> {
+    const conditions = [eq(publicIssueReports.tenantId, tenantId)];
+    if (options?.objectId) {
+      conditions.push(eq(publicIssueReports.objectId, options.objectId));
+    }
+    if (options?.status) {
+      conditions.push(eq(publicIssueReports.status, options.status));
+    }
+    return db.select().from(publicIssueReports)
+      .where(and(...conditions))
+      .orderBy(desc(publicIssueReports.createdAt));
+  }
+
+  async getPublicIssueReport(id: string): Promise<PublicIssueReport | undefined> {
+    const [result] = await db.select().from(publicIssueReports).where(eq(publicIssueReports.id, id));
+    return result;
+  }
+
+  async createPublicIssueReport(report: InsertPublicIssueReport): Promise<PublicIssueReport> {
+    const [result] = await db.insert(publicIssueReports).values(report).returning();
+    return result;
+  }
+
+  async updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined> {
+    const [result] = await db.update(publicIssueReports)
+      .set(data)
+      .where(and(eq(publicIssueReports.id, id), eq(publicIssueReports.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  // ============================================
+  // ENVIRONMENTAL DATA
+  // ============================================
+  
+  async getEnvironmentalData(tenantId: string, options?: { workOrderId?: string; resourceId?: string; startDate?: Date; endDate?: Date }): Promise<EnvironmentalData[]> {
+    const conditions = [eq(environmentalData.tenantId, tenantId)];
+    if (options?.workOrderId) {
+      conditions.push(eq(environmentalData.workOrderId, options.workOrderId));
+    }
+    if (options?.resourceId) {
+      conditions.push(eq(environmentalData.resourceId, options.resourceId));
+    }
+    if (options?.startDate) {
+      conditions.push(gte(environmentalData.recordedAt, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(environmentalData.recordedAt, options.endDate));
+    }
+    return db.select().from(environmentalData)
+      .where(and(...conditions))
+      .orderBy(desc(environmentalData.recordedAt));
+  }
+
+  async createEnvironmentalData(data: InsertEnvironmentalData): Promise<EnvironmentalData> {
+    const [result] = await db.insert(environmentalData).values(data).returning();
+    return result;
+  }
+
+  async updateEnvironmentalData(id: string, tenantId: string, data: Partial<InsertEnvironmentalData>): Promise<EnvironmentalData | undefined> {
+    const [result] = await db.update(environmentalData)
+      .set(data)
+      .where(and(eq(environmentalData.id, id), eq(environmentalData.tenantId, tenantId)))
+      .returning();
     return result;
   }
 }
