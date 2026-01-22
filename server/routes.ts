@@ -10537,6 +10537,118 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       res.status(500).json({ error: "Kunde inte hämta miljöstatistik" });
     }
   });
+  
+  // Environmental Certificate - annual sustainability report per customer
+  app.get("/api/environmental-certificates/:customerId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { customerId } = req.params;
+      const { year } = req.query;
+      
+      const targetYear = year ? parseInt(year as string) : new Date().getFullYear() - 1;
+      const startDate = new Date(`${targetYear}-01-01`);
+      const endDate = new Date(`${targetYear}-12-31T23:59:59`);
+      
+      // Get customer info
+      const customers = await storage.getCustomers(tenantId);
+      const customer = customers.find(c => c.id === customerId);
+      if (!customer) {
+        return res.status(404).json({ error: "Kund hittades inte" });
+      }
+      
+      // Get work orders for this customer
+      const allWorkOrders = await storage.getWorkOrders(tenantId);
+      const customerObjects = await storage.getObjects(tenantId);
+      const customerObjectIds = new Set(
+        customerObjects.filter(o => o.customerId === customerId).map(o => o.id)
+      );
+      const customerWorkOrders = allWorkOrders.filter(
+        wo => wo.customerId === customerId || (wo.objectId && customerObjectIds.has(wo.objectId))
+      );
+      const workOrderIds = new Set(customerWorkOrders.map(wo => wo.id));
+      
+      // Get environmental data for this customer's work orders
+      const allEnvData = await storage.getEnvironmentalData(tenantId, {
+        startDate,
+        endDate,
+      });
+      
+      const envData = allEnvData.filter(d => d.workOrderId && workOrderIds.has(d.workOrderId));
+      
+      // Aggregate statistics
+      let totalDistanceKm = 0;
+      let totalFuelLiters = 0;
+      let totalCo2Kg = 0;
+      let totalWasteKg = 0;
+      const chemicalsAggregated: Record<string, { quantity: number; unit: string }> = {};
+      const fuelByType: Record<string, number> = {};
+      
+      for (const record of envData) {
+        if (record.distanceKm) totalDistanceKm += record.distanceKm;
+        if (record.fuelLiters) {
+          totalFuelLiters += record.fuelLiters;
+          if (record.fuelType) {
+            fuelByType[record.fuelType] = (fuelByType[record.fuelType] || 0) + record.fuelLiters;
+          }
+        }
+        if (record.co2Kg) totalCo2Kg += record.co2Kg;
+        if (record.wasteCollectedKg) totalWasteKg += record.wasteCollectedKg;
+        
+        if (record.chemicalsUsed && Array.isArray(record.chemicalsUsed)) {
+          for (const chem of record.chemicalsUsed as any[]) {
+            if (!chemicalsAggregated[chem.name]) {
+              chemicalsAggregated[chem.name] = { quantity: 0, unit: chem.unit || 'liters' };
+            }
+            chemicalsAggregated[chem.name].quantity += chem.quantity || 0;
+          }
+        }
+      }
+      
+      const chemicals = Object.entries(chemicalsAggregated).map(([name, data]) => ({
+        name,
+        quantity: Math.round(data.quantity * 100) / 100,
+        unit: data.unit,
+      }));
+      
+      // Calculate sustainability metrics
+      const co2PerKm = totalDistanceKm > 0 ? totalCo2Kg / totalDistanceKm : 0;
+      const co2Savings = totalWasteKg * 0.5; // Estimated CO2 saved per kg waste collected (simplified)
+      const netCo2Impact = totalCo2Kg - co2Savings;
+      
+      // Count completed work orders
+      const completedOrders = customerWorkOrders.filter(
+        wo => wo.status === "utford" || wo.status === "fakturerad"
+      ).length;
+      
+      res.json({
+        customerId,
+        customerName: customer.name,
+        customerOrgNumber: customer.orgNumber,
+        year: targetYear,
+        generatedAt: new Date().toISOString(),
+        statistics: {
+          totalWorkOrders: customerWorkOrders.length,
+          completedWorkOrders: completedOrders,
+          totalDistanceKm: Math.round(totalDistanceKm),
+          totalFuelLiters: Math.round(totalFuelLiters * 10) / 10,
+          totalCo2Kg: Math.round(totalCo2Kg * 10) / 10,
+          totalWasteCollectedKg: Math.round(totalWasteKg),
+          co2PerKm: Math.round(co2PerKm * 1000) / 1000,
+          estimatedCo2SavingsKg: Math.round(co2Savings * 10) / 10,
+          netCo2ImpactKg: Math.round(netCo2Impact * 10) / 10,
+          fuelByType,
+          chemicals,
+        },
+        sustainabilityRating: netCo2Impact <= 0 ? "Klimatpositiv" : 
+          co2PerKm < 0.15 ? "Utmärkt" : 
+          co2PerKm < 0.25 ? "Bra" : 
+          co2PerKm < 0.35 ? "Medel" : "Behöver förbättras",
+      });
+    } catch (error) {
+      console.error("Failed to generate environmental certificate:", error);
+      res.status(500).json({ error: "Kunde inte generera miljöcertifikat" });
+    }
+  });
 
   return httpServer;
 }

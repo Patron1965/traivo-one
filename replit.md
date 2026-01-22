@@ -63,7 +63,14 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
   - API endpoints: `/api/portal/visit-confirmations`, `/api/portal/technician-ratings`, `/api/portal/work-order-chat/:workOrderId`, `/api/portal/booking-slots`, `/api/portal/self-bookings`
 - **Advanced Scheduling & Structural Articles (Modus 2.0):** Flexible scheduling with frequency metadata (weekdays, seasonal filters) and dynamic structural articles supporting seasonal adjustments and metadata-driven multiplication. Includes protocol and deviation report generation with PDF and email capabilities.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting via QR codes, allowing GPS position, photos, and conversion to work orders.
-- **Environmental Statistics:** Tracking of mileage, fuel, chemicals, CO2 calculations, and aggregated statistics.
+- **Environmental Statistics & Certificates:** Tracking of mileage, fuel, chemicals, CO2 calculations, and aggregated statistics. Includes annual environmental certificate generation per customer with PDF export featuring:
+  - CO2 emissions and estimated CO2 savings from waste collection
+  - Net CO2 impact calculation with sustainability rating (Klimatpositiv/Utmärkt/Bra/Medel)
+  - Fuel consumption breakdown by type
+  - Chemical usage tracking
+  - Service completion statistics
+  - API endpoint: `/api/environmental-certificates/:customerId?year=YYYY`
+  - Key files: `client/src/pages/EnvironmentalCertificatePage.tsx`, PDF generation using jsPDF
 - **Metadata-triggers:** System for listing objects with deviations, tracking issue history, and categorizing problems.
 - **White-label Multi-tenant UI:** Complete white-label support with dynamic CSS variable injection based on tenant branding. Features include:
   - Per-tenant color scheme (primary, secondary, accent, success, error colors)

@@ -67,6 +67,7 @@ import AIPlanningPage from "@/pages/AIPlanningPage";
 import FieldLoginPage from "@/pages/FieldLoginPage";
 import PublicReportPage from "@/pages/public-report";
 import SmsSettingsPage from "@/pages/SmsSettingsPage";
+import EnvironmentalCertificatePage from "@/pages/EnvironmentalCertificatePage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -111,6 +112,7 @@ function Router() {
       <Route path="/metadata-settings" component={MetadataSettingsPage} />
       <Route path="/fortnox" component={FortnoxSettingsPage} />
       <Route path="/sms-settings" component={SmsSettingsPage} />
+      <Route path="/environmental-certificates" component={EnvironmentalCertificatePage} />
       <Route path="/architecture" component={ArchitecturePage} />
       <Route path="/order-concepts" component={OrderConceptsPage} />
       <Route path="/assignments" component={AssignmentsPage} />
