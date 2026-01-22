@@ -6,10 +6,14 @@ import { Separator } from "@/components/ui/separator";
 import { 
   FileText, Download, Calendar, MapPin, Users, Truck, Package, 
   ClipboardList, BarChart3, Smartphone, Upload, Settings, 
-  Clock, Key, Building2, Layers, DollarSign, RefreshCw, Shield
+  Clock, Key, Building2, Layers, DollarSign, RefreshCw, Shield,
+  WifiOff, Palette, Briefcase, MessageSquare, Leaf, Bell, Bot,
+  QrCode, Star, Building, Receipt
 } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { format } from "date-fns";
+import { sv } from "date-fns/locale";
 
 interface FeatureSection {
   title: string;
@@ -130,6 +134,109 @@ const systemFeatures: FeatureSection[] = [
       { name: "Objektimport", description: "Tvåstegsimport med föräldrarelationer" },
       { name: "Uppgiftsimport", description: "Import av uppgifter med resurskoppling" },
       { name: "Händelseanalys", description: "Beräkning av ställtidsstatistik från händelser" },
+    ]
+  },
+  {
+    title: "Kundportal 2.0",
+    icon: Building,
+    features: [
+      { name: "Magic link-inloggning", description: "Lösenordsfri autentisering via e-post" },
+      { name: "Besöksöversikt", description: "Kommande och genomförda besök" },
+      { name: "Besöksbekräftelse", description: "Kund bekräftar utfört arbete med feedback" },
+      { name: "Teknikerbetyg", description: "1-5 stjärnor med kategorier (punktlighet, kvalitet m.m.)" },
+      { name: "Chatt med tekniker", description: "Realtidskommunikation per arbetsorder" },
+      { name: "Självbokning", description: "Boka tid inom tillgängliga tidsslottar" },
+    ]
+  },
+  {
+    title: "Offline-arkitektur",
+    icon: WifiOff,
+    features: [
+      { name: "IndexedDB-cache", description: "Lokal lagring av ordrar, objekt, artiklar och kontakter" },
+      { name: "Outbox-mönster", description: "Kö för statusuppdateringar, foton och avvikelser offline" },
+      { name: "Automatisk synkning", description: "Bakgrundssynk var 30:e sekund vid uppkoppling" },
+      { name: "Konflikthantering", description: "Automatisk konfliktlösning vid synkronisering" },
+      { name: "Visuella indikatorer", description: "Tydlig visning av offline-status och väntande uppladdningar" },
+      { name: "Fotocache", description: "Spara foton lokalt innan uppladdning" },
+    ]
+  },
+  {
+    title: "White-label & Multi-tenant",
+    icon: Palette,
+    features: [
+      { name: "Dynamisk färgsättning", description: "CSS-variabler per tenant för primär, sekundär, accent" },
+      { name: "Anpassade logotyper", description: "Full logo, ikon och favicon per tenant" },
+      { name: "Företagsnamn & tagline", description: "Visas i TopNav och dokumenttitel" },
+      { name: "Typsnitt per tenant", description: "Anpassningsbar fontfamilj" },
+      { name: "Mörkt läge", description: "Toggle-stöd per tenant" },
+      { name: "Varumärkesmallar", description: "Snabbkonfiguration för avfall, städ, fastighet" },
+    ]
+  },
+  {
+    title: "Branschpaket",
+    icon: Briefcase,
+    features: [
+      { name: "Avfallshantering", description: "Artiklar, metadata och strukturartiklar för sophantering" },
+      { name: "Städtjänster", description: "Fördefinierade artiklar och prissättning för städbranschen" },
+      { name: "Fastighetsservice", description: "Mall för fastighetsunderhåll och skötsel" },
+      { name: "Ett-klicks installation", description: "Installera komplett branschpaket för ny tenant" },
+      { name: "Färgschema per bransch", description: "Förslag på varumärkesprofil per bransch" },
+    ]
+  },
+  {
+    title: "Kommunikation & Notiser",
+    icon: Bell,
+    features: [
+      { name: "E-postnotiser", description: "Automatiska meddelanden via Resend" },
+      { name: "SMS-notiser", description: "Twilio-integration med svenska telefonnummer" },
+      { name: "Push-notifikationer", description: "WebSocket-baserade realtidsmeddelanden" },
+      { name: "Meddelandetyper", description: "På väg, klart, påminnelse, bokning bekräftad/avbokad" },
+      { name: "Tenant-specifik SMS-config", description: "Aktivera/inaktivera, välj leverantör per tenant" },
+    ]
+  },
+  {
+    title: "Miljö & Hållbarhet",
+    icon: Leaf,
+    features: [
+      { name: "CO2-beräkning", description: "Automatisk beräkning av utsläpp per order" },
+      { name: "Bränsleförbrukning", description: "Spårning per bränsletyp (diesel, bensin, el, HVO)" },
+      { name: "Kemikalieanvändning", description: "Loggning av kemikalier med volymer" },
+      { name: "Miljöcertifikat", description: "Årliga PDF-certifikat per kund med hållbarhetsbetyg" },
+      { name: "CO2-besparing", description: "Uppskattning av besparing från avfallshantering" },
+      { name: "Hållbarhetsrating", description: "Klimatpositiv → Utmärkt → Bra → Medel-skala" },
+    ]
+  },
+  {
+    title: "AI-funktioner",
+    icon: Bot,
+    features: [
+      { name: "Conversational AI", description: "Naturligt språk-chatt i veckoplaneraren" },
+      { name: "AI-planeringsassistent", description: "Automatiska förslag för optimerad planering" },
+      { name: "Väderbaserad kapacitet", description: "7-dagars prognos för anpassning av resurser" },
+      { name: "Prediktiv analys", description: "Prognoser och kapacitetsplanering" },
+      { name: "Anomalidetektering", description: "Automatisk identifiering av operativa avvikelser" },
+      { name: "GPT-4o integration", description: "OpenAI via Replit AI Integrations" },
+    ]
+  },
+  {
+    title: "QR & Felanmälan",
+    icon: QrCode,
+    features: [
+      { name: "Publik felanmälan", description: "Mobilvänlig rapportering via QR-koder" },
+      { name: "GPS-position", description: "Automatisk platsregistrering vid anmälan" },
+      { name: "Fotobevis", description: "Bifoga bilder till felanmälan" },
+      { name: "Konvertering till order", description: "Skapa arbetsorder från inrapporterat problem" },
+      { name: "Anonym rapportering", description: "Ingen inloggning krävs för slutanvändare" },
+    ]
+  },
+  {
+    title: "Fortnox-integration",
+    icon: Receipt,
+    features: [
+      { name: "OAuth-autentisering", description: "Säker koppling till Fortnox-konto" },
+      { name: "Entitetsmappning", description: "Synkronisera kunder och artiklar" },
+      { name: "Fakturexport", description: "Automatisk överföring av fakturaunderlag" },
+      { name: "Multi-payer stöd", description: "Hantera flera betalare per faktura" },
     ]
   },
 ];
@@ -288,8 +395,16 @@ export default function SystemOverviewPage() {
     <div className="p-6 max-w-6xl mx-auto space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Systemöversikt</h1>
+          <h1 className="text-2xl font-bold" data-testid="text-page-title">Systemöversikt</h1>
           <p className="text-muted-foreground">Komplett funktionslista för Unicorn</p>
+          <div className="flex items-center gap-2 mt-2">
+            <Badge variant="outline" className="text-xs">
+              Uppdaterad: {format(new Date(), "d MMM yyyy", { locale: sv })}
+            </Badge>
+            <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600 dark:text-green-400">
+              {systemFeatures.reduce((acc, s) => acc + s.features.length, 0)} funktioner live
+            </Badge>
+          </div>
         </div>
         <Button onClick={generatePDF} disabled={generating} data-testid="button-generate-pdf">
           {generating ? (
