@@ -63,6 +63,11 @@ import {
   type QrCodeLink, type InsertQrCodeLink,
   type PublicIssueReport, type InsertPublicIssueReport,
   type EnvironmentalData, type InsertEnvironmentalData,
+  type VisitConfirmation, type InsertVisitConfirmation,
+  type TechnicianRating, type InsertTechnicianRating,
+  type PortalMessage, type InsertPortalMessage,
+  type SelfBookingSlot, type InsertSelfBookingSlot,
+  type SelfBooking, type InsertSelfBooking,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -76,7 +81,8 @@ import {
   orderConcepts, conceptFilters, assignments, assignmentArticles,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
-  protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData
+  protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData,
+  visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
@@ -453,6 +459,40 @@ export interface IStorage {
   getEnvironmentalData(tenantId: string, options?: { workOrderId?: string; resourceId?: string; startDate?: Date; endDate?: Date }): Promise<EnvironmentalData[]>;
   createEnvironmentalData(data: InsertEnvironmentalData): Promise<EnvironmentalData>;
   updateEnvironmentalData(id: string, tenantId: string, data: Partial<InsertEnvironmentalData>): Promise<EnvironmentalData | undefined>;
+  
+  // Customer Portal 2.0 - Visit Confirmations
+  getVisitConfirmations(tenantId: string, options?: { customerId?: string; workOrderId?: string }): Promise<VisitConfirmation[]>;
+  getVisitConfirmation(id: string): Promise<VisitConfirmation | undefined>;
+  getVisitConfirmationByWorkOrder(workOrderId: string): Promise<VisitConfirmation | undefined>;
+  createVisitConfirmation(confirmation: InsertVisitConfirmation): Promise<VisitConfirmation>;
+  
+  // Customer Portal 2.0 - Technician Ratings
+  getTechnicianRatings(tenantId: string, options?: { resourceId?: string; customerId?: string; workOrderId?: string }): Promise<TechnicianRating[]>;
+  getTechnicianRating(id: string): Promise<TechnicianRating | undefined>;
+  getTechnicianRatingByWorkOrder(workOrderId: string): Promise<TechnicianRating | undefined>;
+  createTechnicianRating(rating: InsertTechnicianRating): Promise<TechnicianRating>;
+  getResourceAverageRating(resourceId: string): Promise<{ average: number; count: number }>;
+  
+  // Customer Portal 2.0 - Portal Messages (Chat)
+  getPortalMessages(tenantId: string, options?: { workOrderId?: string; customerId?: string; resourceId?: string; unreadOnly?: boolean }): Promise<PortalMessage[]>;
+  getPortalMessage(id: string): Promise<PortalMessage | undefined>;
+  createPortalMessage(message: InsertPortalMessage): Promise<PortalMessage>;
+  markMessageAsRead(id: string): Promise<PortalMessage | undefined>;
+  getUnreadMessageCount(tenantId: string, customerId?: string, resourceId?: string): Promise<number>;
+  
+  // Customer Portal 2.0 - Self Booking Slots
+  getSelfBookingSlots(tenantId: string, options?: { startDate?: Date; endDate?: Date; serviceType?: string; isActive?: boolean }): Promise<SelfBookingSlot[]>;
+  getSelfBookingSlot(id: string): Promise<SelfBookingSlot | undefined>;
+  createSelfBookingSlot(slot: InsertSelfBookingSlot): Promise<SelfBookingSlot>;
+  updateSelfBookingSlot(id: string, data: Partial<InsertSelfBookingSlot>): Promise<SelfBookingSlot | undefined>;
+  deleteSelfBookingSlot(id: string): Promise<void>;
+  incrementSlotBookingCount(slotId: string): Promise<SelfBookingSlot | undefined>;
+  
+  // Customer Portal 2.0 - Self Bookings
+  getSelfBookings(tenantId: string, options?: { customerId?: string; status?: string }): Promise<SelfBooking[]>;
+  getSelfBooking(id: string): Promise<SelfBooking | undefined>;
+  createSelfBooking(booking: InsertSelfBooking): Promise<SelfBooking>;
+  updateSelfBooking(id: string, data: Partial<InsertSelfBooking>): Promise<SelfBooking | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3215,6 +3255,205 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.update(environmentalData)
       .set(data)
       .where(and(eq(environmentalData.id, id), eq(environmentalData.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  // Customer Portal 2.0 - Visit Confirmations
+  async getVisitConfirmations(tenantId: string, options?: { customerId?: string; workOrderId?: string }): Promise<VisitConfirmation[]> {
+    const conditions = [eq(visitConfirmations.tenantId, tenantId)];
+    if (options?.customerId) {
+      conditions.push(eq(visitConfirmations.customerId, options.customerId));
+    }
+    if (options?.workOrderId) {
+      conditions.push(eq(visitConfirmations.workOrderId, options.workOrderId));
+    }
+    return db.select().from(visitConfirmations)
+      .where(and(...conditions))
+      .orderBy(desc(visitConfirmations.createdAt));
+  }
+
+  async getVisitConfirmation(id: string): Promise<VisitConfirmation | undefined> {
+    const [result] = await db.select().from(visitConfirmations).where(eq(visitConfirmations.id, id));
+    return result;
+  }
+
+  async getVisitConfirmationByWorkOrder(workOrderId: string): Promise<VisitConfirmation | undefined> {
+    const [result] = await db.select().from(visitConfirmations).where(eq(visitConfirmations.workOrderId, workOrderId));
+    return result;
+  }
+
+  async createVisitConfirmation(confirmation: InsertVisitConfirmation): Promise<VisitConfirmation> {
+    const [result] = await db.insert(visitConfirmations).values(confirmation).returning();
+    return result;
+  }
+
+  // Customer Portal 2.0 - Technician Ratings
+  async getTechnicianRatings(tenantId: string, options?: { resourceId?: string; customerId?: string; workOrderId?: string }): Promise<TechnicianRating[]> {
+    const conditions = [eq(technicianRatings.tenantId, tenantId)];
+    if (options?.resourceId) {
+      conditions.push(eq(technicianRatings.resourceId, options.resourceId));
+    }
+    if (options?.customerId) {
+      conditions.push(eq(technicianRatings.customerId, options.customerId));
+    }
+    if (options?.workOrderId) {
+      conditions.push(eq(technicianRatings.workOrderId, options.workOrderId));
+    }
+    return db.select().from(technicianRatings)
+      .where(and(...conditions))
+      .orderBy(desc(technicianRatings.createdAt));
+  }
+
+  async getTechnicianRating(id: string): Promise<TechnicianRating | undefined> {
+    const [result] = await db.select().from(technicianRatings).where(eq(technicianRatings.id, id));
+    return result;
+  }
+
+  async getTechnicianRatingByWorkOrder(workOrderId: string): Promise<TechnicianRating | undefined> {
+    const [result] = await db.select().from(technicianRatings).where(eq(technicianRatings.workOrderId, workOrderId));
+    return result;
+  }
+
+  async createTechnicianRating(rating: InsertTechnicianRating): Promise<TechnicianRating> {
+    const [result] = await db.insert(technicianRatings).values(rating).returning();
+    return result;
+  }
+
+  async getResourceAverageRating(resourceId: string): Promise<{ average: number; count: number }> {
+    const ratings = await db.select().from(technicianRatings).where(eq(technicianRatings.resourceId, resourceId));
+    if (ratings.length === 0) {
+      return { average: 0, count: 0 };
+    }
+    const sum = ratings.reduce((acc, r) => acc + r.rating, 0);
+    return { average: sum / ratings.length, count: ratings.length };
+  }
+
+  // Customer Portal 2.0 - Portal Messages (Chat)
+  async getPortalMessages(tenantId: string, options?: { workOrderId?: string; customerId?: string; resourceId?: string; unreadOnly?: boolean }): Promise<PortalMessage[]> {
+    const conditions = [eq(portalMessages.tenantId, tenantId)];
+    if (options?.workOrderId) {
+      conditions.push(eq(portalMessages.workOrderId, options.workOrderId));
+    }
+    if (options?.customerId) {
+      conditions.push(eq(portalMessages.customerId, options.customerId));
+    }
+    if (options?.resourceId) {
+      conditions.push(eq(portalMessages.resourceId, options.resourceId));
+    }
+    if (options?.unreadOnly) {
+      conditions.push(eq(portalMessages.isRead, false));
+    }
+    return db.select().from(portalMessages)
+      .where(and(...conditions))
+      .orderBy(portalMessages.createdAt);
+  }
+
+  async getPortalMessage(id: string): Promise<PortalMessage | undefined> {
+    const [result] = await db.select().from(portalMessages).where(eq(portalMessages.id, id));
+    return result;
+  }
+
+  async createPortalMessage(message: InsertPortalMessage): Promise<PortalMessage> {
+    const [result] = await db.insert(portalMessages).values(message).returning();
+    return result;
+  }
+
+  async markMessageAsRead(id: string): Promise<PortalMessage | undefined> {
+    const [result] = await db.update(portalMessages)
+      .set({ isRead: true, readAt: new Date() })
+      .where(eq(portalMessages.id, id))
+      .returning();
+    return result;
+  }
+
+  async getUnreadMessageCount(tenantId: string, customerId?: string, resourceId?: string): Promise<number> {
+    const conditions = [eq(portalMessages.tenantId, tenantId), eq(portalMessages.isRead, false)];
+    if (customerId) {
+      conditions.push(eq(portalMessages.customerId, customerId));
+    }
+    if (resourceId) {
+      conditions.push(eq(portalMessages.resourceId, resourceId));
+    }
+    const result = await db.select({ count: sql<number>`count(*)` }).from(portalMessages).where(and(...conditions));
+    return Number(result[0]?.count || 0);
+  }
+
+  // Customer Portal 2.0 - Self Booking Slots
+  async getSelfBookingSlots(tenantId: string, options?: { startDate?: Date; endDate?: Date; serviceType?: string; isActive?: boolean }): Promise<SelfBookingSlot[]> {
+    const conditions = [eq(selfBookingSlots.tenantId, tenantId)];
+    if (options?.startDate) {
+      conditions.push(gte(selfBookingSlots.slotDate, options.startDate));
+    }
+    if (options?.endDate) {
+      conditions.push(lte(selfBookingSlots.slotDate, options.endDate));
+    }
+    if (options?.isActive !== undefined) {
+      conditions.push(eq(selfBookingSlots.isActive, options.isActive));
+    }
+    return db.select().from(selfBookingSlots)
+      .where(and(...conditions))
+      .orderBy(selfBookingSlots.slotDate);
+  }
+
+  async getSelfBookingSlot(id: string): Promise<SelfBookingSlot | undefined> {
+    const [result] = await db.select().from(selfBookingSlots).where(eq(selfBookingSlots.id, id));
+    return result;
+  }
+
+  async createSelfBookingSlot(slot: InsertSelfBookingSlot): Promise<SelfBookingSlot> {
+    const [result] = await db.insert(selfBookingSlots).values(slot).returning();
+    return result;
+  }
+
+  async updateSelfBookingSlot(id: string, data: Partial<InsertSelfBookingSlot>): Promise<SelfBookingSlot | undefined> {
+    const [result] = await db.update(selfBookingSlots)
+      .set(data)
+      .where(eq(selfBookingSlots.id, id))
+      .returning();
+    return result;
+  }
+
+  async deleteSelfBookingSlot(id: string): Promise<void> {
+    await db.delete(selfBookingSlots).where(eq(selfBookingSlots.id, id));
+  }
+
+  async incrementSlotBookingCount(slotId: string): Promise<SelfBookingSlot | undefined> {
+    const [result] = await db.update(selfBookingSlots)
+      .set({ currentBookings: sql`${selfBookingSlots.currentBookings} + 1` })
+      .where(eq(selfBookingSlots.id, slotId))
+      .returning();
+    return result;
+  }
+
+  // Customer Portal 2.0 - Self Bookings
+  async getSelfBookings(tenantId: string, options?: { customerId?: string; status?: string }): Promise<SelfBooking[]> {
+    const conditions = [eq(selfBookings.tenantId, tenantId)];
+    if (options?.customerId) {
+      conditions.push(eq(selfBookings.customerId, options.customerId));
+    }
+    if (options?.status) {
+      conditions.push(eq(selfBookings.status, options.status));
+    }
+    return db.select().from(selfBookings)
+      .where(and(...conditions))
+      .orderBy(desc(selfBookings.createdAt));
+  }
+
+  async getSelfBooking(id: string): Promise<SelfBooking | undefined> {
+    const [result] = await db.select().from(selfBookings).where(eq(selfBookings.id, id));
+    return result;
+  }
+
+  async createSelfBooking(booking: InsertSelfBooking): Promise<SelfBooking> {
+    const [result] = await db.insert(selfBookings).values(booking).returning();
+    return result;
+  }
+
+  async updateSelfBooking(id: string, data: Partial<InsertSelfBooking>): Promise<SelfBooking | undefined> {
+    const [result] = await db.update(selfBookings)
+      .set(data)
+      .where(eq(selfBookings.id, id))
       .returning();
     return result;
   }

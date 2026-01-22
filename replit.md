@@ -51,7 +51,16 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - **Article Hook System:** Enables automatic article suggestions for objects based on hierarchy level and conditions.
 - **Fortnox Integration:** Full integration with the Fortnox accounting system, including OAuth, entity mapping, and an invoice export pipeline with multi-payer support.
 - **EAV Metadata System:** Flexible Entity-Attribute-Value system for object metadata, supporting various datatypes, inheritance, cross-fertilization, and geographic position priority. Includes admin interfaces for catalog management and tenant isolation.
-- **Customer Portal:** Allows staff to view customer orders and provides a customer self-service portal with token-based magic link authentication for viewing upcoming visits, history, and submitting booking requests.
+- **Customer Portal 2.0:** Enhanced customer self-service portal with token-based magic link authentication. Features include:
+  - Viewing upcoming visits and order history
+  - Visit confirmation (customer confirms job completion with optional dispute/feedback)
+  - Technician ratings (1-5 stars with categories: punctuality, quality, professionalism, communication, cleanliness)
+  - Real-time chat with assigned technicians per work order
+  - Self-booking within available time slots configured by staff
+  - Booking management (view, cancel pending bookings)
+  - Key components: `client/src/components/portal/VisitFeedback.tsx`, `client/src/components/portal/WorkOrderChat.tsx`, `client/src/components/portal/SelfBookingWidget.tsx`
+  - Database tables: `visit_confirmations`, `technician_ratings`, `portal_messages`, `self_booking_slots`, `self_bookings`
+  - API endpoints: `/api/portal/visit-confirmations`, `/api/portal/technician-ratings`, `/api/portal/work-order-chat/:workOrderId`, `/api/portal/booking-slots`, `/api/portal/self-bookings`
 - **Advanced Scheduling & Structural Articles (Modus 2.0):** Flexible scheduling with frequency metadata (weekdays, seasonal filters) and dynamic structural articles supporting seasonal adjustments and metadata-driven multiplication. Includes protocol and deviation report generation with PDF and email capabilities.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting via QR codes, allowing GPS position, photos, and conversion to work orders.
 - **Environmental Statistics:** Tracking of mileage, fuel, chemicals, CO2 calculations, and aggregated statistics.

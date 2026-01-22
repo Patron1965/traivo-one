@@ -2917,3 +2917,147 @@ export interface ChemicalUsage {
   unit: string; // liters, kg, ml, g
   hazardClass?: string; // UN-klass eller liknande
 }
+
+// ============================================
+// KUNDPORTAL 2.0 - Besökskvittering, Betyg, Chatt
+// ============================================
+
+// Besökskvitteringar - kunden bekräftar att jobbet är utfört
+export const visitConfirmations = pgTable("visit_confirmations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  confirmedAt: timestamp("confirmed_at").defaultNow().notNull(),
+  confirmationStatus: text("confirmation_status").default("confirmed").notNull(), // confirmed, disputed
+  disputeReason: text("dispute_reason"),
+  customerComment: text("customer_comment"),
+  signatureUrl: text("signature_url"),
+  confirmedByName: text("confirmed_by_name"),
+  confirmedByEmail: text("confirmed_by_email"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_visit_confirm_work_order").on(table.workOrderId),
+  index("idx_visit_confirm_customer").on(table.customerId),
+]);
+
+export const insertVisitConfirmationSchema = createInsertSchema(visitConfirmations).omit({ id: true, createdAt: true });
+export type VisitConfirmation = typeof visitConfirmations.$inferSelect;
+export type InsertVisitConfirmation = z.infer<typeof insertVisitConfirmationSchema>;
+
+// Teknikerbetyg - kunden betygsätter teknikern efter utfört jobb
+export const technicianRatings = pgTable("technician_ratings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  rating: integer("rating").notNull(), // 1-5 stjärnor
+  comment: text("comment"),
+  categories: jsonb("categories").default({}), // {punctuality: 5, quality: 4, professionalism: 5}
+  isAnonymous: boolean("is_anonymous").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_rating_work_order").on(table.workOrderId),
+  index("idx_rating_resource").on(table.resourceId),
+  index("idx_rating_customer").on(table.customerId),
+]);
+
+export const insertTechnicianRatingSchema = createInsertSchema(technicianRatings).omit({ id: true, createdAt: true });
+export type TechnicianRating = typeof technicianRatings.$inferSelect;
+export type InsertTechnicianRating = z.infer<typeof insertTechnicianRatingSchema>;
+
+// Kundportal-meddelanden - chatt mellan kund och tekniker
+export const portalMessages = pgTable("portal_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id"),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  senderType: text("sender_type").notNull(), // customer, technician, system
+  senderId: varchar("sender_id"),
+  senderName: text("sender_name"),
+  message: text("message").notNull(),
+  messageType: text("message_type").default("text"), // text, image, file, eta_update
+  attachmentUrl: text("attachment_url"),
+  isRead: boolean("is_read").default(false),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_portal_msg_work_order").on(table.workOrderId),
+  index("idx_portal_msg_customer").on(table.customerId),
+  index("idx_portal_msg_resource").on(table.resourceId),
+]);
+
+export const insertPortalMessageSchema = createInsertSchema(portalMessages).omit({ id: true, createdAt: true });
+export type PortalMessage = typeof portalMessages.$inferSelect;
+export type InsertPortalMessage = z.infer<typeof insertPortalMessageSchema>;
+
+// Tidsfönster för självbokning - tillgängliga tider för kunder att boka
+export const selfBookingSlots = pgTable("self_booking_slots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  teamId: varchar("team_id").references(() => teams.id),
+  slotDate: timestamp("slot_date").notNull(),
+  startTime: text("start_time").notNull(), // "08:00"
+  endTime: text("end_time").notNull(), // "10:00"
+  maxBookings: integer("max_bookings").default(1),
+  currentBookings: integer("current_bookings").default(0),
+  serviceTypes: jsonb("service_types").default([]), // ["extra_tomning", "container_byte"]
+  areaZones: jsonb("area_zones").default([]), // Geografiska zoner som täcks
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+}, (table) => [
+  index("idx_booking_slot_date").on(table.slotDate),
+  index("idx_booking_slot_resource").on(table.resourceId),
+  index("idx_booking_slot_team").on(table.teamId),
+]);
+
+export const insertSelfBookingSlotSchema = createInsertSchema(selfBookingSlots).omit({ id: true, createdAt: true });
+export type SelfBookingSlot = typeof selfBookingSlots.$inferSelect;
+export type InsertSelfBookingSlot = z.infer<typeof insertSelfBookingSlotSchema>;
+
+// Självbokningar - bokningar gjorda av kunder
+export const selfBookings = pgTable("self_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  slotId: varchar("slot_id").references(() => selfBookingSlots.id),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id),
+  serviceType: text("service_type").notNull(),
+  status: text("status").default("pending").notNull(), // pending, confirmed, cancelled, completed
+  workOrderId: varchar("work_order_id"),
+  customerNotes: text("customer_notes"),
+  confirmedAt: timestamp("confirmed_at"),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelReason: text("cancel_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_self_booking_customer").on(table.customerId),
+  index("idx_self_booking_slot").on(table.slotId),
+  index("idx_self_booking_status").on(table.status),
+]);
+
+export const insertSelfBookingSchema = createInsertSchema(selfBookings).omit({ id: true, createdAt: true });
+export type SelfBooking = typeof selfBookings.$inferSelect;
+export type InsertSelfBooking = z.infer<typeof insertSelfBookingSchema>;
+
+// Betygskategorier för teknikerbetyg
+export const RATING_CATEGORIES = [
+  "punctuality",    // Punktlighet
+  "quality",        // Arbetskvalitet
+  "professionalism", // Professionalism
+  "communication",  // Kommunikation
+  "cleanliness"     // Städning efter sig
+] as const;
+export type RatingCategory = typeof RATING_CATEGORIES[number];
+
+export const RATING_CATEGORY_LABELS: Record<RatingCategory, string> = {
+  punctuality: "Punktlighet",
+  quality: "Arbetskvalitet",
+  professionalism: "Professionalism",
+  communication: "Kommunikation",
+  cleanliness: "Städning efter sig"
+};

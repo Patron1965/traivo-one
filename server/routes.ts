@@ -14,6 +14,7 @@ import {
   insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema,
   insertObjectImageSchema, insertObjectContactSchema, insertTaskDesiredTimewindowSchema,
   insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
+  insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   type ServiceObject
 } from "@shared/schema";
 import { z } from "zod";
@@ -8765,6 +8766,558 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed to send message to customer:", error);
       res.status(500).json({ error: "Kunde inte skicka meddelande" });
+    }
+  });
+
+  // ============================================
+  // CUSTOMER PORTAL 2.0 - Visit Confirmations, Ratings, Chat, Self-Booking
+  // ============================================
+
+  // Visit Confirmations - Customer confirms job completion
+  app.get("/api/portal/visit-confirmations", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const confirmations = await storage.getVisitConfirmations(session.tenantId!, { 
+        customerId: session.customerId 
+      });
+      res.json(confirmations);
+    } catch (error) {
+      console.error("Failed to get visit confirmations:", error);
+      res.status(500).json({ error: "Kunde inte hämta besökskvitteringar" });
+    }
+  });
+
+  const visitConfirmationRequestSchema = insertVisitConfirmationSchema
+    .omit({ tenantId: true, customerId: true, confirmedByEmail: true })
+    .extend({
+      confirmationStatus: z.enum(["confirmed", "disputed"]).optional(),
+    });
+
+  app.post("/api/portal/visit-confirmations", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const parseResult = visitConfirmationRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Ogiltig förfrågningsdata", details: parseResult.error.flatten() });
+      }
+      
+      const { workOrderId, confirmationStatus, disputeReason, customerComment, confirmedByName } = parseResult.data;
+      
+      // Check if already confirmed
+      const existing = await storage.getVisitConfirmationByWorkOrder(workOrderId);
+      if (existing) {
+        return res.status(400).json({ error: "Besöket är redan kvitterat" });
+      }
+      
+      // Get work order to validate ownership
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder || workOrder.customerId !== session.customerId) {
+        return res.status(404).json({ error: "Order hittades inte" });
+      }
+      
+      const confirmation = await storage.createVisitConfirmation({
+        tenantId: session.tenantId!,
+        workOrderId,
+        customerId: session.customerId!,
+        confirmationStatus: confirmationStatus || "confirmed",
+        disputeReason,
+        customerComment,
+        confirmedByName: confirmedByName || session.customerName,
+        confirmedByEmail: session.email,
+      });
+      
+      res.status(201).json(confirmation);
+    } catch (error) {
+      console.error("Failed to create visit confirmation:", error);
+      res.status(500).json({ error: "Kunde inte kvittera besök" });
+    }
+  });
+
+  // Technician Ratings
+  app.get("/api/portal/technician-ratings", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const ratings = await storage.getTechnicianRatings(session.tenantId!, { 
+        customerId: session.customerId 
+      });
+      res.json(ratings);
+    } catch (error) {
+      console.error("Failed to get ratings:", error);
+      res.status(500).json({ error: "Kunde inte hämta betyg" });
+    }
+  });
+
+  const technicianRatingRequestSchema = insertTechnicianRatingSchema
+    .omit({ tenantId: true, customerId: true, resourceId: true })
+    .extend({
+      rating: z.number().min(1).max(5),
+      categories: z.object({
+        punctuality: z.number().min(1).max(5).optional(),
+        quality: z.number().min(1).max(5).optional(),
+        professionalism: z.number().min(1).max(5).optional(),
+        communication: z.number().min(1).max(5).optional(),
+        cleanliness: z.number().min(1).max(5).optional(),
+      }).optional(),
+    });
+
+  app.post("/api/portal/technician-ratings", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const parseResult = technicianRatingRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Ogiltig förfrågningsdata", details: parseResult.error.flatten() });
+      }
+      
+      const { workOrderId, rating, comment, categories, isAnonymous } = parseResult.data;
+      
+      // Check if already rated
+      const existing = await storage.getTechnicianRatingByWorkOrder(workOrderId);
+      if (existing) {
+        return res.status(400).json({ error: "Du har redan betygsatt detta besök" });
+      }
+      
+      // Get work order to get resource and validate
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder || workOrder.customerId !== session.customerId) {
+        return res.status(404).json({ error: "Order hittades inte" });
+      }
+      
+      const newRating = await storage.createTechnicianRating({
+        tenantId: session.tenantId!,
+        workOrderId,
+        customerId: session.customerId!,
+        resourceId: workOrder.resourceId || undefined,
+        rating,
+        comment,
+        categories: categories || {},
+        isAnonymous: isAnonymous || false,
+      });
+      
+      res.status(201).json(newRating);
+    } catch (error) {
+      console.error("Failed to create rating:", error);
+      res.status(500).json({ error: "Kunde inte spara betyg" });
+    }
+  });
+
+  // Portal Messages (Chat) - New unified chat for work orders
+  app.get("/api/portal/work-order-chat/:workOrderId", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const { workOrderId } = req.params;
+      
+      // Verify work order ownership
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder || workOrder.customerId !== session.customerId) {
+        return res.status(404).json({ error: "Order hittades inte" });
+      }
+      
+      // Get resource info
+      let resource = null;
+      if (workOrder.resourceId) {
+        resource = await storage.getResource(workOrder.resourceId);
+      }
+      
+      const messages = await storage.getPortalMessages(session.tenantId!, { 
+        workOrderId,
+        customerId: session.customerId,
+      });
+      
+      res.json({
+        workOrder: {
+          id: workOrder.id,
+          title: workOrder.title,
+          scheduledDate: workOrder.scheduledDate,
+          status: workOrder.orderStatus || workOrder.status,
+        },
+        resource: resource ? {
+          id: resource.id,
+          name: resource.name,
+        } : null,
+        messages,
+      });
+    } catch (error) {
+      console.error("Failed to get work order chat:", error);
+      res.status(500).json({ error: "Kunde inte hämta meddelanden" });
+    }
+  });
+
+  const chatMessageRequestSchema = insertPortalMessageSchema
+    .pick({ message: true })
+    .extend({
+      message: z.string().min(1, "Meddelande krävs"),
+    });
+
+  app.post("/api/portal/work-order-chat/:workOrderId", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const { workOrderId } = req.params;
+      
+      const parseResult = chatMessageRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Meddelande krävs", details: parseResult.error.flatten() });
+      }
+      
+      const { message } = parseResult.data;
+      
+      // Verify work order ownership
+      const workOrder = await storage.getWorkOrder(workOrderId);
+      if (!workOrder || workOrder.customerId !== session.customerId) {
+        return res.status(404).json({ error: "Order hittades inte" });
+      }
+      
+      const newMessage = await storage.createPortalMessage({
+        tenantId: session.tenantId!,
+        workOrderId,
+        customerId: session.customerId!,
+        resourceId: workOrder.resourceId || undefined,
+        senderType: "customer",
+        senderId: session.customerId,
+        senderName: session.customerName,
+        message: message.trim(),
+        messageType: "text",
+      });
+      
+      res.status(201).json(newMessage);
+    } catch (error) {
+      console.error("Failed to send message:", error);
+      res.status(500).json({ error: "Kunde inte skicka meddelande" });
+    }
+  });
+
+  // Self-Booking Slots - Get available slots
+  app.get("/api/portal/booking-slots", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const { startDate, endDate, serviceType } = req.query;
+      
+      const start = startDate ? new Date(startDate as string) : new Date();
+      const end = endDate ? new Date(endDate as string) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      
+      const slots = await storage.getSelfBookingSlots(session.tenantId!, {
+        startDate: start,
+        endDate: end,
+        serviceType: serviceType as string,
+        isActive: true,
+      });
+      
+      // Filter to only available slots
+      const availableSlots = slots.filter(s => (s.currentBookings || 0) < (s.maxBookings || 1));
+      
+      res.json(availableSlots);
+    } catch (error) {
+      console.error("Failed to get booking slots:", error);
+      res.status(500).json({ error: "Kunde inte hämta tillgängliga tider" });
+    }
+  });
+
+  // Self-Bookings - Customer's bookings
+  app.get("/api/portal/self-bookings", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const bookings = await storage.getSelfBookings(session.tenantId!, { 
+        customerId: session.customerId 
+      });
+      
+      // Enrich with slot info
+      const enrichedBookings = await Promise.all(bookings.map(async (booking) => {
+        let slot = null;
+        if (booking.slotId) {
+          slot = await storage.getSelfBookingSlot(booking.slotId);
+        }
+        return {
+          ...booking,
+          slotDate: slot?.slotDate,
+          slotStartTime: slot?.startTime,
+          slotEndTime: slot?.endTime,
+        };
+      }));
+      
+      res.json(enrichedBookings);
+    } catch (error) {
+      console.error("Failed to get self-bookings:", error);
+      res.status(500).json({ error: "Kunde inte hämta bokningar" });
+    }
+  });
+
+  const selfBookingRequestSchema = insertSelfBookingSchema
+    .omit({ tenantId: true, customerId: true, status: true })
+    .extend({
+      serviceType: z.string().min(1, "Tjänsttyp krävs"),
+    });
+
+  app.post("/api/portal/self-bookings", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const parseResult = selfBookingRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Tidslucka och tjänsttyp krävs", details: parseResult.error.flatten() });
+      }
+      
+      const { slotId, objectId, serviceType, customerNotes } = parseResult.data;
+      
+      // Verify slot exists and is available
+      const slot = await storage.getSelfBookingSlot(slotId);
+      if (!slot || slot.tenantId !== session.tenantId) {
+        return res.status(404).json({ error: "Tidslucka hittades inte" });
+      }
+      
+      if ((slot.currentBookings || 0) >= (slot.maxBookings || 1)) {
+        return res.status(400).json({ error: "Tidsluckan är fullbokad" });
+      }
+      
+      // Verify object belongs to customer if provided
+      if (objectId) {
+        const object = await storage.getObject(objectId);
+        if (!object || object.customerId !== session.customerId) {
+          return res.status(404).json({ error: "Objekt hittades inte" });
+        }
+      }
+      
+      // Create booking
+      const booking = await storage.createSelfBooking({
+        tenantId: session.tenantId!,
+        slotId,
+        customerId: session.customerId!,
+        objectId: objectId || undefined,
+        serviceType,
+        status: "pending",
+        customerNotes,
+      });
+      
+      // Increment slot booking count
+      await storage.incrementSlotBookingCount(slotId);
+      
+      res.status(201).json(booking);
+    } catch (error) {
+      console.error("Failed to create self-booking:", error);
+      res.status(500).json({ error: "Kunde inte skapa bokning" });
+    }
+  });
+
+  app.delete("/api/portal/self-bookings/:id", async (req, res) => {
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+      
+      const booking = await storage.getSelfBooking(req.params.id);
+      if (!booking || booking.customerId !== session.customerId) {
+        return res.status(404).json({ error: "Bokning hittades inte" });
+      }
+      
+      if (booking.status !== "pending") {
+        return res.status(400).json({ error: "Endast väntande bokningar kan avbokas" });
+      }
+      
+      await storage.updateSelfBooking(req.params.id, {
+        status: "cancelled",
+        cancelledAt: new Date(),
+        cancelReason: "Avbokad av kund",
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to cancel self-booking:", error);
+      res.status(500).json({ error: "Kunde inte avboka" });
+    }
+  });
+
+  // Staff API - Self-booking slot management
+  app.get("/api/self-booking-slots", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { startDate, endDate } = req.query;
+      
+      const slots = await storage.getSelfBookingSlots(tenantId, {
+        startDate: startDate ? new Date(startDate as string) : undefined,
+        endDate: endDate ? new Date(endDate as string) : undefined,
+      });
+      
+      res.json(slots);
+    } catch (error) {
+      console.error("Failed to get booking slots:", error);
+      res.status(500).json({ error: "Kunde inte hämta tidsluckor" });
+    }
+  });
+
+  app.post("/api/self-booking-slots", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const user = (req as any).user;
+      
+      const { insertSelfBookingSlotSchema } = await import("@shared/schema");
+      const validated = insertSelfBookingSlotSchema.parse({
+        ...req.body,
+        tenantId,
+        createdBy: user?.id,
+      });
+      
+      const slot = await storage.createSelfBookingSlot(validated);
+      res.status(201).json(slot);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors });
+      }
+      console.error("Failed to create booking slot:", error);
+      res.status(500).json({ error: "Kunde inte skapa tidslucka" });
+    }
+  });
+
+  app.patch("/api/self-booking-slots/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getSelfBookingSlot(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Tidslucka hittades inte" });
+      }
+      
+      const updated = await storage.updateSelfBookingSlot(req.params.id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update booking slot:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera tidslucka" });
+    }
+  });
+
+  app.delete("/api/self-booking-slots/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getSelfBookingSlot(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Tidslucka hittades inte" });
+      }
+      
+      await storage.deleteSelfBookingSlot(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete booking slot:", error);
+      res.status(500).json({ error: "Kunde inte ta bort tidslucka" });
+    }
+  });
+
+  // Staff API - View all self-bookings
+  app.get("/api/self-bookings", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { status } = req.query;
+      
+      const bookings = await storage.getSelfBookings(tenantId, {
+        status: status as string,
+      });
+      
+      // Enrich with customer and slot info
+      const enrichedBookings = await Promise.all(bookings.map(async (booking) => {
+        const [customer, slot] = await Promise.all([
+          storage.getCustomer(booking.customerId),
+          booking.slotId ? storage.getSelfBookingSlot(booking.slotId) : null,
+        ]);
+        return {
+          ...booking,
+          customerName: customer?.name,
+          slotDate: slot?.slotDate,
+          slotStartTime: slot?.startTime,
+          slotEndTime: slot?.endTime,
+        };
+      }));
+      
+      res.json(enrichedBookings);
+    } catch (error) {
+      console.error("Failed to get self-bookings:", error);
+      res.status(500).json({ error: "Kunde inte hämta bokningar" });
+    }
+  });
+
+  app.patch("/api/self-bookings/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const existing = await storage.getSelfBooking(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Bokning hittades inte" });
+      }
+      
+      const { status, workOrderId } = req.body;
+      
+      const updateData: Record<string, unknown> = {};
+      if (status) updateData.status = status;
+      if (workOrderId) updateData.workOrderId = workOrderId;
+      if (status === "confirmed") updateData.confirmedAt = new Date();
+      if (status === "cancelled") {
+        updateData.cancelledAt = new Date();
+        updateData.cancelReason = req.body.cancelReason || "Avbokad av personal";
+      }
+      
+      const updated = await storage.updateSelfBooking(req.params.id, updateData as any);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update self-booking:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera bokning" });
+    }
+  });
+
+  // Staff API - View technician ratings
+  app.get("/api/technician-ratings", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { resourceId } = req.query;
+      
+      const ratings = await storage.getTechnicianRatings(tenantId, {
+        resourceId: resourceId as string,
+      });
+      
+      res.json(ratings);
+    } catch (error) {
+      console.error("Failed to get technician ratings:", error);
+      res.status(500).json({ error: "Kunde inte hämta teknikerbetyg" });
+    }
+  });
+
+  app.get("/api/technician-ratings/average/:resourceId", async (req, res) => {
+    try {
+      const { resourceId } = req.params;
+      const avgRating = await storage.getResourceAverageRating(resourceId);
+      res.json(avgRating);
+    } catch (error) {
+      console.error("Failed to get average rating:", error);
+      res.status(500).json({ error: "Kunde inte hämta genomsnittsbetyg" });
+    }
+  });
+
+  // Staff API - View visit confirmations
+  app.get("/api/visit-confirmations", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { customerId, workOrderId } = req.query;
+      
+      const confirmations = await storage.getVisitConfirmations(tenantId, {
+        customerId: customerId as string,
+        workOrderId: workOrderId as string,
+      });
+      
+      res.json(confirmations);
+    } catch (error) {
+      console.error("Failed to get visit confirmations:", error);
+      res.status(500).json({ error: "Kunde inte hämta besökskvitteringar" });
     }
   });
 

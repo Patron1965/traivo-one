@@ -11,12 +11,15 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { format, differenceInDays, isAfter } from "date-fns";
 import { sv } from "date-fns/locale";
+import { VisitFeedback } from "@/components/portal/VisitFeedback";
+import { WorkOrderChat } from "@/components/portal/WorkOrderChat";
+import { SelfBookingWidget } from "@/components/portal/SelfBookingWidget";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -679,6 +682,9 @@ export default function PortalDashboardPage() {
           </Card>
         )}
 
+        {/* Self-Booking Widget */}
+        <SelfBookingWidget portalFetch={portalFetch} objects={objectsQuery.data || []} />
+
         {/* Main Content - Mina ärenden Section */}
         <Card>
           <CardHeader className="pb-4">
@@ -1005,6 +1011,20 @@ export default function PortalDashboardPage() {
                           <span>{order.objectAddress}</span>
                         </div>
                       )}
+                      {order.resourceName && (
+                        <div className="flex items-center gap-2 text-muted-foreground">
+                          <Truck className="h-4 w-4" />
+                          <span>{order.resourceName}</span>
+                        </div>
+                      )}
+                      <VisitFeedback workOrder={order} portalFetch={portalFetch} />
+                      <div className="flex items-center gap-2 pt-2">
+                        <WorkOrderChat
+                          workOrderId={order.id}
+                          workOrderTitle={order.title}
+                          portalFetch={portalFetch}
+                        />
+                      </div>
                     </CardContent>
                   </Card>
                 ))}
