@@ -56,6 +56,15 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting via QR codes, allowing GPS position, photos, and conversion to work orders.
 - **Environmental Statistics:** Tracking of mileage, fuel, chemicals, CO2 calculations, and aggregated statistics.
 - **Metadata-triggers:** System for listing objects with deviations, tracking issue history, and categorizing problems.
+- **White-label Multi-tenant UI:** Complete white-label support with dynamic CSS variable injection based on tenant branding. Features include:
+  - Per-tenant color scheme (primary, secondary, accent, success, error colors)
+  - Custom logos (full logo, icon, favicon) with fallback generation
+  - Company name and tagline displayed in TopNav and document title
+  - Font family customization per tenant
+  - Dark mode toggle support per tenant
+  - Branding templates for quick setup (Waste, Cleaning, Property service)
+  - Live preview and version control for branding changes
+  - Key files: `client/src/components/TenantBrandingProvider.tsx`, `client/src/pages/SystemDashboardPage.tsx`
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

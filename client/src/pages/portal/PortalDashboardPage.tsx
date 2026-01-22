@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -106,6 +107,7 @@ function BookingRequestStatusBadge({ status }: { status: string }) {
 }
 
 export default function PortalDashboardPage() {
+  const { companyName, logoIconUrl, primaryColor } = useTenantBranding();
   const [, setLocation] = useLocation();
   const [bookingDialogOpen, setBookingDialogOpen] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
@@ -225,11 +227,29 @@ export default function PortalDashboardPage() {
     <div className="min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container flex h-14 items-center justify-between">
-          <div className="flex items-center gap-3">
-            <User className="h-5 w-5 text-primary" />
-            <div>
-              <h1 className="text-sm font-semibold leading-none">{customer?.name}</h1>
-              <span className="text-xs text-muted-foreground">{tenant?.name}</span>
+          <div className="flex items-center gap-4">
+            {logoIconUrl ? (
+              <img 
+                src={logoIconUrl} 
+                alt={companyName} 
+                className="h-8 w-8 object-contain"
+                data-testid="img-portal-dashboard-logo"
+              />
+            ) : (
+              <div 
+                className="h-8 w-8 rounded-md flex items-center justify-center text-white font-bold text-sm"
+                style={{ backgroundColor: primaryColor }}
+                data-testid="img-portal-dashboard-logo-fallback"
+              >
+                {companyName.charAt(0).toUpperCase()}
+              </div>
+            )}
+            <div className="flex items-center gap-3">
+              <User className="h-5 w-5 text-primary" />
+              <div>
+                <h1 className="text-sm font-semibold leading-none">{customer?.name}</h1>
+                <span className="text-xs text-muted-foreground">{tenant?.name}</span>
+              </div>
             </div>
           </div>
           <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
@@ -246,11 +266,11 @@ export default function PortalDashboardPage() {
           <div className="relative z-10">
             <div className="flex items-center gap-2 mb-2">
               <Sparkles className="h-5 w-5 text-primary" />
-              <span className="text-sm font-medium text-primary">Kundportal</span>
+              <span className="text-sm font-medium text-primary">{companyName} Kundportal</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold mb-2">{getGreeting()}, {customer?.name?.split(" ")[0]}!</h2>
             <p className="text-muted-foreground max-w-xl">
-              Välkommen till {tenant?.name || "kundportalen"}. Här kan du enkelt hantera dina tjänster, 
+              Välkommen till {companyName}. Här kan du enkelt hantera dina tjänster, 
               boka extra tömningar och kontakta oss.
             </p>
           </div>

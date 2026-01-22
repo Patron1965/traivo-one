@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { TenantBranding } from "@shared/schema";
 
@@ -9,6 +9,9 @@ interface BrandingContextValue {
   secondaryColor: string;
   accentColor: string;
   companyName: string;
+  logoUrl: string | null;
+  logoIconUrl: string | null;
+  fontFamily: string;
 }
 
 const BrandingContext = createContext<BrandingContextValue>({
@@ -18,6 +21,9 @@ const BrandingContext = createContext<BrandingContextValue>({
   secondaryColor: "#6366F1",
   accentColor: "#F59E0B",
   companyName: "Unicorn",
+  logoUrl: null,
+  logoIconUrl: null,
+  fontFamily: "Inter",
 });
 
 export function useTenantBranding() {
@@ -59,7 +65,7 @@ function hexToHSL(hex: string): string {
 }
 
 export function TenantBrandingProvider({ children }: { children: React.ReactNode }) {
-  const [applied, setApplied] = useState(false);
+  const lastVersionRef = useRef<number | null>(null);
 
   const { data: branding, isLoading } = useQuery<TenantBranding | null>({
     queryKey: ["/api/system/tenant-branding"],
@@ -68,37 +74,62 @@ export function TenantBrandingProvider({ children }: { children: React.ReactNode
   });
 
   useEffect(() => {
-    if (!branding || applied) return;
+    if (!branding) return;
+    
+    if (lastVersionRef.current === branding.version) return;
+    lastVersionRef.current = branding.version;
 
     const root = document.documentElement;
 
     if (branding.primaryColor) {
       const hsl = hexToHSL(branding.primaryColor);
-      root.style.setProperty("--tenant-primary", hsl);
+      root.style.setProperty("--primary", hsl);
+      root.style.setProperty("--primary-foreground", "0 0% 100%");
+      root.style.setProperty("--ring", hsl);
     }
 
     if (branding.secondaryColor) {
       const hsl = hexToHSL(branding.secondaryColor);
-      root.style.setProperty("--tenant-secondary", hsl);
+      root.style.setProperty("--secondary", hsl);
+      root.style.setProperty("--secondary-foreground", "0 0% 100%");
     }
 
     if (branding.accentColor) {
       const hsl = hexToHSL(branding.accentColor);
-      root.style.setProperty("--tenant-accent", hsl);
+      root.style.setProperty("--accent", hsl);
+      root.style.setProperty("--accent-foreground", "0 0% 100%");
     }
 
     if (branding.successColor) {
       const hsl = hexToHSL(branding.successColor);
-      root.style.setProperty("--tenant-success", hsl);
+      root.style.setProperty("--success", hsl);
     }
 
     if (branding.errorColor) {
       const hsl = hexToHSL(branding.errorColor);
-      root.style.setProperty("--tenant-error", hsl);
+      root.style.setProperty("--destructive", hsl);
     }
 
-    setApplied(true);
-  }, [branding, applied]);
+    if (branding.fontFamily) {
+      document.body.style.fontFamily = `'${branding.fontFamily}', system-ui, sans-serif`;
+    }
+
+    if (branding.faviconUrl) {
+      const link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
+      if (link) {
+        link.href = branding.faviconUrl;
+      } else {
+        const newLink = document.createElement('link');
+        newLink.rel = 'icon';
+        newLink.href = branding.faviconUrl;
+        document.head.appendChild(newLink);
+      }
+    }
+
+    if (branding.companyName) {
+      document.title = `${branding.companyName} - Fältservice`;
+    }
+  }, [branding]);
 
   const contextValue: BrandingContextValue = {
     branding: branding ?? null,
@@ -107,6 +138,9 @@ export function TenantBrandingProvider({ children }: { children: React.ReactNode
     secondaryColor: branding?.secondaryColor || "#6366F1",
     accentColor: branding?.accentColor || "#F59E0B",
     companyName: branding?.companyName || "Unicorn",
+    logoUrl: branding?.logoUrl || null,
+    logoIconUrl: branding?.logoIconUrl || null,
+    fontFamily: branding?.fontFamily || "Inter",
   };
 
   return (

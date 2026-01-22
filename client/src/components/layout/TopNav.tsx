@@ -1,5 +1,6 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -149,6 +150,7 @@ function NavDropdown({ label, items, icon: Icon, colorClass }: NavDropdownProps)
 }
 
 function GlobalSearch() {
+  const { companyName } = useTenantBranding();
   const openCommandPalette = () => {
     const event = new KeyboardEvent("keydown", {
       key: "k",
@@ -166,7 +168,7 @@ function GlobalSearch() {
       data-testid="button-global-search"
     >
       <Search className="h-4 w-4" />
-      <span className="hidden sm:inline">Sök i Unicorn...</span>
+      <span className="hidden sm:inline">Sök i {companyName}...</span>
       <kbd className="pointer-events-none ml-auto hidden h-5 select-none items-center gap-1 rounded border bg-muted px-1.5 font-mono text-xs font-medium opacity-100 sm:flex">
         ⌘K
       </kbd>
@@ -229,12 +231,43 @@ function UserMenu() {
   );
 }
 
+function TenantLogo() {
+  const { logoIconUrl, companyName, primaryColor } = useTenantBranding();
+
+  return (
+    <Link href="/">
+      <div className="flex items-center gap-2 cursor-pointer hover-elevate rounded-md px-2 py-1">
+        {logoIconUrl ? (
+          <img 
+            src={logoIconUrl} 
+            alt={companyName} 
+            className="h-8 w-8 object-contain"
+            data-testid="img-tenant-logo"
+          />
+        ) : (
+          <div 
+            className="h-8 w-8 rounded-md flex items-center justify-center text-white font-bold text-sm"
+            style={{ backgroundColor: primaryColor }}
+            data-testid="img-tenant-logo-fallback"
+          >
+            {companyName.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <span className="hidden lg:block font-semibold text-sm" data-testid="text-tenant-name">
+          {companyName}
+        </span>
+      </div>
+    </Link>
+  );
+}
+
 export function TopNav() {
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
         <div className="flex items-center gap-4 md:gap-6">
           <MobileNav />
+          <TenantLogo />
 
           <nav className="hidden md:flex items-center gap-1">
             <Link href="/">

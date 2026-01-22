@@ -8,6 +8,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import { 
   Mail, 
   CheckCircle, 
@@ -52,6 +53,7 @@ const features = [
 ];
 
 export default function PortalLoginPage() {
+  const { companyName, logoIconUrl, primaryColor } = useTenantBranding();
   const [emailSent, setEmailSent] = useState(false);
   const [sentEmail, setSentEmail] = useState("");
 
@@ -152,10 +154,23 @@ export default function PortalLoginPage() {
           <div className="space-y-8">
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-                  <Recycle className="h-6 w-6" />
-                </div>
-                <span className="text-2xl font-bold">Kundportal</span>
+                {logoIconUrl ? (
+                  <img 
+                    src={logoIconUrl} 
+                    alt={companyName} 
+                    className="h-12 w-12 object-contain"
+                    data-testid="img-portal-logo"
+                  />
+                ) : (
+                  <div 
+                    className="flex h-12 w-12 items-center justify-center rounded-xl text-white font-bold"
+                    style={{ backgroundColor: primaryColor }}
+                    data-testid="img-portal-logo-fallback"
+                  >
+                    {companyName.charAt(0).toUpperCase()}
+                  </div>
+                )}
+                <span className="text-2xl font-bold">{companyName} Kundportal</span>
               </div>
               
               <h1 className="text-3xl lg:text-4xl font-bold tracking-tight">

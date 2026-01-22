@@ -10,6 +10,8 @@ export const tenants = pgTable("tenants", {
   contactEmail: text("contact_email"),
   contactPhone: text("contact_phone"),
   settings: jsonb("settings").default({}),
+  customDomain: varchar("custom_domain", { length: 255 }),
+  industry: varchar("industry", { length: 50 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });
