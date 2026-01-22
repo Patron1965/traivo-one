@@ -96,6 +96,16 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
     - Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` (configured via Replit Twilio connector)
     - 46elks (planned): Separate API key integration coming soon
   - Key files: `server/unified-notifications.ts`, `server/replit_integrations/twilio.ts`, `client/src/pages/SmsSettingsPage.tsx`
+- **Conversational AI Planner:** Natural language chat interface integrated into the week planner for intuitive planning interactions. Features include:
+  - Chat tab in AISuggestionsPanel for conversational queries
+  - Natural language processing using GPT-4o-mini with planning context
+  - Query examples: "Visa alla försenade ordrar", "Vilken resurs har minst arbete?", "Omplanera Anders ordrar till Lisa"
+  - AI provides structured responses with order/resource data, suggested actions, and follow-up questions
+  - Executable actions: reschedule orders between resources, move orders to different dates
+  - Real-time context awareness of current week's orders, resources, and workload statistics
+  - Swedish language support throughout
+  - API endpoints: `/api/ai/planner-chat` (query), `/api/ai/planner-chat/execute` (action)
+  - Key files: `server/ai-planner.ts` (processConversationalPlannerQuery), `client/src/components/AISuggestionsPanel.tsx` (chat interface)
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useRef, useEffect, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp, Map, AlertTriangle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Sparkles, ArrowRight, Clock, Check, X, RefreshCw, Zap, Calendar, Route, MapPin, TrendingUp, ChevronDown, ChevronUp, Map, AlertTriangle, MessageSquare, Send, User, Bot } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
@@ -94,6 +95,23 @@ interface WorkloadAnalysis {
   summary: string;
 }
 
+interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  data?: {
+    orders?: Array<{ id: string; title: string; status: string; resourceName?: string; scheduledDate?: string }>;
+    resources?: Array<{ id: string; name: string; orderCount: number }>;
+  };
+  suggestedActions?: Array<{
+    label: string;
+    action: string;
+    params: Record<string, unknown>;
+  }>;
+  followUpQuestions?: string[];
+  timestamp: Date;
+}
+
 interface AISuggestionsPanelProps {
   weekStart: string;
   weekEnd: string;
@@ -124,11 +142,26 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
   const [showMapForRoute, setShowMapForRoute] = useState<string | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
   const [workloadAnalysis, setWorkloadAnalysis] = useState<WorkloadAnalysis | null>(null);
-  const [activeTab, setActiveTab] = useState<"auto-schedule" | "routes" | "suggestions" | "varningar">("auto-schedule");
+  const [activeTab, setActiveTab] = useState<"auto-schedule" | "routes" | "suggestions" | "varningar" | "chat">("chat");
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Hej! Jag är din AI-planeringsassistent. Du kan ställa frågor på naturligt språk, t.ex. \"Visa alla försenade ordrar\" eller \"Vilken resurs har minst arbete?\"",
+      followUpQuestions: ["Visa alla ordrar denna vecka", "Vilka resurser har flest ordrar?", "Finns det oschemalagda ordrar?"],
+      timestamp: new Date()
+    }
+  ]);
+  const [chatInput, setChatInput] = useState("");
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
   const currentDate = selectedDate || weekStart;
+  
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
 
   const generateMutation = useMutation({
     mutationFn: async () => {
@@ -295,6 +328,96 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
     setSuggestions((prev) => prev.filter((s) => s.id !== id));
   };
 
+  const chatMutation = useMutation({
+    mutationFn: async (query: string) => {
+      const response = await apiRequest("POST", "/api/ai/planner-chat", {
+        query,
+        weekStart,
+        weekEnd,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      const assistantMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: "assistant",
+        content: data.message,
+        data: data.data,
+        suggestedActions: data.suggestedActions,
+        followUpQuestions: data.followUpQuestions,
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, assistantMessage]);
+    },
+    onError: () => {
+      const errorMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: "assistant",
+        content: "Ett fel uppstod. Försök igen.",
+        followUpQuestions: ["Visa alla ordrar", "Vilka resurser finns?"],
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, errorMessage]);
+    },
+  });
+
+  const executeActionMutation = useMutation({
+    mutationFn: async (params: { action: string; params: Record<string, unknown> }) => {
+      const response = await apiRequest("POST", "/api/ai/planner-chat/execute", {
+        action: params.action,
+        ...params.params,
+      });
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      const confirmMessage: ChatMessage = {
+        id: `msg-${Date.now()}`,
+        role: "assistant",
+        content: data.message,
+        timestamp: new Date()
+      };
+      setChatMessages(prev => [...prev, confirmMessage]);
+      toast({
+        title: "Åtgärd utförd",
+        description: data.message,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Fel",
+        description: "Kunde inte utföra åtgärden.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleChatSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || chatMutation.isPending) return;
+    
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: "user",
+      content: chatInput,
+      timestamp: new Date()
+    };
+    setChatMessages(prev => [...prev, userMessage]);
+    chatMutation.mutate(chatInput);
+    setChatInput("");
+  };
+
+  const handleFollowUpQuestion = (question: string) => {
+    const userMessage: ChatMessage = {
+      id: `msg-${Date.now()}`,
+      role: "user",
+      content: question,
+      timestamp: new Date()
+    };
+    setChatMessages(prev => [...prev, userMessage]);
+    chatMutation.mutate(question);
+  };
+
   const toggleRoute = (resourceId: string) => {
     setExpandedRoutes((prev) => {
       const next = new Set(prev);
@@ -361,6 +484,16 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                 {workloadAnalysis.warnings.length}
               </Badge>
             )}
+          </Button>
+          <Button
+            size="sm"
+            variant={activeTab === "chat" ? "default" : "ghost"}
+            onClick={() => setActiveTab("chat")}
+            className="text-xs whitespace-nowrap"
+            data-testid="tab-chat"
+          >
+            <MessageSquare className="h-3 w-3 mr-1" />
+            AI Chatt
           </Button>
         </div>
       </CardHeader>
@@ -863,6 +996,149 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
               </div>
             )}
           </>
+        )}
+
+        {activeTab === "chat" && (
+          <div className="flex flex-col h-[calc(100vh-280px)] min-h-[300px]">
+            <div className="flex-1 overflow-y-auto space-y-3 pr-2">
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`flex gap-2 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+                  data-testid={`chat-message-${msg.id}`}
+                >
+                  {msg.role === "assistant" && (
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Bot className="h-3 w-3 text-primary" />
+                    </div>
+                  )}
+                  <div
+                    className={`max-w-[85%] rounded-lg p-3 ${
+                      msg.role === "user"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted"
+                    }`}
+                  >
+                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+                    
+                    {msg.data?.orders && msg.data.orders.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {msg.data.orders.slice(0, 5).map((order) => (
+                          <div
+                            key={order.id}
+                            className="text-xs p-2 rounded bg-background/50 flex items-center gap-2"
+                          >
+                            <Calendar className="h-3 w-3 flex-shrink-0" />
+                            <span className="truncate">{order.title}</span>
+                            <Badge variant="outline" className="text-xs flex-shrink-0">
+                              {order.status}
+                            </Badge>
+                          </div>
+                        ))}
+                        {msg.data.orders.length > 5 && (
+                          <p className="text-xs text-muted-foreground">
+                            +{msg.data.orders.length - 5} till...
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    
+                    {msg.data?.resources && msg.data.resources.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {msg.data.resources.map((resource) => (
+                          <div
+                            key={resource.id}
+                            className="text-xs p-2 rounded bg-background/50 flex items-center justify-between"
+                          >
+                            <span>{resource.name}</span>
+                            <Badge variant="secondary" className="text-xs">
+                              {resource.orderCount} ordrar
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {msg.suggestedActions && msg.suggestedActions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {msg.suggestedActions.map((action, idx) => (
+                          <Button
+                            key={idx}
+                            size="sm"
+                            variant="default"
+                            className="text-xs"
+                            onClick={() => executeActionMutation.mutate({ action: action.action, params: action.params })}
+                            disabled={executeActionMutation.isPending}
+                            data-testid={`chat-action-${idx}`}
+                          >
+                            {executeActionMutation.isPending ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <Zap className="h-3 w-3 mr-1" />
+                            )}
+                            {action.label}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+
+                    {msg.followUpQuestions && msg.followUpQuestions.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {msg.followUpQuestions.map((q, idx) => (
+                          <Button
+                            key={idx}
+                            size="sm"
+                            variant="ghost"
+                            className="text-xs h-auto py-1"
+                            onClick={() => handleFollowUpQuestion(q)}
+                            disabled={chatMutation.isPending}
+                            data-testid={`chat-followup-${idx}`}
+                          >
+                            {q}
+                          </Button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {msg.role === "user" && (
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary flex items-center justify-center">
+                      <User className="h-3 w-3 text-primary-foreground" />
+                    </div>
+                  )}
+                </div>
+              ))}
+              {chatMutation.isPending && (
+                <div className="flex gap-2 justify-start">
+                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Bot className="h-3 w-3 text-primary" />
+                  </div>
+                  <div className="bg-muted rounded-lg p-3">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                  </div>
+                </div>
+              )}
+              <div ref={chatEndRef} />
+            </div>
+            
+            <form onSubmit={handleChatSubmit} className="mt-3 flex gap-2" data-testid="chat-form">
+              <Input
+                value={chatInput}
+                onChange={(e) => setChatInput(e.target.value)}
+                placeholder="Ställ en fråga om planeringen..."
+                className="flex-1 text-sm"
+                disabled={chatMutation.isPending}
+                data-testid="chat-input"
+              />
+              <Button
+                type="submit"
+                size="icon"
+                disabled={!chatInput.trim() || chatMutation.isPending}
+                data-testid="chat-send"
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </div>
         )}
       </CardContent>
     </Card>

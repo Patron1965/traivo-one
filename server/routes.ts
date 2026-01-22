@@ -4481,6 +4481,109 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       res.status(500).json({ error: "Kunde inte analysera arbetsbelastning" });
     }
   });
+  
+  // Conversational AI Planner - natural language queries and commands
+  app.post("/api/ai/planner-chat", async (req, res) => {
+    try {
+      const { processConversationalPlannerQuery } = await import("./ai-planner");
+      const { query, weekStart, weekEnd } = req.body;
+      
+      if (!query || typeof query !== "string") {
+        return res.status(400).json({ error: "Fråga krävs" });
+      }
+      
+      const tenantId = getTenantIdWithFallback(req);
+      const [workOrders, resources, clusters] = await Promise.all([
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getClusters(tenantId),
+      ]);
+      
+      const today = new Date().toISOString().split("T")[0];
+      const weekEndDefault = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      
+      const response = await processConversationalPlannerQuery(query, {
+        workOrders,
+        resources,
+        clusters,
+        weekStart: weekStart || today,
+        weekEnd: weekEnd || weekEndDefault,
+      });
+      
+      res.json(response);
+    } catch (error) {
+      console.error("Conversational planner error:", error);
+      res.status(500).json({ 
+        message: "Ett fel uppstod vid bearbetning av din fråga.",
+        followUpQuestions: ["Visa alla ordrar", "Vilka resurser finns?"]
+      });
+    }
+  });
+  
+  // Execute conversational planner action (reschedule, etc.)
+  app.post("/api/ai/planner-chat/execute", async (req, res) => {
+    try {
+      const { action, params, workOrderIds, toResourceId, toDate } = req.body;
+      
+      if (!action || typeof action !== "string") {
+        return res.status(400).json({ success: false, message: "Åtgärd krävs" });
+      }
+      
+      const tenantId = getTenantIdWithFallback(req);
+      
+      // Verify orders belong to tenant before modifying
+      if (workOrderIds && Array.isArray(workOrderIds)) {
+        const tenantOrders = await storage.getWorkOrders(tenantId);
+        const tenantOrderIds = new Set(tenantOrders.map(o => o.id));
+        const invalidIds = workOrderIds.filter((id: string) => !tenantOrderIds.has(id));
+        if (invalidIds.length > 0) {
+          return res.status(403).json({ 
+            success: false, 
+            message: `Åtkomst nekad för ordrar: ${invalidIds.slice(0, 3).join(", ")}` 
+          });
+        }
+      }
+      
+      if (action === "reschedule_to_resource" && workOrderIds && toResourceId) {
+        let successCount = 0;
+        for (const orderId of workOrderIds) {
+          try {
+            await storage.updateWorkOrder(orderId, { resourceId: toResourceId }, tenantId);
+            successCount++;
+          } catch (e) {
+            console.error(`Failed to update order ${orderId}:`, e);
+          }
+        }
+        return res.json({ 
+          success: true, 
+          message: `${successCount} av ${workOrderIds.length} ordrar har omtilldelats.`,
+          affectedOrders: workOrderIds
+        });
+      }
+      
+      if (action === "reschedule_to_date" && workOrderIds && toDate) {
+        let successCount = 0;
+        for (const orderId of workOrderIds) {
+          try {
+            await storage.updateWorkOrder(orderId, { scheduledDate: toDate }, tenantId);
+            successCount++;
+          } catch (e) {
+            console.error(`Failed to update order ${orderId}:`, e);
+          }
+        }
+        return res.json({ 
+          success: true, 
+          message: `${successCount} av ${workOrderIds.length} ordrar har flyttats till ${toDate}.`,
+          affectedOrders: workOrderIds
+        });
+      }
+      
+      res.status(400).json({ success: false, message: "Ogiltig åtgärd eller saknade parametrar." });
+    } catch (error) {
+      console.error("Planner action error:", error);
+      res.status(500).json({ success: false, message: "Kunde inte utföra åtgärden." });
+    }
+  });
 
   // AI Setup Time Insights
   app.get("/api/ai/setup-insights", async (req, res) => {

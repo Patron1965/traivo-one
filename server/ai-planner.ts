@@ -2365,3 +2365,226 @@ export function generateGoogleMapsUrl(stops: RouteStop[]): string {
   
   return url;
 }
+
+// ============================================
+// CONVERSATIONAL AI PLANNER
+// ============================================
+
+export interface ConversationalPlannerContext {
+  workOrders: WorkOrder[];
+  resources: Resource[];
+  clusters: Cluster[];
+  weekStart: string;
+  weekEnd: string;
+}
+
+export interface PlannerCommand {
+  type: "query" | "action" | "unknown";
+  intent: string;
+  entities: {
+    resourceName?: string;
+    resourceId?: string;
+    targetResourceName?: string;
+    targetResourceId?: string;
+    date?: string;
+    status?: string;
+    clusterId?: string;
+    workOrderIds?: string[];
+  };
+  confidence: number;
+}
+
+export interface ConversationalPlannerResponse {
+  message: string;
+  data?: {
+    orders?: Array<{ id: string; title: string; status: string; resourceName?: string; scheduledDate?: string }>;
+    resources?: Array<{ id: string; name: string; orderCount: number }>;
+    actions?: Array<{ type: string; description: string; workOrderId?: string; fromResource?: string; toResource?: string }>;
+  };
+  suggestedActions?: Array<{
+    label: string;
+    action: string;
+    params: Record<string, unknown>;
+  }>;
+  followUpQuestions?: string[];
+}
+
+export async function processConversationalPlannerQuery(
+  query: string,
+  context: ConversationalPlannerContext
+): Promise<ConversationalPlannerResponse> {
+  const { workOrders, resources, clusters, weekStart, weekEnd } = context;
+  
+  // Build context summary for AI
+  const resourceMap = new Map(resources.map(r => [r.id, r.name]));
+  const clusterMap = new Map(clusters.map(c => [c.id, c.name]));
+  
+  // Get orders for the week
+  const weekOrders = workOrders.filter(o => {
+    if (!o.scheduledDate) return false;
+    return o.scheduledDate >= weekStart && o.scheduledDate <= weekEnd;
+  });
+  
+  // Calculate statistics
+  const delayedOrders = weekOrders.filter(o => 
+    o.status === "paborjad" || 
+    (o.scheduledDate && new Date(o.scheduledDate) < new Date() && o.status !== "utford" && o.status !== "fakturerad")
+  );
+  
+  const unassignedOrders = weekOrders.filter(o => !o.resourceId);
+  
+  const ordersByResource: Record<string, number> = {};
+  weekOrders.forEach(o => {
+    if (o.resourceId) {
+      ordersByResource[o.resourceId] = (ordersByResource[o.resourceId] || 0) + 1;
+    }
+  });
+  
+  const ordersByStatus: Record<string, number> = {};
+  weekOrders.forEach(o => {
+    ordersByStatus[o.status] = (ordersByStatus[o.status] || 0) + 1;
+  });
+
+  const contextSummary = `
+PLANNERINGSDATA (${weekStart} - ${weekEnd}):
+- Totalt ${weekOrders.length} ordrar denna vecka
+- ${delayedOrders.length} försenade/pågående ordrar
+- ${unassignedOrders.length} ej tilldelade ordrar
+- Ordrar per status: ${Object.entries(ordersByStatus).map(([s, c]) => `${s}: ${c}`).join(", ")}
+
+RESURSER:
+${resources.map(r => `- ${r.name} (${r.id.slice(0, 8)}): ${ordersByResource[r.id] || 0} ordrar`).join("\n")}
+
+KLUSTER:
+${clusters.slice(0, 10).map(c => `- ${c.name}`).join("\n")}
+${clusters.length > 10 ? `...och ${clusters.length - 10} fler` : ""}
+`;
+
+  const systemPrompt = `Du är en AI-planeringsassistent för Unicorn fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
+
+${contextSummary}
+
+Du kan hjälpa användaren med:
+1. FRÅGOR: Visa ordrar, sök efter försenade jobb, se arbetsbelastning per resurs
+2. ÅTGÄRDER: Omplanera ordrar mellan resurser, flytta ordrar till andra datum
+
+När du svarar:
+- Svara alltid på svenska
+- Var konkret och ge faktiska siffror/namn från datan
+- Om användaren vill utföra en åtgärd, bekräfta vad som kommer att hända först
+- Föreslå relevanta följdfrågor
+
+VIKTIGT: Returnera ALLTID ett JSON-objekt med denna struktur:
+{
+  "message": "Ditt svar till användaren",
+  "data": {
+    "orders": [{"id": "...", "title": "...", "status": "...", "resourceName": "...", "scheduledDate": "..."}],
+    "resources": [{"id": "...", "name": "...", "orderCount": N}],
+    "actions": [{"type": "reschedule", "description": "...", "workOrderId": "...", "fromResource": "...", "toResource": "..."}]
+  },
+  "suggestedActions": [{"label": "Knapptext", "action": "action_name", "params": {...}}],
+  "followUpQuestions": ["Fråga 1?", "Fråga 2?"]
+}
+
+Fyll bara i de fält som är relevanta för frågan. "data" kan vara null om det inte finns specifik data att visa.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: query }
+      ],
+      max_tokens: 1500,
+      temperature: 0.7,
+      response_format: { type: "json_object" }
+    });
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) {
+      return {
+        message: "Kunde inte generera ett svar. Försök igen.",
+        followUpQuestions: ["Visa alla ordrar för denna vecka", "Vilka resurser har flest ordrar?"]
+      };
+    }
+
+    try {
+      const parsed = JSON.parse(content) as ConversationalPlannerResponse;
+      
+      // Enrich order data with actual resource names if needed
+      if (parsed.data?.orders) {
+        parsed.data.orders = parsed.data.orders.map(order => {
+          const fullOrder = workOrders.find(wo => wo.id === order.id);
+          if (fullOrder && fullOrder.resourceId) {
+            return {
+              ...order,
+              resourceName: resourceMap.get(fullOrder.resourceId) || order.resourceName
+            };
+          }
+          return order;
+        });
+      }
+      
+      return parsed;
+    } catch {
+      // If JSON parsing fails, return the raw message
+      return {
+        message: content,
+        followUpQuestions: ["Visa försenade ordrar", "Vilken resurs har minst arbete?"]
+      };
+    }
+  } catch (error) {
+    console.error("Conversational planner error:", error);
+    return {
+      message: "Ett fel uppstod vid bearbetning av din fråga. Försök igen.",
+      followUpQuestions: ["Visa alla ordrar denna vecka"]
+    };
+  }
+}
+
+export async function executeConversationalPlannerAction(
+  action: string,
+  params: Record<string, unknown>,
+  context: ConversationalPlannerContext
+): Promise<{ success: boolean; message: string; affectedOrders?: string[] }> {
+  const { workOrders, resources } = context;
+  
+  switch (action) {
+    case "reschedule_to_resource": {
+      const { workOrderIds, toResourceId } = params as { workOrderIds: string[]; toResourceId: string };
+      const targetResource = resources.find(r => r.id === toResourceId);
+      if (!targetResource) {
+        return { success: false, message: "Kunde inte hitta målresursen." };
+      }
+      
+      const validOrders = workOrderIds.filter(id => workOrders.some(o => o.id === id));
+      if (validOrders.length === 0) {
+        return { success: false, message: "Inga giltiga ordrar att omplanera." };
+      }
+      
+      // Return the action details - actual update will be done in routes.ts
+      return {
+        success: true,
+        message: `${validOrders.length} ordrar kommer att tilldelas ${targetResource.name}.`,
+        affectedOrders: validOrders
+      };
+    }
+    
+    case "reschedule_to_date": {
+      const { workOrderIds, toDate } = params as { workOrderIds: string[]; toDate: string };
+      const validOrders = workOrderIds.filter(id => workOrders.some(o => o.id === id));
+      if (validOrders.length === 0) {
+        return { success: false, message: "Inga giltiga ordrar att omplanera." };
+      }
+      
+      return {
+        success: true,
+        message: `${validOrders.length} ordrar kommer att flyttas till ${toDate}.`,
+        affectedOrders: validOrders
+      };
+    }
+    
+    default:
+      return { success: false, message: `Okänd åtgärd: ${action}` };
+  }
+}
