@@ -51,6 +51,7 @@ import {
   Network,
   Wrench,
   Presentation,
+  MessageSquare,
 } from "lucide-react";
 
 const grunddataItems = [
@@ -80,6 +81,7 @@ const systemItems = [
   { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
   { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
   { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
+  { title: "SMS-inställningar", url: "/sms-settings", icon: MessageSquare, description: "SMS-notifikationer" },
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tider" },
   { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
   { title: "Arkitektur", url: "/architecture", icon: Network, description: "Systemöversikt" },

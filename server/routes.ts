@@ -5344,6 +5344,107 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // SMS Configuration - Get current SMS settings (admin only)
+  app.get("/api/system/sms-config", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const tenant = await storage.getTenant(tenantId);
+      
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      
+      res.json({
+        smsEnabled: tenant.smsEnabled ?? false,
+        smsProvider: tenant.smsProvider ?? "none",
+        smsFromName: tenant.smsFromName ?? tenant.name ?? "",
+      });
+    } catch (error) {
+      console.error("Failed to get SMS config:", error);
+      res.status(500).json({ error: "Failed to get SMS configuration" });
+    }
+  });
+
+  // SMS Configuration - Update SMS settings (admin only)
+  const smsConfigSchema = z.object({
+    smsEnabled: z.boolean().optional(),
+    smsProvider: z.enum(["twilio", "46elks", "none"]).optional(),
+    smsFromName: z.string().max(100).optional(),
+  });
+
+  app.put("/api/system/sms-config", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const parseResult = smsConfigSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: "Invalid request data", details: parseResult.error.flatten() });
+      }
+      
+      const tenant = await storage.updateTenantSmsSettings(tenantId, parseResult.data);
+      
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      
+      await storage.createAuditLog({
+        tenantId,
+        action: "update_sms_config",
+        resourceType: "tenant",
+        resourceId: tenantId,
+        data: parseResult.data,
+      });
+      
+      res.json({
+        smsEnabled: tenant.smsEnabled ?? false,
+        smsProvider: tenant.smsProvider ?? "none",
+        smsFromName: tenant.smsFromName ?? "",
+      });
+    } catch (error) {
+      console.error("Failed to update SMS config:", error);
+      res.status(500).json({ error: "Failed to update SMS configuration" });
+    }
+  });
+
+  // SMS Configuration - Test SMS sending (admin only)
+  app.post("/api/system/sms-config/test", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { phoneNumber } = req.body;
+      
+      if (!phoneNumber) {
+        return res.status(400).json({ error: "Phone number is required" });
+      }
+      
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant?.smsEnabled) {
+        return res.status(400).json({ error: "SMS is not enabled for this tenant" });
+      }
+      
+      const { sendNotification } = await import("./unified-notifications");
+      const result = await sendNotification({
+        tenantId,
+        recipients: [{ phone: phoneNumber, name: "Test" }],
+        notificationType: "reminder",
+        channel: "sms",
+        data: {
+          objectAddress: "Testadress 123",
+          scheduledDate: "idag",
+          scheduledTime: "10:00",
+        },
+      });
+      
+      if (result.success && result.smsSent > 0) {
+        res.json({ success: true, message: "Test-SMS skickat!" });
+      } else {
+        res.status(500).json({ success: false, error: result.errors.join(", ") || "Failed to send test SMS" });
+      }
+    } catch (error: any) {
+      console.error("Failed to send test SMS:", error);
+      res.status(500).json({ error: error.message || "Failed to send test SMS" });
+    }
+  });
+
   // User Tenant Roles - List all users with roles for current tenant (admin only)
   app.get("/api/system/user-roles", requireAdmin, async (req, res) => {
     try {

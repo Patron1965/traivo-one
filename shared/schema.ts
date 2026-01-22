@@ -12,6 +12,9 @@ export const tenants = pgTable("tenants", {
   settings: jsonb("settings").default({}),
   customDomain: varchar("custom_domain", { length: 255 }),
   industry: varchar("industry", { length: 50 }),
+  smsEnabled: boolean("sms_enabled").default(false),
+  smsProvider: varchar("sms_provider", { length: 50 }),
+  smsFromName: varchar("sms_from_name", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });

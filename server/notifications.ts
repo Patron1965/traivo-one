@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import type { WorkOrder, InsertResourcePosition } from "@shared/schema";
 import { storage } from "./storage";
+import { sendNotification, NotificationType as UnifiedNotificationType } from "./unified-notifications";
 import crypto from "crypto";
 
 interface WorkOrderWithDetails extends WorkOrder {
@@ -235,6 +236,35 @@ class NotificationService {
     console.log(`[ws] Broadcast ${notification.type} to ${this.getTotalClients()} clients`);
   }
 
+  async sendCustomerNotification(
+    notificationType: UnifiedNotificationType,
+    tenantId: string,
+    customer: { phone?: string; email?: string; name?: string },
+    resourceName: string,
+    data: Record<string, unknown>
+  ) {
+    try {
+      if (!customer.phone && !customer.email) {
+        console.log(`[notification] No phone/email for customer, skipping external notification`);
+        return;
+      }
+      
+      const channel = customer.phone && customer.email ? "both" : (customer.phone ? "sms" : "email");
+      
+      await sendNotification({
+        tenantId,
+        recipients: [{ phone: customer.phone, email: customer.email, name: customer.name }],
+        notificationType,
+        channel,
+        data: { ...data, resourceName } as Record<string, any>
+      });
+      
+      console.log(`[notification] External ${notificationType} sent to ${customer.name || customer.phone || customer.email}`);
+    } catch (error) {
+      console.error(`[notification] Failed to send external notification:`, error);
+    }
+  }
+
   notifyJobAssigned(order: WorkOrderWithDetails, resourceId: string) {
     this.sendToResource(resourceId, {
       type: "job_assigned",
@@ -249,6 +279,7 @@ class NotificationService {
         priority: order.priority
       }
     });
+    
   }
 
   notifyJobUpdated(order: WorkOrderWithDetails, resourceId: string, changeDescription: string) {
@@ -277,6 +308,7 @@ class NotificationService {
         scheduledStartTime: order.scheduledStartTime
       }
     });
+    
   }
 
   notifyJobCancelled(order: WorkOrderWithDetails, resourceId: string) {

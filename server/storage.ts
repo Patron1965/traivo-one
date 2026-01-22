@@ -98,6 +98,7 @@ export interface IStorage {
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   ensureTenant(id: string, defaultData: Omit<InsertTenant, 'id'>): Promise<Tenant>;
   updateTenantSettings(id: string, settings: Record<string, unknown>): Promise<Tenant | undefined>;
+  updateTenantSmsSettings(id: string, data: { smsEnabled?: boolean; smsProvider?: string; smsFromName?: string }): Promise<Tenant | undefined>;
   
   getCustomers(tenantId: string): Promise<Customer[]>;
   getCustomer(id: string): Promise<Customer | undefined>;
@@ -577,6 +578,15 @@ export class DatabaseStorage implements IStorage {
 
   async updateTenantSettings(id: string, settings: Record<string, unknown>): Promise<Tenant | undefined> {
     const [tenant] = await db.update(tenants).set({ settings }).where(eq(tenants.id, id)).returning();
+    return tenant || undefined;
+  }
+
+  async updateTenantSmsSettings(id: string, data: { smsEnabled?: boolean; smsProvider?: string; smsFromName?: string }): Promise<Tenant | undefined> {
+    const [tenant] = await db.update(tenants).set({
+      smsEnabled: data.smsEnabled,
+      smsProvider: data.smsProvider,
+      smsFromName: data.smsFromName,
+    }).where(eq(tenants.id, id)).returning();
     return tenant || undefined;
   }
 

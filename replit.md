@@ -83,6 +83,19 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
   - Color scheme suggestions per industry
   - API endpoints for seed, list, install packages
   - Key files: `server/data/industryPackages.ts`, `client/src/pages/IndustryPackagesPage.tsx`
+- **SMS Infrastructure (Multi-channel Notifications):** Unified notification service supporting email (Resend) and SMS (Twilio). Features include:
+  - Abstract notification service (`server/unified-notifications.ts`) generating both email HTML and SMS text content
+  - Swedish phone number normalization (adds +46 prefix for 07/08 numbers)
+  - Per-tenant SMS configuration (enable/disable, provider selection, sender name)
+  - Twilio integration via Replit connector framework (`server/replit_integrations/twilio.ts`)
+  - Admin-only SMS settings UI at `/sms-settings`
+  - Test SMS functionality for validation
+  - Notification types: technician_on_way, job_completed, reminder, booking_confirmed, booking_cancelled, job_rescheduled, portal_link
+  - API endpoints: `/api/system/sms-config` (GET/PUT), `/api/system/sms-config/test` (POST)
+  - **Required API Keys for SMS:**
+    - Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` (configured via Replit Twilio connector)
+    - 46elks (planned): Separate API key integration coming soon
+  - Key files: `server/unified-notifications.ts`, `server/replit_integrations/twilio.ts`, `client/src/pages/SmsSettingsPage.tsx`
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
@@ -104,4 +117,5 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - **Open-Meteo API:** Provides weather forecast data for AI auto-scheduling.
 - **Fortnox API:** Integration with the Fortnox accounting system.
 - **Resend:** Email notification service.
+- **Twilio API:** SMS notification service (optional, requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER).
 - **jsPDF:** PDF generation library.
