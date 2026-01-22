@@ -31,6 +31,9 @@ import {
   type TenantBranding, type InsertTenantBranding,
   type UserTenantRole, type InsertUserTenantRole,
   type AuditLog, type InsertAuditLog,
+  type IndustryPackage, type InsertIndustryPackage,
+  type IndustryPackageData, type InsertIndustryPackageData,
+  type TenantPackageInstallation, type InsertTenantPackageInstallation,
   type MetadataDefinition, type InsertMetadataDefinition,
   type ObjectMetadata, type InsertObjectMetadata,
   type ObjectPayer, type InsertObjectPayer,
@@ -67,6 +70,7 @@ import {
   vehicleSchedule, subscriptions, teams, teamMembers, planningParameters, clusters,
   resourcePositions,
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
+  industryPackages, industryPackageData, tenantPackageInstallations,
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
   orderConcepts, conceptFilters, assignments, assignmentArticles,
@@ -249,6 +253,16 @@ export interface IStorage {
   // System Dashboard - Audit Logs
   getAuditLogs(tenantId: string, options?: { limit?: number; offset?: number; action?: string; userId?: string }): Promise<AuditLog[]>;
   createAuditLog(log: InsertAuditLog): Promise<AuditLog>;
+  
+  // Industry Packages
+  getIndustryPackages(): Promise<IndustryPackage[]>;
+  getIndustryPackage(id: string): Promise<IndustryPackage | undefined>;
+  getIndustryPackageBySlug(slug: string): Promise<IndustryPackage | undefined>;
+  createIndustryPackage(pkg: InsertIndustryPackage): Promise<IndustryPackage>;
+  getIndustryPackageData(packageId: string): Promise<IndustryPackageData[]>;
+  createIndustryPackageData(data: InsertIndustryPackageData): Promise<IndustryPackageData>;
+  getTenantPackageInstallations(tenantId: string): Promise<TenantPackageInstallation[]>;
+  createTenantPackageInstallation(installation: InsertTenantPackageInstallation): Promise<TenantPackageInstallation>;
   
   // Resource Position Tracking
   updateResourcePosition(resourceId: string, position: { currentLatitude: number; currentLongitude: number; lastPositionUpdate: Date; trackingStatus: string }): Promise<Resource | undefined>;
@@ -1866,6 +1880,46 @@ export class DatabaseStorage implements IStorage {
 
   async createAuditLog(log: InsertAuditLog): Promise<AuditLog> {
     const [result] = await db.insert(auditLogs).values(log).returning();
+    return result;
+  }
+
+  // Industry Packages
+  async getIndustryPackages(): Promise<IndustryPackage[]> {
+    return db.select().from(industryPackages).where(eq(industryPackages.isActive, true));
+  }
+
+  async getIndustryPackage(id: string): Promise<IndustryPackage | undefined> {
+    const [result] = await db.select().from(industryPackages).where(eq(industryPackages.id, id));
+    return result || undefined;
+  }
+
+  async getIndustryPackageBySlug(slug: string): Promise<IndustryPackage | undefined> {
+    const [result] = await db.select().from(industryPackages).where(eq(industryPackages.slug, slug));
+    return result || undefined;
+  }
+
+  async createIndustryPackage(pkg: InsertIndustryPackage): Promise<IndustryPackage> {
+    const [result] = await db.insert(industryPackages).values(pkg).returning();
+    return result;
+  }
+
+  async getIndustryPackageData(packageId: string): Promise<IndustryPackageData[]> {
+    return db.select().from(industryPackageData).where(eq(industryPackageData.packageId, packageId));
+  }
+
+  async createIndustryPackageData(data: InsertIndustryPackageData): Promise<IndustryPackageData> {
+    const [result] = await db.insert(industryPackageData).values(data).returning();
+    return result;
+  }
+
+  async getTenantPackageInstallations(tenantId: string): Promise<TenantPackageInstallation[]> {
+    return db.select().from(tenantPackageInstallations)
+      .where(eq(tenantPackageInstallations.tenantId, tenantId))
+      .orderBy(desc(tenantPackageInstallations.installedAt));
+  }
+
+  async createTenantPackageInstallation(installation: InsertTenantPackageInstallation): Promise<TenantPackageInstallation> {
+    const [result] = await db.insert(tenantPackageInstallations).values(installation).returning();
     return result;
   }
 

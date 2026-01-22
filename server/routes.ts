@@ -5543,6 +5543,234 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // ============================================
+  // INDUSTRY PACKAGES API ENDPOINTS
+  // ============================================
+
+  // Industry Packages - List all available packages
+  app.get("/api/system/industry-packages", async (req, res) => {
+    try {
+      const packages = await storage.getIndustryPackages();
+      res.json(packages);
+    } catch (error) {
+      console.error("Failed to fetch industry packages:", error);
+      res.status(500).json({ error: "Failed to fetch industry packages" });
+    }
+  });
+
+  // Industry Packages - Get by ID with full data
+  app.get("/api/system/industry-packages/:id", async (req, res) => {
+    try {
+      const pkg = await storage.getIndustryPackage(req.params.id);
+      if (!pkg) return res.status(404).json({ error: "Package not found" });
+      
+      const packageData = await storage.getIndustryPackageData(req.params.id);
+      res.json({ ...pkg, data: packageData });
+    } catch (error) {
+      console.error("Failed to fetch industry package:", error);
+      res.status(500).json({ error: "Failed to fetch package" });
+    }
+  });
+
+  // Industry Packages - Get tenant installation history
+  app.get("/api/system/industry-packages/installations", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const installations = await storage.getTenantPackageInstallations(tenantId);
+      res.json(installations);
+    } catch (error) {
+      console.error("Failed to fetch package installations:", error);
+      res.status(500).json({ error: "Failed to fetch installations" });
+    }
+  });
+
+  // Industry Packages - Install package for tenant
+  app.post("/api/system/industry-packages/:id/install", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const packageId = req.params.id;
+      const userId = (req.user as any)?.id;
+      
+      const pkg = await storage.getIndustryPackage(packageId);
+      if (!pkg) return res.status(404).json({ error: "Package not found" });
+      
+      const packageData = await storage.getIndustryPackageData(packageId);
+      
+      let articlesInstalled = 0;
+      let metadataInstalled = 0;
+      let structuralArticlesInstalled = 0;
+      
+      const articlesData = packageData.find(d => d.dataType === "articles");
+      if (articlesData && Array.isArray(articlesData.data)) {
+        for (const article of articlesData.data as any[]) {
+          try {
+            await storage.createArticle({
+              tenantId,
+              articleNumber: article.articleNumber,
+              name: article.name,
+              description: article.description,
+              articleType: article.articleType,
+              unitPrice: article.unitPrice?.toString(),
+              unit: article.unit,
+              objectTypes: article.objectTypes,
+            });
+            articlesInstalled++;
+          } catch (err) {
+            console.warn(`Skipping duplicate article ${article.articleNumber}:`, err);
+          }
+        }
+      }
+      
+      const metadataData = packageData.find(d => d.dataType === "metadataDefinitions");
+      if (metadataData && Array.isArray(metadataData.data)) {
+        for (const meta of metadataData.data as any[]) {
+          try {
+            await storage.createMetadataDefinition({
+              tenantId,
+              fieldKey: meta.fieldKey,
+              fieldLabel: meta.fieldLabel,
+              dataType: meta.dataType,
+              objectTypes: meta.objectTypes,
+              propagationType: meta.propagationType,
+              isRequired: meta.isRequired,
+              description: meta.description,
+              defaultValue: meta.defaultValue,
+              validationRules: meta.validationRules,
+            });
+            metadataInstalled++;
+          } catch (err) {
+            console.warn(`Skipping duplicate metadata ${meta.fieldKey}:`, err);
+          }
+        }
+      }
+      
+      const structuralData = packageData.find(d => d.dataType === "structuralArticles");
+      if (structuralData && Array.isArray(structuralData.data)) {
+        const tenantArticles = await storage.getArticles(tenantId);
+        const articleMap = new Map(tenantArticles.map(a => [a.articleNumber, a.id]));
+        
+        for (const sa of structuralData.data as any[]) {
+          try {
+            const parentId = articleMap.get(sa.parentArticleNumber);
+            const childId = articleMap.get(sa.childArticleNumber);
+            
+            if (parentId && childId) {
+              await storage.createStructuralArticle({
+                tenantId,
+                parentArticleId: parentId,
+                childArticleId: childId,
+                sequenceOrder: sa.sequenceOrder || 1,
+                quantity: sa.quantity?.toString() || "1",
+                isConditional: sa.isConditional || false,
+                conditionType: sa.conditionType,
+                conditionValue: sa.conditionValue,
+              });
+              structuralArticlesInstalled++;
+            } else {
+              console.warn(`Skipping structural article: parent=${sa.parentArticleNumber} child=${sa.childArticleNumber} - articles not found`);
+            }
+          } catch (err) {
+            console.warn(`Skipping structural article:`, err);
+          }
+        }
+      }
+      
+      const installation = await storage.createTenantPackageInstallation({
+        tenantId,
+        packageId,
+        installedBy: userId,
+        articlesInstalled,
+        metadataInstalled,
+        structuralArticlesInstalled,
+        status: "completed",
+      });
+      
+      await storage.createAuditLog({
+        tenantId,
+        userId,
+        action: "install_industry_package",
+        resourceType: "industry_package",
+        resourceId: packageId,
+        changes: { 
+          packageName: pkg.name, 
+          articlesInstalled, 
+          metadataInstalled,
+          structuralArticlesInstalled
+        },
+      });
+      
+      res.json({
+        success: true,
+        installation,
+        summary: {
+          articlesInstalled,
+          metadataInstalled,
+          structuralArticlesInstalled,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to install industry package:", error);
+      res.status(500).json({ error: "Failed to install package" });
+    }
+  });
+
+  // Industry Packages - Seed default packages (admin only, one-time setup)
+  app.post("/api/system/industry-packages/seed", requireAdmin, async (req, res) => {
+    try {
+      const { allPackages, getPackageData } = await import("./data/industryPackages");
+      
+      const results = [];
+      for (const pkgData of allPackages) {
+        const existing = await storage.getIndustryPackageBySlug(pkgData.slug);
+        if (existing) {
+          results.push({ slug: pkgData.slug, status: "skipped", message: "Already exists" });
+          continue;
+        }
+        
+        const pkg = await storage.createIndustryPackage(pkgData);
+        
+        const data = getPackageData(pkgData.slug);
+        
+        if (data.articles.length > 0) {
+          await storage.createIndustryPackageData({
+            packageId: pkg.id,
+            dataType: "articles",
+            data: data.articles,
+          });
+        }
+        
+        if (data.metadata.length > 0) {
+          await storage.createIndustryPackageData({
+            packageId: pkg.id,
+            dataType: "metadataDefinitions",
+            data: data.metadata,
+          });
+        }
+        
+        if (data.structuralArticles.length > 0) {
+          await storage.createIndustryPackageData({
+            packageId: pkg.id,
+            dataType: "structuralArticles",
+            data: data.structuralArticles,
+          });
+        }
+        
+        results.push({ 
+          slug: pkgData.slug, 
+          status: "created", 
+          articles: data.articles.length,
+          metadata: data.metadata.length,
+          structuralArticles: data.structuralArticles.length,
+        });
+      }
+      
+      res.json({ success: true, results });
+    } catch (error) {
+      console.error("Failed to seed industry packages:", error);
+      res.status(500).json({ error: "Failed to seed packages" });
+    }
+  });
+
   // Audit Logs - Get logs for current tenant
   app.get("/api/system/audit-logs", async (req, res) => {
     try {

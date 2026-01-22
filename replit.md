@@ -65,6 +65,15 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
   - Branding templates for quick setup (Waste, Cleaning, Property service)
   - Live preview and version control for branding changes
   - Key files: `client/src/components/TenantBrandingProvider.tsx`, `client/src/pages/SystemDashboardPage.tsx`
+- **Industry Packages System:** Predefined templates for different industries (Waste, Cleaning, Property services) that include:
+  - Pre-configured articles with standard pricing and types for each industry
+  - Metadata definitions with appropriate data types and propagation rules
+  - Structural articles defining relationships between services
+  - One-click installation for new tenants during onboarding
+  - Installation tracking and audit logging
+  - Color scheme suggestions per industry
+  - API endpoints for seed, list, install packages
+  - Key files: `server/data/industryPackages.ts`, `client/src/pages/IndustryPackagesPage.tsx`
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

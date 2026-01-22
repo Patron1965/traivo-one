@@ -99,6 +99,7 @@ const avanceratItems = [
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, description: "Avtalshantering" },
   { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
+  { title: "Branschpaket", url: "/industry-packages", icon: Package, description: "Fördefinierade mallar" },
   { title: "Admin", url: "/system-dashboard", icon: Palette, description: "Varumärke och roller" },
 ];
 

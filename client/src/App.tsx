@@ -39,6 +39,7 @@ import WeatherPlanningPage from "@/pages/WeatherPlanningPage";
 import CustomerPortalPage from "@/pages/CustomerPortalPage";
 import PortalMessagesPage from "@/pages/PortalMessagesPage";
 import SystemDashboardPage from "@/pages/SystemDashboardPage";
+import IndustryPackagesPage from "@/pages/IndustryPackagesPage";
 import MobileFieldPage from "@/pages/MobileFieldPage";
 import ProjectReportPage from "@/pages/ProjectReportPage";
 import MetadataPage from "@/pages/MetadataPage";
@@ -100,6 +101,7 @@ function Router() {
       <Route path="/system-overview" component={SystemOverviewPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/system-dashboard" component={SystemDashboardPage} />
+      <Route path="/industry-packages" component={IndustryPackagesPage} />
       <Route path="/mobile" component={MobileFieldPage} />
       <Route path="/field" component={MobileFieldPage} />
       <Route path="/simple" component={MobileFieldPage} />

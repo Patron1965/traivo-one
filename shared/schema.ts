@@ -1229,6 +1229,97 @@ export const USER_ROLES = ["owner", "admin", "user"] as const;
 export type UserRole = typeof USER_ROLES[number];
 
 // ============================================
+// INDUSTRY PACKAGES - Predefined templates for different industries
+// ============================================
+
+// Branschtyper
+export const INDUSTRY_TYPES = ["waste", "cleaning", "property", "generic"] as const;
+export type IndustryType = typeof INDUSTRY_TYPES[number];
+
+// Branschpaket - Fördefinierade paket med artiklar, metadatatyper och strukturartiklar
+export const industryPackages = pgTable("industry_packages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  slug: varchar("slug", { length: 100 }).unique().notNull(),
+  name: text("name").notNull(),
+  nameEn: text("name_en"),
+  description: text("description"),
+  descriptionEn: text("description_en"),
+  industry: varchar("industry", { length: 50 }).notNull(), // waste, cleaning, property
+  icon: varchar("icon", { length: 50 }).default("Package"), // Lucide icon name
+  isActive: boolean("is_active").default(true),
+  // Färgförslag för branding
+  suggestedPrimaryColor: varchar("suggested_primary_color", { length: 7 }).default("#3B82F6"),
+  suggestedSecondaryColor: varchar("suggested_secondary_color", { length: 7 }).default("#6366F1"),
+  suggestedAccentColor: varchar("suggested_accent_color", { length: 7 }).default("#F59E0B"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Branschpaketdata - JSON-data för varje pakettyp
+export const industryPackageData = pgTable("industry_package_data", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  packageId: varchar("package_id").references(() => industryPackages.id).notNull(),
+  // Typ av data: articles, metadataDefinitions, structuralArticles, objectTypes
+  dataType: varchar("data_type", { length: 50 }).notNull(),
+  // JSON-array med alla poster av denna typ
+  data: jsonb("data").notNull(),
+  // Versionhantering
+  version: integer("version").default(1),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_package_data_package").on(table.packageId),
+  index("idx_package_data_type").on(table.dataType),
+]);
+
+// Tenant paketinstallation - Spårar vilka paket som installerats per tenant
+export const tenantPackageInstallations = pgTable("tenant_package_installations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  packageId: varchar("package_id").references(() => industryPackages.id).notNull(),
+  installedAt: timestamp("installed_at").defaultNow().notNull(),
+  installedBy: varchar("installed_by").references(() => users.id),
+  // Vilka komponenter som installerades
+  articlesInstalled: integer("articles_installed").default(0),
+  metadataInstalled: integer("metadata_installed").default(0),
+  structuralArticlesInstalled: integer("structural_articles_installed").default(0),
+  // Status
+  status: varchar("status", { length: 20 }).default("completed"), // pending, completed, failed
+  errorMessage: text("error_message"),
+}, (table) => [
+  index("idx_tenant_package_tenant").on(table.tenantId),
+  index("idx_tenant_package_package").on(table.packageId),
+]);
+
+// Relations
+export const industryPackagesRelations = relations(industryPackages, ({ many }) => ({
+  packageData: many(industryPackageData),
+  installations: many(tenantPackageInstallations),
+}));
+
+export const industryPackageDataRelations = relations(industryPackageData, ({ one }) => ({
+  package: one(industryPackages, { fields: [industryPackageData.packageId], references: [industryPackages.id] }),
+}));
+
+export const tenantPackageInstallationsRelations = relations(tenantPackageInstallations, ({ one }) => ({
+  tenant: one(tenants, { fields: [tenantPackageInstallations.tenantId], references: [tenants.id] }),
+  package: one(industryPackages, { fields: [tenantPackageInstallations.packageId], references: [industryPackages.id] }),
+  installedByUser: one(users, { fields: [tenantPackageInstallations.installedBy], references: [users.id] }),
+}));
+
+// Insert schemas
+export const insertIndustryPackageSchema = createInsertSchema(industryPackages).omit({ id: true, createdAt: true });
+export const insertIndustryPackageDataSchema = createInsertSchema(industryPackageData).omit({ id: true, createdAt: true });
+export const insertTenantPackageInstallationSchema = createInsertSchema(tenantPackageInstallations).omit({ id: true, installedAt: true });
+
+// Types
+export type IndustryPackage = typeof industryPackages.$inferSelect;
+export type InsertIndustryPackage = z.infer<typeof insertIndustryPackageSchema>;
+export type IndustryPackageData = typeof industryPackageData.$inferSelect;
+export type InsertIndustryPackageData = z.infer<typeof insertIndustryPackageDataSchema>;
+export type TenantPackageInstallation = typeof tenantPackageInstallations.$inferSelect;
+export type InsertTenantPackageInstallation = z.infer<typeof insertTenantPackageInstallationSchema>;
+
+// ============================================
 // FORTNOX INTEGRATION TABLES
 // ============================================
 
