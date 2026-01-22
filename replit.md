@@ -27,6 +27,15 @@ The user interface includes a sticky TopNav, global search, user utilities, and 
 - **Address Search/Autocomplete:** Uses OpenStreetMap Nominatim API for Swedish address geocoding.
 - **Real-time Notifications:** Token-based authenticated WebSocket push notifications for field workers and system-wide broadcasts.
 - **Real-time GPS Position Tracking:** Tracks field resource locations with breadcrumb trails, storing history and providing real-time updates.
+- **Offline Architecture (NEW):** Complete offline-first architecture for mobile field workers using IndexedDB (`idb` library). Features include:
+  - Local caching of work orders, objects, articles, and contacts in IndexedDB
+  - Outbox pattern for queuing status updates, photos, deviations, and material logs while offline
+  - Automatic synchronization when connectivity returns with conflict resolution
+  - Visual offline indicators (`OfflineIndicator`, `OfflineBanner` components)
+  - Cache statistics showing cached data counts and pending uploads
+  - Support for saving photos locally before upload
+  - Auto-sync service running every 30 seconds when online
+  - Key files: `client/src/lib/offlineDatabase.ts`, `client/src/lib/offlineSync.ts`, `client/src/hooks/useOfflineData.ts`, `client/src/components/OfflineIndicator.tsx`
 - **Automatic Anomaly Monitoring:** Background job detects operational anomalies and broadcasts alerts.
 - **Mobile API Endpoints:** Dedicated endpoints for mobile login, resource/order retrieval, status updates, and note-taking.
 - **Advanced Task & Object Features:** Includes tables for object images, object contacts, task desired timewindows, task dependencies, task information, and structural articles. Work orders support an 8-step execution status workflow, creation method tracking, what3words locations, and GPS coordinates.

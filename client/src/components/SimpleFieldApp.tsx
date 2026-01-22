@@ -18,7 +18,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { useNotifications, type Notification } from "@/hooks/useNotifications";
 import { useOfflineSupport } from "@/hooks/useOfflineSupport";
+import { useOfflineData } from "@/hooks/useOfflineData";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
+import { OfflineIndicator, OfflineBanner } from "@/components/OfflineIndicator";
 import { FieldAIAssistant } from "@/components/FieldAIAssistant";
 import { PhotoCapture } from "@/components/PhotoCapture";
 import { SignatureCapture } from "@/components/SignatureCapture";
@@ -146,6 +148,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     },
   });
+
+  const { 
+    isSyncing, 
+    pendingChanges, 
+    lastSyncAt, 
+    syncNow,
+    queueStatusUpdate,
+    savePhoto,
+  } = useOfflineData({ resourceId, autoSync: true });
 
   const { scrollContainerRef, isRefreshing, pullDistance, shouldTrigger } = usePullToRefresh({
     onRefresh: async () => {
@@ -1143,6 +1154,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   return (
     <div className="flex flex-col h-full bg-background">
+      <OfflineBanner isOnline={isOnline} />
       <div className="p-4 border-b bg-card space-y-3">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -1164,15 +1176,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 )}
               </Badge>
             )}
-            {!isOnline && (
-              <Badge 
-                variant="destructive"
-                data-testid="badge-offline-status"
-              >
-                <WifiOff className="h-3 w-3 mr-1" />
-                Offline
-              </Badge>
-            )}
+            <OfflineIndicator
+              isOnline={isOnline}
+              isSyncing={isSyncing}
+              pendingChanges={pendingChanges}
+              lastSyncAt={lastSyncAt}
+              onSyncNow={syncNow}
+            />
             {resourceId && isOnline && (
               <Button
                 variant="ghost"
