@@ -81,12 +81,15 @@ const slides = [
     type: "product",
     title: "Produktöversikt",
     modules: [
-      { name: "Planeringsmodul", desc: "AI-driven vecko- och dagsplanering", status: "Live" },
-      { name: "Ruttoptimering", desc: "VRP-algoritmer för optimala rutter", status: "Live" },
-      { name: "Fältapp", desc: "Mobil app för chaufförer med offline-stöd", status: "Live" },
-      { name: "Kundportal", desc: "Self-service med bokningar och fakturor", status: "Live" },
-      { name: "Rapportering", desc: "Dashboards och KPI-uppföljning", status: "Live" },
-      { name: "Fortnox-integration", desc: "Automatisk fakturering", status: "Live" },
+      { name: "Planeringsmodul", desc: "AI-driven vecko- och dagsplanering med Conversational AI", status: "Live" },
+      { name: "Ruttoptimering", desc: "VRP-algoritmer med väderbaserad kapacitet", status: "Live" },
+      { name: "Fältapp", desc: "Komplett offline-arkitektur med IndexedDB", status: "Live" },
+      { name: "Kundportal 2.0", desc: "Magic link, betyg, chatt, självbokning", status: "Live" },
+      { name: "White-label", desc: "Multi-tenant med varumärkesanpassning", status: "Live" },
+      { name: "Branschpaket", desc: "Färdiga mallar för avfall, städ, fastighet", status: "Live" },
+      { name: "SMS & Notiser", desc: "E-post, SMS, push-notifikationer", status: "Live" },
+      { name: "Miljöcertifikat", desc: "CO2-spårning och hållbarhetsrapporter", status: "Live" },
+      { name: "Fortnox-integration", desc: "OAuth, fakturexport, multi-payer", status: "Live" },
     ]
   },
   {
@@ -96,11 +99,24 @@ const slides = [
     stats: [
       { value: "22,714", label: "Ordrar i systemet" },
       { value: "901", label: "Kunder" },
-      { value: "9", label: "Resurser/chaufförer" },
-      { value: "6", label: "Geografiska kluster" },
+      { value: "103", label: "Funktioner live" },
+      { value: "20", label: "Modulkategorier" },
     ],
     testimonial: "Unicorn har potential att revolutionera hur vi planerar våra rutter och kommunicerar med kunder.",
     company: "Kinab AB, Sundsvall"
+  },
+  {
+    id: "sustainability",
+    type: "sustainability",
+    title: "Hållbarhet som USP",
+    subtitle: "ESG-ready plattform för miljömedvetna kunder",
+    features: [
+      { icon: Leaf, title: "CO2-spårning", desc: "Automatisk beräkning av utsläpp per order och resurs" },
+      { icon: TrendingUp, title: "Miljöcertifikat", desc: "Årliga PDF-certifikat med hållbarhetsbetyg per kund" },
+      { icon: PiggyBank, title: "CO2-besparing", desc: "Uppskattning av klimatnytta från avfallshantering" },
+      { icon: BarChart3, title: "Hållbarhetsrating", desc: "Klimatpositiv → Utmärkt → Bra → Medel-skala" },
+    ],
+    bottomLine: "Unicorn hjälper kunder att dokumentera sin miljöpåverkan och kommunicera hållbarhetsarbete till intressenter"
   },
   {
     id: "business-model",
@@ -122,24 +138,26 @@ const slides = [
     type: "competitive",
     title: "Konkurrensfördel",
     advantages: [
-      { icon: Brain, title: "AI-first", desc: "Byggt med AI som kärna, inte påklistrat" },
-      { icon: Globe, title: "Nordiskt fokus", desc: "Svensk UI, lokal marknadskännedom" },
-      { icon: Zap, title: "Modern stack", desc: "Snabb utveckling, skalbar arkitektur" },
-      { icon: Shield, title: "Multi-tenant SaaS", desc: "Säker dataisolering per kund" },
+      { icon: Brain, title: "Conversational AI", desc: "Naturligt språk i planeraren - unikt för branschen" },
+      { icon: Globe, title: "Nordiskt fokus", desc: "Svensk UI, svenska adresser, lokal marknad" },
+      { icon: Leaf, title: "Hållbarhetsspårning", desc: "CO2-certifikat och miljörapporter - ESG-ready" },
+      { icon: Smartphone, title: "Offline-first", desc: "Fältapp fungerar utan uppkoppling" },
+      { icon: Shield, title: "White-label SaaS", desc: "Varumärkesanpassning per kund" },
+      { icon: Zap, title: "Branschpaket", desc: "Snabb onboarding med färdiga mallar" },
     ],
-    competitors: ["Modus (legacy)", "Roptimer", "Route4Me", "Generella ERP-system"],
-    differentiation: "Enda AI-drivna lösningen byggd specifikt för nordisk fältservice"
+    competitors: ["Modus (legacy)", "Roptimer", "Route4Me", "Opti", "Generella ERP-system"],
+    differentiation: "Enda AI-drivna lösningen med Conversational AI och hållbarhetscertifikat för nordisk fältservice"
   },
   {
     id: "roadmap",
     type: "roadmap",
-    title: "Roadmap 2026-2027",
+    title: "Roadmap 2025-2027",
     phases: [
-      { quarter: "Q1 2026", items: ["Kinab pilot live", "Grundläggande AI-planering", "Mobilapp v1"], status: "done" },
-      { quarter: "Q2 2026", items: ["Kundportal lansering", "Fortnox-integration", "Väderbaserad planering"], status: "current" },
-      { quarter: "Q3 2026", items: ["Första betalande kunder", "Prediktiv underhållsplanering", "API för tredjepartsintegrationer"], status: "planned" },
-      { quarter: "Q4 2026", items: ["Norge-expansion", "Advanced analytics", "Fleet management"], status: "planned" },
-      { quarter: "2027", items: ["Danmark & Finland", "Enterprise-funktioner", "Partnerprogram"], status: "future" },
+      { quarter: "Q4 2025", items: ["Kinab pilot live", "AI-planering med Conversational AI", "Mobilapp med offline-stöd"], status: "done" },
+      { quarter: "Q1 2026", items: ["Kundportal 2.0", "White-label multi-tenant", "Miljöcertifikat & SMS"], status: "done" },
+      { quarter: "Q2 2026", items: ["Första betalande kunder", "Branschpaket städ & fastighet", "API-dokumentation"], status: "current" },
+      { quarter: "Q3-Q4 2026", items: ["Norge-expansion", "Advanced analytics", "Partnerintegrations-marketplace"], status: "planned" },
+      { quarter: "2027", items: ["Danmark & Finland", "Enterprise on-premise", "AI-prediktivt underhåll"], status: "future" },
     ]
   },
   {
@@ -343,6 +361,32 @@ function SlideContent({ slide, slideNumber, totalSlides }: { slide: typeof slide
             </blockquote>
             <p className="text-center text-muted-foreground">— {slide.company}</p>
           </Card>
+        </div>
+      );
+
+    case "sustainability":
+      return (
+        <div className="h-full flex flex-col">
+          <h2 className="text-4xl font-bold mb-4 text-center">{slide.title}</h2>
+          <p className="text-xl text-muted-foreground text-center mb-8">{slide.subtitle}</p>
+          <div className="grid grid-cols-2 gap-6 flex-1">
+            {slide.features?.map((feature, i) => (
+              <Card key={i} className="p-6 hover-elevate">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 bg-primary/10 rounded-lg">
+                    <feature.icon className="h-8 w-8 text-primary" />
+                  </div>
+                  <div>
+                    <h3 className="text-lg font-semibold mb-1">{feature.title}</h3>
+                    <p className="text-muted-foreground">{feature.desc}</p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+          <div className="mt-6 p-4 bg-primary/5 rounded-lg border border-primary/20 text-center">
+            <p className="text-lg font-medium text-primary">{slide.bottomLine}</p>
+          </div>
         </div>
       );
 
@@ -827,6 +871,44 @@ export default function InvestorPitchPage() {
         doc.setFontSize(10);
         doc.setFont("helvetica", "normal");
         doc.text(`— ${slide.company}`, pageWidth / 2, yPos + 27, { align: "center" });
+        addPageNumber(index);
+        return;
+      }
+
+      // Sustainability slide
+      if (slide.type === "sustainability") {
+        addSlideHeader(slide.title, slide.subtitle);
+        yPos = 55;
+        
+        const greenColor = [34, 197, 94];
+        const colWidth = (pageWidth - 60) / 2;
+        slide.features?.forEach((feature, i) => {
+          const col = i % 2;
+          const row = Math.floor(i / 2);
+          const x = leftMargin + col * (colWidth + 10);
+          const y = yPos + row * 40;
+          
+          doc.setFillColor(236, 253, 245);
+          doc.roundedRect(x, y, colWidth, 32, 3, 3, 'F');
+          
+          doc.setTextColor(greenColor[0], greenColor[1], greenColor[2]);
+          doc.setFontSize(12);
+          doc.setFont("helvetica", "bold");
+          doc.text(feature.title, x + 8, y + 12);
+          
+          doc.setTextColor(textColor[0], textColor[1], textColor[2]);
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "normal");
+          doc.text(feature.desc, x + 8, y + 24);
+        });
+        
+        yPos += 95;
+        doc.setFillColor(236, 253, 245);
+        doc.roundedRect(leftMargin, yPos, pageWidth - 50, 20, 3, 3, 'F');
+        doc.setTextColor(greenColor[0], greenColor[1], greenColor[2]);
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "bold");
+        doc.text(slide.bottomLine || "", pageWidth / 2, yPos + 13, { align: "center" });
         addPageNumber(index);
         return;
       }
