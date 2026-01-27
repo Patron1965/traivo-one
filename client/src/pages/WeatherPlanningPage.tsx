@@ -225,7 +225,7 @@ export default function WeatherPlanningPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-2">
-                {weatherData.impacts.map(impact => (
+                {(weatherData?.impacts || []).map(impact => (
                   <div 
                     key={impact.date} 
                     className="flex items-center gap-4 p-3 rounded-lg bg-muted/50"
