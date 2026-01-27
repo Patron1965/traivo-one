@@ -307,8 +307,8 @@ export default function ClustersPage() {
     return customer?.name || null;
   };
 
-  const filteredClusters = clusters.filter((cluster) =>
-    cluster.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredClusters = (clusters || []).filter((cluster) =>
+    cluster.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const clustersWithCoordinates = useMemo(() => 

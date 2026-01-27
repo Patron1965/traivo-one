@@ -506,7 +506,7 @@ export default function ResourcesPage() {
   };
 
   const filteredResources = useMemo(() => {
-    return resources.filter(r => {
+    return (resources || []).filter(r => {
       const matchesSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (r.email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
         (r.phone || "").includes(searchQuery);
