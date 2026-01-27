@@ -297,13 +297,13 @@ export default function ClustersPage() {
 
   const getTeamName = (teamId: string | null) => {
     if (!teamId) return null;
-    const team = teams.find((t) => t.id === teamId);
+    const team = (teams || []).find((t) => t.id === teamId);
     return team?.name || null;
   };
 
   const getCustomerName = (customerId: string | null) => {
     if (!customerId) return null;
-    const customer = customers.find((c) => c.id === customerId);
+    const customer = (customers || []).find((c) => c.id === customerId);
     return customer?.name || null;
   };
 
@@ -317,7 +317,7 @@ export default function ClustersPage() {
   );
 
   const selectedCluster = selectedClusterId 
-    ? clusters.find(c => c.id === selectedClusterId) 
+    ? (clusters || []).find(c => c.id === selectedClusterId) 
     : null;
 
   if (error) {
