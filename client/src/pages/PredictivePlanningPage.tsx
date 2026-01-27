@@ -92,7 +92,7 @@ export default function PredictivePlanningPage() {
       clusterName: first?.clusterName || clusterId,
       trend: first?.trend || "stable",
       totalPredicted,
-      avgResources: Math.round(clusterForecasts.reduce((sum, f) => sum + f.suggestedResources, 0) / clusterForecasts.length),
+      avgResources: clusterForecasts.length > 0 ? Math.round(clusterForecasts.reduce((sum, f) => sum + f.suggestedResources, 0) / clusterForecasts.length) : 0,
       confidence: first?.confidence || 0
     };
   });

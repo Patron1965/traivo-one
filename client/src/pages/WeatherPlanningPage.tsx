@@ -72,7 +72,7 @@ export default function WeatherPlanningPage() {
     queryKey: [weatherUrl],
   });
 
-  const severeImpacts = weatherData?.impacts.filter(i => i.impactLevel === "high" || i.impactLevel === "severe") || [];
+  const severeImpacts = weatherData?.impacts?.filter(i => i.impactLevel === "high" || i.impactLevel === "severe") || [];
 
   return (
     <div className="p-6 space-y-6 max-w-6xl mx-auto">
@@ -123,11 +123,11 @@ export default function WeatherPlanningPage() {
             <CardHeader className="pb-3">
               <CardTitle>Sammanfattning</CardTitle>
               <CardDescription>
-                {weatherData.location.name || "Vald plats"} • {weatherData.forecasts.length} dagars prognos
+                {weatherData?.location?.name || "Vald plats"} • {weatherData?.forecasts?.length || 0} dagars prognos
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-sm">{weatherData.summary}</p>
+              <p className="text-sm">{weatherData?.summary}</p>
               {severeImpacts.length > 0 && (
                 <div className="mt-4 p-3 rounded-lg bg-destructive/10 border border-destructive/20">
                   <div className="flex items-center gap-2 text-destructive font-medium mb-2">
@@ -147,8 +147,8 @@ export default function WeatherPlanningPage() {
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {weatherData.forecasts.map((forecast, index) => {
-              const impact = weatherData.impacts[index];
+            {(weatherData?.forecasts || []).map((forecast, index) => {
+              const impact = weatherData?.impacts?.[index];
               return (
                 <Card key={forecast.date} data-testid={`card-forecast-${forecast.date}`}>
                   <CardHeader className="pb-2">

@@ -208,7 +208,7 @@ export default function RoutesPage() {
             </Card>
           )}
           
-          {recommendations.recommendations.length > 0 && (
+          {recommendations?.recommendations?.length > 0 && (
             <Card data-testid="card-ai-recommendations">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
