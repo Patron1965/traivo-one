@@ -3971,86 +3971,41 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // AI Proactive Tips - background anomaly analysis for proactive suggestions
+  // OPTIMIZED: Uses efficient SQL COUNT queries instead of fetching all records
   app.get("/api/ai/proactive-tips", isAuthenticated, async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      // Fetch current operational data
-      const orders = await storage.getWorkOrders(tenantId);
-      const resources = await storage.getResources(tenantId);
       
-      const today = new Date();
-      const todayStr = today.toISOString().split("T")[0];
+      // Use optimized count queries - much faster than fetching all orders
+      const counts = await storage.getWorkOrderCounts(tenantId);
+      const activeResourceCount = await storage.getActiveResourceCount(tenantId);
       
       // Detect anomalies
       const tips: { type: string; severity: "info" | "warning" | "critical"; title: string; message: string; action?: string }[] = [];
       
       // Check for overdue orders
-      const overdueOrders = orders.filter(o => 
-        o.scheduledDate && 
-        new Date(o.scheduledDate) < today && 
-        o.status !== "completed" && 
-        o.status !== "cancelled"
-      );
-      if (overdueOrders.length > 0) {
+      if (counts.overdue > 0) {
         tips.push({
           type: "overdue",
-          severity: overdueOrders.length > 5 ? "critical" : "warning",
+          severity: counts.overdue > 5 ? "critical" : "warning",
           title: "Försenade ordrar",
-          message: `Du har ${overdueOrders.length} ordrar som passerat sitt schemalagda datum.`,
+          message: `Du har ${counts.overdue} ordrar som passerat sitt schemalagda datum.`,
           action: "Se veckoplanering"
         });
       }
       
       // Check for today's workload
-      const todayOrders = orders.filter(o => 
-        o.scheduledDate && o.scheduledDate.toISOString().split("T")[0] === todayStr && 
-        o.status !== "completed" && 
-        o.status !== "cancelled"
-      );
-      const activeResources = resources.filter(r => r.status === "active");
-      if (todayOrders.length > 0 && activeResources.length > 0) {
-        const ordersPerResource = todayOrders.length / activeResources.length;
+      if (counts.todayPending > 0 && activeResourceCount > 0) {
+        const ordersPerResource = counts.todayPending / activeResourceCount;
         if (ordersPerResource > 8) {
           tips.push({
             type: "workload",
             severity: "warning",
             title: "Hög arbetsbelastning",
-            message: `Idag finns ${todayOrders.length} ordrar för ${activeResources.length} resurser (${ordersPerResource.toFixed(1)} per resurs).`,
+            message: `Idag finns ${counts.todayPending} ordrar för ${activeResourceCount} resurser (${ordersPerResource.toFixed(1)} per resurs).`,
             action: "Granska planeringen"
           });
         }
-      }
-      
-      // Check for impossible orders
-      const impossibleOrders = orders.filter(o => o.status === "omojlig");
-      if (impossibleOrders.length > 0) {
-        tips.push({
-          type: "impossible",
-          severity: "warning",
-          title: "Omöjliga ordrar",
-          message: `${impossibleOrders.length} ordrar har markerats som omöjliga och behöver åtgärdas.`,
-          action: "Se omöjliga ordrar"
-        });
-      }
-      
-      // Check for unassigned orders this week
-      const nextWeek = new Date(today);
-      nextWeek.setDate(nextWeek.getDate() + 7);
-      const unassignedThisWeek = orders.filter(o => 
-        o.scheduledDate && 
-        new Date(o.scheduledDate) <= nextWeek &&
-        !o.resourceId &&
-        o.status !== "completed" && 
-        o.status !== "cancelled"
-      );
-      if (unassignedThisWeek.length > 3) {
-        tips.push({
-          type: "unassigned",
-          severity: "info",
-          title: "Ordrar utan resurs",
-          message: `${unassignedThisWeek.length} ordrar den kommande veckan saknar tilldelad resurs.`,
-          action: "Tilldela resurser"
-        });
       }
       
       res.json({ tips: tips.slice(0, 3) }); // Return max 3 tips

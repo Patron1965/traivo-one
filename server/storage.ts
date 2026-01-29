@@ -85,7 +85,7 @@ import {
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, desc, gte, lte, sql, inArray } from "drizzle-orm";
+import { eq, and, or, isNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -125,6 +125,8 @@ export interface IStorage {
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
   getWorkOrdersByResource(resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkOrder[]>;
   getWorkOrdersByDate(tenantId: string, date: Date): Promise<WorkOrder[]>;
+  getWorkOrderCounts(tenantId: string): Promise<{ overdue: number; todayPending: number; total: number }>;
+  getActiveResourceCount(tenantId: string): Promise<number>;
   createWorkOrder(workOrder: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
   deleteWorkOrder(id: string): Promise<void>;
@@ -822,6 +824,63 @@ export class DatabaseStorage implements IStorage {
         lte(workOrders.scheduledDate, endOfDay)
       )
     ).orderBy(workOrders.scheduledStartTime);
+  }
+
+  async getWorkOrderCounts(tenantId: string): Promise<{ overdue: number; todayPending: number; total: number }> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Count overdue orders (scheduled before today, not completed/cancelled)
+    const [overdueResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt),
+        lt(workOrders.scheduledDate, today),
+        notInArray(workOrders.status, ['completed', 'cancelled'])
+      ));
+
+    // Count today's pending orders
+    const [todayResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt),
+        gte(workOrders.scheduledDate, today),
+        lt(workOrders.scheduledDate, tomorrow),
+        notInArray(workOrders.status, ['completed', 'cancelled'])
+      ));
+
+    // Count total non-deleted orders
+    const [totalResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        isNull(workOrders.deletedAt)
+      ));
+
+    return {
+      overdue: overdueResult?.count || 0,
+      todayPending: todayResult?.count || 0,
+      total: totalResult?.count || 0
+    };
+  }
+
+  async getActiveResourceCount(tenantId: string): Promise<number> {
+    const [result] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(resources)
+      .where(and(
+        eq(resources.tenantId, tenantId),
+        eq(resources.status, 'active'),
+        isNull(resources.deletedAt)
+      ));
+    return result?.count || 0;
   }
 
   async createWorkOrder(insertWorkOrder: InsertWorkOrder): Promise<WorkOrder> {
