@@ -3212,10 +3212,10 @@ export async function registerRoutes(
     try {
       const tenantId = getTenantIdWithFallback(req);
       const clusters = await storage.getClusters(tenantId);
-      res.json(clusters);
+      res.json(clusters || []);
     } catch (error) {
       console.error("Failed to fetch clusters:", error);
-      res.status(500).json({ error: "Kunde inte hämta kluster" });
+      res.status(500).json({ error: "Kunde inte hämta kluster", details: String(error) });
     }
   });
 
