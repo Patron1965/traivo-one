@@ -122,6 +122,7 @@ export interface IStorage {
   deleteResource(id: string): Promise<void>;
   
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
+  getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
   getWorkOrdersByResource(resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkOrder[]>;
   getWorkOrdersByDate(tenantId: string, date: Date): Promise<WorkOrder[]>;
@@ -798,6 +799,105 @@ export class DatabaseStorage implements IStorage {
     return query;
   }
 
+  async getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
+    const conditions: any[] = [eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)];
+
+    if (startDate && endDate) {
+      if (includeUnscheduled) {
+        conditions.push(
+          or(
+            isNull(workOrders.scheduledDate),
+            and(gte(workOrders.scheduledDate, startDate), lte(workOrders.scheduledDate, endDate))
+          )!
+        );
+      } else {
+        conditions.push(gte(workOrders.scheduledDate, startDate));
+        conditions.push(lte(workOrders.scheduledDate, endDate));
+      }
+    }
+
+    if (status && status !== 'all') {
+      conditions.push(eq(workOrders.status, status));
+    }
+
+    const whereClause = and(...conditions);
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(whereClause);
+
+    const data = await db.select({
+      id: workOrders.id,
+      tenantId: workOrders.tenantId,
+      customerId: workOrders.customerId,
+      objectId: workOrders.objectId,
+      clusterId: workOrders.clusterId,
+      resourceId: workOrders.resourceId,
+      teamId: workOrders.teamId,
+      title: workOrders.title,
+      description: workOrders.description,
+      orderType: workOrders.orderType,
+      priority: workOrders.priority,
+      status: workOrders.status,
+      orderStatus: workOrders.orderStatus,
+      scheduledDate: workOrders.scheduledDate,
+      scheduledStartTime: workOrders.scheduledStartTime,
+      plannedWindowStart: workOrders.plannedWindowStart,
+      plannedWindowEnd: workOrders.plannedWindowEnd,
+      estimatedDuration: workOrders.estimatedDuration,
+      actualDuration: workOrders.actualDuration,
+      setupTime: workOrders.setupTime,
+      setupReason: workOrders.setupReason,
+      lockedAt: workOrders.lockedAt,
+      completedAt: workOrders.completedAt,
+      invoicedAt: workOrders.invoicedAt,
+      cachedValue: workOrders.cachedValue,
+      cachedCost: workOrders.cachedCost,
+      cachedProductionMinutes: workOrders.cachedProductionMinutes,
+      isSimulated: workOrders.isSimulated,
+      simulationScenarioId: workOrders.simulationScenarioId,
+      plannedBy: workOrders.plannedBy,
+      plannedNotes: workOrders.plannedNotes,
+      notes: workOrders.notes,
+      metadata: workOrders.metadata,
+      createdAt: workOrders.createdAt,
+      deletedAt: workOrders.deletedAt,
+      impossibleReason: workOrders.impossibleReason,
+      impossibleReasonText: workOrders.impossibleReasonText,
+      impossibleAt: workOrders.impossibleAt,
+      impossibleBy: workOrders.impossibleBy,
+      impossiblePhotoUrl: workOrders.impossiblePhotoUrl,
+      executionStatus: workOrders.executionStatus,
+      creationMethod: workOrders.creationMethod,
+      structuralArticleId: workOrders.structuralArticleId,
+      what3words: workOrders.what3words,
+      taskLatitude: workOrders.taskLatitude,
+      taskLongitude: workOrders.taskLongitude,
+      externalReference: workOrders.externalReference,
+      onWayAt: workOrders.onWayAt,
+      onSiteAt: workOrders.onSiteAt,
+      inspectedAt: workOrders.inspectedAt,
+      objectName: objects.name,
+      objectAddress: objects.address,
+      objectAccessCode: objects.resolvedAccessCode,
+      objectKeyNumber: objects.resolvedKeyNumber,
+      customerName: customers.name,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .where(whereClause)
+    .orderBy(desc(workOrders.scheduledDate))
+    .limit(limit)
+    .offset(offset);
+
+    return {
+      workOrders: data,
+      total: countResult?.count || 0
+    };
+  }
+
   async getWorkOrder(id: string): Promise<WorkOrder | undefined> {
     const [workOrder] = await db.select().from(workOrders).where(and(eq(workOrders.id, id), isNull(workOrders.deletedAt)));
     return workOrder || undefined;
@@ -831,14 +931,17 @@ export class DatabaseStorage implements IStorage {
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const overdueFloor = new Date(today);
+    overdueFloor.setDate(overdueFloor.getDate() - 90);
 
-    // Count overdue orders (scheduled before today, not completed/cancelled)
+    // Count overdue orders (scheduled in the last 90 days before today, not completed/cancelled)
     const [overdueResult] = await db
       .select({ count: sql<number>`count(*)::int` })
       .from(workOrders)
       .where(and(
         eq(workOrders.tenantId, tenantId),
         isNull(workOrders.deletedAt),
+        gte(workOrders.scheduledDate, overdueFloor),
         lt(workOrders.scheduledDate, today),
         notInArray(workOrders.status, ['completed', 'cancelled'])
       ));

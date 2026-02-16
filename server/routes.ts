@@ -512,9 +512,26 @@ export async function registerRoutes(
       const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
       const includeUnscheduled = req.query.includeUnscheduled === 'true';
       const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
-      
-      const workOrders = await storage.getWorkOrders(tenantId, startDate, endDate, includeUnscheduled, limit);
-      res.json(workOrders);
+      const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
+      const status = req.query.status as string || undefined;
+      const paginated = req.query.paginated === 'true';
+
+      if (paginated || offset !== undefined) {
+        const result = await storage.getWorkOrdersPaginated(
+          tenantId, 
+          limit || 50, 
+          offset || 0, 
+          startDate, 
+          endDate, 
+          includeUnscheduled,
+          status
+        );
+        res.json(result);
+      } else {
+        const defaultLimit = limit || 500;
+        const workOrders = await storage.getWorkOrders(tenantId, startDate, endDate, includeUnscheduled, defaultLimit);
+        res.json(workOrders);
+      }
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch work orders" });
     }
