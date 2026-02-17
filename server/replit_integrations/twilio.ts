@@ -1,4 +1,5 @@
 import Twilio from 'twilio';
+import { trackApiUsage } from "../api-usage-tracker";
 
 let connectionSettings: any;
 
@@ -55,6 +56,15 @@ export async function sendSms(options: {
       to: options.to,
       body: options.body,
     });
+
+    trackApiUsage({
+      service: "twilio",
+      method: "send_sms",
+      endpoint: "/messages",
+      units: 1,
+      statusCode: 200,
+      metadata: { to: options.to, messageId: result.sid },
+    });
     
     return { 
       success: true, 
@@ -62,6 +72,14 @@ export async function sendSms(options: {
     };
   } catch (error: any) {
     console.error('[twilio] Failed to send SMS:', error);
+    trackApiUsage({
+      service: "twilio",
+      method: "send_sms",
+      endpoint: "/messages",
+      units: 1,
+      statusCode: 500,
+      metadata: { to: options.to, error: error.message },
+    });
     return { 
       success: false, 
       error: error.message || 'Failed to send SMS'

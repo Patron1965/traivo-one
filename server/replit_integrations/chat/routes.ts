@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import OpenAI from "openai";
 import { chatStorage } from "./storage";
+import { trackApiUsage } from "../../api-usage-tracker";
 
 const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -78,6 +79,8 @@ export function registerChatRoutes(app: Express): void {
         stream: true,
         max_tokens: 2048,
       });
+
+      trackApiUsage({ service: "openai", method: "chat.completions.stream", endpoint: "/v1/chat/completions", model: "gpt-4o-mini", units: 1, metadata: { streaming: true } });
 
       let fullResponse = "";
 

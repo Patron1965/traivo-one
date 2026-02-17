@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import OpenAI, { toFile } from "openai";
 import { Buffer } from "node:buffer";
+import { trackApiUsage } from "../../api-usage-tracker";
 
 export const openai = new OpenAI({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
@@ -20,6 +21,7 @@ export async function generateImageBuffer(
     prompt,
     size,
   });
+  trackApiUsage({ service: "openai", method: "images.generate", endpoint: "/v1/images/generations", model: "dall-e-3", units: 1 });
   const base64 = response.data[0]?.b64_json ?? "";
   return Buffer.from(base64, "base64");
 }
@@ -46,6 +48,7 @@ export async function editImages(
     image: images,
     prompt,
   });
+  trackApiUsage({ service: "openai", method: "images.generate", endpoint: "/v1/images/generations", model: "dall-e-3", units: 1 });
 
   const imageBase64 = response.data[0]?.b64_json ?? "";
   const imageBytes = Buffer.from(imageBase64, "base64");

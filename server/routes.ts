@@ -2,7 +2,7 @@ import type { Express, Request as ExpressRequest, Response as ExpressResponse } 
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq } from "drizzle-orm";
+import { eq, sql, desc, and, gte } from "drizzle-orm";
 import { 
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
   insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema,
@@ -15,7 +15,8 @@ import {
   insertObjectImageSchema, insertObjectContactSchema, insertTaskDesiredTimewindowSchema,
   insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
-  type ServiceObject
+  type ServiceObject,
+  apiUsageLogs, apiBudgets
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -3471,6 +3472,9 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
         temperature: 0.7,
       });
 
+      const { trackOpenAIResponse } = await import("./api-usage-tracker");
+      trackOpenAIResponse(response);
+
       let rawAnswer = response.choices[0]?.message?.content || "Kunde inte generera ett svar.";
       
       // Parse suggested follow-up questions
@@ -3828,6 +3832,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         content: question
       });
 
+      const { trackOpenAIResponse: trackOAIResponse } = await import("./api-usage-tracker");
+
       // First API call with tools
       let response = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -3837,6 +3843,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         max_tokens: 500,
         temperature: 0.5
       });
+
+      trackOAIResponse(response);
 
       let assistantMessage = response.choices[0]?.message;
 
@@ -3869,6 +3877,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           max_tokens: 500,
           temperature: 0.5
         });
+
+        trackOAIResponse(response);
 
         assistantMessage = response.choices[0]?.message;
       }
@@ -10620,6 +10630,221 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       console.error("Failed to generate environmental certificate:", error);
       res.status(500).json({ error: "Kunde inte generera miljöcertifikat" });
     }
+  });
+
+  app.get("/api/system/api-costs/summary", requireAdmin, async (req, res) => {
+    try {
+      const period = (req.query.period as string) || "month";
+      let startDate: Date;
+      const endDate = new Date();
+      
+      switch (period) {
+        case "day": startDate = new Date(endDate.getTime() - 24 * 60 * 60 * 1000); break;
+        case "week": startDate = new Date(endDate.getTime() - 7 * 24 * 60 * 60 * 1000); break;
+        case "year": startDate = new Date(endDate.getFullYear(), 0, 1); break;
+        default: startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+      }
+      
+      if (req.query.startDate) startDate = new Date(req.query.startDate as string);
+      if (req.query.endDate) endDate.setTime(new Date(req.query.endDate as string).getTime());
+
+      const results = await db
+        .select({
+          service: apiUsageLogs.service,
+          totalCost: sql<number>`COALESCE(SUM(${apiUsageLogs.estimatedCostUsd}), 0)`,
+          totalCalls: sql<number>`COUNT(*)`,
+          totalInputTokens: sql<number>`COALESCE(SUM(${apiUsageLogs.inputTokens}), 0)`,
+          totalOutputTokens: sql<number>`COALESCE(SUM(${apiUsageLogs.outputTokens}), 0)`,
+          avgDurationMs: sql<number>`COALESCE(AVG(${apiUsageLogs.durationMs}), 0)`,
+          errorCount: sql<number>`SUM(CASE WHEN ${apiUsageLogs.statusCode} >= 400 THEN 1 ELSE 0 END)`,
+        })
+        .from(apiUsageLogs)
+        .where(gte(apiUsageLogs.createdAt, startDate))
+        .groupBy(apiUsageLogs.service);
+      
+      const totalCost = results.reduce((sum, r) => sum + Number(r.totalCost), 0);
+      const totalCalls = results.reduce((sum, r) => sum + Number(r.totalCalls), 0);
+      
+      res.json({
+        period,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        totalCostUsd: Math.round(totalCost * 10000) / 10000,
+        totalCalls,
+        services: results.map(r => ({
+          service: r.service,
+          totalCostUsd: Math.round(Number(r.totalCost) * 10000) / 10000,
+          totalCalls: Number(r.totalCalls),
+          totalInputTokens: Number(r.totalInputTokens),
+          totalOutputTokens: Number(r.totalOutputTokens),
+          avgDurationMs: Math.round(Number(r.avgDurationMs)),
+          errorCount: Number(r.errorCount),
+        })),
+      });
+    } catch (error) {
+      console.error("Failed to fetch API cost summary:", error);
+      res.status(500).json({ error: "Kunde inte hämta API-kostnadssammanfattning" });
+    }
+  });
+
+  app.get("/api/system/api-costs/trends", requireAdmin, async (req, res) => {
+    try {
+      const days = parseInt(req.query.days as string) || 30;
+      const serviceFilter = req.query.service as string;
+      const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+      
+      const conditions = [gte(apiUsageLogs.createdAt, startDate)];
+      if (serviceFilter) conditions.push(eq(apiUsageLogs.service, serviceFilter));
+      
+      const results = await db
+        .select({
+          date: sql<string>`DATE(${apiUsageLogs.createdAt})`,
+          service: apiUsageLogs.service,
+          totalCost: sql<number>`COALESCE(SUM(${apiUsageLogs.estimatedCostUsd}), 0)`,
+          totalCalls: sql<number>`COUNT(*)`,
+          totalTokens: sql<number>`COALESCE(SUM(${apiUsageLogs.totalTokens}), 0)`,
+        })
+        .from(apiUsageLogs)
+        .where(and(...conditions))
+        .groupBy(sql`DATE(${apiUsageLogs.createdAt})`, apiUsageLogs.service)
+        .orderBy(sql`DATE(${apiUsageLogs.createdAt})`);
+      
+      res.json(results.map(r => ({
+        date: r.date,
+        service: r.service,
+        totalCostUsd: Math.round(Number(r.totalCost) * 10000) / 10000,
+        totalCalls: Number(r.totalCalls),
+        totalTokens: Number(r.totalTokens),
+      })));
+    } catch (error) {
+      console.error("Failed to fetch API cost trends:", error);
+      res.status(500).json({ error: "Kunde inte hämta kostnadstrender" });
+    }
+  });
+
+  app.get("/api/system/api-costs/recent", requireAdmin, async (req, res) => {
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      const offset = parseInt(req.query.offset as string) || 0;
+      const serviceFilter = req.query.service as string;
+      
+      const conditions = [];
+      if (serviceFilter) conditions.push(eq(apiUsageLogs.service, serviceFilter));
+      
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      
+      const [logs, countResult] = await Promise.all([
+        db
+          .select()
+          .from(apiUsageLogs)
+          .where(whereClause)
+          .orderBy(desc(apiUsageLogs.createdAt))
+          .limit(limit)
+          .offset(offset),
+        db
+          .select({ total: sql<number>`COUNT(*)` })
+          .from(apiUsageLogs)
+          .where(whereClause),
+      ]);
+      
+      res.json({
+        logs,
+        total: Number(countResult[0]?.total || 0),
+        limit,
+        offset,
+      });
+    } catch (error) {
+      console.error("Failed to fetch recent API logs:", error);
+      res.status(500).json({ error: "Kunde inte hämta API-loggar" });
+    }
+  });
+
+  app.get("/api/system/api-costs/by-tenant", requireAdmin, async (req, res) => {
+    try {
+      const period = (req.query.period as string) || "month";
+      let startDate: Date;
+      
+      switch (period) {
+        case "day": startDate = new Date(Date.now() - 24 * 60 * 60 * 1000); break;
+        case "week": startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); break;
+        case "year": startDate = new Date(new Date().getFullYear(), 0, 1); break;
+        default: startDate = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+      }
+
+      const results = await db
+        .select({
+          tenantId: apiUsageLogs.tenantId,
+          service: apiUsageLogs.service,
+          totalCost: sql<number>`COALESCE(SUM(${apiUsageLogs.estimatedCostUsd}), 0)`,
+          totalCalls: sql<number>`COUNT(*)`,
+        })
+        .from(apiUsageLogs)
+        .where(gte(apiUsageLogs.createdAt, startDate))
+        .groupBy(apiUsageLogs.tenantId, apiUsageLogs.service);
+      
+      res.json(results.map(r => ({
+        tenantId: r.tenantId || "system",
+        service: r.service,
+        totalCostUsd: Math.round(Number(r.totalCost) * 10000) / 10000,
+        totalCalls: Number(r.totalCalls),
+      })));
+    } catch (error) {
+      console.error("Failed to fetch tenant API costs:", error);
+      res.status(500).json({ error: "Kunde inte hämta tenant-kostnader" });
+    }
+  });
+
+  app.get("/api/system/api-budgets", requireAdmin, async (req, res) => {
+    try {
+      const budgets = await db.select().from(apiBudgets).orderBy(apiBudgets.service);
+      res.json(budgets);
+    } catch (error) {
+      console.error("Failed to fetch API budgets:", error);
+      res.status(500).json({ error: "Kunde inte hämta budgetar" });
+    }
+  });
+
+  app.put("/api/system/api-budgets", requireAdmin, async (req, res) => {
+    try {
+      const { service, monthlyBudgetUsd, alertThresholdPercent, tenantId } = req.body;
+      if (!service || monthlyBudgetUsd === undefined) {
+        return res.status(400).json({ error: "Service och budget krävs" });
+      }
+      
+      const existing = await db.select().from(apiBudgets)
+        .where(and(
+          eq(apiBudgets.service, service),
+          tenantId ? eq(apiBudgets.tenantId, tenantId) : sql`${apiBudgets.tenantId} IS NULL`
+        ));
+      
+      if (existing.length > 0) {
+        await db.update(apiBudgets)
+          .set({ 
+            monthlyBudgetUsd, 
+            alertThresholdPercent: alertThresholdPercent || 80,
+            updatedAt: new Date() 
+          })
+          .where(eq(apiBudgets.id, existing[0].id));
+      } else {
+        await db.insert(apiBudgets).values({
+          service,
+          tenantId: tenantId || null,
+          monthlyBudgetUsd,
+          alertThresholdPercent: alertThresholdPercent || 80,
+        });
+      }
+      
+      const budgets = await db.select().from(apiBudgets).orderBy(apiBudgets.service);
+      res.json(budgets);
+    } catch (error) {
+      console.error("Failed to update API budget:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera budget" });
+    }
+  });
+
+  app.get("/api/system/api-costs/pricing", requireAdmin, async (_req, res) => {
+    const { PRICING } = await import("./api-usage-tracker");
+    res.json(PRICING);
   });
 
   return httpServer;

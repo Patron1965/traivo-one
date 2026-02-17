@@ -1,5 +1,6 @@
 // Resend email integration
 import { Resend } from 'resend';
+import { trackApiUsage } from "../api-usage-tracker";
 
 let connectionSettings: any;
 
@@ -59,6 +60,15 @@ export async function sendEmail(options: {
     subject: options.subject,
     html: options.html,
     attachments: options.attachments,
+  });
+
+  trackApiUsage({
+    service: "resend",
+    method: "send_email",
+    endpoint: "/emails",
+    units: 1,
+    statusCode: result.error ? 500 : 200,
+    metadata: { to: options.to, subject: options.subject },
   });
   
   return result;

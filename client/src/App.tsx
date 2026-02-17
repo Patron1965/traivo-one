@@ -55,6 +55,7 @@ import ReportingDashboardPage from "@/pages/ReportingDashboardPage";
 import WorkflowGuidePage from "@/pages/WorkflowGuidePage";
 import DataRequirementsPage from "@/pages/DataRequirementsPage";
 import InvestorPitchPage from "@/pages/InvestorPitchPage";
+import ApiCostsDashboardPage from "@/pages/ApiCostsDashboardPage";
 import PortalLoginPage from "@/pages/portal/PortalLoginPage";
 import PortalVerifyPage from "@/pages/portal/PortalVerifyPage";
 import PortalDashboardPage from "@/pages/portal/PortalDashboardPage";
@@ -113,6 +114,7 @@ function Router() {
       <Route path="/metadata-settings" component={MetadataSettingsPage} />
       <Route path="/fortnox" component={FortnoxSettingsPage} />
       <Route path="/sms-settings" component={SmsSettingsPage} />
+      <Route path="/api-costs" component={ApiCostsDashboardPage} />
       <Route path="/environmental-certificates" component={EnvironmentalCertificatePage} />
       <Route path="/architecture" component={ArchitecturePage} />
       <Route path="/order-concepts" component={OrderConceptsPage} />

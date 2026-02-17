@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDesiredTimewindow, StructuralArticle, Article, InsertWorkOrder, InsertTaskDependency } from "@shared/schema";
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
+import { trackOpenAIResponse } from "./api-usage-tracker";
 
 // ============================================
 // AI PLANNING SERVICE - MODELLKONFIGURATION
@@ -406,6 +407,7 @@ export async function generatePlanningSuggestions(
       response_format: { type: "json_object" }
     });
 
+    trackOpenAIResponse(response);
     const content = response.choices[0]?.message?.content || "{}";
     const parsed = JSON.parse(content);
     
@@ -444,6 +446,7 @@ export async function explainSuggestion(
       max_tokens: 300
     });
 
+    trackOpenAIResponse(response);
     return response.choices[0]?.message?.content || "Ingen förklaring tillgänglig.";
   } catch (error) {
     return "Kunde inte generera förklaring.";
@@ -1008,6 +1011,7 @@ Svara ENDAST med JSON:
       response_format: { type: "json_object" }
     });
     
+    trackOpenAIResponse(response);
     const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
     const tips = aiResponse.optimizationTips || [];
     const weatherTips = aiResponse.weatherConsiderations || [];
@@ -1976,6 +1980,7 @@ Svara i JSON-format:
       max_tokens: 500
     });
 
+    trackOpenAIResponse(response);
     const content = response.choices[0]?.message?.content || "";
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     
@@ -2323,7 +2328,7 @@ Ge kort feedback om optimeringen är bra eller om det finns ytterligare att tän
         max_completion_tokens: 200
       });
       
-      // Just log AI feedback, the optimization is algorithmic
+      trackOpenAIResponse(response);
       console.log("AI route feedback:", response.choices[0]?.message?.content);
     } catch (error) {
       console.log("AI feedback skipped:", error);
@@ -2500,6 +2505,7 @@ Fyll bara i de fält som är relevanta för frågan. "data" kan vara null om det
       response_format: { type: "json_object" }
     });
 
+    trackOpenAIResponse(response);
     const content = response.choices[0]?.message?.content;
     if (!content) {
       return {

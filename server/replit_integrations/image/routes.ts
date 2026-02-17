@@ -1,5 +1,6 @@
 import type { Express, Request, Response } from "express";
 import { openai } from "./client";
+import { trackApiUsage } from "../../api-usage-tracker";
 
 export function registerImageRoutes(app: Express): void {
   app.post("/api/generate-image", async (req: Request, res: Response) => {
@@ -16,6 +17,8 @@ export function registerImageRoutes(app: Express): void {
         n: 1,
         size: size as "1024x1024" | "512x512" | "256x256",
       });
+
+      trackApiUsage({ service: "openai", method: "images.generate", endpoint: "/v1/images/generations", model: "dall-e-3", units: 1 });
 
       const imageData = response.data[0];
       res.json({

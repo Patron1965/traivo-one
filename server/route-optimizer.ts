@@ -1,4 +1,5 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
+import { trackApiUsage } from "./api-usage-tracker";
 
 const OPENROUTESERVICE_API_KEY = process.env.OPENROUTESERVICE_API_KEY;
 
@@ -139,6 +140,7 @@ async function getRouteFromORS(coordinates: [number, number][]): Promise<{
   }
   
   try {
+    const startTime = Date.now();
     const response = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
       method: "POST",
       headers: {
@@ -149,6 +151,15 @@ async function getRouteFromORS(coordinates: [number, number][]): Promise<{
         coordinates,
         instructions: false,
       }),
+    });
+
+    trackApiUsage({
+      service: "openrouteservice",
+      method: "directions",
+      endpoint: "/v2/directions",
+      units: 1,
+      statusCode: response.status,
+      durationMs: Date.now() - startTime,
     });
     
     if (!response.ok) {
@@ -498,6 +509,7 @@ export async function optimizeRoutesVRP(
 
   // Call VROOM API
   try {
+    const startTime = Date.now();
     const response = await fetch(ORS_OPTIMIZATION_URL, {
       method: "POST",
       headers: {
@@ -509,6 +521,15 @@ export async function optimizeRoutesVRP(
         jobs: validJobs.map(j => j.job),
         options: { g: true }
       })
+    });
+
+    trackApiUsage({
+      service: "openrouteservice",
+      method: "optimization",
+      endpoint: "/optimization",
+      units: 1,
+      statusCode: response.status,
+      durationMs: Date.now() - startTime,
     });
 
     if (!response.ok) {

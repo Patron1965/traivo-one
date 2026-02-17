@@ -3064,3 +3064,43 @@ export const RATING_CATEGORY_LABELS: Record<RatingCategory, string> = {
   communication: "Kommunikation",
   cleanliness: "Städning efter sig"
 };
+
+export const apiUsageLogs = pgTable("api_usage_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id"),
+  service: varchar("service", { length: 50 }).notNull(),
+  endpoint: varchar("endpoint", { length: 200 }),
+  method: varchar("method", { length: 50 }),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  totalTokens: integer("total_tokens"),
+  units: integer("units").default(1),
+  estimatedCostUsd: real("estimated_cost_usd"),
+  model: varchar("model", { length: 100 }),
+  statusCode: integer("status_code"),
+  durationMs: integer("duration_ms"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_api_usage_tenant").on(table.tenantId),
+  index("idx_api_usage_service").on(table.service),
+  index("idx_api_usage_created").on(table.createdAt),
+]);
+
+export const insertApiUsageLogSchema = createInsertSchema(apiUsageLogs).omit({ id: true, createdAt: true });
+export type InsertApiUsageLog = z.infer<typeof insertApiUsageLogSchema>;
+export type ApiUsageLog = typeof apiUsageLogs.$inferSelect;
+
+export const apiBudgets = pgTable("api_budgets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id"),
+  service: varchar("service", { length: 50 }).notNull(),
+  monthlyBudgetUsd: real("monthly_budget_usd").notNull(),
+  alertThresholdPercent: integer("alert_threshold_percent").default(80),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const insertApiBudgetSchema = createInsertSchema(apiBudgets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertApiBudget = z.infer<typeof insertApiBudgetSchema>;
+export type ApiBudget = typeof apiBudgets.$inferSelect;

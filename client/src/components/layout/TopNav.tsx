@@ -105,6 +105,7 @@ const avanceratItems = [
   { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
   { title: "Branschpaket", url: "/industry-packages", icon: Package, description: "Fördefinierade mallar" },
+  { title: "API-kostnader", url: "/api-costs", icon: BarChart3, description: "Övervakning av API-kostnader" },
   { title: "Admin", url: "/system-dashboard", icon: Palette, description: "Varumärke och roller" },
 ];
 

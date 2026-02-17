@@ -1,3 +1,5 @@
+import { trackApiUsage } from "./api-usage-tracker";
+
 export interface WeatherForecast {
   date: string;
   temperature: number;
@@ -176,7 +178,17 @@ export async function fetchWeatherForecast(
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code&timezone=Europe/Stockholm&forecast_days=${Math.min(days, 16)}`;
 
+    const startTime = Date.now();
     const response = await fetch(url);
+    trackApiUsage({
+      service: "open-meteo",
+      method: "forecast",
+      endpoint: "/v1/forecast",
+      units: 1,
+      statusCode: response.status,
+      durationMs: Date.now() - startTime,
+    });
+
     if (!response.ok) {
       throw new Error(`Weather API error: ${response.status}`);
     }
