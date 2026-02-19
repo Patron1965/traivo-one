@@ -4,20 +4,27 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Driver Core - Fältapp</title>
+  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', system-ui, sans-serif; background: #F8F9FA; color: #1C2833; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-    .card { background: white; border-radius: 16px; padding: 48px; max-width: 480px; text-align: center; border: 1px solid #EAECEE; }
+    .card { background: white; border-radius: 16px; padding: 40px; max-width: 480px; width: 100%; text-align: center; border: 1px solid #EAECEE; }
     h1 { font-size: 28px; margin-bottom: 8px; color: #1B4F72; }
-    p { font-size: 16px; color: #5D6D7E; margin-bottom: 24px; line-height: 1.5; }
-    .status { display: inline-flex; align-items: center; gap: 8px; background: #EAFAF1; color: #27AE60; padding: 8px 16px; border-radius: 100px; font-weight: 600; font-size: 14px; margin-bottom: 32px; }
+    p { font-size: 16px; color: #5D6D7E; margin-bottom: 20px; line-height: 1.5; }
+    .status { display: inline-flex; align-items: center; gap: 8px; background: #EAFAF1; color: #27AE60; padding: 8px 16px; border-radius: 100px; font-weight: 600; font-size: 14px; margin-bottom: 28px; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: #27AE60; }
-    .expo-section { border-top: 1px solid #EAECEE; padding-top: 24px; margin-top: 8px; }
-    .expo-section h2 { font-size: 18px; color: #1B4F72; margin-bottom: 12px; }
-    .expo-link { display: inline-block; background: #1B4F72; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin-top: 12px; transition: background 0.2s; }
+    .expo-section { border-top: 1px solid #EAECEE; padding-top: 24px; }
+    .expo-section h2 { font-size: 20px; color: #1B4F72; margin-bottom: 16px; }
+    #qr-canvas { margin: 0 auto 16px; display: block; border-radius: 8px; }
+    .expo-link { display: inline-block; background: #1B4F72; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin-top: 8px; transition: background 0.2s; width: 100%; }
     .expo-link:hover { background: #154360; }
-    .instructions { font-size: 14px; color: #7F8C8D; margin-top: 16px; line-height: 1.6; }
-    .qr-note { font-size: 13px; color: #95A5A6; margin-top: 8px; }
+    .url-display { background: #F0F3F4; border-radius: 8px; padding: 12px; margin-top: 16px; font-family: monospace; font-size: 12px; color: #5D6D7E; word-break: break-all; }
+    .instructions { font-size: 14px; color: #7F8C8D; margin-top: 20px; line-height: 1.8; text-align: left; }
+    .instructions li { margin-bottom: 4px; }
+    .warn { background: #FEF9E7; border: 1px solid #F9E79F; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; color: #7D6608; line-height: 1.5; }
+    .platform-tabs { display: flex; gap: 8px; margin-bottom: 16px; justify-content: center; }
+    .platform-tab { padding: 8px 20px; border-radius: 8px; border: 1px solid #D5D8DC; background: white; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .platform-tab.active { background: #1B4F72; color: white; border-color: #1B4F72; }
   </style>
 </head>
 <body>
@@ -27,26 +34,73 @@
     <div class="status"><span class="dot"></span> API Active</div>
 
     <div class="expo-section">
-      <h2>&Ouml;ppna i Expo Go</h2>
-      <p style="font-size: 14px; margin-bottom: 16px;">Skanna QR-koden fr&aring;n Replits URL-meny, eller klicka p&aring; knappen nedan fr&aring;n din mobil:</p>
-      <a id="expo-link" class="expo-link" href="#">&Ouml;ppna appen</a>
-      <p class="instructions">
-        1. Installera Expo Go fr&aring;n App Store / Google Play<br>
-        2. Klicka p&aring; knappen ovan fr&aring;n din telefon<br>
-        3. Eller skanna QR-koden i Replits URL-meny
-      </p>
+      <h2>Öppna i Expo Go</h2>
+
+      <div class="platform-tabs">
+        <button class="platform-tab active" onclick="setPlatform('ios')">iPhone</button>
+        <button class="platform-tab" onclick="setPlatform('android')">Android</button>
+      </div>
+
+      <canvas id="qr-canvas"></canvas>
+
+      <a id="expo-link" class="expo-link" href="#">Öppna appen</a>
+
+      <div class="url-display" id="url-display"></div>
+
+      <div class="warn">
+        Anv&auml;nd INTE QR-koden fr&aring;n Replits URL-meny (den pekar till fel port). Skanna QR-koden ovan ist&auml;llet, eller klicka p&aring; knappen fr&aring;n din mobil.
+      </div>
+
+      <ol class="instructions">
+        <li>Installera <strong>Expo Go</strong> fr&aring;n App Store / Google Play</li>
+        <li>Skanna QR-koden ovan med din kamera</li>
+        <li>Eller &ouml;ppna denna sida p&aring; mobilen och klicka p&aring; knappen</li>
+      </ol>
     </div>
   </div>
 
   <script>
-    (function() {
+    var currentPlatform = 'ios';
+
+    function getExpoUrl(platform) {
       var host = window.location.host;
-      var iosLink = 'exps://' + host + '/manifest/ios';
-      var el = document.getElementById('expo-link');
-      if (el) {
-        el.href = iosLink;
+      return 'exps://' + host + '/manifest/' + platform;
+    }
+
+    function setPlatform(platform) {
+      currentPlatform = platform;
+      document.querySelectorAll('.platform-tab').forEach(function(tab) {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+      updateLinks();
+    }
+
+    function updateLinks() {
+      var url = getExpoUrl(currentPlatform);
+      var linkEl = document.getElementById('expo-link');
+      var urlEl = document.getElementById('url-display');
+
+      if (linkEl) linkEl.href = url;
+      if (urlEl) urlEl.textContent = url;
+
+      var canvas = document.getElementById('qr-canvas');
+      if (canvas && typeof QRCode !== 'undefined') {
+        QRCode.toCanvas(canvas, url, {
+          width: 220,
+          margin: 2,
+          color: { dark: '#1B4F72', light: '#FFFFFF' }
+        });
       }
-    })();
+    }
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', updateLinks);
+    } else {
+      updateLinks();
+    }
+
+    window.addEventListener('load', updateLinks);
   </script>
 </body>
 </html>
