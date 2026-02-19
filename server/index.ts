@@ -27,81 +27,12 @@ function getHostUrl(req: express.Request): string {
   return `${proto}://${host}`;
 }
 
-app.get('/manifest/ios', (req, res) => {
-  const appJson = getAppJson();
-  const expo = appJson.expo;
-  const hostUrl = getHostUrl(req);
-
-  const manifest = {
-    id: `@anonymous/${expo.slug}`,
-    createdAt: new Date().toISOString(),
-    runtimeVersion: {
-      type: 'fingerprint',
-      fingerprintSources: [],
-    },
-    launchAsset: {
-      url: `${hostUrl}/bundles/ios/index.bundle`,
-      contentType: 'application/javascript',
-    },
-    assets: [],
-    metadata: {},
-    extra: {
-      expoClient: {
-        ...expo,
-        hostUri: (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000') as string,
-      },
-      expoGo: {
-        developer: {
-          tool: 'expo-cli',
-          projectRoot: '/home/runner/workspace',
-        },
-        packagerOpts: {
-          dev: false,
-        },
-      },
-    },
-  };
-
-  res.setHeader('Content-Type', 'application/json');
-  res.setHeader('expo-protocol-version', '1');
-  res.json(manifest);
-});
-
-app.get('/manifest/android', (req, res) => {
-  const appJson = getAppJson();
-  const expo = appJson.expo;
-  const hostUrl = getHostUrl(req);
-
-  const manifest = {
-    id: `@anonymous/${expo.slug}`,
-    createdAt: new Date().toISOString(),
-    runtimeVersion: {
-      type: 'fingerprint',
-      fingerprintSources: [],
-    },
-    launchAsset: {
-      url: `${hostUrl}/bundles/android/index.bundle`,
-      contentType: 'application/javascript',
-    },
-    assets: [],
-    metadata: {},
-    extra: {
-      expoClient: {
-        ...expo,
-        hostUri: (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000') as string,
-      },
-      expoGo: {
-        developer: {
-          tool: 'expo-cli',
-          projectRoot: '/home/runner/workspace',
-        },
-        packagerOpts: {
-          dev: false,
-        },
-      },
-    },
-  };
-
+app.get('/manifest/:platform', (req, res) => {
+  const platform = req.params.platform;
+  if (platform !== 'ios' && platform !== 'android') {
+    return res.status(404).json({ error: 'Invalid platform' });
+  }
+  const manifest = buildManifest(platform, req);
   res.setHeader('Content-Type', 'application/json');
   res.setHeader('expo-protocol-version', '1');
   res.json(manifest);
@@ -117,9 +48,53 @@ app.use('/bundles', express.static(distDir, {
 
 app.use('/assets', express.static(path.join(distDir, 'assets')));
 
+function buildManifest(platform: string, req: express.Request) {
+  const appJson = getAppJson();
+  const expo = appJson.expo;
+  const hostUrl = getHostUrl(req);
+  const hostUri = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000') as string;
+
+  return {
+    id: `@anonymous/${expo.slug}`,
+    createdAt: new Date().toISOString(),
+    runtimeVersion: {
+      type: 'fingerprint',
+      fingerprintSources: [],
+    },
+    launchAsset: {
+      url: `${hostUrl}/bundles/${platform}/index.bundle`,
+      contentType: 'application/javascript',
+    },
+    assets: [],
+    metadata: {},
+    extra: {
+      expoClient: {
+        ...expo,
+        hostUri,
+      },
+      expoGo: {
+        developer: {
+          tool: 'expo-cli',
+          projectRoot: '/home/runner/workspace',
+        },
+        packagerOpts: {
+          dev: false,
+        },
+      },
+    },
+  };
+}
+
 app.use(express.static(path.join(__dirname, 'templates')));
 
-app.get('/', (_req, res) => {
+app.get('/', (req, res) => {
+  const expoPlatform = req.headers['expo-platform'] as string | undefined;
+  if (expoPlatform === 'ios' || expoPlatform === 'android') {
+    const manifest = buildManifest(expoPlatform, req);
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('expo-protocol-version', '1');
+    return res.json(manifest);
+  }
   res.sendFile(path.join(__dirname, 'templates', 'landing-page.html'));
 });
 
