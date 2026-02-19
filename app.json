@@ -1,13 +1,13 @@
 {
   "expo": {
-    "name": "Driver Core",
-    "slug": "driver-core",
+    "name": "Fältapp",
+    "slug": "fltapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
-    "scheme": "drivercore",
+    "scheme": "fltapp",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -15,7 +15,7 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.unicorn.drivercore",
+      "bundleIdentifier": "com.fltapp.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Driver Core behöver kameran för att ta bilder av objekt och avvikelser",
         "NSLocationWhenInUseUsageDescription": "Driver Core behöver din position för GPS-tracking och navigering",
@@ -28,7 +28,7 @@
         "backgroundColor": "#1B4F72"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.unicorn.drivercore",
+      "package": "com.fltapp.app",
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",
