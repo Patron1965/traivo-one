@@ -23,7 +23,7 @@ import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from "react-
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrderWithObject, Customer, TaskDependency } from "@shared/schema";
+import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -232,6 +232,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [showUnscheduled, setShowUnscheduled] = useState(true);
   const [filterCustomer, setFilterCustomer] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
+  const [filterCluster, setFilterCluster] = useState<string>("all");
   const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<PlannerAction[]>([]);
   const [redoStack, setRedoStack] = useState<PlannerAction[]>([]);
@@ -295,6 +296,16 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
+
+  const { data: clusters = [] } = useQuery<Cluster[]>({
+    queryKey: ["/api/clusters"],
+  });
+
+  const clusterMap = useMemo(() => {
+    const map = new Map<string, Cluster>();
+    clusters.forEach(c => map.set(c.id, c));
+    return map;
+  }, [clusters]);
 
   const workOrderIds = useMemo(() => workOrders.map(wo => wo.id), [workOrders]);
 
@@ -422,6 +433,13 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const filtered = jobs.filter(job => {
       if (filterCustomer !== "all" && job.customerId !== filterCustomer) return false;
       if (filterPriority !== "all" && job.priority !== filterPriority) return false;
+      if (filterCluster !== "all") {
+        if (filterCluster === "none") {
+          if (job.clusterId) return false;
+        } else {
+          if (job.clusterId !== filterCluster) return false;
+        }
+      }
       return true;
     });
     
@@ -430,7 +448,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       const bPriority = priorityOrder[b.priority] ?? 99;
       return aPriority - bPriority;
     });
-  }, [workOrders, filterCustomer, filterPriority]);
+  }, [workOrders, filterCustomer, filterPriority, filterCluster]);
   
   const scheduledJobs = useMemo(
     () => workOrders.filter(job => job.scheduledDate && job.resourceId),
@@ -1908,6 +1926,23 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   <SelectItem value="low">Låg</SelectItem>
                 </SelectContent>
               </Select>
+              <Select value={filterCluster} onValueChange={setFilterCluster}>
+                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-cluster">
+                  <SelectValue placeholder="Alla områden" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla områden</SelectItem>
+                  <SelectItem value="none">Utan område</SelectItem>
+                  {clusters.map((cluster) => (
+                    <SelectItem key={cluster.id} value={cluster.id}>
+                      <span className="flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cluster.color || "#3B82F6" }} />
+                        {cluster.name}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <ScrollArea className="flex-1 p-2">
@@ -1919,6 +1954,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               ) : (
                 unscheduledJobs.map((job) => {
                   const customer = customerMap.get(job.customerId);
+                  const jobCluster = job.clusterId ? clusterMap.get(job.clusterId) : null;
                   return (
                     <DraggableJobCard key={job.id} id={job.id}>
                       <Card
@@ -1934,6 +1970,13 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                           <div className="text-xs text-muted-foreground">{job.objectName || "Okänt objekt"}</div>
                           {customer && (
                             <div className="text-xs text-muted-foreground">{customer.name}</div>
+                          )}
+                          {jobCluster && (
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-job-cluster-${job.id}`}>
+                              <MapPin className="h-2.5 w-2.5" />
+                              <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: jobCluster.color || "#3B82F6" }} />
+                              {jobCluster.name}
+                            </div>
                           )}
                           {/* Åtkomstinformation på oschemalagda jobb */}
                           {(job.objectAccessCode || job.objectKeyNumber) && (
