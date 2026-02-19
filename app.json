@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Driver Core",
+    "slug": "driver-core",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "drivercore",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#1B4F72"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.unicorn.drivercore",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Driver Core behöver kameran för att ta bilder av objekt och avvikelser",
+        "NSLocationWhenInUseUsageDescription": "Driver Core behöver din position för GPS-tracking och navigering",
+        "NSPhotoLibraryUsageDescription": "Driver Core behöver åtkomst till dina foton för att bifoga bilder"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#1B4F72"
+      },
+      "edgeToEdgeEnabled": true,
+      "package": "com.unicorn.drivercore",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_EXTERNAL_STORAGE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    }
+  }
+}
