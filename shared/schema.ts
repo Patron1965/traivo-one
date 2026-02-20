@@ -1615,6 +1615,44 @@ export const taskInformation = pgTable("task_information", {
 ]);
 
 // ============================================
+// TIDSBEGRÄNSNINGAR PÅ OBJEKT (C9)
+// ============================================
+
+export const RESTRICTION_TYPES = [
+  "parking_ban",      // Parkeringsförbud
+  "emptying_day",     // Tömningsdag (bara dessa dagar)
+  "quiet_hours",      // Tysta timmar
+  "access_restriction", // Åtkomstbegränsning
+  "other"             // Annan begränsning
+] as const;
+export type RestrictionType = typeof RESTRICTION_TYPES[number];
+
+export const RESTRICTION_TYPE_LABELS: Record<string, string> = {
+  parking_ban: "Parkeringsförbud",
+  emptying_day: "Tömningsdag",
+  quiet_hours: "Tysta timmar",
+  access_restriction: "Åtkomstbegränsning",
+  other: "Annan",
+};
+
+export const objectTimeRestrictions = pgTable("object_time_restrictions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  restrictionType: text("restriction_type").notNull(),
+  description: text("description"),
+  weekdays: integer("weekdays").array().default([]),
+  startTime: text("start_time"),
+  endTime: text("end_time"),
+  isBlockingAllDay: boolean("is_blocking_all_day").default(false),
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_obj_time_restrictions_object").on(table.objectId),
+  index("idx_obj_time_restrictions_tenant").on(table.tenantId),
+]);
+
+// ============================================
 // STRUKTURARTIKLAR - Artiklar som skapar beroendeuppgifter
 // ============================================
 
@@ -1952,6 +1990,11 @@ export const taskInformationRelations = relations(taskInformation, ({ one }) => 
   createdByUser: one(users, { fields: [taskInformation.createdBy], references: [users.id] }),
 }));
 
+export const objectTimeRestrictionsRelations = relations(objectTimeRestrictions, ({ one }) => ({
+  tenant: one(tenants, { fields: [objectTimeRestrictions.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [objectTimeRestrictions.objectId], references: [objects.id] }),
+}));
+
 export const structuralArticlesRelations = relations(structuralArticles, ({ one }) => ({
   tenant: one(tenants, { fields: [structuralArticles.tenantId], references: [tenants.id] }),
   parentArticle: one(articles, { fields: [structuralArticles.parentArticleId], references: [articles.id] }),
@@ -2003,6 +2046,7 @@ export const insertObjectContactSchema = createInsertSchema(objectContacts).omit
 export const insertTaskDesiredTimewindowSchema = createInsertSchema(taskDesiredTimewindows).omit({ id: true, createdAt: true });
 export const insertTaskDependencySchema = createInsertSchema(taskDependencies).omit({ id: true, createdAt: true });
 export const insertTaskInformationSchema = createInsertSchema(taskInformation).omit({ id: true, createdAt: true });
+export const insertObjectTimeRestrictionSchema = createInsertSchema(objectTimeRestrictions).omit({ id: true, createdAt: true });
 export const insertStructuralArticleSchema = createInsertSchema(structuralArticles).omit({ id: true, createdAt: true });
 
 // ============================================
@@ -2031,6 +2075,8 @@ export type TaskDependency = typeof taskDependencies.$inferSelect;
 export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
 export type TaskInformation = typeof taskInformation.$inferSelect;
 export type InsertTaskInformation = z.infer<typeof insertTaskInformationSchema>;
+export type ObjectTimeRestriction = typeof objectTimeRestrictions.$inferSelect;
+export type InsertObjectTimeRestriction = z.infer<typeof insertObjectTimeRestrictionSchema>;
 export type StructuralArticle = typeof structuralArticles.$inferSelect;
 export type InsertStructuralArticle = z.infer<typeof insertStructuralArticleSchema>;
 
