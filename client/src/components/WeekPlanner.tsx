@@ -697,6 +697,50 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     return { minutes: totalMin, km: Math.round(totalKm * 10) / 10, hours: Math.round(totalMin / 60 * 10) / 10 };
   }, [resources, viewMode, currentWeekStart, currentDate, getJobsForResourceAndDay]);
 
+  const travelTimesForDay = useMemo(() => {
+    const result: Record<string, Array<{ fromJobId: string; toJobId: string; minutes: number; distanceKm: number; startTime: string; endTime: string }>> = {};
+    
+    const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    for (const resource of resources) {
+      const dayJobs = getJobsForResourceAndDay(resource.id, currentDate)
+        .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
+        .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+      
+      const travels: typeof result[string] = [];
+      for (let i = 0; i < dayJobs.length - 1; i++) {
+        const from = dayJobs[i];
+        const to = dayJobs[i + 1];
+        if (!from.taskLatitude || !from.taskLongitude || !to.taskLatitude || !to.taskLongitude) continue;
+
+        const dist = haversineDistance(from.taskLatitude, from.taskLongitude, to.taskLatitude, to.taskLongitude);
+        const travelMinutes = Math.max(Math.round(dist / 50 * 60), 5);
+        
+        const fromDur = from.estimatedDuration || 60;
+        const [fH, fM] = (from.scheduledStartTime || "08:00").split(":").map(Number);
+        const fromEnd = fH * 60 + fM + fromDur;
+        const travelEnd = fromEnd + travelMinutes;
+        
+        travels.push({
+          fromJobId: from.id,
+          toJobId: to.id,
+          minutes: travelMinutes,
+          distanceKm: Math.round(dist * 10) / 10,
+          startTime: `${Math.floor(fromEnd / 60).toString().padStart(2, "0")}:${(fromEnd % 60).toString().padStart(2, "0")}`,
+          endTime: `${Math.floor(travelEnd / 60).toString().padStart(2, "0")}:${(travelEnd % 60).toString().padStart(2, "0")}`,
+        });
+      }
+      if (travels.length > 0) result[resource.id] = travels;
+    }
+    return result;
+  }, [resources, currentDate, getJobsForResourceAndDay]);
+
   const getCapacityPercentage = useCallback((hours: number) => {
     return Math.min((hours / HOURS_IN_DAY) * 100, 100);
   }, []);
@@ -1529,7 +1573,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     unscheduleWorkOrderMutation.mutate(jobId);
   };
 
-  const handleAutoFillPreview = useCallback(async () => {
+  const handleAutoFillPreview = async () => {
     setAutoFillLoading(true);
     setAutoFillPreview(null);
     try {
@@ -1547,9 +1591,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     } finally {
       setAutoFillLoading(false);
     }
-  }, [viewMode, currentWeekStart, currentDate, resources, autoFillOverbooking, toast]);
+  };
 
-  const handleAutoFillApply = useCallback(async () => {
+  const handleAutoFillApply = async () => {
     if (!autoFillPreview || autoFillPreview.length === 0) return;
     setAutoFillApplying(true);
     try {
@@ -1566,7 +1610,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     } finally {
       setAutoFillApplying(false);
     }
-  }, [autoFillPreview, toast]);
+  };
 
   const renderJobCard = (job: WorkOrderWithObject, compact = false) => {
     const execStatus = (job as { executionStatus?: string }).executionStatus || "not_planned";
@@ -1729,50 +1773,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       </DraggableJobCard>
     );
   };
-
-  const travelTimesForDay = useMemo(() => {
-    const result: Record<string, Array<{ fromJobId: string; toJobId: string; minutes: number; distanceKm: number; startTime: string; endTime: string }>> = {};
-    
-    const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    };
-
-    for (const resource of resources) {
-      const dayJobs = getJobsForResourceAndDay(resource.id, currentDate)
-        .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
-        .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
-      
-      const travels: typeof result[string] = [];
-      for (let i = 0; i < dayJobs.length - 1; i++) {
-        const from = dayJobs[i];
-        const to = dayJobs[i + 1];
-        if (!from.taskLatitude || !from.taskLongitude || !to.taskLatitude || !to.taskLongitude) continue;
-
-        const dist = haversineDistance(from.taskLatitude, from.taskLongitude, to.taskLatitude, to.taskLongitude);
-        const travelMinutes = Math.max(Math.round(dist / 50 * 60), 5);
-        
-        const fromDur = from.estimatedDuration || 60;
-        const [fH, fM] = (from.scheduledStartTime || "08:00").split(":").map(Number);
-        const fromEnd = fH * 60 + fM + fromDur;
-        const travelEnd = fromEnd + travelMinutes;
-        
-        travels.push({
-          fromJobId: from.id,
-          toJobId: to.id,
-          minutes: travelMinutes,
-          distanceKm: Math.round(dist * 10) / 10,
-          startTime: `${Math.floor(fromEnd / 60).toString().padStart(2, "0")}:${(fromEnd % 60).toString().padStart(2, "0")}`,
-          endTime: `${Math.floor(travelEnd / 60).toString().padStart(2, "0")}:${(travelEnd % 60).toString().padStart(2, "0")}`,
-        });
-      }
-      if (travels.length > 0) result[resource.id] = travels;
-    }
-    return result;
-  }, [resources, currentDate, getJobsForResourceAndDay]);
 
   const renderDayTimelineView = () => {
     const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
