@@ -6898,6 +6898,14 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         return res.status(400).json({ error: "No valid resources found" });
       }
 
+      const allObjectIds = [...new Set(allWorkOrders.map(wo => wo.objectId).filter(Boolean) as string[])];
+      const timeRestrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, allObjectIds);
+      const restrictionsByObject = new Map<string, typeof timeRestrictions>();
+      for (const r of timeRestrictions) {
+        if (!restrictionsByObject.has(r.objectId)) restrictionsByObject.set(r.objectId, []);
+        restrictionsByObject.get(r.objectId)!.push(r);
+      }
+
       const unscheduledOrders = allWorkOrders.filter(wo => 
         (!wo.scheduledDate || !wo.resourceId) && 
         wo.status !== "completed" && wo.status !== "cancelled" &&
@@ -6968,10 +6976,23 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         for (const day of weekDays) {
           if (assigned) break;
           const dayStr = day.toISOString().split("T")[0];
+          const dayOfWeek = day.getDay() || 7;
 
           if (order.plannedWindowStart) {
             const winDate = new Date(order.plannedWindowStart).toISOString().split("T")[0];
             if (winDate !== dayStr) continue;
+          }
+
+          if (order.objectId) {
+            const objRestrictions = restrictionsByObject.get(order.objectId) || [];
+            const blocked = objRestrictions.some(r => {
+              if (!r.isActive) return false;
+              if (!r.weekdays || r.weekdays.length === 0) return false;
+              if (!r.weekdays.includes(dayOfWeek)) return false;
+              if (r.isBlockingAllDay) return true;
+              return true;
+            });
+            if (blocked) continue;
           }
 
           let bestResource: typeof selectedResources[0] | null = null;
@@ -7408,6 +7429,203 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed to delete task information:", error);
       res.status(500).json({ error: "Failed to delete task information" });
+    }
+  });
+
+  // ============================================
+  // OBJECT TIME RESTRICTIONS (C9) - Tidsbegränsningar
+  // ============================================
+
+  app.get("/api/objects/:objectId/time-restrictions", async (req, res) => {
+    try {
+      const restrictions = await storage.getObjectTimeRestrictions(req.params.objectId);
+      res.json(restrictions);
+    } catch (error) {
+      console.error("Failed to fetch time restrictions:", error);
+      res.status(500).json({ error: "Failed to fetch time restrictions" });
+    }
+  });
+
+  app.get("/api/time-restrictions", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const objectIds = req.query.objectIds ? (req.query.objectIds as string).split(",") : [];
+      let restrictions;
+      if (objectIds.length > 0) {
+        restrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, objectIds);
+      } else {
+        restrictions = await storage.getObjectTimeRestrictionsByTenant(tenantId);
+      }
+      res.json(restrictions);
+    } catch (error) {
+      console.error("Failed to fetch time restrictions:", error);
+      res.status(500).json({ error: "Failed to fetch time restrictions" });
+    }
+  });
+
+  app.post("/api/objects/:objectId/time-restrictions", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { restrictionType, description, weekdays, startTime, endTime, isBlockingAllDay } = req.body;
+      if (!restrictionType) return res.status(400).json({ error: "restrictionType is required" });
+
+      const obj = await storage.getObject(req.params.objectId);
+      if (!obj || obj.tenantId !== tenantId) return res.status(404).json({ error: "Object not found" });
+
+      const restriction = await storage.createObjectTimeRestriction({
+        tenantId,
+        objectId: req.params.objectId,
+        restrictionType,
+        description: description || null,
+        weekdays: weekdays || [],
+        startTime: startTime || null,
+        endTime: endTime || null,
+        isBlockingAllDay: isBlockingAllDay ?? true,
+        isActive: true,
+      });
+      res.json(restriction);
+    } catch (error) {
+      console.error("Failed to create time restriction:", error);
+      res.status(500).json({ error: "Failed to create time restriction" });
+    }
+  });
+
+  app.patch("/api/time-restrictions/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const restriction = await storage.updateObjectTimeRestriction(req.params.id, tenantId, req.body);
+      if (!restriction) return res.status(404).json({ error: "Not found" });
+      res.json(restriction);
+    } catch (error) {
+      console.error("Failed to update time restriction:", error);
+      res.status(500).json({ error: "Failed to update time restriction" });
+    }
+  });
+
+  app.delete("/api/time-restrictions/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteObjectTimeRestriction(req.params.id, tenantId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete time restriction:", error);
+      res.status(500).json({ error: "Failed to delete time restriction" });
+    }
+  });
+
+  // C10 - Expand structural article into sub-step work orders
+  app.post("/api/work-orders/:id/expand-structural", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+
+      const articleId = workOrder.articleId;
+      if (!articleId) return res.status(400).json({ error: "Work order has no article" });
+
+      const subArticles = await storage.getStructuralArticlesByParent(articleId);
+      if (subArticles.length === 0) return res.json({ created: [], message: "No structural sub-articles found" });
+
+      const created: any[] = [];
+      for (const sub of subArticles) {
+        const childArticle = await storage.getArticle(sub.childArticleId);
+        const subWorkOrder = await storage.createWorkOrder({
+          tenantId,
+          title: sub.stepName || childArticle?.name || "Delsteg",
+          description: `Delsteg ${sub.sequenceOrder}: ${sub.stepName || childArticle?.name || ""}`,
+          status: "pending",
+          executionStatus: "not_planned",
+          articleId: sub.childArticleId,
+          objectId: workOrder.objectId,
+          customerId: workOrder.customerId,
+          resourceId: workOrder.resourceId,
+          scheduledDate: workOrder.scheduledDate,
+          scheduledStartTime: workOrder.scheduledStartTime,
+          estimatedDuration: sub.defaultDurationMinutes || childArticle?.productionTime || 30,
+          structuralArticleId: articleId,
+          creationMethod: "structural",
+          executionCode: workOrder.executionCode,
+        });
+
+        await storage.createTaskDependency({
+          tenantId,
+          workOrderId: subWorkOrder.id,
+          dependsOnWorkOrderId: workOrder.id,
+          dependencyType: "structural",
+          structuralArticleId: sub.childArticleId,
+        });
+
+        created.push({
+          workOrder: subWorkOrder,
+          stepName: sub.stepName,
+          sequenceOrder: sub.sequenceOrder,
+          isOptional: sub.isOptional,
+        });
+      }
+
+      res.json({ created, parentId: workOrder.id });
+    } catch (error) {
+      console.error("Failed to expand structural article:", error);
+      res.status(500).json({ error: "Failed to expand structural article" });
+    }
+  });
+
+  // C10 - Get sub-steps for a work order (structural children)
+  app.get("/api/work-orders/:id/sub-steps", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+
+      const allDeps = await storage.getTaskDependencies(req.params.id);
+      const structuralDeps = allDeps.filter(d => d.dependsOnWorkOrderId === req.params.id && d.dependencyType === "structural");
+
+      const subSteps: any[] = [];
+      for (const dep of structuralDeps) {
+        const subWo = await storage.getWorkOrder(dep.workOrderId);
+        if (subWo) {
+          subSteps.push({
+            id: subWo.id,
+            title: subWo.title,
+            status: subWo.status,
+            executionStatus: subWo.executionStatus,
+            estimatedDuration: subWo.estimatedDuration,
+            structuralArticleId: dep.structuralArticleId,
+          });
+        }
+      }
+
+      const articleId = workOrder.articleId;
+      let structuralInfo = null;
+      if (articleId) {
+        const subArticles = await storage.getStructuralArticlesByParent(articleId);
+        if (subArticles.length > 0) {
+          structuralInfo = {
+            totalSteps: subArticles.length,
+            steps: subArticles.map(s => ({
+              childArticleId: s.childArticleId,
+              stepName: s.stepName,
+              sequenceOrder: s.sequenceOrder,
+              isOptional: s.isOptional,
+              defaultDurationMinutes: s.defaultDurationMinutes,
+            })),
+          };
+        }
+      }
+
+      const completedCount = subSteps.filter(s => s.executionStatus === "completed" || s.executionStatus === "inspected" || s.executionStatus === "invoiced").length;
+
+      res.json({
+        subSteps,
+        structuralInfo,
+        progress: {
+          completed: completedCount,
+          total: subSteps.length || structuralInfo?.totalSteps || 0,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to fetch sub-steps:", error);
+      res.status(500).json({ error: "Failed to fetch sub-steps" });
     }
   });
 

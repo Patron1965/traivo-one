@@ -45,6 +45,7 @@ import {
   type TaskDesiredTimewindow, type InsertTaskDesiredTimewindow,
   type TaskDependency, type InsertTaskDependency,
   type TaskInformation, type InsertTaskInformation,
+  type ObjectTimeRestriction, type InsertObjectTimeRestriction,
   type StructuralArticle, type InsertStructuralArticle,
   type OrderConcept, type InsertOrderConcept,
   type ConceptFilter, type InsertConceptFilter,
@@ -77,7 +78,7 @@ import {
   brandingTemplates, tenantBranding, userTenantRoles, auditLogs,
   industryPackages, industryPackageData, tenantPackageInstallations,
   metadataDefinitions, objectMetadata, objectPayers,
-  objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, structuralArticles,
+  objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
   orderConcepts, conceptFilters, assignments, assignmentArticles,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
@@ -356,6 +357,14 @@ export interface IStorage {
   updateTaskInformation(id: string, workOrderId: string, tenantId: string, data: Partial<InsertTaskInformation>): Promise<TaskInformation | undefined>;
   deleteTaskInformation(id: string, workOrderId: string, tenantId: string): Promise<void>;
   
+  // Object Time Restrictions (C9)
+  getObjectTimeRestrictions(objectId: string): Promise<ObjectTimeRestriction[]>;
+  getObjectTimeRestrictionsByTenant(tenantId: string): Promise<ObjectTimeRestriction[]>;
+  getObjectTimeRestrictionsByObjectIds(tenantId: string, objectIds: string[]): Promise<ObjectTimeRestriction[]>;
+  createObjectTimeRestriction(restriction: InsertObjectTimeRestriction): Promise<ObjectTimeRestriction>;
+  updateObjectTimeRestriction(id: string, tenantId: string, data: Partial<InsertObjectTimeRestriction>): Promise<ObjectTimeRestriction | undefined>;
+  deleteObjectTimeRestriction(id: string, tenantId: string): Promise<void>;
+
   // Structural Articles
   getStructuralArticles(tenantId: string): Promise<StructuralArticle[]>;
   getStructuralArticlesByParent(parentArticleId: string): Promise<StructuralArticle[]>;
@@ -780,6 +789,7 @@ export class DatabaseStorage implements IStorage {
       onWayAt: workOrders.onWayAt,
       onSiteAt: workOrders.onSiteAt,
       inspectedAt: workOrders.inspectedAt,
+      executionCode: workOrders.executionCode,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -878,6 +888,7 @@ export class DatabaseStorage implements IStorage {
       onWayAt: workOrders.onWayAt,
       onSiteAt: workOrders.onSiteAt,
       inspectedAt: workOrders.inspectedAt,
+      executionCode: workOrders.executionCode,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -2724,6 +2735,53 @@ export class DatabaseStorage implements IStorage {
       eq(taskInformation.id, id),
       eq(taskInformation.workOrderId, workOrderId),
       eq(taskInformation.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Object Time Restrictions (C9)
+  // ============================================
+
+  async getObjectTimeRestrictions(objectId: string): Promise<ObjectTimeRestriction[]> {
+    return db.select().from(objectTimeRestrictions)
+      .where(eq(objectTimeRestrictions.objectId, objectId));
+  }
+
+  async getObjectTimeRestrictionsByTenant(tenantId: string): Promise<ObjectTimeRestriction[]> {
+    return db.select().from(objectTimeRestrictions)
+      .where(eq(objectTimeRestrictions.tenantId, tenantId));
+  }
+
+  async getObjectTimeRestrictionsByObjectIds(tenantId: string, objectIds: string[]): Promise<ObjectTimeRestriction[]> {
+    if (objectIds.length === 0) return [];
+    return db.select().from(objectTimeRestrictions)
+      .where(and(
+        eq(objectTimeRestrictions.tenantId, tenantId),
+        inArray(objectTimeRestrictions.objectId, objectIds),
+        eq(objectTimeRestrictions.isActive, true)
+      ));
+  }
+
+  async createObjectTimeRestriction(restriction: InsertObjectTimeRestriction): Promise<ObjectTimeRestriction> {
+    const [result] = await db.insert(objectTimeRestrictions).values(restriction).returning();
+    return result;
+  }
+
+  async updateObjectTimeRestriction(id: string, tenantId: string, data: Partial<InsertObjectTimeRestriction>): Promise<ObjectTimeRestriction | undefined> {
+    const [result] = await db.update(objectTimeRestrictions)
+      .set(data)
+      .where(and(
+        eq(objectTimeRestrictions.id, id),
+        eq(objectTimeRestrictions.tenantId, tenantId)
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteObjectTimeRestriction(id: string, tenantId: string): Promise<void> {
+    await db.delete(objectTimeRestrictions).where(and(
+      eq(objectTimeRestrictions.id, id),
+      eq(objectTimeRestrictions.tenantId, tenantId)
     ));
   }
 

@@ -23,8 +23,8 @@ import { MapContainer, TileLayer, Marker, Polyline, Popup, useMap } from "react-
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { sv } from "date-fns/locale";
-import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster } from "@shared/schema";
-import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
+import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, ObjectTimeRestriction } from "@shared/schema";
+import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS, RESTRICTION_TYPE_LABELS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -131,6 +131,70 @@ function getJobCategory(job: WorkOrderWithObject): TimeBlockCategory {
     return "break";
   }
   return "production";
+}
+
+function SubStepsExpander({ jobId, isExpanded, onToggle }: { jobId: string; isExpanded: boolean; onToggle: () => void }) {
+  const { data: subStepsData } = useQuery<{
+    subSteps: Array<{ id: string; title: string; status: string; executionStatus: string; estimatedDuration: number }>;
+    structuralInfo: { totalSteps: number; steps: Array<{ stepName: string; sequenceOrder: number; isOptional: boolean }> } | null;
+    progress: { completed: number; total: number };
+  }>({
+    queryKey: ["/api/work-orders", jobId, "sub-steps"],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/work-orders/${jobId}/sub-steps`);
+      return res.json();
+    },
+    enabled: isExpanded,
+    staleTime: 60000,
+  });
+
+  const hasStructure = subStepsData && (subStepsData.subSteps.length > 0 || (subStepsData.structuralInfo && subStepsData.structuralInfo.totalSteps > 0));
+
+  if (!hasStructure && !isExpanded) return null;
+
+  return (
+    <div className="mt-1">
+      <button
+        className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+        onClick={(e) => { e.stopPropagation(); onToggle(); }}
+        data-testid={`substeps-toggle-${jobId}`}
+      >
+        {isExpanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+        <span>Delsteg</span>
+        {subStepsData?.progress && subStepsData.progress.total > 0 && (
+          <span className="text-[9px] bg-muted px-1 rounded">
+            {subStepsData.progress.completed}/{subStepsData.progress.total}
+          </span>
+        )}
+      </button>
+      {isExpanded && subStepsData && (
+        <div className="mt-1 space-y-0.5 pl-2 border-l-2 border-muted" data-testid={`substeps-list-${jobId}`}>
+          {subStepsData.subSteps.length > 0 ? (
+            subStepsData.subSteps.map((step) => {
+              const isDone = step.executionStatus === "completed" || step.executionStatus === "inspected" || step.executionStatus === "invoiced";
+              return (
+                <div key={step.id} className="flex items-center gap-1.5 text-[10px]" data-testid={`substep-${step.id}`}>
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isDone ? "bg-green-500" : "bg-gray-300"}`} />
+                  <span className={isDone ? "line-through text-muted-foreground" : ""}>{step.title}</span>
+                  <span className="text-muted-foreground ml-auto">{step.estimatedDuration}m</span>
+                </div>
+              );
+            })
+          ) : subStepsData.structuralInfo ? (
+            subStepsData.structuralInfo.steps.map((step, i) => (
+              <div key={i} className="flex items-center gap-1.5 text-[10px]" data-testid={`substep-template-${i}`}>
+                <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-gray-300" />
+                <span>{step.stepName || `Steg ${step.sequenceOrder}`}</span>
+                {step.isOptional && <Badge className="text-[8px] h-3 px-1" variant="outline">Valfri</Badge>}
+              </div>
+            ))
+          ) : (
+            <span className="text-[10px] text-muted-foreground">Inga delsteg</span>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 function DraggableJobCard({ id, children, disabled = false }: { id: string; children: JSX.Element; disabled?: boolean }) {
@@ -397,6 +461,33 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     },
     enabled: !!depChainJobId && depChainDialogOpen,
   });
+
+  const scheduledObjectIds = useMemo(() => {
+    const ids = [...new Set(workOrders.map(wo => wo.objectId).filter(Boolean) as string[])];
+    return ids;
+  }, [workOrders]);
+
+  const { data: timeRestrictions = [] } = useQuery<ObjectTimeRestriction[]>({
+    queryKey: ["/api/time-restrictions", scheduledObjectIds.join(",")],
+    queryFn: async () => {
+      if (scheduledObjectIds.length === 0) return [];
+      const res = await apiRequest("GET", `/api/time-restrictions?objectIds=${scheduledObjectIds.join(",")}`);
+      return res.json();
+    },
+    enabled: scheduledObjectIds.length > 0,
+    staleTime: 120000,
+  });
+
+  const restrictionsByObject = useMemo(() => {
+    const map = new Map<string, ObjectTimeRestriction[]>();
+    for (const r of timeRestrictions) {
+      if (!map.has(r.objectId)) map.set(r.objectId, []);
+      map.get(r.objectId)!.push(r);
+    }
+    return map;
+  }, [timeRestrictions]);
+
+  const [expandedSubSteps, setExpandedSubSteps] = useState<Record<string, boolean>>({});
 
   const workOrdersQueryKey = ["/api/work-orders", dateRange.startDate, dateRange.endDate];
   
@@ -1670,7 +1761,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <span className="text-[10px] shrink-0 bg-slate-100 dark:bg-slate-800 px-1 rounded" data-testid={`exec-code-${job.id}`}>
-                        {EXECUTION_CODE_ICONS[(job as any).executionCode] || "⚙️"}
+                        {EXECUTION_CODE_ICONS[(job as any).executionCode] || "KOD"}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>{EXECUTION_CODE_LABELS[(job as any).executionCode] || (job as any).executionCode}</TooltipContent>
@@ -1770,6 +1861,36 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   </TooltipContent>
                 </Tooltip>
               )}
+              {(() => {
+                const objRestrictions = job.objectId ? (restrictionsByObject.get(job.objectId) || []) : [];
+                const scheduledDay = job.scheduledDate ? (new Date(job.scheduledDate).getDay() || 7) : null;
+                const activeRestrictions = scheduledDay ? objRestrictions.filter(r => r.isActive && r.weekdays && r.weekdays.includes(scheduledDay)) : [];
+                if (activeRestrictions.length > 0) {
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mt-0.5 cursor-help" data-testid={`restriction-warning-${job.id}`}>
+                          <AlertTriangle className="h-3 w-3 shrink-0" />
+                          <span className="truncate">{RESTRICTION_TYPE_LABELS[activeRestrictions[0].restrictionType] || "Tidsbegränsning"}</span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="right" className="max-w-xs">
+                        <div className="space-y-1">
+                          <p className="font-medium text-red-600 dark:text-red-400">Tidsbegränsning</p>
+                          {activeRestrictions.map((r, i) => (
+                            <p key={i} className="text-xs flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                              {RESTRICTION_TYPE_LABELS[r.restrictionType] || r.restrictionType}: {r.description || "Inga detaljer"}
+                              {r.startTime && r.endTime && ` (${r.startTime}–${r.endTime})`}
+                            </p>
+                          ))}
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+                return null;
+              })()}
               {!compact && (
                 <>
                   {job.scheduledStartTime && (
@@ -1787,6 +1908,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                     </div>
                     <span className="text-[9px] text-muted-foreground">{execIndex + 1}/8</span>
                   </div>
+                  <SubStepsExpander jobId={job.id} isExpanded={!!expandedSubSteps[job.id]} onToggle={() => setExpandedSubSteps(prev => ({ ...prev, [job.id]: !prev[job.id] }))} />
                 </>
               )}
             </div>
@@ -1818,10 +1940,21 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const renderDayTimelineView = () => {
     const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
     const day = currentDate;
+    const dayOfWeek = day.getDay() || 7;
+
+    const dayRestrictions = timeRestrictions.filter(r => r.isActive && r.weekdays && r.weekdays.includes(dayOfWeek));
 
     return (
       <div className="flex-1 overflow-auto">
         <div className="min-w-[600px]">
+          {dayRestrictions.length > 0 && (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800" data-testid="day-restrictions-banner">
+              <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
+              <span className="text-xs text-red-600 dark:text-red-400">
+                {dayRestrictions.length} tidsbegränsning{dayRestrictions.length > 1 ? "ar" : ""} aktiv{dayRestrictions.length > 1 ? "a" : ""} idag
+              </span>
+            </div>
+          )}
           <div className="grid border-b sticky top-0 bg-background z-10" style={{ gridTemplateColumns: `200px repeat(${resources.length}, 1fr)` }}>
             <div className="p-3 font-medium text-sm text-muted-foreground border-r">Tid</div>
             {resources.map((resource) => {
@@ -2005,11 +2138,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   }
                 }
 
+                const cellDayOfWeek = day.getDay() || 7;
+                const restrictedJobs = jobs.filter(j => {
+                  if (!j.objectId) return false;
+                  const objR = restrictionsByObject.get(j.objectId) || [];
+                  return objR.some(r => r.isActive && r.weekdays && r.weekdays.includes(cellDayOfWeek));
+                });
+
                 return (
                   <DroppableCell 
                     key={dayIndex} 
                     id={droppableId}
-                    className="p-2 border-r last:border-r-0 min-h-[120px] transition-colors bg-muted/30"
+                    className={`p-2 border-r last:border-r-0 min-h-[120px] transition-colors ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : "bg-muted/30"}`}
                   >
                     <div data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
@@ -2023,6 +2163,24 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                           <AlertTriangle className="h-3 w-3" />
                           <span>Överbokning</span>
                         </div>
+                      )}
+                      {restrictedJobs.length > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mb-1 cursor-help" data-testid={`cell-restriction-${resource.id}-${dayStr}`}>
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              <span>{restrictedJobs.length} begränsad</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="text-xs space-y-1">
+                              <p className="font-medium text-red-500">Tidsbegränsade uppdrag</p>
+                              {restrictedJobs.map(j => (
+                                <p key={j.id}>{j.title} - {j.objectName}</p>
+                              ))}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
                       )}
                       <div className="space-y-1">
                         {jobs.map((job) => renderJobCard(job, true))}
@@ -2572,7 +2730,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                             </Badge>
                             {(job as any).executionCode && (
                               <Badge variant="outline" className="text-[10px]" data-testid={`unscheduled-exec-code-${job.id}`}>
-                                {EXECUTION_CODE_ICONS[(job as any).executionCode] || "⚙️"} {EXECUTION_CODE_LABELS[(job as any).executionCode] || (job as any).executionCode}
+                                {EXECUTION_CODE_ICONS[(job as any).executionCode] || "KOD"} {EXECUTION_CODE_LABELS[(job as any).executionCode] || (job as any).executionCode}
                               </Badge>
                             )}
                           </div>
