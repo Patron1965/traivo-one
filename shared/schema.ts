@@ -165,6 +165,8 @@ export const resources = pgTable("resources", {
   trackingStatus: text("tracking_status").default("offline"),
   weeklyHours: integer("weekly_hours").default(40),
   competencies: text("competencies").array().default([]),
+  // Utförandekoder som resursen kan utföra (C8)
+  executionCodes: text("execution_codes").array().default([]),
   availability: jsonb("availability").default({}),
   // Geografiskt område (postnummer för normalt verksamhetsområde)
   serviceArea: text("service_area").array().default([]),
@@ -253,6 +255,8 @@ export const workOrders = pgTable("work_orders", {
   // GPS-koordinater för uppgiftsspecifik position (om annan än objektets)
   taskLatitude: real("task_latitude"),
   taskLongitude: real("task_longitude"),
+  // Utförandekod: matchar resursens kompetens (t.ex. "kranbil", "tvatt", "sug")
+  executionCode: text("execution_code"),
   // Extern referens (kundportals-ID, felanmälans-ID etc.)
   externalReference: text("external_reference"),
   // Tidsstämplar för statusflöde
@@ -372,8 +376,13 @@ export const articles = pgTable("articles", {
   listPrice: integer("list_price").default(0),
   // För varor: lagerplats
   stockLocation: text("stock_location"),
+  // GPS för lagerplats
+  stockLatitude: real("stock_latitude"),
+  stockLongitude: real("stock_longitude"),
   // För beroende: antal minuter före huvuduppgift
   dependencyMinutesBefore: integer("dependency_minutes_before"),
+  // Utförandekod som krävs (t.ex. "kranbil", "tvatt", "sug")
+  executionCode: text("execution_code"),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -2060,6 +2069,41 @@ export const EXECUTION_STATUS_LABELS: Record<ExecutionStatus, string> = {
   completed: "Utförd",
   inspected: "Kontrollerad",
   invoiced: "Fakturerad"
+};
+
+// ============================================
+// UTFÖRANDEKODER (C8)
+// ============================================
+
+export const EXECUTION_CODES = [
+  "kranbil",
+  "tvatt",
+  "sug",
+  "service",
+  "besiktning",
+  "transport",
+  "manuell",
+] as const;
+export type ExecutionCodeType = typeof EXECUTION_CODES[number];
+
+export const EXECUTION_CODE_LABELS: Record<string, string> = {
+  kranbil: "Kranbil",
+  tvatt: "Tvätt",
+  sug: "Sugbil",
+  service: "Service",
+  besiktning: "Besiktning",
+  transport: "Transport",
+  manuell: "Manuellt arbete",
+};
+
+export const EXECUTION_CODE_ICONS: Record<string, string> = {
+  kranbil: "KB",
+  tvatt: "TV",
+  sug: "SB",
+  service: "SV",
+  besiktning: "BS",
+  transport: "TR",
+  manuell: "MA",
 };
 
 // ============================================

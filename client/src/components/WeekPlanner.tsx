@@ -24,6 +24,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster } from "@shared/schema";
+import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -269,6 +270,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterCluster, setFilterCluster] = useState<string>("all");
   const [filterTeam, setFilterTeam] = useState<string>("all");
+  const [filterExecutionCode, setFilterExecutionCode] = useState<string>("all");
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({
     queryKey: ["/api/teams"],
@@ -304,6 +306,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
   const [pendingSchedule, setPendingSchedule] = useState<{ jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null>(null);
   const [autoFillDialogOpen, setAutoFillDialogOpen] = useState(false);
+  const [depChainDialogOpen, setDepChainDialogOpen] = useState(false);
+  const [depChainJobId, setDepChainJobId] = useState<string | null>(null);
   const [autoFillOverbooking, setAutoFillOverbooking] = useState(0);
   const [autoFillLoading, setAutoFillLoading] = useState(false);
   const [autoFillPreview, setAutoFillPreview] = useState<Array<{ workOrderId: string; resourceId: string; scheduledDate: string; scheduledStartTime: string; title: string; address: string; estimatedDuration: number; priority: string }> | null>(null);
@@ -382,6 +386,16 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     },
     enabled: workOrderIds.length > 0,
     staleTime: 120000,
+  });
+
+  const { data: depChainData } = useQuery<{ chain: Array<{ type: string; dependencyType: string; workOrder: { id: string; title: string; status: string; executionStatus: string; scheduledDate: string | null; scheduledStartTime: string | null; creationMethod: string | null } }> }>({
+    queryKey: ["/api/work-orders", depChainJobId, "dependency-chain"],
+    queryFn: async () => {
+      if (!depChainJobId) return { chain: [] };
+      const res = await apiRequest("GET", `/api/work-orders/${depChainJobId}/dependency-chain`);
+      return res.json();
+    },
+    enabled: !!depChainJobId && depChainDialogOpen,
   });
 
   const workOrdersQueryKey = ["/api/work-orders", dateRange.startDate, dateRange.endDate];
@@ -505,6 +519,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         if (job.teamId && job.teamId !== filterTeam) return false;
         if (!job.teamId && teamResourceIds && job.resourceId && !teamResourceIds.has(job.resourceId)) return false;
       }
+      if (filterExecutionCode !== "all") {
+        if ((job as any).executionCode !== filterExecutionCode) return false;
+      }
       return true;
     });
     
@@ -513,7 +530,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       const bPriority = priorityOrder[b.priority] ?? 99;
       return aPriority - bPriority;
     });
-  }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds]);
+  }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds, filterExecutionCode]);
   
   const scheduledJobs = useMemo(
     () => workOrders.filter(job => job.scheduledDate && job.resourceId),
@@ -1649,10 +1666,28 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   </TooltipContent>
                 </Tooltip>
                 <span className="text-xs font-medium truncate">{job.title}</span>
+                {(job as any).executionCode && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className="text-[10px] shrink-0 bg-slate-100 dark:bg-slate-800 px-1 rounded" data-testid={`exec-code-${job.id}`}>
+                        {EXECUTION_CODE_ICONS[(job as any).executionCode] || "⚙️"}
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>{EXECUTION_CODE_LABELS[(job as any).executionCode] || (job as any).executionCode}</TooltipContent>
+                  </Tooltip>
+                )}
                 {(hasDependencies || hasDependents) && (
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="flex items-center gap-0.5 shrink-0">
+                      <span
+                        className="flex items-center gap-0.5 shrink-0 cursor-pointer hover:opacity-70"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDepChainJobId(job.id);
+                          setDepChainDialogOpen(true);
+                        }}
+                        data-testid={`dep-chain-link-${job.id}`}
+                      >
                         {hasDependencies && (
                           <Link2 className="h-3 w-3 text-orange-500" />
                         )}
@@ -1675,12 +1710,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                             Blockerar {jobDependents.length} uppgift{jobDependents.length > 1 ? "er" : ""}
                           </p>
                         )}
+                        <p className="text-muted-foreground">Klicka för att se beroendekedjan</p>
                       </div>
                     </TooltipContent>
                   </Tooltip>
                 )}
               </div>
               <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
+              {(job as any).creationMethod === "automatic" && (
+                <Badge className="text-[9px] h-4 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300" data-testid={`pickup-badge-${job.id}`}>
+                  Plockuppgift
+                </Badge>
+              )}
               {/* Åtkomstinformation */}
               {(job.objectAccessCode || job.objectKeyNumber) && (
                 <div className="flex items-center gap-2 mt-0.5">
@@ -2455,6 +2496,21 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   </SelectContent>
                 </Select>
               )}
+              <Select value={filterExecutionCode} onValueChange={setFilterExecutionCode}>
+                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-execution-code">
+                  <SelectValue placeholder="Alla utförandekoder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla utförandekoder</SelectItem>
+                  {Object.entries(EXECUTION_CODE_LABELS).map(([code, label]) => (
+                    <SelectItem key={code} value={code}>
+                      <span className="flex items-center gap-1.5">
+                        {EXECUTION_CODE_ICONS[code]} {label}
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <ScrollArea className="flex-1 p-2">
@@ -2507,13 +2563,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                               )}
                             </div>
                           )}
-                          <div className="flex items-center gap-2 pt-1">
+                          <div className="flex items-center gap-2 pt-1 flex-wrap">
                             <Badge variant="outline" className="text-[10px]">
                               {priorityLabels[job.priority] || job.priority}
                             </Badge>
                             <Badge variant="secondary" className="text-[10px]">
                               {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
                             </Badge>
+                            {(job as any).executionCode && (
+                              <Badge variant="outline" className="text-[10px]" data-testid={`unscheduled-exec-code-${job.id}`}>
+                                {EXECUTION_CODE_ICONS[(job as any).executionCode] || "⚙️"} {EXECUTION_CODE_LABELS[(job as any).executionCode] || (job as any).executionCode}
+                              </Badge>
+                            )}
                           </div>
                           <Button
                             size="sm"
@@ -3171,6 +3232,78 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               Tillämpa ({autoFillPreview.length} uppdrag)
             </Button>
           )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    <Dialog open={depChainDialogOpen} onOpenChange={(open) => { if (!open) { setDepChainDialogOpen(false); setDepChainJobId(null); } }}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Link2 className="h-5 w-5 text-orange-500" />
+            Beroendekedja
+          </DialogTitle>
+          <DialogDescription>
+            Visar alla uppgifter som är kopplade via beroenden.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          {depChainJobId && (
+            <div className="p-3 border rounded-lg bg-primary/5">
+              <div className="text-sm font-medium">
+                {workOrders.find(w => w.id === depChainJobId)?.title || "Vald uppgift"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {workOrders.find(w => w.id === depChainJobId)?.objectName}
+              </div>
+            </div>
+          )}
+          {depChainData?.chain && depChainData.chain.length > 0 ? (
+            <div className="space-y-2">
+              {depChainData.chain.map((item, i) => (
+                <div key={i} className={`p-3 border rounded-lg flex items-start gap-3 ${item.workOrder.creationMethod === "automatic" ? "border-amber-300 bg-amber-50 dark:border-amber-700 dark:bg-amber-950/30" : ""}`}>
+                  <div className="shrink-0 mt-0.5">
+                    {item.type === "depends_on" ? (
+                      <Link2 className="h-4 w-4 text-orange-500" />
+                    ) : (
+                      <ArrowRight className="h-4 w-4 text-blue-500" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium">{item.workOrder.title}</div>
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                      <Badge variant="outline" className="text-[10px]">
+                        {item.type === "depends_on" ? "Föregångare" : "Efterföljare"}
+                      </Badge>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {item.dependencyType === "automatic" ? "Automatisk" : item.dependencyType === "structural" ? "Strukturell" : "Sekventiell"}
+                      </Badge>
+                      {item.workOrder.scheduledDate && (
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(item.workOrder.scheduledDate).toLocaleDateString("sv-SE")}
+                          {item.workOrder.scheduledStartTime && ` ${item.workOrder.scheduledStartTime}`}
+                        </span>
+                      )}
+                      {item.workOrder.creationMethod === "automatic" && (
+                        <Badge className="text-[10px] bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200">
+                          Plockuppgift
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-4 text-sm text-muted-foreground">
+              Inga beroenden hittades
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => { setDepChainDialogOpen(false); setDepChainJobId(null); }} data-testid="button-close-dep-chain">
+            Stäng
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -6978,6 +6978,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           let bestScore = Infinity;
 
           for (const resource of selectedResources) {
+            if (order.executionCode && resource.executionCodes && resource.executionCodes.length > 0) {
+              if (!resource.executionCodes.includes(order.executionCode)) continue;
+            }
+
             const currentLoad = resourceDayMinutes[resource.id][dayStr] || 0;
             if (currentLoad + orderDur > maxMinutesPerDay) continue;
 
@@ -7163,6 +7167,164 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed to fetch batch dependencies:", error);
       res.status(500).json({ error: "Failed to fetch batch dependencies" });
+    }
+  });
+
+  // ============================================
+  // C7: AUTO-CREATE PICKUP TASKS (Beroendeartiklar)
+  // ============================================
+
+  app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const mainWorkOrder = await storage.getWorkOrder(req.params.workOrderId);
+      if (!mainWorkOrder || !verifyTenantOwnership(mainWorkOrder, tenantId)) {
+        return res.status(404).json({ error: "Work order not found" });
+      }
+
+      const lines = await storage.getWorkOrderLines(req.params.workOrderId);
+      const createdPickups: any[] = [];
+
+      for (const line of lines) {
+        if (!line.articleId) continue;
+        const article = await storage.getArticle(line.articleId);
+        if (!article || article.articleType !== "beroende") continue;
+
+        const minutesBefore = article.dependencyMinutesBefore || 120;
+        let pickupDate: Date | null = null;
+        let pickupStartTime: string | null = null;
+
+        if (mainWorkOrder.scheduledDate) {
+          const mainDate = mainWorkOrder.scheduledDate instanceof Date 
+            ? mainWorkOrder.scheduledDate 
+            : new Date(mainWorkOrder.scheduledDate);
+          const [mainH, mainM] = (mainWorkOrder.scheduledStartTime || "08:00").split(":").map(Number);
+          const mainMinutes = mainH * 60 + mainM;
+          const pickupMinutes = mainMinutes - minutesBefore;
+
+          if (pickupMinutes >= 0) {
+            pickupDate = mainDate;
+          } else {
+            pickupDate = new Date(mainDate);
+            pickupDate.setDate(pickupDate.getDate() - Math.ceil(Math.abs(pickupMinutes) / (8 * 60)));
+          }
+
+          const effectivePickupMinutes = ((pickupMinutes % (24 * 60)) + 24 * 60) % (24 * 60);
+          const clampedMinutes = Math.max(7 * 60, Math.min(effectivePickupMinutes, 17 * 60));
+          const pH = Math.floor(clampedMinutes / 60);
+          const pM = clampedMinutes % 60;
+          pickupStartTime = `${pH.toString().padStart(2, "0")}:${pM.toString().padStart(2, "0")}`;
+        }
+
+        const pickupWorkOrder = await storage.createWorkOrder({
+          tenantId,
+          customerId: mainWorkOrder.customerId,
+          objectId: mainWorkOrder.objectId,
+          resourceId: mainWorkOrder.resourceId,
+          title: `Plocka: ${article.name}`,
+          description: `Automatisk plockuppgift för ${article.name}. Lagerplats: ${article.stockLocation || "Ej angiven"}`,
+          orderType: "service",
+          priority: mainWorkOrder.priority,
+          status: "draft",
+          orderStatus: mainWorkOrder.resourceId ? "planerad_pre" : "skapad",
+          scheduledDate: pickupDate,
+          scheduledStartTime: pickupStartTime,
+          estimatedDuration: article.productionTime || 30,
+          executionStatus: pickupDate ? "planned_rough" : "not_planned",
+          creationMethod: "automatic",
+          executionCode: mainWorkOrder.executionCode || undefined,
+          taskLatitude: article.stockLatitude || undefined,
+          taskLongitude: article.stockLongitude || undefined,
+        });
+
+        await storage.createTaskDependency({
+          tenantId,
+          workOrderId: req.params.workOrderId,
+          dependsOnWorkOrderId: pickupWorkOrder.id,
+          dependencyType: "automatic",
+          structuralArticleId: article.id,
+        });
+
+        createdPickups.push({
+          pickupWorkOrderId: pickupWorkOrder.id,
+          articleName: article.name,
+          articleId: article.id,
+          scheduledDate: pickupDate?.toISOString().split("T")[0],
+          scheduledStartTime: pickupStartTime,
+          stockLocation: article.stockLocation,
+        });
+      }
+
+      res.json({
+        created: createdPickups.length,
+        pickupTasks: createdPickups,
+        mainWorkOrderId: req.params.workOrderId,
+      });
+    } catch (error) {
+      console.error("Generate pickup tasks error:", error);
+      res.status(500).json({ error: "Failed to generate pickup tasks" });
+    }
+  });
+
+  // C7: Get full dependency chain for a work order
+  app.get("/api/work-orders/:workOrderId/dependency-chain", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.workOrderId);
+      if (!verifyTenantOwnership(workOrder, tenantId)) {
+        return res.status(404).json({ error: "Work order not found" });
+      }
+
+      const dependencies = await storage.getTaskDependencies(req.params.workOrderId);
+      const dependents = await storage.getTaskDependents(req.params.workOrderId);
+
+      const chain: any[] = [];
+
+      for (const dep of dependencies) {
+        const depOrder = await storage.getWorkOrder(dep.dependsOnWorkOrderId);
+        if (depOrder) {
+          chain.push({
+            type: "depends_on",
+            dependencyType: dep.dependencyType,
+            workOrder: {
+              id: depOrder.id,
+              title: depOrder.title,
+              status: depOrder.status,
+              executionStatus: depOrder.executionStatus,
+              scheduledDate: depOrder.scheduledDate,
+              scheduledStartTime: depOrder.scheduledStartTime,
+              creationMethod: depOrder.creationMethod,
+            },
+          });
+        }
+      }
+
+      for (const dep of dependents) {
+        const depOrder = await storage.getWorkOrder(dep.workOrderId);
+        if (depOrder) {
+          chain.push({
+            type: "blocks",
+            dependencyType: dep.dependencyType,
+            workOrder: {
+              id: depOrder.id,
+              title: depOrder.title,
+              status: depOrder.status,
+              executionStatus: depOrder.executionStatus,
+              scheduledDate: depOrder.scheduledDate,
+              scheduledStartTime: depOrder.scheduledStartTime,
+              creationMethod: depOrder.creationMethod,
+            },
+          });
+        }
+      }
+
+      res.json({
+        workOrderId: req.params.workOrderId,
+        chain,
+      });
+    } catch (error) {
+      console.error("Failed to fetch dependency chain:", error);
+      res.status(500).json({ error: "Failed to fetch dependency chain" });
     }
   });
 
