@@ -512,6 +512,280 @@ export async function deleteMetadata(metadataId: string, tenantId: string): Prom
 }
 
 // ============================================================================
+// PROPAGERA METADATA NEDÅT TILL BARNOBJEKT
+// ============================================================================
+
+export interface PropagationResult {
+  inserted: number;
+  skipped: number;
+  affectedObjectIds: string[];
+}
+
+export async function propagateMetadataDown(
+  objektId: string,
+  metadataKatalogId: string | null,
+  tenantId: string,
+  propagatedBy?: string
+): Promise<PropagationResult> {
+  const descendantsQuery = sql`
+    WITH RECURSIVE descendants AS (
+      SELECT id, name, parent_id, 0 as level
+      FROM objects
+      WHERE parent_id = ${objektId} AND tenant_id = ${tenantId}
+      UNION ALL
+      SELECT o.id, o.name, o.parent_id, d.level + 1
+      FROM objects o
+      INNER JOIN descendants d ON o.parent_id = d.id
+      WHERE o.tenant_id = ${tenantId}
+    )
+    SELECT id FROM descendants ORDER BY level
+  `;
+  const descResult = await db.execute(descendantsQuery);
+  const childIds = (descResult.rows as any[]).map(r => r.id);
+
+  if (childIds.length === 0) {
+    return { inserted: 0, skipped: 0, affectedObjectIds: [] };
+  }
+
+  let parentMetadataQuery = db
+    .select()
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.objektId, objektId),
+      eq(metadataVarden.tenantId, tenantId),
+      eq(metadataVarden.arvsNedat, true)
+    ));
+
+  const parentMetadata = metadataKatalogId
+    ? await db.select().from(metadataVarden).where(and(
+        eq(metadataVarden.objektId, objektId),
+        eq(metadataVarden.tenantId, tenantId),
+        eq(metadataVarden.arvsNedat, true),
+        eq(metadataVarden.metadataKatalogId, metadataKatalogId)
+      ))
+    : await parentMetadataQuery;
+
+  let inserted = 0;
+  let skipped = 0;
+  const affectedObjectIds: string[] = [];
+
+  for (const pm of parentMetadata) {
+    if (pm.nivaLas || pm.stoppaVidareArvning) {
+      skipped += childIds.length;
+      continue;
+    }
+
+    for (const childId of childIds) {
+      const [existingLocal] = await db
+        .select({ id: metadataVarden.id })
+        .from(metadataVarden)
+        .where(and(
+          eq(metadataVarden.objektId, childId),
+          eq(metadataVarden.metadataKatalogId, pm.metadataKatalogId),
+          eq(metadataVarden.tenantId, tenantId)
+        ))
+        .limit(1);
+
+      if (existingLocal) {
+        skipped++;
+        continue;
+      }
+
+      const [newEntry] = await db.insert(metadataVarden).values({
+        tenantId,
+        objektId: childId,
+        metadataKatalogId: pm.metadataKatalogId,
+        vardeString: pm.vardeString,
+        vardeInteger: pm.vardeInteger,
+        vardeDecimal: pm.vardeDecimal,
+        vardeBoolean: pm.vardeBoolean,
+        vardeDatetime: pm.vardeDatetime,
+        vardeJson: pm.vardeJson,
+        vardeReferens: pm.vardeReferens,
+        arvsNedat: true,
+        nivaLas: false,
+        skapadAv: propagatedBy ?? 'system',
+        metod: 'arvd',
+      }).returning();
+
+      await db.insert(metadataHistorik).values({
+        tenantId,
+        metadataVardenId: newEntry.id,
+        objektId: childId,
+        metadataKatalogId: pm.metadataKatalogId,
+        gammaltVarde: null,
+        nyttVarde: getDisplayValue(newEntry),
+        andradAv: propagatedBy ?? 'system',
+        andringsMetod: 'arvd',
+      });
+
+      inserted++;
+      if (!affectedObjectIds.includes(childId)) {
+        affectedObjectIds.push(childId);
+      }
+    }
+  }
+
+  return { inserted, skipped, affectedObjectIds };
+}
+
+// ============================================================================
+// ARVSTRADSVY - visa metadata-arv genom hierarkin
+// ============================================================================
+
+export interface InheritanceTreeNode {
+  id: string;
+  namn: string;
+  typ: string;
+  level: number;
+  metadataValue: string | null;
+  metadataSource: 'local' | 'inherited' | 'none';
+  nivaLas: boolean;
+  children: InheritanceTreeNode[];
+}
+
+export async function getInheritanceTree(
+  rootId: string,
+  metadataKatalogId: string,
+  tenantId: string
+): Promise<InheritanceTreeNode | null> {
+  const treeQuery = sql`
+    WITH RECURSIVE tree AS (
+      SELECT id, name, object_type, parent_id, 0 as level, ARRAY[id] as path
+      FROM objects
+      WHERE id = ${rootId} AND tenant_id = ${tenantId}
+      UNION ALL
+      SELECT o.id, o.name, o.object_type, o.parent_id, t.level + 1, t.path || o.id
+      FROM objects o
+      INNER JOIN tree t ON o.parent_id = t.id
+      WHERE o.tenant_id = ${tenantId}
+    )
+    SELECT 
+      t.id, t.name, t.object_type, t.parent_id, t.level,
+      mv.id as metadata_id,
+      COALESCE(mv.varde_string, CAST(mv.varde_integer AS TEXT), CAST(mv.varde_decimal AS TEXT), CAST(mv.varde_boolean AS TEXT), mv.varde_referens) as varde,
+      COALESCE(mv.niva_las, FALSE) as niva_las,
+      COALESCE(mv.arvs_nedat, FALSE) as arvs_nedat
+    FROM tree t
+    LEFT JOIN metadata_varden mv ON mv.objekt_id = t.id 
+      AND mv.metadata_katalog_id = ${metadataKatalogId}
+      AND mv.tenant_id = ${tenantId}
+    ORDER BY t.path
+  `;
+
+  const result = await db.execute(treeQuery);
+  const rows = result.rows as any[];
+
+  if (rows.length === 0) return null;
+
+  const nodeMap = new Map<string, InheritanceTreeNode>();
+
+  rows.forEach(row => {
+    nodeMap.set(row.id, {
+      id: row.id,
+      namn: row.name,
+      typ: row.object_type,
+      level: row.level,
+      metadataValue: row.varde || null,
+      metadataSource: row.metadata_id ? 'local' : 'none',
+      nivaLas: row.niva_las === true,
+      children: [],
+    });
+  });
+
+  let inheritedValue: string | null = null;
+  rows.forEach(row => {
+    const node = nodeMap.get(row.id)!;
+    if (node.metadataSource === 'local') {
+      inheritedValue = node.metadataValue;
+    } else if (inheritedValue && node.metadataSource === 'none') {
+      node.metadataSource = 'inherited';
+      node.metadataValue = inheritedValue;
+    }
+
+    if (row.parent_id !== null) {
+      const parent = nodeMap.get(row.parent_id);
+      if (parent) {
+        parent.children.push(node);
+      }
+    }
+  });
+
+  return nodeMap.get(rootId) || null;
+}
+
+// ============================================================================
+// HÄMTA METADATA FÖR ARBETSORDER (artikel-koppling)
+// ============================================================================
+
+export async function getArticleMetadataForObject(
+  objektId: string,
+  fetchMetadataCode: string,
+  tenantId: string
+): Promise<{ value: any; displayValue: string; source: string; datatype: string; katalogId: string; katalogName: string } | null> {
+  const objectWithMetadata = await getObjectWithAllMetadata(objektId, tenantId);
+  if (!objectWithMetadata) return null;
+
+  const metadata = objectWithMetadata.metadata.find(m => m.katalog.namn === fetchMetadataCode);
+  if (!metadata) return null;
+
+  const value = metadata.vardeString ?? metadata.vardeInteger ?? metadata.vardeDecimal ??
+    metadata.vardeBoolean ?? metadata.vardeDatetime ?? metadata.vardeJson ?? metadata.vardeReferens;
+
+  return {
+    value,
+    displayValue: getDisplayValue(metadata as any) || '',
+    source: metadata.source,
+    datatype: metadata.katalog.datatyp || 'text',
+    katalogId: metadata.metadataKatalogId,
+    katalogName: metadata.katalog.namn,
+  };
+}
+
+export async function writeArticleMetadataOnObject(
+  objektId: string,
+  leaveMetadataCode: string,
+  value: any,
+  tenantId: string,
+  executedBy?: string
+): Promise<MetadataVarden> {
+  const [metadataTyp] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.namn, leaveMetadataCode),
+      eq(metadataKatalog.tenantId, tenantId)
+    ));
+
+  if (!metadataTyp) {
+    throw new Error(`Metadata type "${leaveMetadataCode}" not found for tenant`);
+  }
+
+  const [existing] = await db
+    .select()
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.objektId, objektId),
+      eq(metadataVarden.metadataKatalogId, metadataTyp.id),
+      eq(metadataVarden.tenantId, tenantId)
+    ))
+    .limit(1);
+
+  if (existing) {
+    return updateMetadata(existing.id, value, tenantId, executedBy, 'utforande');
+  } else {
+    return createMetadata({
+      tenantId,
+      objektId,
+      metadataTypNamn: leaveMetadataCode,
+      varde: value,
+      skapadAv: executedBy,
+      metod: 'utforande',
+    });
+  }
+}
+
+// ============================================================================
 // HÄMTA METADATA-HISTORIK
 // ============================================================================
 

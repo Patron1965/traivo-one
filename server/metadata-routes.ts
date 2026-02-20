@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { z, ZodError } from "zod";
 import { db } from "./db";
 import { eq, and } from "drizzle-orm";
-import { metadataKatalog, metadataVarden } from "@shared/schema";
+import { metadataKatalog, metadataVarden, articles } from "@shared/schema";
 import {
   getObjectWithAllMetadata,
   getMetadataValue,
@@ -20,6 +20,10 @@ import {
   deleteWorkOrderMetadata,
   getMetadataHistorik,
   getObjectMetadataHistorik,
+  propagateMetadataDown,
+  getInheritanceTree,
+  getArticleMetadataForObject,
+  writeArticleMetadataOnObject,
 } from "./metadata-queries";
 import { getTenantIdWithFallback } from "./tenant-middleware";
 
@@ -542,5 +546,220 @@ metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Res
       return res.status(404).json({ error: error.message });
     }
     res.status(500).json({ error: "Kunde inte radera arbetsordermetadata" });
+  }
+});
+
+// ============================================================================
+// PROPAGERING NEDÅT
+// ============================================================================
+
+const propagateSchema = z.object({
+  metadataKatalogId: z.string().optional(),
+});
+
+metadataRouter.post("/propagate/:objectId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId } = req.params;
+    const { metadataKatalogId } = propagateSchema.parse(req.body);
+
+    const result = await propagateMetadataDown(
+      objectId,
+      metadataKatalogId || null,
+      tenantId,
+      'admin'
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error propagating metadata:", error);
+    res.status(500).json({ error: "Kunde inte propagera metadata" });
+  }
+});
+
+// ============================================================================
+// ARVSTRÄDSVY
+// ============================================================================
+
+metadataRouter.get("/inheritance-tree/:objectId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId } = req.params;
+    const { metadataKatalogId } = req.query;
+
+    if (!metadataKatalogId || typeof metadataKatalogId !== 'string') {
+      return res.status(400).json({ error: "metadataKatalogId query parameter krävs" });
+    }
+
+    const tree = await getInheritanceTree(objectId, metadataKatalogId, tenantId);
+    res.json(tree);
+  } catch (error: any) {
+    console.error("Error fetching inheritance tree:", error);
+    res.status(500).json({ error: "Kunde inte hämta arvsträd" });
+  }
+});
+
+// ============================================================================
+// ARTIKEL-METADATA KOPPLING
+// ============================================================================
+
+metadataRouter.get("/article-preview/:objectId/:articleId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId, articleId } = req.params;
+    
+    const article = await db.query.articles.findFirst({
+      where: and(eq(articles.id, articleId), eq(articles.tenantId, tenantId)),
+    });
+    
+    if (!article) {
+      return res.json({ fetch: null, leave: null, leaveFormat: null });
+    }
+
+    let fetchData = null;
+    let leaveData = null;
+
+    if (article.fetchMetadataCode) {
+      const result = await getArticleMetadataForObject(objectId, article.fetchMetadataCode, tenantId);
+      if (result) {
+        fetchData = {
+          metadataCode: article.fetchMetadataCode,
+          currentValue: result.value,
+          datatype: result.datatype || "text",
+          katalogId: result.katalogId || "",
+          katalogName: result.katalogName || article.fetchMetadataCode,
+        };
+      }
+    }
+
+    if (article.leaveMetadataCode) {
+      const result = await getArticleMetadataForObject(objectId, article.leaveMetadataCode, tenantId);
+      leaveData = {
+        metadataCode: article.leaveMetadataCode,
+        currentValue: result?.value || null,
+        datatype: result?.datatype || "text",
+        katalogId: result?.katalogId || "",
+        katalogName: result?.katalogName || article.leaveMetadataCode,
+      };
+    }
+
+    res.json({
+      fetch: fetchData,
+      leave: leaveData,
+      leaveFormat: article.leaveMetadataFormat || "value",
+    });
+  } catch (error: any) {
+    console.error("Error fetching article metadata preview:", error);
+    res.status(500).json({ error: "Kunde inte hämta artikelmetadata-förhandsvisning" });
+  }
+});
+
+metadataRouter.post("/article-writeback/:objectId/:articleId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId, articleId } = req.params;
+    const { value } = req.body;
+
+    const article = await db.query.articles.findFirst({
+      where: and(eq(articles.id, articleId), eq(articles.tenantId, tenantId)),
+    });
+
+    if (!article?.leaveMetadataCode) {
+      return res.status(400).json({ error: "Artikeln har ingen leaveMetadataCode" });
+    }
+
+    let coercedValue = value;
+    if (article.leaveMetadataFormat === "timestamp") {
+      coercedValue = new Date().toISOString();
+    } else if (article.leaveMetadataFormat === "boolean_true") {
+      coercedValue = "true";
+    } else if (article.leaveMetadataFormat === "counter_increment") {
+      const current = await getArticleMetadataForObject(objectId, article.leaveMetadataCode, tenantId);
+      const currentNum = parseInt(current?.value || "0") || 0;
+      coercedValue = String(currentNum + 1);
+    }
+
+    const result = await writeArticleMetadataOnObject(
+      objectId,
+      article.leaveMetadataCode,
+      coercedValue,
+      tenantId,
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error writing article metadata:", error);
+    res.status(500).json({ error: "Kunde inte skriva artikelmetadata" });
+  }
+});
+
+metadataRouter.get("/article-fetch/:objectId/:fetchCode", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId, fetchCode } = req.params;
+    const result = await getArticleMetadataForObject(objectId, fetchCode, tenantId);
+
+    if (!result) {
+      return res.json({ value: null, displayValue: '', source: 'none' });
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error fetching article metadata:", error);
+    res.status(500).json({ error: "Kunde inte hämta artikelmetadata" });
+  }
+});
+
+const writeArticleMetadataSchema = z.object({
+  leaveMetadataCode: z.string(),
+  value: z.any(),
+  executedBy: z.string().optional(),
+});
+
+metadataRouter.post("/article-write/:objectId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId } = req.params;
+    const validated = writeArticleMetadataSchema.parse(req.body);
+
+    const result = await writeArticleMetadataOnObject(
+      objectId,
+      validated.leaveMetadataCode,
+      validated.value,
+      tenantId,
+      validated.executedBy
+    );
+
+    res.json(result);
+  } catch (error: any) {
+    console.error("Error writing article metadata:", error);
+    if (error.message?.includes('not found')) {
+      return res.status(404).json({ error: error.message });
+    }
+    res.status(500).json({ error: "Kunde inte skriva artikelmetadata" });
   }
 });

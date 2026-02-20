@@ -62,11 +62,13 @@ import {
   Key,
   Target,
   CheckCircle2,
+  Database,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Article, ServiceObject } from "@shared/schema";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Separator } from "@/components/ui/separator";
 import { HelpTooltip, PageHelp } from "@/components/ui/help-tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -136,6 +138,9 @@ interface ArticleFormData {
   listPrice: number;
   unit: string;
   status: string;
+  fetchMetadataCode: string;
+  leaveMetadataCode: string;
+  leaveMetadataFormat: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -151,6 +156,9 @@ const emptyFormData: ArticleFormData = {
   listPrice: 0,
   unit: "st",
   status: "active",
+  fetchMetadataCode: "",
+  leaveMetadataCode: "",
+  leaveMetadataFormat: "",
 };
 
 export default function ArticlesPage() {
@@ -175,6 +183,10 @@ export default function ArticlesPage() {
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects"],
+  });
+
+  const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string }[]>({
+    queryKey: ["/api/metadata/types"],
   });
 
   const { data: applicableArticles = [], isLoading: isLoadingApplicable } = useQuery<Article[]>({
@@ -257,6 +269,9 @@ export default function ArticlesPage() {
       listPrice: article.listPrice || 0,
       unit: article.unit || "st",
       status: article.status || "active",
+      fetchMetadataCode: (article as any).fetchMetadataCode || "",
+      leaveMetadataCode: (article as any).leaveMetadataCode || "",
+      leaveMetadataFormat: (article as any).leaveMetadataFormat || "",
     });
     setDialogOpen(true);
   };
@@ -863,6 +878,79 @@ export default function ArticlesPage() {
                   </Select>
                 </div>
               </div>
+
+              <Separator />
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  Metadata-koppling
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Koppla artikeln till metadata som hämtas/lämnas vid utförande
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Hämta metadata (fetchMetadataCode)</Label>
+                  <Select
+                    value={formData.fetchMetadataCode || "_none"}
+                    onValueChange={(v) => setFormData({ ...formData, fetchMetadataCode: v === "_none" ? "" : v })}
+                  >
+                    <SelectTrigger data-testid="select-fetch-metadata">
+                      <SelectValue placeholder="Ingen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Ingen</SelectItem>
+                      {metadataTypes.map(t => (
+                        <SelectItem key={t.id} value={t.namn}>{t.namn} ({t.datatyp})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Metadata som visas för utföraren vid start</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Lämna metadata (leaveMetadataCode)</Label>
+                  <Select
+                    value={formData.leaveMetadataCode || "_none"}
+                    onValueChange={(v) => setFormData({ ...formData, leaveMetadataCode: v === "_none" ? "" : v })}
+                  >
+                    <SelectTrigger data-testid="select-leave-metadata">
+                      <SelectValue placeholder="Ingen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Ingen</SelectItem>
+                      {metadataTypes.map(t => (
+                        <SelectItem key={t.id} value={t.namn}>{t.namn} ({t.datatyp})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Metadata som skrivs tillbaka efter utförande</p>
+                </div>
+              </div>
+
+              {formData.leaveMetadataCode && (
+                <div className="space-y-2">
+                  <Label>Lämna-format</Label>
+                  <Select
+                    value={formData.leaveMetadataFormat || "value"}
+                    onValueChange={(v) => setFormData({ ...formData, leaveMetadataFormat: v })}
+                  >
+                    <SelectTrigger data-testid="select-leave-format">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="value">Värde (direkt input)</SelectItem>
+                      <SelectItem value="timestamp">Tidsstämpel (automatisk)</SelectItem>
+                      <SelectItem value="boolean_true">Flagga: Ja</SelectItem>
+                      <SelectItem value="counter_increment">Räknare: +1</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Hur metadata-värdet skapas vid utförande</p>
+                </div>
+              )}
+
+              <Separator />
 
               <div className="space-y-2">
                 <Label>Objekttyper (vad artikeln kan utföras på)</Label>

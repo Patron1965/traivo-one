@@ -13,7 +13,8 @@ import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, Database, Lock, Plus, Save, X, History, Edit2, 
-  ArrowDown, ExternalLink, Trash2, Image, FileText, MapPin, Clock, Hash, Type, ToggleLeft
+  ArrowDown, ExternalLink, Trash2, Image, FileText, MapPin, Clock, Hash, Type, ToggleLeft,
+  Share2, ChevronRight, ChevronDown, TreeDeciduous
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ServiceObject, MetadataKatalog, MetadataHistorik } from "@shared/schema";
@@ -215,6 +216,107 @@ function MetadataHistoryModal({ metadataId, metadataName, tenantId }: { metadata
   );
 }
 
+interface InheritanceNode {
+  id: string;
+  namn: string;
+  typ: string;
+  level: number;
+  metadataValue: string | null;
+  metadataSource: 'local' | 'inherited' | 'none';
+  nivaLas: boolean;
+  children: InheritanceNode[];
+}
+
+function InheritanceTreeNode({ node, depth = 0 }: { node: InheritanceNode; depth?: number }) {
+  const [expanded, setExpanded] = useState(depth < 2);
+  const hasChildren = node.children.length > 0;
+  const sourceColor = node.metadataSource === 'local' ? 'text-blue-600 dark:text-blue-400' 
+    : node.metadataSource === 'inherited' ? 'text-green-600 dark:text-green-400' 
+    : 'text-muted-foreground';
+
+  return (
+    <div className="select-none" data-testid={`tree-node-${node.id}`}>
+      <div 
+        className="flex items-center gap-1.5 py-1 px-1 rounded text-sm cursor-pointer"
+        style={{ paddingLeft: `${depth * 16 + 4}px` }}
+        onClick={() => hasChildren && setExpanded(!expanded)}
+      >
+        {hasChildren ? (
+          expanded ? <ChevronDown className="h-3.5 w-3.5 shrink-0" /> : <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+        ) : (
+          <span className="w-3.5 shrink-0" />
+        )}
+        <span className="font-medium truncate">{node.namn}</span>
+        <Badge variant="outline" className="text-[10px] px-1 py-0 shrink-0">{node.typ}</Badge>
+        {node.nivaLas && <Lock className="h-3 w-3 text-red-500 shrink-0" />}
+        <span className={`ml-auto text-xs truncate max-w-[120px] ${sourceColor}`}>
+          {node.metadataValue || '-'}
+        </span>
+        {node.metadataSource !== 'none' && (
+          <Badge variant="outline" className={`text-[9px] px-1 py-0 shrink-0 ${
+            node.metadataSource === 'local' ? 'border-blue-500 text-blue-600' : 'border-green-500 text-green-600'
+          }`}>
+            {node.metadataSource === 'local' ? 'L' : 'A'}
+          </Badge>
+        )}
+      </div>
+      {expanded && hasChildren && (
+        <div>
+          {node.children.map(child => (
+            <InheritanceTreeNode key={child.id} node={child} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InheritanceTreeDialog({ objectId, metadataKatalogId, metadataName }: { objectId: string; metadataKatalogId: string; metadataName: string }) {
+  const [open, setOpen] = useState(false);
+
+  const { data: tree, isLoading } = useQuery<InheritanceNode>({
+    queryKey: [`/api/metadata/inheritance-tree/${objectId}?metadataKatalogId=${metadataKatalogId}`],
+    enabled: open,
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="h-7 w-7" data-testid={`button-tree-${metadataKatalogId}`}>
+              <TreeDeciduous className="h-3.5 w-3.5" />
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent><p>Visa arvstrad</p></TooltipContent>
+      </Tooltip>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <TreeDeciduous className="h-5 w-5" />
+            Arvstrad: {metadataName}
+          </DialogTitle>
+          <DialogDescription>
+            Visar hur metadata arvs genom objekthierarkin. L=Lokal, A=Arvd.
+          </DialogDescription>
+        </DialogHeader>
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : tree ? (
+          <div className="max-h-[50vh] overflow-y-auto border rounded p-2" data-testid="inheritance-tree">
+            <InheritanceTreeNode node={tree} />
+          </div>
+        ) : (
+          <div className="text-center py-6 text-muted-foreground text-sm">Inget trad tillgangligt</div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProps) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -292,6 +394,20 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
     },
     onError: (error: any) => {
       toast({ title: "Kunde inte skapa metadata", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const propagateMutation = useMutation({
+    mutationFn: async (metadataKatalogId?: string) => {
+      return apiRequest("POST", `/api/metadata/propagate/${object.id}`, {
+        metadataKatalogId,
+      });
+    },
+    onSuccess: (data: any) => {
+      toast({ title: "Metadata propagerad", description: `${data.inserted} nya, ${data.skipped} hoppade over` });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte propagera metadata", variant: "destructive" });
     },
   });
 
@@ -438,6 +554,24 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                             </div>
                             <div className="flex items-center gap-0.5 shrink-0">
                               <MetadataHistoryModal metadataId={entry.id} metadataName={entry.katalog.namn} />
+                              <InheritanceTreeDialog objectId={object.id} metadataKatalogId={entry.metadataKatalogId} metadataName={entry.katalog.namn} />
+                              {entry.source === 'local' && entry.arvsNedat && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-7 w-7"
+                                      onClick={() => propagateMutation.mutate(entry.metadataKatalogId)}
+                                      disabled={propagateMutation.isPending}
+                                      data-testid={`button-propagate-${entry.id}`}
+                                    >
+                                      {propagateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Share2 className="h-3.5 w-3.5" />}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Propagera nedat till barnobjekt</TooltipContent>
+                                </Tooltip>
+                              )}
                               {entry.source === 'local' && (
                                 <>
                                   <Tooltip>
