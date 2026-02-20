@@ -12659,6 +12659,123 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // ============================================
+  // FIELD WORKER PHOTO UPLOAD
+  // ============================================
+  
+  app.post("/api/field-worker/tasks/:id/upload-photo", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder || workOrder.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+      const objectStorageService = new ObjectStorageService();
+      const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+      const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+      
+      res.json({
+        uploadURL,
+        objectPath,
+        workOrderId: req.params.id,
+      });
+    } catch (error) {
+      console.error("Failed to generate photo upload URL:", error);
+      res.status(500).json({ error: "Kunde inte generera uppladdnings-URL" });
+    }
+  });
+  
+  app.post("/api/field-worker/tasks/:id/confirm-photo", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder || workOrder.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const { objectPath, category } = req.body;
+      if (!objectPath) {
+        return res.status(400).json({ error: "objectPath krävs" });
+      }
+      
+      const metadata = (workOrder.metadata as Record<string, any>) || {};
+      const photos = metadata.photos || [];
+      photos.push({
+        path: objectPath,
+        category: category || "general",
+        uploadedAt: new Date().toISOString(),
+      });
+      
+      await storage.updateWorkOrder(req.params.id, tenantId, {
+        metadata: { ...metadata, photos },
+      });
+      
+      res.json({ success: true, photoCount: photos.length });
+    } catch (error) {
+      console.error("Failed to confirm photo upload:", error);
+      res.status(500).json({ error: "Kunde inte spara fotoinformation" });
+    }
+  });
+
+  // ============================================
+  // INVOICE PREVIEW TO FORTNOX EXPORT
+  // ============================================
+  
+  app.post("/api/invoice-preview/export-to-fortnox", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { invoices } = req.body;
+      
+      if (!invoices || !Array.isArray(invoices) || invoices.length === 0) {
+        return res.status(400).json({ error: "Inga fakturor att exportera" });
+      }
+      
+      const results: Array<{ customerId: string; customerName: string; status: string; exportId?: string; error?: string }> = [];
+      
+      for (const invoice of invoices) {
+        const lines = invoice.lines || [];
+        for (const line of lines) {
+          if (!line.workOrderId) continue;
+          try {
+            const invoiceExport = await storage.createFortnoxInvoiceExport({
+              tenantId,
+              workOrderId: line.workOrderId,
+              status: "pending",
+              totalAmount: Math.round(line.total || 0),
+              costCenter: invoice.headerMetadata?.kostnadsställe || null,
+              project: invoice.headerMetadata?.projekt || null,
+            });
+            
+            results.push({
+              customerId: invoice.customerId,
+              customerName: invoice.customerName,
+              status: "pending",
+              exportId: invoiceExport.id,
+            });
+          } catch (e: any) {
+            results.push({
+              customerId: invoice.customerId,
+              customerName: invoice.customerName,
+              status: "error",
+              error: e.message,
+            });
+          }
+        }
+      }
+      
+      res.json({ 
+        exported: results.filter(r => r.status === "pending").length,
+        failed: results.filter(r => r.status === "error").length,
+        results 
+      });
+    } catch (error) {
+      console.error("Failed to export invoices to Fortnox:", error);
+      res.status(500).json({ error: "Kunde inte exportera fakturor till Fortnox" });
+    }
+  });
+
+  // ============================================
   // INSPECTION METADATA ENDPOINTS
   // ============================================
 
