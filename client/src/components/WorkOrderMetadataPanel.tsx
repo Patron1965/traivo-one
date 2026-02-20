@@ -21,7 +21,6 @@ interface MetadataPreview {
 interface WorkOrderMetadataPanelProps {
   workOrderId: string;
   objectId: string;
-  articleId?: string;
   executionStatus?: string;
   compact?: boolean;
 }
@@ -29,7 +28,6 @@ interface WorkOrderMetadataPanelProps {
 export function WorkOrderMetadataPanel({
   workOrderId,
   objectId,
-  articleId,
   executionStatus,
   compact = false,
 }: WorkOrderMetadataPanelProps) {
@@ -37,31 +35,43 @@ export function WorkOrderMetadataPanel({
   const [leaveValue, setLeaveValue] = useState("");
   const [writebackDone, setWritebackDone] = useState(false);
 
+  const { data: workOrderLines = [] } = useQuery<{ articleId: string }[]>({
+    queryKey: ["/api/work-orders", workOrderId, "lines"],
+    queryFn: async () => {
+      const res = await fetch(`/api/work-orders/${workOrderId}/lines`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!workOrderId,
+  });
+
+  const firstArticleId = workOrderLines.length > 0 ? workOrderLines[0].articleId : null;
+
   const { data: metadataPreview, isLoading } = useQuery<{
     fetch: MetadataPreview | null;
     leave: MetadataPreview | null;
     leaveFormat: string | null;
   }>({
-    queryKey: ["/api/metadata/article-preview", objectId, articleId],
+    queryKey: ["/api/metadata/article-preview", objectId, firstArticleId],
     queryFn: async () => {
-      if (!articleId) return { fetch: null, leave: null, leaveFormat: null };
-      const res = await fetch(`/api/metadata/article-preview/${objectId}/${articleId}`);
+      if (!firstArticleId) return { fetch: null, leave: null, leaveFormat: null };
+      const res = await fetch(`/api/metadata/article-preview/${objectId}/${firstArticleId}`);
       if (!res.ok) return { fetch: null, leave: null, leaveFormat: null };
       return res.json();
     },
-    enabled: !!objectId && !!articleId,
+    enabled: !!objectId && !!firstArticleId,
   });
 
   const writebackMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", `/api/metadata/article-writeback/${objectId}/${articleId}`, {
+      return apiRequest("POST", `/api/metadata/article-writeback/${objectId}/${firstArticleId}`, {
         value: leaveValue,
       });
     },
     onSuccess: () => {
       toast({ title: "Metadata sparad", description: "Metadata har skrivits tillbaka till objektet" });
       setWritebackDone(true);
-      queryClient.invalidateQueries({ queryKey: ["/api/metadata/article-preview", objectId, articleId] });
+      queryClient.invalidateQueries({ queryKey: ["/api/metadata/article-preview", objectId, firstArticleId] });
       queryClient.invalidateQueries({ queryKey: ["/api/metadata/object", objectId] });
     },
     onError: () => {
@@ -69,20 +79,20 @@ export function WorkOrderMetadataPanel({
     },
   });
 
-  if (!articleId || isLoading) return null;
+  if (!firstArticleId || isLoading) return null;
   if (!metadataPreview?.fetch && !metadataPreview?.leave) return null;
 
   const isOnSiteOrLater = ["on_site", "completed", "inspected", "invoiced"].includes(executionStatus || "");
 
   if (compact) {
     return (
-      <div className="flex items-center gap-2 text-xs" data-testid={`wo-metadata-compact-${workOrderId}`}>
+      <div className="flex items-center gap-1 flex-wrap mt-0.5" data-testid={`wo-metadata-compact-${workOrderId}`}>
         {metadataPreview.fetch && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="outline" className="gap-1 text-xs">
-                <ArrowDownToLine className="h-3 w-3" />
-                {metadataPreview.fetch.katalogName}: {metadataPreview.fetch.currentValue || "—"}
+              <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1">
+                <ArrowDownToLine className="h-2.5 w-2.5" />
+                {metadataPreview.fetch.katalogName}: {metadataPreview.fetch.currentValue ?? "—"}
               </Badge>
             </TooltipTrigger>
             <TooltipContent>Hämtad metadata från objektet</TooltipContent>
@@ -91,13 +101,19 @@ export function WorkOrderMetadataPanel({
         {metadataPreview.leave && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Badge variant="outline" className="gap-1 text-xs">
-                <ArrowUpFromLine className="h-3 w-3" />
+              <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1">
+                <ArrowUpFromLine className="h-2.5 w-2.5" />
                 {metadataPreview.leave.katalogName}
               </Badge>
             </TooltipTrigger>
             <TooltipContent>Metadata att skriva tillbaka vid utförande</TooltipContent>
           </Tooltip>
+        )}
+        {writebackDone && (
+          <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1 text-green-600 border-green-300">
+            <CheckCircle2 className="h-2.5 w-2.5" />
+            Sparad
+          </Badge>
         )}
       </div>
     );

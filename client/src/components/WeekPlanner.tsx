@@ -27,6 +27,7 @@ import type { Resource, WorkOrderWithObject, Customer, TaskDependency, Cluster, 
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS, RESTRICTION_TYPE_LABELS } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { WorkOrderMetadataPanel } from "./WorkOrderMetadataPanel";
 
 interface PlannerAction {
   type: "schedule" | "unschedule";
@@ -1884,6 +1885,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                     <span className="text-[9px] text-muted-foreground">{execIndex + 1}/8</span>
                   </div>
                   <SubStepsExpander jobId={job.id} isExpanded={!!expandedSubSteps[job.id]} onToggle={() => setExpandedSubSteps(prev => ({ ...prev, [job.id]: !prev[job.id] }))} />
+                  {selectedJob === job.id && (
+                    <WorkOrderMetadataPanel
+                      workOrderId={job.id}
+                      objectId={job.objectId}
+                      executionStatus={execStatus}
+                      compact
+                    />
+                  )}
                 </>
               )}
             </div>
