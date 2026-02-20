@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
-  Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet
+  Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -29,6 +29,8 @@ interface ModusObjectResult {
   parentsUpdated: number;
   customersCreated: number;
   skipped: number;
+  metadataWritten: number;
+  metadataColumns: string[];
   errors: string[];
   totalRows: number;
 }
@@ -607,6 +609,17 @@ export default function ImportPage() {
                     <div className="text-muted-foreground">
                       {modusResults.objects.parentsUpdated} hierarkiska kopplingar
                     </div>
+                    {(modusResults.objects.metadataWritten || 0) > 0 && (
+                      <div className="flex items-center gap-1 text-blue-600">
+                        <Database className="h-3 w-3" />
+                        {modusResults.objects.metadataWritten} metadata-varden
+                        {modusResults.objects.metadataColumns?.length > 0 && (
+                          <span className="text-muted-foreground">
+                            ({modusResults.objects.metadataColumns.join(", ")})
+                          </span>
+                        )}
+                      </div>
+                    )}
                     {modusResults.objects.errors.length > 0 && (
                       <div className="text-orange-600">
                         {modusResults.objects.errors.length} varningar

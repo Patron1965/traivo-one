@@ -31,7 +31,7 @@ import { anomalyMonitor } from "./anomaly-monitor";
 import { sendEmail } from "./replit_integrations/resend";
 import { createInheritanceProcessor } from "./inheritance-processor";
 import { metadataRouter } from "./metadata-routes";
-import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "./metadata-queries";
+import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes } from "./metadata-queries";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -768,6 +768,16 @@ export async function registerRoutes(
       const pageSize = req.query.pageSize ? parseInt(req.query.pageSize as string, 10) : 50;
       const search = req.query.search as string | undefined;
       
+      // Parse metadata filters: metadataFilter=Volym:gt:600,Antal:eq:4
+      let metadataFilters: { metadataName: string; operator: string; value: string }[] | undefined;
+      const metadataFilterRaw = req.query.metadataFilter as string | undefined;
+      if (metadataFilterRaw) {
+        metadataFilters = metadataFilterRaw.split(",").map(f => {
+          const parts = f.split(":");
+          return { metadataName: parts[0], operator: parts[1] || 'eq', value: parts.slice(2).join(":") };
+        }).filter(f => f.metadataName && f.value);
+      }
+      
       const { orders, total, byStatus, aggregates } = await storage.getOrderStock(tenantId, {
         includeSimulated,
         scenarioId,
@@ -776,7 +786,8 @@ export async function registerRoutes(
         endDate,
         page,
         pageSize,
-        search
+        search,
+        metadataFilters,
       });
       
       // Summary with SQL-aggregated values from entire filtered dataset
@@ -1862,12 +1873,78 @@ export async function registerRoutes(
         }
       }
       
+      // Third pass: write metadata from CSV "Metadata - *" columns to EAV system
+      let metadataWritten = 0;
+      const metadataErrors: string[] = [];
+      
+      const metadataTypes = await getAllMetadataTypes(tenantId);
+      const metadataTypeMap = new Map(metadataTypes.map(t => [t.namn.toLowerCase(), t]));
+      
+      // Detect all "Metadata - *" columns from first row
+      const firstRow = (result.data as Record<string, string>[])[0];
+      const metadataColumns: { csvColumn: string; metadataName: string }[] = [];
+      if (firstRow) {
+        for (const key of Object.keys(firstRow)) {
+          if (key.startsWith("Metadata - ")) {
+            const metadataName = key.replace("Metadata - ", "").trim();
+            metadataColumns.push({ csvColumn: key, metadataName });
+          }
+        }
+      }
+      
+      if (metadataColumns.length > 0) {
+        for (const row of result.data as Record<string, string>[]) {
+          const modusId = row["Id"];
+          const objectId = modusId ? modusIdMap.get(modusId) : null;
+          if (!objectId) continue;
+          
+          for (const { csvColumn, metadataName } of metadataColumns) {
+            const rawValue = (row[csvColumn] || "").trim();
+            if (!rawValue) continue;
+            
+            try {
+              // Find metadata type by name (case-insensitive match)
+              const metaType = metadataTypeMap.get(metadataName.toLowerCase());
+              if (!metaType) {
+                // Auto-create metadata type if not found
+                const { metadataKatalog: mkSchema } = await import("@shared/schema");
+                const [newType] = await db.insert(mkSchema).values({
+                  tenantId,
+                  namn: metadataName,
+                  datatyp: 'string',
+                  arLogisk: true,
+                  standardArvs: false,
+                  kategori: 'importerad',
+                  beskrivning: `Importerad fran Modus CSV (${csvColumn})`,
+                  sortOrder: 100,
+                }).returning();
+                metadataTypeMap.set(metadataName.toLowerCase(), newType);
+              }
+              
+              await createMetadata({
+                tenantId,
+                objektId: objectId,
+                metadataTypNamn: metadataTypeMap.get(metadataName.toLowerCase())!.namn,
+                varde: rawValue,
+                skapadAv: 'modus-import',
+                metod: 'manuell',
+              });
+              metadataWritten++;
+            } catch (metaErr: any) {
+              metadataErrors.push(`Metadata "${metadataName}" for "${row["Namn"] || modusId}": ${metaErr.message}`);
+            }
+          }
+        }
+      }
+      
       res.json({ 
         imported: imported.length, 
         parentsUpdated,
         customersCreated: customerNames.size,
         skipped: skipped.length,
-        errors: errors.slice(0, 20),
+        metadataWritten,
+        metadataColumns: metadataColumns.map(c => c.metadataName),
+        errors: [...errors, ...metadataErrors].slice(0, 30),
         totalRows: (result.data as unknown[]).length,
       });
     } catch (error) {

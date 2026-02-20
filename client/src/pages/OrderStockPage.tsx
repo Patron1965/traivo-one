@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource } from "@shared/schema";
+import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource, MetadataKatalog } from "@shared/schema";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { 
   Package, 
@@ -52,7 +52,9 @@ import {
   Unlock,
   XCircle,
   Camera,
-  User
+  User,
+  Database,
+  X
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
 import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
@@ -139,6 +141,12 @@ export default function OrderStockPage() {
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
+  const [metadataFilters, setMetadataFilters] = useState<{ metadataName: string; operator: string; value: string }[]>([]);
+  const [showMetadataFilter, setShowMetadataFilter] = useState(false);
+  const [newFilterName, setNewFilterName] = useState("");
+  const [newFilterOp, setNewFilterOp] = useState("eq");
+  const [newFilterValue, setNewFilterValue] = useState("");
+  
   const [selectedOrder, setSelectedOrder] = useState<WorkOrder | null>(null);
   const [showStatusDialog, setShowStatusDialog] = useState(false);
   const [showLinesDialog, setShowLinesDialog] = useState(false);
@@ -146,19 +154,29 @@ export default function OrderStockPage() {
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
   const [lineQuantity, setLineQuantity] = useState(1);
 
+  const metadataFilterString = useMemo(() => {
+    if (metadataFilters.length === 0) return "";
+    return metadataFilters.map(f => `${f.metadataName}:${f.operator}:${f.value}`).join(",");
+  }, [metadataFilters]);
+  
   const { data: orderStockData, isLoading: ordersLoading } = useQuery<OrderStockResponse>({
-    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch }],
+    queryKey: ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }],
     queryFn: async () => {
       const params = new URLSearchParams();
       if (includeSimulated) params.set("includeSimulated", "true");
       if (selectedScenario) params.set("scenarioId", selectedScenario);
       if (statusFilter !== "all") params.set("orderStatus", statusFilter);
       if (debouncedSearch) params.set("search", debouncedSearch);
+      if (metadataFilterString) params.set("metadataFilter", metadataFilterString);
       params.set("page", currentPage.toString());
       params.set("pageSize", ORDERS_PER_PAGE.toString());
       const response = await fetch(`/api/order-stock?${params.toString()}`);
       return response.json();
     }
+  });
+  
+  const { data: metadataTypes = [] } = useQuery<MetadataKatalog[]>({
+    queryKey: ["/api/metadata/types"],
   });
 
   const { data: scenarios = [] } = useQuery<SimulationScenario[]>({
@@ -203,7 +221,26 @@ export default function OrderStockPage() {
     enabled: !!selectedOrderForLines?.id
   });
 
-  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch }];
+  const currentQueryKey = ["/api/order-stock", { includeSimulated, scenarioId: selectedScenario, orderStatus: statusFilter === "all" ? undefined : statusFilter, page: currentPage, search: debouncedSearch, metadataFilter: metadataFilterString }];
+  
+  const OPERATOR_LABELS: Record<string, string> = {
+    eq: "=", neq: "≠", gt: ">", gte: "≥", lt: "<", lte: "≤", contains: "innehaller",
+  };
+  
+  const addMetadataFilter = () => {
+    if (!newFilterName || !newFilterValue) return;
+    setMetadataFilters(prev => [...prev, { metadataName: newFilterName, operator: newFilterOp, value: newFilterValue }]);
+    setNewFilterName("");
+    setNewFilterOp("eq");
+    setNewFilterValue("");
+    setShowMetadataFilter(false);
+    setCurrentPage(1);
+  };
+  
+  const removeMetadataFilter = (index: number) => {
+    setMetadataFilters(prev => prev.filter((_, i) => i !== index));
+    setCurrentPage(1);
+  };
   
   const updateOrderInCache = async (workOrderId: string) => {
     const response = await fetch(`/api/work-orders/${workOrderId}`);
@@ -600,7 +637,99 @@ export default function OrderStockPage() {
             Rensa filter
           </Button>
         )}
+        
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant={metadataFilters.length > 0 ? "default" : "outline"}
+            size="sm"
+            onClick={() => setShowMetadataFilter(!showMetadataFilter)}
+            className="gap-2"
+            data-testid="button-metadata-filter-toggle"
+          >
+            <Database className="h-4 w-4" />
+            Metadata-filter
+            {metadataFilters.length > 0 && (
+              <Badge variant="secondary" className="ml-1">{metadataFilters.length}</Badge>
+            )}
+          </Button>
+        </div>
       </div>
+
+      {showMetadataFilter && (
+        <Card>
+          <CardContent className="pt-4 pb-3">
+            <div className="flex items-end gap-3 flex-wrap">
+              <div className="space-y-1">
+                <Label className="text-xs">Metadata-typ</Label>
+                <Select value={newFilterName} onValueChange={setNewFilterName}>
+                  <SelectTrigger className="w-44" data-testid="select-metadata-type">
+                    <SelectValue placeholder="Valj typ..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {metadataTypes.map(t => (
+                      <SelectItem key={t.id} value={t.namn}>{t.namn}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Operator</Label>
+                <Select value={newFilterOp} onValueChange={setNewFilterOp}>
+                  <SelectTrigger className="w-28" data-testid="select-metadata-operator">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="eq">= Lika med</SelectItem>
+                    <SelectItem value="neq">≠ Ej lika</SelectItem>
+                    <SelectItem value="gt">&gt; Storre an</SelectItem>
+                    <SelectItem value="gte">≥ Storre/lika</SelectItem>
+                    <SelectItem value="lt">&lt; Mindre an</SelectItem>
+                    <SelectItem value="lte">≤ Mindre/lika</SelectItem>
+                    <SelectItem value="contains">Innehaller</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Varde</Label>
+                <Input
+                  value={newFilterValue}
+                  onChange={e => setNewFilterValue(e.target.value)}
+                  placeholder="t.ex. 600"
+                  className="w-32"
+                  onKeyDown={e => e.key === 'Enter' && addMetadataFilter()}
+                  data-testid="input-metadata-value"
+                />
+              </div>
+              <Button size="sm" onClick={addMetadataFilter} disabled={!newFilterName || !newFilterValue} data-testid="button-add-metadata-filter">
+                <Plus className="h-4 w-4 mr-1" />
+                Lagg till
+              </Button>
+            </div>
+            
+            {metadataFilters.length > 0 && (
+              <div className="flex items-center gap-2 mt-3 flex-wrap">
+                <span className="text-xs text-muted-foreground">Aktiva filter:</span>
+                {metadataFilters.map((f, i) => (
+                  <Badge key={i} variant="secondary" className="gap-1 pr-1" data-testid={`badge-metadata-filter-${i}`}>
+                    {f.metadataName} {OPERATOR_LABELS[f.operator] || f.operator} {f.value}
+                    <span
+                      role="button"
+                      className="inline-flex items-center justify-center h-4 w-4 ml-1 rounded-sm cursor-pointer opacity-70 hover:opacity-100"
+                      onClick={() => removeMetadataFilter(i)}
+                      data-testid={`button-remove-filter-${i}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </span>
+                  </Badge>
+                ))}
+                <Button variant="ghost" size="sm" className="text-xs h-6" onClick={() => { setMetadataFilters([]); setCurrentPage(1); }} data-testid="button-clear-metadata-filters">
+                  Rensa alla
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader className="pb-3">

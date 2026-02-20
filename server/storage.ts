@@ -201,6 +201,7 @@ export interface IStorage {
     page?: number;
     pageSize?: number;
     search?: string;
+    metadataFilters?: { metadataName: string; operator: string; value: string }[];
   }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }>;
   
   // Price Resolution
@@ -1343,6 +1344,7 @@ export class DatabaseStorage implements IStorage {
     page?: number;
     pageSize?: number;
     search?: string;
+    metadataFilters?: { metadataName: string; operator: string; value: string }[];
   }): Promise<{ orders: WorkOrder[]; total: number; byStatus: Record<string, number>; aggregates: { totalValue: number; totalCost: number; totalProductionMinutes: number } }> {
     // Base conditions (tenant, not deleted, simulated filter)
     let baseConditions = and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt));
@@ -1379,6 +1381,57 @@ export class DatabaseStorage implements IStorage {
         sql`${workOrders.customerId} IN (SELECT id FROM ${customers} WHERE lower(name) LIKE ${searchTerm})`,
         sql`${workOrders.objectId} IN (SELECT id FROM ${objects} WHERE lower(name) LIKE ${searchTerm})`
       ));
+    }
+    
+    // Metadata filter - filter orders by object metadata values
+    if (options?.metadataFilters && options.metadataFilters.length > 0) {
+      const validOps = new Set(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains']);
+      
+      for (const mf of options.metadataFilters) {
+        if (!validOps.has(mf.operator)) continue;
+        
+        const metaName = mf.metadataName.toLowerCase();
+        const isNumeric = ['gt', 'gte', 'lt', 'lte'].includes(mf.operator);
+        const isContains = mf.operator === 'contains';
+        
+        const baseSubquery = sql`
+          SELECT mv.objekt_id FROM metadata_varden mv
+          JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
+          JOIN ${objects} o ON o.id = mv.objekt_id AND o.tenant_id = ${tenantId}
+          WHERE mk.tenant_id = ${tenantId}
+            AND lower(mk.namn) = ${metaName}
+        `;
+        
+        if (isNumeric) {
+          const numVal = Number(mf.value);
+          const numExpr = sql`(
+            CASE 
+              WHEN mk.datatyp = 'integer' THEN mv.varde_integer::numeric
+              WHEN mk.datatyp = 'decimal' THEN mv.varde_decimal::numeric
+              ELSE CASE WHEN mv.varde_string ~ '^[0-9.]+$' THEN mv.varde_string::numeric ELSE NULL END
+            END
+          )`;
+          
+          let condition;
+          switch (mf.operator) {
+            case 'gt': condition = sql`${workOrders.objectId} IN (${baseSubquery} AND ${numExpr} > ${numVal})`; break;
+            case 'gte': condition = sql`${workOrders.objectId} IN (${baseSubquery} AND ${numExpr} >= ${numVal})`; break;
+            case 'lt': condition = sql`${workOrders.objectId} IN (${baseSubquery} AND ${numExpr} < ${numVal})`; break;
+            case 'lte': condition = sql`${workOrders.objectId} IN (${baseSubquery} AND ${numExpr} <= ${numVal})`; break;
+          }
+          if (condition) searchConditions = and(searchConditions, condition);
+        } else {
+          const textExpr = sql`COALESCE(mv.varde_string, mv.varde_integer::text, mv.varde_decimal::text, mv.varde_boolean::text, mv.varde_referens, '')`;
+          
+          let condition;
+          switch (mf.operator) {
+            case 'eq': condition = sql`${workOrders.objectId} IN (${baseSubquery} AND ${textExpr} = ${mf.value})`; break;
+            case 'neq': condition = sql`${workOrders.objectId} IN (${baseSubquery} AND ${textExpr} != ${mf.value})`; break;
+            case 'contains': condition = sql`${workOrders.objectId} IN (${baseSubquery} AND ${textExpr} LIKE ${`%${mf.value}%`})`; break;
+          }
+          if (condition) searchConditions = and(searchConditions, condition);
+        }
+      }
     }
     
     // Get total count for current view (with status and search filters)
