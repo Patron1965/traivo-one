@@ -268,6 +268,24 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [filterCustomer, setFilterCustomer] = useState<string>("all");
   const [filterPriority, setFilterPriority] = useState<string>("all");
   const [filterCluster, setFilterCluster] = useState<string>("all");
+  const [filterTeam, setFilterTeam] = useState<string>("all");
+
+  const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({
+    queryKey: ["/api/teams"],
+  });
+
+  const { data: teamMembersData = [] } = useQuery<Array<{ teamId: string; resourceId: string }>>({
+    queryKey: ["/api/team-members"],
+  });
+
+  const teamResourceIds = useMemo(() => {
+    if (filterTeam === "all") return null;
+    const ids = new Set<string>();
+    teamMembersData.forEach(tm => {
+      if (tm.teamId === filterTeam) ids.add(tm.resourceId);
+    });
+    return ids;
+  }, [filterTeam, teamMembersData]);
   const [activeResourceId, setActiveResourceId] = useState<string | null>(null);
   const [undoStack, setUndoStack] = useState<PlannerAction[]>([]);
   const [redoStack, setRedoStack] = useState<PlannerAction[]>([]);
@@ -1116,16 +1134,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     return map;
   }, [activeResourceJobs]);
 
-  const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({
-    queryKey: ["/api/teams"],
-  });
-
-  const { data: teamMembersData = [] } = useQuery<Array<{ teamId: string; resourceId: string }>>({
-    queryKey: ["/api/team-members"],
-  });
-
-  const [filterTeam, setFilterTeam] = useState<string>("all");
-
   const resourceTeamMap = useMemo(() => {
     const map = new Map<string, string[]>();
     teamMembersData.forEach(tm => {
@@ -1135,15 +1143,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     });
     return map;
   }, [teamMembersData]);
-
-  const teamResourceIds = useMemo(() => {
-    if (filterTeam === "all") return null;
-    const ids = new Set<string>();
-    teamMembersData.forEach(tm => {
-      if (tm.teamId === filterTeam) ids.add(tm.resourceId);
-    });
-    return ids;
-  }, [filterTeam, teamMembersData]);
 
   const { data: timewindowsData = [] } = useQuery<Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>({
     queryKey: ["/api/task-timewindows"],
