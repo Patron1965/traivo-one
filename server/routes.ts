@@ -2935,6 +2935,16 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/team-members", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const members = await storage.getAllTeamMembers(tenantId);
+      res.json(members);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
   app.get("/api/team-member/:id", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -6768,6 +6778,17 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // ============================================
   // TASK TIMEWINDOWS - Flera önskade tidsfönster per uppgift
   // ============================================
+
+  app.get("/api/task-timewindows", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const timewindows = await storage.getAllTaskTimewindows(tenantId);
+      res.json(timewindows);
+    } catch (error) {
+      console.error("Failed to fetch all task timewindows:", error);
+      res.status(500).json({ error: "Failed to fetch task timewindows" });
+    }
+  });
 
   app.get("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
     try {

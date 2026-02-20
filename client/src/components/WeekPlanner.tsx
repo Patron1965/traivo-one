@@ -97,6 +97,41 @@ const HOURS_IN_DAY = 8;
 const DAY_START_HOUR = 7;
 const DAY_END_HOUR = 17;
 
+type TimeBlockCategory = "production" | "travel" | "break" | "free";
+
+const timeBlockColors: Record<TimeBlockCategory, string> = {
+  production: "bg-green-500",
+  travel: "bg-yellow-400",
+  break: "bg-blue-400",
+  free: "bg-gray-200 dark:bg-gray-700",
+};
+
+const timeBlockBorders: Record<TimeBlockCategory, string> = {
+  production: "border-l-green-500",
+  travel: "border-l-yellow-400",
+  break: "border-l-blue-400",
+  free: "border-l-gray-300",
+};
+
+const timeBlockLabels: Record<TimeBlockCategory, string> = {
+  production: "Produktionstid",
+  travel: "Restid",
+  break: "Egentid/rast",
+  free: "Ledig tid",
+};
+
+function getJobCategory(job: WorkOrderWithObject): TimeBlockCategory {
+  const title = (job.title || "").toLowerCase();
+  const type = (job.orderType || "").toLowerCase();
+  if (title.includes("resa") || title.includes("körning") || title.includes("transport") || title.includes("restid") || type === "travel") {
+    return "travel";
+  }
+  if (title.includes("rast") || title.includes("vila") || title.includes("lunch") || title.includes("paus") || type === "break") {
+    return "break";
+  }
+  return "production";
+}
+
 function DraggableJobCard({ id, children, disabled = false }: { id: string; children: JSX.Element; disabled?: boolean }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id,
@@ -248,6 +283,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [sendScheduleDialogOpen, setSendScheduleDialogOpen] = useState(false);
   const [sendScheduleResource, setSendScheduleResource] = useState<Resource | null>(null);
   const [sendScheduleCopied, setSendScheduleCopied] = useState(false);
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const [pendingSchedule, setPendingSchedule] = useState<{ jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null>(null);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -440,6 +477,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           if (job.clusterId !== filterCluster) return false;
         }
       }
+      if (filterTeam !== "all") {
+        if (job.teamId && job.teamId !== filterTeam) return false;
+        if (!job.teamId && teamResourceIds && job.resourceId && !teamResourceIds.has(job.resourceId)) return false;
+      }
       return true;
     });
     
@@ -448,7 +489,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       const bPriority = priorityOrder[b.priority] ?? 99;
       return aPriority - bPriority;
     });
-  }, [workOrders, filterCustomer, filterPriority, filterCluster]);
+  }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds]);
   
   const scheduledJobs = useMemo(
     () => workOrders.filter(job => job.scheduledDate && job.resourceId),
@@ -830,106 +871,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     setActiveDragJob(job || null);
   }, [workOrders]);
 
-  const handleDndDragEnd = useCallback((event: DragEndEvent) => {
-    setActiveDragJob(null);
-    
-    const { active, over } = event;
-    if (!over) return;
-    
-    const jobId = active.id as string;
-    const dropId = over.id as string;
-    
-    if (viewMode === "route" && routeJobsForView.length > 0) {
-      const isRouteJob = routeJobsForView.some(j => j.id === jobId);
-      const isDropOnRouteJob = routeJobsForView.some(j => j.id === dropId);
-      
-      if (isRouteJob && isDropOnRouteJob && jobId !== dropId) {
-        const oldIndex = routeJobsForView.findIndex(j => j.id === jobId);
-        const newIndex = routeJobsForView.findIndex(j => j.id === dropId);
-        
-        if (oldIndex !== -1 && newIndex !== -1) {
-          const newOrder = arrayMove(routeJobsForView, oldIndex, newIndex);
-          setRouteJobOrder(newOrder.map(j => j.id));
-          
-          // Calculate cumulative start times based on durations and travel time
-          let currentMinutes = 8 * 60; // Start at 08:00 (480 minutes)
-          const dateStr = format(currentDate, "yyyy-MM-dd");
-          
-          newOrder.forEach((job, idx) => {
-            const hours = Math.floor(currentMinutes / 60);
-            const mins = currentMinutes % 60;
-            const newStartTime = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
-            
-            updateWorkOrderMutation.mutate({
-              id: job.id,
-              resourceId: job.resourceId!,
-              scheduledDate: dateStr,
-              scheduledStartTime: newStartTime
-            });
-            
-            // Add job duration and estimated travel time (5 min) to next stop
-            const jobDuration = job.estimatedDuration || 30;
-            const travelBuffer = idx < newOrder.length - 1 ? 5 : 0;
-            currentMinutes += jobDuration + travelBuffer;
-          });
-          
-          toast({
-            title: "Körordning uppdaterad",
-            description: `${newOrder.length} stopp har fått ny ordning`,
-          });
-        }
-        return;
-      }
-    }
-    
-    const job = workOrders.find(j => j.id === jobId);
-    if (!job) return;
-    
-    const parts = dropId.split("|");
-    if (parts.length < 2) return;
-    
-    const resourceId = parts[0];
-    const dateStr = parts[1];
-    const hour = parts[2] ? parseInt(parts[2], 10) : undefined;
-    const day = new Date(dateStr + "T12:00:00Z");
-    
-    const isSameResourceAndDay = job.resourceId === resourceId && 
-      job.scheduledDate && isSameDay(new Date(job.scheduledDate), day);
-    
-    if (isSameResourceAndDay && hour === undefined) return;
-    
-    const scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
-    const previousDateStr = job.scheduledDate 
-      ? format(new Date(job.scheduledDate), "yyyy-MM-dd")
-      : null;
-
-    addToUndoStack({
-      type: "schedule",
-      jobId,
-      previousState: {
-        resourceId: job.resourceId || null,
-        scheduledDate: previousDateStr,
-        scheduledStartTime: job.scheduledStartTime || null,
-        status: job.status,
-        orderStatus: job.orderStatus,
-      },
-      newState: {
-        resourceId,
-        scheduledDate: dateStr,
-        scheduledStartTime: scheduledStartTime || null,
-        status: "scheduled",
-        orderStatus: "planerad_resurs",
-      },
-    });
-
-    updateWorkOrderMutation.mutate({
-      id: jobId,
-      resourceId,
-      scheduledDate: dateStr,
-      scheduledStartTime,
-    });
-  }, [workOrders, updateWorkOrderMutation, addToUndoStack, viewMode, routeJobsForView, toast]);
-
   const applyActionMutation = useMutation({
     mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => {
       const response = await apiRequest("PATCH", `/api/work-orders/${jobId}`, {
@@ -1175,6 +1116,297 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     return map;
   }, [activeResourceJobs]);
 
+  const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({
+    queryKey: ["/api/teams"],
+  });
+
+  const { data: teamMembersData = [] } = useQuery<Array<{ teamId: string; resourceId: string }>>({
+    queryKey: ["/api/team-members"],
+  });
+
+  const [filterTeam, setFilterTeam] = useState<string>("all");
+
+  const resourceTeamMap = useMemo(() => {
+    const map = new Map<string, string[]>();
+    teamMembersData.forEach(tm => {
+      const existing = map.get(tm.resourceId) || [];
+      existing.push(tm.teamId);
+      map.set(tm.resourceId, existing);
+    });
+    return map;
+  }, [teamMembersData]);
+
+  const teamResourceIds = useMemo(() => {
+    if (filterTeam === "all") return null;
+    const ids = new Set<string>();
+    teamMembersData.forEach(tm => {
+      if (tm.teamId === filterTeam) ids.add(tm.resourceId);
+    });
+    return ids;
+  }, [filterTeam, teamMembersData]);
+
+  const { data: timewindowsData = [] } = useQuery<Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>({
+    queryKey: ["/api/task-timewindows"],
+    staleTime: 120000,
+  });
+
+  const timewindowMap = useMemo(() => {
+    const map = new Map<string, typeof timewindowsData>();
+    timewindowsData.forEach(tw => {
+      const existing = map.get(tw.workOrderId) || [];
+      existing.push(tw);
+      map.set(tw.workOrderId, existing);
+    });
+    return map;
+  }, [timewindowsData]);
+
+  const detectDropConflicts = useCallback((job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime?: string): string[] => {
+    const reasons: string[] = [];
+    const dateObj = new Date(dateStr + "T12:00:00Z");
+    const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+    const jobDay = dayNames[dateObj.getUTCDay()];
+
+    const tws = timewindowMap.get(job.id);
+    if (tws && tws.length > 0) {
+      const dayMatch = tws.filter(tw => !tw.dayOfWeek || tw.dayOfWeek === jobDay);
+      if (dayMatch.length > 0) {
+        for (const tw of dayMatch) {
+          if (tw.startTime && tw.endTime && startTime) {
+            if (startTime < tw.startTime || startTime > tw.endTime) {
+              reasons.push(`Utanför tidsfönster (${tw.startTime}–${tw.endTime})`);
+            }
+          }
+        }
+      } else if (tws.some(tw => tw.dayOfWeek)) {
+        const allowedDays = tws.filter(tw => tw.dayOfWeek).map(tw => tw.dayOfWeek);
+        reasons.push(`Fel dag — tillåtna: ${allowedDays.join(", ")}`);
+      }
+    }
+
+    const plannedStart = job.plannedWindowStart ? new Date(job.plannedWindowStart) : null;
+    const plannedEnd = job.plannedWindowEnd ? new Date(job.plannedWindowEnd) : null;
+    if (plannedStart && dateObj < plannedStart) {
+      reasons.push(`Före leveransfönster (${format(plannedStart, "d MMM", { locale: sv })})`);
+    }
+    if (plannedEnd && dateObj > plannedEnd) {
+      reasons.push(`Efter leveransfönster (${format(plannedEnd, "d MMM", { locale: sv })})`);
+    }
+
+    if (startTime) {
+      const jobDur = job.estimatedDuration || 60;
+      const [jH, jM] = startTime.split(":").map(Number);
+      const jobStartMin = jH * 60 + jM;
+      const jobEndMin = jobStartMin + jobDur;
+
+      const sameResourceDayJobs = scheduledJobs.filter(
+        j => j.id !== job.id && j.resourceId === resourceId && j.scheduledDate &&
+          isSameDay(new Date(j.scheduledDate), dateObj)
+      );
+      for (const other of sameResourceDayJobs) {
+        if (!other.scheduledStartTime) continue;
+        const [oH, oM] = other.scheduledStartTime.split(":").map(Number);
+        const otherStart = oH * 60 + oM;
+        const otherEnd = otherStart + (other.estimatedDuration || 60);
+        if (jobStartMin < otherEnd && jobEndMin > otherStart) {
+          reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime})`);
+          break;
+        }
+      }
+    }
+
+    return reasons;
+  }, [scheduledJobs, timewindowMap]);
+
+  const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string) => {
+    const job = workOrders.find(j => j.id === jobId);
+    if (!job) return;
+
+    const previousDateStr = job.scheduledDate
+      ? format(new Date(job.scheduledDate), "yyyy-MM-dd")
+      : null;
+
+    addToUndoStack({
+      type: "schedule",
+      jobId,
+      previousState: {
+        resourceId: job.resourceId || null,
+        scheduledDate: previousDateStr,
+        scheduledStartTime: job.scheduledStartTime || null,
+        status: job.status,
+        orderStatus: job.orderStatus,
+      },
+      newState: {
+        resourceId,
+        scheduledDate,
+        scheduledStartTime: scheduledStartTime || null,
+        status: "scheduled",
+        orderStatus: "planerad_resurs",
+      },
+    });
+
+    updateWorkOrderMutation.mutate({
+      id: jobId,
+      resourceId,
+      scheduledDate,
+      scheduledStartTime,
+    });
+  }, [workOrders, addToUndoStack, updateWorkOrderMutation]);
+
+  const handleAcceptConflict = useCallback(() => {
+    if (!pendingSchedule) return;
+    executeSchedule(pendingSchedule.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, pendingSchedule.scheduledStartTime);
+    setConflictDialogOpen(false);
+    setPendingSchedule(null);
+    toast({
+      title: "Schemalagt trots varning",
+      description: "Jobbet har schemalagts trots identifierade konflikter.",
+    });
+  }, [pendingSchedule, executeSchedule, toast]);
+
+  const handleDndDragEnd = useCallback((event: DragEndEvent) => {
+    setActiveDragJob(null);
+    
+    const { active, over } = event;
+    if (!over) return;
+    
+    const jobId = active.id as string;
+    const dropId = over.id as string;
+    
+    if (viewMode === "route" && routeJobsForView.length > 0) {
+      const isRouteJob = routeJobsForView.some(j => j.id === jobId);
+      const isDropOnRouteJob = routeJobsForView.some(j => j.id === dropId);
+      
+      if (isRouteJob && isDropOnRouteJob && jobId !== dropId) {
+        const oldIndex = routeJobsForView.findIndex(j => j.id === jobId);
+        const newIndex = routeJobsForView.findIndex(j => j.id === dropId);
+        
+        if (oldIndex !== -1 && newIndex !== -1) {
+          const newOrder = arrayMove(routeJobsForView, oldIndex, newIndex);
+          setRouteJobOrder(newOrder.map(j => j.id));
+          
+          let currentMinutes = 8 * 60;
+          const dateStr = format(currentDate, "yyyy-MM-dd");
+          
+          newOrder.forEach((job, idx) => {
+            const hours = Math.floor(currentMinutes / 60);
+            const mins = currentMinutes % 60;
+            const newStartTime = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+            
+            updateWorkOrderMutation.mutate({
+              id: job.id,
+              resourceId: job.resourceId!,
+              scheduledDate: dateStr,
+              scheduledStartTime: newStartTime
+            });
+            
+            const jobDuration = job.estimatedDuration || 30;
+            const travelBuffer = idx < newOrder.length - 1 ? 5 : 0;
+            currentMinutes += jobDuration + travelBuffer;
+          });
+          
+          toast({
+            title: "Körordning uppdaterad",
+            description: `${newOrder.length} stopp har fått ny ordning`,
+          });
+        }
+        return;
+      }
+    }
+    
+    const job = workOrders.find(j => j.id === jobId);
+    if (!job) return;
+    
+    const parts = dropId.split("|");
+    if (parts.length < 2) return;
+    
+    const resourceId = parts[0];
+    const dateStr = parts[1];
+    const hour = parts[2] ? parseInt(parts[2], 10) : undefined;
+    const day = new Date(dateStr + "T12:00:00Z");
+    
+    const isSameResourceAndDay = job.resourceId === resourceId && 
+      job.scheduledDate && isSameDay(new Date(job.scheduledDate), day);
+    
+    if (isSameResourceAndDay && hour === undefined) return;
+    
+    const scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
+
+    const conflicts = detectDropConflicts(job, resourceId, dateStr, scheduledStartTime);
+    if (conflicts.length > 0) {
+      setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts });
+      setConflictDialogOpen(true);
+      return;
+    }
+
+    executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
+  }, [workOrders, executeSchedule, detectDropConflicts, viewMode, routeJobsForView, toast, updateWorkOrderMutation, currentDate]);
+
+  const jobConflicts = useMemo(() => {
+    const conflicts: Record<string, string[]> = {};
+
+    for (const job of scheduledJobs) {
+      if (!job.scheduledDate || !job.resourceId) continue;
+      const reasons: string[] = [];
+
+      const dateObj = new Date(job.scheduledDate);
+      const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const jobDay = dayNames[dateObj.getUTCDay()];
+      const jobStartTime = job.scheduledStartTime || null;
+      const tws = timewindowMap.get(job.id);
+      if (tws && tws.length > 0) {
+        const dayMatch = tws.filter(tw => !tw.dayOfWeek || tw.dayOfWeek === jobDay);
+        if (dayMatch.length > 0) {
+          for (const tw of dayMatch) {
+            if (tw.startTime && tw.endTime && jobStartTime) {
+              if (jobStartTime < tw.startTime || jobStartTime > tw.endTime) {
+                reasons.push(`Utanför tidsfönster (${tw.startTime}–${tw.endTime})`);
+              }
+            }
+          }
+        } else if (tws.some(tw => tw.dayOfWeek)) {
+          const allowedDays = tws.filter(tw => tw.dayOfWeek).map(tw => tw.dayOfWeek);
+          reasons.push(`Fel dag — tillåtna: ${allowedDays.join(", ")}`);
+        }
+      }
+
+      const plannedStart = job.plannedWindowStart ? new Date(job.plannedWindowStart) : null;
+      const plannedEnd = job.plannedWindowEnd ? new Date(job.plannedWindowEnd) : null;
+      if (plannedStart && dateObj < plannedStart) {
+        reasons.push(`Schemalagd före leveransfönster (${format(plannedStart, "d MMM", { locale: sv })})`);
+      }
+      if (plannedEnd && dateObj > plannedEnd) {
+        reasons.push(`Schemalagd efter leveransfönster (${format(plannedEnd, "d MMM", { locale: sv })})`);
+      }
+
+      const sameResourceDayJobs = scheduledJobs.filter(
+        j => j.id !== job.id && j.resourceId === job.resourceId && j.scheduledDate &&
+          isSameDay(new Date(j.scheduledDate), dateObj)
+      );
+      if (jobStartTime) {
+        const jobDurationMin = job.estimatedDuration || 60;
+        const [jH, jM] = jobStartTime.split(":").map(Number);
+        const jobStartMin = jH * 60 + jM;
+        const jobEndMin = jobStartMin + jobDurationMin;
+
+        for (const other of sameResourceDayJobs) {
+          if (!other.scheduledStartTime) continue;
+          const [oH, oM] = other.scheduledStartTime.split(":").map(Number);
+          const otherStart = oH * 60 + oM;
+          const otherEnd = otherStart + (other.estimatedDuration || 60);
+          if (jobStartMin < otherEnd && jobEndMin > otherStart) {
+            reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime})`);
+            break;
+          }
+        }
+      }
+
+      if (reasons.length > 0) {
+        conflicts[job.id] = reasons;
+      }
+    }
+    return conflicts;
+  }, [scheduledJobs, timewindowMap]);
+
   const isLoading = resourcesLoading || workOrdersLoading;
 
   if (isLoading) {
@@ -1226,11 +1458,13 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const jobDependents = dependenciesData?.dependents?.[job.id] || [];
     const hasDependencies = jobDependencies.length > 0;
     const hasDependents = jobDependents.length > 0;
+    const category = getJobCategory(job);
+    const hasConflict = job.scheduledDate && jobConflicts[job.id];
     
     return (
       <DraggableJobCard key={job.id} id={job.id}>
         <Card
-          className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 ${selectedJob === job.id ? "ring-2 ring-primary" : ""} group touch-none`}
+          className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-4 ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-950/30" : ""} group touch-none`}
           onClick={() => handleJobClick(job.id)}
           data-testid={`job-card-${job.id}`}
         >
@@ -1310,6 +1544,27 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                     </Tooltip>
                   )}
                 </div>
+              )}
+              {hasConflict && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mt-0.5 cursor-help" data-testid={`conflict-warning-${job.id}`}>
+                      <AlertTriangle className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{jobConflicts[job.id][0]}</span>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="right" className="max-w-xs">
+                    <div className="space-y-1">
+                      <p className="font-medium text-red-600 dark:text-red-400">Konfliktvarning</p>
+                      {jobConflicts[job.id].map((reason, i) => (
+                        <p key={i} className="text-xs flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                          {reason}
+                        </p>
+                      ))}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
               )}
               {!compact && (
                 <>
@@ -1943,6 +2198,24 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   ))}
                 </SelectContent>
               </Select>
+              {teamsData.length > 0 && (
+                <Select value={filterTeam} onValueChange={setFilterTeam}>
+                  <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-team">
+                    <SelectValue placeholder="Alla team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alla team</SelectItem>
+                    {teamsData.map((team) => (
+                      <SelectItem key={team.id} value={team.id}>
+                        <span className="flex items-center gap-1.5">
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color || "#3B82F6" }} />
+                          {team.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
           </div>
           <ScrollArea className="flex-1 p-2">
@@ -2170,23 +2443,42 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         {viewMode === "route" && renderRouteMapView()}
 
         <div className="p-3 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
-          <div className="flex items-center gap-4 text-xs">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 bg-red-500 rounded-sm"></span>
+          <div className="flex items-center gap-4 text-xs" data-testid="legend-block-categories">
+            <span className="text-muted-foreground font-medium mr-1">Kategorier:</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-1.5 bg-green-500 rounded-sm"></span>
+              <span>Produktion</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-1.5 bg-yellow-400 rounded-sm"></span>
+              <span>Restid</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-1.5 bg-blue-400 rounded-sm"></span>
+              <span>Egentid</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-sm"></span>
+              <span>Ledig</span>
+            </div>
+            <span className="text-muted-foreground mx-1">|</span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 bg-red-500 rounded-full"></span>
               <span>Akut</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 bg-orange-500 rounded-sm"></span>
+            <div className="flex items-center gap-1.5">
+              <span className="w-3 h-3 bg-orange-500 rounded-full"></span>
               <span>Hög</span>
             </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 bg-blue-500 rounded-sm"></span>
-              <span>Normal</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 bg-gray-400 rounded-sm"></span>
-              <span>Låg</span>
-            </div>
+            {Object.keys(jobConflicts).length > 0 && (
+              <>
+                <span className="text-muted-foreground mx-1">|</span>
+                <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+                  <AlertTriangle className="h-3 w-3" />
+                  <span>{Object.keys(jobConflicts).length} konflikter</span>
+                </div>
+              </>
+            )}
           </div>
           <div className="text-xs text-muted-foreground">
             {filteredScheduledJobs.length} schemalagda | {unscheduledJobs.length} oschemalagda | Dra jobb för att schemalägga
@@ -2425,6 +2717,53 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         <DialogFooter>
           <Button variant="outline" onClick={() => setSendScheduleDialogOpen(false)}>
             Stäng
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Conflict Confirmation Dialog */}
+    <Dialog open={conflictDialogOpen} onOpenChange={(open) => { if (!open) { setConflictDialogOpen(false); setPendingSchedule(null); } }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-5 w-5" />
+            Konflikt upptäckt
+          </DialogTitle>
+          <DialogDescription>
+            Följande konflikter identifierades vid schemaläggning. Du kan välja att schemalägga ändå.
+          </DialogDescription>
+        </DialogHeader>
+        {pendingSchedule && (
+          <div className="space-y-3 py-2">
+            <div className="p-3 bg-muted rounded-lg text-sm">
+              <div className="font-medium">{workOrders.find(j => j.id === pendingSchedule.jobId)?.title}</div>
+              <div className="text-muted-foreground text-xs mt-1">
+                Planerad: {pendingSchedule.scheduledDate}
+                {pendingSchedule.scheduledStartTime && ` kl ${pendingSchedule.scheduledStartTime}`}
+              </div>
+            </div>
+            <div className="space-y-2">
+              {pendingSchedule.conflicts.map((conflict, i) => (
+                <div key={i} className="flex items-start gap-2 p-2 bg-red-50 dark:bg-red-950/30 rounded border border-red-200 dark:border-red-800">
+                  <AlertTriangle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                  <span className="text-sm">{conflict}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => { setConflictDialogOpen(false); setPendingSchedule(null); }} data-testid="button-cancel-conflict">
+            Avbryt
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleAcceptConflict}
+            data-testid="button-accept-conflict"
+          >
+            <AlertTriangle className="h-4 w-4 mr-2" />
+            Schemalägg ändå
           </Button>
         </DialogFooter>
       </DialogContent>

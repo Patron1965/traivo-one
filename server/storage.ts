@@ -1774,6 +1774,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============== TEAM MEMBERS ==============
+  async getAllTeamMembers(tenantId: string): Promise<TeamMember[]> {
+    return db.select().from(teamMembers)
+      .innerJoin(teams, eq(teamMembers.teamId, teams.id))
+      .where(and(eq(teams.tenantId, tenantId), isNull(teams.deletedAt)))
+      .then(rows => rows.map(r => r.team_members));
+  }
+
   async getTeamMembers(teamId: string): Promise<TeamMember[]> {
     return db.select().from(teamMembers).where(eq(teamMembers.teamId, teamId));
   }
@@ -2569,6 +2576,12 @@ export class DatabaseStorage implements IStorage {
   // Task Desired Timewindows
   // ============================================
   
+  async getAllTaskTimewindows(tenantId: string): Promise<TaskDesiredTimewindow[]> {
+    return db.select().from(taskDesiredTimewindows)
+      .where(eq(taskDesiredTimewindows.tenantId, tenantId))
+      .orderBy(taskDesiredTimewindows.priority);
+  }
+
   async getTaskTimewindows(workOrderId: string): Promise<TaskDesiredTimewindow[]> {
     return db.select().from(taskDesiredTimewindows)
       .where(eq(taskDesiredTimewindows.workOrderId, workOrderId))
