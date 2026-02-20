@@ -630,6 +630,153 @@ export async function propagateMetadataDown(
 }
 
 // ============================================================================
+// PROPAGERINGS-PREVIEW - visa vilka objekt som påverkas
+// ============================================================================
+
+export interface PropagationPreviewItem {
+  objektId: string;
+  objektNamn: string;
+  level: number;
+  status: 'will_receive' | 'has_local' | 'blocked';
+  localValue?: string | null;
+  localMethod?: string | null;
+}
+
+export interface PropagationPreview {
+  parentValue: string | null;
+  metadataName: string;
+  items: PropagationPreviewItem[];
+  totalWillReceive: number;
+  totalHasLocal: number;
+  totalBlocked: number;
+}
+
+export async function getPropagationPreview(
+  objektId: string,
+  metadataKatalogId: string,
+  tenantId: string
+): Promise<PropagationPreview> {
+  const [parentMeta] = await db
+    .select()
+    .from(metadataVarden)
+    .where(and(
+      eq(metadataVarden.objektId, objektId),
+      eq(metadataVarden.metadataKatalogId, metadataKatalogId),
+      eq(metadataVarden.tenantId, tenantId)
+    ))
+    .limit(1);
+
+  if (!parentMeta) {
+    throw new Error("Metadata not found on parent object");
+  }
+
+  const [katalog] = await db
+    .select()
+    .from(metadataKatalog)
+    .where(and(
+      eq(metadataKatalog.id, metadataKatalogId),
+      eq(metadataKatalog.tenantId, tenantId)
+    ))
+    .limit(1);
+
+  const parentValue = getDisplayValue(parentMeta);
+  const isBlocked = parentMeta.nivaLas || parentMeta.stoppaVidareArvning;
+
+  const descendantsQuery = sql`
+    WITH RECURSIVE descendants AS (
+      SELECT id, name, parent_id, 0 as level
+      FROM objects
+      WHERE parent_id = ${objektId} AND tenant_id = ${tenantId}
+      UNION ALL
+      SELECT o.id, o.name, o.parent_id, d.level + 1
+      FROM objects o
+      INNER JOIN descendants d ON o.parent_id = d.id
+      WHERE o.tenant_id = ${tenantId}
+    )
+    SELECT id, name, parent_id, level FROM descendants ORDER BY level, name
+  `;
+  const descResult = await db.execute(descendantsQuery);
+  const descendants = descResult.rows as { id: string; name: string; parent_id: string; level: number }[];
+
+  if (descendants.length === 0) {
+    return {
+      parentValue,
+      metadataName: katalog?.namn || '',
+      items: [],
+      totalWillReceive: 0,
+      totalHasLocal: 0,
+      totalBlocked: 0,
+    };
+  }
+
+  const items: PropagationPreviewItem[] = [];
+  let totalWillReceive = 0;
+  let totalHasLocal = 0;
+  let totalBlocked = 0;
+
+  const blockedParentIds = new Set<string>();
+  if (isBlocked) {
+    blockedParentIds.add(objektId);
+  }
+
+  for (const desc of descendants) {
+    if (blockedParentIds.has(desc.parent_id)) {
+      blockedParentIds.add(desc.id);
+      items.push({
+        objektId: desc.id,
+        objektNamn: desc.name,
+        level: desc.level,
+        status: 'blocked',
+      });
+      totalBlocked++;
+      continue;
+    }
+
+    const [existingLocal] = await db
+      .select()
+      .from(metadataVarden)
+      .where(and(
+        eq(metadataVarden.objektId, desc.id),
+        eq(metadataVarden.metadataKatalogId, metadataKatalogId),
+        eq(metadataVarden.tenantId, tenantId)
+      ))
+      .limit(1);
+
+    if (existingLocal) {
+      if (existingLocal.stoppaVidareArvning) {
+        blockedParentIds.add(desc.id);
+      }
+      items.push({
+        objektId: desc.id,
+        objektNamn: desc.name,
+        level: desc.level,
+        status: 'has_local',
+        localValue: getDisplayValue(existingLocal),
+        localMethod: existingLocal.metod,
+      });
+      totalHasLocal++;
+    } else {
+      items.push({
+        objektId: desc.id,
+        objektNamn: desc.name,
+        level: desc.level,
+        status: 'will_receive',
+      });
+      totalWillReceive++;
+    }
+  }
+
+  return {
+    parentValue,
+    metadataName: katalog?.namn || '',
+    items,
+    totalWillReceive,
+    totalHasLocal,
+    totalBlocked,
+  };
+}
+
+// ============================================================================
 // ARVSTRADSVY - visa metadata-arv genom hierarkin
 // ============================================================================
 

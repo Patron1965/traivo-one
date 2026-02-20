@@ -21,6 +21,7 @@ import {
   getMetadataHistorik,
   getObjectMetadataHistorik,
   propagateMetadataDown,
+  getPropagationPreview,
   getInheritanceTree,
   getArticleMetadataForObject,
   writeArticleMetadataOnObject,
@@ -552,6 +553,25 @@ metadataRouter.delete("/work-orders/metadata/:id", async (req: Request, res: Res
 // ============================================================================
 // PROPAGERING NEDÅT
 // ============================================================================
+
+metadataRouter.get("/propagate-preview/:objectId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+    const { objectId } = req.params;
+    const metadataKatalogId = req.query.metadataKatalogId as string;
+    if (!metadataKatalogId) {
+      return res.status(400).json({ error: "metadataKatalogId krävs" });
+    }
+    const preview = await getPropagationPreview(objectId, metadataKatalogId, tenantId);
+    res.json(preview);
+  } catch (error: any) {
+    console.error("Error getting propagation preview:", error);
+    res.status(500).json({ error: "Kunde inte hämta förhandsvisning" });
+  }
+});
 
 const propagateSchema = z.object({
   metadataKatalogId: z.string().optional(),

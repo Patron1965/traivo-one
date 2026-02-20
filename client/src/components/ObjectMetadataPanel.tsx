@@ -425,6 +425,204 @@ function InheritanceTreeDialog({ objectId, metadataKatalogId, metadataName }: { 
   );
 }
 
+interface PropagationPreviewItem {
+  objektId: string;
+  objektNamn: string;
+  level: number;
+  status: 'will_receive' | 'has_local' | 'blocked';
+  localValue?: string | null;
+  localMethod?: string | null;
+}
+
+interface PropagationPreviewData {
+  parentValue: string | null;
+  metadataName: string;
+  items: PropagationPreviewItem[];
+  totalWillReceive: number;
+  totalHasLocal: number;
+  totalBlocked: number;
+}
+
+function PropagationPreviewDialog({ 
+  objectId, 
+  metadataKatalogId, 
+  metadataName,
+  onConfirm,
+  isPropagating,
+}: { 
+  objectId: string; 
+  metadataKatalogId: string; 
+  metadataName: string;
+  onConfirm: () => void;
+  isPropagating: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const { data: preview, isLoading, isError } = useQuery<PropagationPreviewData>({
+    queryKey: ['/api/metadata/propagate-preview', objectId, metadataKatalogId],
+    queryFn: async () => {
+      const res = await fetch(`/api/metadata/propagate-preview/${objectId}?metadataKatalogId=${metadataKatalogId}`);
+      if (!res.ok) throw new Error("Kunde inte hamta forhandsvisning");
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  const handleConfirm = () => {
+    onConfirm();
+    setOpen(false);
+  };
+
+  const methodLabels: Record<string, string> = {
+    manuell: "Manuellt satt",
+    arvd: "Arvd",
+    utforande: "Via utforande",
+    auto: "Auto-writeback",
+  };
+
+  const statusIcon = (status: string) => {
+    switch (status) {
+      case 'will_receive': return <ArrowDown className="h-3.5 w-3.5 text-green-500" />;
+      case 'has_local': return <Lock className="h-3.5 w-3.5 text-amber-500" />;
+      case 'blocked': return <X className="h-3.5 w-3.5 text-red-500" />;
+      default: return null;
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              data-testid={`button-propagate-preview-${metadataKatalogId}`}
+            >
+              <Share2 className="h-3.5 w-3.5" />
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Propagera nedat till barnobjekt</TooltipContent>
+      </Tooltip>
+      <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Share2 className="h-5 w-5" />
+            Propagera: {metadataName}
+          </DialogTitle>
+          <DialogDescription>
+            Forhandsvisning av vilka objekt som paverkas
+          </DialogDescription>
+        </DialogHeader>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin" />
+          </div>
+        ) : isError ? (
+          <div className="text-center py-8 text-destructive">
+            <X className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">Kunde inte hamta forhandsvisning</p>
+            <p className="text-xs text-muted-foreground mt-1">Forsok igen senare</p>
+          </div>
+        ) : !preview || preview.items.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground">
+            <Share2 className="h-8 w-8 mx-auto mb-2 opacity-30" />
+            <p className="text-sm">Inga barnobjekt hittades</p>
+          </div>
+        ) : (
+          <>
+            <div className="flex gap-3 text-xs mb-3">
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-400">
+                <ArrowDown className="h-3 w-3" />
+                <span className="font-medium">{preview.totalWillReceive}</span> far vardet
+              </div>
+              <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400">
+                <Lock className="h-3 w-3" />
+                <span className="font-medium">{preview.totalHasLocal}</span> har lokalt varde
+              </div>
+              {preview.totalBlocked > 0 && (
+                <div className="flex items-center gap-1.5 px-2 py-1 rounded-md bg-red-50 dark:bg-red-950 text-red-700 dark:text-red-400">
+                  <X className="h-3 w-3" />
+                  <span className="font-medium">{preview.totalBlocked}</span> blockerade
+                </div>
+              )}
+            </div>
+
+            <div className="text-xs text-muted-foreground mb-2">
+              Varde att propagera: <span className="font-medium text-foreground">{preview.parentValue || "–"}</span>
+            </div>
+
+            <div className="flex-1 overflow-y-auto border rounded-md max-h-[40vh]">
+              <div className="divide-y">
+                {preview.items.map((item) => (
+                  <div 
+                    key={item.objektId} 
+                    className={`flex items-center gap-2 px-3 py-2 text-sm ${
+                      item.status === 'has_local' ? 'bg-amber-50/50 dark:bg-amber-950/30' : 
+                      item.status === 'blocked' ? 'bg-red-50/50 dark:bg-red-950/30' : ''
+                    }`}
+                    data-testid={`propagation-preview-item-${item.objektId}`}
+                  >
+                    <span style={{ paddingLeft: `${item.level * 16}px` }} className="flex items-center gap-1.5 min-w-0 flex-1">
+                      {statusIcon(item.status)}
+                      <span className="truncate">{item.objektNamn}</span>
+                    </span>
+                    <span className="shrink-0">
+                      {item.status === 'will_receive' && (
+                        <Badge variant="outline" className="text-[10px] border-green-500 text-green-700 dark:text-green-400">
+                          Ny
+                        </Badge>
+                      )}
+                      {item.status === 'has_local' && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="text-[10px] border-amber-500 text-amber-700 dark:text-amber-400 cursor-help">
+                              {methodLabels[item.localMethod || ''] || 'Lokalt'}: {item.localValue || "–"}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Detta objekt har redan ett varde ({item.localValue}) och hoppas over</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {item.status === 'blocked' && (
+                        <Badge variant="outline" className="text-[10px] border-red-500 text-red-700 dark:text-red-400">
+                          Blockerad
+                        </Badge>
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        <DialogFooter className="mt-3">
+          <Button variant="outline" onClick={() => setOpen(false)} data-testid="button-cancel-propagation">
+            Avbryt
+          </Button>
+          <Button 
+            onClick={handleConfirm} 
+            disabled={isPropagating || !preview || preview.totalWillReceive === 0}
+            data-testid="button-confirm-propagation"
+          >
+            {isPropagating ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <Share2 className="h-4 w-4 mr-2" />
+            )}
+            Propagera ({preview?.totalWillReceive || 0} objekt)
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProps) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -667,21 +865,13 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                               <MetadataHistoryModal metadataId={entry.id} metadataName={entry.katalog.namn} />
                               <InheritanceTreeDialog objectId={object.id} metadataKatalogId={entry.metadataKatalogId} metadataName={entry.katalog.namn} />
                               {entry.source === 'local' && entry.arvsNedat && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      className="h-7 w-7"
-                                      onClick={() => propagateMutation.mutate(entry.metadataKatalogId)}
-                                      disabled={propagateMutation.isPending}
-                                      data-testid={`button-propagate-${entry.id}`}
-                                    >
-                                      {propagateMutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Share2 className="h-3.5 w-3.5" />}
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>Propagera nedat till barnobjekt</TooltipContent>
-                                </Tooltip>
+                                <PropagationPreviewDialog
+                                  objectId={object.id}
+                                  metadataKatalogId={entry.metadataKatalogId}
+                                  metadataName={entry.katalog.namn}
+                                  onConfirm={() => propagateMutation.mutate(entry.metadataKatalogId)}
+                                  isPropagating={propagateMutation.isPending}
+                                />
                               )}
                               {entry.source === 'local' && (
                                 <>
