@@ -227,6 +227,114 @@ interface InheritanceNode {
   children: InheritanceNode[];
 }
 
+interface ObjectHistorikEntry extends MetadataHistorik {
+  katalogNamn?: string;
+}
+
+function ObjectMetadataHistoryDialog({ objectId, objectName }: { objectId: string; objectName: string }) {
+  const [open, setOpen] = useState(false);
+
+  const { data: historik = [], isLoading } = useQuery<ObjectHistorikEntry[]>({
+    queryKey: ['/api/metadata/objects', objectId, 'historik'],
+    queryFn: async () => {
+      const res = await fetch(`/api/metadata/objects/${objectId}/historik`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: open,
+  });
+
+  const metodLabel: Record<string, string> = {
+    manuell: "Manuell",
+    arvd: "Ärvd",
+    utforande: "Utförande",
+    import: "Import",
+    auto: "Automatisk",
+  };
+
+  const metodColor: Record<string, string> = {
+    manuell: "bg-blue-500",
+    arvd: "bg-green-500",
+    utforande: "bg-amber-500",
+    import: "bg-purple-500",
+    auto: "bg-cyan-500",
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <Button variant="outline" size="sm" className="h-7 text-xs gap-1" data-testid={`button-object-history-${objectId}`}>
+              <History className="h-3.5 w-3.5" />
+              Historik
+            </Button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent>Visa samlad ändringshistorik</TooltipContent>
+      </Tooltip>
+      <DialogContent className="max-w-lg max-h-[80vh] flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Ändringshistorik: {objectName}
+          </DialogTitle>
+          <DialogDescription>Alla metadataändringar på detta objekt</DialogDescription>
+        </DialogHeader>
+        <div className="flex-1 overflow-y-auto">
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin" />
+            </div>
+          ) : historik.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">
+              <History className="h-8 w-8 mx-auto mb-2 opacity-30" />
+              Ingen ändringshistorik tillgänglig
+            </div>
+          ) : (
+            <div className="space-y-0" data-testid="object-metadata-history-list">
+              {historik.map((h, i) => {
+                const metod = h.andringsMetod?.startsWith("auto:") ? "auto" : (h.andringsMetod || "manuell");
+                return (
+                  <div key={h.id} className="relative pl-6 pb-3" data-testid={`object-history-entry-${h.id}`}>
+                    {i < historik.length - 1 && (
+                      <div className="absolute left-[9px] top-5 bottom-0 w-px bg-border" />
+                    )}
+                    <div className={`absolute left-0.5 top-1 w-4 h-4 rounded-full border-2 border-background ${metodColor[metod] || "bg-gray-400"}`} />
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground mb-0.5">
+                      <span>{new Date(h.andradVid).toLocaleDateString("sv-SE")} {new Date(h.andradVid).toLocaleTimeString("sv-SE", { hour: "2-digit", minute: "2-digit" })}</span>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0">
+                        {metodLabel[metod] || metod}
+                      </Badge>
+                    </div>
+                    <div className="text-sm">
+                      <span className="font-medium text-muted-foreground">{(h as any).katalogNamn || "Metadata"}: </span>
+                      {h.gammaltVarde ? (
+                        <span>
+                          <span className="line-through text-muted-foreground/60">{h.gammaltVarde}</span>
+                          {" → "}
+                          <span className="font-medium">{h.nyttVarde}</span>
+                        </span>
+                      ) : (
+                        <span className="font-medium">{h.nyttVarde} <span className="text-muted-foreground font-normal">(nytt)</span></span>
+                      )}
+                    </div>
+                    {h.andradAv && (
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        Av: {h.andradAv.startsWith("auto:") ? "Automatisk (arbetsorder)" : h.andradAv}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function InheritanceTreeNode({ node, depth = 0 }: { node: InheritanceNode; depth?: number }) {
   const [expanded, setExpanded] = useState(depth < 2);
   const hasChildren = node.children.length > 0;
@@ -508,6 +616,9 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
             </span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Niva-las
+            </span>
+            <span className="ml-auto">
+              <ObjectMetadataHistoryDialog objectId={object.id} objectName={object.name} />
             </span>
           </DialogDescription>
         </DialogHeader>

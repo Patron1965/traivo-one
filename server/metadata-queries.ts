@@ -806,15 +806,30 @@ export async function getMetadataHistorik(
 export async function getObjectMetadataHistorik(
   objektId: string,
   tenantId: string
-): Promise<MetadataHistorik[]> {
-  return db
-    .select()
+): Promise<(MetadataHistorik & { katalogNamn: string | null })[]> {
+  const results = await db
+    .select({
+      id: metadataHistorik.id,
+      tenantId: metadataHistorik.tenantId,
+      metadataVardenId: metadataHistorik.metadataVardenId,
+      objektId: metadataHistorik.objektId,
+      metadataKatalogId: metadataHistorik.metadataKatalogId,
+      gammaltVarde: metadataHistorik.gammaltVarde,
+      nyttVarde: metadataHistorik.nyttVarde,
+      andradAv: metadataHistorik.andradAv,
+      andradVid: metadataHistorik.andradVid,
+      andringsMetod: metadataHistorik.andringsMetod,
+      katalogNamn: metadataKatalog.namn,
+    })
     .from(metadataHistorik)
+    .leftJoin(metadataKatalog, eq(metadataHistorik.metadataKatalogId, metadataKatalog.id))
     .where(and(
       eq(metadataHistorik.objektId, objektId),
       eq(metadataHistorik.tenantId, tenantId)
     ))
-    .orderBy(desc(metadataHistorik.andradVid));
+    .orderBy(desc(metadataHistorik.andradVid))
+    .limit(100);
+  return results;
 }
 
 // ============================================================================

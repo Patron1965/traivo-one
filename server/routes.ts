@@ -16,7 +16,7 @@ import {
   insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   type ServiceObject,
-  apiUsageLogs, apiBudgets
+  apiUsageLogs, apiBudgets, articles
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -31,6 +31,7 @@ import { anomalyMonitor } from "./anomaly-monitor";
 import { sendEmail } from "./replit_integrations/resend";
 import { createInheritanceProcessor } from "./inheritance-processor";
 import { metadataRouter } from "./metadata-routes";
+import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "./metadata-queries";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -673,6 +674,43 @@ export async function registerRoutes(
         notificationService.notifyPriorityChanged(workOrder, newResourceId, existingOrder.priority);
       }
       
+      if (updateData.executionStatus === "completed" && existingOrder.executionStatus !== "completed" && workOrder.objectId) {
+        try {
+          const lines = await storage.getWorkOrderLines(workOrder.id);
+          for (const line of lines) {
+            if (line.articleId) {
+              const article = await db.query.articles.findFirst({
+                where: and(eq(articles.id, line.articleId), eq(articles.tenantId, tenantId)),
+              });
+              if (article?.leaveMetadataCode) {
+                let coercedValue: string = "";
+                if (article.leaveMetadataFormat === "timestamp") {
+                  coercedValue = new Date().toISOString();
+                } else if (article.leaveMetadataFormat === "boolean_true") {
+                  coercedValue = "true";
+                } else if (article.leaveMetadataFormat === "counter_increment") {
+                  const current = await getArticleMetadataForObject(workOrder.objectId, article.leaveMetadataCode, tenantId);
+                  const currentNum = parseInt(current?.value || "0") || 0;
+                  coercedValue = String(currentNum + 1);
+                } else {
+                  coercedValue = new Date().toISOString();
+                }
+                await writeArticleMetadataOnObject(
+                  workOrder.objectId,
+                  article.leaveMetadataCode,
+                  coercedValue,
+                  tenantId,
+                  `auto:${workOrder.id}`
+                );
+                console.log(`[metadata-writeback] Auto-wrote ${article.leaveMetadataCode}=${coercedValue} (format=${article.leaveMetadataFormat || 'default'}) on object ${workOrder.objectId} from work order ${workOrder.id}`);
+              }
+            }
+          }
+        } catch (metaErr) {
+          console.error("[metadata-writeback] Error during auto-writeback:", metaErr);
+        }
+      }
+
       // General update (if resource is assigned and update doesn't fall into other categories)
       const isAssignmentChange = newResourceId !== oldResourceId;
       const isScheduleChange = updateData.scheduledDate !== undefined && 

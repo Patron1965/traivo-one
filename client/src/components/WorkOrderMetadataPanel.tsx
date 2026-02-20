@@ -83,6 +83,7 @@ export function WorkOrderMetadataPanel({
   if (!metadataPreview?.fetch && !metadataPreview?.leave) return null;
 
   const isOnSiteOrLater = ["on_site", "completed", "inspected", "invoiced"].includes(executionStatus || "");
+  const isCompleted = ["completed", "inspected", "invoiced"].includes(executionStatus || "");
 
   if (compact) {
     return (
@@ -98,7 +99,7 @@ export function WorkOrderMetadataPanel({
             <TooltipContent>Hämtad metadata från objektet</TooltipContent>
           </Tooltip>
         )}
-        {metadataPreview.leave && (
+        {metadataPreview.leave && !isCompleted && (
           <Tooltip>
             <TooltipTrigger asChild>
               <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1">
@@ -106,10 +107,21 @@ export function WorkOrderMetadataPanel({
                 {metadataPreview.leave.katalogName}
               </Badge>
             </TooltipTrigger>
-            <TooltipContent>Metadata att skriva tillbaka vid utförande</TooltipContent>
+            <TooltipContent>Metadata skrivs tillbaka automatiskt vid utförande</TooltipContent>
           </Tooltip>
         )}
-        {writebackDone && (
+        {metadataPreview.leave && isCompleted && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1 text-green-600 border-green-300">
+                <CheckCircle2 className="h-2.5 w-2.5" />
+                {metadataPreview.leave.katalogName}: auto-sparad
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>Metadata skrevs automatiskt till objektet vid utförande</TooltipContent>
+          </Tooltip>
+        )}
+        {writebackDone && !isCompleted && (
           <Badge variant="outline" className="gap-0.5 text-[10px] h-4 px-1 text-green-600 border-green-300">
             <CheckCircle2 className="h-2.5 w-2.5" />
             Sparad
