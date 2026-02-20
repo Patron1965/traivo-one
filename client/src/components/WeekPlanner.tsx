@@ -303,6 +303,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [sendScheduleCopied, setSendScheduleCopied] = useState(false);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
   const [pendingSchedule, setPendingSchedule] = useState<{ jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null>(null);
+  const [autoFillDialogOpen, setAutoFillDialogOpen] = useState(false);
+  const [autoFillOverbooking, setAutoFillOverbooking] = useState(0);
+  const [autoFillLoading, setAutoFillLoading] = useState(false);
+  const [autoFillPreview, setAutoFillPreview] = useState<Array<{ workOrderId: string; resourceId: string; scheduledDate: string; scheduledStartTime: string; title: string; address: string; estimatedDuration: number; priority: string }> | null>(null);
+  const [autoFillApplying, setAutoFillApplying] = useState(false);
+  const [autoFillSkipped, setAutoFillSkipped] = useState(0);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -560,6 +566,81 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       ? routeJobOrder.map(id => baseRouteJobs.find(j => j.id === id)!).filter(Boolean)
       : baseRouteJobs;
   }, [viewMode, routeViewResourceId, currentDate, resourceDayJobMap, routeJobOrder]);
+
+  const weekGoals = useMemo(() => {
+    const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
+    const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+    const weekDateKeys = new Set(weekDates.map(d => format(d, "yyyy-MM-dd")));
+
+    const weekJobs = scheduledJobs.filter(j => {
+      if (!j.scheduledDate) return false;
+      const d = j.scheduledDate;
+      const dateKey = d instanceof Date ? format(d, "yyyy-MM-dd") : String(d).split("T")[0];
+      return weekDateKeys.has(dateKey);
+    });
+
+    const totalMinutes = weekJobs.reduce((sum, j) => sum + (j.estimatedDuration || 60), 0);
+    const totalHours = totalMinutes / 60;
+    const totalCost = weekJobs.reduce((sum, j) => sum + ((j as any).cachedCost || 0), 0);
+    const totalStops = weekJobs.length;
+
+    const totalWeeklyHours = resources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
+    const totalWeeklyBudget = totalWeeklyHours * 450;
+    const targetStops = resources.length * 6 * 5;
+
+    const timePct = totalWeeklyHours > 0 ? Math.round((totalHours / totalWeeklyHours) * 100) : 0;
+    const econPct = totalWeeklyBudget > 0 ? Math.round((totalCost / totalWeeklyBudget) * 100) : 0;
+    const countPct = targetStops > 0 ? Math.round((totalStops / targetStops) * 100) : 0;
+
+    return {
+      time: { current: totalHours, target: totalWeeklyHours, pct: timePct },
+      economy: { current: totalCost, target: totalWeeklyBudget, pct: econPct },
+      count: { current: totalStops, target: targetStops, pct: countPct },
+    };
+  }, [scheduledJobs, resources, viewMode, currentWeekStart, currentDate]);
+
+  const weekTravelTotal = useMemo(() => {
+    const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
+    const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+    let totalMin = 0;
+    let totalKm = 0;
+    const hav = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+    for (const resource of resources) {
+      for (const day of weekDates) {
+        const dayJobs = getJobsForResourceAndDay(resource.id, day)
+          .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
+          .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+        for (let i = 0; i < dayJobs.length - 1; i++) {
+          const from = dayJobs[i];
+          const to = dayJobs[i + 1];
+          if (from.taskLatitude && from.taskLongitude && to.taskLatitude && to.taskLongitude) {
+            const d = hav(from.taskLatitude, from.taskLongitude, to.taskLatitude, to.taskLongitude);
+            totalKm += d;
+            totalMin += Math.max(Math.round(d / 50 * 60), 5);
+          }
+        }
+      }
+    }
+    return { minutes: totalMin, km: Math.round(totalKm * 10) / 10, hours: Math.round(totalMin / 60 * 10) / 10 };
+  }, [resources, viewMode, currentWeekStart, currentDate, getJobsForResourceAndDay]);
+
+  const getGoalColor = (pct: number) => {
+    if (pct >= 80) return "bg-green-500";
+    if (pct >= 50) return "bg-yellow-500";
+    return "bg-red-500";
+  };
+
+  const getGoalTextColor = (pct: number) => {
+    if (pct >= 80) return "text-green-600 dark:text-green-400";
+    if (pct >= 50) return "text-yellow-600 dark:text-yellow-400";
+    return "text-red-600 dark:text-red-400";
+  };
 
   const navigate = (direction: "prev" | "next") => {
     if (viewMode === "day" || viewMode === "route") {
@@ -1448,6 +1529,45 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     unscheduleWorkOrderMutation.mutate(jobId);
   };
 
+  const handleAutoFillPreview = useCallback(async () => {
+    setAutoFillLoading(true);
+    setAutoFillPreview(null);
+    try {
+      const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
+      const response = await apiRequest("POST", "/api/auto-plan-week", {
+        weekStartDate: format(weekStart, "yyyy-MM-dd"),
+        resourceIds: resources.map(r => r.id),
+        overbookingPercent: autoFillOverbooking,
+      });
+      const data = await response.json();
+      setAutoFillPreview(data.assignments || []);
+      setAutoFillSkipped(data.totalSkipped || 0);
+    } catch (error) {
+      toast({ title: "Fel", description: "Kunde inte generera planering", variant: "destructive" });
+    } finally {
+      setAutoFillLoading(false);
+    }
+  }, [viewMode, currentWeekStart, currentDate, resources, autoFillOverbooking, toast]);
+
+  const handleAutoFillApply = useCallback(async () => {
+    if (!autoFillPreview || autoFillPreview.length === 0) return;
+    setAutoFillApplying(true);
+    try {
+      const response = await apiRequest("POST", "/api/auto-plan-week/apply", {
+        assignments: autoFillPreview,
+      });
+      const data = await response.json();
+      toast({ title: "Planering tillämpad", description: `${data.applied} uppdrag planerade` });
+      setAutoFillDialogOpen(false);
+      setAutoFillPreview(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+    } catch (error) {
+      toast({ title: "Fel", description: "Kunde inte tillämpa planering", variant: "destructive" });
+    } finally {
+      setAutoFillApplying(false);
+    }
+  }, [autoFillPreview, toast]);
+
   const renderJobCard = (job: WorkOrderWithObject, compact = false) => {
     const execStatus = (job as { executionStatus?: string }).executionStatus || "not_planned";
     const execIndex = executionStatusOrder.indexOf(execStatus);
@@ -1610,6 +1730,50 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     );
   };
 
+  const travelTimesForDay = useMemo(() => {
+    const result: Record<string, Array<{ fromJobId: string; toJobId: string; minutes: number; distanceKm: number; startTime: string; endTime: string }>> = {};
+    
+    const haversineDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    for (const resource of resources) {
+      const dayJobs = getJobsForResourceAndDay(resource.id, currentDate)
+        .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
+        .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+      
+      const travels: typeof result[string] = [];
+      for (let i = 0; i < dayJobs.length - 1; i++) {
+        const from = dayJobs[i];
+        const to = dayJobs[i + 1];
+        if (!from.taskLatitude || !from.taskLongitude || !to.taskLatitude || !to.taskLongitude) continue;
+
+        const dist = haversineDistance(from.taskLatitude, from.taskLongitude, to.taskLatitude, to.taskLongitude);
+        const travelMinutes = Math.max(Math.round(dist / 50 * 60), 5);
+        
+        const fromDur = from.estimatedDuration || 60;
+        const [fH, fM] = (from.scheduledStartTime || "08:00").split(":").map(Number);
+        const fromEnd = fH * 60 + fM + fromDur;
+        const travelEnd = fromEnd + travelMinutes;
+        
+        travels.push({
+          fromJobId: from.id,
+          toJobId: to.id,
+          minutes: travelMinutes,
+          distanceKm: Math.round(dist * 10) / 10,
+          startTime: `${Math.floor(fromEnd / 60).toString().padStart(2, "0")}:${(fromEnd % 60).toString().padStart(2, "0")}`,
+          endTime: `${Math.floor(travelEnd / 60).toString().padStart(2, "0")}:${(travelEnd % 60).toString().padStart(2, "0")}`,
+        });
+      }
+      if (travels.length > 0) result[resource.id] = travels;
+    }
+    return result;
+  }, [resources, currentDate, getJobsForResourceAndDay]);
+
   const renderDayTimelineView = () => {
     const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
     const day = currentDate;
@@ -1652,6 +1816,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 });
                 const dayStr = format(day, "yyyy-MM-dd");
                 const droppableId = `${resource.id}|${dayStr}|${hour}`;
+                const resourceTravels = travelTimesForDay[resource.id] || [];
+                const hourTravels = resourceTravels.filter(t => {
+                  const tHour = parseInt(t.startTime.split(":")[0], 10);
+                  return tHour === hour;
+                });
 
                 return (
                   <DroppableCell
@@ -1660,7 +1829,42 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                     className="p-2 border-r last:border-r-0 min-h-[60px] transition-colors bg-muted/20"
                   >
                     <div className="space-y-1" data-testid={`drop-zone-${resource.id}-${hour}`}>
-                      {jobs.map((job) => renderJobCard(job))}
+                      {jobs.map((job) => {
+                        const travelAfter = resourceTravels.find(t => t.fromJobId === job.id);
+                        return (
+                          <div key={job.id}>
+                            {renderJobCard(job)}
+                            {travelAfter && (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-1.5 px-2 py-1 mt-1 rounded text-xs bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200" data-testid={`travel-block-${job.id}`}>
+                                    <Navigation className="h-3 w-3" />
+                                    <span>Restid {travelAfter.minutes} min</span>
+                                    <span className="text-yellow-600 dark:text-yellow-400">({travelAfter.distanceKm} km)</span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>Körtid: {travelAfter.startTime}–{travelAfter.endTime}</p>
+                                  <p>Avstånd: {travelAfter.distanceKm} km (beräknat ~50 km/h)</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {hourTravels.filter(t => !jobs.some(j => j.id === t.fromJobId)).map((t, i) => (
+                        <Tooltip key={`travel-orphan-${i}`}>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1.5 px-2 py-1 rounded text-xs bg-yellow-100 dark:bg-yellow-900/30 border border-yellow-300 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200">
+                              <Navigation className="h-3 w-3" />
+                              <span>Restid {t.minutes} min ({t.distanceKm} km)</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Körtid: {t.startTime}–{t.endTime}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      ))}
                     </div>
                   </DroppableCell>
                 );
@@ -1738,6 +1942,28 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 const dayStr = format(day, "yyyy-MM-dd");
                 const droppableId = `${resource.id}|${dayStr}`;
 
+                const sortedDayJobs = [...jobs]
+                  .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
+                  .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+                let totalTravelMin = 0;
+                let totalTravelKm = 0;
+                const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+                  const R = 6371;
+                  const dLat = (lat2 - lat1) * Math.PI / 180;
+                  const dLon = (lon2 - lon1) * Math.PI / 180;
+                  const a2 = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+                  return R * 2 * Math.atan2(Math.sqrt(a2), Math.sqrt(1 - a2));
+                };
+                for (let si = 0; si < sortedDayJobs.length - 1; si++) {
+                  const sFrom = sortedDayJobs[si];
+                  const sTo = sortedDayJobs[si + 1];
+                  if (sFrom.taskLatitude && sFrom.taskLongitude && sTo.taskLatitude && sTo.taskLongitude) {
+                    const d = haversine(sFrom.taskLatitude, sFrom.taskLongitude, sTo.taskLatitude, sTo.taskLongitude);
+                    totalTravelKm += d;
+                    totalTravelMin += Math.max(Math.round(d / 50 * 60), 5);
+                  }
+                }
+
                 return (
                   <DroppableCell 
                     key={dayIndex} 
@@ -1760,6 +1986,20 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                       <div className="space-y-1">
                         {jobs.map((job) => renderJobCard(job, true))}
                       </div>
+                      {totalTravelMin > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className="flex items-center gap-1 mt-2 px-1.5 py-0.5 rounded text-[10px] bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800" data-testid={`travel-summary-${resource.id}-${dayStr}`}>
+                              <Navigation className="h-2.5 w-2.5" />
+                              <span>{totalTravelMin} min</span>
+                              <span className="text-yellow-500">({Math.round(totalTravelKm)} km)</span>
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>Total restid: {totalTravelMin} min, {Math.round(totalTravelKm * 10) / 10} km</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
                   </DroppableCell>
                 );
@@ -2387,6 +2627,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               <Plus className="h-4 w-4 mr-2" />
               Nytt jobb
             </Button>
+            <Button 
+              variant="outline" 
+              onClick={() => { setAutoFillDialogOpen(true); setAutoFillPreview(null); }}
+              data-testid="button-auto-fill-week"
+            >
+              <Wand2 className="h-4 w-4 mr-2" />
+              Fyll veckan
+            </Button>
             {onToggleAIPanel && (
               <Button 
                 variant={showAIPanel ? "default" : "ghost"} 
@@ -2435,6 +2683,67 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             </div>
           </div>
         )}
+
+        {/* Målstaplar - Goal progress bars */}
+        <div className="px-4 py-2 border-b bg-muted/10">
+          <div className="flex items-center gap-6 text-xs flex-wrap" data-testid="goal-bars">
+            <div className="flex items-center gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium text-muted-foreground">Veckomål:</span>
+            </div>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[140px]" data-testid="goal-bar-time">
+                  <Clock className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground w-6">Tid</span>
+                  <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.time.pct)}`} style={{ width: `${Math.min(weekGoals.time.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.time.pct)}`}>{weekGoals.time.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent><p>{weekGoals.time.current.toFixed(1)}h av {weekGoals.time.target}h planerat</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[140px]" data-testid="goal-bar-economy">
+                  <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground w-10">Ekon.</span>
+                  <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.economy.pct)}`} style={{ width: `${Math.min(weekGoals.economy.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.economy.pct)}`}>{weekGoals.economy.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent><p>{(weekGoals.economy.current / 100).toLocaleString("sv-SE")} kr av {(weekGoals.economy.target / 100).toLocaleString("sv-SE")} kr budget</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[140px]" data-testid="goal-bar-count">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span className="text-muted-foreground w-8">Antal</span>
+                  <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.count.pct)}`} style={{ width: `${Math.min(weekGoals.count.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.count.pct)}`}>{weekGoals.count.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent><p>{weekGoals.count.current} av {weekGoals.count.target} stopp planerade</p></TooltipContent>
+            </Tooltip>
+            {weekTravelTotal.minutes > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800" data-testid="goal-bar-travel">
+                    <Navigation className="h-3 w-3" />
+                    <span className="font-medium">{weekTravelTotal.hours}h</span>
+                    <span className="text-yellow-500">({weekTravelTotal.km} km)</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent><p>Total restid veckan: {weekTravelTotal.minutes} min, {weekTravelTotal.km} km</p></TooltipContent>
+              </Tooltip>
+            )}
+          </div>
+        </div>
 
         {viewMode === "day" && renderDayTimelineView()}
         {viewMode === "week" && renderWeekView()}
@@ -2764,6 +3073,104 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             <AlertTriangle className="h-4 w-4 mr-2" />
             Schemalägg ändå
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <Dialog open={autoFillDialogOpen} onOpenChange={(open) => { if (!open) { setAutoFillDialogOpen(false); setAutoFillPreview(null); } }}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Wand2 className="h-5 w-5 text-primary" />
+            Fyll veckan automatiskt
+          </DialogTitle>
+          <DialogDescription>
+            Fyll lediga tider i veckan med oplanerade uppdrag. Algoritmen prioriterar brådsamma uppdrag och minimerar körsträckan.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div>
+            <label className="text-sm font-medium mb-2 block">Överbokningstolerans: {autoFillOverbooking}%</label>
+            <input
+              type="range"
+              min={0}
+              max={50}
+              step={5}
+              value={autoFillOverbooking}
+              onChange={(e) => setAutoFillOverbooking(Number(e.target.value))}
+              className="w-full accent-primary"
+              data-testid="slider-overbooking"
+            />
+            <div className="flex justify-between text-xs text-muted-foreground mt-1">
+              <span>0% (exakt)</span>
+              <span>25%</span>
+              <span>50% (max)</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button onClick={handleAutoFillPreview} disabled={autoFillLoading} data-testid="button-auto-fill-preview">
+              {autoFillLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
+              Förhandsgranska
+            </Button>
+            <span className="text-xs text-muted-foreground">
+              {resources.length} resurser, v.{format(viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }), "w", { locale: sv })}
+            </span>
+          </div>
+
+          {autoFillPreview && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3 text-sm">
+                <Badge variant="default">{autoFillPreview.length} tilldelade</Badge>
+                {autoFillSkipped > 0 && <Badge variant="secondary">{autoFillSkipped} ryms ej</Badge>}
+              </div>
+
+              {autoFillPreview.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="grid grid-cols-[1fr_120px_80px_60px] gap-2 px-3 py-2 bg-muted/50 text-xs font-medium text-muted-foreground">
+                    <span>Uppdrag</span>
+                    <span>Resurs</span>
+                    <span>Dag</span>
+                    <span>Tid</span>
+                  </div>
+                  <div className="max-h-[300px] overflow-y-auto">
+                    {autoFillPreview.map((a, i) => {
+                      const resource = resources.find(r => r.id === a.resourceId);
+                      return (
+                        <div key={i} className="grid grid-cols-[1fr_120px_80px_60px] gap-2 px-3 py-2 border-t text-sm items-center" data-testid={`auto-fill-row-${i}`}>
+                          <div className="truncate">
+                            <span className="font-medium">{a.title}</span>
+                            {a.address && <span className="text-xs text-muted-foreground ml-1">- {a.address}</span>}
+                          </div>
+                          <span className="text-xs">{resource?.name || a.resourceId}</span>
+                          <span className="text-xs">{format(new Date(a.scheduledDate + "T12:00:00"), "EEE d/M", { locale: sv })}</span>
+                          <span className="text-xs">{a.scheduledStartTime}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {autoFillPreview.length === 0 && (
+                <div className="p-4 text-center text-muted-foreground text-sm border rounded-lg">
+                  Inga uppdrag kunde tilldelas. Alla tider kan vara fyllda eller det finns inga oplanerade uppdrag.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => { setAutoFillDialogOpen(false); setAutoFillPreview(null); }} data-testid="button-cancel-auto-fill">
+            Avbryt
+          </Button>
+          {autoFillPreview && autoFillPreview.length > 0 && (
+            <Button onClick={handleAutoFillApply} disabled={autoFillApplying} data-testid="button-apply-auto-fill">
+              {autoFillApplying ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+              Tillämpa ({autoFillPreview.length} uppdrag)
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

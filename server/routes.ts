@@ -6871,6 +6871,216 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // ============================================
+  // AUTO-PLAN WEEK (Fyll Veckan) - C4
+  // ============================================
+  app.post("/api/auto-plan-week", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { weekStartDate, resourceIds, overbookingPercent = 0 } = req.body;
+
+      if (!weekStartDate || !resourceIds || !Array.isArray(resourceIds)) {
+        return res.status(400).json({ error: "weekStartDate and resourceIds[] required" });
+      }
+
+      const weekStart = new Date(weekStartDate);
+      const weekDays: Date[] = [];
+      for (let i = 0; i < 5; i++) {
+        const d = new Date(weekStart);
+        d.setDate(d.getDate() + i);
+        weekDays.push(d);
+      }
+
+      const allWorkOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true);
+      const allResources = await storage.getResources(tenantId);
+
+      const selectedResources = allResources.filter(r => resourceIds.includes(r.id));
+      if (selectedResources.length === 0) {
+        return res.status(400).json({ error: "No valid resources found" });
+      }
+
+      const unscheduledOrders = allWorkOrders.filter(wo => 
+        (!wo.scheduledDate || !wo.resourceId) && 
+        wo.status !== "completed" && wo.status !== "cancelled" &&
+        wo.executionStatus !== "completed" && wo.executionStatus !== "invoiced"
+      );
+
+      if (unscheduledOrders.length === 0) {
+        return res.json({ assignments: [], totalAssigned: 0, totalSkipped: 0 });
+      }
+
+      const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+      const sorted = [...unscheduledOrders].sort((a, b) => {
+        const pA = priorityOrder[a.priority] ?? 99;
+        const pB = priorityOrder[b.priority] ?? 99;
+        if (pA !== pB) return pA - pB;
+        if (a.plannedWindowStart && b.plannedWindowStart) {
+          return new Date(a.plannedWindowStart).getTime() - new Date(b.plannedWindowStart).getTime();
+        }
+        if (a.plannedWindowStart) return -1;
+        if (b.plannedWindowStart) return 1;
+        return 0;
+      });
+
+      const HOURS_PER_DAY = 8;
+      const maxMinutesPerDay = HOURS_PER_DAY * 60 * (1 + overbookingPercent / 100);
+
+      const existingScheduled = allWorkOrders.filter(wo => wo.scheduledDate && wo.resourceId);
+      const resourceDayMinutes: Record<string, Record<string, number>> = {};
+      for (const resource of selectedResources) {
+        resourceDayMinutes[resource.id] = {};
+        for (const day of weekDays) {
+          const dayStr = day.toISOString().split("T")[0];
+          const dayMinutes = existingScheduled
+            .filter(wo => {
+              if (wo.resourceId !== resource.id) return false;
+              const woDate = wo.scheduledDate instanceof Date ? wo.scheduledDate : new Date(wo.scheduledDate!);
+              return woDate.toISOString().split("T")[0] === dayStr;
+            })
+            .reduce((sum, wo) => sum + (wo.estimatedDuration || 60), 0);
+          resourceDayMinutes[resource.id][dayStr] = dayMinutes;
+        }
+      }
+
+      const haversine = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+        const R = 6371;
+        const dLat = (lat2 - lat1) * Math.PI / 180;
+        const dLon = (lon2 - lon1) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+
+      const assignments: Array<{
+        workOrderId: string;
+        resourceId: string;
+        scheduledDate: string;
+        scheduledStartTime: string;
+        title: string;
+        address: string;
+        estimatedDuration: number;
+        priority: string;
+      }> = [];
+      const skipped: string[] = [];
+
+      for (const order of sorted) {
+        let assigned = false;
+        const orderDur = order.estimatedDuration || 60;
+
+        for (const day of weekDays) {
+          if (assigned) break;
+          const dayStr = day.toISOString().split("T")[0];
+
+          if (order.plannedWindowStart) {
+            const winDate = new Date(order.plannedWindowStart).toISOString().split("T")[0];
+            if (winDate !== dayStr) continue;
+          }
+
+          let bestResource: typeof selectedResources[0] | null = null;
+          let bestScore = Infinity;
+
+          for (const resource of selectedResources) {
+            const currentLoad = resourceDayMinutes[resource.id][dayStr] || 0;
+            if (currentLoad + orderDur > maxMinutesPerDay) continue;
+
+            let score = currentLoad;
+
+            if (order.taskLatitude && order.taskLongitude) {
+              const dayOrders = [...existingScheduled, ...assignments.map(a => ({
+                ...allWorkOrders.find(wo => wo.id === a.workOrderId),
+                resourceId: a.resourceId,
+                scheduledDate: new Date(a.scheduledDate),
+              }))].filter(wo => {
+                if (!wo || wo.resourceId !== resource.id) return false;
+                const woDate = wo.scheduledDate instanceof Date ? wo.scheduledDate : new Date(wo.scheduledDate!);
+                return woDate.toISOString().split("T")[0] === dayStr;
+              });
+
+              if (dayOrders.length > 0) {
+                const lastOrder = dayOrders[dayOrders.length - 1] as any;
+                if (lastOrder?.taskLatitude && lastOrder?.taskLongitude) {
+                  const dist = haversine(lastOrder.taskLatitude, lastOrder.taskLongitude, order.taskLatitude!, order.taskLongitude!);
+                  score += dist * 10;
+                }
+              }
+            }
+
+            if (!bestResource || score < bestScore) {
+              bestResource = resource;
+              bestScore = score;
+            }
+          }
+
+          if (bestResource) {
+            const currentLoad = resourceDayMinutes[bestResource.id][dayStr] || 0;
+            const startMinutes = Math.max(8 * 60, currentLoad + 8 * 60);
+            const startHour = Math.floor(startMinutes / 60);
+            const startMin = startMinutes % 60;
+            const startTime = `${startHour.toString().padStart(2, "0")}:${startMin.toString().padStart(2, "0")}`;
+
+            assignments.push({
+              workOrderId: order.id,
+              resourceId: bestResource.id,
+              scheduledDate: dayStr,
+              scheduledStartTime: startTime,
+              title: order.title || "Utan titel",
+              address: order.objectAddress || "",
+              estimatedDuration: orderDur,
+              priority: order.priority,
+            });
+
+            resourceDayMinutes[bestResource.id][dayStr] = (resourceDayMinutes[bestResource.id][dayStr] || 0) + orderDur;
+            assigned = true;
+          }
+        }
+
+        if (!assigned) {
+          skipped.push(order.id);
+        }
+      }
+
+      res.json({
+        assignments,
+        totalAssigned: assignments.length,
+        totalSkipped: skipped.length,
+        skippedIds: skipped,
+      });
+    } catch (error) {
+      console.error("Auto-plan week error:", error);
+      res.status(500).json({ error: "Failed to auto-plan week" });
+    }
+  });
+
+  app.post("/api/auto-plan-week/apply", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { assignments } = req.body;
+
+      if (!assignments || !Array.isArray(assignments)) {
+        return res.status(400).json({ error: "assignments[] required" });
+      }
+
+      const results = [];
+      for (const assignment of assignments) {
+        const workOrder = await storage.getWorkOrder(assignment.workOrderId);
+        if (!verifyTenantOwnership(workOrder, tenantId)) continue;
+
+        const updated = await storage.updateWorkOrder(assignment.workOrderId, {
+          resourceId: assignment.resourceId,
+          scheduledDate: new Date(assignment.scheduledDate),
+          scheduledStartTime: assignment.scheduledStartTime,
+          orderStatus: "planerad_pre",
+          executionStatus: "planned_rough",
+        });
+        results.push(updated);
+      }
+
+      res.json({ applied: results.length });
+    } catch (error) {
+      console.error("Apply auto-plan error:", error);
+      res.status(500).json({ error: "Failed to apply auto-plan" });
+    }
+  });
+
+  // ============================================
   // TASK DEPENDENCIES - Beroendelogik
   // ============================================
 

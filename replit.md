@@ -42,6 +42,9 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Industry Packages System:** Predefined templates for different industries (Waste, Cleaning, Property services) including pre-configured articles, metadata definitions, structural articles, and one-click installation for new tenants.
 - **SMS Infrastructure (Multi-channel Notifications):** Unified notification service supporting email and SMS (Twilio) with Swedish phone number normalization, per-tenant configuration, and test functionality.
 - **Conversational AI Planner:** Natural language chat interface integrated into the week planner for intuitive planning interactions, using GPT-4o-mini for conversational queries, structured responses, and executable actions.
+- **Weekly Goal Progress Bars (C6):** Three goal bars (Time/Economy/Count) in WeekPlanner header with color-coded thresholds (green ≥80%, yellow ≥50%, red <50%) showing live calculation from scheduled jobs.
+- **Travel Time Calculation (C5):** Haversine-based travel time estimation between consecutive jobs. Yellow travel blocks in day timeline view with distance/time display, compact summaries in week view cells, and weekly travel total indicator in goal bars area.
+- **Auto-Fill Week (C4 - Fyll Veckan):** Backend auto-planning endpoint (`/api/auto-plan-week`) with priority-based sorting, geographic clustering via Haversine distance, and capacity-aware assignment. Frontend dialog with overbooking tolerance slider (0-50%), preview table showing proposed assignments, and one-click apply with batch update.
 - **API Cost Monitoring Dashboard:** Admin-only dashboard for real-time monitoring of all external API costs, including tracking of API calls, cost estimation, trend charts, per-service breakdown, per-tenant cost allocation, and budget management.
 
 ### System Design Choices
