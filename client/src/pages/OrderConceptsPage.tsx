@@ -325,40 +325,37 @@ export default function OrderConceptsPage() {
     ? concepts.find((c) => c.id === selectedConceptForPhase2)?.articleId || undefined
     : undefined;
 
-  const depTemplatesUrl = selectedConceptArticleId
+  const depTemplatesQueryKey = selectedConceptArticleId
     ? `/api/task-dependency-templates?articleId=${selectedConceptArticleId}`
     : "/api/task-dependency-templates";
 
   const { data: depTemplates = [] } = useQuery<any[]>({
-    queryKey: ["/api/task-dependency-templates", selectedConceptArticleId],
-    queryFn: () => fetch(depTemplatesUrl).then((r) => r.json()),
+    queryKey: [depTemplatesQueryKey],
     enabled: !!selectedConceptArticleId && depTemplateDialogOpen,
   });
 
-  const invoiceRulesUrl = selectedConceptForPhase2
+  const invoiceRulesQueryKey = selectedConceptForPhase2
     ? `/api/invoice-rules?orderConceptId=${selectedConceptForPhase2}`
     : "/api/invoice-rules";
 
   const { data: invoiceRules = [] } = useQuery<any[]>({
-    queryKey: ["/api/invoice-rules", selectedConceptForPhase2],
-    queryFn: () => fetch(invoiceRulesUrl).then((r) => r.json()),
+    queryKey: [invoiceRulesQueryKey],
     enabled: !!selectedConceptForPhase2 && invoiceRuleDialogOpen,
   });
 
-  const runLogsUrl = selectedConceptForPhase2
+  const runLogsQueryKey = selectedConceptForPhase2
     ? `/api/order-concept-run-logs?orderConceptId=${selectedConceptForPhase2}`
     : "/api/order-concept-run-logs";
 
   const { data: runLogs = [] } = useQuery<any[]>({
-    queryKey: ["/api/order-concept-run-logs", selectedConceptForPhase2],
-    queryFn: () => fetch(runLogsUrl).then((r) => r.json()),
+    queryKey: [runLogsQueryKey],
     enabled: !!selectedConceptForPhase2 && runLogsDialogOpen,
   });
 
   const createDepTemplateMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/task-dependency-templates", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/task-dependency-templates", selectedConceptForPhase2] });
+      queryClient.invalidateQueries({ queryKey: [depTemplatesQueryKey] });
       setDepTemplateForm({ sourceArticleId: "", dependentArticleId: "", dependencyType: "before", offsetHours: 24, autoGenerate: true });
       toast({ title: "Beroendemall skapad" });
     },
@@ -370,7 +367,7 @@ export default function OrderConceptsPage() {
   const deleteDepTemplateMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/task-dependency-templates/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/task-dependency-templates", selectedConceptForPhase2] });
+      queryClient.invalidateQueries({ queryKey: [depTemplatesQueryKey] });
       toast({ title: "Beroendemall raderad" });
     },
   });
@@ -378,7 +375,7 @@ export default function OrderConceptsPage() {
   const createInvoiceRuleMutation = useMutation({
     mutationFn: (data: any) => apiRequest("POST", "/api/invoice-rules", data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoice-rules", selectedConceptForPhase2] });
+      queryClient.invalidateQueries({ queryKey: [invoiceRulesQueryKey] });
       setInvoiceRuleForm({ name: "", billingType: "per_task", headerMetadataField: "", lineMetadataField: "", priceField: "", quantityField: "" });
       toast({ title: "Fakturaregel skapad" });
     },
@@ -390,7 +387,7 @@ export default function OrderConceptsPage() {
   const deleteInvoiceRuleMutation = useMutation({
     mutationFn: (id: string) => apiRequest("DELETE", `/api/invoice-rules/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/invoice-rules", selectedConceptForPhase2] });
+      queryClient.invalidateQueries({ queryKey: [invoiceRulesQueryKey] });
       toast({ title: "Fakturaregel raderad" });
     },
   });
@@ -399,7 +396,7 @@ export default function OrderConceptsPage() {
     mutationFn: (id: string) => apiRequest("POST", `/api/order-concepts/${id}/rerun`),
     onSuccess: (response: any) => {
       queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/order-concept-run-logs", selectedConceptForPhase2] });
+      queryClient.invalidateQueries({ queryKey: [runLogsQueryKey] });
       toast({
         title: "Omkörning klar",
         description: response.message || "Ändringar detekterade och loggade",
