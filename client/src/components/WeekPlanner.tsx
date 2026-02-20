@@ -335,6 +335,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [filterCluster, setFilterCluster] = useState<string>("all");
   const [filterTeam, setFilterTeam] = useState<string>("all");
   const [filterExecutionCode, setFilterExecutionCode] = useState<string>("all");
+  const [orderstockSearch, setOrderstockSearch] = useState("");
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({
     queryKey: ["/api/teams"],
@@ -596,6 +597,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const unscheduledJobs = useMemo(() => {
     const jobs = workOrders.filter(job => !job.scheduledDate || !job.resourceId);
     
+    const searchLower = orderstockSearch.toLowerCase().trim();
     const filtered = jobs.filter(job => {
       if (filterCustomer !== "all" && job.customerId !== filterCustomer) return false;
       if (filterPriority !== "all" && job.priority !== filterPriority) return false;
@@ -613,15 +615,24 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       if (filterExecutionCode !== "all") {
         if ((job as any).executionCode !== filterExecutionCode) return false;
       }
+      if (searchLower) {
+        const title = (job.title || "").toLowerCase();
+        const objName = (job.objectName || "").toLowerCase();
+        const custName = (job.customerId ? (customerMap.get(job.customerId)?.name || "") : "").toLowerCase();
+        if (!title.includes(searchLower) && !objName.includes(searchLower) && !custName.includes(searchLower)) return false;
+      }
       return true;
     });
     
     return filtered.sort((a, b) => {
       const aPriority = priorityOrder[a.priority] ?? 99;
       const bPriority = priorityOrder[b.priority] ?? 99;
-      return aPriority - bPriority;
+      if (aPriority !== bPriority) return aPriority - bPriority;
+      const aEnd = a.plannedWindowEnd ? new Date(a.plannedWindowEnd).getTime() : Infinity;
+      const bEnd = b.plannedWindowEnd ? new Date(b.plannedWindowEnd).getTime() : Infinity;
+      return aEnd - bEnd;
     });
-  }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds, filterExecutionCode]);
+  }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds, filterExecutionCode, orderstockSearch, customerMap]);
   
   const scheduledJobs = useMemo(
     () => workOrders.filter(job => job.scheduledDate && job.resourceId),
@@ -1442,6 +1453,16 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       }
     }
 
+    const advanceDays = (job as any).advanceNotificationDays || 0;
+    if (advanceDays > 0) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const daysUntilJob = Math.floor((dateObj.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      if (daysUntilJob < advanceDays) {
+        reasons.push(`Avisering krävs ${advanceDays} dagar i förväg — bara ${Math.max(0, daysUntilJob)} dagar kvar`);
+      }
+    }
+
     if (dependenciesData?.dependencies) {
       const deps = dependenciesData.dependencies[job.id] || [];
       for (const dep of deps) {
@@ -1950,11 +1971,16 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   return tHour === hour;
                 });
 
+                const cellHasProduction = jobs.some(j => getJobCategory(j) === "production");
+                const cellHasTravel = jobs.some(j => getJobCategory(j) === "travel");
+                const cellHasBreak = jobs.some(j => getJobCategory(j) === "break");
+                const cellBg = cellHasProduction ? "bg-green-50/50 dark:bg-green-950/10" : cellHasTravel ? "bg-yellow-50/50 dark:bg-yellow-950/10" : cellHasBreak ? "bg-blue-50/50 dark:bg-blue-950/10" : "bg-muted/20";
+
                 return (
                   <DroppableCell
                     key={resource.id}
                     id={droppableId}
-                    className="p-2 border-r last:border-r-0 min-h-[60px] transition-colors bg-muted/20"
+                    className={`p-2 border-r last:border-r-0 min-h-[60px] transition-colors ${cellBg}`}
                   >
                     <div className="space-y-1" data-testid={`drop-zone-${resource.id}-${hour}`}>
                       {jobs.map((job) => {
@@ -2621,6 +2647,13 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}</Badge>
             </div>
             <div className="space-y-2">
+              <Input
+                placeholder="Sök jobb, objekt, kund..."
+                value={orderstockSearch}
+                onChange={(e) => setOrderstockSearch(e.target.value)}
+                className="h-8 text-xs"
+                data-testid="input-orderstock-search"
+              />
               <Select value={filterCustomer} onValueChange={setFilterCustomer}>
                 <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-customer">
                   <SelectValue placeholder="Alla kunder" />
@@ -2709,7 +2742,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   return (
                     <DraggableJobCard key={job.id} id={job.id}>
                       <Card
-                        className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""}`}
+                        className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "border-l-4 border-l-red-500 bg-red-50/50 dark:bg-red-950/20" : job.priority === "high" ? "border-l-4 border-l-orange-500" : ""}`}
                         onClick={() => handleJobClick(job.id)}
                         data-testid={`unscheduled-job-${job.id}`}
                       >
@@ -2717,6 +2750,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                           <div className="flex items-center gap-1.5">
                             <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[job.priority]}`} />
                             <span className="text-sm font-medium">{job.title}</span>
+                            {job.priority === "urgent" && (
+                              <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
+                            )}
                           </div>
                           <div className="text-xs text-muted-foreground">{job.objectName || "Okänt objekt"}</div>
                           {customer && (
@@ -2743,6 +2779,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                                   <Key className="h-2.5 w-2.5" />
                                   {job.objectKeyNumber}
                                 </span>
+                              )}
+                            </div>
+                          )}
+                          {job.plannedWindowEnd && (
+                            <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-deadline-${job.id}`}>
+                              <Clock className="h-2.5 w-2.5" />
+                              <span>Deadline: {format(new Date(job.plannedWindowEnd), "d MMM", { locale: sv })}</span>
+                              {new Date(job.plannedWindowEnd) < new Date() && (
+                                <Badge variant="destructive" className="text-[9px] h-4 ml-1">Försenad</Badge>
+                              )}
+                              {new Date(job.plannedWindowEnd) >= new Date() && new Date(job.plannedWindowEnd) < addDays(new Date(), 7) && (
+                                <Badge className="text-[9px] h-4 ml-1 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300">Snart</Badge>
                               )}
                             </div>
                           )}
