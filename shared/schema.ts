@@ -1730,18 +1730,31 @@ export const orderConcepts = pgTable("order_concepts", {
   crossPollinationField: text("cross_pollination_field"),
   // Aggregera uppgifter per nivå (t.ex. "fastighet" = en uppgift per fastighet)
   aggregationLevel: text("aggregation_level"),
-  // Schematyp: once, recurring, subscription
+  // Scenario: avrop (on-demand), schema (scheduled), abonnemang (subscription)
+  scenario: text("scenario").default("avrop").notNull(),
+  // Schematyp: once, recurring, subscription (legacy compat)
   scheduleType: text("schedule_type").default("once").notNull(),
   // För recurring: intervall i dagar (legacy)
   intervalDays: integer("interval_days"),
   
+  // === LEVERANSSCHEMA (Delivery Schedule) ===
+  deliverySchedule: jsonb("delivery_schedule"), // Array of { month, weekNumber, weekday, timeWindowStart, timeWindowEnd }
+  rollingMonths: integer("rolling_months").default(3), // Antal månader att generera framåt
+  minDaysBetween: integer("min_days_between"), // Minsta antal dagar mellan besök
+  
+  // === ABONNEMANG (Subscription) ===
+  monthlyFee: real("monthly_fee"), // Fast månadsavgift per enhet
+  billingFrequency: text("billing_frequency").default("monthly"), // monthly, quarterly, yearly
+  contractLockMonths: integer("contract_lock_months"), // Bindningstid i månader
+  subscriptionMetadataField: text("subscription_metadata_field"), // Metadata-nyckel för antal (t.ex. "antal_karl")
+  
   // === FLEXIBEL SCHEMALÄGGNING (ny) ===
-  flexibleFrequency: jsonb("flexible_frequency"), // FlexibleFrequency JSON
-  allowedWeekdays: integer("allowed_weekdays").array(), // [1,3,5] = Mån, Ons, Fre
-  excludedWeekdays: integer("excluded_weekdays").array(), // [0,6] = Ej helger
-  activeSeason: text("active_season"), // Säsong då konceptet ska generera ordrar
-  timesPerPeriod: integer("times_per_period"), // X gånger per vecka/månad
-  periodType: text("period_type"), // 'week', 'month', 'year'
+  flexibleFrequency: jsonb("flexible_frequency"),
+  allowedWeekdays: integer("allowed_weekdays").array(),
+  excludedWeekdays: integer("excluded_weekdays").array(),
+  activeSeason: text("active_season"),
+  timesPerPeriod: integer("times_per_period"),
+  periodType: text("period_type"),
   
   // Nästa planerade körning
   nextRunDate: timestamp("next_run_date"),
@@ -1937,6 +1950,36 @@ export const insertAssignmentArticleSchema = createInsertSchema(assignmentArticl
 });
 
 // ============================================
+// SUBSCRIPTION CHANGES - Ändringsdetektering för abonnemang
+// ============================================
+
+export const subscriptionChanges = pgTable("subscription_changes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  changeType: text("change_type").notNull(), // 'quantity_change', 'new_object', 'removed_object', 'price_change'
+  previousValue: text("previous_value"),
+  newValue: text("new_value"),
+  monthlyDelta: real("monthly_delta"), // Ändring i månadsavgift (+ eller -)
+  approvalStatus: text("approval_status").default("pending").notNull(), // pending, approved, rejected
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_subscription_changes_tenant").on(table.tenantId),
+  index("idx_subscription_changes_concept").on(table.orderConceptId),
+  index("idx_subscription_changes_status").on(table.approvalStatus),
+]);
+
+export const insertSubscriptionChangeSchema = createInsertSchema(subscriptionChanges).omit({
+  id: true,
+  createdAt: true,
+  detectedAt: true,
+});
+
+// ============================================
 // RELATIONS FOR NEW TABLES
 // ============================================
 
@@ -2099,6 +2142,40 @@ export type Assignment = typeof assignments.$inferSelect;
 export type InsertAssignment = z.infer<typeof insertAssignmentSchema>;
 export type AssignmentArticle = typeof assignmentArticles.$inferSelect;
 export type InsertAssignmentArticle = z.infer<typeof insertAssignmentArticleSchema>;
+export type SubscriptionChange = typeof subscriptionChanges.$inferSelect;
+export type InsertSubscriptionChange = z.infer<typeof insertSubscriptionChangeSchema>;
+
+// Scenario types for order concepts
+export const ORDER_CONCEPT_SCENARIOS = [
+  "avrop",        // Engångs-/behovsbaserat (on-demand)
+  "schema",       // Schemalagd med leveransschema
+  "abonnemang"    // Abonnemang med fast avgift
+] as const;
+export type OrderConceptScenario = typeof ORDER_CONCEPT_SCENARIOS[number];
+
+export const ORDER_CONCEPT_SCENARIO_LABELS: Record<OrderConceptScenario, string> = {
+  avrop: "Avrop (engång)",
+  schema: "Schema (återkommande)",
+  abonnemang: "Abonnemang (fast avgift)"
+};
+
+// Delivery schedule entry type
+export interface DeliveryScheduleEntry {
+  month: number; // 1-12
+  weekNumber: number; // 1-5 (week within month)
+  weekday: number; // 0-6 (0=Sunday)
+  timeWindowStart?: string; // "08:00"
+  timeWindowEnd?: string; // "12:00"
+}
+
+// Billing frequency options
+export const BILLING_FREQUENCIES = ["monthly", "quarterly", "yearly"] as const;
+export type BillingFrequency = typeof BILLING_FREQUENCIES[number];
+export const BILLING_FREQUENCY_LABELS: Record<BillingFrequency, string> = {
+  monthly: "Månadsvis",
+  quarterly: "Kvartalsvis",
+  yearly: "Årsvis"
+};
 
 // ============================================
 // UTÖKADE ORDER STATUSAR (8 nivåer enligt spec)

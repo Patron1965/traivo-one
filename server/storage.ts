@@ -51,6 +51,7 @@ import {
   type ConceptFilter, type InsertConceptFilter,
   type Assignment, type InsertAssignment,
   type AssignmentArticle, type InsertAssignmentArticle,
+  type SubscriptionChange, type InsertSubscriptionChange,
   type CustomerPortalToken, type InsertCustomerPortalToken,
   type CustomerPortalSession, type InsertCustomerPortalSession,
   type CustomerBookingRequest, type InsertCustomerBookingRequest,
@@ -79,7 +80,7 @@ import {
   industryPackages, industryPackageData, tenantPackageInstallations,
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
-  orderConcepts, conceptFilters, assignments, assignmentArticles,
+  orderConcepts, conceptFilters, assignments, assignmentArticles, subscriptionChanges,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData,
@@ -399,6 +400,11 @@ export interface IStorage {
   updateAssignmentArticle(id: string, assignmentId: string, data: Partial<InsertAssignmentArticle>): Promise<AssignmentArticle | undefined>;
   deleteAssignmentArticle(id: string, assignmentId: string): Promise<void>;
   
+  // Subscription Changes
+  getSubscriptionChanges(tenantId: string, conceptId?: string, status?: string): Promise<SubscriptionChange[]>;
+  createSubscriptionChange(change: InsertSubscriptionChange): Promise<SubscriptionChange>;
+  updateSubscriptionChangeStatus(id: string, tenantId: string, status: string, approvedBy?: string): Promise<SubscriptionChange | undefined>;
+
   // Customer Portal - Tokens and Sessions
   createPortalToken(token: InsertCustomerPortalToken): Promise<CustomerPortalToken>;
   getPortalTokenByHash(tokenHash: string): Promise<CustomerPortalToken | undefined>;
@@ -3061,6 +3067,34 @@ export class DatabaseStorage implements IStorage {
       eq(assignmentArticles.id, id),
       eq(assignmentArticles.assignmentId, assignmentId)
     ));
+  }
+
+  // ============================================
+  // Subscription Changes
+  // ============================================
+  
+  async getSubscriptionChanges(tenantId: string, conceptId?: string, status?: string): Promise<SubscriptionChange[]> {
+    const conditions = [eq(subscriptionChanges.tenantId, tenantId)];
+    if (conceptId) conditions.push(eq(subscriptionChanges.orderConceptId, conceptId));
+    if (status) conditions.push(eq(subscriptionChanges.approvalStatus, status));
+    return db.select().from(subscriptionChanges).where(and(...conditions)).orderBy(desc(subscriptionChanges.detectedAt));
+  }
+
+  async createSubscriptionChange(change: InsertSubscriptionChange): Promise<SubscriptionChange> {
+    const [result] = await db.insert(subscriptionChanges).values(change).returning();
+    return result;
+  }
+
+  async updateSubscriptionChangeStatus(id: string, tenantId: string, status: string, approvedBy?: string): Promise<SubscriptionChange | undefined> {
+    const [result] = await db.update(subscriptionChanges)
+      .set({ 
+        approvalStatus: status, 
+        approvedBy: approvedBy || null, 
+        approvedAt: status === 'approved' || status === 'rejected' ? new Date() : null 
+      })
+      .where(and(eq(subscriptionChanges.id, id), eq(subscriptionChanges.tenantId, tenantId)))
+      .returning();
+    return result || undefined;
   }
 
   // ============================================

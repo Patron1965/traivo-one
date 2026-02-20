@@ -57,6 +57,18 @@ async function ensureDefaultTenant() {
   });
 }
 
+function getDateFromWeekdayInMonth(year: number, month: number, weekNumber: number, weekday: number): Date | null {
+  const firstDay = new Date(year, month, 1);
+  let dayOfWeek = firstDay.getDay();
+  let diff = weekday - dayOfWeek;
+  if (diff < 0) diff += 7;
+  const firstOccurrence = 1 + diff;
+  const targetDay = firstOccurrence + (weekNumber - 1) * 7;
+  const lastDay = new Date(year, month + 1, 0).getDate();
+  if (targetDay > lastDay) return null;
+  return new Date(year, month, targetDay);
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -8269,6 +8281,440 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed to execute order concept:", error);
       res.status(500).json({ error: "Kunde inte köra orderkoncept" });
+    }
+  });
+
+  // Preview order concept execution (dry run)
+  app.post("/api/order-concepts/:id/preview", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+
+      const filters = await storage.getConceptFilters(concept.id);
+      
+      let targetObjects: ServiceObject[] = [];
+      if (concept.targetClusterId) {
+        targetObjects = await storage.getClusterObjects(concept.targetClusterId);
+      } else {
+        targetObjects = await storage.getObjects(tenantId);
+      }
+
+      const matchingObjects = targetObjects.filter(obj => {
+        return filters.every(filter => {
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
+          const filterValue = filter.filterValue;
+          switch (filter.operator) {
+            case "equals": return metadataValue === filterValue;
+            case "not_equals": return metadataValue !== filterValue;
+            case "contains": return String(metadataValue || "").includes(String(filterValue));
+            case "greater_than": return Number(metadataValue) > Number(filterValue);
+            case "less_than": return Number(metadataValue) < Number(filterValue);
+            case "exists": return metadataValue !== undefined && metadataValue !== null;
+            case "not_exists": return metadataValue === undefined || metadataValue === null;
+            default: return true;
+          }
+        });
+      });
+
+      let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+      if (concept.articleId) {
+        linkedArticle = await storage.getArticle(concept.articleId);
+      }
+
+      const previewItems = matchingObjects.map(obj => {
+        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+        let quantity = 1;
+        if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
+          quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
+        }
+        const unitPrice = linkedArticle?.listPrice || 0;
+        return {
+          objectId: obj.id,
+          objectName: obj.name,
+          address: obj.address,
+          quantity,
+          articleName: linkedArticle?.name || "-",
+          estimatedDuration: (linkedArticle?.productionTime || 0) * quantity,
+          estimatedValue: unitPrice * quantity,
+        };
+      });
+
+      // Generate rolling schedule preview if scenario is "schema"
+      let schedulePreview: Array<{ date: string; objectCount: number }> = [];
+      if (concept.scenario === "schema" && concept.deliverySchedule) {
+        const schedule = concept.deliverySchedule as Array<{ month: number; weekNumber: number; weekday: number; timeWindowStart?: string; timeWindowEnd?: string }>;
+        const months = concept.rollingMonths || 3;
+        const now = new Date();
+        for (let m = 0; m < months; m++) {
+          const targetMonth = new Date(now.getFullYear(), now.getMonth() + m, 1);
+          for (const entry of schedule) {
+            if (entry.month && entry.month !== targetMonth.getMonth() + 1) continue;
+            const date = getDateFromWeekdayInMonth(targetMonth.getFullYear(), targetMonth.getMonth(), entry.weekNumber, entry.weekday);
+            if (date && date >= now) {
+              schedulePreview.push({
+                date: date.toISOString().split('T')[0],
+                objectCount: matchingObjects.length,
+              });
+            }
+          }
+        }
+        schedulePreview.sort((a, b) => a.date.localeCompare(b.date));
+      }
+
+      // Subscription calculation for "abonnemang" scenario
+      let subscriptionCalc: { totalUnits: number; monthlyTotal: number; yearlyTotal: number } | undefined;
+      if (concept.scenario === "abonnemang" && concept.monthlyFee) {
+        let totalUnits = 0;
+        for (const obj of matchingObjects) {
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
+            totalUnits += Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
+          } else {
+            totalUnits += 1;
+          }
+        }
+        subscriptionCalc = {
+          totalUnits,
+          monthlyTotal: totalUnits * concept.monthlyFee,
+          yearlyTotal: totalUnits * concept.monthlyFee * 12,
+        };
+      }
+
+      res.json({
+        objectsMatched: matchingObjects.length,
+        totalFilters: filters.length,
+        items: previewItems,
+        schedulePreview,
+        subscriptionCalc,
+      });
+    } catch (error) {
+      console.error("Failed to preview order concept:", error);
+      res.status(500).json({ error: "Kunde inte förhandsgranska orderkoncept" });
+    }
+  });
+
+  // Rolling schedule execution - generate assignments for upcoming windows
+  app.post("/api/order-concepts/:id/run-rolling", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = req.session?.user?.id;
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+
+      if (concept.scenario !== "schema" || !concept.deliverySchedule) {
+        return res.status(400).json({ error: "Konceptet har inget leveransschema" });
+      }
+
+      const filters = await storage.getConceptFilters(concept.id);
+      let targetObjects: ServiceObject[] = [];
+      if (concept.targetClusterId) {
+        targetObjects = await storage.getClusterObjects(concept.targetClusterId);
+      } else {
+        targetObjects = await storage.getObjects(tenantId);
+      }
+
+      const matchingObjects = targetObjects.filter(obj => {
+        return filters.every(filter => {
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
+          const filterValue = filter.filterValue;
+          switch (filter.operator) {
+            case "equals": return metadataValue === filterValue;
+            case "not_equals": return metadataValue !== filterValue;
+            case "contains": return String(metadataValue || "").includes(String(filterValue));
+            case "greater_than": return Number(metadataValue) > Number(filterValue);
+            case "less_than": return Number(metadataValue) < Number(filterValue);
+            case "exists": return metadataValue !== undefined && metadataValue !== null;
+            case "not_exists": return metadataValue === undefined || metadataValue === null;
+            default: return true;
+          }
+        });
+      });
+
+      let linkedArticle: Awaited<ReturnType<typeof storage.getArticle>> | undefined = undefined;
+      if (concept.articleId) {
+        linkedArticle = await storage.getArticle(concept.articleId);
+      }
+
+      const schedule = concept.deliverySchedule as Array<{ month: number; weekNumber: number; weekday: number; timeWindowStart?: string; timeWindowEnd?: string }>;
+      const months = concept.rollingMonths || 3;
+      const now = new Date();
+      const createdAssignments = [];
+
+      for (let m = 0; m < months; m++) {
+        const targetMonth = new Date(now.getFullYear(), now.getMonth() + m, 1);
+        for (const entry of schedule) {
+          if (entry.month && entry.month !== targetMonth.getMonth() + 1) continue;
+          const date = getDateFromWeekdayInMonth(targetMonth.getFullYear(), targetMonth.getMonth(), entry.weekNumber, entry.weekday);
+          if (!date || date < now) continue;
+
+          for (const obj of matchingObjects) {
+            const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+            let quantity = 1;
+            if (concept.crossPollinationField && objWithMeta.metadata?.[concept.crossPollinationField]) {
+              quantity = Number(objWithMeta.metadata[concept.crossPollinationField]) || 1;
+            }
+
+            const estimatedDuration = (linkedArticle?.productionTime || 0) * quantity || 60;
+            const totalValue = (linkedArticle?.listPrice || 0) * quantity;
+            const totalCost = (linkedArticle?.cost || 0) * quantity;
+
+            const assignment = await storage.createAssignment({
+              tenantId,
+              orderConceptId: concept.id,
+              objectId: obj.id,
+              clusterId: obj.clusterId || undefined,
+              title: concept.name,
+              description: concept.description || undefined,
+              status: "not_planned",
+              priority: concept.priority || "normal",
+              scheduledDate: date,
+              plannedWindowStart: entry.timeWindowStart ? new Date(`${date.toISOString().split('T')[0]}T${entry.timeWindowStart}:00`) : undefined,
+              plannedWindowEnd: entry.timeWindowEnd ? new Date(`${date.toISOString().split('T')[0]}T${entry.timeWindowEnd}:00`) : undefined,
+              quantity,
+              address: obj.address || undefined,
+              latitude: obj.latitude || undefined,
+              longitude: obj.longitude || undefined,
+              creationMethod: "automatic",
+              createdBy: userId,
+              estimatedDuration,
+              cachedValue: totalValue,
+              cachedCost: totalCost,
+            });
+
+            if (linkedArticle && concept.articleId) {
+              await storage.createAssignmentArticle({
+                assignmentId: assignment.id,
+                articleId: concept.articleId,
+                quantity,
+                unitPrice: linkedArticle.listPrice || 0,
+                totalPrice: totalValue,
+                unitCost: linkedArticle.cost || 0,
+                totalCost,
+                unitTime: linkedArticle.productionTime || 0,
+                totalTime: estimatedDuration,
+                sequenceOrder: 1,
+                status: "pending"
+              });
+            }
+
+            createdAssignments.push(assignment);
+          }
+        }
+      }
+
+      await storage.updateOrderConcept(concept.id, tenantId, {
+        lastRunDate: new Date(),
+        nextRunDate: new Date(now.getFullYear(), now.getMonth() + months, 1),
+      });
+
+      res.json({
+        success: true,
+        message: `Genererade ${createdAssignments.length} uppgifter för ${months} månader framåt`,
+        assignmentsCreated: createdAssignments.length,
+        objectsMatched: matchingObjects.length,
+      });
+    } catch (error) {
+      console.error("Failed to run rolling schedule:", error);
+      res.status(500).json({ error: "Kunde inte köra rullande schema" });
+    }
+  });
+
+  // Subscription calculation
+  app.get("/api/order-concepts/:id/subscription-calc", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) {
+        return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+
+      const filters = await storage.getConceptFilters(concept.id);
+      let targetObjects: ServiceObject[] = [];
+      if (concept.targetClusterId) {
+        targetObjects = await storage.getClusterObjects(concept.targetClusterId);
+      } else {
+        targetObjects = await storage.getObjects(tenantId);
+      }
+
+      const matchingObjects = targetObjects.filter(obj => {
+        return filters.every(filter => {
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
+          const filterValue = filter.filterValue;
+          switch (filter.operator) {
+            case "equals": return metadataValue === filterValue;
+            case "not_equals": return metadataValue !== filterValue;
+            case "exists": return metadataValue !== undefined && metadataValue !== null;
+            default: return true;
+          }
+        });
+      });
+
+      const perObject = matchingObjects.map(obj => {
+        const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+        let units = 1;
+        if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
+          units = Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
+        }
+        return {
+          objectId: obj.id,
+          objectName: obj.name,
+          units,
+          monthlyFee: (concept.monthlyFee || 0) * units,
+        };
+      });
+
+      const totalUnits = perObject.reduce((sum, p) => sum + p.units, 0);
+      const monthlyTotal = perObject.reduce((sum, p) => sum + p.monthlyFee, 0);
+
+      res.json({
+        perObject,
+        totalUnits,
+        monthlyTotal,
+        quarterlyTotal: monthlyTotal * 3,
+        yearlyTotal: monthlyTotal * 12,
+        billingFrequency: concept.billingFrequency || "monthly",
+        contractLockMonths: concept.contractLockMonths,
+      });
+    } catch (error) {
+      console.error("Failed to calc subscription:", error);
+      res.status(500).json({ error: "Kunde inte beräkna abonnemang" });
+    }
+  });
+
+  // Subscription changes
+  app.get("/api/subscription-changes", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { conceptId, status } = req.query;
+      const changes = await storage.getSubscriptionChanges(
+        tenantId,
+        conceptId as string | undefined,
+        status as string | undefined
+      );
+      res.json(changes);
+    } catch (error) {
+      console.error("Failed to get subscription changes:", error);
+      res.status(500).json({ error: "Kunde inte hämta abonnemangsändringar" });
+    }
+  });
+
+  app.patch("/api/subscription-changes/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = req.session?.user?.id;
+      const { approvalStatus } = req.body;
+      if (!approvalStatus || !["approved", "rejected"].includes(approvalStatus)) {
+        return res.status(400).json({ error: "Ogiltig status" });
+      }
+      const change = await storage.updateSubscriptionChangeStatus(
+        req.params.id, tenantId, approvalStatus, userId
+      );
+      if (!change) {
+        return res.status(404).json({ error: "Ändring hittades inte" });
+      }
+      res.json(change);
+    } catch (error) {
+      console.error("Failed to update subscription change:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera ändring" });
+    }
+  });
+
+  // Detect subscription changes
+  app.post("/api/order-concepts/:id/detect-changes", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept || concept.scenario !== "abonnemang") {
+        return res.status(400).json({ error: "Konceptet är inte ett abonnemang" });
+      }
+
+      const filters = await storage.getConceptFilters(concept.id);
+      let targetObjects: ServiceObject[] = [];
+      if (concept.targetClusterId) {
+        targetObjects = await storage.getClusterObjects(concept.targetClusterId);
+      } else {
+        targetObjects = await storage.getObjects(tenantId);
+      }
+
+      const matchingObjects = targetObjects.filter(obj => {
+        return filters.every(filter => {
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
+          const filterValue = filter.filterValue;
+          switch (filter.operator) {
+            case "equals": return metadataValue === filterValue;
+            case "not_equals": return metadataValue !== filterValue;
+            case "exists": return metadataValue !== undefined && metadataValue !== null;
+            default: return true;
+          }
+        });
+      });
+
+      const existingAssignments = await storage.getAssignments(tenantId, {});
+      const conceptAssignments = existingAssignments.filter(a => a.orderConceptId === concept.id);
+      const assignedObjectIds = new Set(conceptAssignments.map(a => a.objectId));
+
+      const createdChanges = [];
+
+      for (const obj of matchingObjects) {
+        if (!assignedObjectIds.has(obj.id)) {
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          let units = 1;
+          if (concept.subscriptionMetadataField && objWithMeta.metadata?.[concept.subscriptionMetadataField]) {
+            units = Number(objWithMeta.metadata[concept.subscriptionMetadataField]) || 1;
+          }
+          const monthlyDelta = (concept.monthlyFee || 0) * units;
+          const change = await storage.createSubscriptionChange({
+            tenantId,
+            orderConceptId: concept.id,
+            objectId: obj.id,
+            changeType: "new_object",
+            previousValue: "0",
+            newValue: String(units),
+            monthlyDelta,
+            approvalStatus: "pending",
+          });
+          createdChanges.push(change);
+        }
+      }
+
+      for (const objectId of assignedObjectIds) {
+        if (!matchingObjects.find(o => o.id === objectId)) {
+          const assignment = conceptAssignments.find(a => a.objectId === objectId);
+          const monthlyDelta = -(concept.monthlyFee || 0) * (assignment?.quantity || 1);
+          const change = await storage.createSubscriptionChange({
+            tenantId,
+            orderConceptId: concept.id,
+            objectId,
+            changeType: "removed_object",
+            previousValue: String(assignment?.quantity || 1),
+            newValue: "0",
+            monthlyDelta,
+            approvalStatus: "pending",
+          });
+          createdChanges.push(change);
+        }
+      }
+
+      res.json({
+        changesDetected: createdChanges.length,
+        changes: createdChanges,
+      });
+    } catch (error) {
+      console.error("Failed to detect changes:", error);
+      res.status(500).json({ error: "Kunde inte detektera ändringar" });
     }
   });
 
