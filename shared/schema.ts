@@ -1743,9 +1743,12 @@ export const orderConcepts = pgTable("order_concepts", {
   minDaysBetween: integer("min_days_between"), // Minsta antal dagar mellan besök
   
   // === ABONNEMANG (Subscription) ===
+  washesPerYear: integer("washes_per_year"),
+  pricePerUnit: real("price_per_unit"),
   monthlyFee: real("monthly_fee"), // Fast månadsavgift per enhet
   billingFrequency: text("billing_frequency").default("monthly"), // monthly, quarterly, yearly
   contractLockMonths: integer("contract_lock_months"), // Bindningstid i månader
+  contractLock: boolean("contract_lock").default(false),
   subscriptionMetadataField: text("subscription_metadata_field"), // Metadata-nyckel för antal (t.ex. "antal_karl")
   
   // === FLEXIBEL SCHEMALÄGGNING (ny) ===
@@ -1978,6 +1981,116 @@ export const insertSubscriptionChangeSchema = createInsertSchema(subscriptionCha
   createdAt: true,
   detectedAt: true,
 });
+
+// ============================================
+// TASK DEPENDENCY TEMPLATES - Mallar på artikelnivå
+// ============================================
+
+export const taskDependencyTemplates = pgTable("task_dependency_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  dependentArticleId: varchar("dependent_article_id").references(() => articles.id).notNull(),
+  dependencyType: text("dependency_type").notNull(), // 'before' or 'after'
+  timeOffsetHours: integer("time_offset_hours").default(0).notNull(), // Negativ = innan, Positiv = efter
+  isMandatory: boolean("is_mandatory").default(true).notNull(),
+  orderIndex: integer("order_index").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_task_dep_templates_tenant").on(table.tenantId),
+  index("idx_task_dep_templates_article").on(table.articleId),
+]);
+
+export const insertTaskDependencyTemplateSchema = createInsertSchema(taskDependencyTemplates).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertTaskDependencyTemplate = z.infer<typeof insertTaskDependencyTemplateSchema>;
+export type TaskDependencyTemplate = typeof taskDependencyTemplates.$inferSelect;
+
+// ============================================
+// TASK DEPENDENCY INSTANCES - Genererade beroendeinstanser
+// ============================================
+
+export const taskDependencyInstances = pgTable("task_dependency_instances", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  parentWorkOrderId: varchar("parent_work_order_id").references(() => workOrders.id).notNull(),
+  childWorkOrderId: varchar("child_work_order_id").references(() => workOrders.id).notNull(),
+  dependencyType: text("dependency_type").notNull(), // 'before' or 'after'
+  scheduledAt: timestamp("scheduled_at"),
+  completed: boolean("completed").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_task_dep_instances_parent").on(table.parentWorkOrderId),
+  index("idx_task_dep_instances_child").on(table.childWorkOrderId),
+]);
+
+export const insertTaskDependencyInstanceSchema = createInsertSchema(taskDependencyInstances).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertTaskDependencyInstance = z.infer<typeof insertTaskDependencyInstanceSchema>;
+export type TaskDependencyInstance = typeof taskDependencyInstances.$inferSelect;
+
+// ============================================
+// INVOICE RULES - Faktureringsregler per kund/koncept
+// ============================================
+
+export const INVOICE_TYPES = ["per_task", "per_room", "per_area", "monthly"] as const;
+export type InvoiceType = typeof INVOICE_TYPES[number];
+
+export const invoiceRules = pgTable("invoice_rules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id),
+  customerId: varchar("customer_id"),
+  invoiceType: text("invoice_type").default("per_task").notNull(), // per_task, per_room, per_area, monthly
+  metadataOnHeader: jsonb("metadata_on_header"), // ["avdelningsnummer", "kostnadsställe", "referens"]
+  metadataOnLine: jsonb("metadata_on_line"), // ["fasadnummer", "klistermärke_status"]
+  waitForAll: boolean("wait_for_all").default(false),
+  contractLock: boolean("contract_lock").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_invoice_rules_tenant").on(table.tenantId),
+  index("idx_invoice_rules_concept").on(table.orderConceptId),
+]);
+
+export const insertInvoiceRuleSchema = createInsertSchema(invoiceRules).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertInvoiceRule = z.infer<typeof insertInvoiceRuleSchema>;
+export type InvoiceRule = typeof invoiceRules.$inferSelect;
+
+// ============================================
+// ORDERKONCEPT RUN LOG - Omkörningslogg
+// ============================================
+
+export const orderConceptRunLogs = pgTable("order_concept_run_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id).notNull(),
+  runType: text("run_type").notNull(), // 'manual', 'rolling', 'rerun'
+  status: text("status").default("completed").notNull(), // 'completed', 'failed', 'partial'
+  tasksCreated: integer("tasks_created").default(0),
+  tasksSkipped: integer("tasks_skipped").default(0),
+  changesDetected: integer("changes_detected").default(0),
+  details: jsonb("details"), // JSON with detailed changes
+  runBy: varchar("run_by").references(() => users.id),
+  runAt: timestamp("run_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_run_logs_tenant").on(table.tenantId),
+  index("idx_run_logs_concept").on(table.orderConceptId),
+]);
+
+export const insertOrderConceptRunLogSchema = createInsertSchema(orderConceptRunLogs).omit({
+  id: true,
+  createdAt: true,
+});
+export type InsertOrderConceptRunLog = z.infer<typeof insertOrderConceptRunLogSchema>;
+export type OrderConceptRunLog = typeof orderConceptRunLogs.$inferSelect;
 
 // ============================================
 // RELATIONS FOR NEW TABLES

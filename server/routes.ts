@@ -8719,6 +8719,362 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // ============================================
+  // TASK DEPENDENCY TEMPLATES API
+  // ============================================
+
+  app.get("/api/task-dependency-templates", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { articleId } = req.query;
+      const templates = await storage.getTaskDependencyTemplates(tenantId, articleId as string | undefined);
+      res.json(templates);
+    } catch (error) {
+      console.error("Failed to get task dependency templates:", error);
+      res.status(500).json({ error: "Kunde inte hämta beroendemallar" });
+    }
+  });
+
+  app.get("/api/task-dependency-templates/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const template = await storage.getTaskDependencyTemplate(req.params.id);
+      if (!template || template.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Beroendemall hittades inte" });
+      }
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta beroendemall" });
+    }
+  });
+
+  app.post("/api/task-dependency-templates", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const template = await storage.createTaskDependencyTemplate({ ...req.body, tenantId });
+      res.status(201).json(template);
+    } catch (error) {
+      console.error("Failed to create task dependency template:", error);
+      res.status(500).json({ error: "Kunde inte skapa beroendemall" });
+    }
+  });
+
+  app.put("/api/task-dependency-templates/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const updated = await storage.updateTaskDependencyTemplate(req.params.id, tenantId, req.body);
+      if (!updated) return res.status(404).json({ error: "Beroendemall hittades inte" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte uppdatera beroendemall" });
+    }
+  });
+
+  app.delete("/api/task-dependency-templates/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteTaskDependencyTemplate(req.params.id, tenantId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte ta bort beroendemall" });
+    }
+  });
+
+  app.post("/api/work-orders/:id/generate-dependent-tasks", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder || workOrder.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      }
+
+      const templates = await storage.getTaskDependencyTemplates(tenantId, workOrder.articleId || undefined);
+      if (templates.length === 0) {
+        return res.json({ created: 0, message: "Inga beroendemallar konfigurerade för denna artikel" });
+      }
+
+      const created = [];
+      for (const template of templates) {
+        const scheduledDate = workOrder.scheduledDate ? new Date(workOrder.scheduledDate) : new Date();
+        const offsetMs = (template.timeOffsetHours || 0) * 60 * 60 * 1000;
+        const childScheduled = new Date(scheduledDate.getTime() + offsetMs);
+
+        const childWo = await storage.createWorkOrder({
+          tenantId,
+          articleId: template.dependentArticleId,
+          objectId: workOrder.objectId,
+          customerId: workOrder.customerId,
+          scheduledDate: childScheduled,
+          status: template.dependencyType === "before" ? "pending" : "locked",
+          executionStatus: "not_started",
+          priority: workOrder.priority,
+          description: `Beroende uppgift (${template.dependencyType === "before" ? "före" : "efter"})`,
+          creationMethod: "auto_dependency",
+        });
+
+        const instance = await storage.createTaskDependencyInstance({
+          tenantId,
+          parentWorkOrderId: workOrder.id,
+          childWorkOrderId: childWo.id,
+          dependencyType: template.dependencyType,
+          scheduledAt: childScheduled,
+          completed: false,
+        });
+
+        created.push({ workOrder: childWo, instance });
+      }
+
+      res.json({ created: created.length, tasks: created });
+    } catch (error) {
+      console.error("Failed to generate dependent tasks:", error);
+      res.status(500).json({ error: "Kunde inte generera beroende uppgifter" });
+    }
+  });
+
+  app.get("/api/task-dependency-instances", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { parentWorkOrderId } = req.query;
+      const instances = await storage.getTaskDependencyInstances(tenantId, parentWorkOrderId as string | undefined);
+      res.json(instances);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta beroendeinstanser" });
+    }
+  });
+
+  // ============================================
+  // INVOICE RULES API
+  // ============================================
+
+  app.get("/api/invoice-rules", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { orderConceptId } = req.query;
+      const rules = await storage.getInvoiceRules(tenantId, orderConceptId as string | undefined);
+      res.json(rules);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta faktureringsregler" });
+    }
+  });
+
+  app.post("/api/invoice-rules", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rule = await storage.createInvoiceRule({ ...req.body, tenantId });
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Failed to create invoice rule:", error);
+      res.status(500).json({ error: "Kunde inte skapa faktureringsregel" });
+    }
+  });
+
+  app.put("/api/invoice-rules/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const updated = await storage.updateInvoiceRule(req.params.id, tenantId, req.body);
+      if (!updated) return res.status(404).json({ error: "Faktureringsregel hittades inte" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte uppdatera faktureringsregel" });
+    }
+  });
+
+  app.delete("/api/invoice-rules/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteInvoiceRule(req.params.id, tenantId);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte ta bort faktureringsregel" });
+    }
+  });
+
+  // ============================================
+  // ORDER CONCEPT RERUN & RUN LOGS API
+  // ============================================
+
+  app.get("/api/order-concept-run-logs", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { orderConceptId } = req.query;
+      const logs = await storage.getOrderConceptRunLogs(tenantId, orderConceptId as string | undefined);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta omkörningsloggar" });
+    }
+  });
+
+  app.post("/api/order-concepts/:id/rerun", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = req.session?.user?.id;
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) return res.status(404).json({ error: "Orderkoncept hittades inte" });
+
+      let tasksCreated = 0;
+      let tasksSkipped = 0;
+      let changesDetected = 0;
+      const details: any[] = [];
+
+      const filters = await storage.getConceptFilters(concept.id);
+      let targetObjects: ServiceObject[] = [];
+      if (concept.targetClusterId) {
+        targetObjects = await storage.getClusterObjects(concept.targetClusterId);
+      } else {
+        targetObjects = await storage.getObjects(tenantId);
+      }
+
+      const matchingObjects = targetObjects.filter(obj => {
+        if (filters.length === 0) return true;
+        return filters.every(filter => {
+          const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+          const metadataValue = objWithMeta.metadata?.[filter.metadataKey];
+          const filterValue = filter.filterValue;
+          switch (filter.operator) {
+            case "equals": return metadataValue === filterValue;
+            case "not_equals": return metadataValue !== filterValue;
+            case "exists": return metadataValue !== undefined && metadataValue !== null;
+            default: return true;
+          }
+        });
+      });
+
+      const existingAssignments = await storage.getAssignments(tenantId, {});
+      const conceptAssignments = existingAssignments.filter(a => a.orderConceptId === concept.id);
+      const assignedObjectIds = new Set(conceptAssignments.map(a => a.objectId));
+
+      for (const obj of matchingObjects) {
+        if (!assignedObjectIds.has(obj.id)) {
+          changesDetected++;
+          details.push({ type: "new_object", objectId: obj.id, objectName: obj.name || obj.id });
+        }
+      }
+
+      for (const objectId of assignedObjectIds) {
+        if (!matchingObjects.find(o => o.id === objectId)) {
+          changesDetected++;
+          details.push({ type: "removed_object", objectId });
+        }
+      }
+
+      if (concept.subscriptionMetadataField) {
+        for (const obj of matchingObjects) {
+          if (assignedObjectIds.has(obj.id)) {
+            const objWithMeta = obj as typeof obj & { metadata?: Record<string, unknown> };
+            const currentUnits = Number(objWithMeta.metadata?.[concept.subscriptionMetadataField] || 0);
+            const assignment = conceptAssignments.find(a => a.objectId === obj.id);
+            const previousUnits = assignment?.quantity || 0;
+            if (currentUnits !== previousUnits) {
+              changesDetected++;
+              details.push({ 
+                type: "quantity_changed", 
+                objectId: obj.id, 
+                objectName: obj.name || obj.id,
+                previousValue: previousUnits, 
+                newValue: currentUnits 
+              });
+            }
+          }
+        }
+      }
+
+      if (concept.scenario === "schema" && concept.deliverySchedule) {
+        const schedule = concept.deliverySchedule as any[];
+        const now = new Date();
+        const futureDate = new Date();
+        futureDate.setMonth(futureDate.getMonth() + (concept.rollingMonths || 3));
+
+        for (const entry of schedule) {
+          const targetMonth = entry.month;
+          for (let year = now.getFullYear(); year <= futureDate.getFullYear(); year++) {
+            const entryDate = new Date(year, targetMonth - 1, 1);
+            if (entryDate >= now && entryDate <= futureDate) {
+              const existingForMonth = conceptAssignments.find(a => {
+                if (!a.scheduledDate) return false;
+                const d = new Date(a.scheduledDate);
+                return d.getMonth() + 1 === targetMonth && d.getFullYear() === year;
+              });
+              if (!existingForMonth) {
+                tasksCreated++;
+                details.push({ type: "new_schedule_entry", month: targetMonth, year });
+              } else {
+                tasksSkipped++;
+              }
+            }
+          }
+        }
+      }
+
+      const log = await storage.createOrderConceptRunLog({
+        tenantId,
+        orderConceptId: concept.id,
+        runType: "rerun",
+        status: "completed",
+        tasksCreated,
+        tasksSkipped,
+        changesDetected,
+        details,
+        runBy: userId,
+      });
+
+      await storage.updateOrderConcept(concept.id, tenantId, { lastRunDate: new Date() });
+
+      res.json({
+        log,
+        summary: {
+          tasksCreated,
+          tasksSkipped,
+          changesDetected,
+          details,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to rerun order concept:", error);
+      res.status(500).json({ error: "Kunde inte köra om orderkonceptet" });
+    }
+  });
+
+  app.post("/api/order-concepts/:id/validate-min-days", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) return res.status(404).json({ error: "Orderkoncept hittades inte" });
+
+      const minDays = concept.minDaysBetween || 60;
+      const { proposedDate } = req.body;
+      if (!proposedDate) return res.status(400).json({ error: "proposedDate krävs" });
+
+      const existingAssignments = await storage.getAssignments(tenantId, {});
+      const conceptAssignments = existingAssignments.filter(a => a.orderConceptId === concept.id);
+      const proposedDateObj = new Date(proposedDate);
+
+      let valid = true;
+      let conflictingTask = null;
+
+      for (const assignment of conceptAssignments) {
+        if (!assignment.scheduledDate) continue;
+        const assignDate = new Date(assignment.scheduledDate);
+        const diffMs = Math.abs(proposedDateObj.getTime() - assignDate.getTime());
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+        if (diffDays < minDays) {
+          valid = false;
+          conflictingTask = {
+            id: assignment.id,
+            scheduledDate: assignment.scheduledDate,
+            daysDiff: Math.round(diffDays),
+          };
+          break;
+        }
+      }
+
+      res.json({ valid, minDays, conflictingTask });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte validera min dagar mellan" });
+    }
+  });
+
+  // ============================================
   // SCHEDULE API (Week Planning)
   // ============================================
 

@@ -52,6 +52,10 @@ import {
   type Assignment, type InsertAssignment,
   type AssignmentArticle, type InsertAssignmentArticle,
   type SubscriptionChange, type InsertSubscriptionChange,
+  type TaskDependencyTemplate, type InsertTaskDependencyTemplate,
+  type TaskDependencyInstance, type InsertTaskDependencyInstance,
+  type InvoiceRule, type InsertInvoiceRule,
+  type OrderConceptRunLog, type InsertOrderConceptRunLog,
   type CustomerPortalToken, type InsertCustomerPortalToken,
   type CustomerPortalSession, type InsertCustomerPortalSession,
   type CustomerBookingRequest, type InsertCustomerBookingRequest,
@@ -81,6 +85,7 @@ import {
   metadataDefinitions, objectMetadata, objectPayers,
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
   orderConcepts, conceptFilters, assignments, assignmentArticles, subscriptionChanges,
+  taskDependencyTemplates, taskDependencyInstances, invoiceRules, orderConceptRunLogs,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData,
@@ -404,6 +409,29 @@ export interface IStorage {
   getSubscriptionChanges(tenantId: string, conceptId?: string, status?: string): Promise<SubscriptionChange[]>;
   createSubscriptionChange(change: InsertSubscriptionChange): Promise<SubscriptionChange>;
   updateSubscriptionChangeStatus(id: string, tenantId: string, status: string, approvedBy?: string): Promise<SubscriptionChange | undefined>;
+
+  // Task Dependency Templates
+  getTaskDependencyTemplates(tenantId: string, articleId?: string): Promise<TaskDependencyTemplate[]>;
+  getTaskDependencyTemplate(id: string): Promise<TaskDependencyTemplate | undefined>;
+  createTaskDependencyTemplate(template: InsertTaskDependencyTemplate): Promise<TaskDependencyTemplate>;
+  updateTaskDependencyTemplate(id: string, tenantId: string, data: Partial<InsertTaskDependencyTemplate>): Promise<TaskDependencyTemplate | undefined>;
+  deleteTaskDependencyTemplate(id: string, tenantId: string): Promise<void>;
+
+  // Task Dependency Instances
+  getTaskDependencyInstances(tenantId: string, parentWorkOrderId?: string): Promise<TaskDependencyInstance[]>;
+  createTaskDependencyInstance(instance: InsertTaskDependencyInstance): Promise<TaskDependencyInstance>;
+  updateTaskDependencyInstanceCompleted(id: string, tenantId: string, completed: boolean): Promise<TaskDependencyInstance | undefined>;
+
+  // Invoice Rules
+  getInvoiceRules(tenantId: string, orderConceptId?: string): Promise<InvoiceRule[]>;
+  getInvoiceRule(id: string): Promise<InvoiceRule | undefined>;
+  createInvoiceRule(rule: InsertInvoiceRule): Promise<InvoiceRule>;
+  updateInvoiceRule(id: string, tenantId: string, data: Partial<InsertInvoiceRule>): Promise<InvoiceRule | undefined>;
+  deleteInvoiceRule(id: string, tenantId: string): Promise<void>;
+
+  // Order Concept Run Logs
+  getOrderConceptRunLogs(tenantId: string, orderConceptId?: string): Promise<OrderConceptRunLog[]>;
+  createOrderConceptRunLog(log: InsertOrderConceptRunLog): Promise<OrderConceptRunLog>;
 
   // Customer Portal - Tokens and Sessions
   createPortalToken(token: InsertCustomerPortalToken): Promise<CustomerPortalToken>;
@@ -3095,6 +3123,114 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(subscriptionChanges.id, id), eq(subscriptionChanges.tenantId, tenantId)))
       .returning();
     return result || undefined;
+  }
+
+  // ============================================
+  // Task Dependency Templates
+  // ============================================
+
+  async getTaskDependencyTemplates(tenantId: string, articleId?: string): Promise<TaskDependencyTemplate[]> {
+    const conditions = [eq(taskDependencyTemplates.tenantId, tenantId)];
+    if (articleId) conditions.push(eq(taskDependencyTemplates.articleId, articleId));
+    return db.select().from(taskDependencyTemplates).where(and(...conditions)).orderBy(taskDependencyTemplates.orderIndex);
+  }
+
+  async getTaskDependencyTemplate(id: string): Promise<TaskDependencyTemplate | undefined> {
+    const [result] = await db.select().from(taskDependencyTemplates).where(eq(taskDependencyTemplates.id, id));
+    return result || undefined;
+  }
+
+  async createTaskDependencyTemplate(template: InsertTaskDependencyTemplate): Promise<TaskDependencyTemplate> {
+    const [result] = await db.insert(taskDependencyTemplates).values(template).returning();
+    return result;
+  }
+
+  async updateTaskDependencyTemplate(id: string, tenantId: string, data: Partial<InsertTaskDependencyTemplate>): Promise<TaskDependencyTemplate | undefined> {
+    const [result] = await db.update(taskDependencyTemplates)
+      .set(data)
+      .where(and(eq(taskDependencyTemplates.id, id), eq(taskDependencyTemplates.tenantId, tenantId)))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteTaskDependencyTemplate(id: string, tenantId: string): Promise<void> {
+    await db.delete(taskDependencyTemplates).where(and(
+      eq(taskDependencyTemplates.id, id),
+      eq(taskDependencyTemplates.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Task Dependency Instances
+  // ============================================
+
+  async getTaskDependencyInstances(tenantId: string, parentWorkOrderId?: string): Promise<TaskDependencyInstance[]> {
+    const conditions = [eq(taskDependencyInstances.tenantId, tenantId)];
+    if (parentWorkOrderId) conditions.push(eq(taskDependencyInstances.parentWorkOrderId, parentWorkOrderId));
+    return db.select().from(taskDependencyInstances).where(and(...conditions));
+  }
+
+  async createTaskDependencyInstance(instance: InsertTaskDependencyInstance): Promise<TaskDependencyInstance> {
+    const [result] = await db.insert(taskDependencyInstances).values(instance).returning();
+    return result;
+  }
+
+  async updateTaskDependencyInstanceCompleted(id: string, tenantId: string, completed: boolean): Promise<TaskDependencyInstance | undefined> {
+    const [result] = await db.update(taskDependencyInstances)
+      .set({ completed })
+      .where(and(eq(taskDependencyInstances.id, id), eq(taskDependencyInstances.tenantId, tenantId)))
+      .returning();
+    return result || undefined;
+  }
+
+  // ============================================
+  // Invoice Rules
+  // ============================================
+
+  async getInvoiceRules(tenantId: string, orderConceptId?: string): Promise<InvoiceRule[]> {
+    const conditions = [eq(invoiceRules.tenantId, tenantId)];
+    if (orderConceptId) conditions.push(eq(invoiceRules.orderConceptId, orderConceptId));
+    return db.select().from(invoiceRules).where(and(...conditions));
+  }
+
+  async getInvoiceRule(id: string): Promise<InvoiceRule | undefined> {
+    const [result] = await db.select().from(invoiceRules).where(eq(invoiceRules.id, id));
+    return result || undefined;
+  }
+
+  async createInvoiceRule(rule: InsertInvoiceRule): Promise<InvoiceRule> {
+    const [result] = await db.insert(invoiceRules).values(rule).returning();
+    return result;
+  }
+
+  async updateInvoiceRule(id: string, tenantId: string, data: Partial<InsertInvoiceRule>): Promise<InvoiceRule | undefined> {
+    const [result] = await db.update(invoiceRules)
+      .set(data)
+      .where(and(eq(invoiceRules.id, id), eq(invoiceRules.tenantId, tenantId)))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteInvoiceRule(id: string, tenantId: string): Promise<void> {
+    await db.delete(invoiceRules).where(and(
+      eq(invoiceRules.id, id),
+      eq(invoiceRules.tenantId, tenantId)
+    ));
+  }
+
+  // ============================================
+  // Order Concept Run Logs
+  // ============================================
+
+  async getOrderConceptRunLogs(tenantId: string, orderConceptId?: string): Promise<OrderConceptRunLog[]> {
+    const conditions = [eq(orderConceptRunLogs.tenantId, tenantId)];
+    if (orderConceptId) conditions.push(eq(orderConceptRunLogs.orderConceptId, orderConceptId));
+    return db.select().from(orderConceptRunLogs).where(and(...conditions)).orderBy(desc(orderConceptRunLogs.runAt));
+  }
+
+  async createOrderConceptRunLog(log: InsertOrderConceptRunLog): Promise<OrderConceptRunLog> {
+    const [result] = await db.insert(orderConceptRunLogs).values(log).returning();
+    return result;
   }
 
   // ============================================

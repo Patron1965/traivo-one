@@ -57,6 +57,11 @@ import {
   Clock,
   Package,
   BarChart3,
+  Link2,
+  FileText,
+  History,
+  ArrowRight,
+  ArrowLeft,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -105,6 +110,8 @@ interface FormData {
   priority: string;
   rollingMonths: number;
   minDaysBetween: number;
+  washesPerYear: number;
+  pricePerUnit: number;
   monthlyFee: number;
   billingFrequency: string;
   contractLockMonths: number;
@@ -153,6 +160,8 @@ const defaultForm: FormData = {
   priority: "normal",
   rollingMonths: 3,
   minDaysBetween: 0,
+  washesPerYear: 0,
+  pricePerUnit: 0,
   monthlyFee: 0,
   billingFrequency: "monthly",
   contractLockMonths: 0,
@@ -173,6 +182,25 @@ export default function OrderConceptsPage() {
   const [selectedConceptId, setSelectedConceptId] = useState<string | null>(null);
   const [previewDialogOpen, setPreviewDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("alla");
+  const [depTemplateDialogOpen, setDepTemplateDialogOpen] = useState(false);
+  const [invoiceRuleDialogOpen, setInvoiceRuleDialogOpen] = useState(false);
+  const [runLogsDialogOpen, setRunLogsDialogOpen] = useState(false);
+  const [selectedConceptForPhase2, setSelectedConceptForPhase2] = useState<string | null>(null);
+  const [depTemplateForm, setDepTemplateForm] = useState({
+    sourceArticleId: "",
+    dependentArticleId: "",
+    dependencyType: "before",
+    offsetHours: 24,
+    autoGenerate: true,
+  });
+  const [invoiceRuleForm, setInvoiceRuleForm] = useState({
+    name: "",
+    billingType: "per_task",
+    headerMetadataField: "",
+    lineMetadataField: "",
+    priceField: "",
+    quantityField: "",
+  });
   const [formData, setFormData] = useState<FormData>({ ...defaultForm });
   const [filterForm, setFilterForm] = useState<FilterFormData>({
     metadataKey: "",
@@ -293,6 +321,95 @@ export default function OrderConceptsPage() {
     },
   });
 
+  const selectedConceptArticleId = selectedConceptForPhase2
+    ? concepts.find((c) => c.id === selectedConceptForPhase2)?.articleId || undefined
+    : undefined;
+
+  const depTemplatesUrl = selectedConceptArticleId
+    ? `/api/task-dependency-templates?articleId=${selectedConceptArticleId}`
+    : "/api/task-dependency-templates";
+
+  const { data: depTemplates = [] } = useQuery<any[]>({
+    queryKey: ["/api/task-dependency-templates", selectedConceptArticleId],
+    queryFn: () => fetch(depTemplatesUrl).then((r) => r.json()),
+    enabled: !!selectedConceptArticleId && depTemplateDialogOpen,
+  });
+
+  const invoiceRulesUrl = selectedConceptForPhase2
+    ? `/api/invoice-rules?orderConceptId=${selectedConceptForPhase2}`
+    : "/api/invoice-rules";
+
+  const { data: invoiceRules = [] } = useQuery<any[]>({
+    queryKey: ["/api/invoice-rules", selectedConceptForPhase2],
+    queryFn: () => fetch(invoiceRulesUrl).then((r) => r.json()),
+    enabled: !!selectedConceptForPhase2 && invoiceRuleDialogOpen,
+  });
+
+  const runLogsUrl = selectedConceptForPhase2
+    ? `/api/order-concept-run-logs?orderConceptId=${selectedConceptForPhase2}`
+    : "/api/order-concept-run-logs";
+
+  const { data: runLogs = [] } = useQuery<any[]>({
+    queryKey: ["/api/order-concept-run-logs", selectedConceptForPhase2],
+    queryFn: () => fetch(runLogsUrl).then((r) => r.json()),
+    enabled: !!selectedConceptForPhase2 && runLogsDialogOpen,
+  });
+
+  const createDepTemplateMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/task-dependency-templates", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/task-dependency-templates", selectedConceptForPhase2] });
+      setDepTemplateForm({ sourceArticleId: "", dependentArticleId: "", dependencyType: "before", offsetHours: 24, autoGenerate: true });
+      toast({ title: "Beroendemall skapad" });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte skapa beroendemall", variant: "destructive" });
+    },
+  });
+
+  const deleteDepTemplateMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/task-dependency-templates/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/task-dependency-templates", selectedConceptForPhase2] });
+      toast({ title: "Beroendemall raderad" });
+    },
+  });
+
+  const createInvoiceRuleMutation = useMutation({
+    mutationFn: (data: any) => apiRequest("POST", "/api/invoice-rules", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoice-rules", selectedConceptForPhase2] });
+      setInvoiceRuleForm({ name: "", billingType: "per_task", headerMetadataField: "", lineMetadataField: "", priceField: "", quantityField: "" });
+      toast({ title: "Fakturaregel skapad" });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte skapa fakturaregel", variant: "destructive" });
+    },
+  });
+
+  const deleteInvoiceRuleMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/invoice-rules/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invoice-rules", selectedConceptForPhase2] });
+      toast({ title: "Fakturaregel raderad" });
+    },
+  });
+
+  const rerunMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("POST", `/api/order-concepts/${id}/rerun`),
+    onSuccess: (response: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/order-concept-run-logs", selectedConceptForPhase2] });
+      toast({
+        title: "Omkörning klar",
+        description: response.message || "Ändringar detekterade och loggade",
+      });
+    },
+    onError: () => {
+      toast({ title: "Kunde inte köra om koncept", variant: "destructive" });
+    },
+  });
+
   const handleEdit = (concept: OrderConcept) => {
     setEditingConcept(concept);
     const schedule = (concept.deliverySchedule as DeliveryScheduleEntry[] | null) || [];
@@ -309,6 +426,8 @@ export default function OrderConceptsPage() {
       priority: concept.priority || "normal",
       rollingMonths: (concept as any).rollingMonths || 3,
       minDaysBetween: (concept as any).minDaysBetween || 0,
+      washesPerYear: (concept as any).washesPerYear || 0,
+      pricePerUnit: (concept as any).pricePerUnit || 0,
       monthlyFee: (concept as any).monthlyFee || 0,
       billingFrequency: (concept as any).billingFrequency || "monthly",
       contractLockMonths: (concept as any).contractLockMonths || 0,
@@ -332,6 +451,8 @@ export default function OrderConceptsPage() {
       rollingMonths: formData.rollingMonths || 3,
       minDaysBetween: formData.minDaysBetween || null,
       deliverySchedule: formData.deliverySchedule.length > 0 ? formData.deliverySchedule : null,
+      washesPerYear: formData.scenario === "abonnemang" ? (formData.washesPerYear || null) : null,
+      pricePerUnit: formData.scenario === "abonnemang" ? (formData.pricePerUnit || null) : null,
       monthlyFee: formData.scenario === "abonnemang" ? formData.monthlyFee : null,
       billingFrequency: formData.scenario === "abonnemang" ? formData.billingFrequency : null,
       contractLockMonths: formData.scenario === "abonnemang" ? (formData.contractLockMonths || null) : null,
@@ -602,11 +723,48 @@ export default function OrderConceptsPage() {
                         <Button
                           size="icon"
                           variant="ghost"
+                          onClick={() => { setSelectedConceptForPhase2(concept.id); rerunMutation.mutate(concept.id); }}
+                          title="Kör om (detektera ändringar)"
+                          disabled={rerunMutation.isPending}
+                          data-testid={`button-rerun-${concept.id}`}
+                        >
+                          <RefreshCw className={`h-4 w-4 text-orange-500 ${rerunMutation.isPending ? "animate-spin" : ""}`} />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
                           onClick={() => handleManageFilters(concept.id)}
                           title="Hantera filter"
                           data-testid={`button-filters-${concept.id}`}
                         >
                           <Filter className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => { setSelectedConceptForPhase2(concept.id); setDepTemplateDialogOpen(true); }}
+                          title="Beroendemallar"
+                          data-testid={`button-dep-templates-${concept.id}`}
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => { setSelectedConceptForPhase2(concept.id); setInvoiceRuleDialogOpen(true); }}
+                          title="Fakturaregler"
+                          data-testid={`button-invoice-rules-${concept.id}`}
+                        >
+                          <FileText className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={() => { setSelectedConceptForPhase2(concept.id); setRunLogsDialogOpen(true); }}
+                          title="Körhistorik"
+                          data-testid={`button-run-logs-${concept.id}`}
+                        >
+                          <History className="h-4 w-4" />
                         </Button>
                         <Button
                           size="icon"
@@ -928,6 +1086,29 @@ export default function OrderConceptsPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
+                      <Label>Tvättar per år</Label>
+                      <Input
+                        type="number"
+                        value={formData.washesPerYear}
+                        onChange={(e) => setFormData({ ...formData, washesPerYear: parseInt(e.target.value) || 0 })}
+                        min={0}
+                        data-testid="input-washes-per-year"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Pris per enhet (SEK)</Label>
+                      <Input
+                        type="number"
+                        value={formData.pricePerUnit}
+                        onChange={(e) => setFormData({ ...formData, pricePerUnit: parseFloat(e.target.value) || 0 })}
+                        min={0}
+                        step={0.01}
+                        data-testid="input-price-per-unit"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
                       <Label>Bindningstid (månader)</Label>
                       <Input
                         type="number"
@@ -1202,6 +1383,320 @@ export default function OrderConceptsPage() {
               </div>
             )}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dependency Templates Dialog */}
+      <Dialog open={depTemplateDialogOpen} onOpenChange={setDepTemplateDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5" />
+              Beroendemallar
+            </DialogTitle>
+            <DialogDescription>
+              Definiera beroenden mellan artiklar för automatisk uppgiftsgenerering
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Källa (artikel) *</Label>
+                <Select
+                  value={depTemplateForm.sourceArticleId || "__none__"}
+                  onValueChange={(v) => setDepTemplateForm({ ...depTemplateForm, sourceArticleId: v === "__none__" ? "" : v })}
+                >
+                  <SelectTrigger data-testid="select-dep-source">
+                    <SelectValue placeholder="Välj artikel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Välj artikel</SelectItem>
+                    {articlesList.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Beroende (artikel) *</Label>
+                <Select
+                  value={depTemplateForm.dependentArticleId || "__none__"}
+                  onValueChange={(v) => setDepTemplateForm({ ...depTemplateForm, dependentArticleId: v === "__none__" ? "" : v })}
+                >
+                  <SelectTrigger data-testid="select-dep-dependent">
+                    <SelectValue placeholder="Välj artikel" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Välj artikel</SelectItem>
+                    {articlesList.map((a) => (
+                      <SelectItem key={a.id} value={a.id}>{a.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Typ</Label>
+                <Select
+                  value={depTemplateForm.dependencyType}
+                  onValueChange={(v) => setDepTemplateForm({ ...depTemplateForm, dependencyType: v })}
+                >
+                  <SelectTrigger data-testid="select-dep-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="before">Före</SelectItem>
+                    <SelectItem value="after">Efter</SelectItem>
+                    <SelectItem value="same_day">Samma dag</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Offset (timmar)</Label>
+                <Input
+                  type="number"
+                  value={depTemplateForm.offsetHours}
+                  onChange={(e) => setDepTemplateForm({ ...depTemplateForm, offsetHours: parseInt(e.target.value) || 0 })}
+                  min={0}
+                  data-testid="input-dep-offset"
+                />
+              </div>
+            </div>
+            <Button
+              onClick={() => {
+                if (!depTemplateForm.sourceArticleId || !depTemplateForm.dependentArticleId) return;
+                createDepTemplateMutation.mutate({
+                  articleId: depTemplateForm.sourceArticleId,
+                  dependentArticleId: depTemplateForm.dependentArticleId,
+                  dependencyType: depTemplateForm.dependencyType,
+                  timeOffsetHours: depTemplateForm.offsetHours,
+                  isMandatory: true,
+                });
+              }}
+              disabled={!depTemplateForm.sourceArticleId || !depTemplateForm.dependentArticleId || createDepTemplateMutation.isPending}
+              data-testid="button-add-dep-template"
+            >
+              {createDepTemplateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Lägg till mall
+            </Button>
+
+            {depTemplates.length > 0 && (
+              <div className="space-y-2">
+                <Label>Befintliga mallar</Label>
+                {depTemplates.map((t: any) => (
+                  <div key={t.id} className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Badge variant="outline">{articlesList.find((a) => a.id === t.articleId)?.name || t.articleId}</Badge>
+                      {t.dependencyType === "before" ? <ArrowRight className="h-3 w-3" /> : t.dependencyType === "after" ? <ArrowLeft className="h-3 w-3" /> : <span className="text-xs">=</span>}
+                      <Badge variant="secondary">{articlesList.find((a) => a.id === t.dependentArticleId)?.name || t.dependentArticleId}</Badge>
+                      <span className="text-muted-foreground">({t.timeOffsetHours}h)</span>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => deleteDepTemplateMutation.mutate(t.id)}
+                      data-testid={`button-delete-dep-${t.id}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Invoice Rules Dialog */}
+      <Dialog open={invoiceRuleDialogOpen} onOpenChange={setInvoiceRuleDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Fakturaregler
+            </DialogTitle>
+            <DialogDescription>
+              Konfigurera hur fakturering sker för detta orderkoncept
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Regelnamn *</Label>
+              <Input
+                value={invoiceRuleForm.name}
+                onChange={(e) => setInvoiceRuleForm({ ...invoiceRuleForm, name: e.target.value })}
+                placeholder="T.ex. Standardfaktura"
+                data-testid="input-invoice-rule-name"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Faktureringstyp</Label>
+                <Select
+                  value={invoiceRuleForm.billingType}
+                  onValueChange={(v) => setInvoiceRuleForm({ ...invoiceRuleForm, billingType: v })}
+                >
+                  <SelectTrigger data-testid="select-billing-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="per_task">Per uppgift</SelectItem>
+                    <SelectItem value="per_room">Per rum</SelectItem>
+                    <SelectItem value="per_area">Per yta</SelectItem>
+                    <SelectItem value="monthly">Månadsvis</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Prisfält (metadata)</Label>
+                <Input
+                  value={invoiceRuleForm.priceField}
+                  onChange={(e) => setInvoiceRuleForm({ ...invoiceRuleForm, priceField: e.target.value })}
+                  placeholder="T.ex. pris_per_karl"
+                  data-testid="input-price-field"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Rubrikfält (metadata)</Label>
+                <Input
+                  value={invoiceRuleForm.headerMetadataField}
+                  onChange={(e) => setInvoiceRuleForm({ ...invoiceRuleForm, headerMetadataField: e.target.value })}
+                  placeholder="T.ex. kund_referens"
+                  data-testid="input-header-field"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Radfält (metadata)</Label>
+                <Input
+                  value={invoiceRuleForm.lineMetadataField}
+                  onChange={(e) => setInvoiceRuleForm({ ...invoiceRuleForm, lineMetadataField: e.target.value })}
+                  placeholder="T.ex. artikel_beskrivning"
+                  data-testid="input-line-field"
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Antalfält (metadata)</Label>
+              <Input
+                value={invoiceRuleForm.quantityField}
+                onChange={(e) => setInvoiceRuleForm({ ...invoiceRuleForm, quantityField: e.target.value })}
+                placeholder="T.ex. antal_karl"
+                data-testid="input-quantity-field"
+              />
+            </div>
+            <Button
+              onClick={() => {
+                if (!invoiceRuleForm.name || !selectedConceptForPhase2) return;
+                createInvoiceRuleMutation.mutate({
+                  orderConceptId: selectedConceptForPhase2,
+                  name: invoiceRuleForm.name,
+                  billingType: invoiceRuleForm.billingType,
+                  headerMetadataField: invoiceRuleForm.headerMetadataField || null,
+                  lineMetadataField: invoiceRuleForm.lineMetadataField || null,
+                  priceField: invoiceRuleForm.priceField || null,
+                  quantityField: invoiceRuleForm.quantityField || null,
+                });
+              }}
+              disabled={!invoiceRuleForm.name || createInvoiceRuleMutation.isPending}
+              data-testid="button-add-invoice-rule"
+            >
+              {createInvoiceRuleMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Plus className="h-4 w-4 mr-2" />}
+              Lägg till regel
+            </Button>
+
+            {invoiceRules.length > 0 && (
+              <div className="space-y-2">
+                <Label>Befintliga regler</Label>
+                {invoiceRules.map((rule: any) => (
+                  <div key={rule.id} className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
+                    <div className="text-sm">
+                      <div className="font-medium">{rule.name}</div>
+                      <div className="text-muted-foreground">
+                        {rule.billingType === "per_task" ? "Per uppgift" : rule.billingType === "per_room" ? "Per rum" : rule.billingType === "per_area" ? "Per yta" : "Månadsvis"}
+                        {rule.priceField && <span> · Pris: {rule.priceField}</span>}
+                        {rule.quantityField && <span> · Antal: {rule.quantityField}</span>}
+                      </div>
+                    </div>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      onClick={() => deleteInvoiceRuleMutation.mutate(rule.id)}
+                      data-testid={`button-delete-rule-${rule.id}`}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Run Logs Dialog */}
+      <Dialog open={runLogsDialogOpen} onOpenChange={setRunLogsDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Körhistorik
+            </DialogTitle>
+            <DialogDescription>
+              Logg över körningar och detekterade ändringar
+            </DialogDescription>
+          </DialogHeader>
+          {runLogs.length === 0 ? (
+            <p className="text-muted-foreground text-center py-8">Ingen körhistorik finns</p>
+          ) : (
+            <div className="space-y-3">
+              {runLogs.map((log: any) => (
+                <Card key={log.id} className="border-muted">
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <Badge variant={log.runType === "rerun" ? "default" : "secondary"}>
+                          {log.runType === "rerun" ? "Omkörning" : log.runType === "rolling" ? "Rullande" : "Initial"}
+                        </Badge>
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(log.createdAt).toLocaleString("sv-SE")}
+                        </span>
+                      </div>
+                      <Badge variant="outline">
+                        {log.objectsProcessed || 0} objekt
+                      </Badge>
+                    </div>
+                    {log.changesDetected && typeof log.changesDetected === "object" && (
+                      <div className="grid grid-cols-3 gap-2 mt-2">
+                        {(log.changesDetected as any).newObjects > 0 && (
+                          <div className="text-xs p-2 bg-green-50 dark:bg-green-900/20 rounded text-green-700 dark:text-green-400">
+                            +{(log.changesDetected as any).newObjects} nya objekt
+                          </div>
+                        )}
+                        {(log.changesDetected as any).removedObjects > 0 && (
+                          <div className="text-xs p-2 bg-red-50 dark:bg-red-900/20 rounded text-red-700 dark:text-red-400">
+                            -{(log.changesDetected as any).removedObjects} borttagna
+                          </div>
+                        )}
+                        {(log.changesDetected as any).quantityChanges > 0 && (
+                          <div className="text-xs p-2 bg-amber-50 dark:bg-amber-900/20 rounded text-amber-700 dark:text-amber-400">
+                            ~{(log.changesDetected as any).quantityChanges} ändringar
+                          </div>
+                        )}
+                        {(log.changesDetected as any).newScheduleEntries > 0 && (
+                          <div className="text-xs p-2 bg-blue-50 dark:bg-blue-900/20 rounded text-blue-700 dark:text-blue-400">
+                            +{(log.changesDetected as any).newScheduleEntries} nya scheman
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 
