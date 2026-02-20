@@ -383,6 +383,16 @@ export const articles = pgTable("articles", {
   dependencyMinutesBefore: integer("dependency_minutes_before"),
   // Utförandekod som krävs (t.ex. "kranbil", "tvatt", "sug")
   executionCode: text("execution_code"),
+  // Metadata-koppling (per Mats spec Funktion 3 & 7)
+  fetchMetadataCode: text("fetch_metadata_code"),
+  leaveMetadataCode: text("leave_metadata_code"),
+  leaveMetadataFormat: text("leave_metadata_format"),
+  // Associations-kod för artikelhook mot metadata-typ
+  associationCode: text("association_code"),
+  // Intern beskrivning för utförare
+  internalDescription: text("internal_description"),
+  // Länk till arbetsbeskrivning
+  infoLink: text("info_link"),
   unit: text("unit").default("st"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -2364,17 +2374,32 @@ export type InsertCustomerNotificationSettings = z.infer<typeof insertCustomerNo
 // Kompletterar det befintliga metadataDefinitions/objectMetadata-systemet
 // ============================================================================
 
-// Tillåtna datatyper för metadata
+// Tillåtna datatyper för metadata (utökade per Mats spec)
 export const METADATA_DATA_TYPES = [
   'string',     // Textvärden
-  'integer',    // Heltal
+  'integer',    // Heltal (ANTAL)
   'decimal',    // Decimaltal
-  'boolean',    // Sant/falskt
+  'boolean',    // Sant/falskt (STATUS)
   'datetime',   // Datum/tid
   'json',       // JSON-objekt
-  'referens'    // Referens till annan tabell
+  'referens',   // Referens till annan tabell (KUND, PRISLISTA)
+  'image',      // Bild (BILD) - URL/filreferens
+  'file',       // Fil (FIL) - URL/filreferens
+  'code',       // Kod (KOD) - text, ev. numerisk
+  'location',   // Plats (PLATS) - GPS lat/long
+  'interval'    // Tid/Intervall (TID) - t.ex. "var 5:e månad"
 ] as const;
 export type MetadataDataType = typeof METADATA_DATA_TYPES[number];
+
+// Metoder för hur metadata skapades/uppdaterades
+export const METADATA_METHODS = [
+  'manuell',      // Skapad manuellt av planerare
+  'automatisk',   // Automatiskt genererad av system
+  'extern',       // Importerad från extern källa (CSV, API)
+  'utforande',    // Uppdaterad vid utförande av fältarbetare
+  'arvd'          // Ärvd från förälderobjekt
+] as const;
+export type MetadataMethod = typeof METADATA_METHODS[number];
 
 // Metadatakatalog - utökad katalog över metadatatyper (Mats vision)
 export const metadataKatalog = pgTable("metadata_katalog", {
@@ -2430,6 +2455,8 @@ export const metadataVarden = pgTable("metadata_varden", {
   arvsNedat: boolean("arvs_nedat").default(false).notNull(),
   // Stoppa vidare ärvning (överskriver förälderns värde men ärver inte vidare)
   stoppaVidareArvning: boolean("stoppa_vidare_arvning").default(false).notNull(),
+  // Nivå-lås: metadata stannar på denna nivå, ärvs INTE nedåt (per Mats spec level_lock)
+  nivaLas: boolean("niva_las").default(false).notNull(),
   
   // === KORSBEFRUKTNING ===
   // Kan denna metadata kopplas till annan metadata? (t.ex. Antal kopplad till Artikel)
@@ -2438,6 +2465,8 @@ export const metadataVarden = pgTable("metadata_varden", {
   // Vem skapade/uppdaterade
   skapadAv: varchar("skapad_av", { length: 100 }),
   uppdateradAv: varchar("uppdaterad_av", { length: 100 }),
+  // Metod: manuell, automatisk, extern, utforande, arvd
+  metod: varchar("metod", { length: 50 }).default("manuell"),
   
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -2464,6 +2493,35 @@ export const metadataVardenRelations = relations(metadataVarden, ({ one, many })
   // Korsbefruktning via koppladTillMetadataId (self-reference handled separately)
 }));
 
+// ============================================================================
+// METADATA-HISTORIK (per Mats spec Funktion 5)
+// Sparar gamla värden vid uppdatering för spårbarhet
+// ============================================================================
+
+export const metadataHistorik = pgTable("metadata_historik", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  metadataVardenId: varchar("metadata_varden_id").references(() => metadataVarden.id, { onDelete: "cascade" }).notNull(),
+  objektId: varchar("objekt_id").references(() => objects.id),
+  metadataKatalogId: varchar("metadata_katalog_id").references(() => metadataKatalog.id),
+  gammaltVarde: text("gammalt_varde"),
+  nyttVarde: text("nytt_varde"),
+  andradAv: varchar("andrad_av", { length: 100 }),
+  andradVid: timestamp("andrad_vid").defaultNow().notNull(),
+  andringsMetod: varchar("andrings_metod", { length: 50 }),
+}, (table) => [
+  index("idx_metadata_historik_varden").on(table.metadataVardenId),
+  index("idx_metadata_historik_objekt").on(table.objektId),
+  index("idx_metadata_historik_tid").on(table.andradVid),
+]);
+
+export const metadataHistorikRelations = relations(metadataHistorik, ({ one }) => ({
+  tenant: one(tenants, { fields: [metadataHistorik.tenantId], references: [tenants.id] }),
+  metadataVarden: one(metadataVarden, { fields: [metadataHistorik.metadataVardenId], references: [metadataVarden.id] }),
+  objekt: one(objects, { fields: [metadataHistorik.objektId], references: [objects.id] }),
+  katalog: one(metadataKatalog, { fields: [metadataHistorik.metadataKatalogId], references: [metadataKatalog.id] }),
+}));
+
 // Schemas och types för det nya metadata-systemet
 export const insertMetadataKatalogSchema = createInsertSchema(metadataKatalog).omit({ id: true, createdAt: true });
 export type MetadataKatalog = typeof metadataKatalog.$inferSelect;
@@ -2472,6 +2530,10 @@ export type InsertMetadataKatalog = z.infer<typeof insertMetadataKatalogSchema>;
 export const insertMetadataVardenSchema = createInsertSchema(metadataVarden).omit({ id: true, createdAt: true, updatedAt: true });
 export type MetadataVarden = typeof metadataVarden.$inferSelect;
 export type InsertMetadataVarden = z.infer<typeof insertMetadataVardenSchema>;
+
+export const insertMetadataHistorikSchema = createInsertSchema(metadataHistorik).omit({ id: true });
+export type MetadataHistorik = typeof metadataHistorik.$inferSelect;
+export type InsertMetadataHistorik = z.infer<typeof insertMetadataHistorikSchema>;
 
 // Utökade typer för metadata med ärvningsinformation
 export interface MetadataVardenWithKatalog extends MetadataVarden {

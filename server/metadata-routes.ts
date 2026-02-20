@@ -18,6 +18,8 @@ import {
   getWorkOrderMetadata,
   createWorkOrderMetadata,
   deleteWorkOrderMetadata,
+  getMetadataHistorik,
+  getObjectMetadataHistorik,
 } from "./metadata-queries";
 import { getTenantIdWithFallback } from "./tenant-middleware";
 
@@ -60,7 +62,7 @@ metadataRouter.post("/types/seed", async (req: Request, res: Response) => {
 const createMetadataTypeSchema = z.object({
   namn: z.string().min(1),
   beskrivning: z.string().optional(),
-  datatyp: z.enum(['string', 'integer', 'decimal', 'boolean', 'datetime', 'json', 'referens']),
+  datatyp: z.enum(['string', 'integer', 'decimal', 'boolean', 'datetime', 'json', 'referens', 'image', 'file', 'code', 'location', 'interval']),
   referensTabell: z.string().optional(),
   arLogisk: z.boolean().optional().default(true),
   standardArvs: z.boolean().optional().default(false),
@@ -78,6 +80,18 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
 
     const validated = createMetadataTypeSchema.parse(req.body);
 
+    const existing = await db.select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, tenantId),
+        eq(metadataKatalog.namn, validated.namn)
+      ))
+      .limit(1);
+
+    if (existing.length > 0) {
+      return res.status(409).json({ error: `Metadatatyp med kod '${validated.namn}' finns redan` });
+    }
+
     const [newType] = await db.insert(metadataKatalog).values({
       tenantId,
       ...validated,
@@ -86,7 +100,6 @@ metadataRouter.post("/types", async (req: Request, res: Response) => {
     res.status(201).json(newType);
   } catch (error: any) {
     console.error("Error creating metadata type:", error);
-    // Handle Zod validation errors
     if (error instanceof ZodError) {
       return res.status(400).json({ 
         error: "Valideringsfel", 
@@ -258,8 +271,10 @@ const createMetadataSchema = z.object({
   metadataTypNamn: z.string(),
   varde: z.any().refine(val => val !== undefined, { message: "varde is required" }),
   arvsNedat: z.boolean().optional(),
+  nivaLas: z.boolean().optional(),
   koppladTillMetadataId: z.string().nullable().optional(),
   skapadAv: z.string().optional(),
+  metod: z.string().optional(),
 });
 
 metadataRouter.post("/", async (req: Request, res: Response) => {
@@ -277,8 +292,10 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
       metadataTypNamn: validated.metadataTypNamn,
       varde: validated.varde,
       arvsNedat: validated.arvsNedat,
+      nivaLas: validated.nivaLas,
       koppladTillMetadataId: validated.koppladTillMetadataId,
       skapadAv: validated.skapadAv,
+      metod: validated.metod,
     });
 
     res.status(201).json(newMetadata);
@@ -305,6 +322,7 @@ metadataRouter.post("/", async (req: Request, res: Response) => {
 const updateMetadataSchema = z.object({
   varde: z.any(),
   uppdateradAv: z.string().optional(),
+  metod: z.string().optional(),
 });
 
 metadataRouter.put("/:id", async (req: Request, res: Response) => {
@@ -317,7 +335,7 @@ metadataRouter.put("/:id", async (req: Request, res: Response) => {
     const { id } = req.params;
     const validated = updateMetadataSchema.parse(req.body);
 
-    const updated = await updateMetadata(id, validated.varde, tenantId, validated.uppdateradAv);
+    const updated = await updateMetadata(id, validated.varde, tenantId, validated.uppdateradAv, validated.metod);
 
     res.json(updated);
   } catch (error: any) {
@@ -407,6 +425,42 @@ metadataRouter.patch("/:id/inheritance", async (req: Request, res: Response) => 
   } catch (error) {
     console.error("Error updating metadata inheritance:", error);
     res.status(500).json({ error: "Kunde inte uppdatera ärvning" });
+  }
+});
+
+// ============================================================================
+// METADATA HISTORIK ENDPOINTS
+// ============================================================================
+
+metadataRouter.get("/historik/:metadataId", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { metadataId } = req.params;
+    const historik = await getMetadataHistorik(metadataId, tenantId);
+    res.json(historik);
+  } catch (error) {
+    console.error("Error fetching metadata history:", error);
+    res.status(500).json({ error: "Kunde inte hämta metadata-historik" });
+  }
+});
+
+metadataRouter.get("/objects/:objectId/historik", async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!tenantId) {
+      return res.status(401).json({ error: "Ingen tenant hittad" });
+    }
+
+    const { objectId } = req.params;
+    const historik = await getObjectMetadataHistorik(objectId, tenantId);
+    res.json(historik);
+  } catch (error) {
+    console.error("Error fetching object metadata history:", error);
+    res.status(500).json({ error: "Kunde inte hämta objektmetadata-historik" });
   }
 });
 

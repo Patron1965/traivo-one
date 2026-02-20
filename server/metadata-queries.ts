@@ -1,15 +1,27 @@
 import { db } from "./db";
-import { sql, eq, and, inArray } from "drizzle-orm";
+import { sql, eq, and, inArray, desc } from "drizzle-orm";
 import { 
   objects, 
   metadataKatalog, 
   metadataVarden,
+  metadataHistorik,
   MetadataKatalog,
   MetadataVarden,
+  MetadataHistorik,
   MetadataVardenWithKatalog,
   ObjectWithAllMetadataEAV,
   GeographicPosition
 } from "@shared/schema";
+
+function getDisplayValue(existing: MetadataVarden): string | null {
+  return existing.vardeString ?? 
+    (existing.vardeInteger != null ? String(existing.vardeInteger) : null) ??
+    (existing.vardeDecimal != null ? String(existing.vardeDecimal) : null) ??
+    (existing.vardeBoolean != null ? String(existing.vardeBoolean) : null) ??
+    (existing.vardeDatetime ? existing.vardeDatetime.toISOString() : null) ??
+    (existing.vardeJson ? JSON.stringify(existing.vardeJson) : null) ??
+    existing.vardeReferens ?? null;
+}
 
 // ============================================================================
 // HÄMTA OBJEKT MED ALL METADATA (INKL. ÄRVD)
@@ -74,9 +86,11 @@ export async function getObjectWithAllMetadata(
         mv.varde_referens,
         mv.arvs_nedat,
         mv.stoppa_vidare_arvning,
+        mv.niva_las,
         mv.kopplad_till_metadata_id,
         mv.skapad_av,
         mv.uppdaterad_av,
+        mv.metod,
         mv.created_at,
         mv.updated_at,
         mk.id as katalog_id,
@@ -105,10 +119,10 @@ export async function getObjectWithAllMetadata(
       INNER JOIN metadata_varden mv ON mv.objekt_id = pc.id
       INNER JOIN metadata_katalog mk ON mv.metadata_katalog_id = mk.id
       WHERE
-        -- Include if local OR (inheritable AND not blocked by stoppa_vidare_arvning)
+        -- Include if local OR (inheritable AND not blocked by stoppa_vidare_arvning AND not niva_las)
         (
           mv.objekt_id = ${objektId} 
-          OR (mv.arvs_nedat = TRUE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
+          OR (mv.arvs_nedat = TRUE AND COALESCE(mv.niva_las, FALSE) = FALSE AND NOT (mv.metadata_katalog_id = ANY(pc.blocked_katalog_ids)))
         )
         AND mv.tenant_id = ${tenantId}
         AND mk.tenant_id = ${tenantId}
@@ -148,9 +162,11 @@ export async function getObjectWithAllMetadata(
       vardeReferens: row.varde_referens,
       arvsNedat: row.arvs_nedat,
       stoppaVidareArvning: row.stoppa_vidare_arvning,
+      nivaLas: row.niva_las ?? false,
       koppladTillMetadataId: row.kopplad_till_metadata_id,
       skapadAv: row.skapad_av,
       uppdateradAv: row.uppdaterad_av,
+      metod: row.metod ?? 'manuell',
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       katalog: {
@@ -232,8 +248,10 @@ export async function createMetadata(data: {
   metadataTypNamn: string;
   varde: any;
   arvsNedat?: boolean;
+  nivaLas?: boolean;
   koppladTillMetadataId?: string | null;
   skapadAv?: string;
+  metod?: string;
 }): Promise<MetadataVarden> {
   // SECURITY: Verify object belongs to tenant before allowing metadata creation
   const [objekt] = await db
@@ -316,6 +334,15 @@ export async function createMetadata(data: {
     case 'referens':
       vardeFields.vardeReferens = String(data.varde);
       break;
+    case 'image':
+    case 'file':
+    case 'code':
+    case 'interval':
+      vardeFields.vardeString = String(data.varde);
+      break;
+    case 'location':
+      vardeFields.vardeJson = typeof data.varde === 'string' ? JSON.parse(data.varde) : data.varde;
+      break;
     default:
       throw new Error(`Unknown datatype: ${metadataTyp.datatyp}`);
   }
@@ -326,9 +353,22 @@ export async function createMetadata(data: {
     metadataKatalogId: metadataTyp.id,
     ...vardeFields,
     arvsNedat: data.arvsNedat ?? metadataTyp.standardArvs,
+    nivaLas: data.nivaLas ?? false,
     koppladTillMetadataId: data.koppladTillMetadataId ?? null,
     skapadAv: data.skapadAv,
+    metod: data.metod ?? 'manuell',
   }).returning();
+
+  await db.insert(metadataHistorik).values({
+    tenantId: data.tenantId,
+    metadataVardenId: newMetadata.id,
+    objektId: data.objektId,
+    metadataKatalogId: metadataTyp.id,
+    gammaltVarde: null,
+    nyttVarde: getDisplayValue(newMetadata),
+    andradAv: data.skapadAv ?? 'system',
+    andringsMetod: data.metod ?? 'manuell',
+  });
 
   return newMetadata;
 }
@@ -341,7 +381,8 @@ export async function updateMetadata(
   metadataId: string,
   varde: any,
   tenantId: string,
-  uppdateradAv?: string
+  uppdateradAv?: string,
+  metod?: string
 ): Promise<MetadataVarden> {
   const [existing] = await db
     .select()
@@ -420,19 +461,42 @@ export async function updateMetadata(
     case 'referens':
       vardeFields.vardeReferens = String(varde);
       break;
+    case 'image':
+    case 'file':
+    case 'code':
+    case 'interval':
+      vardeFields.vardeString = String(varde);
+      break;
+    case 'location':
+      vardeFields.vardeJson = typeof varde === 'string' ? JSON.parse(varde) : varde;
+      break;
     default:
       throw new Error(`Unknown datatype: ${metadataTyp.datatyp}`);
   }
+
+  const oldValue = getDisplayValue(existing);
 
   const [updated] = await db
     .update(metadataVarden)
     .set({
       ...vardeFields,
       uppdateradAv,
+      metod: metod ?? 'manuell',
       updatedAt: new Date(),
     })
     .where(and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId)))
     .returning();
+
+  await db.insert(metadataHistorik).values({
+    tenantId,
+    metadataVardenId: metadataId,
+    objektId: existing.objektId,
+    metadataKatalogId: existing.metadataKatalogId,
+    gammaltVarde: oldValue,
+    nyttVarde: getDisplayValue(updated),
+    andradAv: uppdateradAv ?? 'system',
+    andringsMetod: metod ?? 'manuell',
+  });
 
   return updated;
 }
@@ -445,6 +509,38 @@ export async function deleteMetadata(metadataId: string, tenantId: string): Prom
   await db.delete(metadataVarden).where(
     and(eq(metadataVarden.id, metadataId), eq(metadataVarden.tenantId, tenantId))
   );
+}
+
+// ============================================================================
+// HÄMTA METADATA-HISTORIK
+// ============================================================================
+
+export async function getMetadataHistorik(
+  metadataVardenId: string,
+  tenantId: string
+): Promise<MetadataHistorik[]> {
+  return db
+    .select()
+    .from(metadataHistorik)
+    .where(and(
+      eq(metadataHistorik.metadataVardenId, metadataVardenId),
+      eq(metadataHistorik.tenantId, tenantId)
+    ))
+    .orderBy(desc(metadataHistorik.andradVid));
+}
+
+export async function getObjectMetadataHistorik(
+  objektId: string,
+  tenantId: string
+): Promise<MetadataHistorik[]> {
+  return db
+    .select()
+    .from(metadataHistorik)
+    .where(and(
+      eq(metadataHistorik.objektId, objektId),
+      eq(metadataHistorik.tenantId, tenantId)
+    ))
+    .orderBy(desc(metadataHistorik.andradVid));
 }
 
 // ============================================================================

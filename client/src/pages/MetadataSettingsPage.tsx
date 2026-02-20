@@ -124,12 +124,17 @@ const categoryOptions = [
 
 const datatypOptions = [
   { value: 'string', label: 'Text' },
-  { value: 'integer', label: 'Heltal' },
+  { value: 'integer', label: 'Antal (Heltal)' },
   { value: 'decimal', label: 'Decimaltal' },
-  { value: 'boolean', label: 'Ja/Nej' },
+  { value: 'boolean', label: 'Status (Ja/Nej)' },
   { value: 'datetime', label: 'Datum/tid' },
   { value: 'json', label: 'JSON' },
-  { value: 'referens', label: 'Referens' },
+  { value: 'referens', label: 'Referens (Kund/Prislista)' },
+  { value: 'image', label: 'Bild' },
+  { value: 'file', label: 'Fil' },
+  { value: 'code', label: 'Kod' },
+  { value: 'location', label: 'Plats (GPS)' },
+  { value: 'interval', label: 'Tidsintervall' },
 ];
 
 const iconMap: Record<string, any> = {
@@ -174,8 +179,9 @@ export default function MetadataSettingsPage() {
       setAddDialogOpen(false);
       toast({ title: 'Metadatatyp skapad' });
     },
-    onError: () => {
-      toast({ title: 'Fel', description: 'Kunde inte skapa metadatatyp', variant: 'destructive' });
+    onError: (error: any) => {
+      const msg = error?.message?.includes('finns redan') ? error.message : 'Kunde inte skapa metadatatyp';
+      toast({ title: 'Fel', description: msg, variant: 'destructive' });
     },
   });
 
@@ -398,8 +404,18 @@ interface MetadataTypeFormProps {
   isPending: boolean;
 }
 
+function toSnakeCase(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/[åä]/g, 'a').replace(/[ö]/g, 'o').replace(/[é]/g, 'e')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
 function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeFormProps) {
+  const [displayLabel, setDisplayLabel] = useState(initialData?.namn?.replace(/_/g, ' ') || '');
   const [namn, setNamn] = useState(initialData?.namn || '');
+  const [codeManuallyEdited, setCodeManuallyEdited] = useState(!!initialData);
   const [beskrivning, setBeskrivning] = useState(initialData?.beskrivning || '');
   const [datatyp, setDatatyp] = useState(initialData?.datatyp || 'string');
   const [referensTabell, setReferensTabell] = useState(initialData?.referensTabell || '');
@@ -408,6 +424,13 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
   const [kategori, setKategori] = useState(initialData?.kategori || 'annat');
   const [sortOrder, setSortOrder] = useState(initialData?.sortOrder || 0);
   const [icon, setIcon] = useState(initialData?.icon || 'FileText');
+
+  const handleLabelChange = (value: string) => {
+    setDisplayLabel(value);
+    if (!codeManuallyEdited) {
+      setNamn(toSnakeCase(value));
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -426,17 +449,27 @@ function MetadataTypeForm({ initialData, onSubmit, isPending }: MetadataTypeForm
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      <div>
+        <Label>Visningsnamn</Label>
+        <Input
+          value={displayLabel}
+          onChange={(e) => handleLabelChange(e.target.value)}
+          placeholder="T.ex. Kontaktperson Namn"
+          required
+          data-testid="input-type-label"
+        />
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <Label>Namn (unikt ID)</Label>
+          <Label>Kod (unikt ID)</Label>
           <Input
             value={namn}
-            onChange={(e) => setNamn(e.target.value.replace(/\s+/g, '_'))}
-            placeholder="T.ex. Kontaktperson_Namn"
+            onChange={(e) => { setNamn(e.target.value.replace(/\s+/g, '_')); setCodeManuallyEdited(true); }}
+            placeholder="kontaktperson_namn"
             required
             data-testid="input-type-namn"
           />
-          <p className="text-xs text-muted-foreground mt-1">Använd understreck istället för mellanslag</p>
+          <p className="text-xs text-muted-foreground mt-1">Auto-genererad från visningsnamn (snake_case)</p>
         </div>
         <div>
           <Label>Ikon</Label>
