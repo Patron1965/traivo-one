@@ -599,37 +599,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     };
   }, [scheduledJobs, resources, viewMode, currentWeekStart, currentDate]);
 
-  const weekTravelTotal = useMemo(() => {
-    const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
-    const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
-    let totalMin = 0;
-    let totalKm = 0;
-    const hav = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-      const R = 6371;
-      const dLat = (lat2 - lat1) * Math.PI / 180;
-      const dLon = (lon2 - lon1) * Math.PI / 180;
-      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    };
-    for (const resource of resources) {
-      for (const day of weekDates) {
-        const dayJobs = getJobsForResourceAndDay(resource.id, day)
-          .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
-          .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
-        for (let i = 0; i < dayJobs.length - 1; i++) {
-          const from = dayJobs[i];
-          const to = dayJobs[i + 1];
-          if (from.taskLatitude && from.taskLongitude && to.taskLatitude && to.taskLongitude) {
-            const d = hav(from.taskLatitude, from.taskLongitude, to.taskLatitude, to.taskLongitude);
-            totalKm += d;
-            totalMin += Math.max(Math.round(d / 50 * 60), 5);
-          }
-        }
-      }
-    }
-    return { minutes: totalMin, km: Math.round(totalKm * 10) / 10, hours: Math.round(totalMin / 60 * 10) / 10 };
-  }, [resources, viewMode, currentWeekStart, currentDate, getJobsForResourceAndDay]);
-
   const getGoalColor = (pct: number) => {
     if (pct >= 80) return "bg-green-500";
     if (pct >= 50) return "bg-yellow-500";
@@ -696,6 +665,37 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     const dayKey = format(day, "yyyy-MM-dd");
     return resourceDayJobMap.hours[resourceId]?.[dayKey] || 0;
   }, [resourceDayJobMap]);
+
+  const weekTravelTotal = useMemo(() => {
+    const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
+    const weekDates = Array.from({ length: 5 }, (_, i) => addDays(weekStart, i));
+    let totalMin = 0;
+    let totalKm = 0;
+    const hav = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+    for (const resource of resources) {
+      for (const day of weekDates) {
+        const dayJobs = getJobsForResourceAndDay(resource.id, day)
+          .filter(j => j.scheduledStartTime && j.taskLatitude && j.taskLongitude)
+          .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+        for (let i = 0; i < dayJobs.length - 1; i++) {
+          const from = dayJobs[i];
+          const to = dayJobs[i + 1];
+          if (from.taskLatitude && from.taskLongitude && to.taskLatitude && to.taskLongitude) {
+            const d = hav(from.taskLatitude, from.taskLongitude, to.taskLatitude, to.taskLongitude);
+            totalKm += d;
+            totalMin += Math.max(Math.round(d / 50 * 60), 5);
+          }
+        }
+      }
+    }
+    return { minutes: totalMin, km: Math.round(totalKm * 10) / 10, hours: Math.round(totalMin / 60 * 10) / 10 };
+  }, [resources, viewMode, currentWeekStart, currentDate, getJobsForResourceAndDay]);
 
   const getCapacityPercentage = useCallback((hours: number) => {
     return Math.min((hours / HOURS_IN_DAY) * 100, 100);
