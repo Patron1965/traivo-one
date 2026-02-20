@@ -463,7 +463,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   });
 
   const scheduledObjectIds = useMemo(() => {
-    const ids = [...new Set(workOrders.map(wo => wo.objectId).filter(Boolean) as string[])];
+    const ids = Array.from(new Set(workOrders.map(wo => wo.objectId).filter(Boolean) as string[]));
     return ids;
   }, [workOrders]);
 
@@ -1392,7 +1392,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     return map;
   }, [timewindowsData]);
 
-  const detectDropConflicts = useCallback((job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime?: string): string[] => {
+  const detectConflictsForJob = useCallback((job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime?: string | null): string[] => {
     const reasons: string[] = [];
     const dateObj = new Date(dateStr + "T12:00:00Z");
     const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
@@ -1424,6 +1424,41 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       reasons.push(`Efter leveransfönster (${format(plannedEnd, "d MMM", { locale: sv })})`);
     }
 
+    if (job.objectId) {
+      const objRestrictions = restrictionsByObject.get(job.objectId) || [];
+      const dayIndex = dateObj.getUTCDay() || 7;
+      for (const r of objRestrictions) {
+        if (!r.isActive || !r.weekdays || r.weekdays.length === 0) continue;
+        if (r.weekdays.includes(dayIndex)) {
+          const label = RESTRICTION_TYPE_LABELS[r.restrictionType] || r.restrictionType;
+          if (r.isBlockingAllDay) {
+            reasons.push(`${label} — hela dagen blockerad`);
+          } else if (r.startTime && r.endTime) {
+            reasons.push(`${label} (${r.startTime}–${r.endTime})`);
+          } else {
+            reasons.push(`${label} — begränsning aktiv`);
+          }
+        }
+      }
+    }
+
+    if (dependenciesData?.dependencies) {
+      const deps = dependenciesData.dependencies[job.id] || [];
+      for (const dep of deps) {
+        const parentJob = workOrders.find(wo => wo.id === dep.dependsOnWorkOrderId);
+        if (parentJob) {
+          if (!parentJob.scheduledDate || parentJob.executionStatus === "not_planned") {
+            reasons.push(`Beroende "${parentJob.title}" ej planerad`);
+          } else {
+            const parentDate = new Date(parentJob.scheduledDate);
+            if (parentDate > dateObj) {
+              reasons.push(`Beroende "${parentJob.title}" planerad efter (${format(parentDate, "d MMM", { locale: sv })})`);
+            }
+          }
+        }
+      }
+    }
+
     if (startTime) {
       const jobDur = job.estimatedDuration || 60;
       const [jH, jM] = startTime.split(":").map(Number);
@@ -1447,7 +1482,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     }
 
     return reasons;
-  }, [scheduledJobs, timewindowMap]);
+  }, [scheduledJobs, timewindowMap, restrictionsByObject, dependenciesData, workOrders]);
+
+  const detectDropConflicts = detectConflictsForJob;
 
   const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string) => {
     const job = workOrders.find(j => j.id === jobId);
@@ -1575,69 +1612,16 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const jobConflicts = useMemo(() => {
     const conflicts: Record<string, string[]> = {};
-
     for (const job of scheduledJobs) {
       if (!job.scheduledDate || !job.resourceId) continue;
-      const reasons: string[] = [];
-
-      const dateObj = new Date(job.scheduledDate);
-      const dayNames = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
-      const jobDay = dayNames[dateObj.getUTCDay()];
-      const jobStartTime = job.scheduledStartTime || null;
-      const tws = timewindowMap.get(job.id);
-      if (tws && tws.length > 0) {
-        const dayMatch = tws.filter(tw => !tw.dayOfWeek || tw.dayOfWeek === jobDay);
-        if (dayMatch.length > 0) {
-          for (const tw of dayMatch) {
-            if (tw.startTime && tw.endTime && jobStartTime) {
-              if (jobStartTime < tw.startTime || jobStartTime > tw.endTime) {
-                reasons.push(`Utanför tidsfönster (${tw.startTime}–${tw.endTime})`);
-              }
-            }
-          }
-        } else if (tws.some(tw => tw.dayOfWeek)) {
-          const allowedDays = tws.filter(tw => tw.dayOfWeek).map(tw => tw.dayOfWeek);
-          reasons.push(`Fel dag — tillåtna: ${allowedDays.join(", ")}`);
-        }
-      }
-
-      const plannedStart = job.plannedWindowStart ? new Date(job.plannedWindowStart) : null;
-      const plannedEnd = job.plannedWindowEnd ? new Date(job.plannedWindowEnd) : null;
-      if (plannedStart && dateObj < plannedStart) {
-        reasons.push(`Schemalagd före leveransfönster (${format(plannedStart, "d MMM", { locale: sv })})`);
-      }
-      if (plannedEnd && dateObj > plannedEnd) {
-        reasons.push(`Schemalagd efter leveransfönster (${format(plannedEnd, "d MMM", { locale: sv })})`);
-      }
-
-      const sameResourceDayJobs = scheduledJobs.filter(
-        j => j.id !== job.id && j.resourceId === job.resourceId && j.scheduledDate &&
-          isSameDay(new Date(j.scheduledDate), dateObj)
-      );
-      if (jobStartTime) {
-        const jobDurationMin = job.estimatedDuration || 60;
-        const [jH, jM] = jobStartTime.split(":").map(Number);
-        const jobStartMin = jH * 60 + jM;
-        const jobEndMin = jobStartMin + jobDurationMin;
-
-        for (const other of sameResourceDayJobs) {
-          if (!other.scheduledStartTime) continue;
-          const [oH, oM] = other.scheduledStartTime.split(":").map(Number);
-          const otherStart = oH * 60 + oM;
-          const otherEnd = otherStart + (other.estimatedDuration || 60);
-          if (jobStartMin < otherEnd && jobEndMin > otherStart) {
-            reasons.push(`Överlapp med "${other.title}" (${other.scheduledStartTime})`);
-            break;
-          }
-        }
-      }
-
+      const dateStr = format(new Date(job.scheduledDate), "yyyy-MM-dd");
+      const reasons = detectConflictsForJob(job, job.resourceId, dateStr, job.scheduledStartTime || null);
       if (reasons.length > 0) {
         conflicts[job.id] = reasons;
       }
     }
     return conflicts;
-  }, [scheduledJobs, timewindowMap]);
+  }, [scheduledJobs, detectConflictsForJob]);
 
   const isLoading = resourcesLoading || workOrdersLoading;
 
@@ -1861,36 +1845,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   </TooltipContent>
                 </Tooltip>
               )}
-              {(() => {
-                const objRestrictions = job.objectId ? (restrictionsByObject.get(job.objectId) || []) : [];
-                const scheduledDay = job.scheduledDate ? (new Date(job.scheduledDate).getDay() || 7) : null;
-                const activeRestrictions = scheduledDay ? objRestrictions.filter(r => r.isActive && r.weekdays && r.weekdays.includes(scheduledDay)) : [];
-                if (activeRestrictions.length > 0) {
-                  return (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mt-0.5 cursor-help" data-testid={`restriction-warning-${job.id}`}>
-                          <AlertTriangle className="h-3 w-3 shrink-0" />
-                          <span className="truncate">{RESTRICTION_TYPE_LABELS[activeRestrictions[0].restrictionType] || "Tidsbegränsning"}</span>
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent side="right" className="max-w-xs">
-                        <div className="space-y-1">
-                          <p className="font-medium text-red-600 dark:text-red-400">Tidsbegränsning</p>
-                          {activeRestrictions.map((r, i) => (
-                            <p key={i} className="text-xs flex items-center gap-1">
-                              <AlertTriangle className="h-3 w-3 text-red-500 shrink-0" />
-                              {RESTRICTION_TYPE_LABELS[r.restrictionType] || r.restrictionType}: {r.description || "Inga detaljer"}
-                              {r.startTime && r.endTime && ` (${r.startTime}–${r.endTime})`}
-                            </p>
-                          ))}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                }
-                return null;
-              })()}
               {!compact && (
                 <>
                   {job.scheduledStartTime && (
@@ -2228,7 +2182,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           const cells = [];
           
           for (let i = 0; i < emptyCells; i++) {
-            cells.push(<div key={`empty-${i}`} className="min-h-[80px]" />);
+            cells.push(<div key={`empty-${i}`} className="min-h-[100px]" />);
           }
           
           for (let d = 1; d <= daysInCurrentMonth; d++) {
@@ -2236,23 +2190,94 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             const dayJobs = filteredScheduledJobs.filter(j => j.scheduledDate && isSameDay(new Date(j.scheduledDate), day));
             const isToday = isSameDay(day, new Date());
             const totalHours = dayJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0) / 60, 0);
+
+            const productionCount = dayJobs.filter(j => getJobCategory(j) === "production").length;
+            const travelCount = dayJobs.filter(j => getJobCategory(j) === "travel").length;
+            const breakCount = dayJobs.filter(j => getJobCategory(j) === "break").length;
+
+            const dayConflictCount = dayJobs.filter(j => jobConflicts[j.id]).length;
+
+            const dayOfWeek = day.getDay() || 7;
+            const dayObjectIds = new Set(dayJobs.map(j => j.objectId).filter(Boolean));
+            const dayRestrictionCount = dayObjectIds.size > 0
+              ? timeRestrictions.filter(r =>
+                  r.isActive && r.weekdays && r.weekdays.includes(dayOfWeek) && dayObjectIds.has(r.objectId)
+                ).length
+              : 0;
             
             cells.push(
               <div 
                 key={d} 
-                className={`min-h-[80px] p-2 rounded-md border cursor-pointer hover-elevate ${isToday ? "border-primary bg-primary/5" : "border-border bg-muted/30"}`}
+                className={`min-h-[100px] p-2 rounded-md border cursor-pointer hover-elevate transition-colors ${isToday ? "border-primary bg-primary/5" : dayRestrictionCount > 0 ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" : "border-border bg-muted/30"}`}
                 onClick={() => goToDay(day)}
                 data-testid={`month-day-${d}`}
               >
-                <div className={`text-sm font-medium mb-1 ${isToday ? "text-primary" : ""}`}>{d}</div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-sm font-medium ${isToday ? "text-primary" : ""}`}>{d}</span>
+                  {dayConflictCount > 0 && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-0.5 text-red-500" data-testid={`month-conflict-${d}`}>
+                          <AlertTriangle className="h-3 w-3" />
+                          <span className="text-[9px]">{dayConflictCount}</span>
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>{dayConflictCount} jobb med konflikter</TooltipContent>
+                    </Tooltip>
+                  )}
+                </div>
                 {dayJobs.length > 0 && (
                   <div className="space-y-1">
-                    <Badge variant="secondary" className="text-[10px]">
-                      {dayJobs.length} jobb
-                    </Badge>
-                    <div className="text-[10px] text-muted-foreground">
-                      {totalHours.toFixed(1)}h
+                    <div className="flex items-center gap-0.5" data-testid={`month-categories-${d}`}>
+                      {productionCount > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-0.5 text-[9px]" data-testid={`month-production-${d}`}>
+                              <span className="w-2 h-2 rounded-full bg-green-500 shrink-0"></span>
+                              <span>{productionCount}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Produktionstid: {productionCount} jobb</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {travelCount > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-0.5 text-[9px] ml-1" data-testid={`month-travel-${d}`}>
+                              <span className="w-2 h-2 rounded-full bg-yellow-400 shrink-0"></span>
+                              <span>{travelCount}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Restid: {travelCount} jobb</TooltipContent>
+                        </Tooltip>
+                      )}
+                      {breakCount > 0 && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="flex items-center gap-0.5 text-[9px] ml-1" data-testid={`month-break-${d}`}>
+                              <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0"></span>
+                              <span>{breakCount}</span>
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>Egentid: {breakCount} jobb</TooltipContent>
+                        </Tooltip>
+                      )}
                     </div>
+                    <div className="text-[10px] text-muted-foreground" data-testid={`month-summary-${d}`}>
+                      {dayJobs.length} jobb / {totalHours.toFixed(1)}h
+                    </div>
+                    {dayRestrictionCount > 0 && (
+                      <div className="text-[9px] text-red-500 flex items-center gap-0.5" data-testid={`month-restriction-${d}`}>
+                        <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                        {dayRestrictionCount} begr.
+                      </div>
+                    )}
+                  </div>
+                )}
+                {dayJobs.length === 0 && dayRestrictionCount > 0 && (
+                  <div className="text-[9px] text-red-500 flex items-center gap-0.5 mt-1" data-testid={`month-restriction-${d}`}>
+                    <AlertTriangle className="h-2.5 w-2.5 shrink-0" />
+                    {dayRestrictionCount} begr.
                   </div>
                 )}
               </div>
