@@ -74,6 +74,8 @@ import {
   type PortalMessage, type InsertPortalMessage,
   type SelfBookingSlot, type InsertSelfBookingSlot,
   type SelfBooking, type InsertSelfBooking,
+  type InspectionMetadata, type InsertInspectionMetadata,
+  inspectionMetadata,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -541,6 +543,11 @@ export interface IStorage {
   getSelfBooking(id: string): Promise<SelfBooking | undefined>;
   createSelfBooking(booking: InsertSelfBooking): Promise<SelfBooking>;
   updateSelfBooking(id: string, data: Partial<InsertSelfBooking>): Promise<SelfBooking | undefined>;
+  
+  // Inspection metadata
+  getInspectionMetadata(tenantId: string, objectId?: string): Promise<InspectionMetadata[]>;
+  createInspectionMetadata(data: InsertInspectionMetadata): Promise<InspectionMetadata>;
+  searchInspectionMetadata(tenantId: string, filters: { inspectionType?: string; status?: string; objectId?: string }): Promise<InspectionMetadata[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3922,6 +3929,25 @@ export class DatabaseStorage implements IStorage {
       .where(eq(selfBookings.id, id))
       .returning();
     return result;
+  }
+
+  async getInspectionMetadata(tenantId: string, objectId?: string): Promise<InspectionMetadata[]> {
+    const conditions = [eq(inspectionMetadata.tenantId, tenantId)];
+    if (objectId) conditions.push(eq(inspectionMetadata.objectId, objectId));
+    return db.select().from(inspectionMetadata).where(and(...conditions)).orderBy(desc(inspectionMetadata.inspectedAt));
+  }
+
+  async createInspectionMetadata(data: InsertInspectionMetadata): Promise<InspectionMetadata> {
+    const [result] = await db.insert(inspectionMetadata).values(data).returning();
+    return result;
+  }
+
+  async searchInspectionMetadata(tenantId: string, filters: { inspectionType?: string; status?: string; objectId?: string }): Promise<InspectionMetadata[]> {
+    const conditions = [eq(inspectionMetadata.tenantId, tenantId)];
+    if (filters.inspectionType) conditions.push(eq(inspectionMetadata.inspectionType, filters.inspectionType));
+    if (filters.status) conditions.push(eq(inspectionMetadata.status, filters.status));
+    if (filters.objectId) conditions.push(eq(inspectionMetadata.objectId, filters.objectId));
+    return db.select().from(inspectionMetadata).where(and(...conditions)).orderBy(desc(inspectionMetadata.inspectedAt));
   }
 }
 

@@ -9,7 +9,8 @@ import {
   Loader2, AlertTriangle, Navigation, Phone,
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
-  User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share
+  User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
+  Lock, Unlock, ClipboardCheck
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -64,6 +65,16 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [impossiblePhoto, setImpossiblePhoto] = useState<string | null>(null);
   const [isUploadingImpossiblePhoto, setIsUploadingImpossiblePhoto] = useState(false);
   
+  const [showInspectionPanel, setShowInspectionPanel] = useState(false);
+  const [inspectionItems, setInspectionItems] = useState<Record<string, { status: string; issues: string[]; comment: string }>>({
+    door: { status: '', issues: [], comment: '' },
+    lock: { status: '', issues: [], comment: '' },
+    window: { status: '', issues: [], comment: '' },
+    lighting: { status: '', issues: [], comment: '' },
+    floor: { status: '', issues: [], comment: '' },
+    ventilation: { status: '', issues: [], comment: '' },
+  });
+
   const [showNotesPanel, setShowNotesPanel] = useState(false);
   const [jobNote, setJobNote] = useState("");
   const [isOnBreak, setIsOnBreak] = useState(false);
@@ -257,6 +268,26 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     return timeA.localeCompare(timeB);
   });
 
+  const { data: dependencyData = {} } = useQuery<Record<string, { dependsOn: Array<{ parentId: string; type: string; completed: boolean }>; isLocked: boolean; isDependentTask: boolean }>>({
+    queryKey: ["/api/field-worker/dependency-info"],
+    queryFn: async () => {
+      const ids = todayJobs.map(j => j.id);
+      if (ids.length === 0) return {};
+      const results: Record<string, any> = {};
+      const dateStr = new Date().toISOString().split('T')[0];
+      const res = await fetch(`/api/field-worker/tasks?date=${dateStr}${resourceId ? `&resourceId=${resourceId}` : ''}`);
+      if (res.ok) {
+        const tasks = await res.json();
+        for (const t of tasks) {
+          results[t.id] = { dependsOn: t.dependsOn || [], isLocked: t.isLocked || false, isDependentTask: t.isDependentTask || false };
+        }
+      }
+      return results;
+    },
+    enabled: todayJobs.length > 0,
+    refetchInterval: 30000,
+  });
+
   const completedCount = workOrders.filter(wo => {
     if (!wo.scheduledDate) return false;
     if (resourceId && wo.resourceId !== resourceId) return false;
@@ -417,6 +448,36 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         description: "Kunde inte skicka notifiering till kund.", 
         variant: "destructive" 
       });
+    },
+  });
+
+  const saveInspectionMutation = useMutation({
+    mutationFn: async (items: Record<string, { status: string; issues: string[]; comment: string }>) => {
+      const results = [];
+      for (const [type, data] of Object.entries(items)) {
+        if (data.status) {
+          const res = await apiRequest("POST", "/api/inspection-metadata", {
+            workOrderId: selectedJobId,
+            objectId: selectedJob?.objectId,
+            inspectionType: type,
+            status: data.status,
+            issues: data.issues,
+            comment: data.comment || null,
+            photoUrls: [],
+            inspectedBy: resourceId || null,
+          });
+          results.push(await res.json());
+        }
+      }
+      return results;
+    },
+    onSuccess: () => {
+      toast({ title: "Besiktning sparad", description: "Besiktningsdata har registrerats." });
+      setShowInspectionPanel(false);
+      queryClient.invalidateQueries({ queryKey: ["/api/inspection-metadata"] });
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte spara besiktning.", variant: "destructive" });
     },
   });
 
@@ -1060,6 +1121,106 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             }}
           />
 
+          {/* Besiktning */}
+          <Card className="border-teal-200 dark:border-teal-800">
+            <CardHeader className="pb-2 cursor-pointer" onClick={() => setShowInspectionPanel(!showInspectionPanel)}>
+              <CardTitle className="text-base flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ClipboardCheck className="h-4 w-4 text-teal-600" />
+                  Besiktning
+                </div>
+                <ChevronRight className={`h-4 w-4 text-muted-foreground transition-transform ${showInspectionPanel ? 'rotate-90' : ''}`} />
+              </CardTitle>
+            </CardHeader>
+            {showInspectionPanel && (
+              <CardContent className="space-y-3">
+                {Object.entries({
+                  door: { label: 'Dörr', issues: ['Knarrar', 'Stängs inte', 'Skadad', 'Saknar stängare'] },
+                  lock: { label: 'Lås', issues: ['Slitet', 'Fastnar', 'Saknas', 'Fel nyckel'] },
+                  window: { label: 'Fönster', issues: ['Sprucket', 'Öppnas inte', 'Trasig spanjolette', 'Kondens'] },
+                  lighting: { label: 'Belysning', issues: ['Ur funktion', 'Blinkar', 'Saknas', 'Felaktig armatur'] },
+                  floor: { label: 'Golv', issues: ['Skadat', 'Halt', 'Smutsigt', 'Sprickor'] },
+                  ventilation: { label: 'Ventilation', issues: ['Ur funktion', 'Oljud', 'Dålig luft', 'Blockerad'] },
+                }).map(([type, config]) => (
+                  <div key={type} className="border rounded-lg p-3 space-y-2" data-testid={`inspection-item-${type}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="font-medium text-sm">{config.label}</span>
+                      <div className="flex gap-1">
+                        {['ok', 'warning', 'error'].map(status => (
+                          <Button
+                            key={status}
+                            size="sm"
+                            variant={inspectionItems[type]?.status === status ? 'default' : 'outline'}
+                            className={`h-7 px-2 text-xs ${
+                              inspectionItems[type]?.status === status
+                                ? status === 'ok' ? 'bg-green-600 hover:bg-green-700' 
+                                  : status === 'warning' ? 'bg-amber-500 hover:bg-amber-600'
+                                  : 'bg-red-600 hover:bg-red-700'
+                                : ''
+                            }`}
+                            onClick={() => setInspectionItems(prev => ({
+                              ...prev,
+                              [type]: { ...prev[type], status }
+                            }))}
+                            data-testid={`button-inspection-${type}-${status}`}
+                          >
+                            {status === 'ok' ? 'OK' : status === 'warning' ? 'Varning' : 'Fel'}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                    {inspectionItems[type]?.status && inspectionItems[type].status !== 'ok' && (
+                      <div className="space-y-2">
+                        <div className="flex flex-wrap gap-1">
+                          {config.issues.map(issue => (
+                            <Badge
+                              key={issue}
+                              variant={inspectionItems[type]?.issues?.includes(issue) ? 'default' : 'outline'}
+                              className="cursor-pointer text-xs"
+                              onClick={() => setInspectionItems(prev => {
+                                const current = prev[type]?.issues || [];
+                                const updated = current.includes(issue)
+                                  ? current.filter(i => i !== issue)
+                                  : [...current, issue];
+                                return { ...prev, [type]: { ...prev[type], issues: updated } };
+                              })}
+                              data-testid={`badge-issue-${type}-${issue}`}
+                            >
+                              {issue}
+                            </Badge>
+                          ))}
+                        </div>
+                        <Textarea
+                          placeholder="Kommentar..."
+                          className="min-h-[40px] text-sm"
+                          value={inspectionItems[type]?.comment || ''}
+                          onChange={(e) => setInspectionItems(prev => ({
+                            ...prev,
+                            [type]: { ...prev[type], comment: e.target.value }
+                          }))}
+                          data-testid={`input-inspection-comment-${type}`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+                <Button
+                  className="w-full gap-2"
+                  onClick={() => saveInspectionMutation.mutate(inspectionItems)}
+                  disabled={saveInspectionMutation.isPending || !Object.values(inspectionItems).some(i => i.status)}
+                  data-testid="button-save-inspection"
+                >
+                  {saveInspectionMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle className="h-4 w-4" />
+                  )}
+                  Spara besiktning
+                </Button>
+              </CardContent>
+            )}
+          </Card>
+
           {jobStarted && (
             <MaterialLog
               materials={materials}
@@ -1337,8 +1498,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           todayJobs.map((job, index) => (
             <Card 
               key={job.id}
-              className="hover-elevate active-elevate-2 cursor-pointer"
-              onClick={() => handleSelectJob(job.id)}
+              className={`hover-elevate active-elevate-2 cursor-pointer ${dependencyData[job.id]?.isLocked ? 'opacity-60 border-red-200 dark:border-red-800' : ''}`}
+              onClick={() => {
+                if (dependencyData[job.id]?.isLocked) {
+                  toast({ title: "Beroende ej klart", description: "Det finns olösta beroenden för detta jobb.", variant: "destructive" });
+                }
+                handleSelectJob(job.id);
+              }}
               data-testid={`button-job-${job.id}`}
             >
               <CardContent className="p-4">
@@ -1351,6 +1517,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium">{job.title}</p>
                         {getPriorityBadge(job.priority)}
+                        {dependencyData[job.id]?.isLocked && (
+                          <Badge variant="outline" className="text-[10px] border-red-300 text-red-600 dark:text-red-400 gap-0.5">
+                            <Lock className="h-3 w-3" />
+                            Låst
+                          </Badge>
+                        )}
+                        {dependencyData[job.id]?.isDependentTask && !dependencyData[job.id]?.isLocked && (
+                          <Badge variant="outline" className="text-[10px] border-green-300 text-green-600 dark:text-green-400 gap-0.5">
+                            <Unlock className="h-3 w-3" />
+                            Upplåst
+                          </Badge>
+                        )}
                       </div>
                       {job.scheduledStartTime && (
                         <Badge variant="outline" className="shrink-0 text-xs">

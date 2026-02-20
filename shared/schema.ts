@@ -3446,3 +3446,49 @@ export const apiBudgets = pgTable("api_budgets", {
 export const insertApiBudgetSchema = createInsertSchema(apiBudgets).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertApiBudget = z.infer<typeof insertApiBudgetSchema>;
 export type ApiBudget = typeof apiBudgets.$inferSelect;
+
+export const INSPECTION_TYPES = ["door", "lock", "window", "lighting", "floor", "ceiling", "ventilation", "other"] as const;
+export type InspectionType = typeof INSPECTION_TYPES[number];
+
+export const INSPECTION_STATUSES = ["ok", "warning", "error"] as const;
+export type InspectionStatus = typeof INSPECTION_STATUSES[number];
+
+export const INSPECTION_TYPE_LABELS: Record<string, string> = {
+  door: 'Dörr',
+  lock: 'Lås',
+  window: 'Fönster',
+  lighting: 'Belysning',
+  floor: 'Golv',
+  ceiling: 'Tak',
+  ventilation: 'Ventilation',
+  other: 'Övrigt',
+};
+
+export const INSPECTION_STATUS_LABELS: Record<string, string> = {
+  ok: 'OK',
+  warning: 'Varning',
+  error: 'Fel',
+};
+
+export const inspectionMetadata = pgTable("inspection_metadata", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  inspectionType: text("inspection_type").notNull(),
+  status: text("status").notNull(),
+  issues: jsonb("issues").default([]),
+  comment: text("comment"),
+  photoUrls: jsonb("photo_urls").default([]),
+  inspectedBy: varchar("inspected_by"),
+  inspectedAt: timestamp("inspected_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_inspection_meta_tenant").on(table.tenantId),
+  index("idx_inspection_meta_object").on(table.objectId),
+  index("idx_inspection_meta_type").on(table.inspectionType),
+]);
+
+export const insertInspectionMetadataSchema = createInsertSchema(inspectionMetadata).omit({ id: true, createdAt: true });
+export type InsertInspectionMetadata = z.infer<typeof insertInspectionMetadataSchema>;
+export type InspectionMetadata = typeof inspectionMetadata.$inferSelect;

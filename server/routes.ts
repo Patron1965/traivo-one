@@ -16,7 +16,7 @@ import {
   insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   type ServiceObject,
-  apiUsageLogs, apiBudgets, articles
+  apiUsageLogs, apiBudgets, articles, taskDependencyInstances
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -8889,6 +8889,159 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // ============================================
+  // INVOICE PREVIEW/GENERATION
+  // ============================================
+  
+  app.get("/api/invoice-preview", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { orderConceptId, customerId, fromDate, toDate } = req.query;
+      
+      const allOrders = await storage.getWorkOrders(tenantId);
+      const completedOrders = allOrders.filter(wo => {
+        const isCompleted = wo.status === "completed" || wo.executionStatus === "completed";
+        if (!isCompleted) return false;
+        
+        if (customerId && wo.customerId !== customerId) return false;
+        
+        if (fromDate) {
+          const from = new Date(fromDate as string);
+          const woDate = wo.completedAt ? new Date(wo.completedAt) : wo.scheduledDate ? new Date(wo.scheduledDate) : null;
+          if (woDate && woDate < from) return false;
+        }
+        if (toDate) {
+          const to = new Date(toDate as string);
+          const woDate = wo.completedAt ? new Date(wo.completedAt) : wo.scheduledDate ? new Date(wo.scheduledDate) : null;
+          if (woDate && woDate > to) return false;
+        }
+        
+        return true;
+      });
+      
+      // Get invoice rules
+      const rules = await storage.getInvoiceRules(tenantId, orderConceptId as string | undefined);
+      
+      // Group orders by customer for invoicing
+      const ordersByCustomer: Record<string, typeof completedOrders> = {};
+      for (const order of completedOrders) {
+        const cid = order.customerId || 'unknown';
+        if (!ordersByCustomer[cid]) ordersByCustomer[cid] = [];
+        ordersByCustomer[cid].push(order);
+      }
+      
+      // Get all customers for name lookup
+      const customers = await storage.getCustomers(tenantId);
+      const customerMap = new Map(customers.map(c => [c.id, c]));
+      
+      // Generate invoice previews
+      const invoicePreviews = [];
+      
+      for (const [cid, orders] of Object.entries(ordersByCustomer)) {
+        const customer = customerMap.get(cid);
+        const rule = rules.find(r => r.customerId === cid) || rules[0];
+        const invoiceType = rule?.invoiceType || 'per_task';
+        const metadataOnHeader = (rule?.metadataOnHeader as string[]) || [];
+        const metadataOnLine = (rule?.metadataOnLine as string[]) || [];
+        
+        const lines = [];
+        
+        if (invoiceType === 'per_task') {
+          for (const order of orders) {
+            const orderMeta = (order.metadata as Record<string, unknown>) || {};
+            const lineMetadata: Record<string, string> = {};
+            for (const key of metadataOnLine) {
+              if (orderMeta[key]) lineMetadata[key] = String(orderMeta[key]);
+            }
+            
+            lines.push({
+              workOrderId: order.id,
+              description: order.title,
+              objectName: order.objectName,
+              objectAddress: order.objectAddress,
+              quantity: 1,
+              unitPrice: order.estimatedCost || 0,
+              total: order.estimatedCost || 0,
+              completedAt: order.completedAt,
+              metadata: lineMetadata,
+            });
+          }
+        } else if (invoiceType === 'per_room' || invoiceType === 'per_area') {
+          // Group by object
+          const byObject: Record<string, typeof orders> = {};
+          for (const order of orders) {
+            const oid = order.objectId || 'unknown';
+            if (!byObject[oid]) byObject[oid] = [];
+            byObject[oid].push(order);
+          }
+          
+          for (const [oid, objOrders] of Object.entries(byObject)) {
+            const firstOrder = objOrders[0];
+            const totalCost = objOrders.reduce((sum, o) => sum + (o.estimatedCost || 0), 0);
+            
+            lines.push({
+              workOrderId: objOrders.map(o => o.id).join(','),
+              description: `${invoiceType === 'per_room' ? 'Rum' : 'Område'}: ${firstOrder.objectName}`,
+              objectName: firstOrder.objectName,
+              objectAddress: firstOrder.objectAddress,
+              quantity: objOrders.length,
+              unitPrice: totalCost / objOrders.length,
+              total: totalCost,
+              completedAt: objOrders[objOrders.length - 1].completedAt,
+              metadata: {},
+            });
+          }
+        } else if (invoiceType === 'monthly') {
+          // Monthly flat fee
+          lines.push({
+            workOrderId: orders.map(o => o.id).join(','),
+            description: 'Månadsavgift',
+            objectName: null,
+            objectAddress: null,
+            quantity: 1,
+            unitPrice: 0,
+            total: 0,
+            completedAt: null,
+            metadata: {},
+          });
+        }
+        
+        const totalExVat = lines.reduce((sum, l) => sum + l.total, 0);
+        const vat = totalExVat * 0.25;
+        
+        // Build header metadata
+        const headerMetadata: Record<string, string> = {};
+        // Try to get header metadata from the customer or first order
+        for (const key of metadataOnHeader) {
+          const customerData = customer as Record<string, unknown> | undefined;
+          if (customerData && customerData[key]) {
+            headerMetadata[key] = String(customerData[key]);
+          }
+        }
+        
+        invoicePreviews.push({
+          customerId: cid,
+          customerName: customer?.name || 'Okänd kund',
+          invoiceType,
+          headerMetadata,
+          lines,
+          summary: {
+            totalExVat: Math.round(totalExVat * 100) / 100,
+            vat: Math.round(vat * 100) / 100,
+            totalInclVat: Math.round((totalExVat + vat) * 100) / 100,
+            orderCount: orders.length,
+          },
+          waitForAll: rule?.waitForAll || false,
+        });
+      }
+      
+      res.json(invoicePreviews);
+    } catch (error) {
+      console.error("Failed to generate invoice preview:", error);
+      res.status(500).json({ error: "Kunde inte generera fakturaförhandsgranskning" });
+    }
+  });
+
+  // ============================================
   // ORDER CONCEPT RERUN & RUN LOGS API
   // ============================================
 
@@ -12373,6 +12526,177 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   app.get("/api/system/api-costs/pricing", requireAdmin, async (_req, res) => {
     const { PRICING } = await import("./api-usage-tracker");
     res.json(PRICING);
+  });
+
+  // ============================================
+  // FIELD WORKER TASK ENDPOINTS
+  // ============================================
+
+  app.get("/api/field-worker/tasks", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { date, resourceId } = req.query;
+      
+      const allOrders = await storage.getWorkOrders(tenantId);
+      const targetDate = date ? new Date(date as string) : new Date();
+      const dateStr = targetDate.toISOString().split('T')[0];
+      
+      let filtered = allOrders.filter(wo => {
+        if (wo.scheduledDate) {
+          const woDate = new Date(wo.scheduledDate).toISOString().split('T')[0];
+          return woDate === dateStr;
+        }
+        return false;
+      });
+      
+      if (resourceId) {
+        filtered = filtered.filter(wo => wo.resourceId === resourceId);
+      }
+      
+      filtered.sort((a, b) => {
+        const aTime = a.scheduledDate ? new Date(a.scheduledDate).getTime() : 0;
+        const bTime = b.scheduledDate ? new Date(b.scheduledDate).getTime() : 0;
+        return aTime - bTime;
+      });
+      
+      const tasksWithDeps = await Promise.all(filtered.map(async (wo) => {
+        const deps = await db.select().from(taskDependencyInstances)
+          .where(eq(taskDependencyInstances.childWorkOrderId, wo.id));
+        
+        const dependsOn = deps.map(d => ({
+          parentId: d.parentWorkOrderId,
+          type: d.dependencyType,
+          completed: d.completed,
+        }));
+        
+        const isLocked = dependsOn.some(d => d.type === 'before' && !d.completed);
+        
+        return {
+          ...wo,
+          dependsOn,
+          isLocked,
+          isDependentTask: dependsOn.length > 0,
+        };
+      }));
+      
+      res.json(tasksWithDeps);
+    } catch (error) {
+      console.error("Failed to get field worker tasks:", error);
+      res.status(500).json({ error: "Kunde inte hämta uppgifter" });
+    }
+  });
+
+  app.post("/api/field-worker/tasks/:id/start", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder || workOrder.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const updated = await storage.updateWorkOrder(req.params.id, {
+        executionStatus: "travel",
+        status: "in_progress",
+      });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte starta uppgift" });
+    }
+  });
+
+  app.post("/api/field-worker/tasks/:id/complete", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder || workOrder.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const updated = await storage.updateWorkOrder(req.params.id, {
+        executionStatus: "completed",
+        status: "completed",
+        completedAt: new Date(),
+      });
+      
+      await db.update(taskDependencyInstances)
+        .set({ completed: true })
+        .where(eq(taskDependencyInstances.parentWorkOrderId, req.params.id));
+      
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte slutföra uppgift" });
+    }
+  });
+
+  app.post("/api/field-worker/tasks/:id/update-metadata", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const workOrder = await storage.getWorkOrder(req.params.id);
+      if (!workOrder || workOrder.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Uppgift hittades inte" });
+      }
+      
+      const { metadata } = req.body;
+      if (workOrder.objectId && metadata) {
+        for (const [key, value] of Object.entries(metadata)) {
+          try {
+            await createMetadata({
+              tenantId,
+              objektId: workOrder.objectId,
+              metadataTypNamn: key,
+              varde: String(value),
+              metod: `field:${req.params.id}`,
+            });
+          } catch (e) {
+          }
+        }
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte uppdatera metadata" });
+    }
+  });
+
+  // ============================================
+  // INSPECTION METADATA ENDPOINTS
+  // ============================================
+
+  app.get("/api/inspection-metadata", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectId } = req.query;
+      const results = await storage.getInspectionMetadata(tenantId, objectId as string | undefined);
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta besiktningsdata" });
+    }
+  });
+
+  app.post("/api/inspection-metadata", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const result = await storage.createInspectionMetadata({ ...req.body, tenantId });
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Failed to create inspection metadata:", error);
+      res.status(500).json({ error: "Kunde inte skapa besiktningsdata" });
+    }
+  });
+
+  app.get("/api/inspection-metadata/search", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { inspectionType, status, objectId } = req.query;
+      const results = await storage.searchInspectionMetadata(tenantId, {
+        inspectionType: inspectionType as string | undefined,
+        status: status as string | undefined,
+        objectId: objectId as string | undefined,
+      });
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte söka besiktningsdata" });
+    }
   });
 
   return httpServer;

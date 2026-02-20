@@ -70,6 +70,7 @@ import PublicReportPage from "@/pages/public-report";
 import SmsSettingsPage from "@/pages/SmsSettingsPage";
 import EnvironmentalCertificatePage from "@/pages/EnvironmentalCertificatePage";
 import LundstamsROIPage from "@/pages/LundstamsROIPage";
+import InspectionSearchPage from "@/pages/InspectionSearchPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -127,6 +128,7 @@ function Router() {
       <Route path="/investor-pitch" component={InvestorPitchPage} />
       <Route path="/ai-planning" component={AIPlanningPage} />
       <Route path="/lundstams-roi" component={LundstamsROIPage} />
+      <Route path="/inspections" component={InspectionSearchPage} />
       <Route component={NotFound} />
     </Switch>
   );
