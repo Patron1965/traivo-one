@@ -14,7 +14,7 @@ interface AuthContextType {
   user: User | null;
   token: string | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
+  login: (username: string, password: string, pin?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -54,11 +54,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function login(username: string, password: string) {
-    const data = await apiRequest('POST', '/api/mobile/login', {
-      username,
-      password,
-    });
+  async function login(username: string, password: string, pin?: string) {
+    const body: any = pin ? { pin } : { username, password };
+    const data = await apiRequest('POST', '/api/mobile/login', body);
     setUser(data.user);
     setToken(data.token);
     await AsyncStorage.setItem('auth', JSON.stringify(data));

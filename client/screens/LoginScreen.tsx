@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -16,29 +15,52 @@ import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
+type LoginMode = 'credentials' | 'pin';
+
 export function LoginScreen() {
   const insets = useSafeAreaInsets();
   const { login } = useAuth();
+  const [mode, setMode] = useState<LoginMode>('pin');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
   async function handleLogin() {
-    if (!username.trim() || !password.trim()) {
-      setError('Ange anv\u00e4ndarnamn och l\u00f6senord');
-      return;
+    if (mode === 'pin') {
+      if (!pin.trim() || pin.length < 4) {
+        setError('Ange en giltig PIN-kod (4-6 siffror)');
+        return;
+      }
+    } else {
+      if (!username.trim() || !password.trim()) {
+        setError('Ange anv\u00e4ndarnamn och l\u00f6senord');
+        return;
+      }
     }
     setIsLoading(true);
     setError('');
     try {
-      await login(username.trim(), password.trim());
+      if (mode === 'pin') {
+        await login('', '', pin.trim());
+      } else {
+        await login(username.trim(), password.trim());
+      }
     } catch (e: any) {
       setError('Inloggningen misslyckades. F\u00f6rs\u00f6k igen.');
     } finally {
       setIsLoading(false);
     }
+  }
+
+  function switchMode() {
+    setMode(mode === 'pin' ? 'credentials' : 'pin');
+    setError('');
+    setPin('');
+    setUsername('');
+    setPassword('');
   }
 
   return (
@@ -62,44 +84,100 @@ export function LoginScreen() {
           </ThemedText>
         </View>
 
-        <View style={styles.form}>
-          <View style={styles.inputContainer}>
-            <Feather name="user" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="Anv\u00e4ndarnamn"
-              placeholderTextColor={Colors.textMuted}
-              value={username}
-              onChangeText={setUsername}
-              autoCapitalize="none"
-              autoCorrect={false}
-              testID="input-username"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <Feather name="lock" size={20} color={Colors.textMuted} style={styles.inputIcon} />
-            <TextInput
-              style={styles.input}
-              placeholder="L\u00f6senord"
-              placeholderTextColor={Colors.textMuted}
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry={!showPassword}
-              testID="input-password"
-            />
-            <Pressable
-              onPress={() => setShowPassword(!showPassword)}
-              style={styles.eyeButton}
-              testID="button-toggle-password"
+        <View style={styles.modeToggle}>
+          <Pressable
+            style={[styles.modeTab, mode === 'pin' ? styles.modeTabActive : null]}
+            onPress={() => { if (mode !== 'pin') switchMode(); }}
+            testID="button-mode-pin"
+          >
+            <Feather name="hash" size={16} color={mode === 'pin' ? Colors.primary : 'rgba(255,255,255,0.6)'} />
+            <ThemedText
+              variant="caption"
+              color={mode === 'pin' ? Colors.primary : 'rgba(255,255,255,0.6)'}
+              style={styles.modeTabText}
             >
-              <Feather
-                name={showPassword ? 'eye-off' : 'eye'}
-                size={20}
-                color={Colors.textMuted}
-              />
-            </Pressable>
-          </View>
+              PIN-kod
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.modeTab, mode === 'credentials' ? styles.modeTabActive : null]}
+            onPress={() => { if (mode !== 'credentials') switchMode(); }}
+            testID="button-mode-credentials"
+          >
+            <Feather name="user" size={16} color={mode === 'credentials' ? Colors.primary : 'rgba(255,255,255,0.6)'} />
+            <ThemedText
+              variant="caption"
+              color={mode === 'credentials' ? Colors.primary : 'rgba(255,255,255,0.6)'}
+              style={styles.modeTabText}
+            >
+              Inloggning
+            </ThemedText>
+          </Pressable>
+        </View>
+
+        <View style={styles.form}>
+          {mode === 'pin' ? (
+            <View style={styles.pinSection}>
+              <ThemedText variant="body" color="rgba(255,255,255,0.8)" style={styles.pinLabel}>
+                Ange din PIN-kod
+              </ThemedText>
+              <View style={styles.inputContainer}>
+                <Feather name="hash" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, styles.pinInput]}
+                  placeholder="- - - -"
+                  placeholderTextColor={Colors.textMuted}
+                  value={pin}
+                  onChangeText={(text) => setPin(text.replace(/[^0-9]/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  secureTextEntry
+                  textAlign="center"
+                  testID="input-pin"
+                />
+              </View>
+            </View>
+          ) : (
+            <>
+              <View style={styles.inputContainer}>
+                <Feather name="user" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="Anv\u00e4ndarnamn"
+                  placeholderTextColor={Colors.textMuted}
+                  value={username}
+                  onChangeText={setUsername}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  testID="input-username"
+                />
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Feather name="lock" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="L\u00f6senord"
+                  placeholderTextColor={Colors.textMuted}
+                  value={password}
+                  onChangeText={setPassword}
+                  secureTextEntry={!showPassword}
+                  testID="input-password"
+                />
+                <Pressable
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeButton}
+                  testID="button-toggle-password"
+                >
+                  <Feather
+                    name={showPassword ? 'eye-off' : 'eye'}
+                    size={20}
+                    color={Colors.textMuted}
+                  />
+                </Pressable>
+              </View>
+            </>
+          )}
 
           {error ? (
             <View style={styles.errorContainer}>
@@ -138,7 +216,7 @@ export function LoginScreen() {
           color="rgba(255,255,255,0.5)"
           style={styles.version}
         >
-          Driver Core v1.0
+          Driver Core v2.0
         </ThemedText>
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -156,7 +234,7 @@ const styles = StyleSheet.create({
   },
   header: {
     alignItems: 'center',
-    marginBottom: Spacing.xxxl,
+    marginBottom: Spacing.xxl,
   },
   logoContainer: {
     width: 80,
@@ -167,8 +245,42 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.lg,
   },
+  modeToggle: {
+    flexDirection: 'row',
+    marginBottom: Spacing.xl,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: BorderRadius.lg,
+    padding: 4,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  modeTabActive: {
+    backgroundColor: Colors.surface,
+  },
+  modeTabText: {
+    fontSize: FontSize.sm,
+  },
   form: {
     gap: Spacing.lg,
+  },
+  pinSection: {
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  pinLabel: {
+    textAlign: 'center',
+  },
+  pinInput: {
+    fontSize: FontSize.xxl,
+    letterSpacing: 12,
+    fontFamily: 'Inter_600SemiBold',
   },
   inputContainer: {
     flexDirection: 'row',
