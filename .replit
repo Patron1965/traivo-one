@@ -55,3 +55,7 @@ integrations = ["javascript_openai_ai_integrations:2.0.0"]
 deploymentTarget = "cloudrun"
 build = ["sh", "-c", "npm install && bash scripts/build.sh"]
 run = ["npx", "tsx", "server/index.ts"]
+
+[[ports]]
+localPort = 5000
+externalPort = 80

@@ -16,6 +16,7 @@
     .expo-section { border-top: 1px solid #EAECEE; padding-top: 24px; }
     .expo-section h2 { font-size: 20px; color: #1B4F72; margin-bottom: 16px; }
     #qr-canvas { margin: 0 auto 16px; display: block; border-radius: 8px; }
+    #qr-img { margin: 0 auto 16px; display: block; border-radius: 8px; max-width: 220px; }
     .expo-link { display: inline-block; background: #1B4F72; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin-top: 8px; transition: background 0.2s; width: 100%; }
     .expo-link:hover { background: #154360; }
     .url-display { background: #F0F3F4; border-radius: 8px; padding: 12px; margin-top: 16px; font-family: monospace; font-size: 12px; color: #5D6D7E; word-break: break-all; }
@@ -41,7 +42,8 @@
         <button class="platform-tab" onclick="setPlatform('android')">Android</button>
       </div>
 
-      <canvas id="qr-canvas"></canvas>
+      <canvas id="qr-canvas" style="display:none"></canvas>
+      <img id="qr-img" alt="QR-kod" />
 
       <a id="expo-link" class="expo-link" href="#">Öppna appen</a>
 
@@ -80,12 +82,19 @@
       var url = getExpoUrl(currentPlatform);
       var linkEl = document.getElementById('expo-link');
       var urlEl = document.getElementById('url-display');
+      var qrImg = document.getElementById('qr-img');
+      var canvas = document.getElementById('qr-canvas');
 
       if (linkEl) linkEl.href = url;
       if (urlEl) urlEl.textContent = url;
 
-      var canvas = document.getElementById('qr-canvas');
+      if (qrImg) {
+        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url) + '&color=1B4F72';
+      }
+
       if (canvas && typeof QRCode !== 'undefined') {
+        canvas.style.display = 'block';
+        if (qrImg) qrImg.style.display = 'none';
         QRCode.toCanvas(canvas, url, {
           width: 220,
           margin: 2,
