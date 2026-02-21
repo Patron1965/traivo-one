@@ -15,17 +15,16 @@ router.post('/chat', async (req, res) => {
       return res.status(400).json({ error: 'Meddelande krävs' });
     }
 
-    const { currentOrder, allOrders, driverName } = context || {};
-
     let contextInfo = '';
-    if (driverName) {
-      contextInfo += `Förarens namn: ${driverName}\n`;
-    }
-    if (currentOrder) {
-      contextInfo += `Aktuell order: ${JSON.stringify(currentOrder)}\n`;
-    }
-    if (allOrders && allOrders.length > 0) {
-      contextInfo += `Alla dagens ordrar: ${JSON.stringify(allOrders)}\n`;
+    if (context) {
+      if (Array.isArray(context)) {
+        contextInfo = `Alla dagens ordrar: ${JSON.stringify(context)}\n`;
+      } else {
+        const { currentOrder, allOrders, driverName } = context;
+        if (driverName) contextInfo += `Förarens namn: ${driverName}\n`;
+        if (currentOrder) contextInfo += `Aktuell order: ${JSON.stringify(currentOrder)}\n`;
+        if (allOrders && allOrders.length > 0) contextInfo += `Alla dagens ordrar: ${JSON.stringify(allOrders)}\n`;
+      }
     }
 
     const systemPrompt = `Du är "Unicorn Assist", en AI-assistent för fältservicetekniker inom avfallshantering och logistik.

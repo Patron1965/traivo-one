@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import {
   View, ScrollView, Pressable, StyleSheet, Linking, Platform,
-  TextInput, ActivityIndicator
+  TextInput, ActivityIndicator, Modal
 } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -26,6 +26,9 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [noteText, setNoteText] = useState('');
+  const [aiTip, setAiTip] = useState<string | null>(null);
+  const [aiTipLoading, setAiTipLoading] = useState(false);
+  const [showAiTip, setShowAiTip] = useState(false);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/mobile/orders/${orderId}`],
@@ -88,6 +91,23 @@ export function OrderDetailScreen({ route, navigation }: any) {
       in_progress: 'check-circle',
     };
     return icons[status] || 'arrow-right';
+  }
+
+  async function handleAiTip() {
+    if (!order) return;
+    setAiTipLoading(true);
+    setShowAiTip(true);
+    try {
+      const result = await apiRequest('POST', '/api/mobile/ai/chat', {
+        message: `Ge mig en kort sammanfattning och praktiska tips för detta uppdrag: ${order.orderNumber} hos ${order.customerName} på ${order.address}. Uppdraget: ${order.description}. ${order.notes ? 'Not: ' + order.notes : ''} ${order.priority === 'urgent' ? 'OBS: Brådskande!' : ''}`,
+        context: { currentOrder: order },
+      });
+      setAiTip(result.response || 'Inga tips tillgängliga.');
+    } catch {
+      setAiTip('Kunde inte hämta AI-tips just nu. Försök igen senare.');
+    } finally {
+      setAiTipLoading(false);
+    }
   }
 
   function handleAdvanceStatus() {
@@ -475,6 +495,16 @@ export function OrderDetailScreen({ route, navigation }: any) {
               Signatur
             </ThemedText>
           </Pressable>
+          <Pressable
+            style={styles.secondaryAction}
+            onPress={handleAiTip}
+            testID="button-ai-tip"
+          >
+            <Feather name="cpu" size={18} color={Colors.secondary} />
+            <ThemedText variant="caption" color={Colors.secondary}>
+              AI Tips
+            </ThemedText>
+          </Pressable>
         </View>
       </ScrollView>
 
@@ -513,6 +543,41 @@ export function OrderDetailScreen({ route, navigation }: any) {
           </ThemedText>
         </View>
       ) : null}
+
+      <Modal
+        visible={showAiTip}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowAiTip(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <Feather name="cpu" size={20} color={Colors.secondary} />
+                <ThemedText variant="subheading">AI Tips</ThemedText>
+              </View>
+              <Pressable onPress={() => setShowAiTip(false)} testID="button-close-ai-tip">
+                <Feather name="x" size={24} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+            {aiTipLoading ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color={Colors.secondary} />
+                <ThemedText variant="body" color={Colors.textMuted}>
+                  Analyserar uppdraget...
+                </ThemedText>
+              </View>
+            ) : (
+              <ScrollView style={styles.modalScroll}>
+                <ThemedText variant="body" style={styles.modalText}>
+                  {aiTip || ''}
+                </ThemedText>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -805,5 +870,41 @@ const styles = StyleSheet.create({
     height: 56,
     backgroundColor: Colors.secondary,
     borderRadius: BorderRadius.lg,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: Colors.overlay,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: '100%',
+    maxHeight: '70%',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.lg,
+  },
+  modalTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  modalLoading: {
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.xxxl,
+  },
+  modalScroll: {
+    maxHeight: 400,
+  },
+  modalText: {
+    lineHeight: 24,
   },
 });
