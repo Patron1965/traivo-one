@@ -4,6 +4,7 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-02-21: Added AI features: Unicorn Assist chat (GPT-5.2), voice input (gpt-4o-mini-transcribe), AI image analysis for deviations, AI context tips on order detail
 - 2026-02-21: Added task dependencies, execution codes, time restrictions, sub-steps, inspection checklists, order notes, PIN login, and offline indicator
 - 2026-02-19: Initial project setup with full MVP feature set
 
@@ -17,6 +18,7 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 - **Navigation:** React Navigation 7 (native stack + bottom tabs)
 - **State Management:** @tanstack/react-query
 - **Fonts:** Inter (via @expo-google-fonts/inter)
+- **AI Integration:** OpenAI via Replit AI Integrations (GPT-5.2, gpt-4o-mini-transcribe)
 - **Deployment:** Static JS bundles served via Express (exps:// protocol for Expo Go)
 
 ### Directory Structure
@@ -54,7 +56,8 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 │   │   ├── InspectionScreen.tsx   # 6-category inspection checklist
 │   │   ├── MapScreen.tsx
 │   │   ├── ProfileScreen.tsx
-│   │   ├── ReportDeviationScreen.tsx
+│   │   ├── AIAssistantScreen.tsx     # Unicorn Assist chat + voice
+│   │   ├── ReportDeviationScreen.tsx  # With AI image analysis
 │   │   ├── MaterialLogScreen.tsx
 │   │   ├── CameraCaptureScreen.tsx
 │   │   └── SignatureScreen.tsx
@@ -64,6 +67,7 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 │   ├── index.ts               # Express server entry (serves API + static bundles + landing page)
 │   ├── routes/
 │   │   └── mobile.ts          # Mobile API endpoints
+│   │   └── ai.ts              # AI endpoints (chat, transcribe, analyze-image)
 │   └── templates/
 │       └── landing-page.html  # QR code landing page for Expo Go
 └── assets/                    # App icons and images
@@ -84,6 +88,9 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 - `POST /api/mobile/gps` - Submit GPS position
 - `GET /api/mobile/weather` - Get weather (Open-Meteo API)
 - `GET /api/mobile/summary` - Get daily summary
+- `POST /api/mobile/ai/chat` - AI chat `{message, context?}` (GPT-5.2)
+- `POST /api/mobile/ai/transcribe` - Voice transcription `{audio: base64}` (gpt-4o-mini-transcribe)
+- `POST /api/mobile/ai/analyze-image` - AI image analysis `{image: base64, context?}` (GPT-5.2 vision)
 
 ### Key Features
 - PIN-based login (4-6 digits) alongside username/password authentication
@@ -105,6 +112,10 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 - Contact info with one-tap calling
 - Navigation to order locations
 - What3Words position display
+- **AI: Unicorn Assist** - Chat assistant (GPT-5.2) with order context, quick actions, Swedish responses
+- **AI: Voice input** - Push-to-talk transcription (gpt-4o-mini-transcribe), web MediaRecorder + native expo-av
+- **AI: Image analysis** - Photo analysis for deviation reporting, auto-fills category and description
+- **AI: Context tips** - Per-order AI summaries and practical advice in modal overlay
 
 ### Deployment
 - Static bundles built with `bash scripts/build.sh` (iOS + Android)
