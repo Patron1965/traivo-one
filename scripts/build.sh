@@ -28,3 +28,13 @@ npx expo export:embed \
 echo "Build complete! Bundles saved to $DIST_DIR/"
 ls -la "$DIST_DIR/ios/"
 ls -la "$DIST_DIR/android/"
+
+echo "Compiling server TypeScript..."
+rm -rf server-dist
+npx tsc --outDir server-dist --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node server/app.ts 2>&1 || echo "TSC failed, will use tsx at runtime"
+if [ -f "server-dist/app.js" ]; then
+  echo "Server compiled to server-dist/"
+  ls -la server-dist/
+else
+  echo "Warning: Server compilation failed"
+fi
