@@ -57,4 +57,5 @@ integrations = ["javascript_openai_ai_integrations:2.0.0"]
 
 [deployment]
 deploymentTarget = "cloudrun"
+build = ["sh", "-c", "npm install && bash scripts/build.sh"]
 run = ["npx", "tsx", "server/index.ts"]
