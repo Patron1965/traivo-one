@@ -138,7 +138,7 @@ Denna testplan är utformad för att systematiskt gå igenom Unicorn-plattformen
 
 | Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
 |------|--------|-------------------|-----|-----------|
-| 6.1 | Gå till `/mobile-field-app` | Mobilvy laddas | ☐ | |
+| 6.1 | Gå till `/mobile` | Mobilvy laddas | ☐ | |
 | 6.2 | Logga in som fältarbetare | Autentisering fungerar | ☐ | |
 | 6.3 | Visa dagens jobb | Jobblista visas | ☐ | |
 | 6.4 | Klicka på ett jobb | Jobbdetaljer visas | ☐ | |
@@ -182,6 +182,96 @@ Denna testplan är utformad för att systematiskt gå igenom Unicorn-plattformen
 | 9.2 | Verifiera OAuth-status | Anslutningsstatus visas | ☐ | |
 | 9.3 | Synka artiklar | Artiklar hämtas | ☐ | |
 | 9.4 | Exportera faktura | Faktura skapas i Fortnox | ☐ | |
+
+---
+
+## DEL 10: Orderkoncept-systemet (15 min)
+
+### 10.1 Skapa orderkoncept
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 10.1.1 | Gå till `/order-concepts` | Orderkoncept-sida visas | ☐ | |
+| 10.1.2 | Klicka "Skapa orderkoncept" | Formulär öppnas | ☐ | |
+| 10.1.3 | Välj scenario "Avrop" | Avropsfält visas | ☐ | |
+| 10.1.4 | Välj scenario "Schema" | Leveransschema-builder visas | ☐ | |
+| 10.1.5 | Välj scenario "Abonnemang" | Abonnemangsfält visas (tvättar/år, pris/enhet) | ☐ | |
+| 10.1.6 | Spara orderkoncept | Koncept visas i listan | ☐ | |
+
+### 10.2 Beroendemallar
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 10.2.1 | Öppna beroendemall-dialog | Mall-formulär visas | ☐ | |
+| 10.2.2 | Skapa beroende (before/after/same_day) | Beroende sparas | ☐ | |
+| 10.2.3 | Verifiera i listan | Mall visas korrekt | ☐ | |
+
+### 10.3 Fakturaregler
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 10.3.1 | Öppna fakturaregel-dialog | Regelformulär visas | ☐ | |
+| 10.3.2 | Välj typ (per_task/per_room/per_area/monthly) | Typ sparas | ☐ | |
+| 10.3.3 | Lägg till metadata-fält | Metadata sparas | ☐ | |
+
+### 10.4 Körning och omkörning
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 10.4.1 | Klicka "Förhandsgranska" | Preview med genererade ordrar visas | ☐ | |
+| 10.4.2 | Klicka "Kör rullande" | Ordrar genereras | ☐ | |
+| 10.4.3 | Klicka "Kör om" | Ändringsdetektering körs | ☐ | |
+| 10.4.4 | Öppna körningshistorik | Loggar visas med typ och resultat | ☐ | |
+
+---
+
+## DEL 11: Fältarbetare & Besiktning (10 min)
+
+### 11.1 Fältarbetarvy
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 11.1.1 | Gå till `/mobile` | SimpleFieldApp laddas | ☐ | |
+| 11.1.2 | Logga in med PIN | Autentisering fungerar | ☐ | |
+| 11.1.3 | Visa dagens uppgifter | Uppgiftslista med Lock/Unlock badges | ☐ | |
+| 11.1.4 | Klicka på låst uppgift | Toast-varning visas, kan inte startas | ☐ | |
+| 11.1.5 | Starta upplåst uppgift | Status ändras till "travel" | ☐ | |
+| 11.1.6 | Slutföra uppgift | Beroendekedjor löses automatiskt | ☐ | |
+
+### 11.2 Besiktning
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 11.2.1 | Expandera "Besiktning" i jobbdetaljer | 6 kategorier visas | ☐ | |
+| 11.2.2 | Sätt status OK/Varning/Fel per kategori | Knappar togglar korrekt | ☐ | |
+| 11.2.3 | Välj issue-badges vid Varning/Fel | Issues markeras | ☐ | |
+| 11.2.4 | Spara besiktning | Data sparas till server | ☐ | |
+
+### 11.3 Fotouppladdning
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 11.3.1 | Klicka kameraikon | Uppladdnings-URL genereras | ☐ | |
+| 11.3.2 | Välj/ta foto | Foto laddas upp via presigned URL | ☐ | |
+| 11.3.3 | Bekräfta | Foto sparas i metadata.photos | ☐ | |
+
+---
+
+## DEL 12: Besiktningssökning (5 min)
+
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 12.1 | Gå till `/inspections` | Besiktningssöksida laddas | ☐ | |
+| 12.2 | Filtrera på inspektionstyp | Resultat filtreras | ☐ | |
+| 12.3 | Filtrera på status (Varning/Fel) | Korrekt filtrering | ☐ | |
+| 12.4 | Kontrollera statistikkort | Total/OK/Varning/Fel-räknare | ☐ | |
+| 12.5 | Markera rader och exportera CSV | CSV-fil laddas ned | ☐ | |
+| 12.6 | Skapa åtgärdsorder från urval | Arbetsordrar genereras | ☐ | |
+
+---
+
+## DEL 13: Fakturering & Fortnox (5 min)
+
+| Steg | Åtgärd | Förväntat resultat | OK? | Kommentar |
+|------|--------|-------------------|-----|-----------|
+| 13.1 | Anropa /api/invoice-preview | Fakturor grupperade per kund | ☐ | |
+| 13.2 | Verifiera 4 faktureringstyper | per_task/per_room/per_area/monthly | ☐ | |
+| 13.3 | Verifiera 25% moms-beräkning | Korrekt VAT | ☐ | |
+| 13.4 | Exportera till Fortnox | FortnoxInvoiceExport-poster skapade | ☐ | |
+| 13.5 | Verifiera costCenter/project | Metadata propageras korrekt | ☐ | |
 
 ---
 

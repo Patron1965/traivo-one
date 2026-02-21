@@ -1,6 +1,6 @@
 # Unicorn - Systemdokumentation
 
-*Senast uppdaterad: 2025-12-27*
+*Senast uppdaterad: 2026-02-21*
 
 ## Innehållsförteckning
 
@@ -70,7 +70,7 @@ Unicorn är en AI-driven planeringsplattform för fältserviceföretag på den n
 
 ## Databasschema
 
-### Huvudtabeller (33 tabeller totalt)
+### Huvudtabeller (84 tabeller totalt)
 
 #### tenants - Hyresgäster/Organisationer
 Multi-tenant arkitektur för SaaS-stöd.
@@ -524,7 +524,7 @@ POST   /api/routes/optimize                - Optimera rutt (ORS proxy)
 POST   /api/notifications/token            - Hämta WebSocket-token
 ```
 
-### Mobil API
+### Mobil API (PIN-baserad)
 ```
 POST   /api/mobile/login                   - Inloggning (email + PIN)
 POST   /api/mobile/logout                  - Utloggning
@@ -533,6 +533,53 @@ GET    /api/mobile/my-orders               - Mina ordrar
 GET    /api/mobile/orders/:id              - Orderdetaljer
 PATCH  /api/mobile/orders/:id/status       - Uppdatera status
 POST   /api/mobile/orders/:id/notes        - Lägg till anteckning
+POST   /api/mobile/position                - Rapportera GPS-position
+```
+
+### Fältarbetare Task API (tenant-auth)
+```
+GET    /api/field-worker/tasks             - Uppgifter med beroendeinfo (?date=X&resourceId=Y)
+POST   /api/field-worker/tasks/:id/start   - Starta uppgift (sätter travel-status)
+POST   /api/field-worker/tasks/:id/complete - Slutför uppgift (löser beroendekedjor)
+POST   /api/field-worker/tasks/:id/update-metadata - Skriv metadata till objekt
+POST   /api/field-worker/tasks/:id/upload-photo    - Hämta presigned URL för foto
+POST   /api/field-worker/tasks/:id/confirm-photo   - Bekräfta fotouppladdning
+```
+
+### Orderkoncept
+```
+GET    /api/order-concepts                 - Lista orderkoncept
+POST   /api/order-concepts                 - Skapa orderkoncept
+GET    /api/order-concepts/:id             - Hämta orderkoncept
+PUT    /api/order-concepts/:id             - Uppdatera orderkoncept
+DELETE /api/order-concepts/:id             - Ta bort orderkoncept
+GET    /api/order-concepts/:id/preview     - Förhandsgranska genererade ordrar
+POST   /api/order-concepts/:id/run-rolling - Kör rullande förlängning
+POST   /api/order-concepts/:id/rerun       - Kör om med ändringsdetektering
+GET    /api/order-concept-run-logs         - Körningshistorik
+GET    /api/subscription-changes           - Lista abonnemangsändringar
+PATCH  /api/subscription-changes/:id       - Godkänn/avvisa ändring
+```
+
+### Beroende-mallar
+```
+GET    /api/task-dependency-templates      - Lista beroendemallar
+POST   /api/task-dependency-templates      - Skapa beroendemall
+```
+
+### Fakturaregler & Fakturering
+```
+GET    /api/invoice-rules                  - Lista fakturaregler
+POST   /api/invoice-rules                  - Skapa fakturaregel
+GET    /api/invoice-preview                - Generera fakturaförhandsvisning
+POST   /api/invoice-preview/export-to-fortnox - Exportera till Fortnox
+```
+
+### Besiktning (Inspection)
+```
+GET    /api/inspection-metadata            - Hämta besiktningsdata (?objectId=X)
+POST   /api/inspection-metadata            - Spara besiktningsresultat
+GET    /api/inspection-metadata/search     - Sök besiktningar (?inspectionType=X&status=Y)
 ```
 
 ### Autentisering
@@ -551,12 +598,13 @@ GET    /api/system/branding-templates/slug/:slug - Hämta via slug
 
 ## Frontend-Sidor
 
-### Alla registrerade routes (28 sidor)
+### Alla registrerade routes (45+ sidor)
 
 | Route | Sida | Beskrivning |
 |-------|------|-------------|
-| `/` | WeekPlannerPage | Veckoplanerare (startsida) |
-| `/planner` | WeekPlannerPage | Alias för veckoplanerare |
+| `/` | MyTasksPage | Mina uppgifter (startsida) |
+| `/home` | MyTasksPage | Alias för startsida |
+| `/planner` | WeekPlannerPage | Veckoplanerare |
 | `/week-planner` | WeekPlannerPage | Alias för veckoplanerare |
 | `/clusters` | ClustersPage | Klusterhantering |
 | `/clusters/:id` | ClusterDetailPage | Klusterdetaljer |
@@ -578,11 +626,46 @@ GET    /api/system/branding-templates/slug/:slug - Hämta via slug
 | `/auto-cluster` | AutoClusterPage | AI-klusterförslag |
 | `/weather` | WeatherPlanningPage | Väderplanering |
 | `/customer-portal` | CustomerPortalPage | Kundportal |
+| `/portal-messages` | PortalMessagesPage | Portalmeddelanden |
 | `/import` | ImportPage | Dataimport |
 | `/system-overview` | SystemOverviewPage | Systemöversikt |
 | `/settings` | SettingsPage | Inställningar |
 | `/system-dashboard` | SystemDashboardPage | White-labeling & admin |
+| `/industry-packages` | IndustryPackagesPage | Branschpaket |
 | `/mobile` | MobileFieldPage | Mobilvy för fältarbetare |
+| `/field` | MobileFieldPage | Alias för mobilvy |
+| `/simple` | MobileFieldPage | Alias för mobilvy |
+| `/project-report` | ProjectReportPage | Projektrapport |
+| `/metadata` | MetadataPage | Metadata-hantering |
+| `/metadata-settings` | MetadataSettingsPage | Metadata-inställningar |
+| `/fortnox` | FortnoxSettingsPage | Fortnox-integration |
+| `/sms-settings` | SmsSettingsPage | SMS-inställningar |
+| `/api-costs` | ApiCostsDashboardPage | API-kostnader |
+| `/environmental-certificates` | EnvironmentalCertificatePage | Miljöcertifikat |
+| `/architecture` | ArchitecturePage | Arkitekturöversikt |
+| `/order-concepts` | OrderConceptsPage | Orderkoncept (Avrop/Schema/Abonnemang) |
+| `/assignments` | AssignmentsPage | Uppdrag |
+| `/ai-assistant` | AIAssistantPage | AI-assistent |
+| `/reporting` | ReportingDashboardPage | Rapportering |
+| `/workflow-guide` | WorkflowGuidePage | Arbetsflödesguide |
+| `/data-requirements` | DataRequirementsPage | Datakrav |
+| `/inspections` | InspectionSearchPage | Besiktningssökning |
+| `/ai-planning` | AIPlanningPage | AI-planering |
+| `/pitch` | PitchPage | Pitch-presentation |
+| `/investor-pitch` | InvestorPitchPage | Investerarpitch |
+| `/lundstams-roi` | LundstamsROIPage | Lundstams ROI-analys |
+
+#### Kundportal-routes (separat router)
+| Route | Sida | Beskrivning |
+|-------|------|-------------|
+| `/portal` | PortalLoginPage | Portalinloggning (magic link) |
+| `/portal/verify` | PortalVerifyPage | Verifiera magic link |
+| `/portal/dashboard` | PortalDashboardPage | Kundöversikt |
+| `/portal/clusters` | PortalClusterOverviewPage | Klusteröversikt |
+| `/portal/invoices` | PortalInvoicesPage | Fakturor |
+| `/portal/contracts` | PortalContractsPage | Kontrakt |
+| `/portal/settings` | PortalSettingsPage | Inställningar |
+| `/portal/issues` | PortalIssuesPage | Felanmälan |
 
 ---
 
@@ -690,15 +773,37 @@ Verktyg: get_work_orders, get_resources, get_clusters, schedule_work_order, get_
 
 ## Mobilapp
 
-### Webbvy (`/mobile`)
-Responsiv webbvy för fältarbetare med:
+### Webbvy (`/mobile`, `/field`, `/simple`)
+Responsiv webbvy för fältarbetare (SimpleFieldApp) med:
 - Inloggning (email + PIN)
-- Dagens arbetsordrar
+- Dagens arbetsordrar med beroendeindikering (Låst/Upplåst)
 - Starta/slutföra/avbryta uppdrag
+- Tidsloggning med rast-funktion
 - Lägga till anteckningar
-- Navigera till adresser
+- Navigera till adresser (Google Maps-integration)
 - AI-assistent
 - Realtidsnotifikationer (WebSocket)
+- Fotouppladdning (presigned URL flow)
+- Besiktningschecklista (6 kategorier: Dörr, Lås, Fönster, Belysning, Golv, Ventilation)
+- Avvikelsehantering med orsaker och åtgärder
+
+### Beroendehantering i mobilvy
+- **Låsta uppgifter:** Rödfärgade kort med lås-ikon, kan inte startas
+- **Upplåsta uppgifter:** Normala kort med öppet lås-ikon
+- **Auto-upplåsning:** När föregående uppgift slutförs markeras beroendekedjor som klara
+
+### Besiktningssystem
+6 inspektionskategorier med predefined issue badges:
+| Kategori | Problem-alternativ |
+|----------|-------------------|
+| Dörr | Knarrar, Stängs inte, Skadad, Saknar stängare |
+| Lås | Slitet, Fastnar, Saknas, Fel nyckel |
+| Fönster | Sprucket, Öppnas inte, Trasig spanjolette, Kondens |
+| Belysning | Ur funktion, Blinkar, Saknas, Felaktig armatur |
+| Golv | Skadat, Halt, Smutsigt, Sprickor |
+| Ventilation | Ur funktion, Oljud, Dålig luft, Blockerad |
+
+Varje kategori: OK / Varning / Fel status + valfri kommentar.
 
 ### Notifikationstyper
 - `job_assigned` - Nytt uppdrag
@@ -706,6 +811,9 @@ Responsiv webbvy för fältarbetare med:
 - `job_cancelled` - Order avbokad
 - `schedule_changed` - Schema ändrat
 - `priority_changed` - Prioritet ändrad
+
+### Extern Fältapp-koppling
+Se **MOBILE_API.md** för komplett API-dokumentation avsedd för det externa Fältapp-projektet.
 
 ---
 
@@ -734,4 +842,48 @@ Responsiv webbvy för fältarbetare med:
 
 ---
 
-*Dokumentet baserat på kodbas per 2025-12-27.*
+## Orderkoncept-systemet
+
+### Tre orderscenarier
+| Scenario | Beskrivning | Fakturering |
+|----------|-------------|-------------|
+| **Avrop** | On-demand-beställningar | Per uppgift |
+| **Schema** | Återkommande med leveransschema + tidsfönster | Per rum/område |
+| **Abonnemang** | Prenumeration med månatlig avgift per enhet | Månatlig |
+
+### Abonnemangsfält
+- `washesPerYear` - Antal tvättar per år
+- `pricePerUnit` - Pris per enhet (öre)
+- `monthlyFee` - Månatlig avgift
+- `billingFrequency` - Faktureringsfrekvens (monthly/quarterly/yearly)
+- `contractLock` - Bindningstid (månader)
+
+### Beroendemallar (Task Dependency Templates)
+Artikel-till-artikel-beroenden med tre typer:
+- `before` - Måste slutföras före
+- `after` - Ska utföras efter
+- `same_day` - Samma dag
+
+### Körning och Ändringsdetektering
+- **Rullande förlängning:** Genererar ordrar framåt baserat på leveransschema
+- **Omkörning (Rerun):** Detekterar ändringar i orderkoncept och genererar diff
+- **Körningsloggar:** Spårar varje körning med typ, resultat och metadata
+
+### Fakturaregler
+4 faktureringstyper:
+- `per_task` - En rad per slutförd uppgift
+- `per_room` - Grupperat per rum
+- `per_area` - Grupperat per område
+- `monthly` - Månatlig samlad
+
+Metadata på fakturahuvud (kostnadsställe, projekt) och per rad (artikelkod, utförare).
+
+### Fortnox Export
+`POST /api/invoice-preview/export-to-fortnox` skapar FortnoxInvoiceExport-poster per orderrad med:
+- `costCenter` från fakturahuvud-metadata
+- `project` från fakturahuvud-metadata
+- `totalAmount` beräknat per rad
+
+---
+
+*Dokumentet baserat på kodbas per 2026-02-21.*

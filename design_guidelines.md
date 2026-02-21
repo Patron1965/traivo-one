@@ -91,14 +91,30 @@
 - Access info: Collapsible sections with icons (key, parking, gate)
 - Setup time breakdown: Horizontal bar chart showing time distribution
 
-### Mobile Field App
+### Mobile Field App (SimpleFieldApp)
 **Single-Column, Card-Based:**
 - Large touch targets (min h-14 for buttons)
 - Today's jobs: Stacked cards with job #, object name, time, address
 - Primary CTA: Full-width "Start Job" button (sticky bottom)
 - Job details: Full-screen view with prominent access info callout
 - Completion form: Simple, one-field-at-a-time progression
-- Photo capture: Camera button with preview thumbnails
+- Photo capture: Camera button with preview thumbnails (presigned URL upload)
+- **Dependency indicators:** Lock/Unlock badges on job cards
+  - Locked: Red-tinted muted card with Lock icon, cannot be started
+  - Unlocked: Normal card with Unlock icon
+- **Inspection checklist:** Expandable 6-category panel (Dörr/Lås/Fönster/Belysning/Golv/Ventilation)
+  - Three status buttons per category: OK (green) / Varning (amber) / Fel (red)
+  - Issue badges: Predefined clickable chips for common problems
+  - Comment field per category
+- **Time tracking:** Elapsed timer with break/pause support
+- **Deviation handling:** Structured reasons with icons (locked gate, customer absent, etc.)
+
+### External Fältapp Integration
+The mobile field app can also be consumed by an external standalone mobile application via REST API.
+- See **MOBILE_API.md** for complete API documentation
+- Two auth paths: PIN-based session or tenant-scoped auth
+- Endpoints designed for offline-first with outbox sync pattern
+- Response format optimized for mobile: includes `isLocked`, `dependsOn`, `isDependentTask` flags
 
 ### Analytics Dashboard
 **Dashboard Cards:**
