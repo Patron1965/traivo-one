@@ -47,10 +47,6 @@ outputType = "webview"
 localPort = 5000
 externalPort = 80
 
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
 [userenv]
 
 [userenv.shared]
@@ -61,4 +57,4 @@ integrations = ["javascript_openai_ai_integrations:2.0.0"]
 
 [deployment]
 deploymentTarget = "cloudrun"
-publicDir = "dist"
+run = ["npx", "tsx", "server/index.ts"]
