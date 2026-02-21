@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, Alert, Linking, Platform } from 'react-native';
+import {
+  View, ScrollView, Pressable, StyleSheet, Linking, Platform,
+  TextInput, ActivityIndicator
+} from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -10,7 +13,8 @@ import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
-import type { Order, OrderStatus, ORDER_STATUS_SEQUENCE } from '../types';
+import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote } from '../types';
+import { TIME_RESTRICTION_LABELS } from '../types';
 
 const STATUS_SEQUENCE: OrderStatus[] = [
   'planned', 'en_route', 'arrived', 'in_progress', 'completed',
@@ -21,6 +25,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
+  const [noteText, setNoteText] = useState('');
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/mobile/orders/${orderId}`],
@@ -33,6 +38,28 @@ export function OrderDetailScreen({ route, navigation }: any) {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    },
+    onError: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
+  });
+
+  const subStepMutation = useMutation({
+    mutationFn: ({ stepId, completed }: { stepId: number; completed: boolean }) =>
+      apiRequest('PATCH', `/api/mobile/orders/${orderId}/substeps/${stepId}`, { completed }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    },
+  });
+
+  const noteMutation = useMutation({
+    mutationFn: (text: string) =>
+      apiRequest('POST', `/api/mobile/orders/${orderId}/notes`, { text }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
+      setNoteText('');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
   });
@@ -89,6 +116,18 @@ export function OrderDetailScreen({ route, navigation }: any) {
     Linking.openURL(`tel:${phone.replace(/[\s-]/g, '')}`);
   }
 
+  function handleAddNote() {
+    const trimmed = noteText.trim();
+    if (trimmed.length > 0) {
+      noteMutation.mutate(trimmed);
+    }
+  }
+
+  function formatNoteDate(dateStr: string): string {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+
   if (isLoading || !order) {
     return (
       <View style={[styles.container, { paddingTop: headerHeight }]}>
@@ -101,29 +140,111 @@ export function OrderDetailScreen({ route, navigation }: any) {
 
   const nextStatus = getNextStatus(order.status);
   const isFinished = order.status === 'completed' || order.status === 'cancelled' || order.status === 'deferred';
+  const activeRestrictions = order.timeRestrictions?.filter(r => r.isActive) || [];
+  const subSteps = order.subSteps || [];
+  const completedSteps = subSteps.filter(s => s.completed).length;
+  const notes = order.orderNotes || [];
+  const deps = order.dependencies || [];
+  const execCodes = order.executionCodes || [];
 
   return (
     <View style={styles.container}>
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: headerHeight + Spacing.lg, paddingBottom: isFinished ? insets.bottom + Spacing.xl : 120 },
+          { paddingTop: headerHeight + Spacing.lg, paddingBottom: isFinished ? insets.bottom + Spacing.xl : 140 },
         ]}
       >
         <View style={styles.headerSection}>
-          <ThemedText variant="label">{order.orderNumber}</ThemedText>
+          <View style={styles.headerTopRow}>
+            <ThemedText variant="label">{order.orderNumber}</ThemedText>
+            {execCodes.length > 0 ? (
+              <View style={styles.execCodesRow}>
+                {execCodes.map(ec => (
+                  <View key={ec.id} style={styles.execCodeBadge}>
+                    <ThemedText variant="caption" color={Colors.primaryLight} style={styles.execCodeText}>
+                      {ec.code}
+                    </ThemedText>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </View>
           <ThemedText variant="heading">{order.customerName}</ThemedText>
           <StatusBadge status={order.status} />
         </View>
 
+        {order.isLocked ? (
+          <Card style={styles.lockedCard}>
+            <View style={styles.alertRow}>
+              <Feather name="lock" size={20} color={Colors.danger} />
+              <View style={styles.alertTextContainer}>
+                <ThemedText variant="subheading" color={Colors.danger}>
+                  Uppdraget \u00e4r l\u00e5st
+                </ThemedText>
+                <ThemedText variant="caption" color={Colors.textSecondary}>
+                  Beroende uppdrag m\u00e5ste slutf\u00f6ras f\u00f6rst
+                </ThemedText>
+              </View>
+            </View>
+          </Card>
+        ) : null}
+
         {order.priority === 'urgent' ? (
-          <Card style={[styles.urgentCard]}>
-            <View style={styles.urgentRow}>
+          <Card style={styles.urgentCard}>
+            <View style={styles.alertRow}>
               <Feather name="alert-circle" size={20} color={Colors.danger} />
               <ThemedText variant="body" color={Colors.danger}>
                 Br\u00e5dskande uppdrag
               </ThemedText>
             </View>
+          </Card>
+        ) : null}
+
+        {activeRestrictions.length > 0 ? (
+          <Card style={styles.restrictionCard}>
+            <View style={styles.alertRow}>
+              <Feather name="alert-triangle" size={20} color={Colors.warning} />
+              <ThemedText variant="subheading" color={Colors.warning}>
+                Tidsbegr\u00e4nsningar
+              </ThemedText>
+            </View>
+            {activeRestrictions.map(r => (
+              <View key={r.id} style={styles.restrictionItem}>
+                <View style={styles.restrictionTypeBadge}>
+                  <ThemedText variant="caption" color={Colors.danger} style={styles.restrictionTypeText}>
+                    {TIME_RESTRICTION_LABELS[r.type]}
+                  </ThemedText>
+                </View>
+                <ThemedText variant="body" color={Colors.textSecondary} style={styles.restrictionDesc}>
+                  {r.description}
+                </ThemedText>
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
+        {deps.length > 0 ? (
+          <Card>
+            <ThemedText variant="label" style={styles.sectionLabel}>Beroenden</ThemedText>
+            {deps.map(dep => (
+              <View key={dep.id} style={styles.depRow}>
+                <Feather
+                  name={dep.isBlocking ? 'lock' : 'link'}
+                  size={14}
+                  color={dep.isBlocking ? Colors.danger : Colors.info}
+                />
+                <View style={styles.depInfo}>
+                  <ThemedText variant="body">
+                    {dep.dependsOnOrderNumber}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={Colors.textMuted}>
+                    M\u00e5ste vara: {dep.dependsOnStatus === 'completed' ? 'Slutf\u00f6rd' : dep.dependsOnStatus}
+                    {dep.isBlocking ? ' (blockerande)' : ''}
+                  </ThemedText>
+                </View>
+              </View>
+            ))}
           </Card>
         ) : null}
 
@@ -173,6 +294,52 @@ export function OrderDetailScreen({ route, navigation }: any) {
           ) : null}
         </Card>
 
+        {subSteps.length > 0 ? (
+          <Card>
+            <View style={styles.subStepHeader}>
+              <ThemedText variant="label">Delsteg</ThemedText>
+              <View style={styles.subStepProgress}>
+                <ThemedText variant="caption" color={Colors.secondary}>
+                  {completedSteps}/{subSteps.length}
+                </ThemedText>
+                <View style={styles.subStepProgressBarBg}>
+                  <View
+                    style={[
+                      styles.subStepProgressBarFill,
+                      { width: `${subSteps.length > 0 ? (completedSteps / subSteps.length) * 100 : 0}%` },
+                    ]}
+                  />
+                </View>
+              </View>
+            </View>
+            {subSteps.sort((a, b) => a.sortOrder - b.sortOrder).map(step => (
+              <Pressable
+                key={step.id}
+                style={styles.subStepRow}
+                onPress={() => subStepMutation.mutate({ stepId: step.id, completed: !step.completed })}
+                testID={`button-substep-${step.id}`}
+              >
+                <View style={[styles.checkBox, step.completed ? styles.checkBoxChecked : null]}>
+                  {step.completed ? (
+                    <Feather name="check" size={14} color={Colors.textInverse} />
+                  ) : null}
+                </View>
+                <View style={styles.subStepInfo}>
+                  <ThemedText
+                    variant="body"
+                    style={step.completed ? styles.completedText : undefined}
+                  >
+                    {step.name}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={Colors.textMuted}>
+                    {step.articleName}
+                  </ThemedText>
+                </View>
+              </Pressable>
+            ))}
+          </Card>
+        ) : null}
+
         {order.articles.length > 0 ? (
           <Card>
             <ThemedText variant="label" style={styles.sectionLabel}>Artiklar</ThemedText>
@@ -211,6 +378,52 @@ export function OrderDetailScreen({ route, navigation }: any) {
           </Card>
         ) : null}
 
+        <Card>
+          <ThemedText variant="label" style={styles.sectionLabel}>Anteckningar</ThemedText>
+          {notes.length > 0 ? (
+            notes.map(note => (
+              <View key={note.id} style={styles.noteItem}>
+                <View style={styles.noteHeader}>
+                  <ThemedText variant="caption" color={Colors.primaryLight}>
+                    {note.createdBy}
+                  </ThemedText>
+                  <ThemedText variant="caption" color={Colors.textMuted}>
+                    {formatNoteDate(note.createdAt)}
+                  </ThemedText>
+                </View>
+                <ThemedText variant="body">{note.text}</ThemedText>
+              </View>
+            ))
+          ) : (
+            <ThemedText variant="caption" color={Colors.textMuted}>
+              Inga anteckningar \u00e4nnu
+            </ThemedText>
+          )}
+          <View style={styles.noteInputRow}>
+            <TextInput
+              style={styles.noteInput}
+              placeholder="Skriv en anteckning..."
+              placeholderTextColor={Colors.textMuted}
+              value={noteText}
+              onChangeText={setNoteText}
+              multiline
+              testID="input-note"
+            />
+            <Pressable
+              style={[styles.noteSendButton, noteText.trim().length === 0 ? styles.noteSendDisabled : null]}
+              onPress={handleAddNote}
+              disabled={noteText.trim().length === 0 || noteMutation.isPending}
+              testID="button-send-note"
+            >
+              {noteMutation.isPending ? (
+                <ActivityIndicator size="small" color={Colors.textInverse} />
+              ) : (
+                <Feather name="send" size={16} color={Colors.textInverse} />
+              )}
+            </Pressable>
+          </View>
+        </Card>
+
         <View style={styles.actionRow}>
           <Pressable
             style={styles.secondaryAction}
@@ -230,6 +443,16 @@ export function OrderDetailScreen({ route, navigation }: any) {
             <Feather name="package" size={18} color={Colors.primary} />
             <ThemedText variant="caption" color={Colors.primary}>
               Material
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={styles.secondaryAction}
+            onPress={() => navigation.navigate('Inspection', { orderId: order.id })}
+            testID="button-inspection"
+          >
+            <Feather name="clipboard" size={18} color={Colors.secondary} />
+            <ThemedText variant="caption" color={Colors.secondary}>
+              Inspektion
             </ThemedText>
           </Pressable>
           <Pressable
@@ -255,7 +478,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
         </View>
       </ScrollView>
 
-      {!isFinished ? (
+      {!isFinished && !order.isLocked ? (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
           {order.status !== 'new' && order.status !== 'completed' ? (
             <Pressable
@@ -281,6 +504,15 @@ export function OrderDetailScreen({ route, navigation }: any) {
           ) : null}
         </View>
       ) : null}
+
+      {order.isLocked ? (
+        <View style={[styles.bottomBar, styles.lockedBottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
+          <Feather name="lock" size={18} color={Colors.danger} />
+          <ThemedText variant="body" color={Colors.danger}>
+            L\u00e5st - beroende ej uppfyllt
+          </ThemedText>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -302,14 +534,73 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     marginBottom: Spacing.sm,
   },
-  urgentCard: {
-    backgroundColor: Colors.dangerLight,
-    borderColor: Colors.danger,
-  },
-  urgentRow: {
+  headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.sm,
+    flexWrap: 'wrap',
+  },
+  execCodesRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  execCodeBadge: {
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 4,
+  },
+  execCodeText: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  lockedCard: {
+    backgroundColor: Colors.dangerLight,
+  },
+  urgentCard: {
+    backgroundColor: Colors.dangerLight,
+  },
+  restrictionCard: {
+    backgroundColor: Colors.warningLight,
+  },
+  alertRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  alertTextContainer: {
+    flex: 1,
+  },
+  restrictionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingLeft: Spacing.xxl,
+  },
+  restrictionTypeBadge: {
+    backgroundColor: Colors.dangerLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  restrictionTypeText: {
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  restrictionDesc: {
+    flex: 1,
+  },
+  depRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  depInfo: {
+    flex: 1,
   },
   sectionLabel: {
     marginBottom: Spacing.sm,
@@ -341,6 +632,57 @@ const styles = StyleSheet.create({
     padding: Spacing.md,
     borderRadius: BorderRadius.md,
     marginTop: Spacing.md,
+  },
+  subStepHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  subStepProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  subStepProgressBarBg: {
+    width: 60,
+    height: 4,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  subStepProgressBarFill: {
+    height: '100%',
+    backgroundColor: Colors.secondary,
+    borderRadius: 2,
+  },
+  subStepRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  checkBox: {
+    width: 24,
+    height: 24,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkBoxChecked: {
+    backgroundColor: Colors.secondary,
+    borderColor: Colors.secondary,
+  },
+  subStepInfo: {
+    flex: 1,
+  },
+  completedText: {
+    textDecorationLine: 'line-through',
+    color: Colors.textMuted,
   },
   articleRow: {
     flexDirection: 'row',
@@ -378,15 +720,56 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  noteItem: {
+    paddingVertical: Spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.divider,
+  },
+  noteHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.xs,
+  },
+  noteInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: Spacing.sm,
+    marginTop: Spacing.md,
+  },
+  noteInput: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 80,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontFamily: 'Inter_400Regular',
+    fontSize: FontSize.md,
+    color: Colors.text,
+  },
+  noteSendButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  noteSendDisabled: {
+    backgroundColor: Colors.textMuted,
+  },
   actionRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginTop: Spacing.sm,
+    flexWrap: 'wrap',
   },
   secondaryAction: {
     alignItems: 'center',
     gap: Spacing.xs,
-    padding: Spacing.md,
+    padding: Spacing.sm,
+    minWidth: 60,
   },
   bottomBar: {
     position: 'absolute',
@@ -400,6 +783,10 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.surface,
     borderTopWidth: 1,
     borderTopColor: Colors.borderLight,
+  },
+  lockedBottomBar: {
+    justifyContent: 'center',
+    gap: Spacing.sm,
   },
   deferButton: {
     width: 56,

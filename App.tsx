@@ -16,6 +16,7 @@ import { ErrorBoundary } from './client/components/ErrorBoundary';
 import { AuthProvider } from './client/context/AuthContext';
 import { RootNavigator } from './client/navigation/RootNavigator';
 import { queryClient } from './client/lib/query-client';
+import { OfflineIndicator } from './client/components/OfflineIndicator';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -42,6 +43,7 @@ export default function App() {
             <QueryClientProvider client={queryClient}>
               <AuthProvider>
                 <NavigationContainer>
+                  <OfflineIndicator />
                   <RootNavigator />
                   <StatusBar style="auto" />
                 </NavigationContainer>
