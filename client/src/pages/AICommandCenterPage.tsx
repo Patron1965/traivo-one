@@ -260,10 +260,11 @@ function PlannerChat() {
 }
 
 function ETAPanel() {
-  const { data: etaData, isLoading } = useQuery<ETAOverviewEntry[]>({
+  const { data: etaRaw, isLoading } = useQuery<{ calculations: ETAOverviewEntry[]; totalDelayed: number; avgDelay: number; criticalDelays: ETAOverviewEntry[] }>({
     queryKey: ["/api/ai/eta-overview"],
     refetchInterval: 60000,
   });
+  const etaData = etaRaw?.calculations || [];
 
   const delayCheckMutation = useMutation({
     mutationFn: async () => {
@@ -282,7 +283,7 @@ function ETAPanel() {
     );
   }
 
-  const delayed = (etaData || []).filter(e => e.delayMinutes > 10);
+  const delayed = etaData.filter(e => e.delayMinutes > 10);
 
   return (
     <Card data-testid="eta-panel">
