@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
+import QRCode from 'qrcode';
 import { mobileRoutes } from './routes/mobile';
 import { aiRoutes } from './routes/ai';
 
@@ -86,6 +87,28 @@ function buildManifest(platform: string, req: express.Request) {
     },
   };
 }
+
+app.get('/api/qrcode/:platform', async (req, res) => {
+  const platform = req.params.platform;
+  if (platform !== 'ios' && platform !== 'android') {
+    return res.status(404).json({ error: 'Invalid platform' });
+  }
+  const hostUrl = getHostUrl(req);
+  const host = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000') as string;
+  const expoUrl = `exps://${host}/manifest/${platform}`;
+  try {
+    const svg = await QRCode.toString(expoUrl, {
+      type: 'svg',
+      width: 220,
+      margin: 2,
+      color: { dark: '#1B4F72', light: '#FFFFFF' },
+    });
+    res.setHeader('Content-Type', 'image/svg+xml');
+    res.send(svg);
+  } catch (err) {
+    res.status(500).json({ error: 'QR generation failed' });
+  }
+});
 
 app.use(express.static(path.join(__dirname, 'templates')));
 

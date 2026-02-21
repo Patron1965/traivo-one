@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Driver Core - Fältapp</title>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+  
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', system-ui, sans-serif; background: #F8F9FA; color: #1C2833; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
@@ -42,8 +42,7 @@
         <button class="platform-tab" onclick="setPlatform('android')">Android</button>
       </div>
 
-      <canvas id="qr-canvas" style="display:none"></canvas>
-      <img id="qr-img" alt="QR-kod" />
+      <img id="qr-img" alt="QR-kod" style="width:220px;height:220px" />
 
       <a id="expo-link" class="expo-link" href="#">Öppna appen</a>
 
@@ -83,23 +82,12 @@
       var linkEl = document.getElementById('expo-link');
       var urlEl = document.getElementById('url-display');
       var qrImg = document.getElementById('qr-img');
-      var canvas = document.getElementById('qr-canvas');
 
       if (linkEl) linkEl.href = url;
       if (urlEl) urlEl.textContent = url;
 
       if (qrImg) {
-        qrImg.src = 'https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=' + encodeURIComponent(url) + '&color=1B4F72';
-      }
-
-      if (canvas && typeof QRCode !== 'undefined') {
-        canvas.style.display = 'block';
-        if (qrImg) qrImg.style.display = 'none';
-        QRCode.toCanvas(canvas, url, {
-          width: 220,
-          margin: 2,
-          color: { dark: '#1B4F72', light: '#FFFFFF' }
-        });
+        qrImg.src = '/api/qrcode/' + currentPlatform;
       }
     }
 
