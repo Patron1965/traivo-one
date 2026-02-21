@@ -334,7 +334,7 @@ function ETAPanel() {
 
 function CommunicationsPanel() {
   const { data: comms, isLoading } = useQuery<CommunicationEntry[]>({
-    queryKey: ["/api/customer-communications"],
+    queryKey: ["/api/ai/communications"],
   });
 
   const channelIcon: Record<string, any> = { email: Mail, sms: Smartphone };
@@ -387,7 +387,7 @@ function AssistedPlanningPanel() {
   const planMutation = useMutation({
     mutationFn: async (inst: string) => {
       const res = await apiRequest("POST", "/api/ai/assisted-plan", {
-        instructions: inst,
+        instruction: inst,
         weekStart: new Date().toISOString().split("T")[0],
         weekEnd: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
       });
