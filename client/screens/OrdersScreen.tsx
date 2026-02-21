@@ -46,17 +46,33 @@ export function OrdersScreen({ navigation }: any) {
       style={styles.orderPressable}
       testID={`card-order-${order.id}`}
     >
-      <Card style={styles.orderCard}>
+      <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null]}>
         <View style={styles.orderRow}>
           <View style={styles.timeColumn}>
             <ThemedText variant="subheading" color={Colors.primary}>
               {order.scheduledTimeStart || '--:--'}
             </ThemedText>
             <ThemedText variant="caption">{order.estimatedDuration} min</ThemedText>
+            {order.isLocked ? (
+              <Feather name="lock" size={14} color={Colors.danger} style={styles.lockIcon} />
+            ) : null}
           </View>
           <View style={styles.orderContent}>
             <View style={styles.orderTopRow}>
-              <ThemedText variant="label">{order.orderNumber}</ThemedText>
+              <View style={styles.orderNumberWithCodes}>
+                <ThemedText variant="label">{order.orderNumber}</ThemedText>
+                {order.executionCodes && order.executionCodes.length > 0 ? (
+                  <View style={styles.execCodesRow}>
+                    {order.executionCodes.map(ec => (
+                      <View key={ec.id} style={styles.execCodeBadge}>
+                        <ThemedText variant="caption" color={Colors.primaryLight} style={styles.execCodeText}>
+                          {ec.code}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
               <StatusBadge status={order.status} size="sm" />
             </View>
             <ThemedText variant="subheading" numberOfLines={1}>
@@ -71,14 +87,44 @@ export function OrdersScreen({ navigation }: any) {
             <ThemedText variant="caption" numberOfLines={1} color={Colors.textMuted}>
               {order.description}
             </ThemedText>
-            {order.priority === 'urgent' ? (
-              <View style={styles.urgentTag}>
-                <Feather name="alert-circle" size={10} color={Colors.danger} />
-                <ThemedText variant="caption" color={Colors.danger} style={{ fontSize: 10 }}>
-                  BR\u00c5DSKANDE
-                </ThemedText>
-              </View>
-            ) : null}
+
+            <View style={styles.badgeRow}>
+              {order.priority === 'urgent' ? (
+                <View style={styles.urgentTag}>
+                  <Feather name="alert-circle" size={10} color={Colors.danger} />
+                  <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
+                    BR\u00c5DSKANDE
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {order.dependencies && order.dependencies.length > 0 ? (
+                <View style={styles.dependencyTag}>
+                  <Feather name="link" size={10} color={Colors.info} />
+                  <ThemedText variant="caption" color={Colors.info} style={styles.tagText}>
+                    {order.isLocked ? 'L\u00c5ST' : 'BEROENDE'}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {order.timeRestrictions && order.timeRestrictions.filter(r => r.isActive).length > 0 ? (
+                <View style={styles.restrictionTag}>
+                  <Feather name="alert-triangle" size={10} color={Colors.danger} />
+                  <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
+                    BEGR\u00c4NSNING
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {order.subSteps && order.subSteps.length > 0 ? (
+                <View style={styles.subStepTag}>
+                  <Feather name="check-square" size={10} color={Colors.secondary} />
+                  <ThemedText variant="caption" color={Colors.secondary} style={styles.tagText}>
+                    {order.subSteps.filter(s => s.completed).length}/{order.subSteps.length}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
           </View>
           <Feather name="chevron-right" size={20} color={Colors.textMuted} />
         </View>
@@ -113,7 +159,7 @@ export function OrdersScreen({ navigation }: any) {
         <FlashList
           data={filteredOrders}
           renderItem={renderOrder}
-          estimatedItemSize={120}
+          estimatedItemSize={140}
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
             paddingBottom: tabBarHeight + Spacing.xl,
@@ -167,6 +213,11 @@ const styles = StyleSheet.create({
   orderCard: {
     padding: Spacing.md,
   },
+  lockedCard: {
+    backgroundColor: '#FDF2F2',
+    borderWidth: 1,
+    borderColor: Colors.dangerLight,
+  },
   orderRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -175,6 +226,9 @@ const styles = StyleSheet.create({
   timeColumn: {
     alignItems: 'center',
     minWidth: 50,
+  },
+  lockIcon: {
+    marginTop: 4,
   },
   orderContent: {
     flex: 1,
@@ -185,16 +239,59 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  orderNumberWithCodes: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  execCodesRow: {
+    flexDirection: 'row',
+    gap: 3,
+  },
+  execCodeBadge: {
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3,
+  },
+  execCodeText: {
+    fontSize: 8,
+    fontFamily: 'Inter_600SemiBold',
+  },
   addressRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
   },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+    marginTop: 4,
+  },
   urgentTag: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
-    marginTop: 2,
+  },
+  dependencyTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  restrictionTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  subStepTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  tagText: {
+    fontSize: 9,
   },
   loader: {
     flex: 1,

@@ -41,6 +41,7 @@ export function HomeScreen({ navigation }: any) {
   const completedCount = orders?.filter(o => o.status === 'completed').length || 0;
   const totalCount = orders?.length || 0;
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
+  const lockedCount = orders?.filter(o => o.isLocked).length || 0;
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('sv-SE', {
@@ -146,6 +147,17 @@ export function HomeScreen({ navigation }: any) {
             </ThemedText>
             <ThemedText variant="caption">uppskjutna</ThemedText>
           </View>
+          {lockedCount > 0 ? (
+            <>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText variant="heading" color={Colors.warning}>
+                  {lockedCount}
+                </ThemedText>
+                <ThemedText variant="caption">l\u00e5sta</ThemedText>
+              </View>
+            </>
+          ) : null}
         </View>
       </Card>
 
@@ -172,15 +184,33 @@ export function HomeScreen({ navigation }: any) {
             onPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}
             testID={`card-order-${order.id}`}
           >
-            <Card style={styles.orderCard}>
+            <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null]}>
               <View style={styles.orderHeader}>
                 <View style={styles.orderInfo}>
-                  <ThemedText variant="label">{order.orderNumber}</ThemedText>
+                  <View style={styles.orderNumberRow}>
+                    <ThemedText variant="label">{order.orderNumber}</ThemedText>
+                    {order.executionCodes && order.executionCodes.length > 0 ? (
+                      <View style={styles.execCodesRow}>
+                        {order.executionCodes.map(ec => (
+                          <View key={ec.id} style={styles.execCodeBadge}>
+                            <ThemedText variant="caption" color={Colors.primaryLight} style={styles.execCodeText}>
+                              {ec.code}
+                            </ThemedText>
+                          </View>
+                        ))}
+                      </View>
+                    ) : null}
+                  </View>
                   <ThemedText variant="subheading" numberOfLines={1}>
                     {order.customerName}
                   </ThemedText>
                 </View>
-                <StatusBadge status={order.status} size="sm" />
+                <View style={styles.statusColumn}>
+                  <StatusBadge status={order.status} size="sm" />
+                  {order.isLocked ? (
+                    <Feather name="lock" size={14} color={Colors.danger} />
+                  ) : null}
+                </View>
               </View>
               <View style={styles.orderDetails}>
                 <View style={styles.orderDetailRow}>
@@ -198,21 +228,47 @@ export function HomeScreen({ navigation }: any) {
                   </View>
                 ) : null}
               </View>
-              {order.priority === 'urgent' ? (
-                <View style={styles.urgentBadge}>
-                  <Feather name="alert-circle" size={12} color={Colors.danger} />
-                  <ThemedText variant="caption" color={Colors.danger}>
-                    Br\u00e5dskande
-                  </ThemedText>
-                </View>
-              ) : order.priority === 'high' ? (
-                <View style={styles.highBadge}>
-                  <Feather name="arrow-up" size={12} color={Colors.warning} />
-                  <ThemedText variant="caption" color={Colors.warning}>
-                    H\u00f6g prioritet
-                  </ThemedText>
-                </View>
-              ) : null}
+
+              <View style={styles.badgeRow}>
+                {order.priority === 'urgent' ? (
+                  <View style={styles.urgentBadge}>
+                    <Feather name="alert-circle" size={12} color={Colors.danger} />
+                    <ThemedText variant="caption" color={Colors.danger}>Br\u00e5dskande</ThemedText>
+                  </View>
+                ) : order.priority === 'high' ? (
+                  <View style={styles.highBadge}>
+                    <Feather name="arrow-up" size={12} color={Colors.warning} />
+                    <ThemedText variant="caption" color={Colors.warning}>H\u00f6g prioritet</ThemedText>
+                  </View>
+                ) : null}
+
+                {order.dependencies && order.dependencies.length > 0 ? (
+                  <View style={styles.dependencyBadge}>
+                    <Feather name="link" size={12} color={Colors.info} />
+                    <ThemedText variant="caption" color={Colors.info}>
+                      {order.dependencies.length} beroende
+                    </ThemedText>
+                  </View>
+                ) : null}
+
+                {order.timeRestrictions && order.timeRestrictions.filter(r => r.isActive).length > 0 ? (
+                  <View style={styles.restrictionBadge}>
+                    <Feather name="clock" size={12} color={Colors.danger} />
+                    <ThemedText variant="caption" color={Colors.danger}>
+                      Tidsbegr\u00e4nsning
+                    </ThemedText>
+                  </View>
+                ) : null}
+
+                {order.subSteps && order.subSteps.length > 0 ? (
+                  <View style={styles.subStepBadge}>
+                    <Feather name="list" size={12} color={Colors.secondary} />
+                    <ThemedText variant="caption" color={Colors.secondary}>
+                      {order.subSteps.filter(s => s.completed).length}/{order.subSteps.length}
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
             </Card>
           </Pressable>
         ))
@@ -327,6 +383,11 @@ const styles = StyleSheet.create({
   orderCard: {
     backgroundColor: Colors.surface,
   },
+  lockedCard: {
+    backgroundColor: '#FDF2F2',
+    borderWidth: 1,
+    borderColor: Colors.dangerLight,
+  },
   orderHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -337,6 +398,30 @@ const styles = StyleSheet.create({
     flex: 1,
     marginRight: Spacing.md,
   },
+  orderNumberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flexWrap: 'wrap',
+  },
+  execCodesRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  execCodeBadge: {
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  execCodeText: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  statusColumn: {
+    alignItems: 'flex-end',
+    gap: Spacing.xs,
+  },
   orderDetails: {
     gap: Spacing.xs,
   },
@@ -345,26 +430,55 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
+  badgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
   urgentBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    marginTop: Spacing.sm,
     backgroundColor: Colors.dangerLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
-    alignSelf: 'flex-start',
   },
   highBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    marginTop: Spacing.sm,
     backgroundColor: Colors.warningLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
-    alignSelf: 'flex-start',
+  },
+  dependencyBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+  },
+  restrictionBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.dangerLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+  },
+  subStepBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.successLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
   },
 });
