@@ -24,6 +24,7 @@
     "dotenv": "^17.3.1",
     "drizzle-kit": "^0.31.9",
     "drizzle-orm": "^0.45.1",
+    "drizzle-zod": "^0.8.3",
     "expo": "~54.0.33",
     "expo-blur": "^15.0.8",
     "expo-camera": "^17.0.10",
@@ -39,6 +40,9 @@
     "expo-splash-screen": "^31.0.13",
     "expo-status-bar": "~3.0.9",
     "express": "^5.2.1",
+    "openai": "^6.22.0",
+    "p-limit": "^7.3.0",
+    "p-retry": "^7.1.1",
     "pg": "^8.18.0",
     "react": "19.1.0",
     "react-dom": "^19.1.0",
@@ -52,7 +56,9 @@
     "react-native-svg": "^15.15.3",
     "react-native-view-shot": "^4.0.3",
     "react-native-web": "^0.21.2",
-    "tsx": "^4.21.0"
+    "tsx": "^4.21.0",
+    "zod": "^4.3.6",
+    "zod-validation-error": "^5.0.0"
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
