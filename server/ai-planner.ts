@@ -2414,6 +2414,246 @@ export interface ConversationalPlannerResponse {
   followUpQuestions?: string[];
 }
 
+export async function processConversationalPlannerQueryV2(
+  query: string,
+  context: ConversationalPlannerContext,
+  conversationHistory: Array<{ role: string; content: string }> = []
+): Promise<ConversationalPlannerResponse> {
+  const { workOrders, resources, clusters, weekStart, weekEnd } = context;
+  const resourceMap = new Map(resources.map(r => [r.id, r.name]));
+
+  const tools: any[] = [
+    {
+      type: "function",
+      function: {
+        name: "get_unplanned_orders",
+        description: "Hämta alla oplanerade ordrar (saknar schema eller resurs)",
+        parameters: { type: "object", properties: {}, required: [] }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_overdue_orders",
+        description: "Hämta försenade ordrar",
+        parameters: { type: "object", properties: {}, required: [] }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_resource_workload",
+        description: "Visa arbetsbelastning per resurs för veckan",
+        parameters: { type: "object", properties: {}, required: [] }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_orders_by_resource",
+        description: "Hämta ordrar tilldelade en specifik resurs",
+        parameters: {
+          type: "object",
+          properties: { resourceName: { type: "string", description: "Resursens namn" } },
+          required: ["resourceName"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_orders_by_day",
+        description: "Hämta ordrar för en specifik dag",
+        parameters: {
+          type: "object",
+          properties: { date: { type: "string", description: "Datum (YYYY-MM-DD)" } },
+          required: ["date"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "suggest_reschedule",
+        description: "Föreslå omplanering av ordrar mellan resurser",
+        parameters: {
+          type: "object",
+          properties: {
+            orderIds: { type: "array", items: { type: "string" }, description: "Order-IDs att flytta" },
+            toResourceName: { type: "string", description: "Målresursens namn" },
+            toDate: { type: "string", description: "Nytt datum (YYYY-MM-DD), valfritt" }
+          },
+          required: ["orderIds", "toResourceName"]
+        }
+      }
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_weekly_summary",
+        description: "Hämta sammanfattning av veckans planering",
+        parameters: { type: "object", properties: {}, required: [] }
+      }
+    }
+  ];
+
+  const weekOrders = workOrders.filter(o => {
+    if (!o.scheduledDate) return false;
+    const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate).split("T")[0];
+    return d >= weekStart && d <= weekEnd;
+  });
+
+  function executeTool(name: string, args: any): string {
+    switch (name) {
+      case "get_unplanned_orders": {
+        const unplanned = workOrders.filter(o => !o.scheduledDate || !o.resourceId).slice(0, 20);
+        return JSON.stringify(unplanned.map(o => ({
+          id: o.id, title: o.title, priority: o.priority, customer: o.customerName
+        })));
+      }
+      case "get_overdue_orders": {
+        const today = new Date().toISOString().split("T")[0];
+        const overdue = workOrders.filter(o => {
+          if (!o.scheduledDate) return false;
+          const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate);
+          return d < today && o.status !== "completed" && o.status !== "utford" && o.status !== "fakturerad";
+        }).slice(0, 20);
+        return JSON.stringify(overdue.map(o => ({
+          id: o.id, title: o.title, scheduledDate: o.scheduledDate, resourceName: o.resourceId ? resourceMap.get(o.resourceId) : null
+        })));
+      }
+      case "get_resource_workload": {
+        const workload = resources.map(r => {
+          const rOrders = weekOrders.filter(o => o.resourceId === r.id);
+          const byDay: Record<string, number> = {};
+          rOrders.forEach(o => {
+            const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate).split("T")[0];
+            byDay[d] = (byDay[d] || 0) + 1;
+          });
+          return { name: r.name, totalOrders: rOrders.length, byDay };
+        });
+        return JSON.stringify(workload);
+      }
+      case "get_orders_by_resource": {
+        const resource = resources.find(r => r.name.toLowerCase().includes(args.resourceName?.toLowerCase()));
+        if (!resource) return JSON.stringify({ error: `Resursen "${args.resourceName}" hittades inte` });
+        const rOrders = weekOrders.filter(o => o.resourceId === resource.id).slice(0, 30);
+        return JSON.stringify(rOrders.map(o => ({
+          id: o.id, title: o.title, scheduledDate: o.scheduledDate, status: o.status, priority: o.priority
+        })));
+      }
+      case "get_orders_by_day": {
+        const dayOrders = weekOrders.filter(o => {
+          const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate).split("T")[0];
+          return d === args.date;
+        }).slice(0, 30);
+        return JSON.stringify(dayOrders.map(o => ({
+          id: o.id, title: o.title, resourceName: o.resourceId ? resourceMap.get(o.resourceId) : null, status: o.status
+        })));
+      }
+      case "suggest_reschedule": {
+        const target = resources.find(r => r.name.toLowerCase().includes(args.toResourceName?.toLowerCase()));
+        if (!target) return JSON.stringify({ error: `Resursen "${args.toResourceName}" hittades inte` });
+        return JSON.stringify({
+          action: "reschedule_to_resource",
+          orderIds: args.orderIds,
+          toResourceId: target.id,
+          toResourceName: target.name,
+          toDate: args.toDate || null,
+          confirmation: `Vill du flytta ${args.orderIds.length} ordrar till ${target.name}?`
+        });
+      }
+      case "get_weekly_summary": {
+        const byStatus: Record<string, number> = {};
+        weekOrders.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
+        const unplanned = workOrders.filter(o => !o.scheduledDate || !o.resourceId).length;
+        return JSON.stringify({
+          totalThisWeek: weekOrders.length,
+          byStatus,
+          unplanned,
+          resources: resources.length,
+          avgPerResource: Math.round(weekOrders.length / Math.max(resources.length, 1))
+        });
+      }
+      default: return JSON.stringify({ error: "Okänd funktion" });
+    }
+  }
+
+  const systemPrompt = buildSystemPrompt({ role: "planner" }) + "\n" + PLANNING_PERSONA_ADDITIONS + `
+
+VECKODATA (${weekStart} - ${weekEnd}):
+- ${weekOrders.length} ordrar planerade
+- ${resources.length} resurser tillgängliga
+- Resurser: ${resources.map(r => r.name).join(", ")}
+
+Använd verktygen för att hämta data innan du svarar. Svara alltid på svenska.
+Om användaren vill göra en ändring (flytta, omplanera), använd suggest_reschedule och bekräfta först.`;
+
+  const messages: any[] = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory.slice(-6).map(m => ({ role: m.role, content: m.content })),
+    { role: "user", content: query }
+  ];
+
+  try {
+    let response = await openai.chat.completions.create({
+      model: "gpt-4o",
+      messages,
+      tools,
+      tool_choice: "auto",
+      temperature: 0.5,
+      max_tokens: 2000,
+    });
+
+    trackOpenAIResponse(response);
+    let msg = response.choices[0]?.message;
+
+    let toolCallRounds = 0;
+    while (msg?.tool_calls && msg.tool_calls.length > 0 && toolCallRounds < 3) {
+      messages.push(msg);
+      for (const tc of msg.tool_calls) {
+        const args = JSON.parse(tc.function.arguments || "{}");
+        const result = executeTool(tc.function.name, args);
+        messages.push({ role: "tool", tool_call_id: tc.id, content: result });
+      }
+      response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        messages,
+        tools,
+        tool_choice: "auto",
+        temperature: 0.5,
+        max_tokens: 2000,
+      });
+      trackOpenAIResponse(response);
+      msg = response.choices[0]?.message;
+      toolCallRounds++;
+    }
+
+    const content = msg?.content || "Kunde inte generera svar.";
+
+    try {
+      const parsed = JSON.parse(content);
+      return {
+        message: parsed.message || content,
+        data: parsed.data,
+        suggestedActions: parsed.suggestedActions,
+        followUpQuestions: parsed.followUpQuestions || ["Visa oplanerade ordrar", "Hur ser resursbalansen ut?"],
+      };
+    } catch {
+      return {
+        message: content,
+        followUpQuestions: ["Visa oplanerade ordrar", "Hur ser arbetsbelastningen ut?", "Vilka ordrar är försenade?"],
+      };
+    }
+  } catch (error) {
+    console.error("Conversational planner v2 error:", error);
+    return {
+      message: "Ett fel uppstod. Försök igen.",
+      followUpQuestions: ["Visa alla ordrar", "Vilka resurser finns?"],
+    };
+  }
+}
+
 export async function processConversationalPlannerQuery(
   query: string,
   context: ConversationalPlannerContext
@@ -2592,5 +2832,227 @@ export async function executeConversationalPlannerAction(
     
     default:
       return { success: false, message: `Okänd åtgärd: ${action}` };
+  }
+}
+
+export interface PlanningConstraints {
+  priorityRules?: string[];
+  resourceExclusions?: { resourceId: string; reason: string }[];
+  areaFocus?: string[];
+  timePreferences?: { type: string; value: string }[];
+  maxOrdersPerDay?: number;
+  balanceStrategy?: "even" | "front_load" | "back_load";
+  customInstructions?: string;
+}
+
+export interface AIAssistedPlanResult {
+  assignments: ScheduleAssignment[];
+  summary: string;
+  totalOrdersScheduled: number;
+  estimatedEfficiency: number;
+  aiExplanation: string;
+  constraintsApplied: string[];
+  metrics: {
+    totalDriveTime: number;
+    avgOrdersPerResource: number;
+    resourceBalance: number;
+    timeWindowCompliance: number;
+  };
+  warnings: string[];
+}
+
+export async function parseNaturalLanguageConstraints(
+  instruction: string,
+  resources: Resource[],
+  clusters: Cluster[]
+): Promise<PlanningConstraints> {
+  try {
+    const resourceList = resources.map(r => `${r.name} (${r.id.slice(0, 8)})`).join(", ");
+    const clusterList = clusters.map(c => c.name).join(", ");
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `Du är en planeringstolk. Konvertera planeringsinstruktioner till strukturerade constraints.
+
+Tillgängliga resurser: ${resourceList}
+Tillgängliga kluster/områden: ${clusterList}
+
+Returnera ALLTID JSON med denna struktur:
+{
+  "priorityRules": ["beskrivning av prioriteringsregler"],
+  "resourceExclusions": [{"resourceId": "id", "reason": "anledning"}],
+  "areaFocus": ["områdesnamn att prioritera"],
+  "timePreferences": [{"type": "urgent_before", "value": "12:00"}],
+  "maxOrdersPerDay": null,
+  "balanceStrategy": "even",
+  "customInstructions": "övriga instruktioner"
+}`
+        },
+        { role: "user", content: instruction }
+      ],
+      temperature: 0.3,
+      max_tokens: 800,
+      response_format: { type: "json_object" }
+    });
+
+    trackOpenAIResponse(response);
+    const content = response.choices[0]?.message?.content || "{}";
+    return JSON.parse(content) as PlanningConstraints;
+  } catch (error) {
+    console.error("[ai-planner] Failed to parse constraints:", error);
+    return { customInstructions: instruction };
+  }
+}
+
+export async function generatePlanExplanation(
+  assignments: ScheduleAssignment[],
+  context: PlanningContext,
+  constraints: PlanningConstraints
+): Promise<{ explanation: string; warnings: string[]; metrics: AIAssistedPlanResult["metrics"] }> {
+  const resourceMap = new Map(context.resources.map(r => [r.id, r.name]));
+  const clusterMap = new Map(context.clusters.map(c => [c.id, c.name]));
+
+  const ordersByResource: Record<string, number> = {};
+  const ordersByDay: Record<string, number> = {};
+  assignments.forEach(a => {
+    const rName = resourceMap.get(a.resourceId) || a.resourceId.slice(0, 8);
+    ordersByResource[rName] = (ordersByResource[rName] || 0) + 1;
+    ordersByDay[a.scheduledDate] = (ordersByDay[a.scheduledDate] || 0) + 1;
+  });
+
+  const avgPerResource = context.resources.length > 0
+    ? assignments.length / context.resources.length
+    : 0;
+  const maxOrders = Math.max(...Object.values(ordersByResource), 0);
+  const minOrders = Math.min(...Object.values(ordersByResource), 0);
+  const balance = maxOrders > 0 ? Math.round((1 - (maxOrders - minOrders) / maxOrders) * 100) : 100;
+
+  const metrics: AIAssistedPlanResult["metrics"] = {
+    totalDriveTime: 0,
+    avgOrdersPerResource: Math.round(avgPerResource * 10) / 10,
+    resourceBalance: balance,
+    timeWindowCompliance: Math.round(
+      (assignments.filter(a => a.confidence > 70).length / Math.max(assignments.length, 1)) * 100
+    ),
+  };
+
+  try {
+    const summaryText = `
+PLANRESULTAT:
+- ${assignments.length} ordrar planerade på ${Object.keys(ordersByResource).length} resurser
+- Fördelning: ${Object.entries(ordersByResource).map(([r, c]) => `${r}: ${c}`).join(", ")}
+- Balans: ${balance}%
+- Genomsnittlig konfidens: ${Math.round(assignments.reduce((s, a) => s + a.confidence, 0) / Math.max(assignments.length, 1))}%
+${constraints.customInstructions ? `\nAnvändarens instruktioner: "${constraints.customInstructions}"` : ""}
+${constraints.areaFocus?.length ? `Fokusområden: ${constraints.areaFocus.join(", ")}` : ""}
+${constraints.balanceStrategy ? `Balanseringsstrategi: ${constraints.balanceStrategy}` : ""}`;
+
+    const response = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `Du är en planeringsexpert. Analysera planresultatet och ge en kort sammanfattning på svenska.
+Returnera JSON: {"explanation": "2-3 meningar om planen", "warnings": ["eventuella varningar"]}`
+        },
+        { role: "user", content: summaryText }
+      ],
+      temperature: 0.5,
+      max_tokens: 500,
+      response_format: { type: "json_object" }
+    });
+
+    trackOpenAIResponse(response);
+    const parsed = JSON.parse(response.choices[0]?.message?.content || "{}");
+    return {
+      explanation: parsed.explanation || "Planen har genererats framgångsrikt.",
+      warnings: parsed.warnings || [],
+      metrics,
+    };
+  } catch (error) {
+    return {
+      explanation: `${assignments.length} ordrar planerade med ${balance}% resursbalans.`,
+      warnings: [],
+      metrics,
+    };
+  }
+}
+
+export async function aiAssistedSchedule(
+  context: PlanningContext,
+  naturalLanguageInstruction?: string
+): Promise<AIAssistedPlanResult> {
+  let constraints: PlanningConstraints = {};
+  const constraintsApplied: string[] = [];
+
+  if (naturalLanguageInstruction) {
+    constraints = await parseNaturalLanguageConstraints(
+      naturalLanguageInstruction,
+      context.resources,
+      context.clusters
+    );
+    if (constraints.priorityRules?.length) constraintsApplied.push(`Prioriteringsregler: ${constraints.priorityRules.join(", ")}`);
+    if (constraints.areaFocus?.length) constraintsApplied.push(`Fokusområden: ${constraints.areaFocus.join(", ")}`);
+    if (constraints.balanceStrategy) constraintsApplied.push(`Balansstrategi: ${constraints.balanceStrategy}`);
+    if (constraints.resourceExclusions?.length) constraintsApplied.push(`Resursundantag: ${constraints.resourceExclusions.map(e => e.reason).join(", ")}`);
+    if (constraints.customInstructions) constraintsApplied.push(`Instruktioner: ${constraints.customInstructions}`);
+  }
+
+  let filteredResources = [...context.resources];
+  if (constraints.resourceExclusions?.length) {
+    const excludedIds = new Set(constraints.resourceExclusions.map(e => e.resourceId));
+    filteredResources = filteredResources.filter(r => !excludedIds.has(r.id));
+  }
+
+  const modifiedContext = { ...context, resources: filteredResources };
+
+  const weatherImpacts = await getWeatherForPlanning(context.weekStart);
+
+  const baseResult = await autoScheduleOrdersWithWeather(modifiedContext, weatherImpacts);
+
+  const { explanation, warnings, metrics } = await generatePlanExplanation(
+    baseResult.assignments,
+    context,
+    constraints
+  );
+
+  return {
+    ...baseResult,
+    aiExplanation: explanation,
+    constraintsApplied,
+    metrics,
+    warnings,
+  };
+}
+
+async function getWeatherForPlanning(weekStart: string): Promise<WeatherImpact[]> {
+  try {
+    const forecast = await fetchWeatherForecast(59.3293, 18.0686, 7);
+    if (!forecast?.daily) return [];
+    return forecast.daily.time?.map((date: string, i: number) => {
+      const precip = forecast.daily.precipitation_sum?.[i] || 0;
+      const wind = forecast.daily.wind_speed_10m_max?.[i] || 0;
+      const temp = forecast.daily.temperature_2m_max?.[i] || 15;
+      let impactLevel: "none" | "low" | "medium" | "high" | "severe" = "none";
+      let capacityMultiplier = 1.0;
+      const reasons: string[] = [];
+      if (precip > 20) { impactLevel = "high"; capacityMultiplier = 0.7; reasons.push("kraftigt regn"); }
+      else if (precip > 5) { impactLevel = "medium"; capacityMultiplier = 0.85; reasons.push("regn"); }
+      else if (precip > 1) { impactLevel = "low"; capacityMultiplier = 0.95; reasons.push("lätt regn"); }
+      if (wind > 15) { impactLevel = "high"; capacityMultiplier *= 0.8; reasons.push("stark vind"); }
+      if (temp < -10) { impactLevel = "high"; capacityMultiplier *= 0.75; reasons.push("extrem kyla"); }
+      return {
+        date,
+        impactLevel,
+        capacityMultiplier,
+        reason: reasons.length > 0 ? reasons.join(", ") : "bra väder",
+        recommendations: [],
+      };
+    }) || [];
+  } catch {
+    return [];
   }
 }

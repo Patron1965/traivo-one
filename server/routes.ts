@@ -32,6 +32,7 @@ import { sendEmail } from "./replit_integrations/resend";
 import { createInheritanceProcessor } from "./inheritance-processor";
 import { metadataRouter } from "./metadata-routes";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject, createMetadata, getAllMetadataTypes } from "./metadata-queries";
+import { handleWorkOrderStatusChange, getCommunicationLog, sendETAUpdate, getAutoNotificationSettings } from "./ai-communication";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -746,6 +747,16 @@ export async function registerRoutes(
         }
       }
       
+      const statusChanged = updateData.status && updateData.status !== existingOrder.status;
+      const execStatusChanged = updateData.executionStatus && updateData.executionStatus !== existingOrder.executionStatus;
+      if (statusChanged || execStatusChanged) {
+        const oldSt = existingOrder.executionStatus || existingOrder.status;
+        const newSt = updateData.executionStatus || updateData.status || "";
+        handleWorkOrderStatusChange(workOrder.id, oldSt, newSt, tenantId).catch(err => 
+          console.error("[ai-communication] Event hook error:", err)
+        );
+      }
+
       res.json(workOrder);
     } catch (error) {
       console.error("Failed to update work order:", error);
@@ -4601,11 +4612,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
   
-  // Conversational AI Planner - natural language queries and commands
   app.post("/api/ai/planner-chat", async (req, res) => {
     try {
-      const { processConversationalPlannerQuery } = await import("./ai-planner");
-      const { query, weekStart, weekEnd } = req.body;
+      const { processConversationalPlannerQueryV2 } = await import("./ai-planner");
+      const { query, weekStart, weekEnd, conversationHistory } = req.body;
       
       if (!query || typeof query !== "string") {
         return res.status(400).json({ error: "Fråga krävs" });
@@ -4621,13 +4631,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const today = new Date().toISOString().split("T")[0];
       const weekEndDefault = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
       
-      const response = await processConversationalPlannerQuery(query, {
+      const response = await processConversationalPlannerQueryV2(query, {
         workOrders,
         resources,
         clusters,
         weekStart: weekStart || today,
         weekEnd: weekEnd || weekEndDefault,
-      });
+      }, conversationHistory || []);
       
       res.json(response);
     } catch (error) {
@@ -5301,6 +5311,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       console.log(`[mobile] Order ${orderId} status updated to ${status} by resource ${resourceId}`);
       
+      const mobileTenantId = order.tenantId;
+      if (mobileTenantId) {
+        handleWorkOrderStatusChange(orderId, order.status, status, mobileTenantId).catch(err =>
+          console.error("[ai-communication] Mobile event hook error:", err)
+        );
+      }
+
       res.json(updatedOrder);
     } catch (error) {
       console.error("Failed to update order status:", error);
@@ -12598,6 +12615,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         executionStatus: "travel",
         status: "in_progress",
       });
+      if (workOrder.tenantId) {
+        handleWorkOrderStatusChange(req.params.id, workOrder.executionStatus || "pending", "travel", workOrder.tenantId).catch(err =>
+          console.error("[ai-communication] Field start hook error:", err)
+        );
+      }
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Kunde inte starta uppgift" });
@@ -12617,6 +12639,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         status: "completed",
         completedAt: new Date(),
       });
+      if (workOrder.tenantId) {
+        handleWorkOrderStatusChange(req.params.id, workOrder.executionStatus || "in_progress", "completed", workOrder.tenantId).catch(err =>
+          console.error("[ai-communication] Field complete hook error:", err)
+        );
+      }
       
       await db.update(taskDependencyInstances)
         .set({ completed: true })
@@ -12813,6 +12840,150 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       res.json(results);
     } catch (error) {
       res.status(500).json({ error: "Kunde inte söka besiktningsdata" });
+    }
+  });
+
+  // ============================================
+  // AI ETA & DELAY SERVICE
+  // ============================================
+
+  app.get("/api/ai/eta-overview", async (req, res) => {
+    try {
+      const { calculateETAForTodaysOrders } = await import("./ai-eta-service");
+      const tenantId = getTenantIdWithFallback(req);
+      const overview = await calculateETAForTodaysOrders(tenantId);
+      res.json(overview);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte beräkna ETA" });
+    }
+  });
+
+  app.post("/api/ai/eta-check-delays", async (req, res) => {
+    try {
+      const { checkAndNotifyDelays } = await import("./ai-eta-service");
+      const tenantId = getTenantIdWithFallback(req);
+      const { thresholdMinutes } = req.body;
+      const result = await checkAndNotifyDelays(tenantId, thresholdMinutes || 20);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte kontrollera förseningar" });
+    }
+  });
+
+  // ============================================
+  // AI INSIGHT CARDS
+  // ============================================
+
+  app.get("/api/ai/insights", async (req, res) => {
+    try {
+      const { generateInsightCards } = await import("./ai-insights");
+      const tenantId = getTenantIdWithFallback(req);
+      const cards = await generateInsightCards(tenantId);
+      res.json(cards);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte generera insikter" });
+    }
+  });
+
+  // ============================================
+  // AI-ASSISTED PLANNING
+  // ============================================
+
+  app.post("/api/ai/assisted-plan", async (req, res) => {
+    try {
+      const { aiAssistedSchedule } = await import("./ai-planner");
+      const { weekStart, weekEnd, instruction } = req.body;
+
+      const tenantId = getTenantIdWithFallback(req);
+      const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+        storage.getWorkOrders(tenantId),
+        storage.getResources(tenantId),
+        storage.getClusters(tenantId),
+        storage.getSetupTimeLogs(tenantId),
+      ]);
+
+      const unscheduledOrderIds = workOrders
+        .filter(o => !o.scheduledDate || !o.resourceId)
+        .map(o => o.id);
+      const timeWindows = await storage.getTaskTimewindowsBatch(unscheduledOrderIds);
+
+      const result = await aiAssistedSchedule({
+        workOrders,
+        resources,
+        clusters,
+        weekStart: weekStart || new Date().toISOString().split("T")[0],
+        weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        setupTimeLogs,
+        timeWindows,
+      }, instruction);
+
+      res.json(result);
+    } catch (error) {
+      console.error("AI Assisted Plan error:", error);
+      res.status(500).json({ error: "Kunde inte skapa AI-assisterad plan" });
+    }
+  });
+
+  // ============================================
+  // AI CUSTOMER COMMUNICATION
+  // ============================================
+
+  app.get("/api/ai/communications", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId, status, from, to } = req.query;
+      const log = await getCommunicationLog(tenantId, {
+        workOrderId: workOrderId as string,
+        status: status as string,
+        from: from as string,
+        to: to as string,
+      });
+      res.json(log);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta kommunikationslogg" });
+    }
+  });
+
+  app.get("/api/ai/communications/settings", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const settings = await getAutoNotificationSettings(tenantId);
+      res.json(settings);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta inställningar" });
+    }
+  });
+
+  app.post("/api/ai/communications/eta-update", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId, estimatedMinutes } = req.body;
+      if (!workOrderId || estimatedMinutes === undefined) {
+        return res.status(400).json({ error: "workOrderId och estimatedMinutes krävs" });
+      }
+      const result = await sendETAUpdate(workOrderId, estimatedMinutes, tenantId);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte skicka ETA-uppdatering" });
+    }
+  });
+
+  app.post("/api/ai/communications/send-manual", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { workOrderId, notificationType, channel, customMessage } = req.body;
+      if (!workOrderId) {
+        return res.status(400).json({ error: "workOrderId krävs" });
+      }
+      const result = await handleWorkOrderStatusChange(
+        workOrderId, 
+        "manual", 
+        notificationType || "reminder", 
+        tenantId
+      );
+      res.json({ success: true, result });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte skicka meddelande" });
     }
   });
 

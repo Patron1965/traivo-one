@@ -48,6 +48,7 @@ const planeringItems = [
 
 // Analys - rapporter och insikter
 const analysItems = [
+  { title: "AI Command Center", url: "/ai-command-center", icon: Brain },
   { title: "AI-Assistent", url: "/ai-assistant", icon: Brain },
   { title: "Rapportering", url: "/reporting", icon: BarChart3 },
   { title: "Ekonomi", url: "/economics", icon: DollarSign },

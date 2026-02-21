@@ -24,6 +24,7 @@ import {
   Upload,
   FileText,
   Sparkles,
+  Brain,
   Package,
   Receipt,
   ClipboardList,
@@ -65,6 +66,7 @@ const grunddataItems = [
 
 const planeringItems = [
   { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
+  { title: "AI Command Center", url: "/ai-command-center", icon: Brain, description: "Samlade AI-funktioner" },
   { title: "AI Planeringsassistent", url: "/ai-planning", icon: Sparkles, description: "AI-analys och optimering" },
   { title: "Orderkoncept", url: "/order-concepts", icon: Layers, description: "Intelligenta ordergeneratorer" },
   { title: "Uppgifter", url: "/assignments", icon: ClipboardList, description: "Genererade uppgifter" },

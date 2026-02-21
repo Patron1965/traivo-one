@@ -86,3 +86,12 @@ The platform exposes a complete REST API designed for integration with external 
 - **Twilio API:** SMS notification service.
 - **jsPDF:** PDF generation library.
 - **Replit Object Storage:** Photo uploads and file storage for field workers.
+
+### AI Command Center (5 Prioritized AI Functions)
+Backend services and unified frontend dashboard for intelligent field service optimization:
+- **AI Feature 1 - Event-driven Customer Communication** (`server/ai-communication.ts`): Automatic SMS/email on status changes (on_route, arrived, completed, deviation) with AI-generated summaries via GPT-4o-mini. `customerCommunications` table tracks all outbound messages.
+- **AI Feature 2 - AI-Assisted Planning** (`server/ai-planner.ts` → `aiAssistedSchedule`): Natural language constraint parsing, AI-generated plan explanations with metrics/warnings via `/api/ai/assisted-plan`.
+- **AI Feature 3 - ETA Service** (`server/ai-eta-service.ts`): GPS-based ETA calculation, proactive delay detection/notification. Endpoints: `/api/ai/eta-overview`, `/api/ai/eta-check-delays`.
+- **AI Feature 4 - Conversational Planner v2** (`server/ai-planner.ts` → `processConversationalPlannerQueryV2`): OpenAI function-calling with 7 tools (get_unplanned_orders, get_overdue_orders, get_resource_workload, get_orders_by_resource, get_orders_by_day, suggest_reschedule, get_weekly_summary). Multi-round tool execution with conversation history.
+- **AI Feature 5 - Insight Cards** (`server/ai-insights.ts`): GPT-4o-mini generates 4-6 KPI/anomaly/recommendation/trend cards from real operational data via `/api/ai/insights`.
+- **Frontend: AI Command Center** (`client/src/pages/AICommandCenterPage.tsx`): Unified dashboard at `/ai-command-center` with tabs for Overview (insight cards + ETA + communications), AI Planner (chat + assisted planning), ETA panel, and Communication panel.

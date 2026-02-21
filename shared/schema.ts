@@ -3492,3 +3492,30 @@ export const inspectionMetadata = pgTable("inspection_metadata", {
 export const insertInspectionMetadataSchema = createInsertSchema(inspectionMetadata).omit({ id: true, createdAt: true });
 export type InsertInspectionMetadata = z.infer<typeof insertInspectionMetadataSchema>;
 export type InspectionMetadata = typeof inspectionMetadata.$inferSelect;
+
+export const customerCommunications = pgTable("customer_communications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  customerId: varchar("customer_id").references(() => customers.id),
+  objectId: varchar("object_id").references(() => objects.id),
+  channel: text("channel").notNull(),
+  notificationType: text("notification_type").notNull(),
+  recipientName: text("recipient_name"),
+  recipientEmail: text("recipient_email"),
+  recipientPhone: text("recipient_phone"),
+  subject: text("subject"),
+  message: text("message").notNull(),
+  aiGenerated: boolean("ai_generated").default(false),
+  status: text("status").notNull(),
+  errorMessage: text("error_message"),
+  sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_customer_comm_tenant").on(table.tenantId),
+  index("idx_customer_comm_work_order").on(table.workOrderId),
+]);
+
+export const insertCustomerCommunicationSchema = createInsertSchema(customerCommunications).omit({ id: true, createdAt: true });
+export type InsertCustomerCommunication = z.infer<typeof insertCustomerCommunicationSchema>;
+export type CustomerCommunication = typeof customerCommunications.$inferSelect;

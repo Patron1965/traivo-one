@@ -65,6 +65,7 @@ import PortalContractsPage from "@/pages/portal/PortalContractsPage";
 import PortalSettingsPage from "@/pages/portal/PortalSettingsPage";
 import PortalIssuesPage from "@/pages/portal/PortalIssuesPage";
 import AIPlanningPage from "@/pages/AIPlanningPage";
+import AICommandCenterPage from "@/pages/AICommandCenterPage";
 import FieldLoginPage from "@/pages/FieldLoginPage";
 import PublicReportPage from "@/pages/public-report";
 import SmsSettingsPage from "@/pages/SmsSettingsPage";
@@ -127,6 +128,7 @@ function Router() {
       <Route path="/data-requirements" component={DataRequirementsPage} />
       <Route path="/investor-pitch" component={InvestorPitchPage} />
       <Route path="/ai-planning" component={AIPlanningPage} />
+      <Route path="/ai-command-center" component={AICommandCenterPage} />
       <Route path="/lundstams-roi" component={LundstamsROIPage} />
       <Route path="/inspections" component={InspectionSearchPage} />
       <Route component={NotFound} />
