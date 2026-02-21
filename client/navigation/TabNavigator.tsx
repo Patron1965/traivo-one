@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { HomeScreen } from '../screens/HomeScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { MapScreen } from '../screens/MapScreen';
+import { AIAssistantScreen } from '../screens/AIAssistantScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { useScreenOptions } from '../hooks/useScreenOptions';
 import { Colors, FontSize } from '../constants/theme';
@@ -66,6 +67,20 @@ export function TabNavigator() {
           tabBarLabel: 'Karta',
           tabBarIcon: ({ color, size }) => (
             <Feather name="map" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="AIAssistantTab"
+        component={AIAssistantScreen}
+        options={{
+          headerTitle: 'Unicorn Assist',
+          headerStyle: { backgroundColor: Colors.surface },
+          headerShadowVisible: true,
+          headerTransparent: false,
+          tabBarLabel: 'AI',
+          tabBarIcon: ({ color, size }) => (
+            <Feather name="cpu" size={size} color={color} />
           ),
         }}
       />

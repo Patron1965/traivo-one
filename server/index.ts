@@ -3,12 +3,14 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { mobileRoutes } from './routes/mobile';
+import { aiRoutes } from './routes/ai';
 
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/mobile/ai', aiRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'driver-core-api' });
