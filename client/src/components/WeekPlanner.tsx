@@ -217,14 +217,26 @@ function DraggableJobCard({ id, children, disabled = false }: { id: string; chil
   );
 }
 
-function DroppableCell({ id, children, className = "" }: { id: string; children: JSX.Element; className?: string }) {
+function DroppableCell({ id, children, className = "", dropFitInfo }: { id: string; children: JSX.Element; className?: string; dropFitInfo?: { bg: string; label: string; color: string } | null }) {
   const { isOver, setNodeRef } = useDroppable({ id });
+
+  const dropClass = isOver && dropFitInfo
+    ? `ring-2 ring-inset ${dropFitInfo.bg} ${dropFitInfo.bg.includes("ring-") ? "" : "ring-primary"}`
+    : isOver
+    ? "ring-2 ring-primary ring-inset bg-primary/10"
+    : "";
 
   return (
     <div
       ref={setNodeRef}
-      className={`${className} ${isOver ? "ring-2 ring-primary ring-inset bg-primary/10" : ""}`}
+      className={`${className} ${dropClass}`}
     >
+      {isOver && dropFitInfo && (
+        <div className={`text-[9px] font-medium mb-1 ${dropFitInfo.color} flex items-center gap-1`} data-testid="drop-fit-indicator">
+          <span className={`w-1.5 h-1.5 rounded-full ${dropFitInfo.bg.split(" ")[0].replace("bg-", "bg-").replace("/40", "").replace("/20", "").replace("100", "500").replace("50", "500")}`} />
+          {dropFitInfo.label}
+        </div>
+      )}
       {children}
     </div>
   );
@@ -864,6 +876,49 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const getCapacityPercentage = useCallback((hours: number) => {
     return Math.min((hours / HOURS_IN_DAY) * 100, 100);
   }, []);
+
+  const getCapacityColor = useCallback((pct: number) => {
+    if (pct >= 100) return "bg-red-500";
+    if (pct >= 85) return "bg-orange-500";
+    if (pct >= 65) return "bg-yellow-500";
+    return "bg-green-500";
+  }, []);
+
+  const getCapacityBgColor = useCallback((pct: number) => {
+    if (pct >= 100) return "bg-red-50 dark:bg-red-950/20";
+    if (pct >= 85) return "bg-orange-50 dark:bg-orange-950/20";
+    if (pct >= 65) return "bg-yellow-50 dark:bg-yellow-950/20";
+    return "";
+  }, []);
+
+  const getDropFitClass = useCallback((resourceId: string, dayStr: string, jobDurationMinutes: number) => {
+    const currentHours = resourceDayJobMap.hours[resourceId]?.[dayStr] || 0;
+    const newHours = currentHours + jobDurationMinutes / 60;
+    const pct = (newHours / HOURS_IN_DAY) * 100;
+    if (pct > 110) return { bg: "bg-red-100 dark:bg-red-950/40 ring-red-400", label: "Överbokning", color: "text-red-600" };
+    if (pct > 85) return { bg: "bg-orange-100 dark:bg-orange-950/40 ring-orange-400", label: "Tight", color: "text-orange-600" };
+    if (pct > 65) return { bg: "bg-yellow-100 dark:bg-yellow-950/40 ring-yellow-400", label: "Bra", color: "text-yellow-600" };
+    return { bg: "bg-green-100 dark:bg-green-950/40 ring-green-400", label: "Gott om plats", color: "text-green-600" };
+  }, [resourceDayJobMap]);
+
+  const resourceWeekSummary = useMemo(() => {
+    const summary: Record<string, { totalHours: number; weeklyCapacity: number; pct: number }> = {};
+    const weekDates = viewMode === "week" ? visibleDates : [];
+    for (const resource of resources) {
+      let totalHours = 0;
+      for (const day of weekDates) {
+        const dayKey = format(day, "yyyy-MM-dd");
+        totalHours += resourceDayJobMap.hours[resource.id]?.[dayKey] || 0;
+      }
+      const weeklyCapacity = resource.weeklyHours || 40;
+      summary[resource.id] = {
+        totalHours,
+        weeklyCapacity,
+        pct: weeklyCapacity > 0 ? Math.round((totalHours / weeklyCapacity) * 100) : 0,
+      };
+    }
+    return summary;
+  }, [resources, visibleDates, viewMode, resourceDayJobMap]);
 
   const handleJobClick = useCallback((jobId: string) => {
     setSelectedJob(jobId);
@@ -1620,7 +1675,25 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     
     if (isSameResourceAndDay && hour === undefined) return;
     
-    const scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
+    let scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
+
+    if (!scheduledStartTime && viewMode === "week") {
+      const existingDayJobs = (resourceDayJobMap.jobs[resourceId]?.[dateStr] || [])
+        .filter(j => j.scheduledStartTime)
+        .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+      
+      let nextSlotMinutes = DAY_START_HOUR * 60;
+      for (const existing of existingDayJobs) {
+        const [eH, eM] = (existing.scheduledStartTime || "07:00").split(":").map(Number);
+        const endMin = eH * 60 + eM + (existing.estimatedDuration || 60);
+        if (endMin > nextSlotMinutes) nextSlotMinutes = endMin;
+      }
+      const h = Math.floor(nextSlotMinutes / 60);
+      const m = nextSlotMinutes % 60;
+      if (h < DAY_END_HOUR) {
+        scheduledStartTime = `${h.toString().padStart(2, "0")}:${m.toString().padStart(2, "0")}`;
+      }
+    }
 
     const conflicts = detectDropConflicts(job, resourceId, dateStr, scheduledStartTime);
     if (conflicts.length > 0) {
@@ -1630,7 +1703,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     }
 
     executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
-  }, [workOrders, executeSchedule, detectDropConflicts, viewMode, routeJobsForView, toast, updateWorkOrderMutation, currentDate]);
+    if (scheduledStartTime) {
+      toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
+    }
+  }, [workOrders, executeSchedule, detectDropConflicts, viewMode, routeJobsForView, toast, updateWorkOrderMutation, currentDate, resourceDayJobMap]);
 
   const jobConflicts = useMemo(() => {
     const conflicts: Record<string, string[]> = {};
@@ -1872,7 +1948,25 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   {job.scheduledStartTime && (
                     <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
                       <Clock className="h-3 w-3" />
-                      {job.scheduledStartTime}
+                      <span>{job.scheduledStartTime}</span>
+                      {(() => {
+                        const cardTws = timewindowMap.get(job.id);
+                        if (cardTws && cardTws.length > 0) {
+                          const hasTimeBound = cardTws.some(tw => tw.startTime && tw.endTime);
+                          if (hasTimeBound) {
+                            const isWithin = cardTws.some(tw => {
+                              if (!tw.startTime || !tw.endTime || !job.scheduledStartTime) return false;
+                              return job.scheduledStartTime >= tw.startTime && job.scheduledStartTime <= tw.endTime;
+                            });
+                            return (
+                              <span className={`text-[9px] px-1 rounded ${isWithin ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400" : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"}`}>
+                                {isWithin ? "i fönster" : "utanför"}
+                              </span>
+                            );
+                          }
+                        }
+                        return null;
+                      })()}
                     </div>
                   )}
                   <div className="flex items-center gap-1 mt-1">
@@ -1953,8 +2047,20 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                     <span className="text-sm font-medium">{resource.name}</span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Progress value={capacityPct} className={`h-2 ${capacityPct > 100 ? "[&>div]:bg-orange-500" : ""}`} />
-                    <span className="text-xs text-muted-foreground whitespace-nowrap">{dayHours.toFixed(1)}h</span>
+                    <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
+                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className={`text-xs whitespace-nowrap cursor-help ${capacityPct >= 100 ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                          {dayHours.toFixed(1)}h
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{dayHours.toFixed(1)}h av {HOURS_IN_DAY}h</p>
+                        <p>{Math.max(0, HOURS_IN_DAY - dayHours).toFixed(1)}h kvar</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </div>
                 </div>
               );
@@ -1985,11 +2091,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 const cellHasBreak = jobs.some(j => getJobCategory(j) === "break");
                 const cellBg = cellHasProduction ? "bg-green-50/50 dark:bg-green-950/10" : cellHasTravel ? "bg-yellow-50/50 dark:bg-yellow-950/10" : cellHasBreak ? "bg-blue-50/50 dark:bg-blue-950/10" : "bg-muted/20";
 
+                const dayCellDropFit = activeDragJob ? getDropFitClass(resource.id, format(day, "yyyy-MM-dd"), activeDragJob.estimatedDuration || 60) : null;
+
                 return (
                   <DroppableCell
                     key={resource.id}
                     id={droppableId}
                     className={`p-2 border-r last:border-r-0 min-h-[60px] transition-colors ${cellBg}`}
+                    dropFitInfo={dayCellDropFit}
                   >
                     <div className="space-y-1" data-testid={`drop-zone-${resource.id}-${hour}`}>
                       {jobs.map((job) => {
@@ -2060,7 +2169,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             Inga resurser registrerade. Lägg till resurser för att börja planera.
           </div>
         ) : (
-          resources.map((resource) => (
+          resources.map((resource) => {
+            const weekSummary = resourceWeekSummary[resource.id];
+            return (
             <div key={resource.id} className="grid grid-cols-[200px_repeat(5,1fr)] border-b">
               <div 
                 className="p-3 border-r flex items-center gap-3 group"
@@ -2077,7 +2188,25 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   onClick={() => handleResourceClick(resource.id)}
                 >
                   <div className="text-sm font-medium truncate">{resource.name}</div>
-                  <div className="text-xs text-muted-foreground">{resource.weeklyHours || 40}h/vecka</div>
+                  {weekSummary && (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1.5 mt-0.5" data-testid={`week-utilization-${resource.id}`}>
+                          <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${getCapacityColor(weekSummary.pct)}`} style={{ width: `${Math.min(weekSummary.pct, 100)}%` }} />
+                          </div>
+                          <span className={`text-[10px] tabular-nums ${weekSummary.pct >= 100 ? "text-red-600 dark:text-red-400 font-medium" : weekSummary.pct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                            {weekSummary.totalHours.toFixed(1)}h/{weekSummary.weeklyCapacity}h
+                          </span>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Veckobeläggning: {weekSummary.pct}%</p>
+                        <p>{weekSummary.totalHours.toFixed(1)}h planerat av {weekSummary.weeklyCapacity}h kapacitet</p>
+                        <p>{Math.max(0, weekSummary.weeklyCapacity - weekSummary.totalHours).toFixed(1)}h kvar</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  )}
                 </div>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -2134,23 +2263,37 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   return objR.some(r => r.isActive && r.weekdays && r.weekdays.includes(cellDayOfWeek));
                 });
 
+                const cellDropFit = activeDragJob ? getDropFitClass(resource.id, dayStr, activeDragJob.estimatedDuration || 60) : null;
+
                 return (
                   <DroppableCell 
                     key={dayIndex} 
                     id={droppableId}
-                    className={`p-2 border-r last:border-r-0 min-h-[120px] transition-colors ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : "bg-muted/30"}`}
+                    className={`p-2 border-r last:border-r-0 min-h-[120px] transition-colors ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
+                    dropFitInfo={cellDropFit}
                   >
                     <div data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
-                        <Progress value={capacityPct} className={`h-1.5 flex-1 ${isOverbooked ? "[&>div]:bg-orange-500" : ""}`} />
-                        <span className={`text-[10px] ${isOverbooked ? "text-orange-600" : "text-muted-foreground"}`}>
-                          {dayHours.toFixed(1).replace(".", ",")} h
-                        </span>
+                        <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
+                        </div>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className={`text-[10px] tabular-nums cursor-help ${isOverbooked ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                              {dayHours.toFixed(1).replace(".", ",")}h
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p>{dayHours.toFixed(1)}h planerat av {HOURS_IN_DAY}h</p>
+                            <p>{Math.max(0, HOURS_IN_DAY - dayHours).toFixed(1)}h kvar</p>
+                            {isOverbooked && <p className="text-red-500 font-medium">Överbokad med {(dayHours - HOURS_IN_DAY).toFixed(1)}h</p>}
+                          </TooltipContent>
+                        </Tooltip>
                       </div>
                       {isOverbooked && (
-                        <div className="flex items-center gap-1 text-xs text-orange-600 mb-1">
+                        <div className="flex items-center gap-1 text-[10px] text-red-600 dark:text-red-400 mb-1 font-medium">
                           <AlertTriangle className="h-3 w-3" />
-                          <span>Överbokning</span>
+                          <span>+{(dayHours - HOURS_IN_DAY).toFixed(1)}h över</span>
                         </div>
                       )}
                       {restrictedJobs.length > 0 && (
@@ -2193,7 +2336,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 );
               })}
             </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
@@ -2327,17 +2471,42 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const renderDragOverlay = () => {
     if (!activeDragJob) return null;
+    const dragTws = timewindowMap.get(activeDragJob.id);
+    const hasTimeWindow = dragTws && dragTws.length > 0;
+    const windowLabel = hasTimeWindow
+      ? dragTws.map(tw => {
+          const parts: string[] = [];
+          if (tw.dayOfWeek) parts.push(tw.dayOfWeek.substring(0, 3));
+          if (tw.startTime && tw.endTime) parts.push(`${tw.startTime}–${tw.endTime}`);
+          return parts.join(" ");
+        }).join(", ")
+      : null;
+    const hasDeadline = activeDragJob.plannedWindowEnd;
+    
     return (
-      <Card className="p-3 shadow-lg border-primary/50 bg-background/95 backdrop-blur-sm w-[250px] rotate-2">
-        <div className="space-y-1">
+      <Card className="p-3 shadow-xl border-primary/50 bg-background/95 backdrop-blur-sm w-[260px] rotate-1">
+        <div className="space-y-1.5">
           <div className="flex items-center gap-1.5">
             <span className={`w-2 h-2 rounded-full shrink-0 ${priorityDotColors[activeDragJob.priority]}`} />
-            <span className="text-sm font-medium">{activeDragJob.title}</span>
+            <span className="text-sm font-medium truncate">{activeDragJob.title}</span>
           </div>
-          <div className="text-xs text-muted-foreground">{activeDragJob.objectName || "Okänt objekt"}</div>
-          <Badge variant="secondary" className="text-[10px]">
-            {((activeDragJob.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
-          </Badge>
+          <div className="text-xs text-muted-foreground truncate">{activeDragJob.objectName || "Okänt objekt"}</div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <Badge variant="secondary" className="text-[10px]">
+              {((activeDragJob.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
+            </Badge>
+            {windowLabel && (
+              <Badge variant="outline" className="text-[10px] border-blue-300 text-blue-600 dark:text-blue-400">
+                <Clock className="h-2.5 w-2.5 mr-0.5" />
+                {windowLabel}
+              </Badge>
+            )}
+            {hasDeadline && (
+              <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-600 dark:text-amber-400">
+                DL: {format(new Date(activeDragJob.plannedWindowEnd!), "d MMM", { locale: sv })}
+              </Badge>
+            )}
+          </div>
         </div>
       </Card>
     );
@@ -2791,6 +2960,36 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                               )}
                             </div>
                           )}
+                          {(() => {
+                            const jobTws = timewindowMap.get(job.id);
+                            if (jobTws && jobTws.length > 0) {
+                              const twLabel = jobTws.map(tw => {
+                                const parts: string[] = [];
+                                if (tw.dayOfWeek) parts.push(tw.dayOfWeek.substring(0, 3));
+                                if (tw.startTime && tw.endTime) parts.push(`${tw.startTime}–${tw.endTime}`);
+                                return parts.join(" ");
+                              }).join(", ");
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="flex items-center gap-1 text-[10px] text-blue-600 dark:text-blue-400" data-testid={`unscheduled-timewindow-${job.id}`}>
+                                      <Clock className="h-2.5 w-2.5" />
+                                      <span className="truncate">{twLabel}</span>
+                                    </div>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <div className="text-xs space-y-1">
+                                      <p className="font-medium">Tillåtna tidsfönster</p>
+                                      {jobTws.map((tw, i) => (
+                                        <p key={i}>{tw.dayOfWeek || "Alla dagar"}{tw.startTime && tw.endTime ? ` ${tw.startTime}–${tw.endTime}` : ""}</p>
+                                      ))}
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            }
+                            return null;
+                          })()}
                           {job.plannedWindowEnd && (
                             <div className="flex items-center gap-1 text-[10px] text-muted-foreground" data-testid={`unscheduled-deadline-${job.id}`}>
                               <Clock className="h-2.5 w-2.5" />
