@@ -5350,6 +5350,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       }
 
       res.json(updatedOrder);
+
+      broadcastPlannerEvent({
+        type: 'status_changed',
+        data: { orderId, orderNumber: updatedOrder.title || `WO-${orderId.substring(0,8)}`, oldStatus: 'unknown', newStatus: status, driverName: '', timestamp: new Date().toISOString() }
+      });
     } catch (error) {
       console.error("Failed to update order status:", error);
       res.status(500).json({ error: "Failed to update status" });
@@ -5638,6 +5643,11 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
       console.log(`[mobile] Deviation reported for order ${orderId} by resource ${resourceId}`);
       res.json({ success: true, deviation });
+
+      broadcastPlannerEvent({
+        type: 'deviation_reported',
+        data: { orderId, orderNumber: '', deviationType: type, description: description || '', driverName: '', timestamp: new Date().toISOString() }
+      });
     } catch (error) {
       console.error("Failed to create deviation:", error);
       res.status(500).json({ error: "Failed to create deviation" });
@@ -6034,6 +6044,134 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  // Helper to broadcast planner events via SSE
+  function broadcastPlannerEvent(event: { type: string; data: any }) {
+    const clients: Map<string, any> = (global as any).__plannerEventClients || new Map();
+    const msg = `data: ${JSON.stringify(event)}\n\n`;
+    clients.forEach((res, id) => {
+      try { res.write(msg); } catch(e) { clients.delete(id); }
+    });
+  }
+
+  // SSE endpoint for real-time planner events
+  app.get("/api/planner/events", (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+
+    const clientId = Date.now().toString();
+    if (!(global as any).__plannerEventClients) {
+      (global as any).__plannerEventClients = new Map();
+    }
+    const clients: Map<string, any> = (global as any).__plannerEventClients;
+    clients.set(clientId, res);
+
+    res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);
+
+    req.on('close', () => {
+      clients.delete(clientId);
+    });
+  });
+
+  app.get("/api/planner/routes", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const allOrders = await storage.getWorkOrders(tenantId);
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(startOfDay);
+      endOfDay.setDate(endOfDay.getDate() + 1);
+
+      const todayOrders = allOrders.filter(o => {
+        if (!o.scheduledDate || !o.resourceId) return false;
+        const d = new Date(o.scheduledDate);
+        return d >= startOfDay && d < endOfDay;
+      });
+
+      const byResource: Record<string, any[]> = {};
+      for (const order of todayOrders) {
+        if (!byResource[order.resourceId!]) byResource[order.resourceId!] = [];
+        const obj = order.objectId ? await storage.getObject(order.objectId) : null;
+        byResource[order.resourceId!].push({
+          id: order.id,
+          orderNumber: order.title || `WO-${order.id.substring(0, 8)}`,
+          latitude: obj?.latitude || order.taskLatitude,
+          longitude: obj?.longitude || order.taskLongitude,
+          scheduledTimeStart: order.scheduledStartTime,
+          status: order.status,
+          sequence: order.sequenceNumber || 0,
+        });
+      }
+
+      const resources = await storage.getResources(tenantId);
+      const resourceMap = new Map(resources.map(r => [r.id, r]));
+
+      const routes = Object.entries(byResource).map(([resourceId, orders]) => {
+        const resource = resourceMap.get(resourceId);
+        const sorted = orders
+          .filter(o => o.latitude && o.longitude)
+          .sort((a, b) => (a.sequence || 0) - (b.sequence || 0) || (a.scheduledTimeStart || '').localeCompare(b.scheduledTimeStart || ''));
+        return {
+          resourceId,
+          resourceName: resource?.name || 'Okänd',
+          color: resource?.color || null,
+          waypoints: sorted.map(o => ({
+            id: o.id,
+            orderNumber: o.orderNumber,
+            lat: o.latitude,
+            lng: o.longitude,
+            status: o.status,
+          })),
+        };
+      }).filter(r => r.waypoints.length >= 2);
+
+      res.json(routes);
+    } catch (error) {
+      console.error("Failed to get planner routes:", error);
+      res.status(500).json({ error: "Failed to get planner routes" });
+    }
+  });
+
+  app.patch("/api/planner/orders/:id/reassign", async (req, res) => {
+    try {
+      const orderId = req.params.id;
+      const { resourceId } = req.body;
+      if (!resourceId) return res.status(400).json({ error: "resourceId krävs" });
+
+      const tenantId = getTenantIdWithFallback(req);
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+
+      const existingOrder = await storage.getWorkOrder(orderId);
+      if (!existingOrder) return res.status(404).json({ error: "Order hittades inte" });
+      if (existingOrder.tenantId && existingOrder.tenantId !== tenantId) {
+        return res.status(403).json({ error: "Åtkomst nekad" });
+      }
+
+      const updated = await storage.updateWorkOrder(orderId, { resourceId });
+      if (!updated) return res.status(404).json({ error: "Order hittades inte" });
+
+      broadcastPlannerEvent({
+        type: 'order_reassigned',
+        data: {
+          orderId,
+          orderNumber: updated.title || `WO-${orderId.substring(0, 8)}`,
+          newResourceId: resourceId,
+          newResourceName: resource.name,
+          timestamp: new Date().toISOString(),
+        }
+      });
+
+      res.json({ success: true, orderId, resourceId, resourceName: resource.name });
+    } catch (error) {
+      console.error("Failed to reassign order:", error);
+      res.status(500).json({ error: "Failed to reassign order" });
+    }
+  });
+
   app.get("/planner/map", (req, res) => {
     const STATUS_COLORS: Record<string, string> = {
       planned: "#8E44AD",
@@ -6045,6 +6183,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       draft: "#6C757D",
     };
 
+    const ROUTE_COLORS = ['#3B82F6','#EF4444','#10B981','#F59E0B','#8B5CF6','#EC4899','#06B6D4','#F97316','#6366F1','#14B8A6'];
+
     const html = `<!DOCTYPE html>
 <html lang="sv">
 <head>
@@ -6052,104 +6192,324 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Unicorn - Planerarvy</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"><\/script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:Inter,system-ui,sans-serif;background:#1a1a2e}
-#map{width:100vw;height:100vh}
-.controls{position:absolute;top:10px;right:10px;z-index:1000;display:flex;gap:8px}
-.controls button{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s}
+#map{position:absolute;top:0;right:0;bottom:0;left:280px}
+.driver-panel{position:absolute;top:0;left:0;bottom:0;width:280px;background:#1a1a2e;color:#fff;overflow-y:auto;border-right:1px solid #2d2d4a;z-index:1001}
+.driver-panel h2{padding:16px;font-size:16px;border-bottom:1px solid #2d2d4a;display:flex;align-items:center;gap:8px}
+.driver-card{padding:12px 16px;border-bottom:1px solid #2d2d4a;cursor:pointer;transition:background .2s}
+.driver-card:hover{background:#2d2d4a}
+.driver-card.active{background:#3B82F6;background:rgba(59,130,246,0.2);border-left:3px solid #3B82F6}
+.driver-card h4{font-size:14px;margin:0 0 4px}
+.driver-card p{font-size:12px;color:#aaa;margin:0}
+.driver-status{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.driver-status.online{background:#27AE60}
+.driver-status.traveling{background:#F39C12}
+.driver-status.on_site{background:#3B82F6}
+.driver-status.offline{background:#95A5A6}
+.controls{position:absolute;top:10px;right:10px;z-index:1000;display:flex;gap:8px;flex-wrap:wrap}
+.controls button{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;transition:all .2s}
 .btn-active{background:#8E44AD;color:#fff}
 .btn-inactive{background:rgba(255,255,255,0.9);color:#333}
 .btn-inactive:hover{background:#fff}
-.legend{position:absolute;bottom:20px;left:10px;z-index:1000;background:rgba(26,26,46,0.95);padding:12px 16px;border-radius:10px;color:#fff;font-size:13px}
+.btn-route{background:#3B82F6;color:#fff}
+.btn-route:hover{background:#2563EB}
+.btn-route-off{background:rgba(255,255,255,0.9);color:#333}
+.legend{position:absolute;bottom:20px;right:10px;z-index:1000;background:rgba(26,26,46,0.95);padding:12px 16px;border-radius:10px;color:#fff;font-size:12px}
 .legend-item{display:flex;align-items:center;gap:8px;margin:4px 0}
-.legend-dot{width:12px;height:12px;border-radius:50%}
-.legend-sq{width:12px;height:12px;border-radius:2px}
+.legend-dot{width:10px;height:10px;border-radius:50%}
+.legend-sq{width:10px;height:10px;border-radius:2px}
 .status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;color:#fff}
 .driver-popup{min-width:180px}
 .driver-popup h3{margin:0 0 4px;font-size:14px}
 .driver-popup p{margin:2px 0;font-size:12px;color:#666}
-.job-popup{min-width:200px}
+.job-popup{min-width:220px}
 .job-popup h3{margin:0 0 4px;font-size:14px}
 .job-popup p{margin:2px 0;font-size:12px;color:#666}
-.info-bar{position:absolute;top:10px;left:10px;z-index:1000;background:rgba(26,26,46,0.95);padding:10px 16px;border-radius:10px;color:#fff;font-size:13px}
+.info-bar{position:absolute;top:10px;left:290px;z-index:1000;background:rgba(26,26,46,0.95);padding:10px 16px;border-radius:10px;color:#fff;font-size:13px}
+.toast-container{position:fixed;bottom:20px;right:20px;z-index:2000;display:flex;flex-direction:column-reverse;gap:8px;max-width:380px}
+.toast{padding:12px 16px;border-radius:10px;color:#fff;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,0.3);animation:slideIn .3s ease;display:flex;align-items:flex-start;gap:10px;cursor:pointer;transition:opacity .3s}
+.toast:hover{opacity:0.8}
+.toast-status{background:linear-gradient(135deg,#27AE60,#1B8553)}
+.toast-deviation{background:linear-gradient(135deg,#E74C3C,#C0392B)}
+.toast-reassign{background:linear-gradient(135deg,#3B82F6,#2563EB)}
+.toast-icon{font-size:18px;flex-shrink:0}
+.toast-body{flex:1}
+.toast-title{font-weight:600;margin-bottom:2px}
+.toast-msg{font-size:12px;opacity:0.9}
+.toast-time{font-size:11px;opacity:0.6;margin-top:2px}
+@keyframes slideIn{from{transform:translateX(100px);opacity:0}to{transform:translateX(0);opacity:1}}
+.reassign-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:3000;display:flex;align-items:center;justify-content:center}
+.reassign-dialog{background:#fff;border-radius:12px;padding:24px;max-width:400px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3)}
+.reassign-dialog h3{margin:0 0 12px;font-size:18px;color:#1a1a2e}
+.reassign-dialog p{color:#666;font-size:14px;margin:8px 0}
+.reassign-dialog .btn-row{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.reassign-dialog button{padding:8px 20px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500}
+.reassign-dialog .btn-confirm{background:#3B82F6;color:#fff}
+.reassign-dialog .btn-cancel{background:#eee;color:#333}
+.waypoint-number{background:#fff;border:2px solid;border-radius:50%;width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;box-shadow:0 1px 3px rgba(0,0,0,0.3)}
+@media(max-width:768px){
+  .driver-panel{width:0;display:none}
+  #map{left:0}
+  .info-bar{left:10px}
+}
 </style>
 </head>
 <body>
+<div class="driver-panel" id="driver-panel">
+  <h2><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg> F&ouml;rare</h2>
+  <div id="driver-list"></div>
+</div>
 <div id="map"></div>
 <div class="info-bar" id="info-bar">Laddar data...</div>
 <div class="controls">
-<button class="btn-active" id="btn-today" onclick="setRange('today')">Idag</button>
-<button class="btn-inactive" id="btn-week" onclick="setRange('week')">Denna vecka</button>
-<button class="btn-inactive" id="btn-hide" onclick="toggleJobs()">D&ouml;lj jobb</button>
+  <button class="btn-active" id="btn-today" onclick="setRange('today')">Idag</button>
+  <button class="btn-inactive" id="btn-week" onclick="setRange('week')">Vecka</button>
+  <button class="btn-inactive" id="btn-hide" onclick="toggleJobs()">D&ouml;lj jobb</button>
+  <button class="btn-route" id="btn-routes" onclick="toggleRoutes()">Rutter &#x2713;</button>
 </div>
 <div class="legend">
-<div style="font-weight:600;margin-bottom:6px">F&ouml;rklaring</div>
-<div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div> Chauff&ouml;r</div>
-${Object.entries(STATUS_COLORS).map(([k,v]) => `<div class="legend-item"><div class="legend-sq" style="background:${v}"></div> ${k.charAt(0).toUpperCase()+k.slice(1).replace('_',' ')}</div>`).join('')}
+  <div style="font-weight:600;margin-bottom:6px">F&ouml;rklaring</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div> Chauff&ouml;r</div>
+  ${Object.entries(STATUS_COLORS).map(([k,v]) => `<div class="legend-item"><div class="legend-sq" style="background:${v}"></div> ${k.charAt(0).toUpperCase()+k.slice(1).replace('_',' ')}</div>`).join('')}
+  <div class="legend-item"><div style="width:20px;height:2px;border-top:2px dashed #3B82F6"></div> Rutt</div>
 </div>
+<div class="toast-container" id="toast-container"></div>
 <script>
 const STATUS_COLORS = ${JSON.stringify(STATUS_COLORS)};
+const ROUTE_COLORS = ${JSON.stringify(ROUTE_COLORS)};
 const map = L.map('map').setView([57.7089, 11.9746], 11);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  attribution: '&copy; OpenStreetMap'
-}).addTo(map);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);
 
 const driverLayer = L.layerGroup().addTo(map);
 const jobCluster = L.markerClusterGroup({maxClusterRadius:40}).addTo(map);
+const routeLayer = L.layerGroup().addTo(map);
 let currentRange = 'today';
 let jobsVisible = true;
+let routesVisible = true;
+let driversData = [];
+let jobsData = [];
+let selectedDriverId = null;
+let draggedJobId = null;
+let draggedJobMarker = null;
 
-function createDriverIcon() {
+function createDriverIcon(status) {
+  const color = status === 'traveling' ? '#F39C12' : status === 'on_site' ? '#27AE60' : '#3B82F6';
   return L.divIcon({
     className:'',
-    html:'<div style="width:28px;height:28px;border-radius:50%;background:#3B82F6;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>',
-    iconSize:[28,28],iconAnchor:[14,14]
+    html:'<div style="width:32px;height:32px;border-radius:50%;background:'+color+';border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center"><svg width="16" height="16" fill="#fff" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg></div>',
+    iconSize:[32,32],iconAnchor:[16,16]
   });
 }
 function createJobIcon(status) {
   const color = STATUS_COLORS[status] || '#6C757D';
   return L.divIcon({
     className:'',
-    html:'<div style="width:22px;height:22px;border-radius:3px;background:'+color+';border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>',
+    html:'<div style="width:22px;height:22px;border-radius:3px;background:'+color+';border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3);cursor:grab"></div>',
     iconSize:[22,22],iconAnchor:[11,11]
   });
+}
+function createWaypointIcon(number, color) {
+  return L.divIcon({
+    className:'',
+    html:'<div class="waypoint-number" style="border-color:'+color+';color:'+color+'">'+number+'</div>',
+    iconSize:[20,20],iconAnchor:[10,10]
+  });
+}
+
+function esc(str) {
+  var d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+var SVG_ICONS = {
+  status_changed: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/></svg>',
+  deviation_reported: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  order_reassigned: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 3h5v5"/><path d="M4 20L21 3"/><path d="M21 16v5h-5"/><path d="M15 15l6 6"/><path d="M4 4l5 5"/></svg>',
+  default_icon: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>'
+};
+
+function showToast(type, title, message) {
+  const container = document.getElementById('toast-container');
+  const toast = document.createElement('div');
+  const classMap = { status_changed:'toast-status', deviation_reported:'toast-deviation', order_reassigned:'toast-reassign' };
+  toast.className = 'toast ' + (classMap[type] || 'toast-status');
+  toast.innerHTML = '<div class="toast-icon">'+(SVG_ICONS[type]||SVG_ICONS.default_icon)+'</div><div class="toast-body"><div class="toast-title">'+esc(title)+'</div><div class="toast-msg">'+esc(message)+'</div><div class="toast-time">'+new Date().toLocaleTimeString('sv-SE')+'</div></div>';
+  toast.onclick = function() { toast.remove(); };
+  container.appendChild(toast);
+  setTimeout(function() { if(toast.parentNode) toast.remove(); }, 6000);
+  if(container.children.length > 5) container.children[0].remove();
+}
+
+function connectSSE() {
+  const evtSource = new EventSource('/api/planner/events');
+  evtSource.onmessage = function(e) {
+    try {
+      const event = JSON.parse(e.data);
+      if(event.type === 'connected') return;
+      if(event.type === 'status_changed') {
+        showToast('status_changed', 'Status\\u00e4ndring', event.data.orderNumber + ' \\u2192 ' + event.data.newStatus);
+        refresh();
+      } else if(event.type === 'deviation_reported') {
+        showToast('deviation_reported', 'Avvikelse rapporterad', (event.data.orderNumber || 'Order') + ': ' + (event.data.description || event.data.deviationType));
+        refresh();
+      } else if(event.type === 'order_reassigned') {
+        showToast('order_reassigned', 'Omplanering', event.data.orderNumber + ' \\u2192 ' + event.data.newResourceName);
+        refresh();
+      }
+    } catch(err) { console.error('SSE parse error:', err); }
+  };
+  evtSource.onerror = function() {
+    evtSource.close();
+    setTimeout(connectSSE, 5000);
+  };
+}
+connectSSE();
+
+function getDistance(lat1,lon1,lat2,lon2) {
+  var R=6371e3,f1=lat1*Math.PI/180,f2=lat2*Math.PI/180;
+  var df=(lat2-lat1)*Math.PI/180,dl=(lon2-lon1)*Math.PI/180;
+  var a=Math.sin(df/2)*Math.sin(df/2)+Math.cos(f1)*Math.cos(f2)*Math.sin(dl/2)*Math.sin(dl/2);
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+function findNearestDriver(lat, lng) {
+  var nearest = null, minDist = Infinity;
+  driversData.forEach(function(d) {
+    if(!d.latitude || !d.longitude) return;
+    var dist = getDistance(lat, lng, d.latitude, d.longitude);
+    if(dist < minDist) { minDist = dist; nearest = d; }
+  });
+  return nearest && minDist < 2000 ? { driver: nearest, distance: minDist } : null;
+}
+
+function showReassignDialog(jobId, jobTitle, driverName, driverId) {
+  var existing = document.querySelector('.reassign-modal');
+  if(existing) existing.remove();
+  var modal = document.createElement('div');
+  modal.className = 'reassign-modal';
+  modal.innerHTML = '<div class="reassign-dialog"><h3>Omplanera uppdrag</h3><p>Flytta <strong>'+esc(jobTitle)+'</strong> till <strong>'+esc(driverName)+'</strong>?</p><div class="btn-row"><button class="btn-cancel" id="btn-cancel-reassign">Avbryt</button><button class="btn-confirm" id="btn-do-reassign">Bekr\\u00e4fta</button></div></div>';
+  document.body.appendChild(modal);
+  modal.addEventListener('click', function(e) { if(e.target === modal) modal.remove(); });
+  document.getElementById('btn-cancel-reassign').onclick = function() { modal.remove(); };
+  document.getElementById('btn-do-reassign').onclick = async function() {
+    try {
+      var resp = await fetch('/api/planner/orders/'+jobId+'/reassign', {
+        method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({resourceId:driverId})
+      });
+      if(resp.ok) {
+        showToast('order_reassigned','Omplanerad',jobTitle+' \\u2192 '+driverName);
+        refresh();
+      } else {
+        var err = await resp.json();
+        alert('Fel: '+(err.error||'Ok\\u00e4nt fel'));
+      }
+    } catch(e) { alert('N\\u00e4tverksfel'); }
+    modal.remove();
+  };
 }
 
 async function loadDrivers() {
   try {
-    const res = await fetch('/api/planner/drivers/locations');
-    const drivers = await res.json();
+    var res = await fetch('/api/planner/drivers/locations');
+    driversData = await res.json();
     driverLayer.clearLayers();
-    drivers.forEach(d => {
+    driversData.forEach(function(d) {
       if(!d.latitude||!d.longitude) return;
-      const m = L.marker([d.latitude,d.longitude],{icon:createDriverIcon()});
-      m.bindPopup('<div class="driver-popup"><h3>'+d.driverName+'</h3><p>Status: '+d.status+'</p>'+(d.vehicleRegNo?'<p>Reg: '+d.vehicleRegNo+'</p>':'')+'<p>Uppdaterad: '+new Date(d.updatedAt).toLocaleString("sv-SE")+'</p></div>');
+      var m = L.marker([d.latitude,d.longitude],{icon:createDriverIcon(d.status)});
+      m.driverId = d.driverId;
+      m.bindPopup('<div class="driver-popup"><h3>'+esc(d.driverName)+'</h3><p>Status: '+esc(d.status)+'</p>'+(d.vehicleRegNo?'<p>Reg: '+esc(d.vehicleRegNo)+'</p>':'')+'<p>Uppdaterad: '+new Date(d.updatedAt).toLocaleString("sv-SE")+'</p></div>');
       driverLayer.addLayer(m);
     });
-    return drivers.length;
+    updateDriverPanel();
+    return driversData.length;
   } catch(e) { console.error(e); return 0; }
+}
+
+function updateDriverPanel() {
+  var list = document.getElementById('driver-list');
+  if(!driversData.length) {
+    list.innerHTML = '<div style="padding:16px;color:#aaa;font-size:13px">Inga f\\u00f6rare online</div>';
+    return;
+  }
+  var jobCounts = {};
+  jobsData.forEach(function(j) { if(j.resourceId) jobCounts[j.resourceId] = (jobCounts[j.resourceId]||0)+1; });
+  list.innerHTML = driversData.map(function(d) {
+    var statusClass = d.status || 'offline';
+    var count = jobCounts[d.driverId] || 0;
+    return '<div class="driver-card'+(selectedDriverId===d.driverId?' active':'')+'" data-driver-id="'+esc(d.driverId)+'" data-lat="'+d.latitude+'" data-lng="'+d.longitude+'"><h4><span class="driver-status '+esc(statusClass)+'"></span>'+esc(d.driverName)+'</h4><p>'+count+' uppdrag | '+esc(statusClass)+'</p></div>';
+  }).join('');
+  list.querySelectorAll('.driver-card').forEach(function(card) {
+    card.addEventListener('click', function() {
+      focusDriver(card.dataset.driverId, parseFloat(card.dataset.lat), parseFloat(card.dataset.lng));
+    });
+  });
+}
+
+function focusDriver(id,lat,lng) {
+  selectedDriverId = selectedDriverId === id ? null : id;
+  if(lat && lng && selectedDriverId) map.setView([lat,lng], 14);
+  updateDriverPanel();
 }
 
 async function loadJobs() {
   if(!jobsVisible) return 0;
   try {
-    const res = await fetch('/api/planner/orders?range='+currentRange);
-    const jobs = await res.json();
+    var res = await fetch('/api/planner/orders?range='+currentRange);
+    jobsData = await res.json();
     jobCluster.clearLayers();
-    jobs.forEach(j => {
+    jobsData.forEach(function(j) {
       if(!j.latitude||!j.longitude) return;
-      const m = L.marker([j.latitude,j.longitude],{icon:createJobIcon(j.status)});
-      const badge = '<span class="status-badge" style="background:'+(STATUS_COLORS[j.status]||'#6C757D')+'">'+j.status+'</span>';
-      m.bindPopup('<div class="job-popup"><h3>'+j.orderNumber+'</h3>'+badge+'<p>'+j.customerName+'</p><p>'+j.address+'</p>'+(j.scheduledTimeStart?'<p>Tid: '+j.scheduledTimeStart+'</p>':'')+'</div>');
+      var m = L.marker([j.latitude,j.longitude],{icon:createJobIcon(j.status),draggable:true});
+      m.jobData = j;
+      var badge = '<span class="status-badge" style="background:'+(STATUS_COLORS[j.status]||'#6C757D')+'">'+esc(j.status)+'</span>';
+      m.bindPopup('<div class="job-popup"><h3>'+esc(j.orderNumber)+'</h3>'+badge+'<p>'+esc(j.customerName)+'</p><p>'+esc(j.address)+'</p>'+(j.scheduledTimeStart?'<p>Tid: '+esc(j.scheduledTimeStart)+'</p>':'')+(j.resourceId?'<p style="color:#3B82F6">Tilldelad resurs</p>':'<p style="color:#E74C3C">Ej tilldelad</p>')+'</div>');
+      m.on('dragend', function(e) {
+        var pos = e.target.getLatLng();
+        var nearest = findNearestDriver(pos.lat, pos.lng);
+        if(nearest) {
+          showReassignDialog(j.id, j.orderNumber, nearest.driver.driverName, nearest.driver.driverId);
+        } else {
+          showToast('status_changed','Ingen f\\u00f6rare n\\u00e4ra','Dra uppdraget n\\u00e4rmare en f\\u00f6rare (max 2km)');
+        }
+        e.target.setLatLng([j.latitude, j.longitude]);
+      });
       jobCluster.addLayer(m);
     });
-    return jobs.length;
+    updateDriverPanel();
+    return jobsData.length;
   } catch(e) { console.error(e); return 0; }
+}
+
+async function loadRoutes() {
+  routeLayer.clearLayers();
+  if(!routesVisible) return;
+  try {
+    var res = await fetch('/api/planner/routes');
+    var routes = await res.json();
+    routes.forEach(function(route, idx) {
+      var color = route.color || ROUTE_COLORS[idx % ROUTE_COLORS.length];
+      if(route.waypoints.length < 2) return;
+      var latlngs = route.waypoints.map(function(w) { return [w.lat, w.lng]; });
+      var polyline = L.polyline(latlngs, {
+        color: color, weight: 3, opacity: 0.7, dashArray: '8, 6'
+      });
+      routeLayer.addLayer(polyline);
+      route.waypoints.forEach(function(w, i) {
+        var wm = L.marker([w.lat, w.lng], {
+          icon: createWaypointIcon(i+1, color),
+          interactive: false
+        });
+        routeLayer.addLayer(wm);
+      });
+    });
+  } catch(e) { console.error('Routes error:', e); }
 }
 
 function setRange(r) {
@@ -6160,20 +6520,28 @@ function setRange(r) {
 }
 function toggleJobs() {
   jobsVisible = !jobsVisible;
-  document.getElementById('btn-hide').textContent = jobsVisible?'Dölj jobb':'Visa jobb';
+  document.getElementById('btn-hide').textContent = jobsVisible?'D\\u00f6lj jobb':'Visa jobb';
   document.getElementById('btn-hide').className = jobsVisible?'btn-inactive':'btn-active';
   if(!jobsVisible) jobCluster.clearLayers(); else refresh();
 }
+function toggleRoutes() {
+  routesVisible = !routesVisible;
+  document.getElementById('btn-routes').innerHTML = routesVisible?'Rutter &#x2713;':'Rutter';
+  document.getElementById('btn-routes').className = routesVisible?'btn-route':'btn-route-off';
+  if(!routesVisible) routeLayer.clearLayers(); else loadRoutes();
+}
 
 async function refresh() {
-  const [dc,jc] = await Promise.all([loadDrivers(), loadJobs()]);
-  document.getElementById('info-bar').textContent = dc+' chaufförer | '+(jobsVisible?jc+' jobb':'Jobb dolda')+' | '+currentRange.replace('today','Idag').replace('week','Vecka');
+  var results = await Promise.all([loadDrivers(), loadJobs()]);
+  loadRoutes();
+  document.getElementById('info-bar').textContent = results[0]+' f\\u00f6rare | '+(jobsVisible?results[1]+' uppdrag':'Jobb dolda')+' | '+currentRange.replace('today','Idag').replace('week','Vecka');
 }
 
 refresh();
 setInterval(loadDrivers, 15000);
 setInterval(loadJobs, 30000);
-</script>
+setInterval(loadRoutes, 30000);
+<\/script>
 </body>
 </html>`;
     res.type('html').send(html);
