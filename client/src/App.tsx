@@ -72,6 +72,7 @@ import SmsSettingsPage from "@/pages/SmsSettingsPage";
 import EnvironmentalCertificatePage from "@/pages/EnvironmentalCertificatePage";
 import LundstamsROIPage from "@/pages/LundstamsROIPage";
 import InspectionSearchPage from "@/pages/InspectionSearchPage";
+import PlannerMapPage from "@/pages/PlannerMapPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -131,6 +132,7 @@ function Router() {
       <Route path="/ai-command-center" component={AICommandCenterPage} />
       <Route path="/lundstams-roi" component={LundstamsROIPage} />
       <Route path="/inspections" component={InspectionSearchPage} />
+      <Route path="/planner-map" component={PlannerMapPage} />
       <Route component={NotFound} />
     </Switch>
   );
