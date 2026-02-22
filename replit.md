@@ -4,6 +4,7 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-02-22: Added job markers on planner map with color-coded status, filter buttons (Idag/Denna vecka/Dölj jobb), cluster grouping, detailed popups with order info; GET /api/planner/orders endpoint with range=today|week
 - 2026-02-22: Added planner map view (/planner/map) with Leaflet/OpenStreetMap showing real-time driver GPS positions; driver_locations table in PostgreSQL; auto-refresh every 15s; sidebar with driver list
 - 2026-02-22: Switched from expo export (.hbc) to Metro-fetched JS bundles for Expo Go compatibility; manifest protocol v0; QR code uses exps:// for HTTPS; bundles in dist-metro/
 - 2026-02-21: Added AI features: Unicorn Assist chat (GPT-5.2), voice input (gpt-4o-mini-transcribe), AI image analysis for deviations, AI context tips on order detail
