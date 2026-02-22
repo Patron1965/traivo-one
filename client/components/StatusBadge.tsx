@@ -4,13 +4,12 @@ import { OrderStatus, ORDER_STATUS_LABELS } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
 
 const STATUS_COLORS: Record<OrderStatus, { bg: string; text: string }> = {
-  new: { bg: Colors.infoLight, text: Colors.statusNew },
   planned: { bg: '#F4ECF7', text: Colors.statusPlanned },
-  en_route: { bg: Colors.warningLight, text: Colors.statusEnRoute },
-  arrived: { bg: '#FDEBD0', text: Colors.statusArrived },
+  dispatched: { bg: Colors.infoLight, text: Colors.statusDispatched },
+  on_site: { bg: '#FDEBD0', text: Colors.statusOnSite },
   in_progress: { bg: Colors.successLight, text: Colors.statusInProgress },
   completed: { bg: Colors.successLight, text: Colors.statusCompleted },
-  deferred: { bg: Colors.dangerLight, text: Colors.statusDeferred },
+  failed: { bg: Colors.dangerLight, text: Colors.statusFailed },
   cancelled: { bg: '#F2F3F4', text: Colors.statusCancelled },
 };
 
@@ -20,7 +19,7 @@ interface StatusBadgeProps {
 }
 
 export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
-  const colors = STATUS_COLORS[status];
+  const colors = STATUS_COLORS[status] || { bg: '#F2F3F4', text: '#95A5A6' };
   return (
     <View
       style={[
@@ -37,7 +36,7 @@ export function StatusBadge({ status, size = 'md' }: StatusBadgeProps) {
           size === 'sm' ? styles.smallText : null,
         ]}
       >
-        {ORDER_STATUS_LABELS[status]}
+        {ORDER_STATUS_LABELS[status] || status}
       </Text>
     </View>
   );

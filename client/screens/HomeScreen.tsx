@@ -15,13 +15,13 @@ import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
 function getStatusBorderColor(status: OrderStatus): string {
   switch (status) {
     case 'planned': return Colors.statusPlanned;
-    case 'en_route': return Colors.statusEnRoute;
-    case 'arrived': return Colors.statusArrived;
+    case 'dispatched': return Colors.statusDispatched;
+    case 'on_site': return Colors.statusOnSite;
     case 'in_progress': return Colors.statusInProgress;
     case 'completed': return Colors.statusCompleted;
-    case 'deferred': return Colors.statusDeferred;
+    case 'failed': return Colors.statusFailed;
     case 'cancelled': return Colors.statusCancelled;
-    default: return Colors.statusNew;
+    default: return Colors.statusPlanned;
   }
 }
 
@@ -31,7 +31,7 @@ export function HomeScreen({ navigation }: any) {
   const { user } = useAuth();
 
   const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = useQuery<Order[]>({
-    queryKey: ['/api/mobile/orders'],
+    queryKey: ['/api/mobile/my-orders'],
   });
 
   const { data: summary } = useQuery<DaySummary>({
@@ -142,23 +142,27 @@ export function HomeScreen({ navigation }: any) {
         <View style={styles.statsRow}>
           <View style={styles.statItem}>
             <ThemedText variant="heading" color={Colors.primary}>
-              {summary?.estimatedTimeRemaining || 0}
+              {summary?.totalDuration || summary?.estimatedTimeRemaining || 0}
             </ThemedText>
-            <ThemedText variant="caption">min kvar</ThemedText>
+            <ThemedText variant="caption">min totalt</ThemedText>
           </View>
-          <View style={styles.statDivider} />
-          <View style={styles.statItem}>
-            <ThemedText variant="heading" color={Colors.primary}>
-              {summary?.totalDistance?.toFixed(1) || '0'}
-            </ThemedText>
-            <ThemedText variant="caption">km totalt</ThemedText>
-          </View>
+          {summary?.totalDistance ? (
+            <>
+              <View style={styles.statDivider} />
+              <View style={styles.statItem}>
+                <ThemedText variant="heading" color={Colors.primary}>
+                  {summary.totalDistance.toFixed(1)}
+                </ThemedText>
+                <ThemedText variant="caption">km totalt</ThemedText>
+              </View>
+            </>
+          ) : null}
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <ThemedText variant="heading" color={Colors.danger}>
-              {summary?.deferredOrders || 0}
+              {summary?.remainingOrders || 0}
             </ThemedText>
-            <ThemedText variant="caption">uppskjutna</ThemedText>
+            <ThemedText variant="caption">återstående</ThemedText>
           </View>
           {lockedCount > 0 ? (
             <>

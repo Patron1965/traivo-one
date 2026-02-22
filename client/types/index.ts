@@ -1,41 +1,38 @@
 export type OrderStatus =
-  | 'new'
   | 'planned'
-  | 'en_route'
-  | 'arrived'
+  | 'dispatched'
+  | 'on_site'
   | 'in_progress'
   | 'completed'
-  | 'deferred'
+  | 'failed'
   | 'cancelled';
 
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
-  new: 'Ny',
   planned: 'Planerad',
-  en_route: 'På väg',
-  arrived: 'Framme',
+  dispatched: 'Skickad',
+  on_site: 'På plats',
   in_progress: 'Pågår',
   completed: 'Slutförd',
-  deferred: 'Uppskjuten',
+  failed: 'Misslyckad',
   cancelled: 'Avbokad',
 };
 
 export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
-  'new',
   'planned',
-  'en_route',
-  'arrived',
+  'dispatched',
+  'on_site',
   'in_progress',
   'completed',
 ];
 
 export interface ExecutionCode {
-  id: number;
+  id: number | string;
   code: string;
   name: string;
 }
 
 export interface TimeRestriction {
-  id: number;
+  id: number | string;
   type: 'parking_ban' | 'emptying_day' | 'quiet_hours' | 'access_restriction';
   description: string;
   dayOfWeek?: number;
@@ -45,7 +42,7 @@ export interface TimeRestriction {
 }
 
 export interface SubStep {
-  id: number;
+  id: number | string;
   name: string;
   articleName: string;
   completed: boolean;
@@ -53,25 +50,25 @@ export interface SubStep {
 }
 
 export interface TaskDependency {
-  id: number;
-  dependsOnOrderId: number;
+  id: number | string;
+  dependsOnOrderId: number | string;
   dependsOnOrderNumber: string;
   dependsOnStatus: OrderStatus;
   isBlocking: boolean;
 }
 
 export interface OrderNote {
-  id: number;
-  orderId: number;
+  id: number | string;
+  orderId: number | string;
   text: string;
   createdBy: string;
   createdAt: string;
 }
 
-export type InspectionStatus = 'ok' | 'warning' | 'error' | 'not_checked';
+export type InspectionStatus = 'ok' | 'warning' | 'error' | 'issue' | 'not_checked';
 
 export interface InspectionItem {
-  id: number;
+  id: number | string;
   category: string;
   status: InspectionStatus;
   issues: string[];
@@ -89,7 +86,7 @@ export const INSPECTION_CATEGORIES = [
 
 export const INSPECTION_ISSUES: Record<string, string[]> = {
   access: ['Blockerad infart', 'Låst grind', 'Felaktig kod', 'Trång passage'],
-  container: ['Trasigt lock', 'Skadade hjul', 'Deformerat kärl', 'Saknar märkning'],
+  container: ['Trasigt lock', 'Skadade hjul', 'Deformerat kärl', 'Saknar märkning', 'Spricka i lock'],
   environment: ['Nedskräpning', 'Luktproblem', 'Läckage', 'Skadedjur'],
   safety: ['Halt underlag', 'Dålig belysning', 'Farligt gods synligt', 'Trasig markering'],
   cleanliness: ['Smutsigt område', 'Spilld vätska', 'Ej städat', 'Orena kärl'],
@@ -100,6 +97,7 @@ export const INSPECTION_STATUS_LABELS: Record<InspectionStatus, string> = {
   ok: 'OK',
   warning: 'Varning',
   error: 'Fel',
+  issue: 'Problem',
   not_checked: 'Ej kontrollerad',
 };
 
@@ -110,8 +108,23 @@ export const TIME_RESTRICTION_LABELS: Record<TimeRestriction['type'], string> = 
   access_restriction: 'Tillträdesbegränsning',
 };
 
+export interface OrderObject {
+  id: number | string;
+  name: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  what3words?: string;
+}
+
+export interface OrderCustomer {
+  id: number | string;
+  name: string;
+  customerNumber?: string;
+}
+
 export interface Order {
-  id: number;
+  id: number | string;
   orderNumber: string;
   status: OrderStatus;
   customerName: string;
@@ -122,18 +135,23 @@ export interface Order {
   longitude: number;
   what3words?: string;
   scheduledDate: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   scheduledTimeStart?: string;
   scheduledTimeEnd?: string;
+  title?: string;
   description: string;
   notes?: string;
   objectType: string;
-  objectId: number;
-  clusterId?: number;
+  objectId: number | string;
+  clusterId?: number | string;
   clusterName?: string;
   priority: 'low' | 'normal' | 'high' | 'urgent';
   articles: Article[];
   contacts: Contact[];
   estimatedDuration: number;
+  actualStartTime?: string;
+  actualEndTime?: string;
   completedAt?: string;
   signatureUrl?: string;
   photos: string[];
@@ -147,19 +165,30 @@ export interface Order {
   orderNotes?: OrderNote[];
   inspections?: InspectionItem[];
   creationMethod?: string;
+  object?: OrderObject;
+  customer?: OrderCustomer;
+  syncCount?: number;
+  notificationCount?: number;
+  metadata?: Record<string, any>;
+  resourceId?: string | number;
+  tenantId?: string;
+  articleId?: string | number;
+  quantity?: number;
+  unit?: string;
 }
 
 export interface Article {
-  id: number;
+  id: number | string;
   name: string;
+  articleNumber?: string;
   unit: string;
-  quantity: number;
+  quantity?: number;
   category: string;
-  isSeasonal: boolean;
+  isSeasonal?: boolean;
 }
 
 export interface Contact {
-  id: number;
+  id: number | string;
   name: string;
   phone: string;
   email?: string;
@@ -167,22 +196,30 @@ export interface Contact {
 }
 
 export interface Deviation {
-  id: number;
-  orderId: number;
+  id: number | string;
+  orderId: number | string;
   category: string;
   description: string;
   photoUrl?: string;
   latitude?: number;
   longitude?: number;
   createdAt: string;
+  type?: string;
+  photos?: string[];
 }
 
 export interface Resource {
-  id: number;
+  id: number | string;
+  tenantId?: string;
   name: string;
-  type: string;
+  type?: string;
+  phone?: string;
+  email?: string;
   vehicleRegNo?: string;
-  competencies: string[];
+  homeLatitude?: number;
+  homeLongitude?: number;
+  competencies?: string[];
+  executionCodes?: string[];
 }
 
 export interface WeatherData {
@@ -201,12 +238,14 @@ export interface GpsPosition {
   timestamp: number;
   accuracy: number;
   speed?: number;
+  heading?: number;
 }
 
 export interface MaterialLogEntry {
-  id: number;
-  orderId: number;
-  articleId: number;
+  id: number | string;
+  orderId: number | string;
+  articleId: number | string;
+  articleNumber?: string;
   articleName: string;
   quantity: number;
   unit: string;
@@ -217,26 +256,70 @@ export interface MaterialLogEntry {
 export interface DaySummary {
   totalOrders: number;
   completedOrders: number;
-  deferredOrders: number;
-  totalDistance: number;
-  estimatedTimeRemaining: number;
+  remainingOrders: number;
+  failedOrders?: number;
+  totalDuration: number;
+  totalDistance?: number;
+  estimatedTimeRemaining?: number;
 }
 
 export type DeviationCategory =
+  | 'blocked_access'
+  | 'damaged_container'
+  | 'wrong_waste'
+  | 'overloaded'
   | 'broken_container'
   | 'wrong_address'
-  | 'blocked_access'
   | 'contamination'
   | 'overfilled'
   | 'missing_container'
   | 'other';
 
 export const DEVIATION_CATEGORIES: Record<DeviationCategory, string> = {
+  blocked_access: 'Blockerad väg',
+  damaged_container: 'Skadat kärl',
+  wrong_waste: 'Felaktigt avfall',
+  overloaded: 'Överlastat',
   broken_container: 'Trasigt kärl',
   wrong_address: 'Felaktig adress',
-  blocked_access: 'Blockerad väg',
   contamination: 'Kontaminering',
   overfilled: 'Överfyllt',
   missing_container: 'Saknat kärl',
   other: 'Övrigt',
 };
+
+export interface Notification {
+  id: string;
+  type: string;
+  title: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  orderId?: string;
+}
+
+export interface SyncAction {
+  clientId: string;
+  actionType: 'status_update' | 'note' | 'deviation' | 'material' | 'gps' | 'inspection';
+  payload: Record<string, any>;
+}
+
+export interface ChecklistQuestion {
+  id: string;
+  text: string;
+  type: 'boolean' | 'select' | 'text';
+  options?: string[];
+}
+
+export interface ChecklistTemplate {
+  templateId: string;
+  name: string;
+  articleType: string;
+  questions: ChecklistQuestion[];
+}
+
+export interface OrderChecklist {
+  orderId: string;
+  articleTypes: string[];
+  checklists: ChecklistTemplate[];
+}

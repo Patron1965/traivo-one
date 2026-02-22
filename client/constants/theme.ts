@@ -37,13 +37,12 @@ export const Colors = {
 
   overlay: 'rgba(0,0,0,0.5)',
 
-  statusNew: '#3498DB',
   statusPlanned: '#9B59B6',
-  statusEnRoute: '#F39C12',
-  statusArrived: '#E67E22',
+  statusDispatched: '#3498DB',
+  statusOnSite: '#E67E22',
   statusInProgress: '#2ECC71',
   statusCompleted: '#27AE60',
-  statusDeferred: '#E74C3C',
+  statusFailed: '#E74C3C',
   statusCancelled: '#95A5A6',
 };
 

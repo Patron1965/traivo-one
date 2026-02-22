@@ -17,7 +17,7 @@ import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote } from '..
 import { TIME_RESTRICTION_LABELS } from '../types';
 
 const STATUS_SEQUENCE: OrderStatus[] = [
-  'planned', 'en_route', 'arrived', 'in_progress', 'completed',
+  'planned', 'dispatched', 'on_site', 'in_progress', 'completed',
 ];
 
 export function OrderDetailScreen({ route, navigation }: any) {
@@ -29,7 +29,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const [aiTip, setAiTip] = useState<string | null>(null);
   const [aiTipLoading, setAiTipLoading] = useState(false);
   const [showAiTip, setShowAiTip] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<'complete' | 'defer' | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'complete' | 'failed' | null>(null);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/mobile/orders/${orderId}`],
@@ -40,7 +40,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
       apiRequest('PATCH', `/api/mobile/orders/${orderId}/status`, { status: newStatus }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
-      queryClient.invalidateQueries({ queryKey: ['/api/mobile/orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     },
@@ -77,8 +77,8 @@ export function OrderDetailScreen({ route, navigation }: any) {
   function getNextStatusLabel(status: OrderStatus): string {
     const labels: Partial<Record<OrderStatus, string>> = {
       planned: 'Starta körning',
-      en_route: 'Markera framme',
-      arrived: 'Starta arbete',
+      dispatched: 'Markera på plats',
+      on_site: 'Starta arbete',
       in_progress: 'Slutför',
     };
     return labels[status] || 'Nästa steg';
@@ -87,8 +87,8 @@ export function OrderDetailScreen({ route, navigation }: any) {
   function getNextStatusIcon(status: OrderStatus): string {
     const icons: Partial<Record<OrderStatus, string>> = {
       planned: 'navigation',
-      en_route: 'map-pin',
-      arrived: 'play',
+      dispatched: 'map-pin',
+      on_site: 'play',
       in_progress: 'check-circle',
     };
     return icons[status] || 'arrow-right';
@@ -122,15 +122,15 @@ export function OrderDetailScreen({ route, navigation }: any) {
     }
   }
 
-  function handleDefer() {
-    setConfirmAction('defer');
+  function handleFailed() {
+    setConfirmAction('failed');
   }
 
   function handleConfirmAction() {
     if (confirmAction === 'complete') {
       statusMutation.mutate('completed');
-    } else if (confirmAction === 'defer') {
-      statusMutation.mutate('deferred');
+    } else if (confirmAction === 'failed') {
+      statusMutation.mutate('failed');
     }
     setConfirmAction(null);
   }
@@ -172,7 +172,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
   }
 
   const nextStatus = getNextStatus(order.status);
-  const isFinished = order.status === 'completed' || order.status === 'cancelled' || order.status === 'deferred';
+  const isFinished = order.status === 'completed' || order.status === 'cancelled' || order.status === 'failed';
   const activeRestrictions = order.timeRestrictions?.filter(r => r.isActive) || [];
   const subSteps = order.subSteps || [];
   const completedSteps = subSteps.filter(s => s.completed).length;
@@ -349,7 +349,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
               <Pressable
                 key={step.id}
                 style={styles.subStepRow}
-                onPress={() => subStepMutation.mutate({ stepId: step.id, completed: !step.completed })}
+                onPress={() => subStepMutation.mutate({ stepId: Number(step.id), completed: !step.completed })}
                 testID={`button-substep-${step.id}`}
               >
                 <View style={[styles.checkBox, step.completed ? styles.checkBoxChecked : null]}>
@@ -526,15 +526,15 @@ export function OrderDetailScreen({ route, navigation }: any) {
 
       {!isFinished && !order.isLocked ? (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
-          {order.status !== 'new' && order.status !== 'completed' ? (
+          {order.status !== 'completed' ? (
             <Pressable
               style={styles.deferButton}
-              onPress={handleDefer}
-              testID="button-defer"
+              onPress={handleFailed}
+              testID="button-failed"
             >
               <Feather name="x-circle" size={22} color={Colors.danger} />
               <ThemedText variant="caption" color={Colors.danger} style={styles.deferLabel}>
-                Skjut upp
+                Misslyckat
               </ThemedText>
             </Pressable>
           ) : null}
@@ -573,18 +573,18 @@ export function OrderDetailScreen({ route, navigation }: any) {
           <View style={styles.confirmContent}>
             <View style={styles.confirmIconCircle}>
               <Feather
-                name={confirmAction === 'complete' ? 'check-circle' : 'pause-circle'}
+                name={confirmAction === 'complete' ? 'check-circle' : 'x-circle'}
                 size={40}
-                color={confirmAction === 'complete' ? Colors.secondary : Colors.warning}
+                color={confirmAction === 'complete' ? Colors.secondary : Colors.statusFailed}
               />
             </View>
             <ThemedText variant="subheading" style={styles.confirmTitle}>
-              {confirmAction === 'complete' ? 'Slutföra uppdraget?' : 'Skjuta upp uppdraget?'}
+              {confirmAction === 'complete' ? 'Slutföra uppdraget?' : 'Markera som misslyckat?'}
             </ThemedText>
             <ThemedText variant="body" color={Colors.textSecondary} style={styles.confirmDesc}>
               {confirmAction === 'complete'
                 ? 'Uppdraget markeras som slutfört. Du kan inte ångra detta.'
-                : 'Uppdraget skjuts upp till ett senare tillfälle.'}
+                : 'Uppdraget markeras som misslyckat.'}
             </ThemedText>
             <View style={styles.confirmButtons}>
               <Pressable
@@ -597,13 +597,13 @@ export function OrderDetailScreen({ route, navigation }: any) {
               <Pressable
                 style={[
                   styles.confirmOk,
-                  { backgroundColor: confirmAction === 'complete' ? Colors.secondary : Colors.warning },
+                  { backgroundColor: confirmAction === 'complete' ? Colors.secondary : Colors.statusFailed },
                 ]}
                 onPress={handleConfirmAction}
                 testID="button-confirm-ok"
               >
                 <ThemedText variant="body" color={Colors.textInverse} style={styles.confirmOkText}>
-                  {confirmAction === 'complete' ? 'Ja, slutför' : 'Ja, skjut upp'}
+                  {confirmAction === 'complete' ? 'Ja, slutför' : 'Ja, markera misslyckat'}
                 </ThemedText>
               </Pressable>
             </View>

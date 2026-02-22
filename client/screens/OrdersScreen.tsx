@@ -16,19 +16,19 @@ const FILTER_OPTIONS: { label: string; value: OrderStatus | 'all' }[] = [
   { label: 'Plan', value: 'planned' },
   { label: 'Pågår', value: 'in_progress' },
   { label: 'Klar', value: 'completed' },
-  { label: 'Senare', value: 'deferred' },
+  { label: 'Misslyckad', value: 'failed' },
 ];
 
 function getStatusBorderColor(status: OrderStatus): string {
   switch (status) {
     case 'planned': return Colors.statusPlanned;
-    case 'en_route': return Colors.statusEnRoute;
-    case 'arrived': return Colors.statusArrived;
+    case 'dispatched': return Colors.statusDispatched;
+    case 'on_site': return Colors.statusOnSite;
     case 'in_progress': return Colors.statusInProgress;
     case 'completed': return Colors.statusCompleted;
-    case 'deferred': return Colors.statusDeferred;
+    case 'failed': return Colors.statusFailed;
     case 'cancelled': return Colors.statusCancelled;
-    default: return Colors.statusNew;
+    default: return Colors.statusPlanned;
   }
 }
 
@@ -39,7 +39,7 @@ export function OrdersScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
 
   const { data: orders, isLoading, refetch } = useQuery<Order[]>({
-    queryKey: ['/api/mobile/orders'],
+    queryKey: ['/api/mobile/my-orders'],
   });
 
   const onRefresh = useCallback(async () => {
