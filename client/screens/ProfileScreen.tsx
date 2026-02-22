@@ -25,10 +25,10 @@ export function ProfileScreen() {
         <Feather name="user" size={40} color={Colors.primary} />
       </View>
       <ThemedText variant="heading" style={styles.name}>
-        {user?.name || 'Chauff\u00f6r'}
+        {user?.name || 'Chaufför'}
       </ThemedText>
       <ThemedText variant="body" color={Colors.textSecondary} style={styles.role}>
-        {user?.role === 'driver' ? 'Chauff\u00f6r' : user?.role}
+        {user?.role === 'driver' ? 'Chaufför' : user?.role}
       </ThemedText>
 
       <Card style={styles.infoCard}>
@@ -53,7 +53,7 @@ export function ProfileScreen() {
         <Pressable style={styles.menuItem} testID="button-settings">
           <View style={styles.menuLeft}>
             <Feather name="settings" size={18} color={Colors.textSecondary} />
-            <ThemedText variant="body">Inst\u00e4llningar</ThemedText>
+            <ThemedText variant="body">Inställningar</ThemedText>
           </View>
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>

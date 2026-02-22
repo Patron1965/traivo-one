@@ -21,7 +21,7 @@ interface Message {
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Hej! Jag \u00e4r Unicorn Assist, din AI-assistent. Jag kan hj\u00e4lpa dig med fr\u00e5gor om dina uppdrag, ge v\u00e4gledning om procedurer, eller analysera bilder. Vad kan jag hj\u00e4lpa dig med?',
+  content: 'Hej! Jag är Unicorn Assist, din AI-assistent. Jag kan hjälpa dig med frågor om dina uppdrag, ge vägledning om procedurer, eller analysera bilder. Vad kan jag hjälpa dig med?',
   timestamp: new Date(),
 };
 
@@ -81,7 +81,7 @@ export function AIAssistantScreen() {
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: result.response || 'Jag kunde inte bearbeta din f\u00f6rfr\u00e5gan just nu.',
+        content: result.response || 'Jag kunde inte bearbeta din förfrågan just nu.',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, aiMsg]);
@@ -89,7 +89,7 @@ export function AIAssistantScreen() {
       const errorMsg: Message = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
-        content: 'N\u00e5got gick fel. F\u00f6rs\u00f6k igen senare.',
+        content: 'Något gick fel. Försök igen senare.',
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMsg]);
@@ -131,7 +131,7 @@ export function AIAssistantScreen() {
               const errorMsg: Message = {
                 id: Date.now().toString(),
                 role: 'assistant',
-                content: 'Kunde inte transkribera ljudet. F\u00f6rs\u00f6k igen.',
+                content: 'Kunde inte transkribera ljudet. Försök igen.',
                 timestamp: new Date(),
               };
               setMessages(prev => [...prev, errorMsg]);
@@ -146,7 +146,7 @@ export function AIAssistantScreen() {
         const errorMsg: Message = {
           id: Date.now().toString(),
           role: 'assistant',
-          content: 'Kunde inte starta mikrofonen. Kontrollera dina inst\u00e4llningar.',
+          content: 'Kunde inte starta mikrofonen. Kontrollera dina inställningar.',
           timestamp: new Date(),
         };
         setMessages(prev => [...prev, errorMsg]);
@@ -159,7 +159,7 @@ export function AIAssistantScreen() {
           const errorMsg: Message = {
             id: Date.now().toString(),
             role: 'assistant',
-            content: 'Mikrofontillst\u00e5nd kr\u00e4vs f\u00f6r r\u00f6stinmatning.',
+            content: 'Mikrofontillstånd krävs för röstinmatning.',
             timestamp: new Date(),
           };
           setMessages(prev => [...prev, errorMsg]);
@@ -215,7 +215,7 @@ export function AIAssistantScreen() {
               const errorMsg: Message = {
                 id: Date.now().toString(),
                 role: 'assistant',
-                content: 'Kunde inte transkribera ljudet. F\u00f6rs\u00f6k igen.',
+                content: 'Kunde inte transkribera ljudet. Försök igen.',
                 timestamp: new Date(),
               };
               setMessages(prev => [...prev, errorMsg]);
@@ -239,7 +239,7 @@ export function AIAssistantScreen() {
   }
 
   function handleQuickHelp() {
-    sendMessage('Jag beh\u00f6ver hj\u00e4lp. Vad kan du hj\u00e4lpa mig med?');
+    sendMessage('Jag behöver hjälp. Vad kan du hjälpa mig med?');
   }
 
   function formatTime(date: Date): string {
@@ -333,7 +333,7 @@ export function AIAssistantScreen() {
           >
             <Feather name="help-circle" size={14} color={Colors.secondary} />
             <ThemedText variant="caption" color={Colors.secondary}>
-              Hj\u00e4lp
+              Hjälp
             </ThemedText>
           </Pressable>
         </ScrollView>

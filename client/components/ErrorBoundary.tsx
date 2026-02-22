@@ -17,7 +17,7 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       </View>
       <Text style={styles.title}>Driver Core stannade</Text>
       <Text style={styles.message}>
-        N\u00e5got gick fel. Starta om appen f\u00f6r att forts\u00e4tta.
+        Något gick fel. Starta om appen för att fortsätta.
       </Text>
       <Pressable
         style={styles.button}
@@ -25,7 +25,7 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
         testID="button-restart"
       >
         <Feather name="refresh-cw" size={20} color={Colors.textInverse} />
-        <Text style={styles.buttonText}>K\u00f6r ig\u00e5ng igen</Text>
+        <Text style={styles.buttonText}>Kör igång igen</Text>
       </Pressable>
     </View>
   );

@@ -76,7 +76,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
       {orderArticles.length > 0 ? (
         <>
           <ThemedText variant="label" style={styles.sectionLabel}>
-            F\u00f6rv\u00e4ntade artiklar
+            Förväntade artiklar
           </ThemedText>
           {orderArticles.map((article: Article) => (
             <Pressable
@@ -109,13 +109,13 @@ export function MaterialLogScreen({ route, navigation }: any) {
       ) : null}
 
       <ThemedText variant="label" style={[styles.sectionLabel, { marginTop: Spacing.xl }]}>
-        S\u00f6k artikel
+        Sök artikel
       </ThemedText>
       <View style={styles.searchContainer}>
         <Feather name="search" size={18} color={Colors.textMuted} />
         <TextInput
           style={styles.searchInput}
-          placeholder="S\u00f6k artiklar..."
+          placeholder="Sök artiklar..."
           placeholderTextColor={Colors.textMuted}
           value={search}
           onChangeText={setSearch}

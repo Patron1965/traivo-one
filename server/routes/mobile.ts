@@ -129,7 +129,7 @@ const MOCK_ORDERS: any[] = [
     clusterName: 'Centrum Söder',
     priority: 'high',
     articles: [
-      { id: 5, name: 'Byggavfall container 8m\u00b3', unit: 'st', quantity: 1, category: 'Bygg', isSeasonal: false },
+      { id: 5, name: 'Byggavfall container 8m³', unit: 'st', quantity: 1, category: 'Bygg', isSeasonal: false },
       { id: 6, name: 'Verksamhetsavfall 1100L', unit: 'st', quantity: 3, category: 'Avfall', isSeasonal: false },
     ],
     contacts: [
@@ -149,9 +149,9 @@ const MOCK_ORDERS: any[] = [
       { id: 3, type: 'access_restriction', description: 'Kräver passerkort vardagar', isActive: true },
     ],
     subSteps: [
-      { id: 6, name: 'Kontrollera container', articleName: 'Byggavfall container 8m\u00b3', completed: false, sortOrder: 1 },
-      { id: 7, name: 'Lyfta container', articleName: 'Byggavfall container 8m\u00b3', completed: false, sortOrder: 2 },
-      { id: 8, name: 'Byt container', articleName: 'Byggavfall container 8m\u00b3', completed: false, sortOrder: 3 },
+      { id: 6, name: 'Kontrollera container', articleName: 'Byggavfall container 8m³', completed: false, sortOrder: 1 },
+      { id: 7, name: 'Lyfta container', articleName: 'Byggavfall container 8m³', completed: false, sortOrder: 2 },
+      { id: 8, name: 'Byt container', articleName: 'Byggavfall container 8m³', completed: false, sortOrder: 3 },
       { id: 9, name: 'Töm verksamhetsavfall', articleName: 'Verksamhetsavfall 1100L', completed: false, sortOrder: 4 },
     ],
     dependencies: [],
@@ -269,7 +269,7 @@ const MOCK_ARTICLES = [
   { id: 9, name: 'Metall 240L', unit: 'st', category: 'Återvinning' },
   { id: 10, name: 'Tidningar 660L', unit: 'st', category: 'Återvinning' },
   { id: 11, name: 'Trädgårdsavfall 370L', unit: 'st', category: 'Avfall' },
-  { id: 12, name: 'Byggavfall container 8m\u00b3', unit: 'st', category: 'Bygg' },
+  { id: 12, name: 'Byggavfall container 8m³', unit: 'st', category: 'Bygg' },
   { id: 13, name: 'Verksamhetsavfall 1100L', unit: 'st', category: 'Avfall' },
   { id: 14, name: 'Spillolja 200L fat', unit: 'st', category: 'Farligt avfall' },
   { id: 15, name: 'Kemikaliecontainer', unit: 'st', category: 'Farligt avfall' },

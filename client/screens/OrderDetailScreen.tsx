@@ -75,12 +75,12 @@ export function OrderDetailScreen({ route, navigation }: any) {
 
   function getNextStatusLabel(status: OrderStatus): string {
     const labels: Partial<Record<OrderStatus, string>> = {
-      planned: 'Starta k\u00f6rning',
+      planned: 'Starta körning',
       en_route: 'Markera framme',
       arrived: 'Starta arbete',
-      in_progress: 'Slutf\u00f6r',
+      in_progress: 'Slutför',
     };
-    return labels[status] || 'N\u00e4sta steg';
+    return labels[status] || 'Nästa steg';
   }
 
   function getNextStatusIcon(status: OrderStatus): string {
@@ -200,10 +200,10 @@ export function OrderDetailScreen({ route, navigation }: any) {
               <Feather name="lock" size={20} color={Colors.danger} />
               <View style={styles.alertTextContainer}>
                 <ThemedText variant="subheading" color={Colors.danger}>
-                  Uppdraget \u00e4r l\u00e5st
+                  Uppdraget är låst
                 </ThemedText>
                 <ThemedText variant="caption" color={Colors.textSecondary}>
-                  Beroende uppdrag m\u00e5ste slutf\u00f6ras f\u00f6rst
+                  Beroende uppdrag måste slutföras först
                 </ThemedText>
               </View>
             </View>
@@ -215,7 +215,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
             <View style={styles.alertRow}>
               <Feather name="alert-circle" size={20} color={Colors.danger} />
               <ThemedText variant="body" color={Colors.danger}>
-                Br\u00e5dskande uppdrag
+                Brådskande uppdrag
               </ThemedText>
             </View>
           </Card>
@@ -226,7 +226,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
             <View style={styles.alertRow}>
               <Feather name="alert-triangle" size={20} color={Colors.warning} />
               <ThemedText variant="subheading" color={Colors.warning}>
-                Tidsbegr\u00e4nsningar
+                Tidsbegränsningar
               </ThemedText>
             </View>
             {activeRestrictions.map(r => (
@@ -259,7 +259,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
                     {dep.dependsOnOrderNumber}
                   </ThemedText>
                   <ThemedText variant="caption" color={Colors.textMuted}>
-                    M\u00e5ste vara: {dep.dependsOnStatus === 'completed' ? 'Slutf\u00f6rd' : dep.dependsOnStatus}
+                    Måste vara: {dep.dependsOnStatus === 'completed' ? 'Slutförd' : dep.dependsOnStatus}
                     {dep.isBlocking ? ' (blockerande)' : ''}
                   </ThemedText>
                 </View>
@@ -416,7 +416,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
             ))
           ) : (
             <ThemedText variant="caption" color={Colors.textMuted}>
-              Inga anteckningar \u00e4nnu
+              Inga anteckningar ännu
             </ThemedText>
           )}
           <View style={styles.noteInputRow}>
@@ -539,7 +539,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
         <View style={[styles.bottomBar, styles.lockedBottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
           <Feather name="lock" size={18} color={Colors.danger} />
           <ThemedText variant="body" color={Colors.danger}>
-            L\u00e5st - beroende ej uppfyllt
+            Låst - beroende ej uppfyllt
           </ThemedText>
         </View>
       ) : null}

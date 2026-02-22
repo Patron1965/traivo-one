@@ -76,8 +76,8 @@ export function MapScreen({ navigation }: any) {
             Kartvy
           </ThemedText>
           <ThemedText variant="body" color={Colors.textSecondary} style={styles.fallbackText}>
-            Kartan visas i Expo Go p\u00e5 din telefon.
-            {'\n'}H\u00e4r \u00e4r dagens rutt:
+            Kartan visas i Expo Go på din telefon.
+            {'\n'}Här är dagens rutt:
           </ThemedText>
           {activeOrders.sort((a, b) => a.sortOrder - b.sortOrder).map((order, idx) => (
             <Pressable
@@ -139,7 +139,7 @@ export function MapScreen({ navigation }: any) {
 
       <View style={[styles.legend, { bottom: tabBarHeight + Spacing.lg }]}>
         <ThemedText variant="caption" color={Colors.textSecondary}>
-          {activeOrders.length} stopp p\u00e5 rutten
+          {activeOrders.length} stopp på rutten
         </ThemedText>
       </View>
     </View>

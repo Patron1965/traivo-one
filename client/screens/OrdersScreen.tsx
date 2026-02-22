@@ -14,8 +14,8 @@ import type { Order, OrderStatus } from '../types';
 const FILTER_OPTIONS: { label: string; value: OrderStatus | 'all' }[] = [
   { label: 'Alla', value: 'all' },
   { label: 'Planerad', value: 'planned' },
-  { label: 'P\u00e5g\u00e5r', value: 'in_progress' },
-  { label: 'Slutf\u00f6rd', value: 'completed' },
+  { label: 'Pågår', value: 'in_progress' },
+  { label: 'Slutförd', value: 'completed' },
   { label: 'Uppskjuten', value: 'deferred' },
 ];
 
@@ -93,7 +93,7 @@ export function OrdersScreen({ navigation }: any) {
                 <View style={styles.urgentTag}>
                   <Feather name="alert-circle" size={10} color={Colors.danger} />
                   <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
-                    BR\u00c5DSKANDE
+                    BRÅDSKANDE
                   </ThemedText>
                 </View>
               ) : null}
@@ -102,7 +102,7 @@ export function OrdersScreen({ navigation }: any) {
                 <View style={styles.dependencyTag}>
                   <Feather name="link" size={10} color={Colors.info} />
                   <ThemedText variant="caption" color={Colors.info} style={styles.tagText}>
-                    {order.isLocked ? 'L\u00c5ST' : 'BEROENDE'}
+                    {order.isLocked ? 'LÅST' : 'BEROENDE'}
                   </ThemedText>
                 </View>
               ) : null}
@@ -111,7 +111,7 @@ export function OrdersScreen({ navigation }: any) {
                 <View style={styles.restrictionTag}>
                   <Feather name="alert-triangle" size={10} color={Colors.danger} />
                   <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
-                    BEGR\u00c4NSNING
+                    BEGRÄNSNING
                   </ThemedText>
                 </View>
               ) : null}

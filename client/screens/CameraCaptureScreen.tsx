@@ -80,7 +80,7 @@ export function CameraCaptureScreen({ route, navigation }: any) {
         <Pressable style={styles.addPhotoButton} onPress={pickFromGallery} testID="button-pick-gallery">
           <Feather name="image" size={32} color={Colors.primary} />
           <ThemedText variant="caption" color={Colors.primary}>
-            V\u00e4lj bild
+            Välj bild
           </ThemedText>
         </Pressable>
       </View>
@@ -105,7 +105,7 @@ export function CameraCaptureScreen({ route, navigation }: any) {
         <View style={styles.webNote}>
           <Feather name="info" size={16} color={Colors.info} />
           <ThemedText variant="body" color={Colors.textSecondary}>
-            K\u00f6r i Expo Go f\u00f6r full kamerafunktionalitet
+            Kör i Expo Go för full kamerafunktionalitet
           </ThemedText>
         </View>
       ) : null}

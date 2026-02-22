@@ -32,7 +32,7 @@ export function SignatureScreen({ route, navigation }: any) {
         Digital signatur
       </ThemedText>
       <ThemedText variant="body" color={Colors.textSecondary} style={styles.subtitle}>
-        L\u00e5t kunden signera f\u00f6r godk\u00e4nnande
+        Låt kunden signera för godkännande
       </ThemedText>
 
       <View style={styles.signatureArea}>
@@ -40,8 +40,8 @@ export function SignatureScreen({ route, navigation }: any) {
           <Feather name="edit-3" size={48} color={Colors.textMuted} />
           <ThemedText variant="body" color={Colors.textMuted}>
             {Platform.OS === 'web'
-              ? 'Signatur visas i Expo Go p\u00e5 din telefon'
-              : 'Signera h\u00e4r'}
+              ? 'Signatur visas i Expo Go på din telefon'
+              : 'Signera här'}
           </ThemedText>
         </View>
       </View>

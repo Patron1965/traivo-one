@@ -68,7 +68,7 @@ export function HomeScreen({ navigation }: any) {
             {dateStr}
           </ThemedText>
           <ThemedText variant="heading">
-            Hej, {user?.name?.split(' ')[0] || 'Chauf\u00f6r'}
+            Hej, {user?.name?.split(' ')[0] || 'Chauför'}
           </ThemedText>
         </View>
         {user?.vehicleRegNo ? (
@@ -91,12 +91,12 @@ export function HomeScreen({ navigation }: any) {
                 color={Colors.primaryLight}
               />
               <ThemedText variant="heading" style={styles.tempText}>
-                {weather.temperature}\u00b0
+                {weather.temperature}°
               </ThemedText>
               <View>
                 <ThemedText variant="body">{weather.description}</ThemedText>
                 <ThemedText variant="caption">
-                  K\u00e4nns som {weather.feelsLike}\u00b0 | Vind {weather.windSpeed} m/s
+                  Känns som {weather.feelsLike}° | Vind {weather.windSpeed} m/s
                 </ThemedText>
               </View>
             </View>
@@ -154,7 +154,7 @@ export function HomeScreen({ navigation }: any) {
                 <ThemedText variant="heading" color={Colors.warning}>
                   {lockedCount}
                 </ThemedText>
-                <ThemedText variant="caption">l\u00e5sta</ThemedText>
+                <ThemedText variant="caption">låsta</ThemedText>
               </View>
             </>
           ) : null}
@@ -163,7 +163,7 @@ export function HomeScreen({ navigation }: any) {
 
       <View style={styles.sectionHeader}>
         <ThemedText variant="subheading">
-          N\u00e4sta uppdrag
+          Nästa uppdrag
         </ThemedText>
         <Pressable
           onPress={() => navigation.navigate('OrdersTab')}
@@ -233,12 +233,12 @@ export function HomeScreen({ navigation }: any) {
                 {order.priority === 'urgent' ? (
                   <View style={styles.urgentBadge}>
                     <Feather name="alert-circle" size={12} color={Colors.danger} />
-                    <ThemedText variant="caption" color={Colors.danger}>Br\u00e5dskande</ThemedText>
+                    <ThemedText variant="caption" color={Colors.danger}>Brådskande</ThemedText>
                   </View>
                 ) : order.priority === 'high' ? (
                   <View style={styles.highBadge}>
                     <Feather name="arrow-up" size={12} color={Colors.warning} />
-                    <ThemedText variant="caption" color={Colors.warning}>H\u00f6g prioritet</ThemedText>
+                    <ThemedText variant="caption" color={Colors.warning}>Hög prioritet</ThemedText>
                   </View>
                 ) : null}
 
@@ -255,7 +255,7 @@ export function HomeScreen({ navigation }: any) {
                   <View style={styles.restrictionBadge}>
                     <Feather name="clock" size={12} color={Colors.danger} />
                     <ThemedText variant="caption" color={Colors.danger}>
-                      Tidsbegr\u00e4nsning
+                      Tidsbegränsning
                     </ThemedText>
                   </View>
                 ) : null}

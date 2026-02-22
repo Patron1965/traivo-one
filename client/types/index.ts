@@ -11,10 +11,10 @@ export type OrderStatus =
 export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   new: 'Ny',
   planned: 'Planerad',
-  en_route: 'P\u00e5 v\u00e4g',
+  en_route: 'På väg',
   arrived: 'Framme',
-  in_progress: 'P\u00e5g\u00e5r',
-  completed: 'Slutf\u00f6rd',
+  in_progress: 'Pågår',
+  completed: 'Slutförd',
   deferred: 'Uppskjuten',
   cancelled: 'Avbokad',
 };
@@ -79,21 +79,21 @@ export interface InspectionItem {
 }
 
 export const INSPECTION_CATEGORIES = [
-  { key: 'access', label: 'Tillg\u00e4nglighet', icon: 'unlock' },
-  { key: 'container', label: 'K\u00e4rl/Beh\u00e5llare', icon: 'box' },
-  { key: 'environment', label: 'Milj\u00f6', icon: 'sun' },
-  { key: 'safety', label: 'S\u00e4kerhet', icon: 'shield' },
+  { key: 'access', label: 'Tillgänglighet', icon: 'unlock' },
+  { key: 'container', label: 'Kärl/Behållare', icon: 'box' },
+  { key: 'environment', label: 'Miljö', icon: 'sun' },
+  { key: 'safety', label: 'Säkerhet', icon: 'shield' },
   { key: 'cleanliness', label: 'Renlighet', icon: 'droplet' },
-  { key: 'other', label: '\u00d6vrigt', icon: 'more-horizontal' },
+  { key: 'other', label: 'Övrigt', icon: 'more-horizontal' },
 ] as const;
 
 export const INSPECTION_ISSUES: Record<string, string[]> = {
-  access: ['Blockerad infart', 'L\u00e5st grind', 'Felaktig kod', 'Tr\u00e5ng passage'],
-  container: ['Trasigt lock', 'Skadade hjul', 'Deformerat k\u00e4rl', 'Saknar m\u00e4rkning'],
-  environment: ['Nedskr\u00e4pning', 'Luktproblem', 'L\u00e4ckage', 'Skadedjur'],
-  safety: ['Halt underlag', 'D\u00e5lig belysning', 'Farligt gods synligt', 'Trasig markering'],
-  cleanliness: ['Smutsigt omr\u00e5de', 'Spilld v\u00e4tska', 'Ej st\u00e4dat', 'Orena k\u00e4rl'],
-  other: ['Felaktig information', 'Kundklagom\u00e5l', 'Saknad utrustning', 'Annat problem'],
+  access: ['Blockerad infart', 'Låst grind', 'Felaktig kod', 'Trång passage'],
+  container: ['Trasigt lock', 'Skadade hjul', 'Deformerat kärl', 'Saknar märkning'],
+  environment: ['Nedskräpning', 'Luktproblem', 'Läckage', 'Skadedjur'],
+  safety: ['Halt underlag', 'Dålig belysning', 'Farligt gods synligt', 'Trasig markering'],
+  cleanliness: ['Smutsigt område', 'Spilld vätska', 'Ej städat', 'Orena kärl'],
+  other: ['Felaktig information', 'Kundklagomål', 'Saknad utrustning', 'Annat problem'],
 };
 
 export const INSPECTION_STATUS_LABELS: Record<InspectionStatus, string> = {
@@ -104,10 +104,10 @@ export const INSPECTION_STATUS_LABELS: Record<InspectionStatus, string> = {
 };
 
 export const TIME_RESTRICTION_LABELS: Record<TimeRestriction['type'], string> = {
-  parking_ban: 'P-f\u00f6rbud',
-  emptying_day: 'T\u00f6mningsdag',
+  parking_ban: 'P-förbud',
+  emptying_day: 'Tömningsdag',
   quiet_hours: 'Tysta timmar',
-  access_restriction: 'Tilltr\u00e4desbegr\u00e4nsning',
+  access_restriction: 'Tillträdesbegränsning',
 };
 
 export interface Order {
@@ -232,11 +232,11 @@ export type DeviationCategory =
   | 'other';
 
 export const DEVIATION_CATEGORIES: Record<DeviationCategory, string> = {
-  broken_container: 'Trasigt k\u00e4rl',
+  broken_container: 'Trasigt kärl',
   wrong_address: 'Felaktig adress',
-  blocked_access: 'Blockerad v\u00e4g',
+  blocked_access: 'Blockerad väg',
   contamination: 'Kontaminering',
-  overfilled: '\u00d6verfyllt',
-  missing_container: 'Saknat k\u00e4rl',
-  other: '\u00d6vrigt',
+  overfilled: 'Överfyllt',
+  missing_container: 'Saknat kärl',
+  other: 'Övrigt',
 };

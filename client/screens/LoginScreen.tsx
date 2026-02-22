@@ -36,7 +36,7 @@ export function LoginScreen() {
       }
     } else {
       if (!username.trim() || !password.trim()) {
-        setError('Ange anv\u00e4ndarnamn och l\u00f6senord');
+        setError('Ange användarnamn och lösenord');
         return;
       }
     }
@@ -49,7 +49,7 @@ export function LoginScreen() {
         await login(username.trim(), password.trim());
       }
     } catch (e: any) {
-      setError('Inloggningen misslyckades. F\u00f6rs\u00f6k igen.');
+      setError('Inloggningen misslyckades. Försök igen.');
     } finally {
       setIsLoading(false);
     }
@@ -143,7 +143,7 @@ export function LoginScreen() {
                 <Feather name="user" size={20} color={Colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="Anv\u00e4ndarnamn"
+                  placeholder="Användarnamn"
                   placeholderTextColor={Colors.textMuted}
                   value={username}
                   onChangeText={setUsername}
@@ -157,7 +157,7 @@ export function LoginScreen() {
                 <Feather name="lock" size={20} color={Colors.textMuted} style={styles.inputIcon} />
                 <TextInput
                   style={styles.input}
-                  placeholder="L\u00f6senord"
+                  placeholder="Lösenord"
                   placeholderTextColor={Colors.textMuted}
                   value={password}
                   onChangeText={setPassword}
