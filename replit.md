@@ -4,6 +4,7 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-02-22: Added planner map view (/planner/map) with Leaflet/OpenStreetMap showing real-time driver GPS positions; driver_locations table in PostgreSQL; auto-refresh every 15s; sidebar with driver list
 - 2026-02-22: Switched from expo export (.hbc) to Metro-fetched JS bundles for Expo Go compatibility; manifest protocol v0; QR code uses exps:// for HTTPS; bundles in dist-metro/
 - 2026-02-21: Added AI features: Unicorn Assist chat (GPT-5.2), voice input (gpt-4o-mini-transcribe), AI image analysis for deviations, AI context tips on order detail
 - 2026-02-21: Added task dependencies, execution codes, time restrictions, sub-steps, inspection checklists, order notes, PIN login, and offline indicator
@@ -66,11 +67,14 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 │       └── index.ts           # TypeScript type definitions
 ├── server/
 │   ├── index.ts               # Express server entry (serves API + static bundles + landing page)
+│   ├── db.ts                  # PostgreSQL connection pool
 │   ├── routes/
 │   │   └── mobile.ts          # Mobile API endpoints
 │   │   └── ai.ts              # AI endpoints (chat, transcribe, analyze-image)
+│   │   └── planner.ts         # Planner API endpoints (driver locations)
 │   └── templates/
 │       └── landing-page.html  # QR code landing page for Expo Go
+│       └── planner-map.html   # Live driver map for planners (Leaflet/OpenStreetMap)
 └── assets/                    # App icons and images
 ```
 
@@ -92,6 +96,11 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 - `POST /api/mobile/ai/chat` - AI chat `{message, context?}` (GPT-5.2)
 - `POST /api/mobile/ai/transcribe` - Voice transcription `{audio: base64}` (gpt-4o-mini-transcribe)
 - `POST /api/mobile/ai/analyze-image` - AI image analysis `{image: base64, context?}` (GPT-5.2 vision)
+- `GET /api/planner/drivers/locations` - Get all active driver GPS positions (last 24h)
+- `GET /planner/map` - Live driver map web page (Leaflet/OpenStreetMap, auto-refresh 15s)
+
+### Database Tables
+- `driver_locations` - Stores latest GPS position per driver (driver_id UNIQUE, lat/lng, speed, heading, status, current_order)
 
 ### Key Features
 - PIN-based login (4-6 digits) alongside username/password authentication
