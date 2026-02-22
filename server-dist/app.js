@@ -63,11 +63,13 @@ function buildManifest(platform, req) {
     const hostUrl = getHostUrl(req);
     const hostUri = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000');
     const sdkVersion = getExpoSdkVersion();
+    const sdkMajor = sdkVersion.split('.')[0] + '.0.0';
     return {
         id: `@anonymous/${expo.slug}`,
         createdAt: new Date().toISOString(),
-        runtimeVersion: sdkVersion,
+        runtimeVersion: `exposdk:${sdkMajor}`,
         launchAsset: {
+            key: 'bundle',
             url: `${hostUrl}/bundles/${platform}/index.bundle`,
             contentType: 'application/javascript',
         },
@@ -76,10 +78,20 @@ function buildManifest(platform, req) {
         extra: {
             expoClient: {
                 ...expo,
-                sdkVersion,
+                sdkVersion: sdkMajor,
+                platforms: ['ios', 'android', 'web'],
+                iconUrl: `${hostUrl}/assets/icon.png`,
                 hostUri,
+                _internal: {
+                    isDebug: false,
+                    projectRoot: '/home/runner/workspace',
+                    dynamicConfigPath: null,
+                    staticConfigPath: '/home/runner/workspace/app.json',
+                    packageJsonPath: '/home/runner/workspace/package.json',
+                },
             },
             expoGo: {
+                debuggerHost: hostUri,
                 developer: {
                     tool: 'expo-cli',
                     projectRoot: '/home/runner/workspace',
@@ -87,7 +99,9 @@ function buildManifest(platform, req) {
                 packagerOpts: {
                     dev: false,
                 },
+                mainModuleName: 'index.ts',
             },
+            scopeKey: `@anonymous/${expo.slug}`,
         },
     };
 }
