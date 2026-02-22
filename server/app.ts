@@ -53,19 +53,26 @@ app.use('/bundles', express.static(distDir, {
 
 app.use('/assets', express.static(path.join(distDir, 'assets')));
 
+function getExpoSdkVersion(): string {
+  try {
+    const expoPkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'node_modules', 'expo', 'package.json'), 'utf-8'));
+    return expoPkg.version;
+  } catch {
+    return '54.0.0';
+  }
+}
+
 function buildManifest(platform: string, req: express.Request) {
   const appJson = getAppJson();
   const expo = appJson.expo;
   const hostUrl = getHostUrl(req);
   const hostUri = (req.headers['x-forwarded-host'] || req.headers.host || 'localhost:5000') as string;
+  const sdkVersion = getExpoSdkVersion();
 
   return {
     id: `@anonymous/${expo.slug}`,
     createdAt: new Date().toISOString(),
-    runtimeVersion: {
-      type: 'fingerprint',
-      fingerprintSources: [],
-    },
+    runtimeVersion: sdkVersion,
     launchAsset: {
       url: `${hostUrl}/bundles/${platform}/index.bundle`,
       contentType: 'application/javascript',
@@ -75,6 +82,7 @@ function buildManifest(platform: string, req: express.Request) {
     extra: {
       expoClient: {
         ...expo,
+        sdkVersion,
         hostUri,
       },
       expoGo: {
