@@ -36,7 +36,7 @@ export function AIAssistantScreen() {
   const chunksRef = useRef<any[]>([]);
 
   const { data: orders } = useQuery<Order[]>({
-    queryKey: ['/api/mobile/orders'],
+    queryKey: ['/api/mobile/my-orders'],
   });
 
   useEffect(() => {

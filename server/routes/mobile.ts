@@ -3,16 +3,27 @@ import { pool } from '../db';
 
 const router = Router();
 
-const MOCK_USER = {
-  id: 1,
+const MOCK_RESOURCE = {
+  id: 101,
+  tenantId: 'kinab-demo',
   name: 'Erik Lindqvist',
-  role: 'driver',
-  resourceId: 101,
+  type: 'driver',
+  phone: '070-111 22 33',
+  email: 'erik.lindqvist@kinab.se',
   vehicleRegNo: 'ABC 123',
+  homeLatitude: 57.7089,
+  homeLongitude: 11.9746,
+  competencies: ['ADR', 'YKB', 'C-körkort'],
   executionCodes: ['TÖM', 'HÄMT', 'FARL'],
 };
 
 const MOCK_TOKEN = 'mock-driver-token-001';
+
+const MOCK_NOTIFICATIONS: any[] = [
+  { id: 'n1', type: 'schedule_change', title: 'Ruttändring', message: 'Order WO-2026-0453 har flyttats till kl 10:00', isRead: false, createdAt: new Date(Date.now() - 3600000).toISOString(), orderId: '3' },
+  { id: 'n2', type: 'urgent', title: 'Brådskande uppdrag', message: 'Nytt hämtuppdrag tillagt: Göteborgs Hamn AB', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString(), orderId: '5' },
+  { id: 'n3', type: 'info', title: 'Systeminformation', message: 'Ny version av appen tillgänglig', isRead: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
+];
 
 const MOCK_ORDERS: any[] = [
   {
@@ -36,9 +47,11 @@ const MOCK_ORDERS: any[] = [
     clusterId: 10,
     clusterName: 'Centrum Norr',
     priority: 'normal',
+    object: { id: 501, name: 'Sopstation Storgatan 12', address: 'Storgatan 12', latitude: 57.7089, longitude: 11.9746, what3words: 'fest.lampa.skog' },
+    customer: { id: 201, name: 'BRF Solsidan', customerNumber: 'KN-2201' },
     articles: [
-      { id: 1, name: 'Hushållsavfall 370L', unit: 'st', quantity: 4, category: 'Avfall', isSeasonal: false },
-      { id: 2, name: 'Matavfall 140L', unit: 'st', quantity: 2, category: 'Avfall', isSeasonal: false },
+      { id: 1, name: 'Hushållsavfall 370L', articleNumber: 'ART-001', unit: 'st', quantity: 4, category: 'Avfall', isSeasonal: false },
+      { id: 2, name: 'Matavfall 140L', articleNumber: 'ART-002', unit: 'st', quantity: 2, category: 'Avfall', isSeasonal: false },
     ],
     contacts: [
       { id: 1, name: 'Anna Karlsson', phone: '070-123 45 67', email: 'anna@brfsolsidan.se', role: 'Fastighetsskötare' },
@@ -63,6 +76,8 @@ const MOCK_ORDERS: any[] = [
     ],
     inspections: [],
     creationMethod: 'schema',
+    resourceId: 101,
+    tenantId: 'kinab-demo',
   },
   {
     id: 2,
@@ -84,9 +99,11 @@ const MOCK_ORDERS: any[] = [
     clusterId: 10,
     clusterName: 'Centrum Norr',
     priority: 'normal',
+    object: { id: 502, name: 'Soprum Vasagatan', address: 'Vasagatan 28', latitude: 57.7045, longitude: 11.9664 },
+    customer: { id: 202, name: 'Fastighets AB Norden', customerNumber: 'KN-2202' },
     articles: [
-      { id: 3, name: 'Restavfall 660L', unit: 'st', quantity: 2, category: 'Avfall', isSeasonal: false },
-      { id: 4, name: 'Kartong 660L', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
+      { id: 3, name: 'Restavfall 660L', articleNumber: 'ART-003', unit: 'st', quantity: 2, category: 'Avfall', isSeasonal: false },
+      { id: 4, name: 'Kartong 660L', articleNumber: 'ART-004', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
     ],
     contacts: [
       { id: 2, name: 'Lars Svensson', phone: '073-456 78 90', role: 'Driftansvarig' },
@@ -107,6 +124,8 @@ const MOCK_ORDERS: any[] = [
     orderNotes: [],
     inspections: [],
     creationMethod: 'avrop',
+    resourceId: 101,
+    tenantId: 'kinab-demo',
   },
   {
     id: 3,
@@ -129,9 +148,11 @@ const MOCK_ORDERS: any[] = [
     clusterId: 11,
     clusterName: 'Centrum Söder',
     priority: 'high',
+    object: { id: 503, name: 'Chalmers Leveransentré', address: 'Chalmersängen 4', latitude: 57.6896, longitude: 11.9770, what3words: 'böcker.glas.rikt' },
+    customer: { id: 203, name: 'Chalmers Tekniska Högskola', customerNumber: 'KN-2203' },
     articles: [
-      { id: 5, name: 'Byggavfall container 8m³', unit: 'st', quantity: 1, category: 'Bygg', isSeasonal: false },
-      { id: 6, name: 'Verksamhetsavfall 1100L', unit: 'st', quantity: 3, category: 'Avfall', isSeasonal: false },
+      { id: 5, name: 'Byggavfall container 8m³', articleNumber: 'ART-005', unit: 'st', quantity: 1, category: 'Bygg', isSeasonal: false },
+      { id: 6, name: 'Verksamhetsavfall 1100L', articleNumber: 'ART-006', unit: 'st', quantity: 3, category: 'Avfall', isSeasonal: false },
     ],
     contacts: [
       { id: 3, name: 'Maria Berg', phone: '031-772 10 00', email: 'maria.berg@chalmers.se', role: 'Miljösamordnare' },
@@ -162,6 +183,8 @@ const MOCK_ORDERS: any[] = [
     ],
     inspections: [],
     creationMethod: 'manual',
+    resourceId: 101,
+    tenantId: 'kinab-demo',
   },
   {
     id: 4,
@@ -182,9 +205,11 @@ const MOCK_ORDERS: any[] = [
     clusterId: 12,
     clusterName: 'Mölndal',
     priority: 'normal',
+    object: { id: 504, name: 'ICA Maxi Komprimator', address: 'Göteborgsvägen 88', latitude: 57.6557, longitude: 12.0134 },
+    customer: { id: 204, name: 'ICA Maxi Mölndal', customerNumber: 'KN-2204' },
     articles: [
-      { id: 7, name: 'Kartongkomprimator', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
-      { id: 8, name: 'Plastkomprimator', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
+      { id: 7, name: 'Kartongkomprimator', articleNumber: 'ART-007', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
+      { id: 8, name: 'Plastkomprimator', articleNumber: 'ART-008', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
     ],
     contacts: [
       { id: 5, name: 'Per Nilsson', phone: '071-234 56 78', role: 'Butikschef' },
@@ -199,12 +224,14 @@ const MOCK_ORDERS: any[] = [
     ],
     subSteps: [],
     dependencies: [
-      { id: 2, dependsOnOrderId: 3, dependsOnOrderNumber: 'WO-2026-0453', dependsOnStatus: 'en_route', isBlocking: true },
+      { id: 2, dependsOnOrderId: 3, dependsOnOrderNumber: 'WO-2026-0453', dependsOnStatus: 'dispatched', isBlocking: true },
     ],
     isLocked: true,
     orderNotes: [],
     inspections: [],
     creationMethod: 'schema',
+    resourceId: 101,
+    tenantId: 'kinab-demo',
   },
   {
     id: 5,
@@ -224,9 +251,11 @@ const MOCK_ORDERS: any[] = [
     objectType: 'Kärl',
     objectId: 505,
     priority: 'urgent',
+    object: { id: 505, name: 'Hamn Terminal 2', address: 'Terminalgatan 2', latitude: 57.7148, longitude: 11.9414 },
+    customer: { id: 205, name: 'Göteborgs Hamn AB', customerNumber: 'KN-2205' },
     articles: [
-      { id: 9, name: 'Spillolja 200L fat', unit: 'st', quantity: 2, category: 'Farligt avfall', isSeasonal: false },
-      { id: 10, name: 'Kemikaliecontainer', unit: 'st', quantity: 1, category: 'Farligt avfall', isSeasonal: false },
+      { id: 9, name: 'Spillolja 200L fat', articleNumber: 'ART-009', unit: 'st', quantity: 2, category: 'Farligt avfall', isSeasonal: false },
+      { id: 10, name: 'Kemikaliecontainer', articleNumber: 'ART-010', unit: 'st', quantity: 1, category: 'Farligt avfall', isSeasonal: false },
     ],
     contacts: [
       { id: 6, name: 'Karin Holm', phone: '031-368 75 00', email: 'karin.holm@port.goteborg.se', role: 'Hamnchef' },
@@ -255,45 +284,106 @@ const MOCK_ORDERS: any[] = [
     ],
     inspections: [],
     creationMethod: 'avrop',
+    resourceId: 101,
+    tenantId: 'kinab-demo',
   },
 ];
 
 const MOCK_ARTICLES = [
-  { id: 1, name: 'Hushållsavfall 140L', unit: 'st', category: 'Avfall' },
-  { id: 2, name: 'Hushållsavfall 370L', unit: 'st', category: 'Avfall' },
-  { id: 3, name: 'Matavfall 140L', unit: 'st', category: 'Avfall' },
-  { id: 4, name: 'Restavfall 660L', unit: 'st', category: 'Avfall' },
-  { id: 5, name: 'Kartong 660L', unit: 'st', category: 'Återvinning' },
-  { id: 6, name: 'Plast 660L', unit: 'st', category: 'Återvinning' },
-  { id: 7, name: 'Glas - färgat 600L', unit: 'st', category: 'Återvinning' },
-  { id: 8, name: 'Glas - ofärgat 600L', unit: 'st', category: 'Återvinning' },
-  { id: 9, name: 'Metall 240L', unit: 'st', category: 'Återvinning' },
-  { id: 10, name: 'Tidningar 660L', unit: 'st', category: 'Återvinning' },
-  { id: 11, name: 'Trädgårdsavfall 370L', unit: 'st', category: 'Avfall' },
-  { id: 12, name: 'Byggavfall container 8m³', unit: 'st', category: 'Bygg' },
-  { id: 13, name: 'Verksamhetsavfall 1100L', unit: 'st', category: 'Avfall' },
-  { id: 14, name: 'Spillolja 200L fat', unit: 'st', category: 'Farligt avfall' },
-  { id: 15, name: 'Kemikaliecontainer', unit: 'st', category: 'Farligt avfall' },
+  { id: 1, name: 'Hushållsavfall 140L', articleNumber: 'ART-001', unit: 'st', category: 'Avfall' },
+  { id: 2, name: 'Hushållsavfall 370L', articleNumber: 'ART-002', unit: 'st', category: 'Avfall' },
+  { id: 3, name: 'Matavfall 140L', articleNumber: 'ART-003', unit: 'st', category: 'Avfall' },
+  { id: 4, name: 'Restavfall 660L', articleNumber: 'ART-004', unit: 'st', category: 'Avfall' },
+  { id: 5, name: 'Kartong 660L', articleNumber: 'ART-005', unit: 'st', category: 'Återvinning' },
+  { id: 6, name: 'Plast 660L', articleNumber: 'ART-006', unit: 'st', category: 'Återvinning' },
+  { id: 7, name: 'Glas - färgat 600L', articleNumber: 'ART-007', unit: 'st', category: 'Återvinning' },
+  { id: 8, name: 'Glas - ofärgat 600L', articleNumber: 'ART-008', unit: 'st', category: 'Återvinning' },
+  { id: 9, name: 'Metall 240L', articleNumber: 'ART-009', unit: 'st', category: 'Återvinning' },
+  { id: 10, name: 'Tidningar 660L', articleNumber: 'ART-010', unit: 'st', category: 'Återvinning' },
+  { id: 11, name: 'Trädgårdsavfall 370L', articleNumber: 'ART-011', unit: 'st', category: 'Avfall' },
+  { id: 12, name: 'Byggavfall container 8m³', articleNumber: 'ART-012', unit: 'st', category: 'Bygg' },
+  { id: 13, name: 'Verksamhetsavfall 1100L', articleNumber: 'ART-013', unit: 'st', category: 'Avfall' },
+  { id: 14, name: 'Spillolja 200L fat', articleNumber: 'ART-014', unit: 'st', category: 'Farligt avfall' },
+  { id: 15, name: 'Kemikaliecontainer', articleNumber: 'ART-015', unit: 'st', category: 'Farligt avfall' },
 ];
+
+const MOCK_CHECKLIST_TEMPLATES: Record<string, any> = {
+  'Kärl': {
+    templateId: 'tmpl-karl',
+    name: 'Kärlkontroll',
+    articleType: 'Kärl',
+    questions: [
+      { id: 'q1', text: 'Är kärlet skadat?', type: 'boolean' },
+      { id: 'q2', text: 'Är kärlet överfyllt?', type: 'boolean' },
+      { id: 'q3', text: 'Finns felsortering?', type: 'boolean' },
+      { id: 'q4', text: 'Tillgänglighet', type: 'select', options: ['Bra', 'Begränsad', 'Blockerad'] },
+      { id: 'q5', text: 'Kommentar', type: 'text' },
+    ],
+  },
+  'Container': {
+    templateId: 'tmpl-container',
+    name: 'Containerkontroll',
+    articleType: 'Container',
+    questions: [
+      { id: 'q1', text: 'Är containern skadad?', type: 'boolean' },
+      { id: 'q2', text: 'Finns läckage?', type: 'boolean' },
+      { id: 'q3', text: 'Fyllnadsgrad', type: 'select', options: ['Under 50%', '50-75%', '75-100%', 'Överfylld'] },
+      { id: 'q4', text: 'Kommentar', type: 'text' },
+    ],
+  },
+  'Komprimator': {
+    templateId: 'tmpl-komprimator',
+    name: 'Komprimatorkontroll',
+    articleType: 'Komprimator',
+    questions: [
+      { id: 'q1', text: 'Fungerar komprimatorn?', type: 'boolean' },
+      { id: 'q2', text: 'Finns hydraulikläckage?', type: 'boolean' },
+      { id: 'q3', text: 'Fyllnadsgrad', type: 'select', options: ['Under 50%', '50-75%', '75-100%', 'Överfylld'] },
+      { id: 'q4', text: 'Kommentar', type: 'text' },
+    ],
+  },
+};
 
 router.post('/login', (req, res) => {
   const { username, password, pin } = req.body;
   if (pin) {
     if (pin.length === 4 || pin.length === 6) {
-      res.json({ user: MOCK_USER, token: MOCK_TOKEN });
+      res.json({
+        success: true,
+        token: MOCK_TOKEN,
+        resource: MOCK_RESOURCE,
+      });
     } else {
-      res.status(401).json({ error: 'Ogiltig PIN-kod' });
+      res.status(401).json({ success: false, error: 'Ogiltig PIN-kod' });
     }
   } else if (username && password) {
-    res.json({ user: MOCK_USER, token: MOCK_TOKEN });
+    res.json({
+      success: true,
+      token: MOCK_TOKEN,
+      resource: MOCK_RESOURCE,
+    });
   } else {
-    res.status(401).json({ error: 'Ogiltiga inloggningsuppgifter' });
+    res.status(401).json({ success: false, error: 'Ogiltiga inloggningsuppgifter' });
   }
 });
 
-router.get('/orders', (req, res) => {
-  const date = req.query.date || new Date().toISOString().split('T')[0];
-  res.json(MOCK_ORDERS.filter(o => o.scheduledDate === date));
+router.post('/logout', (_req, res) => {
+  res.json({ success: true });
+});
+
+router.get('/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.includes(MOCK_TOKEN)) {
+    res.json({ success: true, resource: MOCK_RESOURCE });
+  } else {
+    res.status(401).json({ success: false, error: 'Ej autentiserad' });
+  }
+});
+
+router.get('/my-orders', (req, res) => {
+  const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+  const orders = MOCK_ORDERS.filter(o => o.scheduledDate === date);
+  res.json(orders);
 });
 
 router.get('/orders/:id', (req, res) => {
@@ -305,6 +395,22 @@ router.get('/orders/:id', (req, res) => {
   }
 });
 
+router.get('/orders/:id/checklist', (req, res) => {
+  const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+  if (!order) {
+    res.status(404).json({ error: 'Order hittades inte' });
+    return;
+  }
+  const articleTypes = [...new Set(order.articles.map((a: any) => a.category))] as string[];
+  const objectTemplate = MOCK_CHECKLIST_TEMPLATES[order.objectType];
+  const checklists = objectTemplate ? [objectTemplate] : [];
+  res.json({
+    orderId: order.id.toString(),
+    articleTypes,
+    checklists,
+  });
+});
+
 router.patch('/orders/:id/status', (req, res) => {
   const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
   if (order) {
@@ -313,8 +419,15 @@ router.patch('/orders/:id/status', (req, res) => {
       return;
     }
     order.status = req.body.status;
+    if (req.body.status === 'in_progress') {
+      order.actualStartTime = new Date().toISOString();
+    }
     if (req.body.status === 'completed') {
-      (order as any).completedAt = new Date().toISOString();
+      order.completedAt = new Date().toISOString();
+      order.actualEndTime = new Date().toISOString();
+    }
+    if (req.body.status === 'failed') {
+      order.actualEndTime = new Date().toISOString();
     }
     res.json(order);
   } else {
@@ -404,6 +517,70 @@ router.post('/orders/:id/inspections', (req, res) => {
   }
 });
 
+router.post('/orders/:id/upload-photo', (req, res) => {
+  const orderId = parseInt(req.params.id);
+  const order = MOCK_ORDERS.find(o => o.id === orderId);
+  if (!order) {
+    res.status(404).json({ error: 'Order hittades inte' });
+    return;
+  }
+  const photoId = `photo-${Date.now()}`;
+  const presignedUrl = `/api/mobile/photos/${photoId}/upload`;
+  res.json({
+    success: true,
+    photoId,
+    presignedUrl,
+    confirmUrl: `/api/mobile/orders/${orderId}/confirm-photo`,
+  });
+});
+
+router.post('/orders/:id/confirm-photo', (req, res) => {
+  const orderId = parseInt(req.params.id);
+  const order = MOCK_ORDERS.find(o => o.id === orderId);
+  if (order) {
+    const photoUrl = `/photos/${req.body.photoId}.jpg`;
+    order.photos.push(photoUrl);
+    res.json({ success: true, photoUrl });
+  } else {
+    res.status(404).json({ error: 'Order hittades inte' });
+  }
+});
+
+router.get('/notifications', (_req, res) => {
+  res.json(MOCK_NOTIFICATIONS);
+});
+
+router.patch('/notifications/:id/read', (req, res) => {
+  const notification = MOCK_NOTIFICATIONS.find(n => n.id === req.params.id);
+  if (notification) {
+    notification.isRead = true;
+    res.json(notification);
+  } else {
+    res.status(404).json({ error: 'Notifikation hittades inte' });
+  }
+});
+
+router.patch('/notifications/read-all', (_req, res) => {
+  MOCK_NOTIFICATIONS.forEach(n => { n.isRead = true; });
+  res.json({ success: true });
+});
+
+router.post('/sync', (req, res) => {
+  const { actions } = req.body;
+  if (!Array.isArray(actions)) {
+    res.status(400).json({ error: 'actions måste vara en array' });
+    return;
+  }
+  const results = actions.map((action: any) => {
+    return {
+      clientId: action.clientId,
+      success: true,
+      serverTimestamp: new Date().toISOString(),
+    };
+  });
+  res.json({ success: true, results });
+});
+
 router.get('/articles', (req, res) => {
   const search = (req.query.search as string || '').toLowerCase();
   if (search) {
@@ -413,9 +590,38 @@ router.get('/articles', (req, res) => {
   }
 });
 
+router.post('/position', async (req, res) => {
+  const { latitude, longitude, speed, heading, accuracy } = req.body;
+
+  try {
+    if (latitude != null && longitude != null) {
+      const driverId = MOCK_RESOURCE.id;
+      await pool.query(
+        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, speed, heading, accuracy, status, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NOW())
+         ON CONFLICT (driver_id) DO UPDATE SET
+           driver_name = EXCLUDED.driver_name,
+           vehicle_reg_no = EXCLUDED.vehicle_reg_no,
+           latitude = EXCLUDED.latitude,
+           longitude = EXCLUDED.longitude,
+           speed = COALESCE(EXCLUDED.speed, driver_locations.speed),
+           heading = COALESCE(EXCLUDED.heading, driver_locations.heading),
+           accuracy = COALESCE(EXCLUDED.accuracy, driver_locations.accuracy),
+           status = 'active',
+           updated_at = NOW()`,
+        [driverId, MOCK_RESOURCE.name, MOCK_RESOURCE.vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0]
+      );
+    }
+    res.json({ received: true, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error saving GPS position:', error);
+    res.json({ received: true, timestamp: new Date().toISOString() });
+  }
+});
+
 router.post('/gps', async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
-  
+
   try {
     if (latitude != null && longitude != null && driverId) {
       await pool.query(
@@ -502,17 +708,17 @@ router.get('/weather', async (_req, res) => {
   }
 });
 
-router.get('/summary', (req, res) => {
+router.get('/summary', (_req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const todayOrders = MOCK_ORDERS.filter(o => o.scheduledDate === today);
+  const remaining = todayOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'failed');
   res.json({
     totalOrders: todayOrders.length,
     completedOrders: todayOrders.filter(o => o.status === 'completed').length,
-    deferredOrders: todayOrders.filter(o => o.status === 'deferred').length,
-    totalDistance: 34.2,
-    estimatedTimeRemaining: todayOrders
-      .filter(o => o.status !== 'completed' && o.status !== 'cancelled')
-      .reduce((sum, o) => sum + o.estimatedDuration, 0),
+    remainingOrders: remaining.length,
+    failedOrders: todayOrders.filter(o => o.status === 'failed').length,
+    totalDuration: todayOrders.reduce((sum, o) => sum + o.estimatedDuration, 0),
+    estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0),
   });
 });
 

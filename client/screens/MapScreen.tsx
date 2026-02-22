@@ -26,7 +26,7 @@ export function MapScreen({ navigation }: any) {
   const mapRef = useRef<any>(null);
 
   const { data: orders } = useQuery<Order[]>({
-    queryKey: ['/api/mobile/orders'],
+    queryKey: ['/api/mobile/my-orders'],
   });
 
   const activeOrders = orders?.filter(o => o.status !== 'cancelled') || [];
@@ -60,9 +60,9 @@ export function MapScreen({ navigation }: any) {
 
   function getMarkerColor(order: Order): string {
     if (order.status === 'completed') return Colors.success;
-    if (order.status === 'in_progress' || order.status === 'arrived') return Colors.secondary;
-    if (order.status === 'en_route') return Colors.warning;
-    if (order.status === 'deferred') return Colors.danger;
+    if (order.status === 'in_progress' || order.status === 'on_site') return Colors.secondary;
+    if (order.status === 'dispatched') return Colors.warning;
+    if (order.status === 'failed') return Colors.danger;
     if (order.priority === 'urgent') return Colors.danger;
     return Colors.primary;
   }
