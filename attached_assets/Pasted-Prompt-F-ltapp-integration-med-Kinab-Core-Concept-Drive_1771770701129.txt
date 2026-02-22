@@ -1,0 +1,181 @@
+Prompt: Fältapp-integration med Kinab Core Concept
+Driver Core är en mobilapp (React Native/Expo) för fältchauffirer som ansluter till Kinab Core Concept via REST API. Nedan beskrivs alla endpoints, dataformat och funktioner som backend behöver stödja för att appen ska fungera fullt ut.
+
+Autentisering
+POST /api/mobile/login
+
+Stödjer två inloggningsmetoder:
+PIN-kod: { pin: "1234" } (4-6 siffror)
+Användarnamn/lösenord: { username: "erik", password: "pass" }
+Svar: { token, user: { id, name, role, resourceId, vehicleRegNo, executionCodes[] } }
+Token skickas som Authorization: Bearer <token> i alla efterföljande anrop
+Arbetsordrar
+GET /api/mobile/orders
+
+Returnerar dagens ordrar för inloggad chaufför
+Varje order innehåller:
+{
+  "id": 1,
+  "orderNumber": "WO-2026-0451",
+  "status": "planned",           // planned | en_route | in_progress | completed | deferred | cancelled
+  "customerName": "Göteborgs Stad",
+  "address": "Storgatan 15",
+  "city": "Göteborg",
+  "postalCode": "411 38",
+  "latitude": 57.7089,
+  "longitude": 11.9746,
+  "contactName": "Anna Karlsson",
+  "contactPhone": "+46701234567",
+  "scheduledDate": "2026-02-22",
+  "scheduledTimeStart": "08:00",
+  "scheduledTimeEnd": "09:30",
+  "description": "Tömning av kärl - Hushållsavfall",
+  "priority": "normal",          // normal | high | urgent
+  "estimatedDuration": 30,       // minuter
+  "wasteType": "Hushållsavfall",
+  "containerType": "Kärl 370L",
+  "containerCount": 4,
+  "what3words": "///fokus.handel.energi",
+  "executionCodes": [
+    { "id": 1, "code": "TÖM", "name": "Tömning" }
+  ],
+  "dependencies": [
+    { "orderId": 2, "orderNumber": "WO-2026-0452", "status": "planned", "type": "must_complete_first" }
+  ],
+  "timeRestrictions": {
+    "earliestPickup": "07:00",
+    "latestPickup": "10:00",
+    "earliestDelivery": null,
+    "latestDelivery": null
+  },
+  "subSteps": [
+    { "id": "s1", "label": "Kontrollera kärl", "completed": false },
+    { "id": "s2", "label": "Tömning", "completed": false }
+  ],
+  "orderNotes": [
+    { "id": "n1", "text": "Port kod: 1234", "createdAt": "2026-02-22T07:30:00Z", "author": "Planerare" }
+  ]
+}
+GET /api/mobile/orders/:id — Hämta enskild order
+
+PATCH /api/mobile/orders/:id/status
+
+Body: { status: "in_progress" }
+Statusflöde: planned → en_route → in_progress → completed (eller deferred/cancelled)
+PATCH /api/mobile/orders/:id/substeps/:stepId
+
+Body: { completed: true }
+POST /api/mobile/orders/:id/notes
+
+Body: { text: "Kund ej hemma, lämnat vid grind" }
+Avvikelser
+POST /api/mobile/orders/:id/deviations
+
+Body:
+{
+  "type": "blocked_access",      // blocked_access | damaged_container | wrong_waste | overloaded | other
+  "description": "Bil blockerar infart",
+  "latitude": 57.7089,
+  "longitude": 11.9746,
+  "photos": ["base64..."]        // valfritt
+}
+Materialloggning
+POST /api/mobile/orders/:id/materials
+
+Body:
+{
+  "articleId": 1,
+  "articleNumber": "ART-001",
+  "articleName": "Extrasäck 160L",
+  "quantity": 2
+}
+GET /api/mobile/articles?search=säck
+
+Returnerar artiklar för autocomplete: [{ id, articleNumber, name, unit, category }]
+Signatur
+POST /api/mobile/orders/:id/signature
+
+Body: { signature: "base64-png-data" }
+Inspektioner
+POST /api/mobile/orders/:id/inspections
+
+Body:
+{
+  "inspections": [
+    {
+      "category": "Tillgänglighet",    // Tillgänglighet | Kärl/Behållare | Miljö | Säkerhet | Renlighet | Övrigt
+      "status": "ok",                   // ok | warning | error
+      "issues": ["Skymd skyltning"],    // fördefinierade problem
+      "comment": "Fritext kommentar"
+    }
+  ]
+}
+GPS-positionering
+POST /api/mobile/gps
+
+Body:
+{
+  "driverId": 1,
+  "driverName": "Erik Lindqvist",
+  "vehicleRegNo": "ABC 123",
+  "latitude": 57.7089,
+  "longitude": 11.9746,
+  "speed": 45.2,
+  "heading": 180,
+  "accuracy": 10,
+  "currentOrderId": 1,
+  "currentOrderNumber": "WO-2026-0451"
+}
+Appen skickar GPS-position kontinuerligt under körning
+Positionen lagras i driver_locations-tabell (UPSERT på driver_id)
+Planerarvy (webbaserad)
+GET /api/planner/drivers/locations
+
+Returnerar alla chaufförers senaste positioner (senaste 24h)
+Svar: [{ driverId, driverName, vehicleRegNo, latitude, longitude, speed, heading, status, currentOrderId, currentOrderNumber, updatedAt }]
+GET /api/planner/orders?range=today|week
+
+Returnerar ordrar med koordinater för kartvisning
+Filtreras på range: "today" (dagens ordrar) eller "week" (veckans ordrar)
+Svar: samma orderformat som ovan men med fokus på kartrelevanta fält
+GET /planner/map
+
+Webbsida med Leaflet/OpenStreetMap som visar:
+Chaufförers realtidspositioner (cirkulära markörer)
+Jobbmarkörer (fyrkantiga, färgkodade efter status)
+Filterknappar: Idag / Denna vecka / Dölj jobb
+Klustrade markörer vid hög densitet
+Popup med orderdetaljer vid klick
+Väder
+GET /api/mobile/weather
+
+Returnerar väderdata för arbetsområdet (Open-Meteo API)
+Daglig sammanfattning
+GET /api/mobile/summary
+
+Returnerar: { totalOrders, completedOrders, remainingOrders, totalDuration }
+AI-funktioner
+POST /api/mobile/ai/chat
+
+Body: { message: "Hur hanterar jag farligt avfall?", context: { orderNumber, customerName } }
+Svar: { response: "..." } (GPT-svar på svenska)
+POST /api/mobile/ai/transcribe
+
+Body: { audio: "base64-audio-data" }
+Svar: { text: "transkriberad text" }
+POST /api/mobile/ai/analyze-image
+
+Body: { image: "base64-image", context: "Avvikelserapport" }
+Svar: { category, description, severity }
+Statuskoder och färger
+Status	Kod	Färg
+Planerad	planned	#8E44AD (lila)
+På väg	en_route	#F39C12 (orange)
+Pågår	in_progress	#27AE60 (grön)
+Klar	completed	#1B8553 (mörkgrön)
+Uppskjuten	deferred	#E74C3C (röd)
+Inställd	cancelled	#95A5A6 (grå)
+Utförandekoder
+TÖM — Tömning
+HÄMT — Hämtning
+FARL — Farligt avfall
