@@ -104,7 +104,6 @@ const avanceratItems = [
   { title: "Arbetsflödesguide", url: "/workflow-guide", icon: BookOpen, description: "Hur systemet används" },
   { title: "Datakrav för import", url: "/data-requirements", icon: FileText, description: "Specifikation för Kinab" },
   { title: "Investerarpresentation", url: "/investor-pitch", icon: Presentation, description: "Pitch deck för investerare" },
-  { title: "Lundstams ROI", url: "/lundstams-roi", icon: TrendingUp, description: "ROI-analys för Lundstams" },
   { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
   { title: "AI-optimering", url: "/optimization", icon: Sparkles, description: "Automatisk optimering" },
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
