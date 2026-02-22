@@ -43,6 +43,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **KPI Dashboard on Map:** Real-time daily KPI overlay (completed/remaining tasks, average time, completion rate) on the historical map view.
 - **Automatic Weekly Reports:** Scheduled Friday email reports via Resend with weekly KPIs, trend comparisons, and per-tenant summaries.
 - **API Cost Monitoring Dashboard:** Admin-only dashboard for real-time monitoring of external API costs.
+- **Reporting & KPI Dashboard:** Enhanced `/reporting` page with 7 tabs (Översikt, Produktivitet, Slutförda, Avvikelser, Resurser, Områden, Kunder). Includes Recharts diagrams for productivity trends (planned vs actual time, efficiency), completion analysis (cumulative rate, per-priority, per-resource), and deviation statistics (trend, category distribution, severity pie, status breakdown, recent list). Deviation data fetched from `/api/deviation-reports`.
 - **Execution Codes:** Many-to-many system mapping resource capabilities to task requirements, enforced by auto-planning.
 - **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner visualization.
