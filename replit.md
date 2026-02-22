@@ -4,6 +4,7 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-02-22: Kinab Core Concept integration: new status workflow (planned→dispatched→on_site→in_progress→completed/failed), /my-orders endpoint, resource-based auth (POST login returns {success, token, resource}), POST /logout, GET /me, notifications API, offline sync POST /sync, template-based checklists GET /orders/:id/checklist, presigned photo URLs, /position GPS endpoint, enriched orders with object/customer data
 - 2026-02-22: Added job markers on planner map with color-coded status, filter buttons (Idag/Denna vecka/Dölj jobb), cluster grouping, detailed popups with order info; GET /api/planner/orders endpoint with range=today|week
 - 2026-02-22: Added planner map view (/planner/map) with Leaflet/OpenStreetMap showing real-time driver GPS positions; driver_locations table in PostgreSQL; auto-refresh every 15s; sidebar with driver list
 - 2026-02-22: Switched from expo export (.hbc) to Metro-fetched JS bundles for Expo Go compatibility; manifest protocol v0; QR code uses exps:// for HTTPS; bundles in dist-metro/
@@ -80,20 +81,30 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 ```
 
 ### API Endpoints (port 5000)
-- `POST /api/mobile/login` - Driver authentication (supports `{pin}` or `{username, password}`)
-- `GET /api/mobile/orders` - Get today's orders (includes dependencies, executionCodes, timeRestrictions, subSteps, orderNotes)
+- `POST /api/mobile/login` - Driver authentication (supports `{pin}` or `{username, password}`), returns `{success, token, resource}`
+- `POST /api/mobile/logout` - End session
+- `GET /api/mobile/me` - Validate token, returns `{success, resource}`
+- `GET /api/mobile/my-orders?date=` - Get orders for date (default today), enriched with object/customer data
 - `GET /api/mobile/orders/:id` - Get single order
-- `PATCH /api/mobile/orders/:id/status` - Update order status
+- `GET /api/mobile/orders/:id/checklist` - Get template-based checklist for order
+- `PATCH /api/mobile/orders/:id/status` - Update order status (planned→dispatched→on_site→in_progress→completed/failed)
 - `POST /api/mobile/orders/:id/deviations` - Report deviation
 - `POST /api/mobile/orders/:id/materials` - Log material usage
 - `POST /api/mobile/orders/:id/signature` - Save signature
 - `POST /api/mobile/orders/:id/notes` - Add order note `{text}`
 - `PATCH /api/mobile/orders/:id/substeps/:stepId` - Toggle sub-step `{completed}`
 - `POST /api/mobile/orders/:id/inspections` - Save inspection results `{inspections[]}`
+- `POST /api/mobile/orders/:id/upload-photo` - Get presigned URL for photo upload
+- `POST /api/mobile/orders/:id/confirm-photo` - Confirm uploaded photo
+- `GET /api/mobile/notifications` - Get notifications
+- `PATCH /api/mobile/notifications/:id/read` - Mark notification as read
+- `PATCH /api/mobile/notifications/read-all` - Mark all notifications read
+- `POST /api/mobile/sync` - Offline sync batch `{actions[]}`
+- `POST /api/mobile/position` - Submit GPS position (resource-based)
 - `GET /api/mobile/articles?search=` - Search articles
-- `POST /api/mobile/gps` - Submit GPS position
+- `POST /api/mobile/gps` - Submit GPS position (legacy)
 - `GET /api/mobile/weather` - Get weather (Open-Meteo API)
-- `GET /api/mobile/summary` - Get daily summary
+- `GET /api/mobile/summary` - Get daily summary (totalOrders, completedOrders, remainingOrders, failedOrders, totalDuration)
 - `POST /api/mobile/ai/chat` - AI chat `{message, context?}` (GPT-5.2)
 - `POST /api/mobile/ai/transcribe` - Voice transcription `{audio: base64}` (gpt-4o-mini-transcribe)
 - `POST /api/mobile/ai/analyze-image` - AI image analysis `{image: base64, context?}` (GPT-5.2 vision)
