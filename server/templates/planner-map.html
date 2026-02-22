@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Driver Core - Chaufförskarta</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #F8F9FA; }
+    
+    .header {
+      background: #1B4F72;
+      color: white;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 1000;
+      height: 56px;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .header h1 {
+      font-size: 18px;
+      font-weight: 600;
+    }
+    .header-subtitle {
+      font-size: 13px;
+      opacity: 0.8;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .status-indicator {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      background: rgba(255,255,255,0.15);
+      padding: 6px 12px;
+      border-radius: 20px;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #2ECC71;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+    .driver-count {
+      font-weight: 600;
+      font-size: 14px;
+      background: rgba(255,255,255,0.2);
+      padding: 6px 14px;
+      border-radius: 20px;
+    }
+    .back-link {
+      color: white;
+      text-decoration: none;
+      font-size: 13px;
+      opacity: 0.8;
+      transition: opacity 0.2s;
+    }
+    .back-link:hover { opacity: 1; }
+
+    #map {
+      position: fixed;
+      top: 56px;
+      left: 0;
+      right: 0;
+      bottom: 0;
+    }
+
+    .sidebar {
+      position: fixed;
+      top: 56px;
+      right: 0;
+      bottom: 0;
+      width: 320px;
+      background: white;
+      border-left: 1px solid #E5E7EB;
+      z-index: 999;
+      overflow-y: auto;
+      transition: transform 0.3s ease;
+    }
+    .sidebar.collapsed {
+      transform: translateX(320px);
+    }
+    .sidebar-toggle {
+      position: fixed;
+      right: 320px;
+      top: 72px;
+      z-index: 1000;
+      background: white;
+      border: 1px solid #E5E7EB;
+      border-right: none;
+      border-radius: 8px 0 0 8px;
+      padding: 8px 6px;
+      cursor: pointer;
+      font-size: 18px;
+      transition: right 0.3s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 40px;
+    }
+    .sidebar-toggle.collapsed {
+      right: 0;
+    }
+    .sidebar-header {
+      padding: 16px;
+      border-bottom: 1px solid #F3F4F6;
+      font-weight: 600;
+      font-size: 15px;
+      color: #1B4F72;
+    }
+    .driver-list-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      border-bottom: 1px solid #F9FAFB;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .driver-list-item:hover {
+      background: #F0F9FF;
+    }
+    .driver-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      color: white;
+      flex-shrink: 0;
+    }
+    .driver-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .driver-info-name {
+      font-weight: 600;
+      font-size: 14px;
+      color: #1C2833;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .driver-info-detail {
+      font-size: 12px;
+      color: #7F8C8D;
+      margin-top: 2px;
+    }
+    .driver-status-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 12px;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .driver-status-active {
+      background: #EAFAF1;
+      color: #27AE60;
+    }
+    .driver-status-idle {
+      background: #FEF9E7;
+      color: #F39C12;
+    }
+    .driver-status-offline {
+      background: #F2F3F4;
+      color: #95A5A6;
+    }
+
+    .leaflet-popup-content-wrapper {
+      border-radius: 12px;
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    }
+    .leaflet-popup-content {
+      margin: 0;
+      min-width: 220px;
+    }
+    .popup-card {
+      padding: 16px;
+    }
+    .popup-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .popup-avatar {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 16px;
+      color: white;
+    }
+    .popup-name {
+      font-weight: 700;
+      font-size: 15px;
+      color: #1C2833;
+    }
+    .popup-vehicle {
+      font-size: 12px;
+      color: #7F8C8D;
+      margin-top: 2px;
+    }
+    .popup-details {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .popup-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #5D6D7E;
+    }
+    .popup-row svg {
+      flex-shrink: 0;
+      color: #95A5A6;
+    }
+    .popup-order {
+      background: #F0F9FF;
+      border-radius: 8px;
+      padding: 8px 10px;
+      margin-top: 4px;
+    }
+    .popup-order-label {
+      font-size: 11px;
+      color: #7F8C8D;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .popup-order-number {
+      font-weight: 600;
+      font-size: 14px;
+      color: #1B4F72;
+      margin-top: 2px;
+    }
+    .popup-time {
+      font-size: 11px;
+      color: #95A5A6;
+      margin-top: 8px;
+      text-align: right;
+    }
+
+    .no-drivers {
+      padding: 40px 20px;
+      text-align: center;
+      color: #95A5A6;
+    }
+    .no-drivers-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+
+    @media (max-width: 768px) {
+      .sidebar { width: 280px; }
+      .sidebar-toggle { right: 280px; }
+      .sidebar-toggle.collapsed { right: 0; }
+      .header h1 { font-size: 16px; }
+      .header-subtitle { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="header-left">
+      <a href="/" class="back-link">&larr; Tillbaka</a>
+      <div>
+        <h1>Chaufforskarta</h1>
+        <div class="header-subtitle">Realtidspositioner - Kinab Core Concept</div>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="status-indicator">
+        <span class="status-dot"></span>
+        <span id="update-text">Uppdateras...</span>
+      </div>
+      <div class="driver-count" id="driver-count">0 chaufförer</div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <button class="sidebar-toggle" id="sidebar-toggle" title="Visa/dölj lista">&lsaquo;</button>
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-header">Aktiva chaufförer</div>
+    <div id="driver-list"></div>
+  </div>
+
+  <script>
+    var map = L.map('map', {
+      zoomControl: true,
+      attributionControl: true,
+    }).setView([57.7089, 11.9746], 12);
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors',
+      maxZoom: 19,
+    }).addTo(map);
+
+    var markers = {};
+    var driverData = [];
+    var sidebarCollapsed = false;
+
+    var avatarColors = ['#1B4F72', '#17A589', '#E74C3C', '#8E44AD', '#F39C12', '#2ECC71', '#3498DB', '#E67E22'];
+
+    function getColor(index) {
+      return avatarColors[index % avatarColors.length];
+    }
+
+    function getInitials(name) {
+      return name.split(' ').map(function(w) { return w[0]; }).join('').substring(0, 2).toUpperCase();
+    }
+
+    function timeAgo(dateStr) {
+      var now = new Date();
+      var then = new Date(dateStr);
+      var diffMs = now - then;
+      var diffSec = Math.floor(diffMs / 1000);
+      if (diffSec < 60) return 'Just nu';
+      var diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) return diffMin + ' min sedan';
+      var diffH = Math.floor(diffMin / 60);
+      if (diffH < 24) return diffH + ' tim sedan';
+      return Math.floor(diffH / 24) + ' dagar sedan';
+    }
+
+    function createDriverIcon(name, color, status) {
+      var opacity = status === 'active' ? 1 : 0.6;
+      var borderColor = status === 'active' ? '#2ECC71' : (status === 'idle' ? '#F39C12' : '#95A5A6');
+      var html = '<div style="' +
+        'width:40px;height:40px;border-radius:50%;' +
+        'background:' + color + ';' +
+        'color:white;font-weight:700;font-size:14px;' +
+        'display:flex;align-items:center;justify-content:center;' +
+        'border:3px solid ' + borderColor + ';' +
+        'box-shadow:0 2px 8px rgba(0,0,0,0.3);' +
+        'opacity:' + opacity + ';' +
+        'font-family:Inter,system-ui,sans-serif;' +
+        '">' + getInitials(name) + '</div>';
+      return L.divIcon({
+        html: html,
+        className: '',
+        iconSize: [40, 40],
+        iconAnchor: [20, 20],
+        popupAnchor: [0, -24],
+      });
+    }
+
+    function createPopupContent(driver, color) {
+      var speedText = driver.speed > 0 ? Math.round(driver.speed) + ' km/h' : 'Stillastående';
+      var orderHtml = driver.currentOrderNumber
+        ? '<div class="popup-order"><div class="popup-order-label">Aktivt uppdrag</div><div class="popup-order-number">' + driver.currentOrderNumber + '</div></div>'
+        : '<div class="popup-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Inget aktivt uppdrag</div>';
+      
+      return '<div class="popup-card">' +
+        '<div class="popup-header">' +
+          '<div class="popup-avatar" style="background:' + color + '">' + getInitials(driver.driverName) + '</div>' +
+          '<div><div class="popup-name">' + driver.driverName + '</div>' +
+          '<div class="popup-vehicle">' + (driver.vehicleRegNo || '') + '</div></div>' +
+        '</div>' +
+        '<div class="popup-details">' +
+          '<div class="popup-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg> ' + speedText + '</div>' +
+          '<div class="popup-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg> ' + driver.latitude.toFixed(5) + ', ' + driver.longitude.toFixed(5) + '</div>' +
+          orderHtml +
+        '</div>' +
+        '<div class="popup-time">Senast uppdaterad: ' + timeAgo(driver.updatedAt) + '</div>' +
+      '</div>';
+    }
+
+    function updateDriverList(drivers) {
+      var listEl = document.getElementById('driver-list');
+      if (drivers.length === 0) {
+        listEl.innerHTML = '<div class="no-drivers"><div class="no-drivers-icon">&#x1F4CD;</div><p>Inga aktiva chaufförer</p></div>';
+        return;
+      }
+      var html = '';
+      drivers.forEach(function(driver, i) {
+        var color = getColor(i);
+        var statusClass = driver.status === 'active' ? 'driver-status-active' : (driver.status === 'idle' ? 'driver-status-idle' : 'driver-status-offline');
+        var statusLabel = driver.status === 'active' ? 'Aktiv' : (driver.status === 'idle' ? 'Vilande' : 'Offline');
+        var detail = driver.currentOrderNumber || (driver.vehicleRegNo || 'Inget uppdrag');
+        html += '<div class="driver-list-item" onclick="focusDriver(' + i + ')">' +
+          '<div class="driver-avatar" style="background:' + color + '">' + getInitials(driver.driverName) + '</div>' +
+          '<div class="driver-info">' +
+            '<div class="driver-info-name">' + driver.driverName + '</div>' +
+            '<div class="driver-info-detail">' + detail + ' &middot; ' + timeAgo(driver.updatedAt) + '</div>' +
+          '</div>' +
+          '<span class="driver-status-badge ' + statusClass + '">' + statusLabel + '</span>' +
+        '</div>';
+      });
+      listEl.innerHTML = html;
+    }
+
+    function focusDriver(index) {
+      var driver = driverData[index];
+      if (driver) {
+        map.setView([driver.latitude, driver.longitude], 15, { animate: true });
+        var markerId = 'driver-' + driver.driverId;
+        if (markers[markerId]) {
+          markers[markerId].openPopup();
+        }
+      }
+    }
+
+    function fetchDriverLocations() {
+      fetch('/api/planner/drivers/locations')
+        .then(function(r) { return r.json(); })
+        .then(function(drivers) {
+          driverData = drivers;
+          document.getElementById('driver-count').textContent = drivers.length + ' chaufför' + (drivers.length !== 1 ? 'er' : '');
+          document.getElementById('update-text').textContent = 'Uppdaterad ' + new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+          var activeIds = {};
+          drivers.forEach(function(driver, i) {
+            var markerId = 'driver-' + driver.driverId;
+            activeIds[markerId] = true;
+            var color = getColor(i);
+            var icon = createDriverIcon(driver.driverName, color, driver.status);
+            var popupContent = createPopupContent(driver, color);
+
+            if (markers[markerId]) {
+              markers[markerId].setLatLng([driver.latitude, driver.longitude]);
+              markers[markerId].setIcon(icon);
+              markers[markerId].getPopup().setContent(popupContent);
+            } else {
+              markers[markerId] = L.marker([driver.latitude, driver.longitude], { icon: icon })
+                .bindPopup(popupContent, { maxWidth: 280 })
+                .addTo(map);
+            }
+          });
+
+          Object.keys(markers).forEach(function(id) {
+            if (!activeIds[id]) {
+              map.removeLayer(markers[id]);
+              delete markers[id];
+            }
+          });
+
+          updateDriverList(drivers);
+        })
+        .catch(function(err) {
+          console.error('Error fetching locations:', err);
+          document.getElementById('update-text').textContent = 'Uppdatering misslyckades';
+        });
+    }
+
+    document.getElementById('sidebar-toggle').addEventListener('click', function() {
+      sidebarCollapsed = !sidebarCollapsed;
+      document.getElementById('sidebar').classList.toggle('collapsed', sidebarCollapsed);
+      this.classList.toggle('collapsed', sidebarCollapsed);
+      this.innerHTML = sidebarCollapsed ? '&rsaquo;' : '&lsaquo;';
+      setTimeout(function() { map.invalidateSize(); }, 350);
+    });
+
+    fetchDriverLocations();
+    setInterval(fetchDriverLocations, 15000);
+
+    window.addEventListener('resize', function() {
+      if (!sidebarCollapsed && window.innerWidth <= 768) {
+        var mapEl = document.getElementById('map');
+      }
+    });
+  </script>
+</body>
+</html>
