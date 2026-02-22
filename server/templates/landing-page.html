@@ -37,11 +37,6 @@
     <div class="expo-section">
       <h2>Öppna i Expo Go</h2>
 
-      <div class="platform-tabs">
-        <button class="platform-tab active" onclick="setPlatform('ios')">iPhone</button>
-        <button class="platform-tab" onclick="setPlatform('android')">Android</button>
-      </div>
-
       <img id="qr-img" alt="QR-kod" style="width:220px;height:220px" />
 
       <a id="expo-link" class="expo-link" href="#">Öppna appen</a>
@@ -61,24 +56,9 @@
   </div>
 
   <script>
-    var currentPlatform = 'ios';
-
-    function getExpoUrl(platform) {
-      var host = window.location.host;
-      return 'exps://' + host + '/manifest/' + platform;
-    }
-
-    function setPlatform(platform) {
-      currentPlatform = platform;
-      document.querySelectorAll('.platform-tab').forEach(function(tab) {
-        tab.classList.remove('active');
-      });
-      event.target.classList.add('active');
-      updateLinks();
-    }
-
     function updateLinks() {
-      var url = getExpoUrl(currentPlatform);
+      var host = window.location.host;
+      var url = 'exp://' + host;
       var linkEl = document.getElementById('expo-link');
       var urlEl = document.getElementById('url-display');
       var qrImg = document.getElementById('qr-img');
@@ -87,7 +67,7 @@
       if (urlEl) urlEl.textContent = url;
 
       if (qrImg) {
-        qrImg.src = '/api/qrcode/' + currentPlatform;
+        qrImg.src = '/api/qrcode';
       }
     }
 
