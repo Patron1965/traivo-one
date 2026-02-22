@@ -19,24 +19,8 @@ app.get('/api/health', (_req, res) => {
 });
 
 const projectRoot = path.resolve(__dirname, '..');
-const exportDir = path.join(projectRoot, 'dist-export');
+const metroDir = path.join(projectRoot, 'dist-metro');
 const templatesDir = path.join(projectRoot, 'server', 'templates');
-
-interface AssetMeta { path: string; ext: string; }
-interface PlatformMeta { bundle: string; assets: AssetMeta[]; }
-interface ExportMetadata {
-  version: number;
-  bundler: string;
-  fileMetadata: { ios?: PlatformMeta; android?: PlatformMeta; };
-}
-
-let cachedMetadata: ExportMetadata | null = null;
-function getMetadata(): ExportMetadata {
-  if (!cachedMetadata) {
-    cachedMetadata = JSON.parse(fs.readFileSync(path.join(exportDir, 'metadata.json'), 'utf-8'));
-  }
-  return cachedMetadata!;
-}
 
 function getAppJson() {
   return JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf-8'));
@@ -66,11 +50,7 @@ function buildManifest(platform: 'ios' | 'android', req: express.Request) {
   const sdkVersion = getExpoSdkVersion();
   const sdkMajor = sdkVersion.split('.')[0] + '.0.0';
 
-  const metadata = getMetadata();
-  const platformMeta = metadata.fileMetadata[platform];
-  const bundleUrl = platformMeta
-    ? `${hostUrl}/${platformMeta.bundle}`
-    : `${hostUrl}/_expo/static/js/${platform}/index.hbc`;
+  const bundleUrl = `${hostUrl}/bundles/${platform}/index.bundle`;
 
   return {
     id: crypto.randomUUID(),
@@ -112,7 +92,7 @@ function buildManifest(platform: 'ios' | 'android', req: express.Request) {
         packagerOpts: {
           dev: false,
         },
-        mainModuleName: 'index.ts',
+        mainModuleName: 'index',
       },
       scopeKey: `@anonymous/${expo.slug}`,
     },
@@ -136,16 +116,21 @@ app.get('/manifest/:platform', (req, res) => {
   serveManifest(platform, req, res);
 });
 
-app.use('/_expo', express.static(path.join(exportDir, '_expo'), {
-  setHeaders: (res, filePath) => {
-    if (filePath.endsWith('.hbc')) {
-      res.setHeader('Content-Type', 'application/javascript');
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
-  },
-}));
+app.get('/bundles/:platform/index.bundle', (req, res) => {
+  const platform = req.params.platform;
+  if (platform !== 'ios' && platform !== 'android') {
+    return res.status(404).send('Invalid platform');
+  }
+  const bundlePath = path.join(metroDir, platform, 'index.bundle');
+  if (!fs.existsSync(bundlePath)) {
+    return res.status(404).send('Bundle not found. Run: bash scripts/build.sh');
+  }
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.sendFile(bundlePath);
+});
 
-app.use('/assets', express.static(path.join(exportDir, 'assets'), {
+app.use('/assets', express.static(path.join(projectRoot, 'assets'), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith('.ttf')) {
       res.setHeader('Content-Type', 'font/ttf');
@@ -155,8 +140,6 @@ app.use('/assets', express.static(path.join(exportDir, 'assets'), {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   },
 }));
-
-app.use('/assets', express.static(path.join(projectRoot, 'assets')));
 
 app.get('/api/qrcode', async (req, res) => {
   const host = getHostUri(req);
@@ -212,12 +195,14 @@ app.get('/', (req, res) => {
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Driver Core API running on port ${PORT}`);
-  try {
-    const metadata = getMetadata();
-    const hasIos = !!metadata.fileMetadata.ios;
-    const hasAndroid = !!metadata.fileMetadata.android;
-    console.log(`Hermes bundles: iOS=${hasIos}, Android=${hasAndroid}`);
-    if (hasIos) console.log(`  iOS: ${metadata.fileMetadata.ios!.bundle} (${(fs.statSync(path.join(exportDir, metadata.fileMetadata.ios!.bundle)).size / 1024 / 1024).toFixed(1)} MB)`);
-    if (hasAndroid) console.log(`  Android: ${metadata.fileMetadata.android!.bundle} (${(fs.statSync(path.join(exportDir, metadata.fileMetadata.android!.bundle)).size / 1024 / 1024).toFixed(1)} MB)`);
-  } catch { console.log('Warning: No export metadata found. Run: bash scripts/build.sh'); }
+  const iosBundle = path.join(metroDir, 'ios', 'index.bundle');
+  const androidBundle = path.join(metroDir, 'android', 'index.bundle');
+  const hasIos = fs.existsSync(iosBundle);
+  const hasAndroid = fs.existsSync(androidBundle);
+  console.log(`Metro JS bundles: iOS=${hasIos}, Android=${hasAndroid}`);
+  if (hasIos) console.log(`  iOS: ${(fs.statSync(iosBundle).size / 1024 / 1024).toFixed(1)} MB`);
+  if (hasAndroid) console.log(`  Android: ${(fs.statSync(androidBundle).size / 1024 / 1024).toFixed(1)} MB`);
+  if (!hasIos || !hasAndroid) {
+    console.log('Warning: Bundles missing. Run: bash scripts/build.sh');
+  }
 });

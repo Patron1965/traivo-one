@@ -1,23 +1,34 @@
 #!/bin/bash
 set -e
 
-echo "Building Hermes bytecode bundles for Expo Go..."
+echo "Building Metro JS bundles for Expo Go..."
 
-EXPORT_DIR="dist-export"
-rm -rf "$EXPORT_DIR"
+METRO_URL="http://localhost:8081"
+OUTPUT_DIR="dist-metro"
 
-echo "Exporting iOS + Android bundles with Hermes bytecode..."
-npx expo export --platform all --output-dir "$EXPORT_DIR" --clear 2>&1
+if ! curl -s --max-time 5 "$METRO_URL/status" | grep -q "packager-status:running"; then
+  echo "Error: Metro dev server not running on port 8081. Start it first."
+  exit 1
+fi
+
+rm -rf "$OUTPUT_DIR"
+mkdir -p "$OUTPUT_DIR/ios" "$OUTPUT_DIR/android"
+
+echo "Fetching iOS bundle from Metro..."
+curl -s --max-time 180 "$METRO_URL/index.bundle?platform=ios&dev=false&minify=false&lazy=true" -o "$OUTPUT_DIR/ios/index.bundle"
+IOS_SIZE=$(wc -c < "$OUTPUT_DIR/ios/index.bundle")
+echo "  iOS bundle: $IOS_SIZE bytes"
+
+echo "Fetching Android bundle from Metro..."
+curl -s --max-time 180 "$METRO_URL/index.bundle?platform=android&dev=false&minify=false&lazy=true" -o "$OUTPUT_DIR/android/index.bundle"
+ANDROID_SIZE=$(wc -c < "$OUTPUT_DIR/android/index.bundle")
+echo "  Android bundle: $ANDROID_SIZE bytes"
+
+if [ "$IOS_SIZE" -lt 1000 ] || [ "$ANDROID_SIZE" -lt 1000 ]; then
+  echo "Error: Bundle sizes too small. Metro may have returned an error."
+  exit 1
+fi
 
 echo "Build complete!"
-cat "$EXPORT_DIR/metadata.json" | node -e "process.stdin.on('data', d => { const m = JSON.parse(d); Object.entries(m.fileMetadata).forEach(([k,v]) => console.log(k + ': ' + v.bundle + ' (' + v.assets.length + ' assets)')) })"
-
-echo "Compiling server TypeScript..."
-rm -rf server-dist
-npx tsc --outDir server-dist --esModuleInterop --resolveJsonModule --module commonjs --target es2020 --skipLibCheck --allowSyntheticDefaultImports --moduleResolution node server/app.ts 2>&1 || echo "TSC failed, will use tsx at runtime"
-if [ -f "server-dist/app.js" ]; then
-  echo "Server compiled to server-dist/"
-  ls -la server-dist/
-else
-  echo "Warning: Server compilation failed"
-fi
+echo "  iOS: $(echo "scale=1; $IOS_SIZE / 1048576" | bc) MB"
+echo "  Android: $(echo "scale=1; $ANDROID_SIZE / 1048576" | bc) MB"
