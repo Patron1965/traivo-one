@@ -122,10 +122,10 @@ export async function registerRoutes(
     }
   });
 
-  // Apply tenant middleware to all API routes EXCEPT portal routes
-  // Portal routes use their own token-based authentication
+  // Apply tenant middleware to all API routes EXCEPT portal, mobile, and planner routes
+  // Portal routes use token-based auth, mobile routes use Bearer token auth
   app.use("/api", (req, res, next) => {
-    if (req.path.startsWith("/portal")) {
+    if (req.path.startsWith("/portal") || req.path.startsWith("/mobile") || req.path.startsWith("/planner")) {
       return next();
     }
     return requireTenantWithFallback(req, res, next);
@@ -5083,45 +5083,59 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // Mobile login - authenticate with email and PIN
   app.post("/api/mobile/login", async (req, res) => {
     try {
-      const { email, pin } = req.body;
+      const { email, pin, username, password } = req.body;
       
-      if (!email || !pin) {
-        return res.status(400).json({ error: "Email and PIN required" });
-      }
-      
-      // Find resource by email
       const tenantId = getTenantIdWithFallback(req);
       const resources = await storage.getResources(tenantId);
-      const resource = resources.find(r => 
-        r.email?.toLowerCase() === email.toLowerCase() && r.status === 'active'
-      );
-      
+      let resource: any = null;
+
+      if (pin && !email && !username) {
+        resource = resources.find(r => r.pin === pin && r.status === 'active');
+      } else if (username && password) {
+        resource = resources.find(r =>
+          (r.email?.toLowerCase() === username.toLowerCase() || r.name?.toLowerCase() === username.toLowerCase()) && r.status === 'active'
+        );
+        if (resource && resource.pin && resource.pin !== password) {
+          resource = null;
+        }
+      } else if (email && pin) {
+        resource = resources.find(r =>
+          r.email?.toLowerCase() === email.toLowerCase() && r.status === 'active'
+        );
+        if (resource) {
+          if (resource.pin) {
+            if (resource.pin !== pin) resource = null;
+          } else {
+            if (pin.length < 4 || pin.length > 6) {
+              return res.status(401).json({ error: "PIN must be 4-6 digits" });
+            }
+          }
+        }
+      } else {
+        return res.status(400).json({ error: "PIN or username/password required" });
+      }
+
       if (!resource) {
         return res.status(401).json({ error: "Invalid credentials" });
       }
       
-      // Validate PIN against stored value
-      // If resource has no PIN set, allow any valid PIN for initial setup
-      if (resource.pin) {
-        if (resource.pin !== pin) {
-          return res.status(401).json({ error: "Invalid credentials" });
-        }
-      } else {
-        // No PIN set - require at least 4 digits for demo
-        if (pin.length < 4 || pin.length > 6) {
-          return res.status(401).json({ error: "PIN must be 4-6 digits" });
-        }
-      }
-      
-      // Generate token
       const token = generateMobileToken();
-      const expiresAt = Date.now() + (24 * 60 * 60 * 1000); // 24 hours
+      const expiresAt = Date.now() + (24 * 60 * 60 * 1000);
       
       mobileTokens.set(token, { resourceId: resource.id, expiresAt });
       
       console.log(`[mobile] Login successful for resource ${resource.name} (${resource.id})`);
       
       res.json({
+        token,
+        user: {
+          id: resource.id,
+          name: resource.name,
+          role: resource.resourceType || "driver",
+          resourceId: resource.id,
+          vehicleRegNo: "",
+          executionCodes: resource.executionCodes || [],
+        },
         success: true,
         resource: {
           id: resource.id,
@@ -5136,8 +5150,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           homeLatitude: resource.homeLatitude,
           homeLongitude: resource.homeLongitude,
           status: resource.status,
+          executionCodes: resource.executionCodes || [],
         },
-        token,
       });
     } catch (error) {
       console.error("Mobile login failed:", error);
@@ -5289,21 +5303,38 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       const updateData: any = {};
       
-      if (status === 'paborjad') {
-        // Use 'in_progress' status that the mobile app can recognize
+      if (status === 'paborjad' || status === 'in_progress') {
         updateData.status = 'in_progress';
         updateData.orderStatus = 'planerad_resurs';
-      } else if (status === 'utford') {
+        updateData.executionStatus = 'on_site';
+        updateData.onSiteAt = new Date();
+      } else if (status === 'en_route') {
+        updateData.status = 'in_progress';
+        updateData.executionStatus = 'on_way';
+        updateData.onWayAt = new Date();
+      } else if (status === 'planned') {
+        updateData.status = 'planned';
+        updateData.executionStatus = 'planned_fine';
+      } else if (status === 'utford' || status === 'completed') {
         updateData.status = 'completed';
         updateData.orderStatus = 'utford';
+        updateData.executionStatus = 'completed';
         updateData.completedAt = new Date();
-      } else if (status === 'ej_utford') {
+      } else if (status === 'ej_utford' || status === 'deferred') {
+        updateData.status = 'deferred';
+        updateData.orderStatus = 'skapad';
+        if (notes) {
+          updateData.notes = order.notes 
+            ? `${order.notes}\n\nUppskjuten: ${notes}` 
+            : `Uppskjuten: ${notes}`;
+        }
+      } else if (status === 'cancelled') {
         updateData.status = 'cancelled';
         updateData.orderStatus = 'skapad';
         if (notes) {
           updateData.notes = order.notes 
-            ? `${order.notes}\n\nEj utförd: ${notes}` 
-            : `Ej utförd: ${notes}`;
+            ? `${order.notes}\n\nInställd: ${notes}` 
+            : `Inställd: ${notes}`;
         }
       }
       
@@ -5394,7 +5425,760 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       res.status(500).json({ error: "Failed to update position" });
     }
   });
-  
+
+  // ============================================
+  // DRIVER CORE FIELD APP API - Extended Endpoints
+  // ============================================
+
+  async function enrichOrderForMobile(order: any, storage: any) {
+    const object = order.objectId ? await storage.getObject(order.objectId) : null;
+    const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
+
+    const [dependencies, lines, timeRestrictions] = await Promise.all([
+      storage.getTaskDependencies(order.id).catch(() => []),
+      storage.getWorkOrderLines(order.id).catch(() => []),
+      order.objectId ? storage.getObjectTimeRestrictions(order.objectId).catch(() => []) : Promise.resolve([]),
+    ]);
+
+    const depDetails = await Promise.all(
+      dependencies.map(async (dep: any) => {
+        const depOrder = await storage.getWorkOrder(dep.dependsOnWorkOrderId).catch(() => null);
+        return {
+          orderId: dep.dependsOnWorkOrderId,
+          orderNumber: depOrder?.title || dep.dependsOnWorkOrderId,
+          status: depOrder?.status || "unknown",
+          type: dep.dependencyType === "sequential" ? "must_complete_first" : dep.dependencyType,
+        };
+      })
+    );
+
+    const enrichedLines = await Promise.all(
+      lines.map(async (line: any) => {
+        const article = await storage.getArticle(line.articleId).catch(() => null);
+        return {
+          id: line.id,
+          articleId: line.articleId,
+          articleNumber: article?.articleNumber || "",
+          articleName: article?.name || "",
+          quantity: line.quantity,
+          completed: false,
+        };
+      })
+    );
+
+    const metadata: any = order.metadata || {};
+    const completedSubSteps: string[] = metadata.completedSubSteps || [];
+
+    const structuralArticles = order.structuralArticleId
+      ? await storage.getStructuralArticlesByParent(order.structuralArticleId).catch(() => [])
+      : [];
+    const subSteps = structuralArticles.map((sa: any, idx: number) => ({
+      id: sa.id,
+      label: sa.stepLabel || `Steg ${idx + 1}`,
+      completed: completedSubSteps.includes(sa.id),
+    }));
+
+    const noteParts = order.notes
+      ? order.notes.split("\n").filter((n: string) => n.trim()).map((n: string, idx: number) => ({
+          id: `n${idx + 1}`,
+          text: n.trim(),
+          createdAt: order.createdAt,
+          author: "System",
+        }))
+      : [];
+
+    const restrictions = timeRestrictions.length > 0
+      ? {
+          earliestPickup: timeRestrictions.find((r: any) => r.startTime)?.startTime || null,
+          latestPickup: timeRestrictions.find((r: any) => r.endTime)?.endTime || null,
+          earliestDelivery: null,
+          latestDelivery: null,
+        }
+      : null;
+
+    const executionCodes = order.executionCode
+      ? [{ id: order.executionCode, code: (order.executionCode as string).toUpperCase().substring(0, 4), name: order.executionCode }]
+      : [];
+
+    return {
+      id: order.id,
+      orderNumber: order.title || `WO-${order.id.substring(0, 8)}`,
+      status: order.status,
+      executionStatus: order.executionStatus,
+      customerName: customer?.name || "",
+      address: object?.address || "",
+      city: object?.city || "",
+      postalCode: object?.postalCode || "",
+      latitude: object?.latitude || order.taskLatitude,
+      longitude: object?.longitude || order.taskLongitude,
+      contactName: customer?.contactPerson || customer?.name || "",
+      contactPhone: customer?.phone || "",
+      scheduledDate: order.scheduledDate,
+      scheduledTimeStart: order.scheduledStartTime || null,
+      scheduledTimeEnd: order.plannedWindowEnd || null,
+      description: order.description || "",
+      priority: order.priority || "normal",
+      estimatedDuration: order.estimatedDuration || 60,
+      wasteType: object?.objectType || "",
+      containerType: object?.name || "",
+      containerCount: object?.containerCount || 0,
+      what3words: order.what3words || "",
+      executionCodes,
+      dependencies: depDetails,
+      timeRestrictions: restrictions,
+      subSteps: subSteps.length > 0 ? subSteps : enrichedLines.map((l: any) => ({
+        id: l.id,
+        label: l.articleName || `Artikel ${l.articleNumber}`,
+        completed: completedSubSteps.includes(l.id),
+      })),
+      orderNotes: noteParts,
+      objectId: order.objectId,
+      customerId: order.customerId,
+      resourceId: order.resourceId,
+      notes: order.notes,
+    };
+  }
+
+  app.get("/api/mobile/orders", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resource not found" });
+
+      const tenantId = resource.tenantId;
+      const allOrders = await storage.getWorkOrders(tenantId);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const orders = allOrders.filter(o => {
+        if (o.resourceId !== resourceId) return false;
+        if (!o.scheduledDate) return false;
+        const d = new Date(o.scheduledDate);
+        return d >= today && d < tomorrow;
+      });
+
+      orders.sort((a, b) => {
+        if (!a.scheduledStartTime && !b.scheduledStartTime) return 0;
+        if (!a.scheduledStartTime) return 1;
+        if (!b.scheduledStartTime) return -1;
+        return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
+      });
+
+      const enriched = await Promise.all(orders.map(o => enrichOrderForMobile(o, storage)));
+      res.json(enriched);
+    } catch (error) {
+      console.error("Failed to get mobile orders:", error);
+      res.status(500).json({ error: "Failed to get orders" });
+    }
+  });
+
+  app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const { id: orderId, stepId } = req.params;
+      const resourceId = req.mobileResourceId;
+      const { completed } = req.body;
+
+      const order = await storage.getWorkOrder(orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.resourceId !== resourceId) return res.status(403).json({ error: "Not authorized" });
+
+      const metadata: any = order.metadata || {};
+      if (!metadata.completedSubSteps) metadata.completedSubSteps = [];
+      if (completed && !metadata.completedSubSteps.includes(stepId)) {
+        metadata.completedSubSteps.push(stepId);
+      } else if (!completed) {
+        metadata.completedSubSteps = metadata.completedSubSteps.filter((s: string) => s !== stepId);
+      }
+
+      await storage.updateWorkOrder(orderId, { metadata });
+      res.json({ success: true, stepId, completed });
+    } catch (error) {
+      console.error("Failed to update substep:", error);
+      res.status(500).json({ error: "Failed to update substep" });
+    }
+  });
+
+  app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+      const { type, description, latitude, longitude, photos } = req.body;
+
+      const order = await storage.getWorkOrder(orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.resourceId !== resourceId) return res.status(403).json({ error: "Not authorized" });
+
+      const resource = await storage.getResource(resourceId);
+
+      const DEVIATION_TYPE_MAP: Record<string, string> = {
+        blocked_access: "Blockerad åtkomst",
+        damaged_container: "Skadat kärl",
+        wrong_waste: "Felaktigt avfall",
+        overloaded: "Överlastat",
+        other: "Övrigt",
+      };
+
+      const deviation = await storage.createDeviationReport({
+        tenantId: order.tenantId,
+        workOrderId: orderId,
+        objectId: order.objectId,
+        category: type || "other",
+        title: DEVIATION_TYPE_MAP[type] || type || "Avvikelse",
+        description: description || "",
+        severityLevel: "medium",
+        reportedByName: resource?.name || "Fältarbetare",
+        latitude: latitude || null,
+        longitude: longitude || null,
+        photos: photos || [],
+        status: "reported",
+      });
+
+      console.log(`[mobile] Deviation reported for order ${orderId} by resource ${resourceId}`);
+      res.json({ success: true, deviation });
+    } catch (error) {
+      console.error("Failed to create deviation:", error);
+      res.status(500).json({ error: "Failed to create deviation" });
+    }
+  });
+
+  app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+      const { articleId, articleNumber, articleName, quantity } = req.body;
+
+      const order = await storage.getWorkOrder(orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.resourceId !== resourceId) return res.status(403).json({ error: "Not authorized" });
+
+      let resolvedArticleId = articleId;
+      if (!resolvedArticleId && articleNumber) {
+        const articles = await storage.getArticles(order.tenantId);
+        const found = articles.find(a => a.articleNumber === articleNumber);
+        if (found) resolvedArticleId = found.id;
+      }
+
+      if (!resolvedArticleId) {
+        return res.status(400).json({ error: "Article ID or valid article number required" });
+      }
+
+      const line = await storage.createWorkOrderLine({
+        tenantId: order.tenantId,
+        workOrderId: orderId,
+        articleId: resolvedArticleId,
+        quantity: quantity || 1,
+      });
+
+      console.log(`[mobile] Material logged for order ${orderId}: ${articleName || articleNumber} x${quantity}`);
+      res.json({ success: true, line });
+    } catch (error) {
+      console.error("Failed to log material:", error);
+      res.status(500).json({ error: "Failed to log material" });
+    }
+  });
+
+  app.get("/api/mobile/articles", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resource not found" });
+
+      const search = (req.query.search as string || "").toLowerCase();
+      const articles = await storage.getArticles(resource.tenantId);
+
+      const filtered = search
+        ? articles.filter(a =>
+            a.name.toLowerCase().includes(search) ||
+            a.articleNumber.toLowerCase().includes(search) ||
+            (a.description && a.description.toLowerCase().includes(search))
+          )
+        : articles;
+
+      res.json(filtered.slice(0, 50).map(a => ({
+        id: a.id,
+        articleNumber: a.articleNumber,
+        name: a.name,
+        unit: a.unit || "st",
+        category: a.articleType,
+      })));
+    } catch (error) {
+      console.error("Failed to search articles:", error);
+      res.status(500).json({ error: "Failed to search articles" });
+    }
+  });
+
+  app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+      const { signature } = req.body;
+
+      if (!signature) return res.status(400).json({ error: "Signature data required" });
+
+      const order = await storage.getWorkOrder(orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.resourceId !== resourceId) return res.status(403).json({ error: "Not authorized" });
+
+      const resource = await storage.getResource(resourceId);
+
+      const protocol = await storage.createProtocol({
+        tenantId: order.tenantId,
+        workOrderId: orderId,
+        objectId: order.objectId,
+        protocolType: "service",
+        executedAt: new Date(),
+        executedByName: resource?.name || "Fältarbetare",
+        signature,
+        signedAt: new Date(),
+        status: "completed",
+      });
+
+      console.log(`[mobile] Signature captured for order ${orderId} by resource ${resourceId}`);
+      res.json({ success: true, protocol });
+    } catch (error) {
+      console.error("Failed to save signature:", error);
+      res.status(500).json({ error: "Failed to save signature" });
+    }
+  });
+
+  app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+      const { inspections } = req.body;
+
+      if (!inspections || !Array.isArray(inspections)) {
+        return res.status(400).json({ error: "Inspections array required" });
+      }
+
+      const order = await storage.getWorkOrder(orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.resourceId !== resourceId) return res.status(403).json({ error: "Not authorized" });
+
+      const results = await Promise.all(
+        inspections.map((insp: any) =>
+          storage.createInspectionMetadata({
+            tenantId: order.tenantId,
+            workOrderId: orderId,
+            objectId: order.objectId,
+            inspectionType: insp.category || "Övrigt",
+            status: insp.status || "ok",
+            issues: insp.issues || [],
+            comment: insp.comment || null,
+            inspectedBy: resourceId,
+          })
+        )
+      );
+
+      console.log(`[mobile] ${results.length} inspections saved for order ${orderId}`);
+      res.json({ success: true, inspections: results });
+    } catch (error) {
+      console.error("Failed to save inspections:", error);
+      res.status(500).json({ error: "Failed to save inspections" });
+    }
+  });
+
+  app.post("/api/mobile/gps", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const { latitude, longitude, speed, heading, accuracy, currentOrderId, currentOrderNumber, vehicleRegNo, driverName } = req.body;
+
+      if (latitude === undefined || longitude === undefined) {
+        return res.status(400).json({ error: "Latitude and longitude are required" });
+      }
+
+      await notificationService.handlePositionUpdate({
+        resourceId,
+        latitude,
+        longitude,
+        speed: speed || 0,
+        heading: heading || 0,
+        accuracy: accuracy || 0,
+        status: currentOrderId ? "on_site" : "traveling",
+        workOrderId: currentOrderId,
+      });
+
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to update GPS:", error);
+      res.status(500).json({ error: "Failed to update GPS" });
+    }
+  });
+
+  app.get("/api/mobile/summary", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resource not found" });
+
+      const tenantId = resource.tenantId;
+      const allOrders = await storage.getWorkOrders(tenantId);
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+
+      const todayOrders = allOrders.filter(o => {
+        if (o.resourceId !== resourceId) return false;
+        if (!o.scheduledDate) return false;
+        const d = new Date(o.scheduledDate);
+        return d >= today && d < tomorrow;
+      });
+
+      const completedOrders = todayOrders.filter(o => o.status === "completed").length;
+      const totalDuration = todayOrders.reduce((sum, o) => sum + (o.estimatedDuration || 0), 0);
+
+      res.json({
+        totalOrders: todayOrders.length,
+        completedOrders,
+        remainingOrders: todayOrders.length - completedOrders,
+        totalDuration,
+      });
+    } catch (error) {
+      console.error("Failed to get summary:", error);
+      res.status(500).json({ error: "Failed to get summary" });
+    }
+  });
+
+  app.get("/api/mobile/weather", async (req, res) => {
+    try {
+      const lat = parseFloat(req.query.lat as string) || 57.7089;
+      const lon = parseFloat(req.query.lon as string) || 11.9746;
+
+      const weatherRes = await fetch(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,weathercode&current_weather=true&timezone=Europe/Stockholm`
+      );
+      const data = await weatherRes.json();
+      res.json(data);
+    } catch (error) {
+      console.error("Failed to fetch weather:", error);
+      res.status(500).json({ error: "Failed to fetch weather" });
+    }
+  });
+
+  app.post("/api/mobile/ai/chat", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const { message, context } = req.body;
+      if (!message) return res.status(400).json({ error: "Message required" });
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Du är en hjälpsam AI-assistent för fältarbetare inom avfallshantering och fastighetsskötsel i Sverige. Svara alltid på svenska. Var kortfattad och praktisk. " +
+              (context ? `Kontext: Order ${context.orderNumber || ""}, Kund: ${context.customerName || ""}` : ""),
+          },
+          { role: "user", content: message },
+        ],
+        max_tokens: 500,
+      });
+
+      res.json({ response: completion.choices[0]?.message?.content || "Inget svar" });
+    } catch (error) {
+      console.error("Failed AI chat:", error);
+      res.status(500).json({ error: "Failed to get AI response" });
+    }
+  });
+
+  app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const { audio } = req.body;
+      if (!audio) return res.status(400).json({ error: "Audio data required" });
+
+      const buffer = Buffer.from(audio, "base64");
+      const blob = new Blob([buffer], { type: "audio/webm" });
+      const file = new File([blob], "audio.webm", { type: "audio/webm" });
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI();
+      const transcription = await openai.audio.transcriptions.create({
+        file,
+        model: "whisper-1",
+        language: "sv",
+      });
+
+      res.json({ text: transcription.text });
+    } catch (error) {
+      console.error("Failed transcription:", error);
+      res.status(500).json({ error: "Failed to transcribe audio" });
+    }
+  });
+
+  app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const { image, context } = req.body;
+      if (!image) return res.status(400).json({ error: "Image data required" });
+
+      const OpenAI = (await import("openai")).default;
+      const openai = new OpenAI();
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: "Du analyserar bilder för fältarbetare inom avfallshantering. Svara på svenska med JSON-format: {category, description, severity}. Severity: low/medium/high. " +
+              (context ? `Kontext: ${context}` : ""),
+          },
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Analysera denna bild och identifiera eventuella problem eller avvikelser." },
+              { type: "image_url", image_url: { url: `data:image/jpeg;base64,${image}` } },
+            ],
+          },
+        ],
+        max_tokens: 300,
+      });
+
+      const responseText = completion.choices[0]?.message?.content || "";
+      try {
+        const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+        const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : { category: "unknown", description: responseText, severity: "medium" };
+        res.json(parsed);
+      } catch {
+        res.json({ category: "unknown", description: responseText, severity: "medium" });
+      }
+    } catch (error) {
+      console.error("Failed image analysis:", error);
+      res.status(500).json({ error: "Failed to analyze image" });
+    }
+  });
+
+  // ============================================
+  // PLANNER VIEW API ENDPOINTS (Driver Core)
+  // ============================================
+
+  app.get("/api/planner/drivers/locations", async (req, res) => {
+    try {
+      const resources = await storage.getActiveResourcePositions();
+      const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+      const locations = resources
+        .filter(r => r.currentLatitude && r.currentLongitude && r.lastPositionUpdate && new Date(r.lastPositionUpdate) > cutoff)
+        .map(r => ({
+          driverId: r.id,
+          driverName: r.name,
+          vehicleRegNo: "",
+          latitude: r.currentLatitude,
+          longitude: r.currentLongitude,
+          speed: 0,
+          heading: 0,
+          status: r.trackingStatus || "offline",
+          currentOrderId: null,
+          currentOrderNumber: null,
+          updatedAt: r.lastPositionUpdate,
+        }));
+
+      res.json(locations);
+    } catch (error) {
+      console.error("Failed to get driver locations:", error);
+      res.status(500).json({ error: "Failed to get driver locations" });
+    }
+  });
+
+  app.get("/api/planner/orders", async (req, res) => {
+    try {
+      const range = req.query.range as string || "today";
+      const tenantId = getTenantIdWithFallback(req);
+      const allOrders = await storage.getWorkOrders(tenantId);
+
+      const now = new Date();
+      const startOfDay = new Date(now);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endRange = new Date(startOfDay);
+
+      if (range === "week") {
+        endRange.setDate(endRange.getDate() + 7);
+      } else {
+        endRange.setDate(endRange.getDate() + 1);
+      }
+
+      const filtered = allOrders.filter(o => {
+        if (!o.scheduledDate) return false;
+        const d = new Date(o.scheduledDate);
+        return d >= startOfDay && d < endRange;
+      });
+
+      const enriched = await Promise.all(
+        filtered.map(async (order) => {
+          const object = order.objectId ? await storage.getObject(order.objectId) : null;
+          const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
+          return {
+            id: order.id,
+            orderNumber: order.title || `WO-${order.id.substring(0, 8)}`,
+            status: order.status,
+            customerName: customer?.name || "",
+            address: object?.address || "",
+            latitude: object?.latitude || order.taskLatitude,
+            longitude: object?.longitude || order.taskLongitude,
+            scheduledDate: order.scheduledDate,
+            scheduledTimeStart: order.scheduledStartTime,
+            priority: order.priority,
+            resourceId: order.resourceId,
+            description: order.description,
+          };
+        })
+      );
+
+      res.json(enriched);
+    } catch (error) {
+      console.error("Failed to get planner orders:", error);
+      res.status(500).json({ error: "Failed to get planner orders" });
+    }
+  });
+
+  app.get("/planner/map", (req, res) => {
+    const STATUS_COLORS: Record<string, string> = {
+      planned: "#8E44AD",
+      en_route: "#F39C12",
+      in_progress: "#27AE60",
+      completed: "#1B8553",
+      deferred: "#E74C3C",
+      cancelled: "#95A5A6",
+      draft: "#6C757D",
+    };
+
+    const html = `<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unicorn - Planerarvy</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:Inter,system-ui,sans-serif;background:#1a1a2e}
+#map{width:100vw;height:100vh}
+.controls{position:absolute;top:10px;right:10px;z-index:1000;display:flex;gap:8px}
+.controls button{padding:8px 16px;border:none;border-radius:8px;cursor:pointer;font-size:14px;font-weight:500;transition:all .2s}
+.btn-active{background:#8E44AD;color:#fff}
+.btn-inactive{background:rgba(255,255,255,0.9);color:#333}
+.btn-inactive:hover{background:#fff}
+.legend{position:absolute;bottom:20px;left:10px;z-index:1000;background:rgba(26,26,46,0.95);padding:12px 16px;border-radius:10px;color:#fff;font-size:13px}
+.legend-item{display:flex;align-items:center;gap:8px;margin:4px 0}
+.legend-dot{width:12px;height:12px;border-radius:50%}
+.legend-sq{width:12px;height:12px;border-radius:2px}
+.status-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;color:#fff}
+.driver-popup{min-width:180px}
+.driver-popup h3{margin:0 0 4px;font-size:14px}
+.driver-popup p{margin:2px 0;font-size:12px;color:#666}
+.job-popup{min-width:200px}
+.job-popup h3{margin:0 0 4px;font-size:14px}
+.job-popup p{margin:2px 0;font-size:12px;color:#666}
+.info-bar{position:absolute;top:10px;left:10px;z-index:1000;background:rgba(26,26,46,0.95);padding:10px 16px;border-radius:10px;color:#fff;font-size:13px}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="info-bar" id="info-bar">Laddar data...</div>
+<div class="controls">
+<button class="btn-active" id="btn-today" onclick="setRange('today')">Idag</button>
+<button class="btn-inactive" id="btn-week" onclick="setRange('week')">Denna vecka</button>
+<button class="btn-inactive" id="btn-hide" onclick="toggleJobs()">D&ouml;lj jobb</button>
+</div>
+<div class="legend">
+<div style="font-weight:600;margin-bottom:6px">F&ouml;rklaring</div>
+<div class="legend-item"><div class="legend-dot" style="background:#3B82F6"></div> Chauff&ouml;r</div>
+${Object.entries(STATUS_COLORS).map(([k,v]) => `<div class="legend-item"><div class="legend-sq" style="background:${v}"></div> ${k.charAt(0).toUpperCase()+k.slice(1).replace('_',' ')}</div>`).join('')}
+</div>
+<script>
+const STATUS_COLORS = ${JSON.stringify(STATUS_COLORS)};
+const map = L.map('map').setView([57.7089, 11.9746], 11);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap'
+}).addTo(map);
+
+const driverLayer = L.layerGroup().addTo(map);
+const jobCluster = L.markerClusterGroup({maxClusterRadius:40}).addTo(map);
+let currentRange = 'today';
+let jobsVisible = true;
+
+function createDriverIcon() {
+  return L.divIcon({
+    className:'',
+    html:'<div style="width:28px;height:28px;border-radius:50%;background:#3B82F6;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3)"></div>',
+    iconSize:[28,28],iconAnchor:[14,14]
+  });
+}
+function createJobIcon(status) {
+  const color = STATUS_COLORS[status] || '#6C757D';
+  return L.divIcon({
+    className:'',
+    html:'<div style="width:22px;height:22px;border-radius:3px;background:'+color+';border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3)"></div>',
+    iconSize:[22,22],iconAnchor:[11,11]
+  });
+}
+
+async function loadDrivers() {
+  try {
+    const res = await fetch('/api/planner/drivers/locations');
+    const drivers = await res.json();
+    driverLayer.clearLayers();
+    drivers.forEach(d => {
+      if(!d.latitude||!d.longitude) return;
+      const m = L.marker([d.latitude,d.longitude],{icon:createDriverIcon()});
+      m.bindPopup('<div class="driver-popup"><h3>'+d.driverName+'</h3><p>Status: '+d.status+'</p>'+(d.vehicleRegNo?'<p>Reg: '+d.vehicleRegNo+'</p>':'')+'<p>Uppdaterad: '+new Date(d.updatedAt).toLocaleString("sv-SE")+'</p></div>');
+      driverLayer.addLayer(m);
+    });
+    return drivers.length;
+  } catch(e) { console.error(e); return 0; }
+}
+
+async function loadJobs() {
+  if(!jobsVisible) return 0;
+  try {
+    const res = await fetch('/api/planner/orders?range='+currentRange);
+    const jobs = await res.json();
+    jobCluster.clearLayers();
+    jobs.forEach(j => {
+      if(!j.latitude||!j.longitude) return;
+      const m = L.marker([j.latitude,j.longitude],{icon:createJobIcon(j.status)});
+      const badge = '<span class="status-badge" style="background:'+(STATUS_COLORS[j.status]||'#6C757D')+'">'+j.status+'</span>';
+      m.bindPopup('<div class="job-popup"><h3>'+j.orderNumber+'</h3>'+badge+'<p>'+j.customerName+'</p><p>'+j.address+'</p>'+(j.scheduledTimeStart?'<p>Tid: '+j.scheduledTimeStart+'</p>':'')+'</div>');
+      jobCluster.addLayer(m);
+    });
+    return jobs.length;
+  } catch(e) { console.error(e); return 0; }
+}
+
+function setRange(r) {
+  currentRange = r;
+  document.getElementById('btn-today').className = r==='today'?'btn-active':'btn-inactive';
+  document.getElementById('btn-week').className = r==='week'?'btn-active':'btn-inactive';
+  refresh();
+}
+function toggleJobs() {
+  jobsVisible = !jobsVisible;
+  document.getElementById('btn-hide').textContent = jobsVisible?'Dölj jobb':'Visa jobb';
+  document.getElementById('btn-hide').className = jobsVisible?'btn-inactive':'btn-active';
+  if(!jobsVisible) jobCluster.clearLayers(); else refresh();
+}
+
+async function refresh() {
+  const [dc,jc] = await Promise.all([loadDrivers(), loadJobs()]);
+  document.getElementById('info-bar').textContent = dc+' chaufförer | '+(jobsVisible?jc+' jobb':'Jobb dolda')+' | '+currentRange.replace('today','Idag').replace('week','Vecka');
+}
+
+refresh();
+setInterval(loadDrivers, 15000);
+setInterval(loadJobs, 30000);
+</script>
+</body>
+</html>`;
+    res.type('html').send(html);
+  });
+
   // Get resource position history (breadcrumb trail) for a specific date
   app.get("/api/resources/:id/positions", async (req, res) => {
     try {
