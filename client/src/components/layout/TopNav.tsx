@@ -54,6 +54,7 @@ import {
   Presentation,
   MessageSquare,
   Leaf,
+  MapPin,
 } from "lucide-react";
 
 const grunddataItems = [
@@ -73,6 +74,7 @@ const planeringItems = [
   { title: "Orderstock", url: "/order-stock", icon: Package, description: "Alla ordrar" },
   { title: "Mobilapp", url: "/mobile", icon: Smartphone, description: "Fältarbete" },
   { title: "Rutter", url: "/routes", icon: Map, description: "Körvägar" },
+  { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
 ];
 
 const analysItems = [

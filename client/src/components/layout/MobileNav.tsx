@@ -38,6 +38,7 @@ import {
   ListChecks,
   UserCheck,
   Database,
+  MapPin,
 } from "lucide-react";
 
 const navigationGroups = [
@@ -70,6 +71,7 @@ const navigationGroups = [
       { title: "Väderplanering", url: "/weather", icon: Cloud },
       { title: "Ruttplanering", url: "/routes", icon: Map },
       { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
+      { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
     ],
   },
   {
