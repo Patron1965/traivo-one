@@ -13,10 +13,10 @@ import type { Order, OrderStatus } from '../types';
 
 const FILTER_OPTIONS: { label: string; value: OrderStatus | 'all' }[] = [
   { label: 'Alla', value: 'all' },
-  { label: 'Planerad', value: 'planned' },
+  { label: 'Plan', value: 'planned' },
   { label: 'Pågår', value: 'in_progress' },
-  { label: 'Slutförd', value: 'completed' },
-  { label: 'Uppskjuten', value: 'deferred' },
+  { label: 'Klar', value: 'completed' },
+  { label: 'Senare', value: 'deferred' },
 ];
 
 export function OrdersScreen({ navigation }: any) {
