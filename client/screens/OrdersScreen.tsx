@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { FlashList } from '@shopify/flash-list';
@@ -134,7 +134,12 @@ export function OrdersScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.filterContainer, { marginTop: headerHeight + Spacing.sm }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={[styles.filterScroll, { marginTop: headerHeight + Spacing.sm }]}
+        contentContainerStyle={styles.filterContainer}
+      >
         {FILTER_OPTIONS.map(opt => (
           <Pressable
             key={opt.value}
@@ -151,7 +156,7 @@ export function OrdersScreen({ navigation }: any) {
             </ThemedText>
           </Pressable>
         ))}
-      </View>
+      </ScrollView>
 
       {isLoading ? (
         <ActivityIndicator color={Colors.primary} style={styles.loader} />
@@ -185,6 +190,10 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    flexShrink: 0,
   },
   filterContainer: {
     flexDirection: 'row',
