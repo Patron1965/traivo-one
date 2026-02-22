@@ -56,6 +56,7 @@ import {
   MessageSquare,
   Leaf,
   MapPin,
+  Fuel,
 } from "lucide-react";
 
 const grunddataItems = [
@@ -84,6 +85,7 @@ const analysItems = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, description: "Översikt och nyckeltal" },
   { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
   { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
+  { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
   { title: "Miljöcertifikat", url: "/environmental-certificates", icon: Leaf, description: "Årliga hållbarhetsrapporter" },
 ];
 

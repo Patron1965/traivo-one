@@ -2544,6 +2544,80 @@ export async function registerRoutes(
     }
   });
 
+  // ============== FUEL LOGS ==============
+  app.get("/api/fuel-logs", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const vehicleId = req.query.vehicleId as string | undefined;
+      const logs = await storage.getFuelLogs(tenantId, vehicleId);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch fuel logs" });
+    }
+  });
+
+  app.post("/api/fuel-logs", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const vehicle = await storage.getVehicle(req.body.vehicleId);
+      if (!verifyTenantOwnership(vehicle, tenantId)) {
+        return res.status(404).json({ error: "Vehicle not found" });
+      }
+      const log = await storage.createFuelLog({ ...req.body, tenantId });
+      res.status(201).json(log);
+    } catch (error) {
+      console.error("Failed to create fuel log:", error);
+      res.status(500).json({ error: "Failed to create fuel log" });
+    }
+  });
+
+  app.delete("/api/fuel-logs/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteFuelLog(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete fuel log" });
+    }
+  });
+
+  // ============== MAINTENANCE LOGS ==============
+  app.get("/api/maintenance-logs", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const vehicleId = req.query.vehicleId as string | undefined;
+      const logs = await storage.getMaintenanceLogs(tenantId, vehicleId);
+      res.json(logs);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch maintenance logs" });
+    }
+  });
+
+  app.post("/api/maintenance-logs", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const vehicle = await storage.getVehicle(req.body.vehicleId);
+      if (!verifyTenantOwnership(vehicle, tenantId)) {
+        return res.status(404).json({ error: "Vehicle not found" });
+      }
+      const log = await storage.createMaintenanceLog({ ...req.body, tenantId });
+      res.status(201).json(log);
+    } catch (error) {
+      console.error("Failed to create maintenance log:", error);
+      res.status(500).json({ error: "Failed to create maintenance log" });
+    }
+  });
+
+  app.delete("/api/maintenance-logs/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteMaintenanceLog(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete maintenance log" });
+    }
+  });
+
   // ============== EQUIPMENT ==============
   app.get("/api/equipment", async (req, res) => {
     try {

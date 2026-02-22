@@ -3577,3 +3577,68 @@ export const offlineSyncLog = pgTable("offline_sync_log", {
 export const insertOfflineSyncLogSchema = createInsertSchema(offlineSyncLog).omit({ id: true, createdAt: true, processedAt: true });
 export type InsertOfflineSyncLog = z.infer<typeof insertOfflineSyncLogSchema>;
 export type OfflineSyncLog = typeof offlineSyncLog.$inferSelect;
+
+// ============================================
+// FLEET MANAGEMENT - Bränslelogg & Underhållslogg
+// ============================================
+
+export const fuelLogs = pgTable("fuel_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  vehicleId: varchar("vehicle_id").references(() => vehicles.id).notNull(),
+  date: timestamp("date").notNull(),
+  liters: real("liters").notNull(),
+  costSek: real("cost_sek"),
+  pricePerLiter: real("price_per_liter"),
+  fuelType: text("fuel_type").default("diesel"),
+  odometerReading: integer("odometer_reading"),
+  fullTank: boolean("full_tank").default(true),
+  station: text("station"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_fuel_logs_vehicle").on(table.vehicleId),
+  index("idx_fuel_logs_date").on(table.date),
+]);
+
+export const insertFuelLogSchema = createInsertSchema(fuelLogs).omit({ id: true, createdAt: true });
+export type FuelLog = typeof fuelLogs.$inferSelect;
+export type InsertFuelLog = z.infer<typeof insertFuelLogSchema>;
+
+export const maintenanceLogs = pgTable("maintenance_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  vehicleId: varchar("vehicle_id").references(() => vehicles.id).notNull(),
+  date: timestamp("date").notNull(),
+  maintenanceType: text("maintenance_type").notNull(),
+  description: text("description").notNull(),
+  costSek: real("cost_sek"),
+  odometerReading: integer("odometer_reading"),
+  workshop: text("workshop"),
+  nextMaintenanceDate: timestamp("next_maintenance_date"),
+  nextMaintenanceOdometer: integer("next_maintenance_odometer"),
+  status: text("status").default("completed").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_maintenance_logs_vehicle").on(table.vehicleId),
+  index("idx_maintenance_logs_date").on(table.date),
+]);
+
+export const MAINTENANCE_TYPES = [
+  "service", "reparation", "besiktning", "dack", "olja", "bromsar", "annat"
+] as const;
+
+export const MAINTENANCE_TYPE_LABELS: Record<string, string> = {
+  service: "Service",
+  reparation: "Reparation",
+  besiktning: "Besiktning",
+  dack: "Däckbyte",
+  olja: "Oljebyte",
+  bromsar: "Bromsar",
+  annat: "Annat",
+};
+
+export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogs).omit({ id: true, createdAt: true });
+export type MaintenanceLog = typeof maintenanceLogs.$inferSelect;
+export type InsertMaintenanceLog = z.infer<typeof insertMaintenanceLogSchema>;

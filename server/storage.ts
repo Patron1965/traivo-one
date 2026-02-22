@@ -78,7 +78,10 @@ import {
   type ChecklistTemplate, type InsertChecklistTemplate,
   type DriverNotification, type InsertDriverNotification,
   type OfflineSyncLog, type InsertOfflineSyncLog,
+  type FuelLog, type InsertFuelLog,
+  type MaintenanceLog, type InsertMaintenanceLog,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
+  fuelLogs, maintenanceLogs,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -571,6 +574,16 @@ export interface IStorage {
   createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog>;
   getOfflineSyncLogs(resourceId: string, status?: string): Promise<OfflineSyncLog[]>;
   updateOfflineSyncLogStatus(id: string, status: string, errorMessage?: string): Promise<OfflineSyncLog | undefined>;
+
+  // Fuel Logs
+  getFuelLogs(tenantId: string, vehicleId?: string): Promise<FuelLog[]>;
+  createFuelLog(log: InsertFuelLog): Promise<FuelLog>;
+  deleteFuelLog(id: string, tenantId: string): Promise<void>;
+
+  // Maintenance Logs
+  getMaintenanceLogs(tenantId: string, vehicleId?: string): Promise<MaintenanceLog[]>;
+  createMaintenanceLog(log: InsertMaintenanceLog): Promise<MaintenanceLog>;
+  deleteMaintenanceLog(id: string, tenantId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4044,6 +4057,38 @@ export class DatabaseStorage implements IStorage {
   async updateOfflineSyncLogStatus(id: string, status: string, errorMessage?: string): Promise<OfflineSyncLog | undefined> {
     const [result] = await db.update(offlineSyncLog).set({ status, errorMessage, processedAt: new Date() }).where(eq(offlineSyncLog.id, id)).returning();
     return result;
+  }
+
+  // ============== FUEL LOGS ==============
+  async getFuelLogs(tenantId: string, vehicleId?: string): Promise<FuelLog[]> {
+    const conditions = [eq(fuelLogs.tenantId, tenantId)];
+    if (vehicleId) conditions.push(eq(fuelLogs.vehicleId, vehicleId));
+    return db.select().from(fuelLogs).where(and(...conditions)).orderBy(desc(fuelLogs.date));
+  }
+
+  async createFuelLog(log: InsertFuelLog): Promise<FuelLog> {
+    const [result] = await db.insert(fuelLogs).values(log).returning();
+    return result;
+  }
+
+  async deleteFuelLog(id: string, tenantId: string): Promise<void> {
+    await db.delete(fuelLogs).where(and(eq(fuelLogs.id, id), eq(fuelLogs.tenantId, tenantId)));
+  }
+
+  // ============== MAINTENANCE LOGS ==============
+  async getMaintenanceLogs(tenantId: string, vehicleId?: string): Promise<MaintenanceLog[]> {
+    const conditions = [eq(maintenanceLogs.tenantId, tenantId)];
+    if (vehicleId) conditions.push(eq(maintenanceLogs.vehicleId, vehicleId));
+    return db.select().from(maintenanceLogs).where(and(...conditions)).orderBy(desc(maintenanceLogs.date));
+  }
+
+  async createMaintenanceLog(log: InsertMaintenanceLog): Promise<MaintenanceLog> {
+    const [result] = await db.insert(maintenanceLogs).values(log).returning();
+    return result;
+  }
+
+  async deleteMaintenanceLog(id: string, tenantId: string): Promise<void> {
+    await db.delete(maintenanceLogs).where(and(eq(maintenanceLogs.id, id), eq(maintenanceLogs.tenantId, tenantId)));
   }
 }
 
