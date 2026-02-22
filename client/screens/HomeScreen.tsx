@@ -10,7 +10,20 @@ import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { getApiUrl } from '../lib/query-client';
-import type { Order, DaySummary, WeatherData } from '../types';
+import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
+
+function getStatusBorderColor(status: OrderStatus): string {
+  switch (status) {
+    case 'planned': return Colors.statusPlanned;
+    case 'en_route': return Colors.statusEnRoute;
+    case 'arrived': return Colors.statusArrived;
+    case 'in_progress': return Colors.statusInProgress;
+    case 'completed': return Colors.statusCompleted;
+    case 'deferred': return Colors.statusDeferred;
+    case 'cancelled': return Colors.statusCancelled;
+    default: return Colors.statusNew;
+  }
+}
 
 export function HomeScreen({ navigation }: any) {
   const headerHeight = useHeaderHeight();
@@ -161,9 +174,35 @@ export function HomeScreen({ navigation }: any) {
         </View>
       </Card>
 
+      {!ordersLoading && activeOrders.length > 0 ? (
+        <Pressable
+          style={styles.nextOrderButton}
+          onPress={() => {
+            const nextOrder = activeOrders.find(o => !o.isLocked) || activeOrders[0];
+            navigation.navigate('OrderDetail', { orderId: nextOrder.id });
+          }}
+          testID="button-next-order"
+        >
+          <View style={styles.nextOrderLeft}>
+            <View style={styles.nextOrderIconCircle}>
+              <Feather name="arrow-right-circle" size={28} color={Colors.textInverse} />
+            </View>
+            <View>
+              <ThemedText variant="subheading" color={Colors.textInverse}>
+                Nästa uppdrag
+              </ThemedText>
+              <ThemedText variant="caption" color="rgba(255,255,255,0.8)">
+                {(activeOrders.find(o => !o.isLocked) || activeOrders[0]).customerName}
+              </ThemedText>
+            </View>
+          </View>
+          <Feather name="chevron-right" size={24} color={Colors.textInverse} />
+        </Pressable>
+      ) : null}
+
       <View style={styles.sectionHeader}>
         <ThemedText variant="subheading">
-          Nästa uppdrag
+          Kommande uppdrag
         </ThemedText>
         <Pressable
           onPress={() => navigation.navigate('OrdersTab')}
@@ -185,89 +224,96 @@ export function HomeScreen({ navigation }: any) {
             testID={`card-order-${order.id}`}
           >
             <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null]}>
-              <View style={styles.orderHeader}>
-                <View style={styles.orderInfo}>
-                  <View style={styles.orderNumberRow}>
-                    <ThemedText variant="label">{order.orderNumber}</ThemedText>
-                    {order.executionCodes && order.executionCodes.length > 0 ? (
-                      <View style={styles.execCodesRow}>
-                        {order.executionCodes.map(ec => (
-                          <View key={ec.id} style={styles.execCodeBadge}>
-                            <ThemedText variant="caption" color={Colors.primaryLight} style={styles.execCodeText}>
-                              {ec.code}
-                            </ThemedText>
-                          </View>
-                        ))}
-                      </View>
+              <View style={[styles.statusStripe, { backgroundColor: getStatusBorderColor(order.status) }]} />
+              <View style={styles.orderInner}>
+                <View style={styles.orderHeader}>
+                  <View style={styles.orderInfo}>
+                    <View style={styles.orderNumberRow}>
+                      <ThemedText variant="label">{order.orderNumber}</ThemedText>
+                      {order.executionCodes && order.executionCodes.length > 0 ? (
+                        <View style={styles.execCodesRow}>
+                          {order.executionCodes.map(ec => (
+                            <View key={ec.id} style={styles.execCodeBadge}>
+                              <ThemedText variant="caption" color={Colors.primaryLight} style={styles.execCodeText}>
+                                {ec.code}
+                              </ThemedText>
+                            </View>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                    <ThemedText variant="subheading" numberOfLines={1}>
+                      {order.customerName}
+                    </ThemedText>
+                  </View>
+                  <View style={styles.statusColumn}>
+                    <StatusBadge status={order.status} size="sm" />
+                    {order.isLocked ? (
+                      <Feather name="lock" size={14} color={Colors.danger} />
                     ) : null}
                   </View>
-                  <ThemedText variant="subheading" numberOfLines={1}>
-                    {order.customerName}
-                  </ThemedText>
                 </View>
-                <View style={styles.statusColumn}>
-                  <StatusBadge status={order.status} size="sm" />
-                  {order.isLocked ? (
-                    <Feather name="lock" size={14} color={Colors.danger} />
+                <View style={styles.orderDetails}>
+                  <View style={styles.orderDetailRow}>
+                    <Feather name="map-pin" size={14} color={Colors.textSecondary} />
+                    <ThemedText variant="body" color={Colors.textSecondary} numberOfLines={1}>
+                      {order.address}, {order.city}
+                    </ThemedText>
+                  </View>
+                  {order.scheduledTimeStart ? (
+                    <View style={styles.orderDetailRow}>
+                      <Feather name="clock" size={14} color={Colors.textSecondary} />
+                      <ThemedText variant="body" color={Colors.textSecondary}>
+                        {order.scheduledTimeStart} - {order.scheduledTimeEnd}
+                      </ThemedText>
+                    </View>
                   ) : null}
                 </View>
-              </View>
-              <View style={styles.orderDetails}>
-                <View style={styles.orderDetailRow}>
-                  <Feather name="map-pin" size={14} color={Colors.textSecondary} />
-                  <ThemedText variant="body" color={Colors.textSecondary} numberOfLines={1}>
-                    {order.address}, {order.city}
-                  </ThemedText>
-                </View>
-                {order.scheduledTimeStart ? (
-                  <View style={styles.orderDetailRow}>
-                    <Feather name="clock" size={14} color={Colors.textSecondary} />
-                    <ThemedText variant="body" color={Colors.textSecondary}>
-                      {order.scheduledTimeStart} - {order.scheduledTimeEnd}
-                    </ThemedText>
-                  </View>
-                ) : null}
-              </View>
-
-              <View style={styles.badgeRow}>
-                {order.priority === 'urgent' ? (
-                  <View style={styles.urgentBadge}>
-                    <Feather name="alert-circle" size={12} color={Colors.danger} />
-                    <ThemedText variant="caption" color={Colors.danger}>Brådskande</ThemedText>
-                  </View>
-                ) : order.priority === 'high' ? (
-                  <View style={styles.highBadge}>
-                    <Feather name="arrow-up" size={12} color={Colors.warning} />
-                    <ThemedText variant="caption" color={Colors.warning}>Hög prioritet</ThemedText>
-                  </View>
-                ) : null}
-
-                {order.dependencies && order.dependencies.length > 0 ? (
-                  <View style={styles.dependencyBadge}>
-                    <Feather name="link" size={12} color={Colors.info} />
-                    <ThemedText variant="caption" color={Colors.info}>
-                      {order.dependencies.length} beroende
-                    </ThemedText>
-                  </View>
-                ) : null}
-
-                {order.timeRestrictions && order.timeRestrictions.filter(r => r.isActive).length > 0 ? (
-                  <View style={styles.restrictionBadge}>
-                    <Feather name="clock" size={12} color={Colors.danger} />
-                    <ThemedText variant="caption" color={Colors.danger}>
-                      Tidsbegränsning
-                    </ThemedText>
-                  </View>
-                ) : null}
 
                 {order.subSteps && order.subSteps.length > 0 ? (
-                  <View style={styles.subStepBadge}>
-                    <Feather name="list" size={12} color={Colors.secondary} />
-                    <ThemedText variant="caption" color={Colors.secondary}>
+                  <View style={styles.progressSection}>
+                    <View style={styles.progressBarSmBg}>
+                      <View style={[styles.progressBarSmFill, {
+                        width: `${order.subSteps.length > 0 ? (order.subSteps.filter(s => s.completed).length / order.subSteps.length) * 100 : 0}%`
+                      }]} />
+                    </View>
+                    <ThemedText variant="caption" color={Colors.secondary} style={styles.progressSmText}>
                       {order.subSteps.filter(s => s.completed).length}/{order.subSteps.length}
                     </ThemedText>
                   </View>
                 ) : null}
+
+                <View style={styles.badgeRow}>
+                  {order.priority === 'urgent' ? (
+                    <View style={styles.urgentBadge}>
+                      <Feather name="alert-circle" size={12} color={Colors.danger} />
+                      <ThemedText variant="caption" color={Colors.danger}>Brådskande</ThemedText>
+                    </View>
+                  ) : order.priority === 'high' ? (
+                    <View style={styles.highBadge}>
+                      <Feather name="arrow-up" size={12} color={Colors.warning} />
+                      <ThemedText variant="caption" color={Colors.warning}>Hög prioritet</ThemedText>
+                    </View>
+                  ) : null}
+
+                  {order.dependencies && order.dependencies.length > 0 ? (
+                    <View style={styles.dependencyBadge}>
+                      <Feather name="link" size={12} color={Colors.info} />
+                      <ThemedText variant="caption" color={Colors.info}>
+                        {order.dependencies.length} beroende
+                      </ThemedText>
+                    </View>
+                  ) : null}
+
+                  {order.timeRestrictions && order.timeRestrictions.filter(r => r.isActive).length > 0 ? (
+                    <View style={styles.restrictionBadge}>
+                      <Feather name="clock" size={12} color={Colors.danger} />
+                      <ThemedText variant="caption" color={Colors.danger}>
+                        Tidsbegränsning
+                      </ThemedText>
+                    </View>
+                  ) : null}
+                </View>
               </View>
             </Card>
           </Pressable>
@@ -380,13 +426,68 @@ const styles = StyleSheet.create({
   loader: {
     padding: Spacing.xxl,
   },
+  nextOrderButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.primary,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+  },
+  nextOrderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  nextOrderIconCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   orderCard: {
-    backgroundColor: Colors.surface,
+    padding: 0,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
+  statusStripe: {
+    width: 5,
+    borderTopLeftRadius: BorderRadius.lg,
+    borderBottomLeftRadius: BorderRadius.lg,
+  },
+  orderInner: {
+    flex: 1,
+    padding: Spacing.lg,
   },
   lockedCard: {
     backgroundColor: '#FDF2F2',
     borderWidth: 1,
     borderColor: Colors.dangerLight,
+  },
+  progressSection: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.xs,
+  },
+  progressBarSmBg: {
+    flex: 1,
+    height: 6,
+    backgroundColor: Colors.borderLight,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  progressBarSmFill: {
+    height: '100%',
+    backgroundColor: Colors.secondary,
+    borderRadius: 3,
+  },
+  progressSmText: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+    minWidth: 24,
   },
   orderHeader: {
     flexDirection: 'row',
@@ -468,15 +569,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     backgroundColor: Colors.dangerLight,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.round,
-  },
-  subStepBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    backgroundColor: Colors.successLight,
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
