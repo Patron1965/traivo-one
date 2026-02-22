@@ -223,7 +223,7 @@ export default function HistoricalMapPage() {
             <SelectTrigger className="w-[200px]" data-testid="select-resource">
               <SelectValue placeholder="Välj resurs..." />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="z-[1500]">
               {resources?.map(r => (
                 <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
               ))}
