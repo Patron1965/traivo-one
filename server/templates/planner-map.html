@@ -5,7 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Driver Core - Chaufförskarta</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; background: #F8F9FA; }
@@ -40,7 +43,7 @@
     .header-right {
       display: flex;
       align-items: center;
-      gap: 16px;
+      gap: 12px;
     }
     .status-indicator {
       display: flex;
@@ -78,9 +81,86 @@
     }
     .back-link:hover { opacity: 1; }
 
-    #map {
+    .filter-bar {
       position: fixed;
       top: 56px;
+      left: 0;
+      right: 0;
+      z-index: 999;
+      background: white;
+      border-bottom: 1px solid #E5E7EB;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      height: 48px;
+    }
+    .filter-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: #5D6D7E;
+      white-space: nowrap;
+    }
+    .filter-group {
+      display: flex;
+      gap: 6px;
+    }
+    .filter-btn {
+      padding: 6px 16px;
+      border: 1px solid #D5D8DC;
+      background: white;
+      border-radius: 20px;
+      font-size: 13px;
+      font-weight: 500;
+      color: #5D6D7E;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: inherit;
+      white-space: nowrap;
+    }
+    .filter-btn:hover {
+      border-color: #1B4F72;
+      color: #1B4F72;
+    }
+    .filter-btn.active {
+      background: #1B4F72;
+      color: white;
+      border-color: #1B4F72;
+    }
+    .filter-divider {
+      width: 1px;
+      height: 24px;
+      background: #E5E7EB;
+    }
+    .job-count {
+      font-size: 13px;
+      color: #7F8C8D;
+      margin-left: auto;
+      white-space: nowrap;
+    }
+    .legend {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-left: 16px;
+    }
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      color: #7F8C8D;
+      white-space: nowrap;
+    }
+    .legend-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    #map {
+      position: fixed;
+      top: 104px;
       left: 0;
       right: 0;
       bottom: 0;
@@ -88,13 +168,13 @@
 
     .sidebar {
       position: fixed;
-      top: 56px;
+      top: 104px;
       right: 0;
       bottom: 0;
       width: 320px;
       background: white;
       border-left: 1px solid #E5E7EB;
-      z-index: 999;
+      z-index: 998;
       overflow-y: auto;
       transition: transform 0.3s ease;
     }
@@ -104,8 +184,8 @@
     .sidebar-toggle {
       position: fixed;
       right: 320px;
-      top: 72px;
-      z-index: 1000;
+      top: 116px;
+      z-index: 999;
       background: white;
       border: 1px solid #E5E7EB;
       border-right: none;
@@ -270,6 +350,85 @@
       text-align: right;
     }
 
+    .job-popup-card {
+      padding: 16px;
+    }
+    .job-popup-header {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+    .job-popup-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+    .job-popup-title {
+      font-weight: 700;
+      font-size: 14px;
+      color: #1C2833;
+    }
+    .job-popup-customer {
+      font-size: 13px;
+      color: #5D6D7E;
+      margin-top: 2px;
+    }
+    .job-popup-status {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 12px;
+      margin-top: 6px;
+    }
+    .job-popup-details {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .job-popup-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: #5D6D7E;
+    }
+    .job-popup-row svg {
+      flex-shrink: 0;
+      color: #95A5A6;
+      width: 14px;
+      height: 14px;
+    }
+    .job-popup-codes {
+      display: flex;
+      gap: 4px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .job-popup-code {
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #EBF5FB;
+      color: #1B4F72;
+    }
+    .job-popup-priority {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .priority-urgent { background: #FDEDEC; color: #E74C3C; }
+    .priority-high { background: #FEF5E7; color: #F39C12; }
+    .priority-normal { background: #EBF5FB; color: #2E86C1; }
+
     .no-drivers {
       padding: 40px 20px;
       text-align: center;
@@ -280,12 +439,42 @@
       margin-bottom: 12px;
     }
 
+    .marker-cluster-small {
+      background-color: rgba(27, 79, 114, 0.2);
+    }
+    .marker-cluster-small div {
+      background-color: rgba(27, 79, 114, 0.6);
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .marker-cluster-medium {
+      background-color: rgba(27, 79, 114, 0.3);
+    }
+    .marker-cluster-medium div {
+      background-color: rgba(27, 79, 114, 0.7);
+      color: white;
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .marker-cluster-large {
+      background-color: rgba(27, 79, 114, 0.4);
+    }
+    .marker-cluster-large div {
+      background-color: rgba(27, 79, 114, 0.8);
+      color: white;
+      font-weight: 700;
+      font-size: 14px;
+    }
+
     @media (max-width: 768px) {
       .sidebar { width: 280px; }
       .sidebar-toggle { right: 280px; }
       .sidebar-toggle.collapsed { right: 0; }
       .header h1 { font-size: 16px; }
       .header-subtitle { display: none; }
+      .legend { display: none; }
+      .filter-bar { padding: 10px 12px; gap: 8px; }
     }
   </style>
 </head>
@@ -307,9 +496,27 @@
     </div>
   </div>
 
+  <div class="filter-bar">
+    <div class="filter-label">Jobb:</div>
+    <div class="filter-group">
+      <button class="filter-btn active" id="filter-today" onclick="setJobFilter('today')">Idag</button>
+      <button class="filter-btn" id="filter-week" onclick="setJobFilter('week')">Denna vecka</button>
+      <button class="filter-btn" id="filter-hide" onclick="setJobFilter('hide')">Dolj jobb</button>
+    </div>
+    <div class="filter-divider"></div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#8E44AD"></div> Planerad</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#F39C12"></div> Pa vag</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#27AE60"></div> Pagar</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#1B8553"></div> Klar</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#E74C3C"></div> Avvikelse</div>
+    </div>
+    <div class="job-count" id="job-count"></div>
+  </div>
+
   <div id="map"></div>
 
-  <button class="sidebar-toggle" id="sidebar-toggle" title="Visa/dölj lista">&lsaquo;</button>
+  <button class="sidebar-toggle" id="sidebar-toggle" title="Visa/dolj lista">&lsaquo;</button>
   <div class="sidebar" id="sidebar">
     <div class="sidebar-header">Aktiva chaufförer</div>
     <div id="driver-list"></div>
@@ -326,11 +533,45 @@
       maxZoom: 19,
     }).addTo(map);
 
-    var markers = {};
+    var driverMarkers = {};
     var driverData = [];
     var sidebarCollapsed = false;
+    var currentJobFilter = 'today';
+    var jobClusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 40,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnHover: false,
+      zoomToBoundsOnClick: true,
+      iconCreateFunction: function(cluster) {
+        var count = cluster.getChildCount();
+        var size = count < 10 ? 'small' : (count < 30 ? 'medium' : 'large');
+        return L.divIcon({
+          html: '<div>' + count + '</div>',
+          className: 'marker-cluster marker-cluster-' + size,
+          iconSize: L.point(40, 40)
+        });
+      }
+    });
+    map.addLayer(jobClusterGroup);
 
     var avatarColors = ['#1B4F72', '#17A589', '#E74C3C', '#8E44AD', '#F39C12', '#2ECC71', '#3498DB', '#E67E22'];
+
+    var statusColors = {
+      planned: '#8E44AD',
+      en_route: '#F39C12',
+      in_progress: '#27AE60',
+      completed: '#1B8553',
+      deferred: '#E74C3C',
+      cancelled: '#95A5A6',
+    };
+    var statusLabels = {
+      planned: 'Planerad',
+      en_route: 'Pa vag',
+      in_progress: 'Pagar',
+      completed: 'Klar',
+      deferred: 'Uppskjuten',
+      cancelled: 'Installd',
+    };
 
     function getColor(index) {
       return avatarColors[index % avatarColors.length];
@@ -375,8 +616,81 @@
       });
     }
 
+    function createJobIcon(order) {
+      var color = statusColors[order.status] || '#95A5A6';
+      var priorityBorder = order.priority === 'urgent' ? '#E74C3C' : (order.priority === 'high' ? '#F39C12' : 'transparent');
+      var html = '<div style="' +
+        'width:32px;height:32px;border-radius:6px;' +
+        'background:' + color + ';' +
+        'color:white;font-weight:700;font-size:12px;' +
+        'display:flex;align-items:center;justify-content:center;' +
+        'border:2px solid ' + (order.priority === 'urgent' || order.priority === 'high' ? priorityBorder : 'rgba(255,255,255,0.5)') + ';' +
+        'box-shadow:0 2px 6px rgba(0,0,0,0.25);' +
+        'font-family:Inter,system-ui,sans-serif;' +
+        'position:relative;' +
+        '">' +
+        '<svg width="16" height="16" viewBox="0 0 24 24" fill="white" stroke="none"><path d="M20 6H4V4h16v2zm-2 6H6V10h12v2zm-2 6H8v-2h8v2z"/></svg>' +
+        '</div>';
+      return L.divIcon({
+        html: html,
+        className: '',
+        iconSize: [32, 32],
+        iconAnchor: [16, 16],
+        popupAnchor: [0, -20],
+      });
+    }
+
+    function createJobPopupContent(order) {
+      var color = statusColors[order.status] || '#95A5A6';
+      var label = statusLabels[order.status] || order.status;
+      var codesHtml = '';
+      if (order.executionCodes && order.executionCodes.length > 0) {
+        codesHtml = '<div class="job-popup-codes">';
+        order.executionCodes.forEach(function(c) {
+          codesHtml += '<span class="job-popup-code">' + c.code + '</span>';
+        });
+        codesHtml += '</div>';
+      }
+      var priorityHtml = '';
+      if (order.priority && order.priority !== 'normal') {
+        var pClass = 'priority-' + order.priority;
+        var pLabel = order.priority === 'urgent' ? 'Akut' : 'Hog';
+        priorityHtml = '<span class="job-popup-priority ' + pClass + '">' + pLabel + '</span>';
+      }
+      var timeText = '';
+      if (order.scheduledTimeStart && order.scheduledTimeEnd) {
+        timeText = order.scheduledTimeStart + ' - ' + order.scheduledTimeEnd;
+      }
+      return '<div class="job-popup-card">' +
+        '<div class="job-popup-header">' +
+          '<div class="job-popup-icon" style="background:' + color + '22;color:' + color + '">' +
+            '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>' +
+          '</div>' +
+          '<div>' +
+            '<div class="job-popup-title">' + order.orderNumber + '</div>' +
+            '<div class="job-popup-customer">' + order.customerName + '</div>' +
+            '<div style="margin-top:4px;display:flex;align-items:center;gap:6px;">' +
+              '<span class="job-popup-status" style="background:' + color + '18;color:' + color + '">' + label + '</span>' +
+              priorityHtml +
+            '</div>' +
+          '</div>' +
+        '</div>' +
+        '<div class="job-popup-details">' +
+          '<div class="job-popup-row">' +
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>' +
+            order.address + (order.city ? ', ' + order.city : '') +
+          '</div>' +
+          (timeText ? '<div class="job-popup-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>' + timeText + '</div>' : '') +
+          (order.scheduledDate ? '<div class="job-popup-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>' + order.scheduledDate + '</div>' : '') +
+          (order.description ? '<div class="job-popup-row" style="color:#7F8C8D;font-size:12px;">' + order.description + '</div>' : '') +
+          codesHtml +
+          (order.estimatedDuration ? '<div class="job-popup-row" style="font-size:12px;color:#95A5A6;">Beraknad tid: ' + order.estimatedDuration + ' min</div>' : '') +
+        '</div>' +
+      '</div>';
+    }
+
     function createPopupContent(driver, color) {
-      var speedText = driver.speed > 0 ? Math.round(driver.speed) + ' km/h' : 'Stillastående';
+      var speedText = driver.speed > 0 ? Math.round(driver.speed) + ' km/h' : 'Stillastaende';
       var orderHtml = driver.currentOrderNumber
         ? '<div class="popup-order"><div class="popup-order-label">Aktivt uppdrag</div><div class="popup-order-number">' + driver.currentOrderNumber + '</div></div>'
         : '<div class="popup-row"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg> Inget aktivt uppdrag</div>';
@@ -425,10 +739,41 @@
       if (driver) {
         map.setView([driver.latitude, driver.longitude], 15, { animate: true });
         var markerId = 'driver-' + driver.driverId;
-        if (markers[markerId]) {
-          markers[markerId].openPopup();
+        if (driverMarkers[markerId]) {
+          driverMarkers[markerId].openPopup();
         }
       }
+    }
+
+    function setJobFilter(filter) {
+      currentJobFilter = filter;
+      document.querySelectorAll('.filter-btn').forEach(function(btn) { btn.classList.remove('active'); });
+      document.getElementById('filter-' + filter).classList.add('active');
+      fetchJobs();
+    }
+
+    function fetchJobs() {
+      if (currentJobFilter === 'hide') {
+        jobClusterGroup.clearLayers();
+        document.getElementById('job-count').textContent = '';
+        return;
+      }
+      fetch('/api/planner/orders?range=' + currentJobFilter)
+        .then(function(r) { return r.json(); })
+        .then(function(orders) {
+          jobClusterGroup.clearLayers();
+          orders.forEach(function(order) {
+            var icon = createJobIcon(order);
+            var popup = createJobPopupContent(order);
+            var marker = L.marker([order.latitude, order.longitude], { icon: icon })
+              .bindPopup(popup, { maxWidth: 320 });
+            jobClusterGroup.addLayer(marker);
+          });
+          document.getElementById('job-count').textContent = orders.length + ' jobb';
+        })
+        .catch(function(err) {
+          console.error('Error fetching orders:', err);
+        });
     }
 
     function fetchDriverLocations() {
@@ -436,7 +781,7 @@
         .then(function(r) { return r.json(); })
         .then(function(drivers) {
           driverData = drivers;
-          document.getElementById('driver-count').textContent = drivers.length + ' chaufför' + (drivers.length !== 1 ? 'er' : '');
+          document.getElementById('driver-count').textContent = drivers.length + ' chauffor' + (drivers.length !== 1 ? 'er' : '');
           document.getElementById('update-text').textContent = 'Uppdaterad ' + new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
           var activeIds = {};
@@ -447,21 +792,21 @@
             var icon = createDriverIcon(driver.driverName, color, driver.status);
             var popupContent = createPopupContent(driver, color);
 
-            if (markers[markerId]) {
-              markers[markerId].setLatLng([driver.latitude, driver.longitude]);
-              markers[markerId].setIcon(icon);
-              markers[markerId].getPopup().setContent(popupContent);
+            if (driverMarkers[markerId]) {
+              driverMarkers[markerId].setLatLng([driver.latitude, driver.longitude]);
+              driverMarkers[markerId].setIcon(icon);
+              driverMarkers[markerId].getPopup().setContent(popupContent);
             } else {
-              markers[markerId] = L.marker([driver.latitude, driver.longitude], { icon: icon })
+              driverMarkers[markerId] = L.marker([driver.latitude, driver.longitude], { icon: icon })
                 .bindPopup(popupContent, { maxWidth: 280 })
                 .addTo(map);
             }
           });
 
-          Object.keys(markers).forEach(function(id) {
+          Object.keys(driverMarkers).forEach(function(id) {
             if (!activeIds[id]) {
-              map.removeLayer(markers[id]);
-              delete markers[id];
+              map.removeLayer(driverMarkers[id]);
+              delete driverMarkers[id];
             }
           });
 
@@ -482,7 +827,9 @@
     });
 
     fetchDriverLocations();
+    fetchJobs();
     setInterval(fetchDriverLocations, 15000);
+    setInterval(fetchJobs, 30000);
 
     window.addEventListener('resize', function() {
       if (!sidebarCollapsed && window.innerWidth <= 768) {
