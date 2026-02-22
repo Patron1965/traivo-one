@@ -73,6 +73,7 @@ import EnvironmentalCertificatePage from "@/pages/EnvironmentalCertificatePage";
 import LundstamsROIPage from "@/pages/LundstamsROIPage";
 import InspectionSearchPage from "@/pages/InspectionSearchPage";
 import PlannerMapPage from "@/pages/PlannerMapPage";
+import ChecklistTemplatesPage from "@/pages/ChecklistTemplatesPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -133,6 +134,7 @@ function Router() {
       <Route path="/lundstams-roi" component={LundstamsROIPage} />
       <Route path="/inspections" component={InspectionSearchPage} />
       <Route path="/planner-map" component={PlannerMapPage} />
+      <Route path="/checklist-templates" component={ChecklistTemplatesPage} />
       <Route component={NotFound} />
     </Switch>
   );

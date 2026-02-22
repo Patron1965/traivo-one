@@ -75,6 +75,7 @@ const planeringItems = [
   { title: "Mobilapp", url: "/mobile", icon: Smartphone, description: "Fältarbete" },
   { title: "Rutter", url: "/routes", icon: Map, description: "Körvägar" },
   { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
+  { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardList, description: "Inspektionsfrågor per artikeltyp" },
 ];
 
 const analysItems = [

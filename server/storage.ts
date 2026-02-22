@@ -75,7 +75,10 @@ import {
   type SelfBookingSlot, type InsertSelfBookingSlot,
   type SelfBooking, type InsertSelfBooking,
   type InspectionMetadata, type InsertInspectionMetadata,
-  inspectionMetadata,
+  type ChecklistTemplate, type InsertChecklistTemplate,
+  type DriverNotification, type InsertDriverNotification,
+  type OfflineSyncLog, type InsertOfflineSyncLog,
+  inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -548,6 +551,26 @@ export interface IStorage {
   getInspectionMetadata(tenantId: string, objectId?: string): Promise<InspectionMetadata[]>;
   createInspectionMetadata(data: InsertInspectionMetadata): Promise<InspectionMetadata>;
   searchInspectionMetadata(tenantId: string, filters: { inspectionType?: string; status?: string; objectId?: string }): Promise<InspectionMetadata[]>;
+
+  // Checklist Templates
+  getChecklistTemplates(tenantId: string): Promise<ChecklistTemplate[]>;
+  getChecklistTemplate(id: string): Promise<ChecklistTemplate | undefined>;
+  getChecklistTemplatesByArticleType(tenantId: string, articleType: string): Promise<ChecklistTemplate[]>;
+  createChecklistTemplate(template: InsertChecklistTemplate): Promise<ChecklistTemplate>;
+  updateChecklistTemplate(id: string, data: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined>;
+  deleteChecklistTemplate(id: string): Promise<void>;
+
+  // Driver Notifications
+  getDriverNotifications(resourceId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<DriverNotification[]>;
+  createDriverNotification(notification: InsertDriverNotification): Promise<DriverNotification>;
+  markDriverNotificationRead(id: string, resourceId: string): Promise<DriverNotification | undefined>;
+  markAllDriverNotificationsRead(resourceId: string): Promise<number>;
+  getUnreadNotificationCount(resourceId: string): Promise<number>;
+
+  // Offline Sync Log
+  createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog>;
+  getOfflineSyncLogs(resourceId: string, status?: string): Promise<OfflineSyncLog[]>;
+  updateOfflineSyncLogStatus(id: string, status: string, errorMessage?: string): Promise<OfflineSyncLog | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -3948,6 +3971,79 @@ export class DatabaseStorage implements IStorage {
     if (filters.status) conditions.push(eq(inspectionMetadata.status, filters.status));
     if (filters.objectId) conditions.push(eq(inspectionMetadata.objectId, filters.objectId));
     return db.select().from(inspectionMetadata).where(and(...conditions)).orderBy(desc(inspectionMetadata.inspectedAt));
+  }
+
+  async getChecklistTemplates(tenantId: string): Promise<ChecklistTemplate[]> {
+    return db.select().from(checklistTemplates).where(eq(checklistTemplates.tenantId, tenantId)).orderBy(checklistTemplates.name);
+  }
+
+  async getChecklistTemplate(id: string): Promise<ChecklistTemplate | undefined> {
+    const [result] = await db.select().from(checklistTemplates).where(eq(checklistTemplates.id, id));
+    return result || undefined;
+  }
+
+  async getChecklistTemplatesByArticleType(tenantId: string, articleType: string): Promise<ChecklistTemplate[]> {
+    return db.select().from(checklistTemplates).where(
+      and(eq(checklistTemplates.tenantId, tenantId), eq(checklistTemplates.articleType, articleType), eq(checklistTemplates.isActive, true))
+    );
+  }
+
+  async createChecklistTemplate(template: InsertChecklistTemplate): Promise<ChecklistTemplate> {
+    const [result] = await db.insert(checklistTemplates).values(template).returning();
+    return result;
+  }
+
+  async updateChecklistTemplate(id: string, data: Partial<InsertChecklistTemplate>): Promise<ChecklistTemplate | undefined> {
+    const [result] = await db.update(checklistTemplates).set({ ...data, updatedAt: new Date() }).where(eq(checklistTemplates.id, id)).returning();
+    return result;
+  }
+
+  async deleteChecklistTemplate(id: string): Promise<void> {
+    await db.delete(checklistTemplates).where(eq(checklistTemplates.id, id));
+  }
+
+  async getDriverNotifications(resourceId: string, options?: { unreadOnly?: boolean; limit?: number }): Promise<DriverNotification[]> {
+    const conditions = [eq(driverNotifications.resourceId, resourceId)];
+    if (options?.unreadOnly) conditions.push(eq(driverNotifications.isRead, false));
+    let query = db.select().from(driverNotifications).where(and(...conditions)).orderBy(desc(driverNotifications.createdAt));
+    if (options?.limit) query = query.limit(options.limit) as any;
+    return query;
+  }
+
+  async createDriverNotification(notification: InsertDriverNotification): Promise<DriverNotification> {
+    const [result] = await db.insert(driverNotifications).values(notification).returning();
+    return result;
+  }
+
+  async markDriverNotificationRead(id: string, resourceId: string): Promise<DriverNotification | undefined> {
+    const [result] = await db.update(driverNotifications).set({ isRead: true }).where(and(eq(driverNotifications.id, id), eq(driverNotifications.resourceId, resourceId))).returning();
+    return result;
+  }
+
+  async markAllDriverNotificationsRead(resourceId: string): Promise<number> {
+    const result = await db.update(driverNotifications).set({ isRead: true }).where(and(eq(driverNotifications.resourceId, resourceId), eq(driverNotifications.isRead, false))).returning();
+    return result.length;
+  }
+
+  async getUnreadNotificationCount(resourceId: string): Promise<number> {
+    const result = await db.select({ count: sql<number>`count(*)` }).from(driverNotifications).where(and(eq(driverNotifications.resourceId, resourceId), eq(driverNotifications.isRead, false)));
+    return Number(result[0]?.count || 0);
+  }
+
+  async createOfflineSyncLog(log: InsertOfflineSyncLog): Promise<OfflineSyncLog> {
+    const [result] = await db.insert(offlineSyncLog).values(log).returning();
+    return result;
+  }
+
+  async getOfflineSyncLogs(resourceId: string, status?: string): Promise<OfflineSyncLog[]> {
+    const conditions = [eq(offlineSyncLog.resourceId, resourceId)];
+    if (status) conditions.push(eq(offlineSyncLog.status, status));
+    return db.select().from(offlineSyncLog).where(and(...conditions)).orderBy(desc(offlineSyncLog.createdAt));
+  }
+
+  async updateOfflineSyncLogStatus(id: string, status: string, errorMessage?: string): Promise<OfflineSyncLog | undefined> {
+    const [result] = await db.update(offlineSyncLog).set({ status, errorMessage, processedAt: new Date() }).where(eq(offlineSyncLog.id, id)).returning();
+    return result;
   }
 }
 

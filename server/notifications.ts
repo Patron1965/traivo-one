@@ -192,19 +192,37 @@ class NotificationService {
     return `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  sendToResource(resourceId: string, notification: Omit<Notification, "id" | "timestamp">) {
-    const clients = this.clients.get(resourceId);
-    if (!clients || clients.length === 0) {
-      console.log(`[ws] No connected clients for resource ${resourceId}`);
-      return;
-    }
-
+  async sendToResource(resourceId: string, notification: Omit<Notification, "id" | "timestamp">) {
     const fullNotification: Notification = {
       ...notification,
       id: this.generateId(),
       timestamp: new Date().toISOString(),
       resourceId
     };
+
+    try {
+      const resource = await storage.getResource(resourceId);
+      if (resource) {
+        await storage.createDriverNotification({
+          tenantId: resource.tenantId,
+          resourceId,
+          type: notification.type,
+          title: notification.title,
+          message: notification.message,
+          orderId: notification.orderId || null,
+          data: notification.data || {},
+          isRead: false,
+        });
+      }
+    } catch (e) {
+      console.error(`[ws] Failed to persist notification for ${resourceId}:`, e);
+    }
+
+    const clients = this.clients.get(resourceId);
+    if (!clients || clients.length === 0) {
+      console.log(`[ws] No connected clients for resource ${resourceId}, notification persisted for polling`);
+      return;
+    }
 
     const message = JSON.stringify(fullNotification);
     

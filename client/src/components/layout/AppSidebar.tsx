@@ -45,6 +45,7 @@ const planeringItems = [
   { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
   { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
   { title: "Besiktning", url: "/inspections", icon: ClipboardCheck },
+  { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardCheck },
 ];
 
 // Analys - rapporter och insikter

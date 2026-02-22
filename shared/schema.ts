@@ -3519,3 +3519,61 @@ export const customerCommunications = pgTable("customer_communications", {
 export const insertCustomerCommunicationSchema = createInsertSchema(customerCommunications).omit({ id: true, createdAt: true });
 export type InsertCustomerCommunication = z.infer<typeof insertCustomerCommunicationSchema>;
 export type CustomerCommunication = typeof customerCommunications.$inferSelect;
+
+export const checklistTemplates = pgTable("checklist_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  articleType: text("article_type").notNull(),
+  questions: jsonb("questions").default([]).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_checklist_tpl_tenant").on(table.tenantId),
+  index("idx_checklist_tpl_article_type").on(table.tenantId, table.articleType),
+]);
+
+export const insertChecklistTemplateSchema = createInsertSchema(checklistTemplates).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertChecklistTemplate = z.infer<typeof insertChecklistTemplateSchema>;
+export type ChecklistTemplate = typeof checklistTemplates.$inferSelect;
+
+export const driverNotifications = pgTable("driver_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  resourceId: varchar("resource_id").notNull(),
+  type: text("type").notNull(),
+  title: text("title").notNull(),
+  message: text("message").notNull(),
+  orderId: varchar("order_id"),
+  data: jsonb("data").default({}),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_driver_notif_resource").on(table.resourceId, table.isRead),
+  index("idx_driver_notif_tenant").on(table.tenantId),
+]);
+
+export const insertDriverNotificationSchema = createInsertSchema(driverNotifications).omit({ id: true, createdAt: true });
+export type InsertDriverNotification = z.infer<typeof insertDriverNotificationSchema>;
+export type DriverNotification = typeof driverNotifications.$inferSelect;
+
+export const offlineSyncLog = pgTable("offline_sync_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  resourceId: varchar("resource_id").notNull(),
+  clientId: text("client_id").notNull(),
+  actionType: text("action_type").notNull(),
+  payload: jsonb("payload").default({}).notNull(),
+  status: text("status").default("pending").notNull(),
+  errorMessage: text("error_message"),
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_sync_log_resource").on(table.resourceId, table.status),
+  index("idx_sync_log_tenant").on(table.tenantId),
+]);
+
+export const insertOfflineSyncLogSchema = createInsertSchema(offlineSyncLog).omit({ id: true, createdAt: true, processedAt: true });
+export type InsertOfflineSyncLog = z.infer<typeof insertOfflineSyncLogSchema>;
+export type OfflineSyncLog = typeof offlineSyncLog.$inferSelect;

@@ -5234,9 +5234,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         };
       }));
       
+      const syncLogs = await storage.getOfflineSyncLogs(resourceId);
+      const processingSync = syncLogs.filter(l => l.status === "processing").length;
+      const failedSync = syncLogs.filter(l => l.status === "error").length;
+      const unreadNotifs = await storage.getUnreadNotificationCount(resourceId);
+
       res.json({
         orders: enrichedOrders,
         total: enrichedOrders.length,
+        syncStatus: {
+          processingActions: processingSync,
+          failedActions: failedSync,
+          lastSync: syncLogs[0]?.createdAt || null,
+        },
+        unreadNotifications: unreadNotifs,
       });
     } catch (error) {
       console.error("Failed to get mobile orders:", error);
@@ -5958,6 +5969,431 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Failed image analysis:", error);
       res.status(500).json({ error: "Failed to analyze image" });
+    }
+  });
+
+  // ============================================
+  // OFFLINE SYNC API (Mobile Field App)
+  // ============================================
+
+  app.post("/api/mobile/sync", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resource not found" });
+      const tenantId = resource.tenantId;
+      const { actions } = req.body;
+
+      if (!actions || !Array.isArray(actions)) {
+        return res.status(400).json({ error: "actions array required" });
+      }
+
+      const results: Array<{ clientId: string; status: string; error?: string }> = [];
+
+      for (const action of actions) {
+        const { clientId, actionType, payload } = action;
+        if (!clientId || !actionType) {
+          results.push({ clientId: clientId || "unknown", status: "error", error: "clientId and actionType required" });
+          continue;
+        }
+
+        const logEntry = await storage.createOfflineSyncLog({
+          tenantId,
+          resourceId,
+          clientId,
+          actionType,
+          payload: payload || {},
+          status: "processing",
+        });
+
+        const verifyOrder = async (orderId: string): Promise<{ order: any; error?: string }> => {
+          if (!orderId) return { order: null, error: "orderId required" };
+          const order = await storage.getWorkOrder(orderId);
+          if (!order) return { order: null, error: "Order not found" };
+          if (order.tenantId !== tenantId) return { order: null, error: "Not authorized" };
+          if (order.resourceId !== resourceId) return { order: null, error: "Not authorized" };
+          return { order };
+        };
+
+        try {
+          switch (actionType) {
+            case "status_update": {
+              const { orderId, status: newStatus } = payload;
+              if (!orderId || !newStatus) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId and status required");
+                results.push({ clientId, status: "error", error: "orderId and status required" });
+                break;
+              }
+              const { order, error } = await verifyOrder(orderId);
+              if (!order) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
+                results.push({ clientId, status: "error", error });
+                break;
+              }
+              await storage.updateWorkOrder(orderId, { status: newStatus });
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+              results.push({ clientId, status: "completed" });
+              break;
+            }
+            case "note": {
+              const { orderId, text } = payload;
+              if (!orderId || !text) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId and text required");
+                results.push({ clientId, status: "error", error: "orderId and text required" });
+                break;
+              }
+              const { order, error } = await verifyOrder(orderId);
+              if (!order) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
+                results.push({ clientId, status: "error", error });
+                break;
+              }
+              const existingNotes = Array.isArray(order.notes) ? order.notes : [];
+              await storage.updateWorkOrder(orderId, {
+                notes: [...existingNotes, { text, by: resourceId, at: new Date().toISOString() }] as any,
+              });
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+              results.push({ clientId, status: "completed" });
+              break;
+            }
+            case "deviation": {
+              const { orderId, description, severity, category } = payload;
+              if (!orderId) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId required");
+                results.push({ clientId, status: "error", error: "orderId required" });
+                break;
+              }
+              const { order, error } = await verifyOrder(orderId);
+              if (!order) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
+                results.push({ clientId, status: "error", error });
+                break;
+              }
+              const existingDeviations = Array.isArray(order.deviations) ? order.deviations : [];
+              await storage.updateWorkOrder(orderId, {
+                deviations: [...existingDeviations, {
+                  description: description || "",
+                  severity: severity || "medium",
+                  category: category || "other",
+                  reportedBy: resourceId,
+                  reportedAt: new Date().toISOString(),
+                }] as any,
+              });
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+              results.push({ clientId, status: "completed" });
+              break;
+            }
+            case "material": {
+              const { orderId, articleId, quantity, comment } = payload;
+              if (!orderId || !articleId) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId and articleId required");
+                results.push({ clientId, status: "error", error: "orderId and articleId required" });
+                break;
+              }
+              const { order, error } = await verifyOrder(orderId);
+              if (!order) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
+                results.push({ clientId, status: "error", error });
+                break;
+              }
+              const materials = Array.isArray(order.materialsUsed) ? order.materialsUsed : [];
+              await storage.updateWorkOrder(orderId, {
+                materialsUsed: [...materials, {
+                  articleId,
+                  quantity: quantity || 1,
+                  comment: comment || "",
+                  loggedBy: resourceId,
+                  loggedAt: new Date().toISOString(),
+                }] as any,
+              });
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+              results.push({ clientId, status: "completed" });
+              break;
+            }
+            case "gps": {
+              const { latitude, longitude, speed, heading, accuracy } = payload;
+              if (latitude !== undefined && longitude !== undefined) {
+                await notificationService.handlePositionUpdate({
+                  resourceId,
+                  latitude,
+                  longitude,
+                  speed: speed || 0,
+                  heading: heading || 0,
+                  accuracy: accuracy || 0,
+                  status: "traveling",
+                });
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+                results.push({ clientId, status: "completed" });
+              } else {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "latitude and longitude required");
+                results.push({ clientId, status: "error", error: "latitude and longitude required" });
+              }
+              break;
+            }
+            case "inspection": {
+              const { orderId, inspections } = payload;
+              if (!orderId || !Array.isArray(inspections)) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId and inspections required");
+                results.push({ clientId, status: "error", error: "orderId and inspections required" });
+                break;
+              }
+              const { order, error } = await verifyOrder(orderId);
+              if (!order) {
+                await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
+                results.push({ clientId, status: "error", error });
+                break;
+              }
+              await Promise.all(inspections.map((insp: any) =>
+                storage.createInspectionMetadata({
+                  tenantId,
+                  workOrderId: orderId,
+                  objectId: order.objectId!,
+                  inspectionType: insp.category || "Övrigt",
+                  status: insp.status || "ok",
+                  issues: insp.issues || [],
+                  comment: insp.comment || null,
+                  inspectedBy: resourceId,
+                })
+              ));
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+              results.push({ clientId, status: "completed" });
+              break;
+            }
+            default: {
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "error", `Unknown actionType: ${actionType}`);
+              results.push({ clientId, status: "error", error: `Unknown actionType: ${actionType}` });
+            }
+          }
+        } catch (err: any) {
+          await storage.updateOfflineSyncLogStatus(logEntry.id, "error", err.message || "Processing failed");
+          results.push({ clientId, status: "error", error: err.message || "Processing failed" });
+        }
+      }
+
+      const completed = results.filter(r => r.status === "completed").length;
+      const failed = results.filter(r => r.status === "error").length;
+
+      console.log(`[mobile-sync] Processed ${actions.length} actions for resource ${resourceId}: ${completed} completed, ${failed} failed`);
+
+      res.json({
+        success: true,
+        processed: actions.length,
+        completed,
+        failed,
+        results,
+      });
+    } catch (error) {
+      console.error("Failed to process sync:", error);
+      res.status(500).json({ error: "Failed to process sync" });
+    }
+  });
+
+  app.get("/api/mobile/sync/status", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const status = (req.query.status as string) || undefined;
+      const logs = await storage.getOfflineSyncLogs(resourceId, status);
+
+      const processing = logs.filter(l => l.status === "processing").length;
+      const completed = logs.filter(l => l.status === "completed").length;
+      const failed = logs.filter(l => l.status === "error").length;
+
+      res.json({
+        syncStatus: {
+          processing,
+          completed,
+          failed,
+          total: logs.length,
+          lastSync: logs[0]?.createdAt || null,
+        },
+        recentLogs: logs.slice(0, 20).map(l => ({
+          id: l.id,
+          clientId: l.clientId,
+          actionType: l.actionType,
+          status: l.status,
+          errorMessage: l.errorMessage,
+          createdAt: l.createdAt,
+          processedAt: l.processedAt,
+        })),
+      });
+    } catch (error) {
+      console.error("Failed to get sync status:", error);
+      res.status(500).json({ error: "Failed to get sync status" });
+    }
+  });
+
+  // ============================================
+  // CHECKLIST TEMPLATES API
+  // ============================================
+
+  app.get("/api/checklist-templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const templates = await storage.getChecklistTemplates(tenantId);
+      res.json(templates);
+    } catch (error) {
+      console.error("Failed to get checklist templates:", error);
+      res.status(500).json({ error: "Failed to get checklist templates" });
+    }
+  });
+
+  app.get("/api/checklist-templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const template = await storage.getChecklistTemplate(req.params.id);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get template" });
+    }
+  });
+
+  app.post("/api/checklist-templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { name, articleType, questions, isActive } = req.body;
+
+      if (!name || !articleType) {
+        return res.status(400).json({ error: "name and articleType required" });
+      }
+
+      const template = await storage.createChecklistTemplate({
+        tenantId,
+        name,
+        articleType,
+        questions: questions || [],
+        isActive: isActive !== false,
+      });
+
+      console.log(`[checklist] Template "${name}" created for articleType "${articleType}"`);
+      res.json(template);
+    } catch (error) {
+      console.error("Failed to create checklist template:", error);
+      res.status(500).json({ error: "Failed to create template" });
+    }
+  });
+
+  app.patch("/api/checklist-templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const template = await storage.updateChecklistTemplate(req.params.id, req.body);
+      if (!template) return res.status(404).json({ error: "Template not found" });
+      res.json(template);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  app.delete("/api/checklist-templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      await storage.deleteChecklistTemplate(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+
+  app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const orderId = req.params.id;
+      const resourceId = req.mobileResourceId;
+
+      const order = await storage.getWorkOrder(orderId);
+      if (!order) return res.status(404).json({ error: "Order not found" });
+      if (order.resourceId !== resourceId) return res.status(403).json({ error: "Not authorized" });
+
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resource not found" });
+
+      const lines = await storage.getWorkOrderLines(orderId);
+      const articleIds = lines.map(l => l.articleId).filter(Boolean);
+
+      let articleTypes: string[] = [];
+      if (articleIds.length > 0) {
+        const articles = await storage.getArticles(resource.tenantId);
+        articleTypes = [...new Set(
+          articles.filter(a => articleIds.includes(a.id)).map(a => a.articleType)
+        )];
+      }
+
+      if (articleTypes.length === 0) {
+        articleTypes = ["tjanst"];
+      }
+
+      const allTemplates: any[] = [];
+      for (const at of articleTypes) {
+        const templates = await storage.getChecklistTemplatesByArticleType(resource.tenantId, at);
+        allTemplates.push(...templates);
+      }
+
+      const uniqueTemplates = Array.from(new Map(allTemplates.map(t => [t.id, t])).values());
+
+      res.json({
+        orderId,
+        articleTypes,
+        checklists: uniqueTemplates.map(t => ({
+          templateId: t.id,
+          name: t.name,
+          articleType: t.articleType,
+          questions: t.questions,
+        })),
+      });
+    } catch (error) {
+      console.error("Failed to get checklist for order:", error);
+      res.status(500).json({ error: "Failed to get checklist" });
+    }
+  });
+
+  // ============================================
+  // DRIVER PUSH NOTIFICATIONS API
+  // ============================================
+
+  app.get("/api/mobile/notifications", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const unreadOnly = req.query.unread === "true";
+      const limit = parseInt(req.query.limit as string) || 50;
+
+      const notifications = await storage.getDriverNotifications(resourceId, { unreadOnly, limit });
+      const unreadCount = await storage.getUnreadNotificationCount(resourceId);
+
+      res.json({
+        notifications,
+        unreadCount,
+        total: notifications.length,
+      });
+    } catch (error) {
+      console.error("Failed to get driver notifications:", error);
+      res.status(500).json({ error: "Failed to get notifications" });
+    }
+  });
+
+  app.patch("/api/mobile/notifications/:id/read", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const notification = await storage.markDriverNotificationRead(req.params.id, resourceId);
+      if (!notification) return res.status(404).json({ error: "Notification not found" });
+      res.json(notification);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark notification as read" });
+    }
+  });
+
+  app.patch("/api/mobile/notifications/read-all", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const count = await storage.markAllDriverNotificationsRead(resourceId);
+      res.json({ success: true, markedRead: count });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to mark all as read" });
+    }
+  });
+
+  app.get("/api/mobile/notifications/count", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const unreadCount = await storage.getUnreadNotificationCount(resourceId);
+      res.json({ unreadCount });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get notification count" });
     }
   });
 
