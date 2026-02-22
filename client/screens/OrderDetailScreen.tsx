@@ -29,6 +29,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const [aiTip, setAiTip] = useState<string | null>(null);
   const [aiTipLoading, setAiTipLoading] = useState(false);
   const [showAiTip, setShowAiTip] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<'complete' | 'defer' | null>(null);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/mobile/orders/${orderId}`],
@@ -113,13 +114,25 @@ export function OrderDetailScreen({ route, navigation }: any) {
   function handleAdvanceStatus() {
     if (!order) return;
     const next = getNextStatus(order.status);
-    if (next) {
+    if (!next) return;
+    if (next === 'completed') {
+      setConfirmAction('complete');
+    } else {
       statusMutation.mutate(next);
     }
   }
 
   function handleDefer() {
-    statusMutation.mutate('deferred');
+    setConfirmAction('defer');
+  }
+
+  function handleConfirmAction() {
+    if (confirmAction === 'complete') {
+      statusMutation.mutate('completed');
+    } else if (confirmAction === 'defer') {
+      statusMutation.mutate('deferred');
+    }
+    setConfirmAction(null);
   }
 
   function openNavigation() {
@@ -444,68 +457,71 @@ export function OrderDetailScreen({ route, navigation }: any) {
           </View>
         </Card>
 
-        <View style={styles.actionRow}>
-          <Pressable
-            style={styles.secondaryAction}
-            onPress={() => navigation.navigate('ReportDeviation', { orderId: order.id })}
-            testID="button-report-deviation"
-          >
-            <Feather name="alert-triangle" size={18} color={Colors.warning} />
-            <ThemedText variant="caption" color={Colors.warning}>
-              Avvikelse
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryAction}
-            onPress={() => navigation.navigate('MaterialLog', { orderId: order.id, articles: order.articles })}
-            testID="button-material-log"
-          >
-            <Feather name="package" size={18} color={Colors.primary} />
-            <ThemedText variant="caption" color={Colors.primary}>
-              Material
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryAction}
-            onPress={() => navigation.navigate('Inspection', { orderId: order.id })}
-            testID="button-inspection"
-          >
-            <Feather name="clipboard" size={18} color={Colors.secondary} />
-            <ThemedText variant="caption" color={Colors.secondary}>
-              Inspektion
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryAction}
-            onPress={() => navigation.navigate('CameraCapture', { orderId: order.id })}
-            testID="button-camera"
-          >
-            <Feather name="camera" size={18} color={Colors.primary} />
-            <ThemedText variant="caption" color={Colors.primary}>
-              Foto
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryAction}
-            onPress={() => navigation.navigate('Signature', { orderId: order.id })}
-            testID="button-signature"
-          >
-            <Feather name="edit-3" size={18} color={Colors.primary} />
-            <ThemedText variant="caption" color={Colors.primary}>
-              Signatur
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={styles.secondaryAction}
-            onPress={handleAiTip}
-            testID="button-ai-tip"
-          >
-            <Feather name="cpu" size={18} color={Colors.secondary} />
-            <ThemedText variant="caption" color={Colors.secondary}>
-              AI Tips
-            </ThemedText>
-          </Pressable>
-        </View>
+        <Card>
+          <ThemedText variant="label" style={styles.sectionLabel}>Åtgärder</ThemedText>
+          <View style={styles.actionGrid}>
+            <Pressable
+              style={styles.actionGridItem}
+              onPress={() => navigation.navigate('ReportDeviation', { orderId: order.id })}
+              testID="button-report-deviation"
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: Colors.warningLight }]}>
+                <Feather name="alert-triangle" size={24} color={Colors.warning} />
+              </View>
+              <ThemedText variant="caption" style={styles.actionLabel}>Avvikelse</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.actionGridItem}
+              onPress={() => navigation.navigate('MaterialLog', { orderId: order.id, articles: order.articles })}
+              testID="button-material-log"
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
+                <Feather name="package" size={24} color={Colors.primary} />
+              </View>
+              <ThemedText variant="caption" style={styles.actionLabel}>Material</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.actionGridItem}
+              onPress={() => navigation.navigate('Inspection', { orderId: order.id })}
+              testID="button-inspection"
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
+                <Feather name="clipboard" size={24} color={Colors.secondary} />
+              </View>
+              <ThemedText variant="caption" style={styles.actionLabel}>Inspektion</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.actionGridItem}
+              onPress={() => navigation.navigate('CameraCapture', { orderId: order.id })}
+              testID="button-camera"
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
+                <Feather name="camera" size={24} color={Colors.primaryLight} />
+              </View>
+              <ThemedText variant="caption" style={styles.actionLabel}>Foto</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.actionGridItem}
+              onPress={() => navigation.navigate('Signature', { orderId: order.id })}
+              testID="button-signature"
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
+                <Feather name="edit-3" size={24} color={Colors.primary} />
+              </View>
+              <ThemedText variant="caption" style={styles.actionLabel}>Signatur</ThemedText>
+            </Pressable>
+            <Pressable
+              style={styles.actionGridItem}
+              onPress={handleAiTip}
+              testID="button-ai-tip"
+            >
+              <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
+                <Feather name="cpu" size={24} color={Colors.secondary} />
+              </View>
+              <ThemedText variant="caption" style={styles.actionLabel}>AI Tips</ThemedText>
+            </Pressable>
+          </View>
+        </Card>
       </ScrollView>
 
       {!isFinished && !order.isLocked ? (
@@ -516,7 +532,10 @@ export function OrderDetailScreen({ route, navigation }: any) {
               onPress={handleDefer}
               testID="button-defer"
             >
-              <Feather name="x-circle" size={20} color={Colors.danger} />
+              <Feather name="x-circle" size={22} color={Colors.danger} />
+              <ThemedText variant="caption" color={Colors.danger} style={styles.deferLabel}>
+                Skjut upp
+              </ThemedText>
             </Pressable>
           ) : null}
           {nextStatus ? (
@@ -526,8 +545,8 @@ export function OrderDetailScreen({ route, navigation }: any) {
               disabled={statusMutation.isPending}
               testID="button-advance-status"
             >
-              <Feather name={getNextStatusIcon(order.status) as any} size={20} color={Colors.textInverse} />
-              <ThemedText variant="subheading" color={Colors.textInverse} style={{ fontSize: FontSize.lg }}>
+              <Feather name={getNextStatusIcon(order.status) as any} size={24} color={Colors.textInverse} />
+              <ThemedText variant="subheading" color={Colors.textInverse} style={styles.advanceLabel}>
                 {getNextStatusLabel(order.status)}
               </ThemedText>
             </Pressable>
@@ -543,6 +562,54 @@ export function OrderDetailScreen({ route, navigation }: any) {
           </ThemedText>
         </View>
       ) : null}
+
+      <Modal
+        visible={confirmAction !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConfirmAction(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.confirmContent}>
+            <View style={styles.confirmIconCircle}>
+              <Feather
+                name={confirmAction === 'complete' ? 'check-circle' : 'pause-circle'}
+                size={40}
+                color={confirmAction === 'complete' ? Colors.secondary : Colors.warning}
+              />
+            </View>
+            <ThemedText variant="subheading" style={styles.confirmTitle}>
+              {confirmAction === 'complete' ? 'Slutföra uppdraget?' : 'Skjuta upp uppdraget?'}
+            </ThemedText>
+            <ThemedText variant="body" color={Colors.textSecondary} style={styles.confirmDesc}>
+              {confirmAction === 'complete'
+                ? 'Uppdraget markeras som slutfört. Du kan inte ångra detta.'
+                : 'Uppdraget skjuts upp till ett senare tillfälle.'}
+            </ThemedText>
+            <View style={styles.confirmButtons}>
+              <Pressable
+                style={styles.confirmCancel}
+                onPress={() => setConfirmAction(null)}
+                testID="button-confirm-cancel"
+              >
+                <ThemedText variant="body" color={Colors.textSecondary}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.confirmOk,
+                  { backgroundColor: confirmAction === 'complete' ? Colors.secondary : Colors.warning },
+                ]}
+                onPress={handleConfirmAction}
+                testID="button-confirm-ok"
+              >
+                <ThemedText variant="body" color={Colors.textInverse} style={styles.confirmOkText}>
+                  {confirmAction === 'complete' ? 'Ja, slutför' : 'Ja, skjut upp'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <Modal
         visible={showAiTip}
@@ -824,17 +891,28 @@ const styles = StyleSheet.create({
   noteSendDisabled: {
     backgroundColor: Colors.textMuted,
   },
-  actionRow: {
+  actionGrid: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginTop: Spacing.sm,
     flexWrap: 'wrap',
+    gap: Spacing.md,
   },
-  secondaryAction: {
+  actionGridItem: {
     alignItems: 'center',
     gap: Spacing.xs,
-    padding: Spacing.sm,
-    minWidth: 60,
+    width: '28%',
+    minWidth: 80,
+  },
+  actionIconBox: {
+    width: 56,
+    height: 56,
+    borderRadius: BorderRadius.lg,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  actionLabel: {
+    fontSize: FontSize.xs,
+    textAlign: 'center',
+    color: Colors.text,
   },
   bottomBar: {
     position: 'absolute',
@@ -854,12 +932,17 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
   },
   deferButton: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     borderRadius: BorderRadius.lg,
     backgroundColor: Colors.dangerLight,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 2,
+  },
+  deferLabel: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
   },
   advanceButton: {
     flex: 1,
@@ -867,9 +950,56 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.sm,
-    height: 56,
+    height: 64,
     backgroundColor: Colors.secondary,
     borderRadius: BorderRadius.lg,
+  },
+  advanceLabel: {
+    fontSize: FontSize.xl,
+    fontFamily: 'Inter_700Bold',
+  },
+  confirmContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: '85%',
+    alignItems: 'center',
+  },
+  confirmIconCircle: {
+    marginBottom: Spacing.md,
+  },
+  confirmTitle: {
+    textAlign: 'center',
+    marginBottom: Spacing.sm,
+    fontSize: FontSize.xl,
+  },
+  confirmDesc: {
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+    lineHeight: 22,
+  },
+  confirmButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    width: '100%',
+  },
+  confirmCancel: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.background,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmOk: {
+    flex: 1,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  confirmOkText: {
+    fontFamily: 'Inter_600SemiBold',
   },
   modalOverlay: {
     flex: 1,
