@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { pool } from '../db';
 
 const router = Router();
 
@@ -412,8 +413,34 @@ router.get('/articles', (req, res) => {
   }
 });
 
-router.post('/gps', (req, res) => {
-  res.json({ received: true });
+router.post('/gps', async (req, res) => {
+  const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
+  
+  try {
+    if (latitude != null && longitude != null && driverId) {
+      await pool.query(
+        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, speed, heading, accuracy, current_order_id, current_order_number, status, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW())
+         ON CONFLICT (driver_id) DO UPDATE SET
+           driver_name = EXCLUDED.driver_name,
+           vehicle_reg_no = EXCLUDED.vehicle_reg_no,
+           latitude = EXCLUDED.latitude,
+           longitude = EXCLUDED.longitude,
+           speed = COALESCE(EXCLUDED.speed, driver_locations.speed),
+           heading = COALESCE(EXCLUDED.heading, driver_locations.heading),
+           accuracy = COALESCE(EXCLUDED.accuracy, driver_locations.accuracy),
+           current_order_id = EXCLUDED.current_order_id,
+           current_order_number = EXCLUDED.current_order_number,
+           status = 'active',
+           updated_at = NOW()`,
+        [driverId, driverName || 'Okänd', vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0, currentOrderId, currentOrderNumber]
+      );
+    }
+    res.json({ received: true });
+  } catch (error) {
+    console.error('Error saving GPS position:', error);
+    res.json({ received: true });
+  }
 });
 
 router.get('/weather', async (_req, res) => {
