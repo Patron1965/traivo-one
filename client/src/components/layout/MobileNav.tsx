@@ -39,6 +39,7 @@ import {
   UserCheck,
   Database,
   MapPin,
+  History,
 } from "lucide-react";
 
 const navigationGroups = [
@@ -72,6 +73,7 @@ const navigationGroups = [
       { title: "Ruttplanering", url: "/routes", icon: Map },
       { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
       { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
+      { title: "Historisk Kartvy", url: "/historical-map", icon: History },
     ],
   },
   {

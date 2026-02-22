@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain, BookOpen, Database, ClipboardCheck, MapPin } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain, BookOpen, Database, ClipboardCheck, MapPin, History } from "lucide-react";
 import unicornLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -44,6 +44,7 @@ const planeringItems = [
   { title: "Ruttplanering", url: "/routes", icon: Map },
   { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
   { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
+  { title: "Historisk Kartvy", url: "/historical-map", icon: History },
   { title: "Besiktning", url: "/inspections", icon: ClipboardCheck },
   { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardCheck },
 ];

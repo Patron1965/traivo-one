@@ -28,6 +28,7 @@ import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { hashPassword } from "./password";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { anomalyMonitor } from "./anomaly-monitor";
+import { startWeeklyReportScheduler, generateAndSendWeeklyReports } from "./weekly-report";
 import { sendEmail } from "./replit_integrations/resend";
 import { createInheritanceProcessor } from "./inheritance-processor";
 import { metadataRouter } from "./metadata-routes";
@@ -80,6 +81,9 @@ export async function registerRoutes(
   
   // Start anomaly monitoring (runs every 5 minutes)
   anomalyMonitor.start();
+  
+  // Start weekly report scheduler (Fridays 16:00)
+  startWeeklyReportScheduler();
   
   await setupAuth(app);
   registerAuthRoutes(app);
@@ -7026,6 +7030,148 @@ setInterval(loadRoutes, 30000);
   });
 
   // ============================================
+  // KPI / ANALYTICS ENDPOINTS
+  // ============================================
+
+  app.get("/api/kpis/daily", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const dateParam = req.query.date as string;
+      const date = dateParam ? new Date(dateParam) : new Date();
+      
+      const startOfDay = new Date(date);
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date(date);
+      endOfDay.setHours(23, 59, 59, 999);
+
+      const orders = await storage.getWorkOrdersByDate(tenantId, date);
+      const resources = await storage.getResources(tenantId);
+
+      const completed = orders.filter(o => 
+        o.completedAt || o.status === "completed" || o.executionStatus === "completed"
+      );
+      const remaining = orders.filter(o => 
+        !o.completedAt && o.status !== "completed" && o.executionStatus !== "completed"
+      );
+
+      const durationsMinutes = completed
+        .map(o => o.actualDuration || o.estimatedDuration || 0)
+        .filter(d => d > 0);
+      const avgTimePerTask = durationsMinutes.length > 0
+        ? Math.round(durationsMinutes.reduce((a, b) => a + b, 0) / durationsMinutes.length)
+        : 0;
+
+      const activeResources = resources.filter(r => 
+        orders.some(o => o.resourceId === r.id)
+      );
+
+      const resourceKpis = activeResources.map(r => {
+        const resourceOrders = orders.filter(o => o.resourceId === r.id);
+        const resourceCompleted = resourceOrders.filter(o => 
+          o.completedAt || o.status === "completed" || o.executionStatus === "completed"
+        );
+        const resourceDurations = resourceCompleted
+          .map(o => o.actualDuration || o.estimatedDuration || 0)
+          .filter(d => d > 0);
+        return {
+          resourceId: r.id,
+          resourceName: r.name,
+          totalTasks: resourceOrders.length,
+          completedTasks: resourceCompleted.length,
+          remainingTasks: resourceOrders.length - resourceCompleted.length,
+          avgTimeMinutes: resourceDurations.length > 0
+            ? Math.round(resourceDurations.reduce((a, b) => a + b, 0) / resourceDurations.length)
+            : 0,
+        };
+      });
+
+      res.json({
+        date: date.toISOString().split("T")[0],
+        totalTasks: orders.length,
+        completedTasks: completed.length,
+        remainingTasks: remaining.length,
+        completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
+        avgTimePerTaskMinutes: avgTimePerTask,
+        activeResources: activeResources.length,
+        resourceKpis,
+      });
+    } catch (error) {
+      console.error("Failed to compute daily KPIs:", error);
+      res.status(500).json({ error: "Failed to compute KPIs" });
+    }
+  });
+
+  app.get("/api/kpis/weekly", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const weekParam = req.query.week as string;
+      
+      let startOfWeek: Date;
+      if (weekParam) {
+        startOfWeek = new Date(weekParam);
+      } else {
+        startOfWeek = new Date();
+        const day = startOfWeek.getDay();
+        const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+        startOfWeek.setDate(diff);
+      }
+      startOfWeek.setHours(0, 0, 0, 0);
+      const endOfWeek = new Date(startOfWeek);
+      endOfWeek.setDate(endOfWeek.getDate() + 6);
+      endOfWeek.setHours(23, 59, 59, 999);
+
+      const prevStart = new Date(startOfWeek);
+      prevStart.setDate(prevStart.getDate() - 7);
+      const prevEnd = new Date(startOfWeek);
+      prevEnd.setMilliseconds(-1);
+
+      const thisWeekOrders = await storage.getWorkOrders(tenantId, startOfWeek, endOfWeek, true);
+      const prevWeekOrders = await storage.getWorkOrders(tenantId, prevStart, prevEnd, true);
+      const thisWeek = thisWeekOrders;
+      const prevWeek = prevWeekOrders;
+
+      const calcStats = (orders: typeof thisWeek) => {
+        const completed = orders.filter(o => o.completedAt || o.status === "completed" || o.executionStatus === "completed");
+        const durations = completed.map(o => o.actualDuration || o.estimatedDuration || 0).filter(d => d > 0);
+        return {
+          totalTasks: orders.length,
+          completedTasks: completed.length,
+          completionRate: orders.length > 0 ? Math.round((completed.length / orders.length) * 100) : 0,
+          avgTimeMinutes: durations.length > 0 ? Math.round(durations.reduce((a, b) => a + b, 0) / durations.length) : 0,
+        };
+      };
+
+      const current = calcStats(thisWeek);
+      const previous = calcStats(prevWeek);
+
+      res.json({
+        weekStart: startOfWeek.toISOString().split("T")[0],
+        weekEnd: endOfWeek.toISOString().split("T")[0],
+        current,
+        previous,
+        trends: {
+          tasksDelta: current.totalTasks - previous.totalTasks,
+          completionRateDelta: current.completionRate - previous.completionRate,
+          avgTimeDelta: current.avgTimeMinutes - previous.avgTimeMinutes,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to compute weekly KPIs:", error);
+      res.status(500).json({ error: "Failed to compute weekly KPIs" });
+    }
+  });
+
+  app.post("/api/system/weekly-report/trigger", requireAdmin, async (req, res) => {
+    try {
+      const result = await generateAndSendWeeklyReports();
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to trigger weekly report:", error);
+      res.status(500).json({ error: "Failed to send weekly reports" });
+    }
+  });
+
+  // ============================================
   // ANOMALY MONITORING API ENDPOINTS
   // ============================================
   
@@ -11836,8 +11982,8 @@ setInterval(loadRoutes, 30000);
       const session = await requirePortalAuth(req, res);
       if (!session) return;
 
-      const messages = await storage.getPortalMessages(session.tenantId!, session.customerId!);
-      await storage.markPortalMessagesAsRead(session.tenantId!, session.customerId!);
+      const messages = await storage.getLegacyPortalMessages(session.tenantId!, session.customerId!);
+      await storage.markLegacyPortalMessagesAsRead(session.tenantId!, session.customerId!);
       res.json(messages);
     } catch (error) {
       console.error("Failed to get portal messages:", error);
@@ -11856,7 +12002,7 @@ setInterval(loadRoutes, 30000);
         return res.status(400).json({ error: "Meddelande krävs" });
       }
 
-      const newMessage = await storage.createPortalMessage({
+      const newMessage = await storage.createLegacyPortalMessage({
         tenantId: session.tenantId!,
         customerId: session.customerId!,
         sender: "customer",
@@ -11876,7 +12022,7 @@ setInterval(loadRoutes, 30000);
       const session = await requirePortalAuth(req, res);
       if (!session) return;
 
-      const count = await storage.getUnreadMessageCount(session.tenantId!, session.customerId!);
+      const count = await storage.getLegacyUnreadMessageCount(session.tenantId!, session.customerId!);
       res.json({ count });
     } catch (error) {
       console.error("Failed to get unread count:", error);
@@ -12152,7 +12298,7 @@ setInterval(loadRoutes, 30000);
       
       const customerMessages = await Promise.all(
         customerIds.map(async (customerId) => {
-          const messages = await storage.getPortalMessages(tenantId, customerId);
+          const messages = await storage.getLegacyPortalMessages(tenantId, customerId);
           const customer = customers.find(c => c?.id === customerId);
           const unreadCount = messages.filter(m => m.sender === "customer" && !m.readAt).length;
           const lastMessage = messages[messages.length - 1];
@@ -12194,7 +12340,7 @@ setInterval(loadRoutes, 30000);
         return res.status(404).json({ error: "Kund hittades inte" });
       }
 
-      const messages = await storage.getPortalMessages(tenantId, customerId);
+      const messages = await storage.getLegacyPortalMessages(tenantId, customerId);
       await storage.markStaffMessagesAsRead(tenantId, customerId);
       
       res.json({
@@ -12227,7 +12373,7 @@ setInterval(loadRoutes, 30000);
         return res.status(404).json({ error: "Kund hittades inte" });
       }
 
-      const newMessage = await storage.createPortalMessage({
+      const newMessage = await storage.createLegacyPortalMessage({
         tenantId,
         customerId,
         sender: "staff",

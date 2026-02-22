@@ -3379,10 +3379,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ============================================
-  // Customer Portal Messages
+  // Customer Portal Messages (Legacy)
   // ============================================
   
-  async getPortalMessages(tenantId: string, customerId: string): Promise<CustomerPortalMessage[]> {
+  async getLegacyPortalMessages(tenantId: string, customerId: string): Promise<CustomerPortalMessage[]> {
     return db.select().from(customerPortalMessages)
       .where(and(
         eq(customerPortalMessages.tenantId, tenantId),
@@ -3391,12 +3391,12 @@ export class DatabaseStorage implements IStorage {
       .orderBy(customerPortalMessages.createdAt);
   }
 
-  async createPortalMessage(message: InsertCustomerPortalMessage): Promise<CustomerPortalMessage> {
+  async createLegacyPortalMessage(message: InsertCustomerPortalMessage): Promise<CustomerPortalMessage> {
     const [result] = await db.insert(customerPortalMessages).values(message).returning();
     return result;
   }
 
-  async markPortalMessagesAsRead(tenantId: string, customerId: string): Promise<void> {
+  async markLegacyPortalMessagesAsRead(tenantId: string, customerId: string): Promise<void> {
     await db.update(customerPortalMessages)
       .set({ readAt: new Date() })
       .where(and(
@@ -3407,7 +3407,7 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async getUnreadMessageCount(tenantId: string, customerId?: string): Promise<number> {
+  async getLegacyUnreadMessageCount(tenantId: string, customerId?: string): Promise<number> {
     const conditions = [
       eq(customerPortalMessages.tenantId, tenantId),
       isNull(customerPortalMessages.readAt)

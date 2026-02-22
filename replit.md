@@ -39,6 +39,9 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Metadata-triggers:** System for listing objects with deviations and tracking issue history.
 - **Industry Packages System:** Predefined templates for different industries with configurable articles, metadata, and one-click installation for new tenants.
 - **SMS Infrastructure:** Unified multi-channel notification service supporting email and SMS.
+- **Historical Map View:** Playback of daily GPS movement patterns per resource with timeline slider, speed control, and KPI overlay. Located at `/historical-map`.
+- **KPI Dashboard on Map:** Real-time daily KPI overlay (completed/remaining tasks, average time, completion rate) on the historical map view.
+- **Automatic Weekly Reports:** Scheduled Friday email reports via Resend with weekly KPIs, trend comparisons, and per-tenant summaries.
 - **API Cost Monitoring Dashboard:** Admin-only dashboard for real-time monitoring of external API costs.
 - **Execution Codes:** Many-to-many system mapping resource capabilities to task requirements, enforced by auto-planning.
 - **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
