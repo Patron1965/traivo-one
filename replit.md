@@ -53,7 +53,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Field Worker Task Dependency View:** Mobile app displays task dependencies.
 - **Field Worker Photo Upload:** Two-step presigned URL flow for photo capture.
 - **Inspection & Metadata System:** Structured inspection checklist integrated into the mobile app with a dedicated search page for results.
-- **Invoice Preview/Generation & Fortnox Export:** Backend endpoint for invoice previews and batch export to Fortnox.
+- **Invoice Preview/Generation & Fortnox Export:** Full invoicing page at `/invoicing` with invoice preview (grouped by customer, expandable line items), date/customer filtering, batch selection, Fortnox export with confirmation dialog, export history tracking with status badges, and detailed invoice preview dialog. Backend endpoints for invoice previews and batch export to Fortnox.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

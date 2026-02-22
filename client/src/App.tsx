@@ -72,6 +72,7 @@ import SmsSettingsPage from "@/pages/SmsSettingsPage";
 import EnvironmentalCertificatePage from "@/pages/EnvironmentalCertificatePage";
 import LundstamsROIPage from "@/pages/LundstamsROIPage";
 import InspectionSearchPage from "@/pages/InspectionSearchPage";
+import InvoicingPage from "@/pages/InvoicingPage";
 import PlannerMapPage from "@/pages/PlannerMapPage";
 import HistoricalMapPage from "@/pages/HistoricalMapPage";
 import ChecklistTemplatesPage from "@/pages/ChecklistTemplatesPage";
@@ -117,6 +118,7 @@ function Router() {
       <Route path="/project-report" component={ProjectReportPage} />
       <Route path="/metadata" component={MetadataPage} />
       <Route path="/metadata-settings" component={MetadataSettingsPage} />
+      <Route path="/invoicing" component={InvoicingPage} />
       <Route path="/fortnox" component={FortnoxSettingsPage} />
       <Route path="/sms-settings" component={SmsSettingsPage} />
       <Route path="/api-costs" component={ApiCostsDashboardPage} />
