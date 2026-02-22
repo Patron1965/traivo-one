@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor } from "lucide-react";
+import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -37,6 +37,7 @@ interface JobFormData {
   estimatedDuration: string;
   resourceId: string;
   scheduledDate: Date | undefined;
+  teamResourceIds: string[];
 }
 
 export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
@@ -51,11 +52,13 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     estimatedDuration: "60",
     resourceId: "",
     scheduledDate: undefined,
+    teamResourceIds: [],
   });
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
   const [selectedObjectName, setSelectedObjectName] = useState("");
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
+  const [teamPopoverOpen, setTeamPopoverOpen] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -134,6 +137,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       scheduledDate: Date | null;
       status: string;
       articlesToAdd: Array<{ id: string; name: string; price: number | null }>;
+      metadata?: Record<string, any>;
     }) => {
       const { articlesToAdd, ...orderData } = data;
       const response = await apiRequest("POST", "/api/work-orders", orderData);
@@ -167,6 +171,24 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     },
   });
 
+  const toggleTeamMember = (resourceId: string) => {
+    setFormData(prev => {
+      const ids = prev.teamResourceIds.includes(resourceId)
+        ? prev.teamResourceIds.filter(id => id !== resourceId)
+        : [...prev.teamResourceIds, resourceId];
+      const primaryId = ids.length > 0 ? ids[0] : "";
+      return { ...prev, teamResourceIds: ids, resourceId: primaryId };
+    });
+  };
+
+  const removeTeamMember = (resourceId: string) => {
+    setFormData(prev => {
+      const ids = prev.teamResourceIds.filter(id => id !== resourceId);
+      const primaryId = ids.length > 0 ? ids[0] : "";
+      return { ...prev, teamResourceIds: ids, resourceId: primaryId };
+    });
+  };
+
   const handleClose = () => {
     setFormData({
       title: "",
@@ -178,10 +200,12 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       estimatedDuration: "60",
       resourceId: "",
       scheduledDate: undefined,
+      teamResourceIds: [],
     });
     setObjectSearch("");
     setSelectedObjectName("");
     setSelectedArticleIds(new Set());
+    setTeamPopoverOpen(false);
     onClose();
   };
 
@@ -195,6 +219,9 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       .filter(a => selectedArticleIds.has(a.id))
       .map(a => ({ id: a.id, name: a.name, price: a.listPrice }));
 
+    const teamResourceNames = formData.teamResourceIds
+      .map(id => resources.find(r => r.id === id)?.name || id);
+
     createWorkOrderMutation.mutate({
       title: formData.title,
       description: formData.description,
@@ -207,6 +234,13 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       scheduledDate: formData.scheduledDate || null,
       status: formData.resourceId && formData.scheduledDate ? "scheduled" : "draft",
       articlesToAdd,
+      metadata: formData.teamResourceIds.length > 1 ? {
+        teamMembers: formData.teamResourceIds.map((id, i) => ({
+          resourceId: id,
+          name: teamResourceNames[i],
+          role: i === 0 ? "ansvarig" : "medlem",
+        })),
+      } : undefined,
     });
 
     onSubmit?.(formData);
@@ -375,20 +409,72 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
             </div>
 
             <div className="space-y-2">
-              <Label>Tekniker</Label>
-              <Select 
-                value={formData.resourceId} 
-                onValueChange={(v) => setFormData({...formData, resourceId: v})}
-              >
-                <SelectTrigger data-testid="select-resource">
-                  <SelectValue placeholder="Välj tekniker" />
-                </SelectTrigger>
-                <SelectContent>
-                  {resources.map(r => (
-                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label className="flex items-center gap-1.5">
+                <Users className="h-3.5 w-3.5" />
+                Tekniker {formData.teamResourceIds.length > 1 && <Badge variant="secondary" className="text-xs px-1.5 py-0">{formData.teamResourceIds.length} st</Badge>}
+              </Label>
+              <Popover open={teamPopoverOpen} onOpenChange={setTeamPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between font-normal h-auto min-h-[36px]"
+                    data-testid="select-resource"
+                  >
+                    {formData.teamResourceIds.length === 0 ? (
+                      <span className="text-muted-foreground">Välj tekniker...</span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1 py-0.5">
+                        {formData.teamResourceIds.map((id, i) => {
+                          const r = resources.find(res => res.id === id);
+                          return (
+                            <Badge
+                              key={id}
+                              variant={i === 0 ? "default" : "secondary"}
+                              className="text-xs gap-1 pr-1"
+                            >
+                              {r?.name || id}
+                              <span
+                                role="button"
+                                className="hover:bg-background/20 rounded-full p-0.5 cursor-pointer"
+                                onClick={(e) => { e.stopPropagation(); removeTeamMember(id); }}
+                                data-testid={`button-remove-resource-${id}`}
+                              >
+                                <X className="h-3 w-3" />
+                              </span>
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[250px] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Sök tekniker..." />
+                    <CommandList>
+                      <CommandEmpty>Inga tekniker hittades</CommandEmpty>
+                      <CommandGroup>
+                        {resources.map(r => (
+                          <CommandItem
+                            key={r.id}
+                            value={r.name}
+                            onSelect={() => toggleTeamMember(r.id)}
+                            data-testid={`option-resource-${r.id}`}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", formData.teamResourceIds.includes(r.id) ? "opacity-100" : "opacity-0")} />
+                            <span>{r.name}</span>
+                            {formData.teamResourceIds[0] === r.id && (
+                              <Badge variant="outline" className="ml-auto text-xs">Ansvarig</Badge>
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
           </div>
 
