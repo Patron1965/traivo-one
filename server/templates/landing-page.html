@@ -58,7 +58,8 @@
   <script>
     function updateLinks() {
       var host = window.location.host;
-      var url = 'exp://' + host;
+      var proto = window.location.protocol === 'https:' ? 'exps' : 'exp';
+      var url = proto + '://' + host;
       var linkEl = document.getElementById('expo-link');
       var urlEl = document.getElementById('url-display');
       var qrImg = document.getElementById('qr-img');
