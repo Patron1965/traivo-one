@@ -83,6 +83,29 @@ const SLA_COLORS: Record<string, string> = {
   enterprise: "#a855f7",
 };
 
+const PERIODICITY_OPTIONS = [
+  { value: "dag", label: "Dagligen" },
+  { value: "vecka", label: "Varje vecka" },
+  { value: "varannan_vecka", label: "Varannan vecka" },
+  { value: "manad", label: "Varje månad" },
+  { value: "kvartal", label: "Varje kvartal" },
+  { value: "halvår", label: "Varje halvår" },
+  { value: "år", label: "Varje år" },
+];
+
+const TIME_SLOT_OPTIONS = [
+  { value: "07:00-09:00", label: "Tidig morgon (07-09)" },
+  { value: "09:00-12:00", label: "Förmiddag (09-12)" },
+  { value: "12:00-15:00", label: "Eftermiddag (12-15)" },
+  { value: "15:00-18:00", label: "Sen eftermiddag (15-18)" },
+  { value: "heldag", label: "Heldag" },
+];
+
+const COLOR_PRESETS = [
+  "#3B82F6", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6",
+  "#EC4899", "#06B6D4", "#F97316", "#6366F1", "#14B8A6",
+];
+
 const clusterFormSchema = z.object({
   name: z.string().min(1, "Namn krävs"),
   description: z.string().optional(),
@@ -93,6 +116,9 @@ const clusterFormSchema = z.object({
   postalCodes: z.string().optional(),
   slaLevel: z.string().default("standard"),
   primaryTeamId: z.string().optional(),
+  defaultPeriodicity: z.string().default("vecka"),
+  defaultPreferredTime: z.string().optional(),
+  color: z.string().default("#3B82F6"),
 });
 
 type ClusterFormValues = z.infer<typeof clusterFormSchema>;
@@ -165,6 +191,9 @@ export default function ClustersPage() {
       postalCodes: "",
       slaLevel: "standard",
       primaryTeamId: "",
+      defaultPeriodicity: "vecka",
+      defaultPreferredTime: "",
+      color: "#3B82F6",
     },
   });
 
@@ -244,6 +273,9 @@ export default function ClustersPage() {
       postalCodes: "",
       slaLevel: "standard",
       primaryTeamId: "",
+      defaultPeriodicity: "vecka",
+      defaultPreferredTime: "",
+      color: "#3B82F6",
     });
     setDialogOpen(true);
   };
@@ -260,6 +292,9 @@ export default function ClustersPage() {
       postalCodes: cluster.postalCodes?.join(", ") || "",
       slaLevel: cluster.slaLevel || "standard",
       primaryTeamId: cluster.primaryTeamId || "",
+      defaultPeriodicity: cluster.defaultPeriodicity || "vecka",
+      defaultPreferredTime: cluster.defaultPreferredTime || "",
+      color: cluster.color || "#3B82F6",
     });
     setDialogOpen(true);
   };
@@ -277,6 +312,9 @@ export default function ClustersPage() {
         : null,
       slaLevel: values.slaLevel,
       primaryTeamId: values.primaryTeamId === "none" ? null : values.primaryTeamId || null,
+      defaultPeriodicity: values.defaultPeriodicity || "vecka",
+      defaultPreferredTime: values.defaultPreferredTime === "none" ? null : values.defaultPreferredTime || null,
+      color: values.color || "#3B82F6",
     };
 
     if (editingCluster) {
@@ -414,7 +452,7 @@ export default function ClustersPage() {
                   />
                   <MapFitBounds clusters={clustersWithCoordinates} />
                   {clustersWithCoordinates.map((cluster) => {
-                    const color = SLA_COLORS[cluster.slaLevel || "standard"] || SLA_COLORS.standard;
+                    const color = cluster.color || SLA_COLORS[cluster.slaLevel || "standard"] || SLA_COLORS.standard;
                     return (
                       <div key={cluster.id}>
                         {cluster.radiusKm && (
@@ -534,7 +572,13 @@ export default function ClustersPage() {
               >
                 <CardHeader className="flex flex-row items-start justify-between gap-2 pb-2">
                   <div className="flex-1 min-w-0">
-                    <CardTitle className="text-base truncate">{cluster.name}</CardTitle>
+                    <CardTitle className="text-base truncate flex items-center gap-2">
+                      <span
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: cluster.color || "#3B82F6" }}
+                      />
+                      {cluster.name}
+                    </CardTitle>
                     {customerName && (
                       <p className="text-sm text-muted-foreground truncate mt-1">
                         Rotkund: {customerName}
@@ -572,12 +616,18 @@ export default function ClustersPage() {
                     </div>
                   </div>
 
-                  {(teamName || cluster.postalCodes?.length) && (
+                  {(teamName || cluster.postalCodes?.length || cluster.defaultPeriodicity) && (
                     <div className="flex flex-wrap gap-2">
                       {teamName && (
                         <Badge variant="outline">
                           <Users className="h-3 w-3 mr-1" />
                           {teamName}
+                        </Badge>
+                      )}
+                      {cluster.defaultPeriodicity && cluster.defaultPeriodicity !== "vecka" && (
+                        <Badge variant="secondary">
+                          <Clock className="h-3 w-3 mr-1" />
+                          {PERIODICITY_OPTIONS.find(p => p.value === cluster.defaultPeriodicity)?.label || cluster.defaultPeriodicity}
                         </Badge>
                       )}
                       {cluster.postalCodes?.slice(0, 3).map((pc) => (
@@ -648,7 +698,7 @@ export default function ClustersPage() {
       )}
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {editingCluster ? "Redigera Kluster" : "Nytt Kluster"}
@@ -840,6 +890,71 @@ export default function ClustersPage() {
                 )}
               />
 
+              <div className="border-t pt-4 mt-4">
+                <p className="text-sm font-medium text-muted-foreground mb-3">
+                  Service- och planeringsinställningar
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="defaultPeriodicity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Servicefrekvens</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-cluster-periodicity">
+                            <SelectValue placeholder="Välj frekvens" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {PERIODICITY_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Standardfrekvens för nya objekt i klustret
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="defaultPreferredTime"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Föredragen servicetid</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value || "none"}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-cluster-preferred-time">
+                            <SelectValue placeholder="Välj tidsfönster" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="none">Ingen preferens</SelectItem>
+                          {TIME_SLOT_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value}>
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-xs text-muted-foreground">
+                        Ärvs till nya objekt om inget annat anges
+                      </p>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={form.control}
@@ -868,30 +983,76 @@ export default function ClustersPage() {
 
                 <FormField
                   control={form.control}
-                  name="primaryTeamId"
+                  name="color"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Ansvarigt team</FormLabel>
-                      <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                          <SelectTrigger data-testid="select-cluster-team">
-                            <SelectValue placeholder="Välj team" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="none">Inget team</SelectItem>
-                          {teams.map((team) => (
-                            <SelectItem key={team.id} value={team.id}>
-                              {team.name}
-                            </SelectItem>
+                      <FormLabel>Klusterfärg</FormLabel>
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-8 h-8 rounded border shrink-0"
+                          style={{ backgroundColor: field.value }}
+                        />
+                        <div className="flex flex-wrap gap-1">
+                          {COLOR_PRESETS.map((c) => (
+                            <button
+                              key={c}
+                              type="button"
+                              onClick={() => field.onChange(c)}
+                              className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                                field.value === c ? "border-foreground scale-125" : "border-transparent"
+                              }`}
+                              style={{ backgroundColor: c }}
+                              data-testid={`color-preset-${c.replace("#", "")}`}
+                            />
                           ))}
-                        </SelectContent>
-                      </Select>
+                        </div>
+                      </div>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+
+              <div className="border-t pt-4 mt-4">
+                <p className="text-sm font-medium text-muted-foreground mb-3">
+                  Teamkoppling
+                </p>
+              </div>
+
+              <FormField
+                control={form.control}
+                name="primaryTeamId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Ansvarigt team</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "none"}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-cluster-team">
+                          <SelectValue placeholder="Välj team" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="none">Inget team</SelectItem>
+                        {teams.length > 0 ? (
+                          teams.map((team) => (
+                            <SelectItem key={team.id} value={team.id}>
+                              {team.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-teams" disabled>
+                            Inga team skapade ännu
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      Kan sättas senare. Skapa först användare och resurser under Användarhantering, sedan team, och koppla teamet här.
+                    </p>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
