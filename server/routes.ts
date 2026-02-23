@@ -14795,5 +14795,147 @@ setInterval(loadRoutes, 30000);
     }
   });
 
+  // ============================================
+  // USER MANAGEMENT API
+  // ============================================
+
+  app.get("/api/admin/users", isAuthenticated, async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      const safeUsers = allUsers.map(({ passwordHash, ...user }) => user);
+      res.json(safeUsers);
+    } catch (error) {
+      console.error("Failed to get users:", error);
+      res.status(500).json({ error: "Kunde inte hämta användare" });
+    }
+  });
+
+  app.post("/api/admin/users", isAuthenticated, async (req, res) => {
+    try {
+      const { email, firstName, lastName, password, role, resourceId } = req.body;
+
+      if (!email || !password) {
+        return res.status(400).json({ error: "E-post och lösenord krävs" });
+      }
+
+      const existing = await storage.getUserByUsername(email);
+      if (existing) {
+        return res.status(409).json({ error: "En användare med den e-postadressen finns redan" });
+      }
+
+      const hashedPassword = hashPassword(password);
+      const user = await storage.createUser({
+        email,
+        firstName: firstName || null,
+        lastName: lastName || null,
+        passwordHash: hashedPassword,
+        role: role || "user",
+        resourceId: resourceId || null,
+        isActive: true,
+      });
+
+      const { passwordHash: _, ...safeUser } = user;
+      console.log(`[user-mgmt] User "${email}" created with role "${role || 'user'}"`);
+      res.status(201).json(safeUser);
+    } catch (error) {
+      console.error("Failed to create user:", error);
+      res.status(500).json({ error: "Kunde inte skapa användare" });
+    }
+  });
+
+  app.patch("/api/admin/users/:id", isAuthenticated, async (req, res) => {
+    try {
+      const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
+      const updateData: Record<string, any> = {};
+
+      if (email !== undefined) updateData.email = email;
+      if (firstName !== undefined) updateData.firstName = firstName;
+      if (lastName !== undefined) updateData.lastName = lastName;
+      if (role !== undefined) updateData.role = role;
+      if (resourceId !== undefined) updateData.resourceId = resourceId;
+      if (isActive !== undefined) updateData.isActive = isActive;
+      if (password) {
+        updateData.passwordHash = hashPassword(password);
+      }
+
+      const user = await storage.updateUser(req.params.id, updateData);
+      if (!user) return res.status(404).json({ error: "Användaren hittades inte" });
+
+      const { passwordHash: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      console.error("Failed to update user:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera användare" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", isAuthenticated, async (req, res) => {
+    try {
+      await storage.deleteUser(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to delete user:", error);
+      res.status(500).json({ error: "Kunde inte ta bort användare" });
+    }
+  });
+
+  // Login with email + password (returns session)
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password) {
+        return res.status(400).json({ error: "E-post och lösenord krävs" });
+      }
+
+      const { verifyPassword } = await import("./password");
+      const user = await storage.getUserByUsername(email);
+      if (!user || !user.passwordHash) {
+        return res.status(401).json({ error: "Felaktig e-post eller lösenord" });
+      }
+      if (user.isActive === false) {
+        return res.status(403).json({ error: "Kontot är inaktiverat" });
+      }
+
+      const valid = verifyPassword(password, user.passwordHash);
+      if (!valid) {
+        return res.status(401).json({ error: "Felaktig e-post eller lösenord" });
+      }
+
+      (req.session as any).userId = user.id;
+      (req.session as any).userEmail = user.email;
+      (req.session as any).userRole = user.role;
+
+      const { passwordHash: _, ...safeUser } = user;
+      console.log(`[auth] User "${email}" logged in successfully`);
+      res.json({ success: true, user: safeUser });
+    } catch (error) {
+      console.error("Login failed:", error);
+      res.status(500).json({ error: "Inloggning misslyckades" });
+    }
+  });
+
+  app.get("/api/auth/me", async (req, res) => {
+    try {
+      const userId = (req.session as any)?.userId;
+      if (!userId) {
+        return res.status(401).json({ error: "Inte inloggad" });
+      }
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(401).json({ error: "Användaren hittades inte" });
+      }
+      const { passwordHash: _, ...safeUser } = user;
+      res.json(safeUser);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta användardata" });
+    }
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.session.destroy(() => {
+      res.json({ success: true });
+    });
+  });
+
   return httpServer;
 }

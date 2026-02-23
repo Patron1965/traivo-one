@@ -77,6 +77,7 @@ import FleetManagementPage from "@/pages/FleetManagementPage";
 import PlannerMapPage from "@/pages/PlannerMapPage";
 import HistoricalMapPage from "@/pages/HistoricalMapPage";
 import ChecklistTemplatesPage from "@/pages/ChecklistTemplatesPage";
+import UserManagementPage from "@/pages/UserManagementPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -121,6 +122,7 @@ function Router() {
       <Route path="/metadata-settings" component={MetadataSettingsPage} />
       <Route path="/invoicing" component={InvoicingPage} />
       <Route path="/fleet" component={FleetManagementPage} />
+      <Route path="/user-management" component={UserManagementPage} />
       <Route path="/fortnox" component={FortnoxSettingsPage} />
       <Route path="/sms-settings" component={SmsSettingsPage} />
       <Route path="/api-costs" component={ApiCostsDashboardPage} />

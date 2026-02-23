@@ -105,7 +105,10 @@ import { eq, and, or, isNull, desc, gte, lte, lt, sql, inArray, notInArray } fro
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByUsername(username: string): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
+  updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<void>;
   upsertUser(user: Partial<UpsertUser> & { id: string; email: string }): Promise<User>;
   
   getTenant(id: string): Promise<Tenant | undefined>;
@@ -597,9 +600,25 @@ export class DatabaseStorage implements IStorage {
     return user || undefined;
   }
 
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(desc(users.createdAt));
+  }
+
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
+  }
+
+  async updateUser(id: string, data: Partial<InsertUser>): Promise<User | undefined> {
+    const [user] = await db.update(users)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user || undefined;
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await db.delete(users).where(eq(users.id, id));
   }
 
   async upsertUser(userData: Partial<UpsertUser> & { id: string; email: string }): Promise<User> {
