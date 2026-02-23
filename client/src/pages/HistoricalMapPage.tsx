@@ -12,7 +12,7 @@ import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import {
   Play, Pause, SkipBack, SkipForward, Clock, MapPin, Navigation,
-  CheckCircle2, Timer, TrendingUp, TrendingDown, Minus, Users, Loader2, Calendar, History
+  CheckCircle2, Timer, TrendingUp, Users, Loader2, Calendar, History
 } from "lucide-react";
 
 interface ResourcePosition {
@@ -104,8 +104,26 @@ const statusColors: Record<string, string> = {
   break: "#f59e0b",
 };
 
+function safeFormatDate(dateStr: string, fmt: string, options?: { locale?: typeof sv }) {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    return format(d, fmt, options);
+  } catch {
+    return dateStr;
+  }
+}
+
+function getToday() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  const d = String(now.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 export default function HistoricalMapPage() {
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [selectedDate, setSelectedDate] = useState(getToday);
   const [selectedResourceId, setSelectedResourceId] = useState<string>("");
   const [playbackIndex, setPlaybackIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -214,7 +232,7 @@ export default function HistoricalMapPage() {
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => setSelectedDate(e.target.value || getToday())}
               className="border rounded px-2 py-1 text-sm bg-background"
               data-testid="input-date-picker"
             />
@@ -239,7 +257,7 @@ export default function HistoricalMapPage() {
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm flex items-center gap-1.5">
                   <TrendingUp className="h-4 w-4 text-primary" />
-                  KPI — {format(new Date(selectedDate + "T12:00:00"), "d MMM yyyy", { locale: sv })}
+                  KPI — {safeFormatDate(selectedDate + "T12:00:00", "d MMM yyyy", { locale: sv })}
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-2">
@@ -311,7 +329,7 @@ export default function HistoricalMapPage() {
             <p className="text-lg font-medium">Inga positioner registrerade</p>
             <p className="text-sm">
               {selectedResource?.name} har inga GPS-positioner för{" "}
-              {format(new Date(selectedDate + "T12:00:00"), "d MMMM yyyy", { locale: sv })}
+              {safeFormatDate(selectedDate + "T12:00:00", "d MMMM yyyy", { locale: sv })}
             </p>
           </div>
         ) : (
@@ -346,7 +364,7 @@ export default function HistoricalMapPage() {
                 <div className="text-sm">
                   <p className="font-medium">Start</p>
                   <p className="text-xs text-muted-foreground">
-                    {format(new Date(sortedPositions[0].recordedAt), "HH:mm:ss", { locale: sv })}
+                    {safeFormatDate(sortedPositions[0].recordedAt, "HH:mm:ss", { locale: sv })}
                   </p>
                 </div>
               </Popup>
@@ -361,7 +379,7 @@ export default function HistoricalMapPage() {
                 <div className="text-sm">
                   <p className="font-medium">Slut</p>
                   <p className="text-xs text-muted-foreground">
-                    {format(new Date(sortedPositions[sortedPositions.length - 1].recordedAt), "HH:mm:ss", { locale: sv })}
+                    {safeFormatDate(sortedPositions[sortedPositions.length - 1].recordedAt, "HH:mm:ss", { locale: sv })}
                   </p>
                 </div>
               </Popup>
@@ -380,7 +398,7 @@ export default function HistoricalMapPage() {
                       <p className="text-xs text-muted-foreground">{Math.round(currentPosition.speed)} km/h</p>
                     )}
                     <p className="text-xs text-muted-foreground">
-                      {format(new Date(currentPosition.recordedAt), "HH:mm:ss", { locale: sv })}
+                      {safeFormatDate(currentPosition.recordedAt, "HH:mm:ss", { locale: sv })}
                     </p>
                   </div>
                 </Popup>
@@ -407,7 +425,7 @@ export default function HistoricalMapPage() {
                       <div className="text-sm">
                         <p className="font-medium">{statusLabels[pos.status] || pos.status}</p>
                         <p className="text-xs text-muted-foreground">
-                          {format(new Date(pos.recordedAt), "HH:mm:ss", { locale: sv })}
+                          {safeFormatDate(pos.recordedAt, "HH:mm:ss", { locale: sv })}
                         </p>
                       </div>
                     </Popup>
@@ -467,7 +485,7 @@ export default function HistoricalMapPage() {
                 {currentPosition && (
                   <Badge variant="outline" className="text-xs" data-testid="text-current-time">
                     <Clock className="h-3 w-3 mr-1" />
-                    {format(new Date(currentPosition.recordedAt), "HH:mm:ss")}
+                    {safeFormatDate(currentPosition.recordedAt, "HH:mm:ss")}
                   </Badge>
                 )}
                 <Badge
