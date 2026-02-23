@@ -865,6 +865,10 @@ router.post('/sync', async (req, res) => {
   } catch { res.status(503).json({ error: 'Synkronisering misslyckades.' }); }
 });
 
+router.get('/sync/status', async (req, res) => {
+  res.json({ lastSync: new Date().toISOString(), pendingActions: 0 });
+});
+
 router.get('/articles', (req, res) => {
   const search = (req.query.search as string || '').toLowerCase();
   if (search) {

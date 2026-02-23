@@ -1,12 +1,13 @@
-// @ts-ignore - netinfo types are loaded dynamically
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { View, StyleSheet, Platform, Pressable } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from './ThemedText';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
+import { useOfflinePendingCount } from '../hooks/useOfflineSync';
 
 export function OfflineIndicator() {
   const [isOffline, setIsOffline] = useState(false);
+  const pendingCount = useOfflinePendingCount();
 
   useEffect(() => {
     if (Platform.OS === 'web') {
@@ -38,13 +39,19 @@ export function OfflineIndicator() {
     return () => { mounted = false; cleanup.then((fn: any) => fn()); };
   }, []);
 
-  if (!isOffline) return null;
+  if (!isOffline && pendingCount === 0) return null;
 
   return (
-    <View style={styles.container}>
-      <Feather name="wifi-off" size={14} color={Colors.textInverse} />
+    <View style={[styles.container, isOffline ? styles.offline : styles.syncing]}>
+      <Feather
+        name={isOffline ? 'wifi-off' : 'refresh-cw'}
+        size={14}
+        color={Colors.textInverse}
+      />
       <ThemedText variant="caption" color={Colors.textInverse} style={styles.text}>
-        Offline - data sparas lokalt
+        {isOffline
+          ? `Offline${pendingCount > 0 ? ` - ${pendingCount} väntande` : ' - data sparas lokalt'}`
+          : `${pendingCount} väntande synkas...`}
       </ThemedText>
     </View>
   );
@@ -56,9 +63,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: Spacing.xs,
-    backgroundColor: Colors.danger,
     paddingVertical: Spacing.xs,
     paddingHorizontal: Spacing.md,
+  },
+  offline: {
+    backgroundColor: Colors.danger,
+  },
+  syncing: {
+    backgroundColor: Colors.warning,
   },
   text: {
     fontSize: FontSize.xs,
