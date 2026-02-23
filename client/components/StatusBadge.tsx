@@ -3,7 +3,15 @@ import { View, Text, StyleSheet } from 'react-native';
 import { OrderStatus, ORDER_STATUS_LABELS } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
 
-const STATUS_COLORS: Record<OrderStatus, { bg: string; text: string }> = {
+const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  skapad: { bg: '#F2F3F4', text: Colors.statusSkapad },
+  planerad_pre: { bg: '#F4ECF7', text: Colors.statusPlaneradPre },
+  planerad_resurs: { bg: Colors.infoLight, text: Colors.statusPlaneradResurs },
+  planerad_las: { bg: '#FDEBD0', text: Colors.statusPlaneradLas },
+  utford: { bg: Colors.successLight, text: Colors.statusUtford },
+  fakturerad: { bg: '#E8F8F5', text: Colors.statusFakturerad },
+  impossible: { bg: Colors.dangerLight, text: Colors.statusImpossible },
+
   planned: { bg: '#F4ECF7', text: Colors.statusPlanned },
   dispatched: { bg: Colors.infoLight, text: Colors.statusDispatched },
   on_site: { bg: '#FDEBD0', text: Colors.statusOnSite },

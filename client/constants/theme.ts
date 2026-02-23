@@ -37,6 +37,14 @@ export const Colors = {
 
   overlay: 'rgba(0,0,0,0.5)',
 
+  statusSkapad: '#95A5A6',
+  statusPlaneradPre: '#9B59B6',
+  statusPlaneradResurs: '#3498DB',
+  statusPlaneradLas: '#E67E22',
+  statusUtford: '#27AE60',
+  statusFakturerad: '#1ABC9C',
+  statusImpossible: '#E74C3C',
+
   statusPlanned: '#9B59B6',
   statusDispatched: '#3498DB',
   statusOnSite: '#E67E22',

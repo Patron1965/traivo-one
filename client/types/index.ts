@@ -1,4 +1,11 @@
 export type OrderStatus =
+  | 'skapad'
+  | 'planerad_pre'
+  | 'planerad_resurs'
+  | 'planerad_las'
+  | 'utford'
+  | 'fakturerad'
+  | 'impossible'
   | 'planned'
   | 'dispatched'
   | 'on_site'
@@ -7,7 +14,14 @@ export type OrderStatus =
   | 'failed'
   | 'cancelled';
 
-export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+export const ORDER_STATUS_LABELS: Record<string, string> = {
+  skapad: 'Skapad',
+  planerad_pre: 'Förplanerad',
+  planerad_resurs: 'Tilldelad',
+  planerad_las: 'Inlastad',
+  utford: 'Utförd',
+  fakturerad: 'Fakturerad',
+  impossible: 'Omöjlig',
   planned: 'Planerad',
   dispatched: 'Skickad',
   on_site: 'På plats',
@@ -18,12 +32,25 @@ export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
 };
 
 export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
-  'planned',
-  'dispatched',
-  'on_site',
-  'in_progress',
-  'completed',
+  'skapad',
+  'planerad_pre',
+  'planerad_resurs',
+  'planerad_las',
+  'utford',
+  'fakturerad',
 ];
+
+export const IMPOSSIBLE_REASONS = {
+  no_access: 'Ingen åtkomst',
+  wrong_address: 'Felaktig adress',
+  dangerous: 'Farlig situation',
+  missing_equipment: 'Saknad utrustning',
+  customer_refused: 'Kund nekade',
+  weather: 'Väderförhållanden',
+  other: 'Annat',
+} as const;
+
+export type ImpossibleReason = keyof typeof IMPOSSIBLE_REASONS;
 
 export interface ExecutionCode {
   id: number | string;
@@ -175,6 +202,9 @@ export interface Order {
   articleId?: string | number;
   quantity?: number;
   unit?: string;
+  impossibleReason?: string;
+  impossibleAt?: string;
+  impossibleBy?: string;
 }
 
 export interface Article {
@@ -213,13 +243,16 @@ export interface Resource {
   tenantId?: string;
   name: string;
   type?: string;
+  role?: string;
   phone?: string;
   email?: string;
   vehicleRegNo?: string;
+  resourceId?: string | number;
   homeLatitude?: number;
   homeLongitude?: number;
   competencies?: string[];
   executionCodes?: string[];
+  trackingStatus?: 'idle' | 'traveling' | 'on_site' | 'offline';
 }
 
 export interface WeatherData {
@@ -300,8 +333,9 @@ export interface Notification {
 
 export interface SyncAction {
   clientId: string;
-  actionType: 'status_update' | 'note' | 'deviation' | 'material' | 'gps' | 'inspection';
+  actionType: 'status_update' | 'note' | 'deviation' | 'material' | 'gps' | 'inspection' | 'signature';
   payload: Record<string, any>;
+  timestamp: number;
 }
 
 export interface ChecklistQuestion {

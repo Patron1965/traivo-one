@@ -13,12 +13,24 @@ import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
-import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote } from '../types';
-import { TIME_RESTRICTION_LABELS } from '../types';
+import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote, ImpossibleReason } from '../types';
+import { TIME_RESTRICTION_LABELS, ORDER_STATUS_SEQUENCE, IMPOSSIBLE_REASONS } from '../types';
 
-const STATUS_SEQUENCE: OrderStatus[] = [
-  'planned', 'dispatched', 'on_site', 'in_progress', 'completed',
-];
+const STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
+
+const LEGACY_STATUS_MAP: Record<string, OrderStatus> = {
+  planned: 'planerad_resurs',
+  dispatched: 'planerad_las',
+  on_site: 'planerad_las',
+  in_progress: 'planerad_las',
+  completed: 'utford',
+  failed: 'impossible',
+};
+
+function normalizeStatus(status: OrderStatus): OrderStatus {
+  if (STATUS_SEQUENCE.includes(status)) return status;
+  return LEGACY_STATUS_MAP[status] || status;
+}
 
 export function OrderDetailScreen({ route, navigation }: any) {
   const { orderId } = route.params;
@@ -30,14 +42,17 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const [aiTipLoading, setAiTipLoading] = useState(false);
   const [showAiTip, setShowAiTip] = useState(false);
   const [confirmAction, setConfirmAction] = useState<'complete' | 'failed' | null>(null);
+  const [showImpossibleModal, setShowImpossibleModal] = useState(false);
+  const [selectedReason, setSelectedReason] = useState<ImpossibleReason | null>(null);
+  const [impossibleText, setImpossibleText] = useState('');
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/mobile/orders/${orderId}`],
   });
 
   const statusMutation = useMutation({
-    mutationFn: (newStatus: OrderStatus) =>
-      apiRequest('PATCH', `/api/mobile/orders/${orderId}/status`, { status: newStatus }),
+    mutationFn: (params: { status: OrderStatus; impossibleReason?: string }) =>
+      apiRequest('PATCH', `/api/mobile/orders/${orderId}/status`, params),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
@@ -69,13 +84,18 @@ export function OrderDetailScreen({ route, navigation }: any) {
   });
 
   function getNextStatus(current: OrderStatus): OrderStatus | null {
-    const idx = STATUS_SEQUENCE.indexOf(current);
+    const norm = normalizeStatus(current);
+    const idx = STATUS_SEQUENCE.indexOf(norm);
     if (idx === -1 || idx >= STATUS_SEQUENCE.length - 1) return null;
     return STATUS_SEQUENCE[idx + 1];
   }
 
   function getNextStatusLabel(status: OrderStatus): string {
-    const labels: Partial<Record<OrderStatus, string>> = {
+    const labels: Record<string, string> = {
+      skapad: 'Förplanera',
+      planerad_pre: 'Tilldela resurs',
+      planerad_resurs: 'Lasta in',
+      planerad_las: 'Slutför',
       planned: 'Starta körning',
       dispatched: 'Markera på plats',
       on_site: 'Starta arbete',
@@ -85,7 +105,11 @@ export function OrderDetailScreen({ route, navigation }: any) {
   }
 
   function getNextStatusIcon(status: OrderStatus): string {
-    const icons: Partial<Record<OrderStatus, string>> = {
+    const icons: Record<string, string> = {
+      skapad: 'clipboard',
+      planerad_pre: 'user-check',
+      planerad_resurs: 'truck',
+      planerad_las: 'check-circle',
       planned: 'navigation',
       dispatched: 'map-pin',
       on_site: 'play',
@@ -115,22 +139,34 @@ export function OrderDetailScreen({ route, navigation }: any) {
     if (!order) return;
     const next = getNextStatus(order.status);
     if (!next) return;
-    if (next === 'completed') {
+    if (next === 'utford' || next === 'fakturerad') {
       setConfirmAction('complete');
     } else {
-      statusMutation.mutate(next);
+      statusMutation.mutate({ status: next });
     }
   }
 
-  function handleFailed() {
-    setConfirmAction('failed');
+  function handleImpossible() {
+    setShowImpossibleModal(true);
+    setSelectedReason(null);
+    setImpossibleText('');
+  }
+
+  function handleConfirmImpossible() {
+    if (!selectedReason) return;
+    const reason = selectedReason === 'other'
+      ? impossibleText.trim() || IMPOSSIBLE_REASONS[selectedReason]
+      : IMPOSSIBLE_REASONS[selectedReason];
+    statusMutation.mutate({ status: 'impossible' as OrderStatus, impossibleReason: reason });
+    setShowImpossibleModal(false);
+    setSelectedReason(null);
+    setImpossibleText('');
   }
 
   function handleConfirmAction() {
     if (confirmAction === 'complete') {
-      statusMutation.mutate('completed');
-    } else if (confirmAction === 'failed') {
-      statusMutation.mutate('failed');
+      const next = order ? getNextStatus(order.status) : null;
+      statusMutation.mutate({ status: next || ('utford' as OrderStatus) });
     }
     setConfirmAction(null);
   }
@@ -172,7 +208,8 @@ export function OrderDetailScreen({ route, navigation }: any) {
   }
 
   const nextStatus = getNextStatus(order.status);
-  const isFinished = order.status === 'completed' || order.status === 'cancelled' || order.status === 'failed';
+  const isFinished = order.status === 'completed' || order.status === 'cancelled' || order.status === 'failed'
+    || order.status === 'utford' || order.status === 'fakturerad' || order.status === 'impossible';
   const activeRestrictions = order.timeRestrictions?.filter(r => r.isActive) || [];
   const subSteps = order.subSteps || [];
   const completedSteps = subSteps.filter(s => s.completed).length;
@@ -526,18 +563,16 @@ export function OrderDetailScreen({ route, navigation }: any) {
 
       {!isFinished && !order.isLocked ? (
         <View style={[styles.bottomBar, { paddingBottom: insets.bottom + Spacing.md }]}>
-          {order.status !== 'completed' ? (
-            <Pressable
-              style={styles.deferButton}
-              onPress={handleFailed}
-              testID="button-failed"
-            >
-              <Feather name="x-circle" size={22} color={Colors.danger} />
-              <ThemedText variant="caption" color={Colors.danger} style={styles.deferLabel}>
-                Misslyckat
-              </ThemedText>
-            </Pressable>
-          ) : null}
+          <Pressable
+            style={styles.deferButton}
+            onPress={handleImpossible}
+            testID="button-impossible"
+          >
+            <Feather name="alert-octagon" size={22} color={Colors.danger} />
+            <ThemedText variant="caption" color={Colors.danger} style={styles.deferLabel}>
+              Omöjlig
+            </ThemedText>
+          </Pressable>
           {nextStatus ? (
             <Pressable
               style={styles.advanceButton}
@@ -569,22 +604,16 @@ export function OrderDetailScreen({ route, navigation }: any) {
         animationType="fade"
         onRequestClose={() => setConfirmAction(null)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.confirmContent}>
+        <Pressable style={styles.modalOverlay} onPress={() => setConfirmAction(null)}>
+          <Pressable style={styles.confirmContent} onPress={(e) => e.stopPropagation()}>
             <View style={styles.confirmIconCircle}>
-              <Feather
-                name={confirmAction === 'complete' ? 'check-circle' : 'x-circle'}
-                size={40}
-                color={confirmAction === 'complete' ? Colors.secondary : Colors.statusFailed}
-              />
+              <Feather name="check-circle" size={40} color={Colors.secondary} />
             </View>
             <ThemedText variant="subheading" style={styles.confirmTitle}>
-              {confirmAction === 'complete' ? 'Slutföra uppdraget?' : 'Markera som misslyckat?'}
+              Markera som utförd?
             </ThemedText>
             <ThemedText variant="body" color={Colors.textSecondary} style={styles.confirmDesc}>
-              {confirmAction === 'complete'
-                ? 'Uppdraget markeras som slutfört. Du kan inte ångra detta.'
-                : 'Uppdraget markeras som misslyckat.'}
+              Uppdraget markeras som utfört.
             </ThemedText>
             <View style={styles.confirmButtons}>
               <Pressable
@@ -595,20 +624,99 @@ export function OrderDetailScreen({ route, navigation }: any) {
                 <ThemedText variant="body" color={Colors.textSecondary}>Avbryt</ThemedText>
               </Pressable>
               <Pressable
-                style={[
-                  styles.confirmOk,
-                  { backgroundColor: confirmAction === 'complete' ? Colors.secondary : Colors.statusFailed },
-                ]}
+                style={[styles.confirmOk, { backgroundColor: Colors.secondary }]}
                 onPress={handleConfirmAction}
                 testID="button-confirm-ok"
               >
                 <ThemedText variant="body" color={Colors.textInverse} style={styles.confirmOkText}>
-                  {confirmAction === 'complete' ? 'Ja, slutför' : 'Ja, markera misslyckat'}
+                  Ja, slutför
                 </ThemedText>
               </Pressable>
             </View>
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={showImpossibleModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowImpossibleModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowImpossibleModal(false)}>
+          <Pressable style={styles.impossibleContent} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.modalHeader}>
+              <View style={styles.modalTitleRow}>
+                <Feather name="alert-octagon" size={20} color={Colors.danger} />
+                <ThemedText variant="subheading">Markera som omöjlig</ThemedText>
+              </View>
+              <Pressable
+                style={styles.modalCloseButton}
+                onPress={() => setShowImpossibleModal(false)}
+              >
+                <Feather name="x" size={24} color={Colors.textSecondary} />
+              </Pressable>
+            </View>
+            <ThemedText variant="body" color={Colors.textSecondary} style={styles.impossibleDesc}>
+              Välj orsak till varför uppdraget inte kan utföras:
+            </ThemedText>
+            <ScrollView style={styles.reasonsList}>
+              {(Object.keys(IMPOSSIBLE_REASONS) as ImpossibleReason[]).map(key => (
+                <Pressable
+                  key={key}
+                  style={[
+                    styles.reasonItem,
+                    selectedReason === key ? styles.reasonItemSelected : null,
+                  ]}
+                  onPress={() => setSelectedReason(key)}
+                  testID={`button-reason-${key}`}
+                >
+                  <View style={[
+                    styles.reasonRadio,
+                    selectedReason === key ? styles.reasonRadioSelected : null,
+                  ]}>
+                    {selectedReason === key ? (
+                      <View style={styles.reasonRadioDot} />
+                    ) : null}
+                  </View>
+                  <ThemedText variant="body">{IMPOSSIBLE_REASONS[key]}</ThemedText>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {selectedReason === 'other' ? (
+              <TextInput
+                style={styles.impossibleInput}
+                placeholder="Beskriv orsaken..."
+                placeholderTextColor={Colors.textMuted}
+                value={impossibleText}
+                onChangeText={setImpossibleText}
+                multiline
+                testID="input-impossible-reason"
+              />
+            ) : null}
+            <View style={styles.confirmButtons}>
+              <Pressable
+                style={styles.confirmCancel}
+                onPress={() => setShowImpossibleModal(false)}
+              >
+                <ThemedText variant="body" color={Colors.textSecondary}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.confirmOk,
+                  { backgroundColor: selectedReason ? Colors.danger : Colors.textMuted },
+                ]}
+                onPress={handleConfirmImpossible}
+                disabled={!selectedReason}
+                testID="button-confirm-impossible"
+              >
+                <ThemedText variant="body" color={Colors.textInverse} style={styles.confirmOkText}>
+                  Bekräfta
+                </ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
       </Modal>
 
       <Modal
@@ -1069,5 +1177,62 @@ const styles = StyleSheet.create({
   },
   modalDismissText: {
     fontFamily: 'Inter_600SemiBold',
+  },
+  impossibleContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: '100%',
+    maxHeight: '80%',
+  },
+  impossibleDesc: {
+    marginBottom: Spacing.md,
+    lineHeight: 22,
+  },
+  reasonsList: {
+    maxHeight: 300,
+    marginBottom: Spacing.md,
+  },
+  reasonItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.xs,
+  },
+  reasonItemSelected: {
+    backgroundColor: Colors.dangerLight,
+  },
+  reasonRadio: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 2,
+    borderColor: Colors.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  reasonRadioSelected: {
+    borderColor: Colors.danger,
+  },
+  reasonRadioDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: Colors.danger,
+  },
+  impossibleInput: {
+    minHeight: 60,
+    maxHeight: 100,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    fontFamily: 'Inter_400Regular',
+    fontSize: FontSize.md,
+    color: Colors.text,
+    marginBottom: Spacing.md,
   },
 });

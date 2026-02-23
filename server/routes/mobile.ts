@@ -650,15 +650,22 @@ router.patch('/orders/:id/status', async (req, res) => {
         return;
       }
       order.status = req.body.status;
-      if (req.body.status === 'in_progress') {
+      if (req.body.status === 'in_progress' || req.body.status === 'planerad_las') {
         order.actualStartTime = new Date().toISOString();
       }
-      if (req.body.status === 'completed') {
+      if (req.body.status === 'completed' || req.body.status === 'utford') {
         order.completedAt = new Date().toISOString();
         order.actualEndTime = new Date().toISOString();
       }
-      if (req.body.status === 'failed') {
+      if (req.body.status === 'failed' || req.body.status === 'impossible') {
         order.actualEndTime = new Date().toISOString();
+        if (req.body.impossibleReason) {
+          order.impossibleReason = req.body.impossibleReason;
+          order.impossibleAt = new Date().toISOString();
+        }
+      }
+      if (req.body.status === 'fakturerad') {
+        order.completedAt = order.completedAt || new Date().toISOString();
       }
       res.json(order);
     } else {
