@@ -2,13 +2,15 @@ import React from 'react';
 import { View, ScrollView, Pressable, StyleSheet } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useNavigation } from '@react-navigation/native';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
-export function ProfileScreen({ navigation }: any) {
+export function ProfileScreen() {
+  const navigation = useNavigation<any>();
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { user, logout } = useAuth();
