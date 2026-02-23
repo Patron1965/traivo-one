@@ -3,6 +3,33 @@ import { pool } from '../db';
 
 const router = Router();
 
+const KINAB_API_URL = process.env.KINAB_API_URL || '';
+const IS_MOCK_MODE = !KINAB_API_URL || process.env.KINAB_MOCK_MODE === 'true';
+
+async function kinabFetch(path: string, options: RequestInit = {}): Promise<{ status: number; data: any }> {
+  const url = `${KINAB_API_URL}${path}`;
+  try {
+    const response = await fetch(url, {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        ...(options.headers || {}),
+      },
+    });
+    const data = await response.json().catch(() => ({}));
+    return { status: response.status, data };
+  } catch (error: any) {
+    console.error(`Kinab API error (${path}):`, error.message);
+    throw new Error(`Kunde inte nå Kinab-servern: ${error.message}`);
+  }
+}
+
+function getAuthHeader(req: { headers: { authorization?: string } }): Record<string, string> {
+  const auth = req.headers.authorization;
+  return auth ? { 'Authorization': auth } : {};
+}
+
 const MOCK_RESOURCE = {
   id: 101,
   tenantId: 'kinab-demo',
@@ -344,241 +371,389 @@ const MOCK_CHECKLIST_TEMPLATES: Record<string, any> = {
   },
 };
 
-router.post('/login', (req, res) => {
-  const { username, password, pin } = req.body;
-  if (pin) {
-    if (pin.length === 4 || pin.length === 6) {
+router.post('/login', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const { username, password, pin } = req.body;
+    if (pin) {
+      if (pin.length === 4 || pin.length === 6) {
+        res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
+      } else {
+        res.status(401).json({ success: false, error: 'Ogiltig PIN-kod' });
+      }
+    } else if (username && password) {
+      res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
+    } else {
+      res.status(401).json({ success: false, error: 'Ogiltiga inloggningsuppgifter' });
+    }
+    return;
+  }
+
+  try {
+    const { status, data } = await kinabFetch('/api/mobile/login', {
+      method: 'POST',
+      body: JSON.stringify(req.body),
+    });
+
+    if (status === 200 && data.token) {
+      const resource = data.resource || data.user || {};
       res.json({
         success: true,
-        token: MOCK_TOKEN,
-        resource: MOCK_RESOURCE,
+        token: data.token,
+        resource,
       });
     } else {
-      res.status(401).json({ success: false, error: 'Ogiltig PIN-kod' });
+      res.status(status || 401).json({
+        success: false,
+        error: data.error || data.message || 'Inloggningen misslyckades',
+      });
     }
-  } else if (username && password) {
-    res.json({
-      success: true,
-      token: MOCK_TOKEN,
-      resource: MOCK_RESOURCE,
+  } catch (error: any) {
+    console.error('Login proxy error:', error.message);
+    res.status(503).json({
+      success: false,
+      error: 'Kunde inte nå inloggningsservern. Försök igen om en stund.',
     });
-  } else {
-    res.status(401).json({ success: false, error: 'Ogiltiga inloggningsuppgifter' });
   }
 });
 
-router.post('/logout', (_req, res) => {
-  res.json({ success: true });
-});
-
-router.get('/me', (req, res) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.includes(MOCK_TOKEN)) {
-    res.json({ success: true, resource: MOCK_RESOURCE });
-  } else {
-    res.status(401).json({ success: false, error: 'Ej autentiserad' });
-  }
-});
-
-router.get('/my-orders', (req, res) => {
-  const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
-  const orders = MOCK_ORDERS.filter(o => o.scheduledDate === date);
-  res.json(orders);
-});
-
-router.get('/orders/:id', (req, res) => {
-  const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
-  if (order) {
-    res.json(order);
-  } else {
-    res.status(404).json({ error: 'Order hittades inte' });
-  }
-});
-
-router.get('/orders/:id/checklist', (req, res) => {
-  const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
-  if (!order) {
-    res.status(404).json({ error: 'Order hittades inte' });
+router.post('/logout', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    res.json({ success: true });
     return;
   }
-  const articleTypes = [...new Set(order.articles.map((a: any) => a.category))] as string[];
-  const objectTemplate = MOCK_CHECKLIST_TEMPLATES[order.objectType];
-  const checklists = objectTemplate ? [objectTemplate] : [];
-  res.json({
-    orderId: order.id.toString(),
-    articleTypes,
-    checklists,
-  });
+
+  try {
+    const { status, data } = await kinabFetch('/api/mobile/logout', {
+      method: 'POST',
+      headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch {
+    res.json({ success: true });
+  }
 });
 
-router.patch('/orders/:id/status', (req, res) => {
-  const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
-  if (order) {
-    if (order.isLocked) {
-      res.status(403).json({ error: 'Uppdraget är låst - beroende uppdrag ej slutförda' });
+router.get('/me', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.includes(MOCK_TOKEN)) {
+      res.json({ success: true, resource: MOCK_RESOURCE });
+    } else {
+      res.status(401).json({ success: false, error: 'Ej autentiserad' });
+    }
+    return;
+  }
+
+  try {
+    const { status, data } = await kinabFetch('/api/mobile/me', {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+
+    if (status === 200) {
+      if (data.success !== undefined) {
+        res.json(data);
+      } else {
+        res.json({ success: true, resource: data });
+      }
+    } else {
+      res.status(status).json({
+        success: false,
+        error: data.error || data.message || 'Ej autentiserad',
+      });
+    }
+  } catch (error: any) {
+    console.error('Me proxy error:', error.message);
+    res.status(503).json({
+      success: false,
+      error: 'Kunde inte verifiera sessionen. Försök igen.',
+    });
+  }
+});
+
+router.get('/my-orders', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const date = (req.query.date as string) || new Date().toISOString().split('T')[0];
+    const orders = MOCK_ORDERS.filter(o => o.scheduledDate === date);
+    res.json(orders);
+    return;
+  }
+
+  try {
+    const queryString = req.query.date ? `?date=${req.query.date}` : '';
+    const { status, data } = await kinabFetch(`/api/mobile/my-orders${queryString}`, {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    console.error('My-orders proxy error:', error.message);
+    res.status(503).json({ error: 'Kunde inte hämta ordrar. Försök igen.' });
+  }
+});
+
+router.get('/orders/:id', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    if (order) {
+      res.json(order);
+    } else {
+      res.status(404).json({ error: 'Order hittades inte' });
+    }
+    return;
+  }
+
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}`, {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    res.status(503).json({ error: 'Kunde inte hämta order. Försök igen.' });
+  }
+});
+
+router.get('/orders/:id/checklist', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    if (!order) {
+      res.status(404).json({ error: 'Order hittades inte' });
       return;
     }
-    order.status = req.body.status;
-    if (req.body.status === 'in_progress') {
-      order.actualStartTime = new Date().toISOString();
-    }
-    if (req.body.status === 'completed') {
-      order.completedAt = new Date().toISOString();
-      order.actualEndTime = new Date().toISOString();
-    }
-    if (req.body.status === 'failed') {
-      order.actualEndTime = new Date().toISOString();
-    }
-    res.json(order);
-  } else {
-    res.status(404).json({ error: 'Order hittades inte' });
+    const articleTypes = [...new Set(order.articles.map((a: any) => a.category))] as string[];
+    const objectTemplate = MOCK_CHECKLIST_TEMPLATES[order.objectType];
+    const checklists = objectTemplate ? [objectTemplate] : [];
+    res.json({ orderId: order.id.toString(), articleTypes, checklists });
+    return;
+  }
+
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/checklist`, {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    res.status(503).json({ error: 'Kunde inte hämta checklista. Försök igen.' });
   }
 });
 
-router.post('/orders/:id/deviations', (req, res) => {
-  const orderId = parseInt(req.params.id);
-  const deviation = {
-    id: Date.now(),
-    orderId,
-    ...req.body,
-    createdAt: new Date().toISOString(),
-  };
-  const order = MOCK_ORDERS.find(o => o.id === orderId);
-  if (order) {
-    order.deviations.push(deviation);
-  }
-  res.json(deviation);
-});
-
-router.post('/orders/:id/materials', (req, res) => {
-  const entry = {
-    id: Date.now(),
-    orderId: parseInt(req.params.id),
-    ...req.body,
-    createdAt: new Date().toISOString(),
-  };
-  res.json(entry);
-});
-
-router.post('/orders/:id/signature', (req, res) => {
-  const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
-  if (order) {
-    order.signatureUrl = req.body.signatureData;
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: 'Order hittades inte' });
-  }
-});
-
-router.post('/orders/:id/notes', (req, res) => {
-  const orderId = parseInt(req.params.id);
-  const order = MOCK_ORDERS.find(o => o.id === orderId);
-  if (order) {
-    const note = {
-      id: Date.now(),
-      orderId,
-      text: req.body.text,
-      createdBy: 'Chaufför',
-      createdAt: new Date().toISOString(),
-    };
-    if (!order.orderNotes) order.orderNotes = [];
-    order.orderNotes.push(note);
-    res.json(note);
-  } else {
-    res.status(404).json({ error: 'Order hittades inte' });
-  }
-});
-
-router.patch('/orders/:id/substeps/:stepId', (req, res) => {
-  const orderId = parseInt(req.params.id);
-  const stepId = parseInt(req.params.stepId);
-  const order = MOCK_ORDERS.find(o => o.id === orderId);
-  if (order && order.subSteps) {
-    const step = order.subSteps.find((s: any) => s.id === stepId);
-    if (step) {
-      step.completed = req.body.completed;
-      res.json(step);
+router.patch('/orders/:id/status', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    if (order) {
+      if (order.isLocked) {
+        res.status(403).json({ error: 'Uppdraget är låst - beroende uppdrag ej slutförda' });
+        return;
+      }
+      order.status = req.body.status;
+      if (req.body.status === 'in_progress') {
+        order.actualStartTime = new Date().toISOString();
+      }
+      if (req.body.status === 'completed') {
+        order.completedAt = new Date().toISOString();
+        order.actualEndTime = new Date().toISOString();
+      }
+      if (req.body.status === 'failed') {
+        order.actualEndTime = new Date().toISOString();
+      }
+      res.json(order);
     } else {
-      res.status(404).json({ error: 'Delsteg hittades inte' });
+      res.status(404).json({ error: 'Order hittades inte' });
     }
-  } else {
-    res.status(404).json({ error: 'Order hittades inte' });
-  }
-});
-
-router.post('/orders/:id/inspections', (req, res) => {
-  const orderId = parseInt(req.params.id);
-  const order = MOCK_ORDERS.find(o => o.id === orderId);
-  if (order) {
-    order.inspections = req.body.inspections;
-    res.json({ success: true, inspections: order.inspections });
-  } else {
-    res.status(404).json({ error: 'Order hittades inte' });
-  }
-});
-
-router.post('/orders/:id/upload-photo', (req, res) => {
-  const orderId = parseInt(req.params.id);
-  const order = MOCK_ORDERS.find(o => o.id === orderId);
-  if (!order) {
-    res.status(404).json({ error: 'Order hittades inte' });
     return;
   }
-  const photoId = `photo-${Date.now()}`;
-  const presignedUrl = `/api/mobile/photos/${photoId}/upload`;
-  res.json({
-    success: true,
-    photoId,
-    presignedUrl,
-    confirmUrl: `/api/mobile/orders/${orderId}/confirm-photo`,
-  });
-});
 
-router.post('/orders/:id/confirm-photo', (req, res) => {
-  const orderId = parseInt(req.params.id);
-  const order = MOCK_ORDERS.find(o => o.id === orderId);
-  if (order) {
-    const photoUrl = `/photos/${req.body.photoId}.jpg`;
-    order.photos.push(photoUrl);
-    res.json({ success: true, photoUrl });
-  } else {
-    res.status(404).json({ error: 'Order hittades inte' });
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeader(req),
+      body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    res.status(503).json({ error: 'Kunde inte uppdatera status. Försök igen.' });
   }
 });
 
-router.get('/notifications', (_req, res) => {
-  res.json(MOCK_NOTIFICATIONS);
-});
-
-router.patch('/notifications/:id/read', (req, res) => {
-  const notification = MOCK_NOTIFICATIONS.find(n => n.id === req.params.id);
-  if (notification) {
-    notification.isRead = true;
-    res.json(notification);
-  } else {
-    res.status(404).json({ error: 'Notifikation hittades inte' });
-  }
-});
-
-router.patch('/notifications/read-all', (_req, res) => {
-  MOCK_NOTIFICATIONS.forEach(n => { n.isRead = true; });
-  res.json({ success: true });
-});
-
-router.post('/sync', (req, res) => {
-  const { actions } = req.body;
-  if (!Array.isArray(actions)) {
-    res.status(400).json({ error: 'actions måste vara en array' });
+router.post('/orders/:id/deviations', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const orderId = parseInt(req.params.id);
+    const deviation = { id: Date.now(), orderId, ...req.body, createdAt: new Date().toISOString() };
+    const order = MOCK_ORDERS.find(o => o.id === orderId);
+    if (order) order.deviations.push(deviation);
+    res.json(deviation);
     return;
   }
-  const results = actions.map((action: any) => {
-    return {
-      clientId: action.clientId,
-      success: true,
-      serverTimestamp: new Date().toISOString(),
-    };
-  });
-  res.json({ success: true, results });
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/deviations`, {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte rapportera avvikelse.' }); }
+});
+
+router.post('/orders/:id/materials', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    res.json({ id: Date.now(), orderId: parseInt(req.params.id), ...req.body, createdAt: new Date().toISOString() });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/materials`, {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte logga material.' }); }
+});
+
+router.post('/orders/:id/signature', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    if (order) { order.signatureUrl = req.body.signatureData; res.json({ success: true }); }
+    else res.status(404).json({ error: 'Order hittades inte' });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/signature`, {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte spara signatur.' }); }
+});
+
+router.post('/orders/:id/notes', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const orderId = parseInt(req.params.id);
+    const order = MOCK_ORDERS.find(o => o.id === orderId);
+    if (order) {
+      const note = { id: Date.now(), orderId, text: req.body.text, createdBy: 'Chaufför', createdAt: new Date().toISOString() };
+      if (!order.orderNotes) order.orderNotes = [];
+      order.orderNotes.push(note);
+      res.json(note);
+    } else res.status(404).json({ error: 'Order hittades inte' });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/notes`, {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte spara anteckning.' }); }
+});
+
+router.patch('/orders/:id/substeps/:stepId', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    if (order && order.subSteps) {
+      const step = order.subSteps.find((s: any) => s.id === parseInt(req.params.stepId));
+      if (step) { step.completed = req.body.completed; res.json(step); }
+      else res.status(404).json({ error: 'Delsteg hittades inte' });
+    } else res.status(404).json({ error: 'Order hittades inte' });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/substeps/${req.params.stepId}`, {
+      method: 'PATCH', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte uppdatera delsteg.' }); }
+});
+
+router.post('/orders/:id/inspections', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    if (order) { order.inspections = req.body.inspections; res.json({ success: true, inspections: order.inspections }); }
+    else res.status(404).json({ error: 'Order hittades inte' });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/inspections`, {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte spara inspektion.' }); }
+});
+
+router.post('/orders/:id/upload-photo', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const orderId = parseInt(req.params.id);
+    const order = MOCK_ORDERS.find(o => o.id === orderId);
+    if (!order) { res.status(404).json({ error: 'Order hittades inte' }); return; }
+    const photoId = `photo-${Date.now()}`;
+    res.json({ success: true, photoId, presignedUrl: `/api/mobile/photos/${photoId}/upload`, confirmUrl: `/api/mobile/orders/${orderId}/confirm-photo` });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/upload-photo`, {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte hämta uppladdnings-URL.' }); }
+});
+
+router.post('/orders/:id/confirm-photo', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    if (order) { const photoUrl = `/photos/${req.body.photoId}.jpg`; order.photos.push(photoUrl); res.json({ success: true, photoUrl }); }
+    else res.status(404).json({ error: 'Order hittades inte' });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/confirm-photo`, {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte bekräfta foto.' }); }
+});
+
+router.get('/notifications', async (req, res) => {
+  if (IS_MOCK_MODE) { res.json(MOCK_NOTIFICATIONS); return; }
+  try {
+    const { status, data } = await kinabFetch('/api/mobile/notifications', { method: 'GET', headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch { res.json(MOCK_NOTIFICATIONS); }
+});
+
+router.patch('/notifications/:id/read', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const notification = MOCK_NOTIFICATIONS.find(n => n.id === req.params.id);
+    if (notification) { notification.isRead = true; res.json(notification); }
+    else res.status(404).json({ error: 'Notifikation hittades inte' });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/notifications/${req.params.id}/read`, {
+      method: 'PATCH', headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte markera notifikation.' }); }
+});
+
+router.patch('/notifications/read-all', async (req, res) => {
+  if (IS_MOCK_MODE) { MOCK_NOTIFICATIONS.forEach(n => { n.isRead = true; }); res.json({ success: true }); return; }
+  try {
+    const { status, data } = await kinabFetch('/api/mobile/notifications/read-all', {
+      method: 'PATCH', headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch { res.json({ success: true }); }
+});
+
+router.post('/sync', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const { actions } = req.body;
+    if (!Array.isArray(actions)) { res.status(400).json({ error: 'actions måste vara en array' }); return; }
+    const results = actions.map((action: any) => ({ clientId: action.clientId, success: true, serverTimestamp: new Date().toISOString() }));
+    res.json({ success: true, results });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch('/api/mobile/sync', {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Synkronisering misslyckades.' }); }
 });
 
 router.get('/articles', (req, res) => {
@@ -593,9 +768,21 @@ router.get('/articles', (req, res) => {
 router.post('/position', async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy } = req.body;
 
+  if (!IS_MOCK_MODE) {
+    try {
+      await kinabFetch('/api/mobile/position', {
+        method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+      });
+    } catch (e: any) {
+      console.error('Kinab position proxy error:', e.message);
+    }
+  }
+
   try {
     if (latitude != null && longitude != null) {
-      const driverId = MOCK_RESOURCE.id;
+      const driverId = IS_MOCK_MODE ? MOCK_RESOURCE.id : 'unknown';
+      const driverName = IS_MOCK_MODE ? MOCK_RESOURCE.name : 'Okänd';
+      const vehicleRegNo = IS_MOCK_MODE ? MOCK_RESOURCE.vehicleRegNo : '';
       await pool.query(
         `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, speed, heading, accuracy, status, updated_at)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NOW())
@@ -609,7 +796,7 @@ router.post('/position', async (req, res) => {
            accuracy = COALESCE(EXCLUDED.accuracy, driver_locations.accuracy),
            status = 'active',
            updated_at = NOW()`,
-        [driverId, MOCK_RESOURCE.name, MOCK_RESOURCE.vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0]
+        [driverId, driverName, vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0]
       );
     }
     res.json({ received: true, timestamp: new Date().toISOString() });
@@ -708,18 +895,29 @@ router.get('/weather', async (_req, res) => {
   }
 });
 
-router.get('/summary', (_req, res) => {
-  const today = new Date().toISOString().split('T')[0];
-  const todayOrders = MOCK_ORDERS.filter(o => o.scheduledDate === today);
-  const remaining = todayOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'failed');
-  res.json({
-    totalOrders: todayOrders.length,
-    completedOrders: todayOrders.filter(o => o.status === 'completed').length,
-    remainingOrders: remaining.length,
-    failedOrders: todayOrders.filter(o => o.status === 'failed').length,
-    totalDuration: todayOrders.reduce((sum, o) => sum + o.estimatedDuration, 0),
-    estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0),
-  });
+router.get('/summary', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const today = new Date().toISOString().split('T')[0];
+    const todayOrders = MOCK_ORDERS.filter(o => o.scheduledDate === today);
+    const remaining = todayOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'failed');
+    res.json({
+      totalOrders: todayOrders.length,
+      completedOrders: todayOrders.filter(o => o.status === 'completed').length,
+      remainingOrders: remaining.length,
+      failedOrders: todayOrders.filter(o => o.status === 'failed').length,
+      totalDuration: todayOrders.reduce((sum, o) => sum + o.estimatedDuration, 0),
+      estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0),
+    });
+    return;
+  }
+  try {
+    const { status, data } = await kinabFetch('/api/mobile/summary', {
+      method: 'GET', headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch {
+    res.status(503).json({ error: 'Kunde inte hämta sammanfattning.' });
+  }
 });
 
 export { router as mobileRoutes, MOCK_ORDERS };

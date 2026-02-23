@@ -200,7 +200,10 @@ app.get('/', (req, res) => {
 
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => {
+  const kinabUrl = process.env.KINAB_API_URL;
+  const mockMode = !kinabUrl || process.env.KINAB_MOCK_MODE === 'true';
   console.log(`Driver Core API running on port ${PORT}`);
+  console.log(`Kinab Core Concept: ${mockMode ? 'MOCK MODE (no KINAB_API_URL set)' : `LIVE → ${kinabUrl}`}`);
   const iosBundle = path.join(metroDir, 'ios', 'index.bundle');
   const androidBundle = path.join(metroDir, 'android', 'index.bundle');
   const hasIos = fs.existsSync(iosBundle);

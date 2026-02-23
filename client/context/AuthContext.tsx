@@ -37,11 +37,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const stored = await AsyncStorage.getItem('auth');
       if (stored) {
         const parsed = JSON.parse(stored);
+        const storedToken = parsed.token;
         setUser(parsed.resource || parsed.user);
-        setToken(parsed.token);
+        setToken(storedToken);
         try {
-          const meData = await apiRequest('GET', '/api/mobile/me');
+          const meData = await apiRequest('GET', '/api/mobile/me', undefined, storedToken);
           if (meData.success && meData.resource) {
+            setUser(meData.resource);
+          } else if (meData.resource) {
             setUser(meData.resource);
           }
         } catch {
@@ -68,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function logout() {
     try {
-      await apiRequest('POST', '/api/mobile/logout', {});
+      await apiRequest('POST', '/api/mobile/logout', {}, token);
     } catch {}
     setUser(null);
     setToken(null);

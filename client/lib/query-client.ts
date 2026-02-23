@@ -1,6 +1,7 @@
 import { QueryClient } from '@tanstack/react-query';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export function getApiUrl(): string {
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
@@ -13,6 +14,17 @@ export function getApiUrl(): string {
   return 'http://localhost:5000';
 }
 
+async function getStoredToken(): Promise<string | null> {
+  try {
+    const stored = await AsyncStorage.getItem('auth');
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      return parsed.token || null;
+    }
+  } catch {}
+  return null;
+}
+
 export async function apiRequest(
   method: string,
   path: string,
@@ -20,11 +32,12 @@ export async function apiRequest(
   token?: string | null,
 ): Promise<any> {
   const url = new URL(path, getApiUrl()).toString();
+  const authToken = token ?? await getStoredToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
   }
   const res = await fetch(url, {
     method,
@@ -41,9 +54,12 @@ export async function apiRequest(
 async function defaultQueryFn({ queryKey }: { queryKey: readonly unknown[] }) {
   const path = queryKey[0] as string;
   const url = new URL(path, getApiUrl()).toString();
-  const res = await fetch(url, {
-    headers: { 'Content-Type': 'application/json' },
-  });
+  const authToken = await getStoredToken();
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
+  }
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     throw new Error(`${res.status}`);
   }
