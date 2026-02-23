@@ -13,6 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { TourMenu } from "@/components/TourMenu";
 import {
   Calendar,
   Map,
@@ -41,7 +42,6 @@ import {
   Building,
   Search,
   Bell,
-  HelpCircle,
   ChevronDown,
   Database,
   BarChart3,
@@ -356,14 +356,7 @@ export function TopNav() {
             <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
           </Button>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="hidden sm:flex"
-            data-testid="button-help"
-          >
-            <HelpCircle className="h-5 w-5" />
-          </Button>
+          <TourMenu />
 
           <GlobalAIButton />
           <ThemeToggle />

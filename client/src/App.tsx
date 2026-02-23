@@ -81,6 +81,9 @@ import ChecklistTemplatesPage from "@/pages/ChecklistTemplatesPage";
 import UserManagementPage from "@/pages/UserManagementPage";
 import TenantConfigPage from "@/pages/TenantConfigPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
+import { TourProvider } from "@/hooks/use-tour";
+import { TourGuide } from "@/components/TourGuide";
+import { TourAutoStart } from "@/components/TourAutoStart";
 import { Loader2 } from "lucide-react";
 
 function Router() {
@@ -270,17 +273,21 @@ function AuthenticatedApp() {
   
   return (
     <TenantBrandingProvider>
-      <div className="flex flex-col min-h-screen bg-background pb-16 md:pb-0">
-        <TopNav />
-        <main className="flex-1">
-          <ErrorBoundary>
-            <Router />
-          </ErrorBoundary>
-        </main>
-        <FloatingActionButton />
-        <MobileBottomNav />
-        <CommandPalette onThemeToggle={toggleTheme} currentTheme={theme} />
-      </div>
+      <TourProvider>
+        <div className="flex flex-col min-h-screen bg-background pb-16 md:pb-0">
+          <TopNav />
+          <main className="flex-1">
+            <ErrorBoundary>
+              <Router />
+            </ErrorBoundary>
+          </main>
+          <FloatingActionButton />
+          <MobileBottomNav />
+          <CommandPalette onThemeToggle={toggleTheme} currentTheme={theme} />
+          <TourGuide />
+          <TourAutoStart />
+        </div>
+      </TourProvider>
     </TenantBrandingProvider>
   );
 }
