@@ -209,8 +209,8 @@ export default function ArticlesPage() {
       resetForm();
       toast({ title: "Artikel skapad", description: "Artikeln har lagts till." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa artikeln.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -224,8 +224,8 @@ export default function ArticlesPage() {
       resetForm();
       toast({ title: "Artikel uppdaterad", description: "Artikeln har uppdaterats." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera artikeln.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -239,8 +239,8 @@ export default function ArticlesPage() {
       setArticleToDelete(null);
       toast({ title: "Artikel borttagen", description: "Artikeln har tagits bort." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort artikeln.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 

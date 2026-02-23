@@ -328,8 +328,8 @@ export default function ResourcesPage() {
       toast({ title: "Resurs skapad" });
       closeDialog();
     },
-    onError: () => {
-      toast({ title: "Fel vid skapande", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel vid skapande", description: error.message, variant: "destructive" });
     },
   });
 
@@ -343,8 +343,8 @@ export default function ResourcesPage() {
       closeDialog();
       setAvailabilityDialogOpen(false);
     },
-    onError: () => {
-      toast({ title: "Fel vid uppdatering", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel vid uppdatering", description: error.message, variant: "destructive" });
     },
   });
 
@@ -358,8 +358,8 @@ export default function ResourcesPage() {
       setDeleteDialogOpen(false);
       setResourceToDelete(null);
     },
-    onError: () => {
-      toast({ title: "Fel vid borttagning", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel vid borttagning", description: error.message, variant: "destructive" });
     },
   });
 
@@ -378,8 +378,8 @@ export default function ResourcesPage() {
       setEfficiencyFactor(1.0);
       setProductionTimeOverride(null);
     },
-    onError: () => {
-      toast({ title: "Kunde inte lägga till tidsverk", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte lägga till tidsverk", description: error.message, variant: "destructive" });
     },
   });
 
@@ -391,8 +391,8 @@ export default function ResourcesPage() {
       queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
       toast({ title: "Tidsverk borttaget" });
     },
-    onError: () => {
-      toast({ title: "Kunde inte ta bort tidsverk", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort tidsverk", description: error.message, variant: "destructive" });
     },
   });
 

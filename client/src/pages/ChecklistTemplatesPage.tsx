@@ -105,7 +105,7 @@ export default function ChecklistTemplatesPage() {
       toast({ title: "Mall skapad" });
       closeDialog();
     },
-    onError: () => toast({ title: "Kunde inte skapa mall", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte skapa mall", description: error.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -115,7 +115,7 @@ export default function ChecklistTemplatesPage() {
       toast({ title: "Mall uppdaterad" });
       closeDialog();
     },
-    onError: () => toast({ title: "Kunde inte uppdatera mall", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte uppdatera mall", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -125,7 +125,7 @@ export default function ChecklistTemplatesPage() {
       toast({ title: "Mall borttagen" });
       setDeleteId(null);
     },
-    onError: () => toast({ title: "Kunde inte ta bort mall", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte ta bort mall", description: error.message, variant: "destructive" }),
   });
 
   function openNew() {

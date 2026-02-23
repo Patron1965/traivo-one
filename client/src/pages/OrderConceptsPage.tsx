@@ -244,8 +244,8 @@ export default function OrderConceptsPage() {
       setFormData({ ...defaultForm });
       toast({ title: "Orderkoncept skapat" });
     },
-    onError: () => {
-      toast({ title: "Kunde inte skapa orderkoncept", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa orderkoncept", description: error.message, variant: "destructive" });
     },
   });
 
@@ -282,8 +282,8 @@ export default function OrderConceptsPage() {
         description: `Skapade ${response.assignmentsCreated} uppgifter`,
       });
     },
-    onError: () => {
-      toast({ title: "Kunde inte köra orderkoncept", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte köra orderkoncept", description: error.message, variant: "destructive" });
     },
   });
 
@@ -297,8 +297,8 @@ export default function OrderConceptsPage() {
         description: response.message || `Genererade ${response.assignmentsCreated} uppgifter`,
       });
     },
-    onError: () => {
-      toast({ title: "Kunde inte köra rullande schema", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte köra rullande schema", description: error.message, variant: "destructive" });
     },
   });
 
@@ -359,8 +359,8 @@ export default function OrderConceptsPage() {
       setDepTemplateForm({ sourceArticleId: "", dependentArticleId: "", dependencyType: "before", offsetHours: 24, autoGenerate: true });
       toast({ title: "Beroendemall skapad" });
     },
-    onError: () => {
-      toast({ title: "Kunde inte skapa beroendemall", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa beroendemall", description: error.message, variant: "destructive" });
     },
   });
 
@@ -379,8 +379,8 @@ export default function OrderConceptsPage() {
       setInvoiceRuleForm({ name: "", billingType: "per_task", headerMetadataField: "", lineMetadataField: "", priceField: "", quantityField: "" });
       toast({ title: "Fakturaregel skapad" });
     },
-    onError: () => {
-      toast({ title: "Kunde inte skapa fakturaregel", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa fakturaregel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -402,8 +402,8 @@ export default function OrderConceptsPage() {
         description: response.message || "Ändringar detekterade och loggade",
       });
     },
-    onError: () => {
-      toast({ title: "Kunde inte köra om koncept", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte köra om koncept", description: error.message, variant: "destructive" });
     },
   });
 

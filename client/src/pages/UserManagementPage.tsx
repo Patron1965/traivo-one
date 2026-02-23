@@ -140,8 +140,8 @@ export default function UserManagementPage() {
       toast({ title: "Uppdaterad", description: "Användaren har uppdaterats." });
       closeDialog();
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera användare", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -152,8 +152,8 @@ export default function UserManagementPage() {
       toast({ title: "Borttagen", description: "Användaren har tagits bort." });
       setDeleteTarget(null);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort användare", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -172,8 +172,8 @@ export default function UserManagementPage() {
       toast({ title: "Team skapat", description: "Teamet har skapats." });
       closeTeamDialog();
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa team", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -184,8 +184,8 @@ export default function UserManagementPage() {
       toast({ title: "Uppdaterat", description: "Teamet har uppdaterats." });
       closeTeamDialog();
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera team", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -197,8 +197,8 @@ export default function UserManagementPage() {
       toast({ title: "Borttaget", description: "Teamet har tagits bort." });
       setDeleteTeamTarget(null);
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort team", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -212,8 +212,8 @@ export default function UserManagementPage() {
       setAddMemberResourceId("");
       setAddMemberRole("medlem");
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte lägga till medlem", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -223,8 +223,8 @@ export default function UserManagementPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/team-members"] });
       toast({ title: "Borttagen", description: "Medlemmen har tagits bort från teamet." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort medlem", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 

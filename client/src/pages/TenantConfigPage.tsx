@@ -80,8 +80,8 @@ function CompanyInfoTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/tenant"] });
       toast({ title: "Sparat", description: "Företagsinformation uppdaterad." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -202,8 +202,8 @@ function ArticlesExecutionTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
       toast({ title: "Sparat", description: "Exekveringskod uppdaterad." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -489,8 +489,8 @@ function ResourcesExecutionTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
       toast({ title: "Sparat", description: "Behörigheter uppdaterade." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte spara.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 

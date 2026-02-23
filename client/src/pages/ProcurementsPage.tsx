@@ -123,8 +123,8 @@ export default function ProcurementsPage() {
       setNewProcurement({ title: "", referenceNumber: "", description: "", customerId: "", estimatedValue: 0, deadline: "", estimatedHoursPerWeek: 0 });
       toast({ title: "Upphandling skapad", description: "Den nya upphandlingen har lagts till." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa upphandlingen.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -139,8 +139,8 @@ export default function ProcurementsPage() {
       setSelectedProcurement(null);
       toast({ title: "Upphandling uppdaterad" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte uppdatera upphandlingen.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 
@@ -154,8 +154,8 @@ export default function ProcurementsPage() {
       setSelectedProcurement(null);
       toast({ title: "Upphandling borttagen" });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ta bort upphandlingen.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 

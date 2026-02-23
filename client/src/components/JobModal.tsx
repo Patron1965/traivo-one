@@ -189,8 +189,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       toast({ title: "Jobb skapat", description: message });
       handleClose();
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte skapa jobbet.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
 

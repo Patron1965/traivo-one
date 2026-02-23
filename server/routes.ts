@@ -15,6 +15,7 @@ import {
   insertObjectImageSchema, insertObjectContactSchema, insertTaskDesiredTimewindowSchema,
   insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
+  insertFuelLogSchema, insertMaintenanceLogSchema,
   type ServiceObject,
   apiUsageLogs, apiBudgets, articles, taskDependencyInstances
 } from "@shared/schema";
@@ -48,6 +49,15 @@ const upload = multer({
 });
 
 const DEFAULT_TENANT_ID = "default-tenant";
+
+function formatZodError(error: z.ZodError): { error: string; details: Array<{ field: string; message: string }> } {
+  const details = error.errors.map(e => ({
+    field: e.path.join('.') || 'unknown',
+    message: e.message,
+  }));
+  const summary = details.map(d => `${d.field}: ${d.message}`).join(', ');
+  return { error: `Valideringsfel: ${summary}`, details };
+}
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
@@ -189,7 +199,7 @@ export async function registerRoutes(
       res.status(201).json(customer);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create customer:", error);
       res.status(500).json({ error: "Failed to create customer" });
@@ -204,11 +214,19 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Customer not found" });
       }
-      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
+      const updateSchema = insertCustomerSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const customer = await storage.updateCustomer(req.params.id, updateData);
       if (!customer) return res.status(404).json({ error: "Customer not found" });
       res.json(customer);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       console.error("Failed to update customer:", error);
       res.status(500).json({ error: "Failed to update customer" });
     }
@@ -307,7 +325,7 @@ export async function registerRoutes(
       res.status(201).json(object);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create object:", error);
       res.status(500).json({ error: "Failed to create object" });
@@ -321,11 +339,19 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Object not found" });
       }
-      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
+      const updateSchema = insertObjectSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const object = await storage.updateObject(req.params.id, updateData);
       if (!object) return res.status(404).json({ error: "Object not found" });
       res.json(object);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       console.error("Failed to update object:", error);
       res.status(500).json({ error: "Failed to update object" });
     }
@@ -485,7 +511,7 @@ export async function registerRoutes(
       res.status(201).json(resource);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create resource:", error);
       res.status(500).json({ error: "Failed to create resource" });
@@ -499,11 +525,19 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Resource not found" });
       }
-      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
+      const updateSchema = insertResourceSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const resource = await storage.updateResource(req.params.id, updateData);
       if (!resource) return res.status(404).json({ error: "Resource not found" });
       res.json(resource);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       console.error("Failed to update resource:", error);
       res.status(500).json({ error: "Failed to update resource" });
     }
@@ -633,7 +667,7 @@ export async function registerRoutes(
       res.status(201).json(workOrder);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create work order" });
     }
@@ -930,7 +964,7 @@ export async function registerRoutes(
       res.status(201).json(line);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create work order line:", error);
       res.status(500).json({ error: "Failed to create work order line" });
@@ -949,7 +983,12 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Work order line not found" });
       }
       
-      const { id, tenantId: _, workOrderId, createdAt, ...updateData } = req.body;
+      const updateSchema = insertWorkOrderLineSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { id: _id, tenantId: _t, workOrderId: _w, createdAt: _c, ...updateData } = parseResult.data as any;
       const line = await storage.updateWorkOrderLine(req.params.id, updateData);
       if (!line) return res.status(404).json({ error: "Work order line not found" });
       
@@ -960,6 +999,9 @@ export async function registerRoutes(
       
       res.json(line);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       res.status(500).json({ error: "Failed to update work order line" });
     }
   });
@@ -1122,7 +1164,7 @@ export async function registerRoutes(
       res.status(201).json(scenario);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create simulation scenario" });
     }
@@ -1260,7 +1302,7 @@ export async function registerRoutes(
       res.status(201).json(log);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create setup time log" });
     }
@@ -1307,7 +1349,7 @@ export async function registerRoutes(
       res.status(201).json(procurement);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create procurement" });
     }
@@ -2247,7 +2289,7 @@ export async function registerRoutes(
       res.status(201).json(article);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create article" });
     }
@@ -2260,11 +2302,19 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Article not found" });
       }
-      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
+      const updateSchema = insertArticleSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const article = await storage.updateArticle(req.params.id, updateData);
       if (!article) return res.status(404).json({ error: "Article not found" });
       res.json(article);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       res.status(500).json({ error: "Failed to update article" });
     }
   });
@@ -2333,7 +2383,7 @@ export async function registerRoutes(
       res.status(201).json(priceList);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create price list" });
     }
@@ -2346,11 +2396,19 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Price list not found" });
       }
-      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
+      const updateSchema = insertPriceListSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const priceList = await storage.updatePriceList(req.params.id, updateData);
       if (!priceList) return res.status(404).json({ error: "Price list not found" });
       res.json(priceList);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       res.status(500).json({ error: "Failed to update price list" });
     }
   });
@@ -2396,7 +2454,7 @@ export async function registerRoutes(
       res.status(201).json(priceListArticle);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create price list article" });
     }
@@ -2414,11 +2472,19 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Price list article not found" });
       }
       
-      const { id, priceListId, articleId, createdAt, ...updateData } = req.body;
+      const updateSchema = insertPriceListArticleSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const priceListArticle = await storage.updatePriceListArticle(req.params.id, updateData);
       if (!priceListArticle) return res.status(404).json({ error: "Price list article not found" });
       res.json(priceListArticle);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       res.status(500).json({ error: "Failed to update price list article" });
     }
   });
@@ -2469,7 +2535,7 @@ export async function registerRoutes(
       res.status(201).json(resourceArticle);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create resource article" });
     }
@@ -2487,11 +2553,19 @@ export async function registerRoutes(
         return res.status(404).json({ error: "Resource article not found" });
       }
       
-      const { id, resourceId, articleId, createdAt, ...updateData } = req.body;
+      const updateSchema = insertResourceArticleSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const resourceArticle = await storage.updateResourceArticle(req.params.id, updateData);
       if (!resourceArticle) return res.status(404).json({ error: "Resource article not found" });
       res.json(resourceArticle);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       res.status(500).json({ error: "Failed to update resource article" });
     }
   });
@@ -2546,7 +2620,7 @@ export async function registerRoutes(
       res.status(201).json(vehicle);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create vehicle" });
     }
@@ -2559,11 +2633,19 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Vehicle not found" });
       }
-      const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
+      const updateSchema = insertVehicleSchema.partial().omit({ tenantId: true });
+      const parseResult = updateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
       const vehicle = await storage.updateVehicle(req.params.id, updateData);
       if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
       res.json(vehicle);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       res.status(500).json({ error: "Failed to update vehicle" });
     }
   });
@@ -2601,9 +2683,13 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(vehicle, tenantId)) {
         return res.status(404).json({ error: "Vehicle not found" });
       }
-      const log = await storage.createFuelLog({ ...req.body, tenantId });
+      const data = insertFuelLogSchema.parse({ ...req.body, tenantId });
+      const log = await storage.createFuelLog(data);
       res.status(201).json(log);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       console.error("Failed to create fuel log:", error);
       res.status(500).json({ error: "Failed to create fuel log" });
     }
@@ -2638,9 +2724,13 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(vehicle, tenantId)) {
         return res.status(404).json({ error: "Vehicle not found" });
       }
-      const log = await storage.createMaintenanceLog({ ...req.body, tenantId });
+      const data = insertMaintenanceLogSchema.parse({ ...req.body, tenantId });
+      const log = await storage.createMaintenanceLog(data);
       res.status(201).json(log);
     } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
       console.error("Failed to create maintenance log:", error);
       res.status(500).json({ error: "Failed to create maintenance log" });
     }
@@ -2687,7 +2777,7 @@ export async function registerRoutes(
       res.status(201).json(equipment);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create equipment" });
     }
@@ -2771,7 +2861,7 @@ export async function registerRoutes(
       res.status(201).json(item);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create resource availability" });
     }
@@ -2864,7 +2954,7 @@ export async function registerRoutes(
       res.status(201).json(item);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create vehicle schedule" });
     }
@@ -2939,7 +3029,7 @@ export async function registerRoutes(
       res.status(201).json(subscription);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create subscription" });
     }
@@ -3133,7 +3223,7 @@ export async function registerRoutes(
       res.status(201).json(team);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create team" });
     }
@@ -3227,7 +3317,7 @@ export async function registerRoutes(
       res.status(201).json(member);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create team member" });
     }
@@ -3302,7 +3392,7 @@ export async function registerRoutes(
       res.status(201).json(param);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create planning parameter" });
     }
@@ -3370,7 +3460,7 @@ export async function registerRoutes(
       res.status(201).json(rv);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create resource vehicle" });
     }
@@ -3443,7 +3533,7 @@ export async function registerRoutes(
       res.status(201).json(re);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       res.status(500).json({ error: "Failed to create resource equipment" });
     }
@@ -3522,7 +3612,7 @@ export async function registerRoutes(
       res.status(201).json(cluster);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create cluster:", error);
       res.status(500).json({ error: "Kunde inte skapa kluster" });
@@ -8126,7 +8216,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(definition);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create metadata definition:", error);
       res.status(500).json({ error: "Failed to create metadata definition" });
@@ -8155,7 +8245,7 @@ setInterval(loadRoutes, 30000);
       res.json(definition);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update metadata definition:", error);
       res.status(500).json({ error: "Failed to update metadata definition" });
@@ -8213,7 +8303,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(metadata);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create object metadata:", error);
       res.status(500).json({ error: "Failed to create object metadata" });
@@ -8237,7 +8327,7 @@ setInterval(loadRoutes, 30000);
       res.json(metadata);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update object metadata:", error);
       res.status(500).json({ error: "Failed to update object metadata" });
@@ -8304,7 +8394,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(payer);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create object payer:", error);
       res.status(500).json({ error: "Failed to create object payer" });
@@ -8335,7 +8425,7 @@ setInterval(loadRoutes, 30000);
       res.json(payer);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update object payer:", error);
       res.status(500).json({ error: "Failed to update object payer" });
@@ -8510,7 +8600,7 @@ setInterval(loadRoutes, 30000);
       res.json(config);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update Fortnox config:", error);
       res.status(500).json({ error: "Failed to update Fortnox config" });
@@ -8619,7 +8709,7 @@ setInterval(loadRoutes, 30000);
       res.json(invoiceExport);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update Fortnox export:", error);
       res.status(500).json({ error: "Failed to update Fortnox export" });
@@ -8659,7 +8749,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(image);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create object image:", error);
       res.status(500).json({ error: "Failed to create object image" });
@@ -8716,7 +8806,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(contact);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create object contact:", error);
       res.status(500).json({ error: "Failed to create object contact" });
@@ -8744,7 +8834,7 @@ setInterval(loadRoutes, 30000);
       res.json(contact);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update object contact:", error);
       res.status(500).json({ error: "Failed to update object contact" });
@@ -8811,7 +8901,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(timewindow);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create task timewindow:", error);
       res.status(500).json({ error: "Failed to create task timewindow" });
@@ -8838,7 +8928,7 @@ setInterval(loadRoutes, 30000);
       res.json(timewindow);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update task timewindow:", error);
       res.status(500).json({ error: "Failed to update task timewindow" });
@@ -9145,7 +9235,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(dependency);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create task dependency:", error);
       res.status(500).json({ error: "Failed to create task dependency" });
@@ -9374,7 +9464,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(info);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create task information:", error);
       res.status(500).json({ error: "Failed to create task information" });
@@ -9400,7 +9490,7 @@ setInterval(loadRoutes, 30000);
       res.json(info);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update task information:", error);
       res.status(500).json({ error: "Failed to update task information" });
@@ -9660,7 +9750,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(article);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create structural article:", error);
       res.status(500).json({ error: "Failed to create structural article" });
@@ -9681,7 +9771,7 @@ setInterval(loadRoutes, 30000);
       res.json(article);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to update structural article:", error);
       res.status(500).json({ error: "Failed to update structural article" });
@@ -12904,7 +12994,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(slot);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create booking slot:", error);
       res.status(500).json({ error: "Kunde inte skapa tidslucka" });
@@ -13104,7 +13194,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(link);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create QR code link:", error);
       res.status(500).json({ error: "Kunde inte skapa QR-kod" });
@@ -13398,7 +13488,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(protocol);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create protocol:", error);
       res.status(500).json({ error: "Kunde inte skapa protokoll" });
@@ -13658,7 +13748,7 @@ setInterval(loadRoutes, 30000);
       res.status(201).json(report);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
+        return res.status(400).json(formatZodError(error));
       }
       console.error("Failed to create deviation report:", error);
       res.status(500).json({ error: "Kunde inte skapa avvikelserapport" });
@@ -14982,6 +15072,15 @@ setInterval(loadRoutes, 30000);
     req.session.destroy(() => {
       res.json({ success: true });
     });
+  });
+
+  app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
+    console.error("[global-error]", err);
+    if (err instanceof z.ZodError) {
+      return res.status(400).json(formatZodError(err));
+    }
+    const message = err.message || "Ett oväntat serverfel uppstod";
+    res.status(err.status || 500).json({ error: message });
   });
 
   return httpServer;
