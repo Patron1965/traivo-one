@@ -17,6 +17,11 @@ async function kinabFetch(path: string, options: RequestInit = {}): Promise<{ st
         ...(options.headers || {}),
       },
     });
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      console.error(`Kinab API returned non-JSON (${contentType}) for ${path}`);
+      throw new Error('Kinab-servern svarade inte med JSON (kan vara nere)');
+    }
     const data = await response.json().catch(() => ({}));
     return { status: response.status, data };
   } catch (error: any) {
@@ -371,6 +376,93 @@ const MOCK_CHECKLIST_TEMPLATES: Record<string, any> = {
   },
 };
 
+function mapKinabStatus(kinabStatus: string, orderStatus?: string): string {
+  const statusMap: Record<string, string> = {
+    'draft': 'planned',
+    'scheduled': 'planned',
+    'dispatched': 'dispatched',
+    'on_site': 'on_site',
+    'in_progress': 'in_progress',
+    'completed': 'completed',
+    'failed': 'failed',
+    'cancelled': 'cancelled',
+    'impossible': 'failed',
+  };
+  return statusMap[kinabStatus] || statusMap[orderStatus || ''] || 'planned';
+}
+
+function parseAddressParts(fullAddress: string): { address: string; city: string; postalCode: string } {
+  if (!fullAddress) return { address: '', city: '', postalCode: '' };
+  const parts = fullAddress.split(',').map(s => s.trim());
+  return {
+    address: parts[0] || fullAddress,
+    city: parts[1] || '',
+    postalCode: parts[2] || '',
+  };
+}
+
+function transformKinabOrder(raw: any): any {
+  const addrParts = parseAddressParts(raw.objectAddress || '');
+  return {
+    id: raw.id,
+    orderNumber: raw.title || raw.externalReference || `ORD-${(raw.id || '').toString().slice(0, 8)}`,
+    status: mapKinabStatus(raw.status, raw.orderStatus),
+    customerName: raw.customerName || 'Okänd kund',
+    address: addrParts.address,
+    city: addrParts.city,
+    postalCode: addrParts.postalCode,
+    latitude: raw.taskLatitude || 0,
+    longitude: raw.taskLongitude || 0,
+    what3words: raw.what3words || undefined,
+    scheduledDate: raw.scheduledDate ? raw.scheduledDate.split('T')[0] : new Date().toISOString().split('T')[0],
+    scheduledTimeStart: raw.scheduledStartTime || undefined,
+    scheduledTimeEnd: undefined,
+    scheduledStartTime: raw.scheduledStartTime || undefined,
+    scheduledEndTime: undefined,
+    title: raw.title || '',
+    description: raw.description || '',
+    notes: raw.notes || raw.plannedNotes || '',
+    objectType: raw.orderType || '',
+    objectId: raw.objectId || '',
+    clusterId: raw.clusterId || undefined,
+    clusterName: undefined,
+    priority: raw.priority || 'normal',
+    articles: [],
+    contacts: raw.customerPhone ? [{ id: 'c1', name: raw.customerName || '', phone: raw.customerPhone, role: 'Kund' }] : [],
+    estimatedDuration: raw.estimatedDuration || 30,
+    actualStartTime: raw.onSiteAt || undefined,
+    actualEndTime: undefined,
+    completedAt: raw.completedAt || undefined,
+    signatureUrl: undefined,
+    photos: [],
+    deviations: [],
+    sortOrder: 0,
+    executionCodes: raw.executionCode ? [{ id: raw.executionCode, code: raw.executionCode, name: raw.executionCode }] : [],
+    timeRestrictions: [],
+    subSteps: [],
+    dependencies: [],
+    isLocked: raw.lockedAt ? true : false,
+    orderNotes: [],
+    inspections: [],
+    creationMethod: raw.creationMethod || 'manual',
+    object: raw.objectName ? {
+      id: raw.objectId,
+      name: raw.objectName,
+      address: raw.objectAddress || '',
+      latitude: raw.taskLatitude || 0,
+      longitude: raw.taskLongitude || 0,
+      what3words: raw.what3words || undefined,
+    } : undefined,
+    customer: raw.customerName ? {
+      id: raw.customerId,
+      name: raw.customerName,
+    } : undefined,
+    resourceId: raw.resourceId,
+    tenantId: raw.tenantId,
+    metadata: raw.metadata,
+  };
+}
+
 router.post('/login', async (req, res) => {
   if (IS_MOCK_MODE) {
     const { username, password, pin } = req.body;
@@ -485,7 +577,13 @@ router.get('/my-orders', async (req, res) => {
       method: 'GET',
       headers: getAuthHeader(req),
     });
-    res.status(status).json(data);
+    if (status === 200) {
+      const rawOrders = Array.isArray(data) ? data : (data.orders || []);
+      const transformed = rawOrders.map(transformKinabOrder);
+      res.json(transformed);
+    } else {
+      res.status(status).json(data);
+    }
   } catch (error: any) {
     console.error('My-orders proxy error:', error.message);
     res.status(503).json({ error: 'Kunde inte hämta ordrar. Försök igen.' });
@@ -508,7 +606,11 @@ router.get('/orders/:id', async (req, res) => {
       method: 'GET',
       headers: getAuthHeader(req),
     });
-    res.status(status).json(data);
+    if (status === 200 && data) {
+      res.json(transformKinabOrder(data));
+    } else {
+      res.status(status).json(data);
+    }
   } catch (error: any) {
     res.status(503).json({ error: 'Kunde inte hämta order. Försök igen.' });
   }
@@ -911,12 +1013,38 @@ router.get('/summary', async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch('/api/mobile/summary', {
+    const { status: summaryStatus, data: summaryData } = await kinabFetch('/api/mobile/summary', {
       method: 'GET', headers: getAuthHeader(req),
     });
-    res.status(status).json(data);
+    if (summaryStatus === 200 && summaryData && summaryData.totalOrders !== undefined) {
+      res.json(summaryData);
+      return;
+    }
+  } catch {}
+  try {
+    const { status: ordersStatus, data: ordersData } = await kinabFetch('/api/mobile/my-orders', {
+      method: 'GET', headers: getAuthHeader(req),
+    });
+    if (ordersStatus === 200) {
+      const rawOrders = Array.isArray(ordersData) ? ordersData : (ordersData.orders || []);
+      const completed = rawOrders.filter((o: any) => o.status === 'completed').length;
+      const failed = rawOrders.filter((o: any) => o.status === 'failed' || o.status === 'impossible').length;
+      const cancelled = rawOrders.filter((o: any) => o.status === 'cancelled').length;
+      const remaining = rawOrders.length - completed - failed - cancelled;
+      res.json({
+        totalOrders: rawOrders.length,
+        completedOrders: completed,
+        remainingOrders: remaining,
+        failedOrders: failed,
+        totalDuration: rawOrders.reduce((sum: number, o: any) => sum + (o.estimatedDuration || 0), 0),
+        estimatedTimeRemaining: rawOrders.filter((o: any) => o.status !== 'completed' && o.status !== 'failed' && o.status !== 'cancelled')
+          .reduce((sum: number, o: any) => sum + (o.estimatedDuration || 0), 0),
+      });
+    } else {
+      res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
+    }
   } catch {
-    res.status(503).json({ error: 'Kunde inte hämta sammanfattning.' });
+    res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
   }
 });
 
