@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useLocation, useSearch } from "wouter";
-import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
@@ -10,50 +9,70 @@ export default function PortalVerifyPage() {
   const searchString = useSearch();
   const [status, setStatus] = useState<"verifying" | "success" | "error">("verifying");
   const [errorMessage, setErrorMessage] = useState("");
-
-  const verifyMutation = useMutation({
-    mutationFn: async (token: string) => {
-      const res = await fetch("/api/portal/auth/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token }),
-      });
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Verifiering misslyckades");
-      }
-      return res.json();
-    },
-    onSuccess: (data) => {
-      localStorage.setItem("portal_session", data.sessionToken);
-      localStorage.setItem("portal_customer", JSON.stringify(data.customer));
-      localStorage.setItem("portal_tenant", JSON.stringify(data.tenant));
-      setStatus("success");
-      setTimeout(() => {
-        setLocation("/portal/dashboard");
-      }, 1500);
-    },
-    onError: (error: Error) => {
-      setStatus("error");
-      setErrorMessage(error.message);
-    },
-  });
+  const verifyAttempted = useRef(false);
 
   useEffect(() => {
+    if (verifyAttempted.current) return;
+
     const params = new URLSearchParams(searchString);
     const token = params.get("token");
-    
-    if (token) {
-      verifyMutation.mutate(token);
-    } else {
+
+    if (!token) {
+      const existingSession = localStorage.getItem("portal_session");
+      if (existingSession) {
+        setStatus("success");
+        setTimeout(() => setLocation("/portal/dashboard"), 500);
+        return;
+      }
       setStatus("error");
       setErrorMessage("Ingen token hittades i länken");
+      return;
     }
-  }, [searchString]);
+
+    verifyAttempted.current = true;
+
+    async function verify() {
+      try {
+        const res = await fetch("/api/portal/auth/verify", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+
+        if (!res.ok) {
+          const data = await res.json();
+          const errorMsg = data.error || "Verifiering misslyckades";
+
+          if (errorMsg.includes("redan använts")) {
+            const existingSession = localStorage.getItem("portal_session");
+            if (existingSession) {
+              setStatus("success");
+              setTimeout(() => setLocation("/portal/dashboard"), 500);
+              return;
+            }
+          }
+
+          throw new Error(errorMsg);
+        }
+
+        const data = await res.json();
+        localStorage.setItem("portal_session", data.sessionToken);
+        localStorage.setItem("portal_customer", JSON.stringify(data.customer));
+        localStorage.setItem("portal_tenant", JSON.stringify(data.tenant));
+        setStatus("success");
+        setTimeout(() => setLocation("/portal/dashboard"), 1000);
+      } catch (err: any) {
+        setStatus("error");
+        setErrorMessage(err.message || "Något gick fel");
+      }
+    }
+
+    verify();
+  }, [searchString, setLocation]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted p-4">
-      <Card className="w-full max-w-md">
+      <Card className="w-full max-w-md" data-testid="card-verify">
         <CardHeader className="text-center">
           {status === "verifying" && (
             <>
@@ -87,13 +106,13 @@ export default function PortalVerifyPage() {
         </CardHeader>
 
         {status === "error" && (
-          <CardContent>
+          <CardContent className="space-y-3">
             <Button
               className="w-full"
               onClick={() => setLocation("/portal")}
               data-testid="button-back-to-login"
             >
-              Tillbaka till inloggning
+              Begär en ny inloggningslänk
             </Button>
           </CardContent>
         )}
