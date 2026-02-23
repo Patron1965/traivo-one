@@ -1,20 +1,31 @@
-import React, { useRef, useState } from 'react';
-import { View, StyleSheet, Pressable, Platform } from 'react-native';
+import React, { useRef, useState, useCallback } from 'react';
+import { View, StyleSheet, Pressable, PanResponder, Dimensions, Platform } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
+import Svg, { Path } from 'react-native-svg';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
+
+interface PathData {
+  id: number;
+  d: string;
+}
 
 export function SignatureScreen({ route, navigation }: any) {
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
-  const [hasSignature, setHasSignature] = useState(false);
+  const [paths, setPaths] = useState<PathData[]>([]);
+  const [currentPath, setCurrentPath] = useState<string>('');
+  const pathIdRef = useRef(0);
+  const layoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+
+  const hasSignature = paths.length > 0 || currentPath.length > 0;
 
   const mutation = useMutation({
     mutationFn: (signatureData: string) =>
@@ -26,30 +37,98 @@ export function SignatureScreen({ route, navigation }: any) {
     },
   });
 
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
+      onPanResponderGrant: (evt) => {
+        const touch = evt.nativeEvent;
+        const x = touch.locationX;
+        const y = touch.locationY;
+        setCurrentPath(`M${x.toFixed(1)},${y.toFixed(1)}`);
+      },
+      onPanResponderMove: (evt) => {
+        const touch = evt.nativeEvent;
+        const x = touch.locationX;
+        const y = touch.locationY;
+        setCurrentPath(prev => `${prev} L${x.toFixed(1)},${y.toFixed(1)}`);
+      },
+      onPanResponderRelease: () => {
+        if (currentPath.length > 0) {
+          pathIdRef.current += 1;
+          setPaths(prev => [...prev, { id: pathIdRef.current, d: currentPath }]);
+          setCurrentPath('');
+        }
+      },
+    })
+  ).current;
+
+  const handleClear = useCallback(() => {
+    setPaths([]);
+    setCurrentPath('');
+    pathIdRef.current = 0;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const handleSave = useCallback(() => {
+    const allPaths = paths.map(p => p.d).join('|');
+    mutation.mutate(allPaths);
+  }, [paths, mutation]);
+
   return (
-    <View style={[styles.container, { paddingTop: headerHeight + Spacing.xl }]}>
+    <View style={[styles.container, { paddingTop: headerHeight + Spacing.md }]}>
       <ThemedText variant="heading" style={styles.title}>
         Digital signatur
       </ThemedText>
       <ThemedText variant="body" color={Colors.textSecondary} style={styles.subtitle}>
-        Låt kunden signera för godkännande
+        Rita signaturen med fingret nedan
       </ThemedText>
 
-      <View style={styles.signatureArea}>
-        <View style={styles.signaturePlaceholder}>
-          <Feather name="edit-3" size={48} color={Colors.textMuted} />
-          <ThemedText variant="body" color={Colors.textMuted}>
-            {Platform.OS === 'web'
-              ? 'Signatur visas i Expo Go på din telefon'
-              : 'Signera här'}
-          </ThemedText>
-        </View>
+      <View
+        style={styles.signatureArea}
+        onLayout={(e) => {
+          layoutRef.current = e.nativeEvent.layout;
+        }}
+        {...panResponder.panHandlers}
+      >
+        <Svg style={StyleSheet.absoluteFill}>
+          {paths.map(p => (
+            <Path
+              key={p.id}
+              d={p.d}
+              stroke={Colors.text}
+              strokeWidth={2.5}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ))}
+          {currentPath.length > 0 ? (
+            <Path
+              d={currentPath}
+              stroke={Colors.text}
+              strokeWidth={2.5}
+              fill="none"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          ) : null}
+        </Svg>
+        {!hasSignature ? (
+          <View style={styles.signaturePlaceholder} pointerEvents="none">
+            <Feather name="edit-3" size={32} color={Colors.borderLight} />
+            <ThemedText variant="caption" color={Colors.borderLight}>
+              Rita din signatur här
+            </ThemedText>
+          </View>
+        ) : null}
+        <View style={styles.signatureLine} />
       </View>
 
-      <View style={styles.buttonRow}>
+      <View style={[styles.buttonRow, { paddingBottom: insets.bottom + Spacing.md }]}>
         <Pressable
           style={styles.clearButton}
-          onPress={() => setHasSignature(false)}
+          onPress={handleClear}
           testID="button-clear-signature"
         >
           <Feather name="trash-2" size={18} color={Colors.danger} />
@@ -59,15 +138,14 @@ export function SignatureScreen({ route, navigation }: any) {
         </Pressable>
 
         <Pressable
-          style={styles.saveButton}
-          onPress={() => {
-            mutation.mutate('signature-data-placeholder');
-          }}
+          style={[styles.saveButton, !hasSignature ? styles.saveButtonDisabled : null]}
+          onPress={handleSave}
+          disabled={!hasSignature || mutation.isPending}
           testID="button-save-signature"
         >
           <Feather name="check" size={18} color={Colors.textInverse} />
           <ThemedText variant="body" color={Colors.textInverse}>
-            Spara signatur
+            {mutation.isPending ? 'Sparar...' : 'Spara signatur'}
           </ThemedText>
         </Pressable>
       </View>
@@ -85,28 +163,37 @@ const styles = StyleSheet.create({
     marginBottom: Spacing.xs,
   },
   subtitle: {
-    marginBottom: Spacing.xl,
+    marginBottom: Spacing.lg,
   },
   signatureArea: {
     flex: 1,
-    maxHeight: 300,
+    maxHeight: 350,
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
     borderWidth: 2,
-    borderColor: Colors.borderLight,
+    borderColor: Colors.border,
+    borderStyle: 'dashed',
     marginBottom: Spacing.xl,
     overflow: 'hidden',
+    position: 'relative',
   },
   signaturePlaceholder: {
-    flex: 1,
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: Spacing.md,
+    gap: Spacing.sm,
+  },
+  signatureLine: {
+    position: 'absolute',
+    bottom: 40,
+    left: 24,
+    right: 24,
+    height: 1,
+    backgroundColor: Colors.borderLight,
   },
   buttonRow: {
     flexDirection: 'row',
     gap: Spacing.md,
-    marginBottom: Spacing.xl,
   },
   clearButton: {
     flexDirection: 'row',
@@ -114,7 +201,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.sm,
     backgroundColor: Colors.dangerLight,
-    height: 48,
+    height: 52,
     paddingHorizontal: Spacing.xl,
     borderRadius: BorderRadius.lg,
   },
@@ -125,7 +212,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: Spacing.sm,
     backgroundColor: Colors.secondary,
-    height: 48,
+    height: 52,
     borderRadius: BorderRadius.lg,
+  },
+  saveButtonDisabled: {
+    backgroundColor: Colors.textMuted,
   },
 });
