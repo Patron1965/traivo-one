@@ -3,12 +3,40 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import http from 'http';
 import QRCode from 'qrcode';
+import { Server as SocketIOServer } from 'socket.io';
 import { mobileRoutes } from './routes/mobile';
 import { aiRoutes } from './routes/ai';
 import { plannerRoutes } from './routes/planner';
 
 const app = express();
+const server = http.createServer(app);
+
+const io = new SocketIOServer(server, {
+  cors: { origin: '*', methods: ['GET', 'POST'] },
+  path: '/ws',
+});
+
+io.on('connection', (socket) => {
+  console.log(`WebSocket client connected: ${socket.id}`);
+
+  socket.on('join', (data: { resourceId?: string; tenantId?: string }) => {
+    if (data.resourceId) {
+      socket.join(`resource:${data.resourceId}`);
+    }
+    if (data.tenantId) {
+      socket.join(`tenant:${data.tenantId}`);
+    }
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`WebSocket client disconnected: ${socket.id}`);
+  });
+});
+
+(app as any).io = io;
+
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 
@@ -199,7 +227,7 @@ app.get('/', (req, res) => {
 });
 
 const PORT = 5000;
-app.listen(PORT, '0.0.0.0', () => {
+server.listen(PORT, '0.0.0.0', () => {
   const kinabUrl = process.env.KINAB_API_URL;
   const mockMode = !kinabUrl || process.env.KINAB_MOCK_MODE === 'true';
   console.log(`Driver Core API running on port ${PORT}`);

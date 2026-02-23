@@ -642,6 +642,7 @@ router.get('/orders/:id/checklist', async (req, res) => {
 });
 
 router.patch('/orders/:id/status', async (req, res) => {
+  const io = (req.app as any).io;
   if (IS_MOCK_MODE) {
     const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
     if (order) {
@@ -666,6 +667,9 @@ router.patch('/orders/:id/status', async (req, res) => {
       }
       if (req.body.status === 'fakturerad') {
         order.completedAt = order.completedAt || new Date().toISOString();
+      }
+      if (io) {
+        io.emit('order:updated', { orderId: order.id, status: order.status, updatedAt: new Date().toISOString() });
       }
       res.json(order);
     } else {
