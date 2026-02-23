@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -311,6 +311,12 @@ function SortableRouteItem({
               <Badge variant="secondary" className="text-[10px]">
                 {((job.estimatedDuration || 0) / 60).toFixed(1)}h
               </Badge>
+              {(job as any).metadata?.teamName && (
+                <Badge variant="outline" className="text-[10px] gap-0.5">
+                  <UsersRound className="h-2.5 w-2.5" />
+                  {(job as any).metadata.teamName}
+                </Badge>
+              )}
             </div>
           </div>
         </div>
@@ -1890,6 +1896,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 )}
               </div>
               <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
+              {(job as any).metadata?.teamName && (
+                <Badge variant="outline" className="text-[9px] h-4 gap-0.5 mt-0.5" style={{ borderColor: "#3B82F6" }} data-testid={`team-badge-${job.id}`}>
+                  <UsersRound className="h-2.5 w-2.5" />
+                  {(job as any).metadata.teamName}
+                </Badge>
+              )}
               {(job as any).creationMethod === "automatic" && (
                 <Badge className="text-[9px] h-4 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300" data-testid={`pickup-badge-${job.id}`}>
                   Plockuppgift

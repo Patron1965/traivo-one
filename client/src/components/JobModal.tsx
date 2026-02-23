@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Customer, ServiceObject, Resource, Article } from "@shared/schema";
+import type { Customer, ServiceObject, Resource, Article, Team, TeamMember } from "@shared/schema";
 import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
 
 interface JobModalProps {
@@ -101,6 +101,29 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const { data: resources = [] } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
   });
+
+  const { data: teams = [] } = useQuery<Team[]>({
+    queryKey: ["/api/teams"],
+  });
+
+  const { data: allTeamMembers = [] } = useQuery<TeamMember[]>({
+    queryKey: ["/api/team-members"],
+  });
+
+  const [selectedTeamId, setSelectedTeamId] = useState<string>("");
+
+  const selectTeam = (teamId: string) => {
+    if (!teamId || teamId === "none") {
+      setSelectedTeamId("");
+      setFormData(prev => ({ ...prev, teamResourceIds: [], resourceId: "" }));
+      return;
+    }
+    setSelectedTeamId(teamId);
+    const members = allTeamMembers.filter(m => m.teamId === teamId);
+    const resourceIds = members.map(m => m.resourceId);
+    const primaryId = resourceIds.length > 0 ? resourceIds[0] : "";
+    setFormData(prev => ({ ...prev, teamResourceIds: resourceIds, resourceId: primaryId }));
+  };
 
   const { data: applicableArticles = [], isLoading: articlesLoading } = useQuery<Article[]>({
     queryKey: ["/api/objects", formData.objectId, "applicable-articles"],
@@ -206,6 +229,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     setSelectedObjectName("");
     setSelectedArticleIds(new Set());
     setTeamPopoverOpen(false);
+    setSelectedTeamId("");
     onClose();
   };
 
@@ -234,7 +258,9 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       scheduledDate: formData.scheduledDate || null,
       status: formData.resourceId && formData.scheduledDate ? "scheduled" : "draft",
       articlesToAdd,
-      metadata: formData.teamResourceIds.length > 1 ? {
+      metadata: (selectedTeamId || formData.teamResourceIds.length > 1) ? {
+        teamId: selectedTeamId || undefined,
+        teamName: selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : undefined,
         teamMembers: formData.teamResourceIds.map((id, i) => ({
           resourceId: id,
           name: teamResourceNames[i],
@@ -407,6 +433,34 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                 data-testid="input-duration"
               />
             </div>
+
+            {teams.length > 0 && (
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1.5">
+                  <Users className="h-3.5 w-3.5" />
+                  Välj team
+                </Label>
+                <Select value={selectedTeamId || "none"} onValueChange={(v) => selectTeam(v === "none" ? "" : v)}>
+                  <SelectTrigger data-testid="select-team">
+                    <SelectValue placeholder="Inget team" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Inget team (välj manuellt)</SelectItem>
+                    {teams.filter(t => t.status === "active").map(t => {
+                      const memberCount = allTeamMembers.filter(m => m.teamId === t.id).length;
+                      return (
+                        <SelectItem key={t.id} value={t.id}>
+                          <span className="flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: t.color || "#3B82F6" }} />
+                            {t.name} ({memberCount} pers)
+                          </span>
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label className="flex items-center gap-1.5">
