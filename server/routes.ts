@@ -12398,6 +12398,54 @@ setInterval(loadRoutes, 30000);
     }
   });
 
+  app.post("/api/portal/auth/demo-login", async (req, res) => {
+    try {
+      if (process.env.NODE_ENV === "production" && !process.env.ENABLE_DEMO_LOGIN) {
+        return res.status(403).json({ error: "Demo-inloggning är inaktiverad i produktion" });
+      }
+
+      const demoEmail = "demo@unicorn.se";
+      const tenantId = "default-tenant";
+      
+      const customer = await storage.getCustomerByEmail(demoEmail, tenantId);
+      if (!customer) {
+        return res.status(404).json({ error: "Demokund finns inte. Skapa en kund med e-post demo@unicorn.se." });
+      }
+
+      const { generateSessionToken } = await import("./portal-auth");
+      const sessionToken = generateSessionToken();
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+      await storage.createPortalSession({
+        tenantId,
+        customerId: customer.id,
+        sessionToken,
+        expiresAt,
+        ipAddress: req.ip || null,
+        userAgent: req.headers["user-agent"] || null,
+      });
+
+      const tenant = await storage.getTenant(tenantId);
+
+      res.json({
+        success: true,
+        sessionToken,
+        customer: {
+          id: customer.id,
+          name: customer.name,
+          email: customer.email,
+        },
+        tenant: {
+          id: tenant?.id,
+          name: tenant?.name,
+        },
+      });
+    } catch (error) {
+      console.error("Failed demo login:", error);
+      res.status(500).json({ error: "Kunde inte skapa demosession" });
+    }
+  });
+
   app.post("/api/portal/logout", async (req, res) => {
     try {
       const authHeader = req.headers.authorization;

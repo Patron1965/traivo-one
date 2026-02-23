@@ -64,6 +64,7 @@ import PortalInvoicesPage from "@/pages/portal/PortalInvoicesPage";
 import PortalContractsPage from "@/pages/portal/PortalContractsPage";
 import PortalSettingsPage from "@/pages/portal/PortalSettingsPage";
 import PortalIssuesPage from "@/pages/portal/PortalIssuesPage";
+import PortalDemoPage from "@/pages/portal/PortalDemoPage";
 import AIPlanningPage from "@/pages/AIPlanningPage";
 import AICommandCenterPage from "@/pages/AICommandCenterPage";
 import FieldLoginPage from "@/pages/FieldLoginPage";
@@ -154,6 +155,7 @@ function PortalRouter() {
   return (
     <Switch>
       <Route path="/portal" component={PortalLoginPage} />
+      <Route path="/portal/demo" component={PortalDemoPage} />
       <Route path="/portal/verify" component={PortalVerifyPage} />
       <Route path="/portal/dashboard" component={PortalDashboardPage} />
       <Route path="/portal/clusters" component={PortalClusterOverviewPage} />

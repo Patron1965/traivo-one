@@ -57,6 +57,7 @@ import {
   Leaf,
   MapPin,
   Fuel,
+  ExternalLink,
 } from "lucide-react";
 
 const grunddataItems = [
@@ -113,6 +114,7 @@ const avanceratItems = [
   { title: "Metadatainställningar", url: "/metadata-settings", icon: Database, description: "Metadatakatalog" },
   { title: "Upphandlingar", url: "/procurements", icon: Briefcase, description: "Avtalshantering" },
   { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
+  { title: "Demo Kundportal", url: "/portal/demo", icon: ExternalLink, description: "Testa kundens vy" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
   { title: "Branschpaket", url: "/industry-packages", icon: Package, description: "Fördefinierade mallar" },
   { title: "API-kostnader", url: "/api-costs", icon: BarChart3, description: "Övervakning av API-kostnader" },
