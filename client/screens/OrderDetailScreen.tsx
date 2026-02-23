@@ -617,15 +617,20 @@ export function OrderDetailScreen({ route, navigation }: any) {
         animationType="fade"
         onRequestClose={() => setShowAiTip(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowAiTip(false)}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation()}>
             <View style={styles.modalHeader}>
               <View style={styles.modalTitleRow}>
                 <Feather name="cpu" size={20} color={Colors.secondary} />
                 <ThemedText variant="subheading">AI Tips</ThemedText>
               </View>
-              <Pressable onPress={() => setShowAiTip(false)} testID="button-close-ai-tip">
-                <Feather name="x" size={24} color={Colors.textMuted} />
+              <Pressable
+                style={styles.modalCloseButton}
+                onPress={() => setShowAiTip(false)}
+                testID="button-close-ai-tip"
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+              >
+                <Feather name="x" size={24} color={Colors.textSecondary} />
               </Pressable>
             </View>
             {aiTipLoading ? (
@@ -636,14 +641,24 @@ export function OrderDetailScreen({ route, navigation }: any) {
                 </ThemedText>
               </View>
             ) : (
-              <ScrollView style={styles.modalScroll}>
-                <ThemedText variant="body" style={styles.modalText}>
-                  {aiTip || ''}
-                </ThemedText>
-              </ScrollView>
+              <>
+                <ScrollView style={styles.modalScroll}>
+                  <ThemedText variant="body" style={styles.modalText}>
+                    {aiTip || ''}
+                  </ThemedText>
+                </ScrollView>
+                <Pressable
+                  style={styles.modalDismissButton}
+                  onPress={() => setShowAiTip(false)}
+                >
+                  <ThemedText variant="body" color={Colors.textInverse} style={styles.modalDismissText}>
+                    Stäng
+                  </ThemedText>
+                </Pressable>
+              </>
             )}
-          </View>
-        </View>
+          </Pressable>
+        </Pressable>
       </Modal>
     </View>
   );
@@ -1036,5 +1051,23 @@ const styles = StyleSheet.create({
   },
   modalText: {
     lineHeight: 24,
+  },
+  modalCloseButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: Colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalDismissButton: {
+    marginTop: Spacing.lg,
+    backgroundColor: Colors.primary,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    alignItems: 'center',
+  },
+  modalDismissText: {
+    fontFamily: 'Inter_600SemiBold',
   },
 });
