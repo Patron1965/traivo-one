@@ -4,6 +4,9 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-02-23: GPS tracking hook (useGpsTracking) with foreground location, 30s interval reporting to /position endpoint, permission handling for web and native
+- 2026-02-23: WebSocket real-time updates via Socket.io (useWebSocket hook); server emits order:updated, order:assigned, notification events; auto-invalidates React Query cache
+- 2026-02-23: Presigned URL photo upload flow in CameraCaptureScreen: camera/gallery → upload-photo → PUT to presigned URL → confirm-photo, with per-photo upload status indicators
 - 2026-02-22: Kinab Core Concept integration: new status workflow (planned→dispatched→on_site→in_progress→completed/failed), /my-orders endpoint, resource-based auth (POST login returns {success, token, resource}), POST /logout, GET /me, notifications API, offline sync POST /sync, template-based checklists GET /orders/:id/checklist, presigned photo URLs, /position GPS endpoint, enriched orders with object/customer data
 - 2026-02-22: Added job markers on planner map with color-coded status, filter buttons (Idag/Denna vecka/Dölj jobb), cluster grouping, detailed popups with order info; GET /api/planner/orders endpoint with range=today|week
 - 2026-02-22: Added planner map view (/planner/map) with Leaflet/OpenStreetMap showing real-time driver GPS positions; driver_locations table in PostgreSQL; auto-refresh every 15s; sidebar with driver list
