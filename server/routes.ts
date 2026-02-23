@@ -129,7 +129,7 @@ export async function registerRoutes(
   // Apply tenant middleware to all API routes EXCEPT portal, mobile, and planner routes
   // Portal routes use token-based auth, mobile routes use Bearer token auth
   app.use("/api", (req, res, next) => {
-    if (req.path.startsWith("/portal") || req.path.startsWith("/mobile") || req.path.startsWith("/planner")) {
+    if (req.path.startsWith("/portal") || req.path.startsWith("/mobile") || req.path.startsWith("/planner") || req.path.startsWith("/admin") || req.path.startsWith("/auth")) {
       return next();
     }
     return requireTenantWithFallback(req, res, next);
@@ -14799,7 +14799,16 @@ setInterval(loadRoutes, 30000);
   // USER MANAGEMENT API
   // ============================================
 
-  app.get("/api/admin/users", isAuthenticated, async (req, res) => {
+  const requireAdminAuth = (req: any, res: any, next: any) => {
+    const replitUser = req.user as any;
+    const sessionUserId = (req.session as any)?.userId;
+    if ((replitUser && replitUser.claims?.sub) || sessionUserId) {
+      return next();
+    }
+    return res.status(401).json({ error: "Ej autentiserad", message: "Du måste logga in för att komma åt denna resurs." });
+  };
+
+  app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
       const safeUsers = allUsers.map(({ passwordHash, ...user }) => user);
@@ -14810,7 +14819,7 @@ setInterval(loadRoutes, 30000);
     }
   });
 
-  app.post("/api/admin/users", isAuthenticated, async (req, res) => {
+  app.post("/api/admin/users", requireAdminAuth, async (req, res) => {
     try {
       const { email, firstName, lastName, password, role, resourceId } = req.body;
 
@@ -14843,7 +14852,7 @@ setInterval(loadRoutes, 30000);
     }
   });
 
-  app.patch("/api/admin/users/:id", isAuthenticated, async (req, res) => {
+  app.patch("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
     try {
       const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
       const updateData: Record<string, any> = {};
@@ -14869,7 +14878,7 @@ setInterval(loadRoutes, 30000);
     }
   });
 
-  app.delete("/api/admin/users/:id", isAuthenticated, async (req, res) => {
+  app.delete("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
     try {
       await storage.deleteUser(req.params.id);
       res.json({ success: true });
