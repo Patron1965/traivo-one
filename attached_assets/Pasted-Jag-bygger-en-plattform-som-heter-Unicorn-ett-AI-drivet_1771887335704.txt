@@ -1,0 +1,97 @@
+Jag bygger en plattform som heter Unicorn – ett AI-drivet fältservice-system för nordiska bolag (avfallshantering, fastighetsunderhåll). Plattformen har en webbaserad kärnapplikation (React/TypeScript/Vite + Express + PostgreSQL/Drizzle ORM) och en fältapp för mobila fältarbetare som ska fungera i React Native/Expo (kallas "Driver Core").
+
+Kärnapplikationen har redan ett komplett REST API för fältappen som hanteras via Bearer token-autentisering. Fältappen finns också som en webb-prototyp i client/src/components/SimpleFieldApp.tsx (ca 1 580 rader) som visar hur frontend redan konsumerar API:et.
+
+Befintligt Mobile API (/api/mobile/*)
+Alla endpoints (utom login och weather) kräver Authorization: Bearer <token> i headern.
+
+Autentisering
+POST /api/mobile/login — Body: { username, password } → Returnerar { token, resource } (resurs = fältarbetare)
+POST /api/mobile/logout — Logga ut, invalidera token
+GET /api/mobile/me — Hämta inloggad resurs-profil
+Arbetsordrar
+GET /api/mobile/my-orders — Dagens arbetsordrar tilldelade till resursen, inkl. objektdata, kunddata, checklistor, beroenden, metadata
+GET /api/mobile/orders — Arbetsordrar med filtreringsmöjligheter
+GET /api/mobile/orders/:id — Detaljer för en specifik arbetsorder
+PATCH /api/mobile/orders/:id/status — Ändra status: body { status, impossibleReason? }. Statusflöde: skapad → planerad_pre → planerad_resurs → planerad_las → utford → fakturerad. Även omöjlig-status med orsak.
+POST /api/mobile/orders/:id/notes — Lägg till anteckning
+PATCH /api/mobile/orders/:id/substeps/:stepId — Markera delsteg som utfört (strukturerade uppgifter)
+POST /api/mobile/orders/:id/deviations — Rapportera avvikelse: { type, description, latitude, longitude, photos }
+POST /api/mobile/orders/:id/materials — Logga materialförbrukning: { articleId, quantity, unit, notes }
+POST /api/mobile/orders/:id/signature — Spara signatur (base64)
+POST /api/mobile/orders/:id/inspections — Skicka in inspektionsresultat
+GET /api/mobile/orders/:id/checklist — Hämta matchade checklistmallar baserat på artikeltyp
+Position & GPS
+POST /api/mobile/position — Skicka aktuell position: { latitude, longitude }
+POST /api/mobile/gps — GPS-spårning med mer data
+Övriga
+GET /api/mobile/articles — Hämta artiklar (för materialloggning)
+GET /api/mobile/summary — Daglig sammanfattning (KPI: slutförda, kvar, tid)
+GET /api/mobile/weather — Väderprognos (öppen, ingen auth krävs)
+AI-funktioner
+POST /api/mobile/ai/chat — AI-chat (kontext: fältarbete, ordrar)
+POST /api/mobile/ai/transcribe — Röst-till-text
+POST /api/mobile/ai/analyze-image — Bildanalys (t.ex. avvikelser)
+Offline-synk
+POST /api/mobile/sync — Batch-synkronisering av offlineändringar (status, anteckningar, avvikelser, material, signaturer, inspektioner, GPS)
+GET /api/mobile/sync/status — Synkstatus
+Notifieringar
+GET /api/mobile/notifications — Hämta notifieringar
+PATCH /api/mobile/notifications/:id/read — Markera som läst
+PATCH /api/mobile/notifications/read-all — Markera alla som lästa
+GET /api/mobile/notifications/count — Antal olästa
+Fotouppladdning
+POST /api/field-worker/tasks/:id/upload-photo — Presigned URL-flöde för fotouppladdning till Replit Object Storage
+Datamodell (nyckelscheman i shared/schema.ts)
+resources — Fältarbetare: id, name, role, phone, email, tenantId, userId, password (hash), trackingStatus (idle|traveling|on_site|offline), color, competences, vehicleType
+workOrders — Arbetsordrar: id, objectId, resourceId, teamId, customerId, tenantId, articleId, date, startTime, endTime, status, priority, notes, estimatedMinutes, actualMinutes, what3words, latitude/longitude, impossibleReason/impossibleAt/impossibleBy
+teams — Arbetsteam med leaderId och kluster-koppling
+team_members — Kopplingstabell team ↔ resurser
+deviationReports — Avvikelserapporter kopplade till arbetsordrar
+inspections — Inspektionsprotokoll
+checklistTemplates — Mallar för inspektionschecklistor per artikeltyp
+offlineSyncLog — Logg av offline-synkroniseringar
+notifications — Persistenta notifieringar per resurs
+Offline-arkitektur (redan designad)
+Webbprototypen har hooks som visar mönstret:
+
+useOfflineSupport — IndexedDB-lagring, outbox-pattern, auto-sync
+useOfflineData — Cachad data för offline-läge
+OfflineIndicator / OfflineBanner — UI-komponenter för offline-status
+Konceptet: Alla mutationer (statusändringar, anteckningar, avvikelser, material, signaturer, inspektioner, GPS) lagras lokalt i en outbox och synkas via POST /api/mobile/sync när anslutning finns.
+
+Vad som ska byggas i fältappen (Driver Core)
+Bygg en React Native/Expo-app som:
+
+Login-skärm — Username/password → POST /api/mobile/login → spara token i SecureStore
+Dagvy (Jobblista) — Visa dagens arbetsordrar sorterade (pågående först, sedan planerade, sedan klara). Varje kort visar: objektnamn, adress, artikelnamn, tid, prioritet, status-badge
+Jobbdetalj — Visa full info: objekt, kund, kontaktinfo, karta, anteckningar, checklistor, beroenden, delsteg. Knappar: Starta → Pausa → Slutför → Nästa jobb
+Statusflöde — Tydligt visuellt flöde. Statusändringar via PATCH /api/mobile/orders/:id/status. Stöd för "Omöjlig" med orsaksval (IMPOSSIBLE_REASONS: no_access, wrong_address, dangerous, missing_equipment, customer_refused, weather, other)
+Avvikelserapportering — Formulär med typ, beskrivning, foto, GPS-position
+Materialloggning — Registrera material/artiklar med antal och enhet
+Signatur — Rita signatur vid slutförd order → skicka som base64
+Inspektionschecklistor — Hämta per order, visa checkboxar, textfält, fotorutor
+Fotouppladdning — Kamera + galleri → presigned URL-flöde
+GPS-spårning — Bakgrundsspårning → POST /api/mobile/gps
+Notifieringar — Visa olästa, markera som lästa, badge i header
+Offline-stöd — IndexedDB/AsyncStorage outbox → batch-sync vid anslutning
+AI-assistent — Chat-bubbla för frågor, röstinspelning → transkription, fotoanalys
+Väder — Visa dagens väder på dashboarden
+Daglig sammanfattning — KPI-kort: slutförda/kvar/tid/framsteg
+Design-riktlinjer
+Språk: Svenska (sv) för all UI-text
+Stil: Stora touchvänliga knappar, tydliga statusfärger (grön=klar, gul=pågående, röd=avvikelse), mörkt/ljust tema
+Navigation: Tab-baserad (Jobb, Karta, Notiser, Profil) eller enkel stack-navigation
+Offline-first: Alla skärmar ska fungera med cachad data. Offline-banner synlig
+API-bas-URL
+Konfigurerbar via env-variabel. Alla requests inkluderar Authorization: Bearer <token> header. Timeout-hantering och retry-logik krävs.
+
+Koppling till kärnapplikationen
+Kärnappen (webb) har:
+
+WeekPlanner — Drag-and-drop för att tilldela ordrar till resurser/dagar. När en order tilldelas → status ändras → fältappen ser den i GET /api/mobile/my-orders
+WebSocket — Realtids-notifieringar broadcastas till fältappen
+GPS-karta — Kärnappen visar fältarbetarnas positioner i realtid (data från fältappens GPS-spårning)
+Avvikelser & Inspektioner — Rapporteras i fältappen → synliga i kärnappens rapporteringssida
+Team-system — Ordrar kan tilldelas team → alla team-medlemmar ser dem i fältappen
+Den här prompten beskriver hela integrationspunkten. Du kan klistra in den när du vill fortsätta bygga fältappen i en ny session, och agenten har all kontext som behövs för att allt ska fungera ihop.
