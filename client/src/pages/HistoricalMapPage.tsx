@@ -8,11 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
+import { Calendar as CalendarWidget } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import {
   Play, Pause, SkipBack, SkipForward, Clock, MapPin, Navigation,
-  CheckCircle2, Timer, TrendingUp, Users, Loader2, Calendar, History
+  CheckCircle2, Timer, TrendingUp, Users, Loader2, CalendarIcon, History
 } from "lucide-react";
 
 interface ResourcePosition {
@@ -227,16 +229,30 @@ export default function HistoricalMapPage() {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value || getToday())}
-              className="border rounded px-2 py-1 text-sm bg-background"
-              data-testid="input-date-picker"
-            />
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" className="gap-2" data-testid="button-date-picker">
+                <CalendarIcon className="h-4 w-4" />
+                {safeFormatDate(selectedDate + "T12:00:00", "d MMMM yyyy", { locale: sv })}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 z-[1500]" align="end">
+              <CalendarWidget
+                mode="single"
+                selected={selectedDate ? new Date(selectedDate + "T12:00:00") : undefined}
+                onSelect={(date) => {
+                  if (date) {
+                    const y = date.getFullYear();
+                    const m = String(date.getMonth() + 1).padStart(2, "0");
+                    const d = String(date.getDate()).padStart(2, "0");
+                    setSelectedDate(`${y}-${m}-${d}`);
+                  }
+                }}
+                locale={sv}
+                initialFocus
+              />
+            </PopoverContent>
+          </Popover>
           <Select value={selectedResourceId} onValueChange={setSelectedResourceId}>
             <SelectTrigger className="w-[200px]" data-testid="select-resource">
               <SelectValue placeholder="Välj resurs..." />
