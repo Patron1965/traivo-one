@@ -10,6 +10,7 @@ import { MaterialLogScreen } from '../screens/MaterialLogScreen';
 import { CameraCaptureScreen } from '../screens/CameraCaptureScreen';
 import { SignatureScreen } from '../screens/SignatureScreen';
 import { InspectionScreen } from '../screens/InspectionScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 
@@ -65,6 +66,11 @@ export function RootNavigator() {
             name="Inspection"
             component={InspectionScreen}
             options={{ headerTitle: 'Inspektion' }}
+          />
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{ headerTitle: 'Inställningar' }}
           />
         </>
       ) : (

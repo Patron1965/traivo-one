@@ -8,7 +8,7 @@ import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
-export function ProfileScreen() {
+export function ProfileScreen({ navigation }: any) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { user, logout } = useAuth();
@@ -50,7 +50,7 @@ export function ProfileScreen() {
       </Card>
 
       <Card style={styles.menuCard}>
-        <Pressable style={styles.menuItem} testID="button-settings">
+        <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Settings')} testID="button-settings">
           <View style={styles.menuLeft}>
             <Feather name="settings" size={18} color={Colors.textSecondary} />
             <ThemedText variant="body">Inställningar</ThemedText>
@@ -58,7 +58,7 @@ export function ProfileScreen() {
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
         <View style={styles.divider} />
-        <Pressable style={styles.menuItem} testID="button-about">
+        <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Settings')} testID="button-about">
           <View style={styles.menuLeft}>
             <Feather name="info" size={18} color={Colors.textSecondary} />
             <ThemedText variant="body">Om Driver Core</ThemedText>
