@@ -115,6 +115,7 @@ export interface IStorage {
   getPublicTenants(): Promise<Tenant[]>;
   createTenant(tenant: InsertTenant): Promise<Tenant>;
   ensureTenant(id: string, defaultData: Omit<InsertTenant, 'id'>): Promise<Tenant>;
+  updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined>;
   updateTenantSettings(id: string, settings: Record<string, unknown>): Promise<Tenant | undefined>;
   updateTenantSmsSettings(id: string, data: { smsEnabled?: boolean; smsProvider?: string; smsFromName?: string }): Promise<Tenant | undefined>;
   
@@ -683,6 +684,12 @@ export class DatabaseStorage implements IStorage {
       throw new Error(`Failed to ensure tenant ${id}`);
     }
     return tenant;
+  }
+
+  async updateTenant(id: string, data: Partial<InsertTenant>): Promise<Tenant | undefined> {
+    const { id: _, ...updateData } = data as any;
+    const [tenant] = await db.update(tenants).set(updateData).where(eq(tenants.id, id)).returning();
+    return tenant || undefined;
   }
 
   async updateTenantSettings(id: string, settings: Record<string, unknown>): Promise<Tenant | undefined> {

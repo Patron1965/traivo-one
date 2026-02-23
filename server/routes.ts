@@ -1539,6 +1539,44 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/tenant", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      res.json(tenant);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch tenant" });
+    }
+  });
+
+  app.patch("/api/tenant", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const tenantUpdateSchema = z.object({
+        name: z.string().min(1).optional(),
+        orgNumber: z.string().optional(),
+        contactEmail: z.string().email().optional().or(z.literal("")),
+        contactPhone: z.string().optional(),
+        industry: z.string().optional(),
+      });
+      const parseResult = tenantUpdateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: parseResult.error.errors });
+      }
+      const tenant = await storage.updateTenant(tenantId, parseResult.data);
+      if (!tenant) {
+        return res.status(404).json({ error: "Tenant not found" });
+      }
+      res.json(tenant);
+    } catch (error) {
+      console.error("Failed to update tenant:", error);
+      res.status(500).json({ error: "Failed to update tenant" });
+    }
+  });
+
   // Tenant settings
   app.get("/api/tenant/settings", async (req, res) => {
     try {

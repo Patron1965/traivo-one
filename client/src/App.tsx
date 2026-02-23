@@ -78,6 +78,7 @@ import PlannerMapPage from "@/pages/PlannerMapPage";
 import HistoricalMapPage from "@/pages/HistoricalMapPage";
 import ChecklistTemplatesPage from "@/pages/ChecklistTemplatesPage";
 import UserManagementPage from "@/pages/UserManagementPage";
+import TenantConfigPage from "@/pages/TenantConfigPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { Loader2 } from "lucide-react";
 
@@ -143,6 +144,7 @@ function Router() {
       <Route path="/planner-map" component={PlannerMapPage} />
       <Route path="/historical-map" component={HistoricalMapPage} />
       <Route path="/checklist-templates" component={ChecklistTemplatesPage} />
+      <Route path="/tenant-config" component={TenantConfigPage} />
       <Route component={NotFound} />
     </Switch>
   );

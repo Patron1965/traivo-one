@@ -98,6 +98,7 @@ const systemItems = [
   { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
   { title: "Arkitektur", url: "/architecture", icon: Network, description: "Systemöversikt" },
   { title: "Användarhantering", url: "/user-management", icon: Users, description: "Hantera användare och roller" },
+  { title: "Tenant-konfiguration", url: "/tenant-config", icon: Settings2, description: "Företag, artiklar, koder" },
   { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
 ];
 
