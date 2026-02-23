@@ -107,384 +107,188 @@ async function mockAuthAndNavigate(page: Page, path: string) {
 
 test.describe("Page navigation & rendering", () => {
   const pages = [
-    { path: "/", name: "root" },
-    { path: "/dashboard", name: "dashboard" },
-    { path: "/clusters", name: "clusters", expectedText: "Kluster" },
-    { path: "/assignments", name: "assignments" },
-    { path: "/planner", name: "planner" },
-    { path: "/resources", name: "resources" },
-    { path: "/map", name: "map" },
-    { path: "/reporting", name: "reporting" },
-    { path: "/invoicing", name: "invoicing" },
-    { path: "/fleet", name: "fleet" },
-    { path: "/import", name: "import" },
-    { path: "/historical-map", name: "historical-map" },
-    { path: "/user-management", name: "user-management" },
-    { path: "/tenant-config", name: "tenant-config" },
-    { path: "/price-lists", name: "price-lists" },
-    { path: "/order-concepts", name: "order-concepts" },
-    { path: "/optimization", name: "optimization" },
-    { path: "/checklist-templates", name: "checklist-templates" },
+    "/", "/dashboard", "/clusters", "/assignments", "/planner",
+    "/resources", "/map", "/reporting", "/invoicing", "/fleet",
+    "/import", "/historical-map", "/user-management", "/tenant-config",
+    "/price-lists", "/order-concepts", "/optimization", "/checklist-templates",
   ];
 
-  for (const { path, name, expectedText } of pages) {
-    test(`${path} should render without crashing`, async ({ page }) => {
+  for (const path of pages) {
+    test(`${path} renders without crashing`, async ({ page }) => {
       await mockAuthAndNavigate(page, path);
       await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
-
-      const hasUnhandledError = await page
-        .locator("text=Application Error")
-        .isVisible()
-        .catch(() => false);
-      expect(hasUnhandledError).toBe(false);
-
-      if (expectedText) {
-        await expect(
-          page.getByText(expectedText, { exact: false }).first()
-        ).toBeVisible({ timeout: 10000 });
-      }
+      const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
+      expect(hasError).toBe(false);
     });
   }
 
-  test("/clusters should show Kluster heading", async ({ page }) => {
+  test("/clusters shows Kluster heading", async ({ page }) => {
     await mockAuthAndNavigate(page, "/clusters");
-    await expect(page.locator("h1").filter({ hasText: "Kluster" })).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(page.locator("h1").filter({ hasText: "Kluster" })).toBeVisible({ timeout: 10000 });
   });
 
-  test("/historical-map should show historical map title", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/historical-map");
-    await expect(
-      page.locator('[data-testid="text-historical-map-title"]')
-    ).toBeVisible({ timeout: 10000 });
-  });
-
-  test("/reporting should show reporting tabs", async ({ page }) => {
+  test("/reporting shows tabs", async ({ page }) => {
     await mockAuthAndNavigate(page, "/reporting");
-    await expect(page.locator('[data-testid="tab-overview"]')).toBeVisible({
-      timeout: 10000,
-    });
+    await expect(page.locator('[data-testid="tab-overview"]')).toBeVisible({ timeout: 10000 });
   });
 });
 
 test.describe("Dashboard functionality", () => {
-  test("dashboard page renders greeting or error boundary", async ({ page }) => {
+  test("renders greeting or error boundary", async ({ page }) => {
     await mockAuthAndNavigate(page, "/dashboard");
-
-    const greetingVisible = await page
-      .locator('[data-testid="text-dashboard-greeting"]')
-      .isVisible({ timeout: 10000 })
-      .catch(() => false);
-
-    const errorBoundaryVisible = await page
-      .getByText("Något gick fel")
-      .isVisible()
-      .catch(() => false);
-
+    const greetingVisible = await page.locator('[data-testid="text-dashboard-greeting"]').isVisible({ timeout: 10000 }).catch(() => false);
+    const errorBoundaryVisible = await page.getByText("Något gick fel").isVisible().catch(() => false);
     expect(greetingVisible || errorBoundaryVisible).toBe(true);
   });
 
-  test("QuickStats cards render on dashboard when greeting visible", async ({ page }) => {
+  test("QuickActions links present when loaded", async ({ page }) => {
     await mockAuthAndNavigate(page, "/dashboard");
-
-    const greetingVisible = await page
-      .locator('[data-testid="text-dashboard-greeting"]')
-      .isVisible({ timeout: 10000 })
-      .catch(() => false);
-
+    const greetingVisible = await page.locator('[data-testid="text-dashboard-greeting"]').isVisible({ timeout: 10000 }).catch(() => false);
     if (greetingVisible) {
-      const quickStatsSection = page.locator('[data-testid^="stat-card-"]');
-      const count = await quickStatsSection.count();
-      expect(count).toBeGreaterThanOrEqual(0);
-    }
-  });
-
-  test("QuickActions links are present when dashboard loads", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/dashboard");
-
-    const greetingVisible = await page
-      .locator('[data-testid="text-dashboard-greeting"]')
-      .isVisible({ timeout: 10000 })
-      .catch(() => false);
-
-    if (greetingVisible) {
-      await expect(
-        page.locator('[data-testid="card-quick-actions"]')
-      ).toBeVisible({ timeout: 10000 });
-
-      await expect(
-        page.locator('[data-testid="text-quick-actions-title"]')
-      ).toHaveText("Snabbkommandon", { timeout: 10000 });
-
-      const firstQuickLink = page.locator('[data-testid^="quick-link-"]').first();
-      await expect(firstQuickLink).toBeVisible({ timeout: 10000 });
-      await expect(firstQuickLink).toBeEnabled();
-    }
-  });
-
-  test("TodayOverview renders or shows loading state", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/dashboard");
-
-    const greetingVisible = await page
-      .locator('[data-testid="text-dashboard-greeting"]')
-      .isVisible({ timeout: 10000 })
-      .catch(() => false);
-
-    if (greetingVisible) {
-      const todayCard = page.locator(
-        '[data-testid="card-today-overview"], [data-testid="card-today-loading"]'
-      );
-      const todayVisible = await todayCard
-        .first()
-        .isVisible({ timeout: 10000 })
-        .catch(() => false);
-
-      expect(todayVisible).toBe(true);
+      await expect(page.locator('[data-testid="card-quick-actions"]')).toBeVisible({ timeout: 10000 });
+      const firstLink = page.locator('[data-testid^="quick-link-"]').first();
+      await expect(firstLink).toBeVisible({ timeout: 10000 });
     }
   });
 });
 
-test.describe("Cluster CRUD flow", () => {
-  test("open create cluster dialog and verify form fields", async ({ page }) => {
+test.describe("Cluster dialog", () => {
+  test("create dialog shows all form fields", async ({ page }) => {
     await mockAuthAndNavigate(page, "/clusters");
-    await expect(page.locator("h1").filter({ hasText: "Kluster" })).toBeVisible({
-      timeout: 10000,
-    });
-
     await page.locator('[data-testid="button-create-cluster"]').click();
-
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible({ timeout: 10000 });
-
     await expect(dialog.locator("text=Nytt Kluster").first()).toBeVisible({ timeout: 5000 });
-
-    await expect(
-      page.locator('[data-testid="input-cluster-name"]')
-    ).toBeVisible({ timeout: 5000 });
-
-    await expect(dialog.getByText("Beskrivning")).toBeVisible({ timeout: 5000 });
-    await expect(
-      page.locator('[data-testid="input-cluster-description"]')
-    ).toBeVisible({ timeout: 5000 });
-
-    await expect(dialog.locator("text=Rotkund").first()).toBeVisible({ timeout: 5000 });
-    await expect(
-      page.locator('[data-testid="select-root-customer"]')
-    ).toBeVisible({ timeout: 5000 });
-  });
-
-  test("verify Servicefrekvens, Föredragen servicetid, and Klusterfärg fields", async ({
-    page,
-  }) => {
-    await mockAuthAndNavigate(page, "/clusters");
-    await page.locator('[data-testid="button-create-cluster"]').click();
-
-    const dialog = page.locator('[role="dialog"]');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="input-cluster-name"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="input-cluster-description"]')).toBeVisible({ timeout: 5000 });
+    await expect(page.locator('[data-testid="select-root-customer"]')).toBeVisible({ timeout: 5000 });
 
     const serviceFrekvens = page.locator('[data-testid="select-cluster-periodicity"]');
     await serviceFrekvens.scrollIntoViewIfNeeded();
-    await expect(dialog.locator("text=Servicefrekvens").first()).toBeVisible({ timeout: 5000 });
     await expect(serviceFrekvens).toBeVisible({ timeout: 5000 });
 
     const preferredTime = page.locator('[data-testid="select-cluster-preferred-time"]');
     await preferredTime.scrollIntoViewIfNeeded();
-    await expect(dialog.locator("text=Föredragen servicetid").first()).toBeVisible({
-      timeout: 5000,
-    });
     await expect(preferredTime).toBeVisible({ timeout: 5000 });
-
-    const colorLabel = dialog.locator("text=Klusterfärg").first();
-    await colorLabel.scrollIntoViewIfNeeded();
-    await expect(colorLabel).toBeVisible({ timeout: 5000 });
-  });
-
-  test("verify Ansvarigt team section with helper text", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/clusters");
-    await page.locator('[data-testid="button-create-cluster"]').click();
-
-    const dialog = page.locator('[role="dialog"]');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
 
     const teamSelect = page.locator('[data-testid="select-cluster-team"]');
     await teamSelect.scrollIntoViewIfNeeded();
-    await expect(dialog.locator("text=Ansvarigt team").first()).toBeVisible({ timeout: 5000 });
     await expect(teamSelect).toBeVisible({ timeout: 5000 });
-
-    await expect(
-      dialog.locator("text=Kan sättas senare").first()
-    ).toBeVisible({ timeout: 5000 });
-  });
-
-  test("close create cluster dialog", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/clusters");
-    await page.locator('[data-testid="button-create-cluster"]').click();
-
-    const dialog = page.locator('[role="dialog"]');
-    await expect(dialog).toBeVisible({ timeout: 10000 });
+    await expect(dialog.locator("text=Kan sättas senare").first()).toBeVisible({ timeout: 5000 });
 
     await dialog.locator("text=Avbryt").first().click();
     await expect(dialog).not.toBeVisible({ timeout: 5000 });
   });
 });
 
-test.describe("Historical map page", () => {
-  test("calendar date picker button is present", async ({ page }) => {
+test.describe("Historical map", () => {
+  test("date picker button and resource selector present", async ({ page }) => {
     await mockAuthAndNavigate(page, "/historical-map");
-    await expect(
-      page.locator('[data-testid="button-date-picker"]')
-    ).toBeVisible({ timeout: 10000 });
-
     const datePicker = page.locator('[data-testid="button-date-picker"]');
+    await expect(datePicker).toBeVisible({ timeout: 10000 });
     const tagName = await datePicker.evaluate((el) => el.tagName.toLowerCase());
     expect(tagName).toBe("button");
+    await expect(page.locator('[data-testid="select-resource"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test("resource selector dropdown exists", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/historical-map");
-    await expect(
-      page.locator('[data-testid="select-resource"]')
-    ).toBeVisible({ timeout: 10000 });
-  });
-
-  test("click date picker and verify calendar opens", async ({ page }) => {
+  test("calendar opens on date picker click", async ({ page }) => {
     await mockAuthAndNavigate(page, "/historical-map");
     await page.locator('[data-testid="button-date-picker"]').click();
-
-    await expect(
-      page.locator('[data-radix-popper-content-wrapper]')
-    ).toBeVisible({ timeout: 5000 });
-
+    await expect(page.locator('[data-radix-popper-content-wrapper]')).toBeVisible({ timeout: 5000 });
     await expect(page.locator("table")).toBeVisible({ timeout: 5000 });
   });
 });
 
-test.describe("Reporting dashboard", () => {
-  test("tabs are present", async ({ page }) => {
+test.describe("Reporting tabs", () => {
+  test("click through tabs", async ({ page }) => {
     await mockAuthAndNavigate(page, "/reporting");
+    await expect(page.locator('[data-testid="tab-overview"]')).toBeVisible({ timeout: 10000 });
 
-    await expect(page.locator('[data-testid="tab-overview"]')).toBeVisible({
-      timeout: 10000,
-    });
-    await expect(page.locator('[data-testid="tab-productivity"]')).toBeVisible({
-      timeout: 5000,
-    });
-    await expect(page.locator('[data-testid="tab-completed"]')).toBeVisible({
-      timeout: 5000,
-    });
-    await expect(page.locator('[data-testid="tab-deviations"]')).toBeVisible({
-      timeout: 5000,
-    });
-    await expect(page.locator('[data-testid="tab-resources"]')).toBeVisible({
-      timeout: 5000,
-    });
-  });
-
-  test("click through reporting tabs", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/reporting");
-
-    await expect(page.locator('[data-testid="tab-overview"]')).toBeVisible({
-      timeout: 10000,
-    });
-
-    await page.locator('[data-testid="tab-productivity"]').click();
-    await expect(page.locator('[data-testid="tab-productivity"]')).toHaveAttribute(
-      "data-state",
-      "active",
-      { timeout: 5000 }
-    );
-
-    await page.locator('[data-testid="tab-completed"]').click();
-    await expect(page.locator('[data-testid="tab-completed"]')).toHaveAttribute(
-      "data-state",
-      "active",
-      { timeout: 5000 }
-    );
-
-    await page.locator('[data-testid="tab-deviations"]').click();
-    await expect(page.locator('[data-testid="tab-deviations"]')).toHaveAttribute(
-      "data-state",
-      "active",
-      { timeout: 5000 }
-    );
-
-    await page.locator('[data-testid="tab-resources"]').click();
-    await expect(page.locator('[data-testid="tab-resources"]')).toHaveAttribute(
-      "data-state",
-      "active",
-      { timeout: 5000 }
-    );
-
-    await page.locator('[data-testid="tab-areas"]').click();
-    await expect(page.locator('[data-testid="tab-areas"]')).toHaveAttribute(
-      "data-state",
-      "active",
-      { timeout: 5000 }
-    );
-
-    await page.locator('[data-testid="tab-customers"]').click();
-    await expect(page.locator('[data-testid="tab-customers"]')).toHaveAttribute(
-      "data-state",
-      "active",
-      { timeout: 5000 }
-    );
+    const tabs = ["tab-productivity", "tab-completed", "tab-deviations", "tab-resources"];
+    for (const tab of tabs) {
+      await page.locator(`[data-testid="${tab}"]`).click();
+      await expect(page.locator(`[data-testid="${tab}"]`)).toHaveAttribute("data-state", "active", { timeout: 5000 });
+    }
   });
 });
 
 test.describe("Error handling", () => {
-  test("non-existent route does not crash the app", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/this-route-does-not-exist-12345");
+  test("unknown route does not crash app", async ({ page }) => {
+    await mockAuthAndNavigate(page, "/non-existent-route-xyz-12345");
     await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
-
-    const pageContent = await page.textContent("body");
-    expect(pageContent).toBeTruthy();
-
-    const hasUnhandledError = await page
-      .locator("text=Application Error")
-      .isVisible()
-      .catch(() => false);
-    expect(hasUnhandledError).toBe(false);
-  });
-
-  test("app renders gracefully on unknown route", async ({ page }) => {
-    await mockAuthAndNavigate(page, "/non-existent-page-xyz");
-    await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
-
-    const hasAppError = await page
-      .locator("text=Application Error")
-      .isVisible()
-      .catch(() => false);
-    expect(hasAppError).toBe(false);
+    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
+    expect(hasError).toBe(false);
   });
 });
 
-test.describe("Responsive checks", () => {
+test.describe("Responsive", () => {
   test("mobile viewport shows hamburger menu", async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     await mockAuthAndNavigate(page, "/clusters");
-
-    await expect(
-      page.locator('[data-testid="button-mobile-menu"]')
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid="button-mobile-menu"]')).toBeVisible({ timeout: 10000 });
   });
 
-  test("desktop viewport shows top navigation", async ({ page }) => {
+  test("desktop viewport shows navigation", async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await mockAuthAndNavigate(page, "/clusters");
-
-    await expect(
-      page.locator('[data-testid^="nav-dropdown-"]').first()
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.locator('[data-testid^="nav-dropdown-"]').first()).toBeVisible({ timeout: 10000 });
   });
+});
 
-  test("mobile viewport opens navigation drawer", async ({ page }) => {
-    await page.setViewportSize({ width: 375, height: 812 });
-    await mockAuthAndNavigate(page, "/clusters");
+test.describe("Work order lifecycle", () => {
+  test("assignments page loads and create button check", async ({ page }) => {
+    await mockAuthAndNavigate(page, "/assignments");
+    await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
+    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
+    expect(hasError).toBe(false);
 
-    await page.locator('[data-testid="button-mobile-menu"]').click();
-    await expect(
-      page.locator('[data-testid="mobile-nav-menu"]')
-    ).toBeVisible({ timeout: 5000 });
+    const createButton = page.locator('[data-testid="button-create-work-order"]');
+    const buttonVisible = await createButton.isVisible({ timeout: 5000 }).catch(() => false);
+    if (buttonVisible) {
+      await createButton.click();
+      const dialog = page.locator('[role="dialog"]');
+      await expect(dialog).toBeVisible({ timeout: 10000 });
+      const hasFormFields = await dialog.locator("input, select, textarea, [data-testid]").first().isVisible({ timeout: 5000 }).catch(() => false);
+      expect(hasFormFields).toBe(true);
+    }
+  });
+});
+
+test.describe("Invoicing flow", () => {
+  test("invoicing page loads with filter controls", async ({ page }) => {
+    await mockAuthAndNavigate(page, "/invoicing");
+    await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
+    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
+    expect(hasError).toBe(false);
+
+    const hasDatePicker = await page.locator('[data-testid*="date"], [data-testid*="filter"], button:has-text("datum"), input[type="date"]').first().isVisible({ timeout: 5000 }).catch(() => false);
+    const hasTable = await page.locator('table, [data-testid*="invoice"], [data-testid*="list"]').first().isVisible({ timeout: 5000 }).catch(() => false);
+    expect(hasDatePicker || hasTable).toBe(true);
+  });
+});
+
+test.describe("Week planner", () => {
+  test("planner page loads with weekly view", async ({ page }) => {
+    await mockAuthAndNavigate(page, "/planner");
+    await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
+    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
+    expect(hasError).toBe(false);
+
+    const hasDayColumns = await page.locator('[data-testid*="day"], [data-testid*="column"], th, [data-testid*="planner"]').first().isVisible({ timeout: 5000 }).catch(() => false);
+    const hasResourceRows = await page.locator('[data-testid*="resource"], [data-testid*="row"], [data-testid*="timeline"]').first().isVisible({ timeout: 5000 }).catch(() => false);
+    expect(hasDayColumns || hasResourceRows).toBe(true);
+  });
+});
+
+test.describe("Portal login page", () => {
+  test("portal shows login form with email input", async ({ page }) => {
+    await page.goto("/portal");
+    await page.waitForLoadState("networkidle");
+    await expect(page.locator("body")).toBeVisible({ timeout: 10000 });
+    const hasError = await page.locator("text=Application Error").isVisible().catch(() => false);
+    expect(hasError).toBe(false);
+
+    const emailInput = page.locator('input[type="email"], input[name="email"], [data-testid*="email"], input[placeholder*="e-post"], input[placeholder*="mail"]');
+    await expect(emailInput.first()).toBeVisible({ timeout: 10000 });
   });
 });

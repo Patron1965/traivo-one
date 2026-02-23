@@ -275,4 +275,84 @@ describe("API Endpoints", () => {
       expect(authRes.body.error).toMatch(/[a-zåäö]/i);
     });
   });
+
+  describe("Autentiserade portal-flöden", () => {
+    let sessionToken: string | null = null;
+
+    it("POST /api/portal/auth/demo-login returnerar session eller 404", async () => {
+      const res = await apiPost("/api/portal/auth/demo-login", {});
+      expect([200, 403, 404]).toContain(res.status);
+      if (res.status === 200) {
+        expect(res.body).toHaveProperty("success", true);
+        expect(res.body).toHaveProperty("sessionToken");
+        expect(typeof res.body.sessionToken).toBe("string");
+        expect(res.body).toHaveProperty("customer");
+        sessionToken = res.body.sessionToken;
+      } else {
+        expect(res.body).toHaveProperty("error");
+        expect(typeof res.body.error).toBe("string");
+      }
+    });
+
+    it("GET /api/portal/me med giltig session returnerar kunddata", async () => {
+      if (!sessionToken) {
+        const login = await apiPost("/api/portal/auth/demo-login", {});
+        if (login.status !== 200) return;
+        sessionToken = login.body.sessionToken;
+      }
+      const res = await apiGet("/api/portal/me", {
+        Authorization: `Bearer ${sessionToken}`,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("customer");
+      expect(res.body.customer).toHaveProperty("id");
+      expect(res.body.customer).toHaveProperty("name");
+    });
+
+    it("POST /api/portal/logout med giltig session returnerar success", async () => {
+      if (!sessionToken) {
+        const login = await apiPost("/api/portal/auth/demo-login", {});
+        if (login.status !== 200) return;
+        sessionToken = login.body.sessionToken;
+      }
+      const res = await apiPost("/api/portal/logout", {}, {
+        Authorization: `Bearer ${sessionToken}`,
+      });
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("success", true);
+    });
+  });
+
+  describe("API svarskontrakt", () => {
+    it("GET /api/me/tenant returnerar tenantId och role", async () => {
+      const res = await apiGet("/api/me/tenant");
+      expect(res.status).toBe(200);
+      expect(res.body).toHaveProperty("tenantId");
+      expect(res.body).toHaveProperty("role");
+    });
+
+    it("POST /api/auth/login med tom body returnerar 400 med error", async () => {
+      const res = await apiPost("/api/auth/login", {});
+      expect(res.status).toBe(400);
+      expect(res.body).toHaveProperty("error");
+      expect(typeof res.body.error).toBe("string");
+    });
+
+    it("POST /api/auth/login med felaktiga uppgifter returnerar 401 med error", async () => {
+      const res = await apiPost("/api/auth/login", {
+        email: "wrong@invalid.test",
+        password: "wrongpassword123",
+      });
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty("error");
+      expect(typeof res.body.error).toBe("string");
+    });
+
+    it("GET /api/auth/me utan session returnerar 401 med error", async () => {
+      const res = await apiGet("/api/auth/me");
+      expect(res.status).toBe(401);
+      expect(res.body).toHaveProperty("error");
+      expect(typeof res.body.error).toBe("string");
+    });
+  });
 });
