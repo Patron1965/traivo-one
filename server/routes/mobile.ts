@@ -651,8 +651,8 @@ router.patch('/orders/:id/status', async (req, res) => {
         return;
       }
       order.status = req.body.status;
-      if (req.body.status === 'in_progress' || req.body.status === 'planerad_las') {
-        order.actualStartTime = new Date().toISOString();
+      if (req.body.status === 'on_site' || req.body.status === 'in_progress' || req.body.status === 'planerad_las') {
+        order.actualStartTime = order.actualStartTime || new Date().toISOString();
       }
       if (req.body.status === 'completed' || req.body.status === 'utford') {
         order.completedAt = new Date().toISOString();

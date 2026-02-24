@@ -16,20 +16,18 @@ import { apiRequest } from '../lib/query-client';
 import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote, ImpossibleReason } from '../types';
 import { TIME_RESTRICTION_LABELS, ORDER_STATUS_SEQUENCE, IMPOSSIBLE_REASONS } from '../types';
 
-const STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
+const KINAB_STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
 
-const LEGACY_STATUS_MAP: Record<string, OrderStatus> = {
-  planned: 'planerad_resurs',
-  dispatched: 'planerad_las',
-  on_site: 'planerad_las',
-  in_progress: 'planerad_las',
-  completed: 'utford',
-  failed: 'impossible',
-};
+const DRIVER_STATUS_SEQUENCE: OrderStatus[] = [
+  'planned',
+  'dispatched',
+  'on_site',
+  'in_progress',
+  'completed',
+];
 
-function normalizeStatus(status: OrderStatus): OrderStatus {
-  if (STATUS_SEQUENCE.includes(status)) return status;
-  return LEGACY_STATUS_MAP[status] || status;
+function isDriverFlow(status: OrderStatus): boolean {
+  return DRIVER_STATUS_SEQUENCE.includes(status);
 }
 
 export function OrderDetailScreen({ route, navigation }: any) {
@@ -84,10 +82,14 @@ export function OrderDetailScreen({ route, navigation }: any) {
   });
 
   function getNextStatus(current: OrderStatus): OrderStatus | null {
-    const norm = normalizeStatus(current);
-    const idx = STATUS_SEQUENCE.indexOf(norm);
-    if (idx === -1 || idx >= STATUS_SEQUENCE.length - 1) return null;
-    return STATUS_SEQUENCE[idx + 1];
+    if (isDriverFlow(current)) {
+      const idx = DRIVER_STATUS_SEQUENCE.indexOf(current);
+      if (idx === -1 || idx >= DRIVER_STATUS_SEQUENCE.length - 1) return null;
+      return DRIVER_STATUS_SEQUENCE[idx + 1];
+    }
+    const idx = KINAB_STATUS_SEQUENCE.indexOf(current);
+    if (idx === -1 || idx >= KINAB_STATUS_SEQUENCE.length - 1) return null;
+    return KINAB_STATUS_SEQUENCE[idx + 1];
   }
 
   function getNextStatusLabel(status: OrderStatus): string {
@@ -97,11 +99,21 @@ export function OrderDetailScreen({ route, navigation }: any) {
       planerad_resurs: 'Lasta in',
       planerad_las: 'Slutför',
       planned: 'Starta körning',
-      dispatched: 'Markera på plats',
-      on_site: 'Starta arbete',
+      dispatched: 'På plats',
+      on_site: 'Utför',
       in_progress: 'Slutför',
     };
     return labels[status] || 'Nästa steg';
+  }
+
+  function getNextStatusSubLabel(status: OrderStatus): string | null {
+    const subLabels: Record<string, string> = {
+      planned: 'Navigera till uppdraget',
+      dispatched: 'Tidsregistrering börjar när du anländer',
+      on_site: 'Gör jobbet, logga material och anteckningar',
+      in_progress: 'Markera uppdraget som klart',
+    };
+    return subLabels[status] || null;
   }
 
   function getNextStatusIcon(status: OrderStatus): string {
@@ -139,7 +151,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
     if (!order) return;
     const next = getNextStatus(order.status);
     if (!next) return;
-    if (next === 'utford' || next === 'fakturerad') {
+    if (next === 'utford' || next === 'fakturerad' || next === 'completed') {
       setConfirmAction('complete');
     } else {
       statusMutation.mutate({ status: next });
@@ -581,9 +593,16 @@ export function OrderDetailScreen({ route, navigation }: any) {
               testID="button-advance-status"
             >
               <Feather name={getNextStatusIcon(order.status) as any} size={24} color={Colors.textInverse} />
-              <ThemedText variant="subheading" color={Colors.textInverse} style={styles.advanceLabel}>
-                {getNextStatusLabel(order.status)}
-              </ThemedText>
+              <View style={styles.advanceLabelContainer}>
+                <ThemedText variant="subheading" color={Colors.textInverse} style={styles.advanceLabel}>
+                  {getNextStatusLabel(order.status)}
+                </ThemedText>
+                {getNextStatusSubLabel(order.status) ? (
+                  <ThemedText variant="caption" color="rgba(255,255,255,0.75)" style={styles.advanceSubLabel}>
+                    {getNextStatusSubLabel(order.status)}
+                  </ThemedText>
+                ) : null}
+              </View>
             </Pressable>
           ) : null}
         </View>
@@ -1077,9 +1096,16 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
     borderRadius: BorderRadius.lg,
   },
+  advanceLabelContainer: {
+    flexShrink: 1,
+  },
   advanceLabel: {
     fontSize: FontSize.xl,
     fontFamily: 'Inter_700Bold',
+  },
+  advanceSubLabel: {
+    fontSize: FontSize.xs,
+    marginTop: 2,
   },
   confirmContent: {
     backgroundColor: Colors.surface,
