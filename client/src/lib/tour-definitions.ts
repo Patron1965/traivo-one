@@ -255,7 +255,7 @@ export const tenantConfigTour: TourDefinition = {
   steps: [
     {
       target: '[data-testid="nav-settings-menu"], [data-testid="nav-dropdown-grunddata"]',
-      title: "Tenant-konfiguration",
+      title: "Företagsinställningar",
       description: "Gå till Inställningar för att konfigurera ditt företag. Här ställer du in allt som behövs för att komma igång.",
       placement: "bottom",
     },

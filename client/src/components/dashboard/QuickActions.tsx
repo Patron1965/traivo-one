@@ -17,7 +17,7 @@ const quickLinks = [
   { title: "Flottan", url: "/fleet", icon: Truck },
   { title: "AI-optimering", url: "/optimization", icon: Sparkles },
   { title: "Import", url: "/import", icon: Upload },
-  { title: "Tenant-config", url: "/tenant-config", icon: Settings2 },
+  { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2 },
   { title: "Prislistor", url: "/price-lists", icon: FileText },
 ];
 

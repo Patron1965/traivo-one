@@ -193,7 +193,7 @@ export default function ArchitecturePage() {
               
               <ArchitectureBox title="Admin & Rapporter" icon={BarChart3} color="bg-purple-50 dark:bg-purple-950/30" borderColor="border-purple-200 dark:border-purple-800">
                 <FeatureItem>Användarrollhantering</FeatureItem>
-                <FeatureItem>Tenant-konfiguration</FeatureItem>
+                <FeatureItem>Företagsinställningar</FeatureItem>
                 <FeatureItem>Metadatakatalog (EAV)</FeatureItem>
                 <FeatureItem>CSV-import (Modus 2.0)</FeatureItem>
                 <FeatureItem>PDF-protokollgenerering</FeatureItem>

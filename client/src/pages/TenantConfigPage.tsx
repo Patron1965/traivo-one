@@ -677,8 +677,8 @@ export default function TenantConfigPage() {
     <div className="container mx-auto py-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Tenant-konfiguration</h1>
-          <p className="text-muted-foreground">Konfigurera {tenant?.name || "er tenant"} med rätt inställningar före dataimport</p>
+          <h1 className="text-2xl font-bold">Företagsinställningar</h1>
+          <p className="text-muted-foreground">Konfigurera {tenant?.name || "ert företag"} med rätt inställningar före dataimport</p>
         </div>
         <div className="flex items-center gap-2">
           <Badge variant={completedCount === completionSteps.length ? "default" : "secondary"} className="text-sm px-3 py-1">
