@@ -44,3 +44,8 @@ integrations = ["javascript_object_storage:2.0.0", "javascript_database:1.0.0", 
 
 [objectStorage]
 defaultBucketID = "replit-objstore-83309b29-1b38-4584-a19c-e2db5578f98a"
+
+[userenv]
+
+[userenv.production]
+ENABLE_DEMO_LOGIN = "true"
