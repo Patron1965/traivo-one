@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Platform } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Platform, Animated } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
@@ -28,7 +28,7 @@ function getStatusBorderColor(status: OrderStatus): string {
 export function HomeScreen({ navigation }: any) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
-  const { user } = useAuth();
+  const { user, isOnline, setIsOnline } = useAuth();
 
   const { data: orders, isLoading: ordersLoading, refetch: refetchOrders } = useQuery<Order[]>({
     queryKey: ['/api/mobile/my-orders'],
@@ -76,9 +76,25 @@ export function HomeScreen({ navigation }: any) {
           <ThemedText variant="caption" style={styles.dateText}>
             {dateStr}
           </ThemedText>
-          <ThemedText variant="heading">
-            Hej, {user?.name?.split(' ')[0] || 'Chauför'}
-          </ThemedText>
+          <View style={styles.greetingRow}>
+            <ThemedText variant="heading">
+              Hej, {user?.name?.split(' ')[0] || 'Chaufor'}
+            </ThemedText>
+            <Pressable
+              style={styles.onlineToggle}
+              onPress={() => setIsOnline(!isOnline)}
+              testID="button-toggle-online"
+            >
+              <View style={[styles.onlineDot, isOnline ? styles.onlineDotActive : styles.onlineDotInactive]} />
+              <ThemedText
+                variant="caption"
+                color={isOnline ? Colors.secondary : Colors.textSecondary}
+                style={styles.onlineLabel}
+              >
+                {isOnline ? 'Online' : 'Offline'}
+              </ThemedText>
+            </Pressable>
+          </View>
         </View>
         {user?.vehicleRegNo ? (
           <View style={styles.vehicleBadge}>
@@ -306,6 +322,37 @@ const styles = StyleSheet.create({
   dateText: {
     textTransform: 'capitalize',
     marginBottom: Spacing.xs,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  onlineToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: BorderRadius.round,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  onlineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  onlineDotActive: {
+    backgroundColor: Colors.secondary,
+  },
+  onlineDotInactive: {
+    backgroundColor: Colors.textSecondary,
+  },
+  onlineLabel: {
+    fontSize: 11,
+    fontFamily: 'Inter_600SemiBold',
   },
   vehicleBadge: {
     flexDirection: 'row',

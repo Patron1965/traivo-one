@@ -923,6 +923,34 @@ router.post('/position', async (req, res) => {
   }
 });
 
+router.post('/status', async (req, res) => {
+  const { online } = req.body;
+  try {
+    const driverId = IS_MOCK_MODE ? MOCK_RESOURCE.id : 'unknown';
+    const driverName = IS_MOCK_MODE ? MOCK_RESOURCE.name : 'Okänd';
+    const vehicleRegNo = IS_MOCK_MODE ? MOCK_RESOURCE.vehicleRegNo : '';
+    if (online) {
+      await pool.query(
+        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, status, updated_at)
+         VALUES ($1, $2, $3, 0, 0, 'active', NOW())
+         ON CONFLICT (driver_id) DO UPDATE SET
+           status = 'active',
+           updated_at = NOW()`,
+        [driverId, driverName, vehicleRegNo]
+      );
+    } else {
+      await pool.query(
+        `UPDATE driver_locations SET status = 'offline', updated_at = NOW() WHERE driver_id = $1`,
+        [driverId]
+      );
+    }
+    res.json({ success: true, online });
+  } catch (error) {
+    console.error('Error updating driver status:', error);
+    res.json({ success: true, online });
+  }
+});
+
 router.post('/gps', async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
 

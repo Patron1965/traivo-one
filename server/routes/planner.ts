@@ -126,6 +126,7 @@ router.get('/drivers/locations', async (_req, res) => {
         updated_at as "updatedAt"
       FROM driver_locations
       WHERE updated_at > NOW() - INTERVAL '24 hours'
+        AND status = 'active'
       ORDER BY driver_name`
     );
     res.json(result.rows);
