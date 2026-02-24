@@ -126,9 +126,243 @@ export const invoicingTour: TourDefinition = {
       placement: "bottom",
     },
     {
+      target: '[data-testid="nav-dropdown-grunddata"]',
+      title: "Prislistor",
+      description: "Hantera prislistor under Grunddata > Prislistor. Priserna kopplas till artiklar och används vid fakturaberäkning.",
+      placement: "bottom",
+    },
+  ],
+};
+
+export const fleetTour: TourDefinition = {
+  id: "fleet-guide",
+  name: "Fleethantering",
+  description: "Hantera fordon, underhåll och bränsle",
+  steps: [
+    {
       target: '[data-testid="nav-dropdown-analys"]',
       title: "Fleethantering",
-      description: "Under Analys > Fleethantering kan du följa fordon, bränsleförbrukning och underhållsplanering.",
+      description: "Gå till Analys > Fleethantering för att få full överblick över din fordonsflotta, underhåll och bränslekostnader.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="card-kpi-vehicles"], [data-testid="fleet-management-page"]',
+      title: "Fordonsöversikt",
+      description: "Snabbkort visar antal fordon, servicevarningar, bränsle- och underhållskostnader. Klicka på ett fordon för att se detaljer.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-maintenance"], [data-testid="tabs-fleet"]',
+      title: "Underhållsplanering",
+      description: "Under fliken Underhåll ser du servicevarningar, underhållstyper och historik. Lägg till nya underhållsloggar direkt.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-fuel"], [data-testid="tabs-fleet"]',
+      title: "Bränsleuppföljning",
+      description: "Fliken Bränsle visar trenddiagram, fördelning per bränsletyp och förbrukning per fordon. Registrera tankning löpande.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="button-add-fuel"], [data-testid="button-add-maintenance"]',
+      title: "Registrera ny post",
+      description: "Använd knapparna högst upp för att snabbt lägga till bränsle- eller underhållsposter.",
+      placement: "bottom",
+    },
+  ],
+};
+
+export const reportingTour: TourDefinition = {
+  id: "reporting-guide",
+  name: "Rapportering & Analys",
+  description: "Utforska KPI-dashboarden och rapporter",
+  steps: [
+    {
+      target: '[data-testid="nav-dropdown-analys"]',
+      title: "Rapportering",
+      description: "Gå till Analys > Rapportering & KPI för att se alla nyckeltal och trender i din verksamhet.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tabs-report-sections"], [data-testid="reporting-dashboard"]',
+      title: "Sju analysflikar",
+      description: "Dashboarden har flikarna Översikt, Produktivitet, Slutförda, Avvikelser, Resurser, Områden och Kunder — varje flik ger djupare insikter.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-productivity"], [data-testid="tabs-report-sections"]',
+      title: "Produktivitet",
+      description: "Se planerad vs faktisk tid, effektivitetstrender och resursranking. Identifiera flaskhalsar snabbt.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-deviations"], [data-testid="tabs-report-sections"]',
+      title: "Avvikelser",
+      description: "Följ avvikelsetrender, kategorifördelning, allvarlighetsgrad och senaste rapporterna. Fältarbetare rapporterar avvikelser direkt från appen.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="select-time-range"], [data-testid="button-export-report"]',
+      title: "Tidsperiod och export",
+      description: "Välj tidsperiod (7, 30 eller 90 dagar) och exportera rapporter vid behov.",
+      placement: "bottom",
+    },
+  ],
+};
+
+export const teamManagementTour: TourDefinition = {
+  id: "team-management-guide",
+  name: "Teamhantering",
+  description: "Hantera användare, roller och arbetsteam",
+  steps: [
+    {
+      target: '[data-testid="nav-dropdown-grunddata"]',
+      title: "Användarhantering",
+      description: "Gå till Grunddata > Användarhantering för att skapa konton, tilldela roller och organisera team.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-users"], [data-testid="text-page-title"]',
+      title: "Användare",
+      description: "Under fliken Användare ser du alla konton med roll, kopplad resurs och status. Skapa nya användare med lösenord för fältappen.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-teams"], [data-testid="text-page-title"]',
+      title: "Team",
+      description: "Team grupperar resurser i arbetsgrupper (vanligtvis 2 personer). Tilldela ordrar till ett team så ser alla medlemmar jobben i fältappen.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="button-create-user"], [data-testid="text-page-title"]',
+      title: "Skapa användare",
+      description: "Klicka Ny användare för att skapa ett konto. Ange namn, e-post, lösenord och roll. Koppla till en resurs för att aktivera fältappen.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="button-create-team"], [data-testid="text-page-title"]',
+      title: "Skapa team",
+      description: "Klicka Nytt team för att gruppera resurser. Välj teamledare och lägg till medlemmar. Team visas med badge på arbetsorderkort i planeraren.",
+      placement: "bottom",
+    },
+  ],
+};
+
+export const tenantConfigTour: TourDefinition = {
+  id: "tenant-config-guide",
+  name: "Företagskonfiguration",
+  description: "Ställ in företagsuppgifter, artiklar och resurser",
+  steps: [
+    {
+      target: '[data-testid="nav-settings-menu"], [data-testid="nav-dropdown-grunddata"]',
+      title: "Tenant-konfiguration",
+      description: "Gå till Inställningar för att konfigurera ditt företag. Här ställer du in allt som behövs för att komma igång.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-company"], [data-testid="input-company-name"]',
+      title: "Företagsinfo",
+      description: "Fyll i företagsnamn, organisationsnummer, kontaktuppgifter och bransch. Det här visas på fakturor och rapporter.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-articles"], [data-testid="input-company-name"]',
+      title: "Artiklar och exekveringskoder",
+      description: "Under fliken Artiklar kopplar du exekveringskoder till artiklar. Koderna styr vilka resurser som kan utföra vilka uppgifter.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-pricelists"], [data-testid="input-company-name"]',
+      title: "Prislistor",
+      description: "Fliken Prislistor ger överblick och länk till fullständig prislistehantering. Priserna används vid fakturering.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="tab-resources"], [data-testid="input-company-name"]',
+      title: "Resurser och behörigheter",
+      description: "Aktivera exekveringskoder per resurs. Systemet matchar automatiskt rätt resurs till rätt uppgift vid autoplanering.",
+      placement: "bottom",
+    },
+  ],
+};
+
+export const customerPortalTour: TourDefinition = {
+  id: "customer-portal-guide",
+  name: "Kundportal",
+  description: "Förstå kundportalen och självservice",
+  steps: [
+    {
+      target: '[data-testid="nav-dropdown-grunddata"]',
+      title: "Kundportal",
+      description: "Unicorn har en kundportal där era kunder kan logga in, se besök, boka extra tjänster och chatta — utan att ringa er.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-grunddata"]',
+      title: "Magic Link-inloggning",
+      description: "Kunder loggar in via en magic link som skickas till deras e-post. Inga lösenord behövs — säkert och enkelt.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-grunddata"]',
+      title: "Kommande besök",
+      description: "Kunden ser sina kommande planerade besök med datum, tjänstetyp och status. Transparent service skapar förtroende.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-grunddata"]',
+      title: "Extra bokningar",
+      description: "Kunden kan boka extra tjänster direkt i portalen genom att välja objekt, tjänst och önskat datum.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-grunddata"]',
+      title: "Realtidschat",
+      description: "Inbyggd chatt låter kunden kommunicera direkt med er. Meddelanden syns i plattformens meddelandevy.",
+      placement: "bottom",
+    },
+  ],
+};
+
+export const fieldAppTour: TourDefinition = {
+  id: "field-app-guide",
+  name: "Fältappen",
+  description: "Översikt av mobilappen för fältarbetare",
+  steps: [
+    {
+      target: '[data-testid="nav-dropdown-planering"]',
+      title: "Fältappen (Driver Core)",
+      description: "Fältarbetare använder en mobilapp för att se sina jobb, rapportera och kommunicera. Allt som planeras här syns direkt i appen.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-planering"]',
+      title: "Jobbflöde",
+      description: "Fältarbetaren ser dagens jobb sorterade efter prioritet. De startar, pausar och slutför jobb med enkla knappar. Statusändringen syns direkt i planeraren.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-planering"]',
+      title: "Avvikelser och inspektion",
+      description: "Fältarbetaren rapporterar avvikelser med foto och GPS direkt i appen. Inspektionschecklistor fylls i på plats — resultaten syns under Rapportering.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-planering"]',
+      title: "Offline-stöd",
+      description: "Appen fungerar utan internetanslutning. Ändringar sparas lokalt och synkas automatiskt när uppkopplingen är tillbaka.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-planering"]',
+      title: "GPS och realtid",
+      description: "Fältarbetarens position spåras i realtid och visas på kartan i plattformen. Notifieringar skickas direkt via push.",
+      placement: "bottom",
+    },
+    {
+      target: '[data-testid="nav-dropdown-planering"]',
+      title: "AI-assistent i fält",
+      description: "Fältarbetaren har tillgång till en AI-assistent för frågor, röstinspelning som transkriberas, och bildanalys för att identifiera avvikelser.",
       placement: "bottom",
     },
   ],
@@ -139,4 +373,10 @@ export const allTours: TourDefinition[] = [
   plannerTour,
   clusterTour,
   invoicingTour,
+  fleetTour,
+  reportingTour,
+  teamManagementTour,
+  tenantConfigTour,
+  customerPortalTour,
+  fieldAppTour,
 ];
