@@ -10,7 +10,7 @@ import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { getApiUrl } from '../lib/query-client';
-import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
+import type { Order, OrderStatus, DaySummary } from '../types';
 
 function getStatusBorderColor(status: OrderStatus): string {
   switch (status) {
@@ -36,10 +36,6 @@ export function HomeScreen({ navigation }: any) {
 
   const { data: summary } = useQuery<DaySummary>({
     queryKey: ['/api/mobile/summary'],
-  });
-
-  const { data: weather } = useQuery<WeatherData>({
-    queryKey: ['/api/mobile/weather'],
   });
 
   const [refreshing, setRefreshing] = React.useState(false);
@@ -93,41 +89,6 @@ export function HomeScreen({ navigation }: any) {
           </View>
         ) : null}
       </View>
-
-      {weather ? (
-        <Card style={styles.weatherCard}>
-          <View style={styles.weatherRow}>
-            <View style={styles.weatherMain}>
-              <Feather
-                name={weather.icon as any}
-                size={28}
-                color={Colors.primaryLight}
-              />
-              <ThemedText variant="heading" style={styles.tempText}>
-                {weather.temperature}°
-              </ThemedText>
-              <View>
-                <ThemedText variant="body">{weather.description}</ThemedText>
-                <ThemedText variant="caption">
-                  Känns som {weather.feelsLike}° | Vind {weather.windSpeed} m/s
-                </ThemedText>
-              </View>
-            </View>
-          </View>
-          {weather.warnings.length > 0 ? (
-            <View style={styles.warningsContainer}>
-              {weather.warnings.map((w, i) => (
-                <View key={i} style={styles.warningBadge}>
-                  <Feather name="alert-triangle" size={12} color={Colors.warning} />
-                  <ThemedText variant="caption" color={Colors.warning}>
-                    {w}
-                  </ThemedText>
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </Card>
-      ) : null}
 
       <Card style={styles.progressCard}>
         <View style={styles.progressHeader}>
@@ -352,40 +313,6 @@ const styles = StyleSheet.create({
     gap: Spacing.xs,
     backgroundColor: Colors.infoLight,
     paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.round,
-  },
-  weatherCard: {
-    backgroundColor: Colors.surface,
-  },
-  weatherRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  weatherMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  tempText: {
-    fontSize: FontSize.xxxl,
-  },
-  warningsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-    marginTop: Spacing.md,
-    paddingTop: Spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
-  },
-  warningBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    backgroundColor: Colors.warningLight,
-    paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
   },
