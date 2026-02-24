@@ -8085,7 +8085,7 @@ setInterval(loadRoutes, 30000);
           "GPS-spårning i realtid med breadcrumb-trails",
           "Automatisk anomali-övervakning",
           "Mobil fältapp med digitala signaturer",
-          "Multi-tenant arkitektur",
+          "Flerföretagsstöd-arkitektur",
           "WebSocket push-notifikationer",
           "MCP-integration för externa AI-assistenter",
           "Modus 2.0 CSV-import",

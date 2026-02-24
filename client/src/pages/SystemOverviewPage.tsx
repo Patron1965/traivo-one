@@ -161,7 +161,7 @@ const systemFeatures: FeatureSection[] = [
     ]
   },
   {
-    title: "White-label & Multi-tenant",
+    title: "White-label & Flerföretagsstöd",
     icon: Palette,
     features: [
       { name: "Dynamisk färgsättning", description: "CSS-variabler per tenant för primär, sekundär, accent" },
@@ -291,7 +291,7 @@ export default function SystemOverviewPage() {
         "serviceverksamhet i Norden.",
         "",
         "Genom att först bevisa värde med Kinab som design partner bygger vi grunden",
-        "för en kommersiell multi-tenant SaaS-plattform.",
+        "för en kommersiell flerföretagsstöd SaaS-plattform.",
         "",
         "AI-driven optimering omfattar:",
         "• Ruttplanering - kortare körsträckor, bättre sekvensering",
@@ -431,7 +431,7 @@ export default function SystemOverviewPage() {
           </p>
           <p className="text-muted-foreground">
             Genom att först bevisa värde med Kinab som design partner bygger vi grunden för en 
-            kommersiell multi-tenant SaaS-plattform.
+            kommersiell flerföretagsstöd SaaS-plattform. Unicorn har flerföretagsstöd — varje kund får sin egen separata miljö med egna data, inställningar och utseende, men alla kör på samma plattform.
           </p>
           <div className="space-y-2">
             <p className="text-sm font-medium">AI-driven optimering omfattar:</p>
@@ -446,7 +446,7 @@ export default function SystemOverviewPage() {
           </div>
           <div className="flex flex-wrap gap-2">
             <Badge variant="secondary">Design Partner: Kinab AB</Badge>
-            <Badge variant="secondary">Multi-tenant SaaS</Badge>
+            <Badge variant="secondary">Flerföretagsstöd</Badge>
             <Badge variant="secondary">AI-optimering</Badge>
             <Badge variant="secondary">Nordic Market</Badge>
           </div>

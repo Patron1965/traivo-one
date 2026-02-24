@@ -549,9 +549,9 @@ export default function PitchPage() {
           <Card className="hover-elevate">
             <CardContent className="p-5">
               <Shield className="h-8 w-8 text-slate-500 mb-3" />
-              <h3 className="font-semibold mb-1">Multi-tenant SaaS</h3>
+              <h3 className="font-semibold mb-1">Flerföretagsstöd</h3>
               <p className="text-sm text-muted-foreground">
-                Full isolering mellan kunder - säker och skalbar
+                Varje kund får sin egen separata miljö med egna data, inställningar och utseende
               </p>
             </CardContent>
           </Card>

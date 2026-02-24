@@ -85,7 +85,7 @@ const slides = [
       { name: "Ruttoptimering", desc: "VRP-algoritmer med väderbaserad kapacitet", status: "Live" },
       { name: "Fältapp", desc: "Komplett offline-arkitektur med IndexedDB", status: "Live" },
       { name: "Kundportal 2.0", desc: "Magic link, betyg, chatt, självbokning", status: "Live" },
-      { name: "White-label", desc: "Multi-tenant med varumärkesanpassning", status: "Live" },
+      { name: "White-label", desc: "Flerföretagsstöd med varumärkesanpassning", status: "Live" },
       { name: "Branschpaket", desc: "Färdiga mallar för avfall, städ, fastighet", status: "Live" },
       { name: "SMS & Notiser", desc: "E-post, SMS, push-notifikationer", status: "Live" },
       { name: "Miljöcertifikat", desc: "CO2-spårning och hållbarhetsrapporter", status: "Live" },
@@ -154,7 +154,7 @@ const slides = [
     title: "Roadmap 2025-2027",
     phases: [
       { quarter: "Q4 2025", items: ["Kinab pilot live", "AI-planering med Conversational AI", "Mobilapp med offline-stöd"], status: "done" },
-      { quarter: "Q1 2026", items: ["Kundportal 2.0", "White-label multi-tenant", "Miljöcertifikat & SMS"], status: "done" },
+      { quarter: "Q1 2026", items: ["Kundportal 2.0", "White-label flerföretagsstöd", "Miljöcertifikat & SMS"], status: "done" },
       { quarter: "Q2 2026", items: ["Första betalande kunder", "Branschpaket städ & fastighet", "API-dokumentation"], status: "current" },
       { quarter: "Q3-Q4 2026", items: ["Norge-expansion", "Advanced analytics", "Partnerintegrations-marketplace"], status: "planned" },
       { quarter: "2027", items: ["Danmark & Finland", "Enterprise on-premise", "AI-prediktivt underhåll"], status: "future" },
@@ -175,7 +175,7 @@ const slides = [
     highlights: [
       "Agil utveckling med snabba releaser",
       "AI-integration i varje modul",
-      "Skalbar multi-tenant arkitektur",
+      "Skalbar flerföretagsstöd-arkitektur",
       "Modern DevOps med CI/CD"
     ]
   },

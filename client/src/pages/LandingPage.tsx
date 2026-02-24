@@ -57,7 +57,7 @@ export default function LandingPage() {
               </h1>
               
               <p className="text-xl text-muted-foreground mb-10 max-w-2xl mx-auto" data-testid="text-hero-description">
-                Multi-tenant SaaS för nordiska fältserviceföretag. 
+                Flerföretagsstöd SaaS för nordiska fältserviceföretag. 
                 AI-optimerad planering, realtidsspårning och fullständig Fortnox-integration.
               </p>
               
@@ -77,7 +77,7 @@ export default function LandingPage() {
           <div className="container mx-auto px-4 py-12">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               <div>
-                <div className="text-3xl font-bold text-purple-600 mb-1">Multi-tenant</div>
+                <div className="text-3xl font-bold text-purple-600 mb-1">Flerföretagsstöd</div>
                 <div className="text-sm text-muted-foreground">Fullständig dataisolering</div>
               </div>
               <div>
@@ -111,9 +111,9 @@ export default function LandingPage() {
                   <div className="h-12 w-12 rounded-lg bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
                     <Shield className="h-6 w-6 text-purple-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">Multi-tenant säkerhet</h3>
+                  <h3 className="font-semibold text-lg mb-2">Flerföretagsstöd & säkerhet</h3>
                   <p className="text-muted-foreground">
-                    Fullständig dataisolering mellan organisationer med rollbaserad åtkomstkontroll (RBAC).
+                    Varje kund får sin egen separata miljö med egna data, inställningar och utseende — med rollbaserad åtkomstkontroll (RBAC).
                   </p>
                 </CardContent>
               </Card>
@@ -339,7 +339,7 @@ export default function LandingPage() {
               <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
-              Multi-tenant fältserviceplattform för nordiska företag
+              Flerföretagsstöd — fältserviceplattform för nordiska företag
             </p>
           </div>
         </div>

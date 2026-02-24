@@ -224,7 +224,7 @@ export default function ArchitecturePage() {
               </ArchitectureBox>
               
               <ArchitectureBox title="Säkerhetslager" icon={Shield} color="bg-red-50 dark:bg-red-950/30" borderColor="border-red-200 dark:border-red-800">
-                <FeatureItem>Multi-tenant middleware</FeatureItem>
+                <FeatureItem>Flerföretagsstöd-middleware</FeatureItem>
                 <FeatureItem>106+ ownership-verifieringar</FeatureItem>
                 <FeatureItem>Rollbaserad åtkomstkontroll</FeatureItem>
                 <FeatureItem>Session-autentisering</FeatureItem>
@@ -294,7 +294,7 @@ export default function ArchitecturePage() {
           <CardContent>
             <ArchitectureBox title="PostgreSQL + Drizzle ORM" icon={Database} color="bg-cyan-50 dark:bg-cyan-950/30" borderColor="border-cyan-200 dark:border-cyan-800">
               <FeatureItem>50+ tabeller</FeatureItem>
-              <FeatureItem>Multi-tenant isolering</FeatureItem>
+              <FeatureItem>Flerföretagsstöd-isolering</FeatureItem>
               <FeatureItem>Transaktionssäkerhet</FeatureItem>
               <FeatureItem>Automatiska migrationer</FeatureItem>
             </ArchitectureBox>

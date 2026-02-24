@@ -1,7 +1,7 @@
 # Unicorn - AI-Driven Field Service Planning Platform
 
 ## Overview
-Unicorn is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial multi-tenant SaaS solution.
+Unicorn is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
@@ -14,13 +14,13 @@ Unicorn is an AI-driven platform designed to optimize field service operations f
 The Unicorn platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
 
 ### UI/UX Decisions
-The user interface features a sticky TopNav, global search, user utilities, a mobile-friendly hamburger menu, Floating Action Button, QuickStats dashboard cards, a drag-and-drop WeekPlanner (with capacity-aware color-coded drop zones, auto time-slot assignment, time window badges, and weekly resource utilization summaries), RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Dedicated mobile interfaces for field technicians include a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help and progressive loading. White-label multi-tenant UI is supported with dynamic CSS variable injection, per-tenant color schemes, custom logos, font customization, and branding templates. An AI Command Center provides a unified dashboard for AI features. An interactive Tour Guide system provides step-by-step onboarding with spotlight overlay, tooltip navigation, and multiple tour definitions (platform overview, planner, clusters, invoicing). Tours auto-start for first-time desktop users and are accessible via the help button in TopNav. Tour completion is persisted in localStorage.
+The user interface features a sticky TopNav, global search, user utilities, a mobile-friendly hamburger menu, Floating Action Button, QuickStats dashboard cards, a drag-and-drop WeekPlanner (with capacity-aware color-coded drop zones, auto time-slot assignment, time window badges, and weekly resource utilization summaries), RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Dedicated mobile interfaces for field technicians include a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help and progressive loading. White-label flerföretagsstöd UI is supported with dynamic CSS variable injection, per-tenant color schemes, custom logos, font customization, and branding templates. An AI Command Center provides a unified dashboard for AI features. An interactive Tour Guide system provides step-by-step onboarding with spotlight overlay, tooltip navigation, and multiple tour definitions (platform overview, planner, clusters, invoicing). Tours auto-start for first-time desktop users and are accessible via the help button in TopNav. Tour completion is persisted in localStorage.
 
 ### Technical Implementations
 - **Frontend:** React, TypeScript, Vite.
 - **Backend:** Express.js.
 - **Database:** PostgreSQL with Drizzle ORM.
-- **Multi-tenancy:** Full tenant isolation at database and API level with middleware, dynamic tenant selection, tenant ownership verification, and role-based access control.
+- **Flerföretagsstöd (Multi-tenancy):** Full tenant isolation at database and API level with middleware, dynamic tenant selection, tenant ownership verification, and role-based access control. UI terminology uses "flerföretagsstöd" instead of "multi-tenant".
 - **AI Integration:** AI-first approach with OpenAI (gpt-4o-mini for quick analyses, gpt-4o for complex decisions) via Replit AI Integrations. Includes AI Cards for context-aware suggestions, an AI Planning Assistant, and AI Auto-Scheduling considering weather forecasts. Conversational AI Planner with natural language chat interface and function-calling capabilities.
 - **MCP Server (Model Context Protocol):** Enables external AI assistants to interact with Unicorn data via SSE.
 - **Modus 2.0 Import System:** Dedicated `/import` page for CSV imports with data transformation and validation.
