@@ -77,6 +77,10 @@ function getNextStatusLabel(current: OrderStatus): string {
   return labels[current] || 'Starta';
 }
 
+function isFinishedOrder(status: OrderStatus): boolean {
+  return ['completed', 'utford', 'fakturerad'].includes(status);
+}
+
 function canSwipe(order: Order): boolean {
   const terminalStatuses: OrderStatus[] = ['completed', 'failed', 'cancelled', 'utford', 'fakturerad', 'impossible'];
   if (terminalStatuses.includes(order.status)) return false;
@@ -242,16 +246,24 @@ function OrderCardContent({
   stepProgress: number;
   travelTime?: string | null;
 }) {
+  const finished = isFinishedOrder(order.status);
   return (
-    <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null]}>
+    <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null, finished ? styles.finishedCard : null]}>
       <View style={[styles.statusStripe, { backgroundColor: getStatusBorderColor(order.status) }]} />
-      <View style={styles.orderInner}>
+      {finished ? (
+        <View style={styles.finishedCheckOverlay}>
+          <View style={styles.finishedCheckCircle}>
+            <Feather name="check" size={18} color="#fff" />
+          </View>
+        </View>
+      ) : null}
+      <View style={[styles.orderInner, finished ? styles.finishedInner : null]}>
         <View style={styles.orderRow}>
           <View style={styles.timeColumn}>
-            <ThemedText variant="subheading" color={Colors.primary}>
+            <ThemedText variant="subheading" color={finished ? Colors.textMuted : Colors.primary}>
               {order.scheduledTimeStart || '--:--'}
             </ThemedText>
-            <ThemedText variant="caption">{order.estimatedDuration} min</ThemedText>
+            <ThemedText variant="caption" color={finished ? Colors.textMuted : undefined}>{order.estimatedDuration} min</ThemedText>
             {order.isLocked ? (
               <Feather name="lock" size={14} color={Colors.danger} style={styles.lockIcon} />
             ) : null}
@@ -259,7 +271,7 @@ function OrderCardContent({
           <View style={styles.orderContent}>
             <View style={styles.orderTopRow}>
               <View style={styles.orderNumberWithCodes}>
-                <ThemedText variant="label">{order.orderNumber}</ThemedText>
+                <ThemedText variant="label" color={finished ? Colors.textMuted : undefined}>{order.orderNumber}</ThemedText>
                 {order.executionCodes && order.executionCodes.length > 0 ? (
                   <View style={styles.execCodesRow}>
                     {order.executionCodes.map(ec => (
@@ -274,12 +286,12 @@ function OrderCardContent({
               </View>
               <StatusBadge status={order.status} size="sm" />
             </View>
-            <ThemedText variant="subheading" numberOfLines={1}>
+            <ThemedText variant="subheading" numberOfLines={1} color={finished ? Colors.textMuted : undefined}>
               {order.customerName}
             </ThemedText>
             <View style={styles.addressRow}>
-              <Feather name="map-pin" size={12} color={Colors.textSecondary} />
-              <ThemedText variant="caption" numberOfLines={1} style={{ flex: 1 }}>
+              <Feather name="map-pin" size={12} color={finished ? Colors.textMuted : Colors.textSecondary} />
+              <ThemedText variant="caption" numberOfLines={1} style={{ flex: 1 }} color={finished ? Colors.textMuted : undefined}>
                 {order.address}, {order.city}
               </ThemedText>
               {travelTime ? (
@@ -344,7 +356,7 @@ function OrderCardContent({
               ) : null}
             </View>
           </View>
-          <Feather name="chevron-right" size={20} color={Colors.textMuted} />
+          <Feather name="chevron-right" size={20} color={finished ? Colors.textMuted : Colors.textSecondary} />
         </View>
       </View>
     </Card>
@@ -507,6 +519,27 @@ const styles = StyleSheet.create({
     backgroundColor: '#FDF2F2',
     borderWidth: 1,
     borderColor: Colors.dangerLight,
+  },
+  finishedCard: {
+    backgroundColor: '#F0F9F4',
+    opacity: 0.85,
+  },
+  finishedCheckOverlay: {
+    position: 'absolute',
+    right: 14,
+    top: 10,
+    zIndex: 2,
+  },
+  finishedCheckCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.statusCompleted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  finishedInner: {
+    opacity: 0.7,
   },
   statusStripe: {
     width: 5,
