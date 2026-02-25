@@ -1,9 +1,8 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, FlatList, Pressable, StyleSheet, TextInput,
-  ActivityIndicator, Platform,
+  ActivityIndicator, Platform, KeyboardAvoidingView,
 } from 'react-native';
-import { KeyboardAvoidingView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
