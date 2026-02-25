@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation, Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { canAccessRoute } from "@/lib/role-config";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -103,6 +105,17 @@ const navigationGroups = [
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const [location] = useLocation();
+  const { user } = useAuth();
+  const userRole = user?.role;
+
+  const filteredGroups = useMemo(() => {
+    return navigationGroups
+      .map((group) => ({
+        ...group,
+        items: group.items.filter((item) => canAccessRoute(userRole, item.url)),
+      }))
+      .filter((group) => group.items.length > 0);
+  }, [userRole]);
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
@@ -130,7 +143,7 @@ export function MobileNav() {
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-80px)]">
           <nav className="p-4 space-y-6" data-testid="mobile-nav-menu">
-            {navigationGroups.map((group) => (
+            {filteredGroups.map((group) => (
               <div key={group.title}>
                 <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">
                   {group.title}

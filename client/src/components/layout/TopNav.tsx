@@ -1,6 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
+import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -223,7 +224,7 @@ function UserMenu() {
             <span className="text-sm font-medium" data-testid="text-user-name">
               {displayName}
             </span>
-            <span className="text-xs text-muted-foreground">Planerare</span>
+            <span className="text-xs text-muted-foreground">{getRoleLabel(user?.role || "user")}</span>
           </div>
           <ChevronDown className="h-3 w-3 opacity-50 hidden md:block" />
         </Button>
@@ -282,6 +283,17 @@ function TenantLogo() {
 }
 
 export function TopNav() {
+  const { user } = useAuth();
+  const userRole = user?.role || "user";
+
+  const menuGroups: { label: string; items: typeof grunddataItems; icon: React.ElementType; colorClass: string; group: NavMenuGroup }[] = [
+    { label: "Grunddata", items: grunddataItems, icon: Database, group: "grunddata", colorClass: "text-blue-500" },
+    { label: "Planering", items: planeringItems, icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { label: "Analys", items: analysItems, icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
+    { label: "System", items: systemItems, icon: Settings, group: "system", colorClass: "text-orange-500" },
+    { label: "Avancerat", items: avanceratItems, icon: Wrench, group: "avancerat", colorClass: "text-gray-500" },
+  ];
+
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
@@ -300,36 +312,17 @@ export function TopNav() {
                 <span className="hidden lg:inline">Start</span>
               </Button>
             </Link>
-            <NavDropdown
-              label="Grunddata"
-              items={grunddataItems}
-              icon={Database}
-              colorClass="text-blue-500"
-            />
-            <NavDropdown
-              label="Planering"
-              items={planeringItems}
-              icon={Calendar}
-              colorClass="text-green-500"
-            />
-            <NavDropdown
-              label="Analys"
-              items={analysItems}
-              icon={BarChart3}
-              colorClass="text-purple-500"
-            />
-            <NavDropdown
-              label="System"
-              items={systemItems}
-              icon={Settings}
-              colorClass="text-orange-500"
-            />
-            <NavDropdown
-              label="Avancerat"
-              items={avanceratItems}
-              icon={Wrench}
-              colorClass="text-gray-500"
-            />
+            {menuGroups.map((menu) =>
+              canAccessMenu(userRole, menu.group) ? (
+                <NavDropdown
+                  key={menu.label}
+                  label={menu.label}
+                  items={menu.items}
+                  icon={menu.icon}
+                  colorClass={menu.colorClass}
+                />
+              ) : null
+            )}
           </nav>
         </div>
 

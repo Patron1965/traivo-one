@@ -86,6 +86,7 @@ import { TourProvider } from "@/hooks/use-tour";
 import { TourGuide } from "@/components/TourGuide";
 import { TourAutoStart } from "@/components/TourAutoStart";
 import { Loader2 } from "lucide-react";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 function Router() {
   return (
@@ -115,32 +116,32 @@ function Router() {
       <Route path="/weather" component={WeatherPlanningPage} />
       <Route path="/customer-portal" component={CustomerPortalPage} />
       <Route path="/portal-messages" component={PortalMessagesPage} />
-      <Route path="/import" component={ImportPage} />
-      <Route path="/system-overview" component={SystemOverviewPage} />
+      <Route path="/import">{() => <ProtectedRoute component={ImportPage} path="/import" />}</Route>
+      <Route path="/system-overview">{() => <ProtectedRoute component={SystemOverviewPage} path="/system-overview" />}</Route>
       <Route path="/settings" component={SettingsPage} />
-      <Route path="/system-dashboard" component={SystemDashboardPage} />
-      <Route path="/industry-packages" component={IndustryPackagesPage} />
+      <Route path="/system-dashboard">{() => <ProtectedRoute component={SystemDashboardPage} path="/system-dashboard" />}</Route>
+      <Route path="/industry-packages">{() => <ProtectedRoute component={IndustryPackagesPage} path="/industry-packages" />}</Route>
       <Route path="/mobile" component={MobileFieldPage} />
       <Route path="/field" component={MobileFieldPage} />
       <Route path="/simple" component={MobileFieldPage} />
       <Route path="/project-report" component={ProjectReportPage} />
       <Route path="/metadata" component={MetadataPage} />
-      <Route path="/metadata-settings" component={MetadataSettingsPage} />
+      <Route path="/metadata-settings">{() => <ProtectedRoute component={MetadataSettingsPage} path="/metadata-settings" />}</Route>
       <Route path="/invoicing" component={InvoicingPage} />
       <Route path="/fleet" component={FleetManagementPage} />
-      <Route path="/user-management" component={UserManagementPage} />
+      <Route path="/user-management">{() => <ProtectedRoute component={UserManagementPage} path="/user-management" />}</Route>
       <Route path="/fortnox" component={FortnoxSettingsPage} />
-      <Route path="/sms-settings" component={SmsSettingsPage} />
-      <Route path="/api-costs" component={ApiCostsDashboardPage} />
+      <Route path="/sms-settings">{() => <ProtectedRoute component={SmsSettingsPage} path="/sms-settings" />}</Route>
+      <Route path="/api-costs">{() => <ProtectedRoute component={ApiCostsDashboardPage} path="/api-costs" />}</Route>
       <Route path="/environmental-certificates" component={EnvironmentalCertificatePage} />
-      <Route path="/architecture" component={ArchitecturePage} />
+      <Route path="/architecture">{() => <ProtectedRoute component={ArchitecturePage} path="/architecture" />}</Route>
       <Route path="/order-concepts" component={OrderConceptsPage} />
       <Route path="/assignments" component={AssignmentsPage} />
       <Route path="/pitch" component={PitchPage} />
       <Route path="/ai-assistant" component={AIAssistantPage} />
       <Route path="/reporting" component={ReportingDashboardPage} />
       <Route path="/workflow-guide" component={WorkflowGuidePage} />
-      <Route path="/data-requirements" component={DataRequirementsPage} />
+      <Route path="/data-requirements">{() => <ProtectedRoute component={DataRequirementsPage} path="/data-requirements" />}</Route>
       <Route path="/investor-pitch" component={InvestorPitchPage} />
       <Route path="/ai-planning" component={AIPlanningPage} />
       <Route path="/ai-command-center" component={AICommandCenterPage} />
@@ -149,8 +150,8 @@ function Router() {
       <Route path="/planner-map" component={PlannerMapPage} />
       <Route path="/historical-map" component={HistoricalMapPage} />
       <Route path="/checklist-templates" component={ChecklistTemplatesPage} />
-      <Route path="/tenant-config" component={TenantConfigPage} />
-      <Route path="/onboarding" component={OnboardingWizardPage} />
+      <Route path="/tenant-config">{() => <ProtectedRoute component={TenantConfigPage} path="/tenant-config" />}</Route>
+      <Route path="/onboarding">{() => <ProtectedRoute component={OnboardingWizardPage} path="/onboarding" />}</Route>
       <Route component={NotFound} />
     </Switch>
   );

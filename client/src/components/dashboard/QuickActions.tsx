@@ -1,12 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { filterQuickLinks } from "@/lib/role-config";
 import { 
   Calendar, Map, Upload, FileText, Users, Truck, 
   ClipboardList, Receipt, BarChart3, Settings2, Layers, Sparkles, Building2
 } from "lucide-react";
 
-const quickLinks = [
+const allQuickLinks = [
   { title: "Veckoplanering", url: "/planner", icon: Calendar },
   { title: "Karta", url: "/map", icon: Map },
   { title: "Arbetsordrar", url: "/assignments", icon: ClipboardList },
@@ -23,6 +25,9 @@ const quickLinks = [
 ];
 
 export function QuickActions() {
+  const { user } = useAuth();
+  const quickLinks = filterQuickLinks(allQuickLinks, user?.role);
+
   return (
     <Card data-testid="card-quick-actions">
       <CardHeader className="pb-3">
