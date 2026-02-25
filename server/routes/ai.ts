@@ -78,6 +78,82 @@ router.post('/transcribe', async (req, res) => {
   }
 });
 
+router.post('/voice-command', async (req, res) => {
+  try {
+    const { audio } = req.body;
+    if (!audio) {
+      return res.status(400).json({ error: 'Ljuddata krävs' });
+    }
+
+    const audioBuffer = Buffer.from(audio, 'base64');
+    const file = await toFile(audioBuffer, 'audio.webm');
+
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: 'gpt-4o-mini-transcribe',
+    });
+
+    const spokenText = transcription.text;
+
+    const classifyPrompt = `Du är en röstkommandotolk för en fältservice-app (avfallshantering/logistik). Analysera följande transkriberad text och klassificera vilken åtgärd användaren vill utföra.
+
+Möjliga kommandon:
+1. "navigate_orders" - Användaren vill se sina jobb/ordrar/uppdrag (t.ex. "Visa mina jobb", "Visa ordrar", "Mina uppdrag")
+2. "start_next" - Användaren vill starta nästa jobb (t.ex. "Starta nästa jobb", "Börja nästa uppdrag", "Starta")
+3. "report_deviation" - Användaren vill rapportera en avvikelse (t.ex. "Rapportera avvikelse", "Anmäl problem", "Rapportera fel")
+4. "on_site" - Användaren har anlänt till platsen (t.ex. "Jag är på plats", "Framme", "Ankommit")
+5. "unknown" - Kommandot kunde inte tolkas
+
+Svara ENBART i JSON-format:
+{
+  "action": "en_av_ovanstående",
+  "transcript": "den transkriberade texten",
+  "confidence": 0.0-1.0,
+  "displayMessage": "kort bekräftelsemeddelande på svenska"
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-5.2',
+      messages: [
+        { role: 'system', content: classifyPrompt },
+        { role: 'user', content: spokenText },
+      ],
+    });
+
+    const content = response.choices[0]?.message?.content || '';
+
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        res.json({
+          action: parsed.action || 'unknown',
+          transcript: parsed.transcript || spokenText,
+          confidence: parsed.confidence || 0,
+          displayMessage: parsed.displayMessage || 'Kommandot kunde inte tolkas.',
+        });
+      } else {
+        res.json({
+          action: 'unknown',
+          transcript: spokenText,
+          confidence: 0,
+          displayMessage: 'Kommandot kunde inte tolkas.',
+        });
+      }
+    } catch {
+      res.json({
+        action: 'unknown',
+        transcript: spokenText,
+        confidence: 0,
+        displayMessage: 'Kommandot kunde inte tolkas.',
+      });
+    }
+  } catch (error: any) {
+    console.error('Voice command error:', error);
+    res.status(500).json({ error: 'Kunde inte bearbeta röstkommandot' });
+  }
+});
+
 router.post('/analyze-image', async (req, res) => {
   try {
     const { image, context } = req.body;
@@ -85,9 +161,11 @@ router.post('/analyze-image', async (req, res) => {
       return res.status(400).json({ error: 'Bilddata krävs' });
     }
 
-    const systemPrompt = `Du är en AI som analyserar foton från fältservicearbete. Beskriv vad du ser, identifiera problem eller avvikelser, och föreslå en kategori och beskrivning för avvikelserapporteringen.
+    const systemPrompt = `Du är en AI som analyserar foton från fältservicearbete. Beskriv vad du ser, identifiera problem eller avvikelser, och föreslå en kategori, allvarlighetsgrad och beskrivning för avvikelserapporteringen.
 
-Kategorier: broken_container, wrong_address, blocked_access, contamination, overfilled, missing_container, other
+Kategorier: broken_container, wrong_address, blocked_access, contamination, overfilled, missing_container, damaged_container, wrong_waste, overloaded, other
+
+Allvarlighetsgrader: low, medium, high, critical
 
 Svara alltid på svenska.
 
@@ -95,8 +173,12 @@ Svara i följande JSON-format:
 {
   "description": "En beskrivning av vad du ser på bilden",
   "suggestedCategory": "en_av_kategorierna_ovan",
-  "suggestedDescription": "En föreslagen beskrivning för avvikelserapporten"
-}${context ? `\n\nYtterligare kontext: ${context}` : ''}`;
+  "suggestedDescription": "En föreslagen beskrivning för avvikelserapporten",
+  "suggestedSeverity": "en_av_allvarlighetsgraderna_ovan",
+  "confidence": 0.85
+}
+
+confidence ska vara ett tal mellan 0 och 1 som anger hur säker du är på din analys.${context ? `\n\nYtterligare kontext: ${context}` : ''}`;
 
     const response = await openai.chat.completions.create({
       model: 'gpt-5.2',
@@ -122,12 +204,16 @@ Svara i följande JSON-format:
           description: parsed.description || content,
           suggestedCategory: parsed.suggestedCategory || 'other',
           suggestedDescription: parsed.suggestedDescription || content,
+          suggestedSeverity: parsed.suggestedSeverity || 'medium',
+          confidence: typeof parsed.confidence === 'number' ? parsed.confidence : 0.5,
         });
       } else {
         res.json({
           description: content,
           suggestedCategory: 'other',
           suggestedDescription: content,
+          suggestedSeverity: 'medium',
+          confidence: 0.5,
         });
       }
     } catch {
@@ -135,6 +221,8 @@ Svara i följande JSON-format:
         description: content,
         suggestedCategory: 'other',
         suggestedDescription: content,
+        suggestedSeverity: 'medium',
+        confidence: 0.5,
       });
     }
   } catch (error: any) {

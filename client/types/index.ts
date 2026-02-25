@@ -100,15 +100,20 @@ export interface InspectionItem {
   status: InspectionStatus;
   issues: string[];
   comment: string;
+  photos?: string[];
+  beforePhoto?: string;
+  afterPhoto?: string;
 }
 
+export type PhotoRequirement = 'none' | 'single' | 'before_after';
+
 export const INSPECTION_CATEGORIES = [
-  { key: 'access', label: 'Tillgänglighet', icon: 'unlock' },
-  { key: 'container', label: 'Kärl/Behållare', icon: 'box' },
-  { key: 'environment', label: 'Miljö', icon: 'sun' },
-  { key: 'safety', label: 'Säkerhet', icon: 'shield' },
-  { key: 'cleanliness', label: 'Renlighet', icon: 'droplet' },
-  { key: 'other', label: 'Övrigt', icon: 'more-horizontal' },
+  { key: 'access', label: 'Tillgänglighet', icon: 'unlock', photoRequired: false, photoType: 'none' as PhotoRequirement },
+  { key: 'container', label: 'Kärl/Behållare', icon: 'box', photoRequired: true, photoType: 'before_after' as PhotoRequirement },
+  { key: 'environment', label: 'Miljö', icon: 'sun', photoRequired: true, photoType: 'single' as PhotoRequirement },
+  { key: 'safety', label: 'Säkerhet', icon: 'shield', photoRequired: true, photoType: 'single' as PhotoRequirement },
+  { key: 'cleanliness', label: 'Renlighet', icon: 'droplet', photoRequired: false, photoType: 'none' as PhotoRequirement },
+  { key: 'other', label: 'Övrigt', icon: 'more-horizontal', photoRequired: false, photoType: 'none' as PhotoRequirement },
 ] as const;
 
 export const INSPECTION_ISSUES: Record<string, string[]> = {
@@ -343,6 +348,8 @@ export interface ChecklistQuestion {
   text: string;
   type: 'boolean' | 'select' | 'text';
   options?: string[];
+  photoRequired?: boolean;
+  photoType?: PhotoRequirement;
 }
 
 export interface ChecklistTemplate {

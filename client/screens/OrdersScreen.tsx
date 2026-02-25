@@ -3,13 +3,30 @@ import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndica
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { FlashList } from '@shopify/flash-list';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  runOnJS,
+  interpolate,
+  Extrapolation,
+} from 'react-native-reanimated';
+import * as Haptics from 'expo-haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { apiRequest } from '../lib/query-client';
+import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
+import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus } from '../types';
+
+const SWIPE_THRESHOLD = 80;
+const ACTION_WIDTH = 90;
 
 const FILTER_OPTIONS: { label: string; value: OrderStatus | 'all' }[] = [
   { label: 'Alla', value: 'all' },
@@ -32,14 +49,330 @@ function getStatusBorderColor(status: OrderStatus): string {
   }
 }
 
+function getNextStatus(current: OrderStatus): OrderStatus | null {
+  const flow: Record<string, OrderStatus> = {
+    planned: 'dispatched',
+    dispatched: 'on_site',
+    on_site: 'in_progress',
+    in_progress: 'completed',
+    skapad: 'planerad_pre',
+    planerad_pre: 'planerad_resurs',
+    planerad_resurs: 'planerad_las',
+    planerad_las: 'utford',
+  };
+  return flow[current] || null;
+}
+
+function getNextStatusLabel(current: OrderStatus): string {
+  const labels: Record<string, string> = {
+    planned: 'Starta',
+    dispatched: 'På plats',
+    on_site: 'Börja',
+    in_progress: 'Klar',
+    skapad: 'Starta',
+    planerad_pre: 'Starta',
+    planerad_resurs: 'Starta',
+    planerad_las: 'Utför',
+  };
+  return labels[current] || 'Starta';
+}
+
+function canSwipe(order: Order): boolean {
+  const terminalStatuses: OrderStatus[] = ['completed', 'failed', 'cancelled', 'utford', 'fakturerad', 'impossible'];
+  if (terminalStatuses.includes(order.status)) return false;
+  if (order.isLocked) return false;
+  return true;
+}
+
+function SwipeableOrderCard({
+  order,
+  onPress,
+  onAdvance,
+  onDeviation,
+  travelTime,
+}: {
+  order: Order;
+  onPress: () => void;
+  onAdvance: (orderId: number | string, nextStatus: OrderStatus) => void;
+  onDeviation: (orderId: number | string) => void;
+  travelTime?: string | null;
+}) {
+  const translateX = useSharedValue(0);
+  const swipeable = canSwipe(order);
+  const nextStatus = getNextStatus(order.status);
+
+  const completedSteps = order.subSteps ? order.subSteps.filter(s => s.completed).length : 0;
+  const totalSteps = order.subSteps ? order.subSteps.length : 0;
+  const stepProgress = totalSteps > 0 ? completedSteps / totalSteps : 0;
+
+  const handleAdvance = useCallback(() => {
+    if (nextStatus) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onAdvance(order.id, nextStatus);
+    }
+  }, [nextStatus, order.id, onAdvance]);
+
+  const handleDeviation = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onDeviation(order.id);
+  }, [order.id, onDeviation]);
+
+  const triggerHaptic = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }, []);
+
+  const pan = Gesture.Pan()
+    .activeOffsetX([-15, 15])
+    .failOffsetY([-10, 10])
+    .enabled(swipeable)
+    .onUpdate((e) => {
+      const clampedX = Math.max(-ACTION_WIDTH, Math.min(ACTION_WIDTH, e.translationX));
+      translateX.value = clampedX;
+    })
+    .onEnd((e) => {
+      if (e.translationX > SWIPE_THRESHOLD && nextStatus) {
+        translateX.value = withTiming(ACTION_WIDTH, { duration: 200 });
+        runOnJS(handleAdvance)();
+        translateX.value = withTiming(0, { duration: 300 });
+      } else if (e.translationX < -SWIPE_THRESHOLD) {
+        translateX.value = withTiming(-ACTION_WIDTH, { duration: 200 });
+        runOnJS(handleDeviation)();
+        translateX.value = withTiming(0, { duration: 300 });
+      } else {
+        translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
+      }
+    });
+
+  const cardAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: translateX.value }],
+  }));
+
+  const rightActionStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      translateX.value,
+      [0, SWIPE_THRESHOLD * 0.5, SWIPE_THRESHOLD],
+      [0, 0.5, 1],
+      Extrapolation.CLAMP,
+    );
+    const scale = interpolate(
+      translateX.value,
+      [0, SWIPE_THRESHOLD],
+      [0.5, 1],
+      Extrapolation.CLAMP,
+    );
+    return { opacity, transform: [{ scale }] };
+  });
+
+  const leftActionStyle = useAnimatedStyle(() => {
+    const opacity = interpolate(
+      translateX.value,
+      [0, -SWIPE_THRESHOLD * 0.5, -SWIPE_THRESHOLD],
+      [0, 0.5, 1],
+      Extrapolation.CLAMP,
+    );
+    const scale = interpolate(
+      translateX.value,
+      [0, -SWIPE_THRESHOLD],
+      [0.5, 1],
+      Extrapolation.CLAMP,
+    );
+    return { opacity, transform: [{ scale }] };
+  });
+
+  return (
+    <View style={styles.orderPressable} testID={`card-order-${order.id}`}>
+      {swipeable ? (
+        <>
+          <View style={styles.swipeActionsContainer}>
+            {nextStatus ? (
+              <Animated.View style={[styles.swipeActionRight, rightActionStyle]}>
+                <Feather name="play" size={20} color={Colors.textInverse} />
+                <ThemedText variant="caption" color={Colors.textInverse} style={styles.swipeActionText}>
+                  {getNextStatusLabel(order.status)}
+                </ThemedText>
+              </Animated.View>
+            ) : null}
+            <Animated.View style={[styles.swipeActionLeft, leftActionStyle]}>
+              <Feather name="alert-triangle" size={20} color={Colors.textInverse} />
+              <ThemedText variant="caption" color={Colors.textInverse} style={styles.swipeActionText}>
+                Avvikelse
+              </ThemedText>
+            </Animated.View>
+          </View>
+
+          <GestureDetector gesture={pan}>
+            <Animated.View style={cardAnimatedStyle}>
+              <Pressable onPress={onPress}>
+                <OrderCardContent
+                  order={order}
+                  completedSteps={completedSteps}
+                  totalSteps={totalSteps}
+                  stepProgress={stepProgress}
+                  travelTime={travelTime}
+                />
+              </Pressable>
+            </Animated.View>
+          </GestureDetector>
+        </>
+      ) : (
+        <Pressable onPress={onPress}>
+          <OrderCardContent
+            order={order}
+            completedSteps={completedSteps}
+            totalSteps={totalSteps}
+            stepProgress={stepProgress}
+            travelTime={travelTime}
+          />
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function OrderCardContent({
+  order,
+  completedSteps,
+  totalSteps,
+  stepProgress,
+  travelTime,
+}: {
+  order: Order;
+  completedSteps: number;
+  totalSteps: number;
+  stepProgress: number;
+  travelTime?: string | null;
+}) {
+  return (
+    <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null]}>
+      <View style={[styles.statusStripe, { backgroundColor: getStatusBorderColor(order.status) }]} />
+      <View style={styles.orderInner}>
+        <View style={styles.orderRow}>
+          <View style={styles.timeColumn}>
+            <ThemedText variant="subheading" color={Colors.primary}>
+              {order.scheduledTimeStart || '--:--'}
+            </ThemedText>
+            <ThemedText variant="caption">{order.estimatedDuration} min</ThemedText>
+            {order.isLocked ? (
+              <Feather name="lock" size={14} color={Colors.danger} style={styles.lockIcon} />
+            ) : null}
+          </View>
+          <View style={styles.orderContent}>
+            <View style={styles.orderTopRow}>
+              <View style={styles.orderNumberWithCodes}>
+                <ThemedText variant="label">{order.orderNumber}</ThemedText>
+                {order.executionCodes && order.executionCodes.length > 0 ? (
+                  <View style={styles.execCodesRow}>
+                    {order.executionCodes.map(ec => (
+                      <View key={ec.id} style={styles.execCodeBadge}>
+                        <ThemedText variant="caption" color={Colors.primaryLight} style={styles.execCodeText}>
+                          {ec.code}
+                        </ThemedText>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+              </View>
+              <StatusBadge status={order.status} size="sm" />
+            </View>
+            <ThemedText variant="subheading" numberOfLines={1}>
+              {order.customerName}
+            </ThemedText>
+            <View style={styles.addressRow}>
+              <Feather name="map-pin" size={12} color={Colors.textSecondary} />
+              <ThemedText variant="caption" numberOfLines={1} style={{ flex: 1 }}>
+                {order.address}, {order.city}
+              </ThemedText>
+              {travelTime ? (
+                <View style={styles.travelBadge}>
+                  <Feather name="navigation" size={9} color={Colors.primary} />
+                  <ThemedText variant="caption" color={Colors.primary} style={styles.travelText}>
+                    {travelTime}
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+            <ThemedText variant="caption" numberOfLines={1} color={Colors.textMuted}>
+              {order.description}
+            </ThemedText>
+
+            {totalSteps > 0 ? (
+              <View style={styles.progressSection}>
+                <View style={styles.progressBarBg}>
+                  <View style={[styles.progressBarFill, { width: `${stepProgress * 100}%` }]} />
+                </View>
+                <ThemedText variant="caption" color={Colors.secondary} style={styles.progressText}>
+                  {completedSteps}/{totalSteps}
+                </ThemedText>
+              </View>
+            ) : null}
+
+            <View style={styles.badgeRow}>
+              {order.priority === 'urgent' ? (
+                <View style={styles.urgentTag}>
+                  <Feather name="alert-circle" size={10} color={Colors.danger} />
+                  <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
+                    BRÅDSKANDE
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {order.dependencies && order.dependencies.length > 0 ? (
+                <View style={styles.dependencyTag}>
+                  <Feather name="link" size={10} color={Colors.info} />
+                  <ThemedText variant="caption" color={Colors.info} style={styles.tagText}>
+                    {order.isLocked ? 'LÅST' : 'BEROENDE'}
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {order.timeRestrictions && order.timeRestrictions.filter(r => r.isActive).length > 0 ? (
+                <View style={styles.restrictionTag}>
+                  <Feather name="alert-triangle" size={10} color={Colors.danger} />
+                  <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
+                    BEGRÄNSNING
+                  </ThemedText>
+                </View>
+              ) : null}
+
+              {canSwipe({ status: order.status, isLocked: order.isLocked } as Order) ? (
+                <View style={styles.swipeHint}>
+                  <Feather name="chevrons-right" size={10} color={Colors.textMuted} />
+                  <ThemedText variant="caption" color={Colors.textMuted} style={styles.tagText}>
+                    svep
+                  </ThemedText>
+                </View>
+              ) : null}
+            </View>
+          </View>
+          <Feather name="chevron-right" size={20} color={Colors.textMuted} />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
 export function OrdersScreen({ navigation }: any) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
+  const queryClient = useQueryClient();
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const [refreshing, setRefreshing] = useState(false);
+  const { currentPosition } = useGpsTracking();
 
   const { data: orders, isLoading, refetch } = useQuery<Order[]>({
     queryKey: ['/api/mobile/my-orders'],
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: ({ orderId, status }: { orderId: number | string; status: OrderStatus }) =>
+      apiRequest('PATCH', `/api/mobile/orders/${orderId}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
+    },
+    onError: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+    },
   });
 
   const onRefresh = useCallback(async () => {
@@ -53,106 +386,27 @@ export function OrdersScreen({ navigation }: any) {
     return o.status === filter;
   }) || [];
 
+  const handleAdvance = useCallback((orderId: number | string, nextStatus: OrderStatus) => {
+    statusMutation.mutate({ orderId, status: nextStatus });
+  }, [statusMutation]);
+
+  const handleDeviation = useCallback((orderId: number | string) => {
+    navigation.navigate('ReportDeviation', { orderId });
+  }, [navigation]);
+
   const renderOrder = ({ item: order }: { item: Order }) => {
-    const completedSteps = order.subSteps ? order.subSteps.filter(s => s.completed).length : 0;
-    const totalSteps = order.subSteps ? order.subSteps.length : 0;
-    const stepProgress = totalSteps > 0 ? completedSteps / totalSteps : 0;
-
+    const travelMin = estimateTravelMinutes(
+      currentPosition?.latitude, currentPosition?.longitude,
+      order.latitude, order.longitude
+    );
     return (
-      <Pressable
+      <SwipeableOrderCard
+        order={order}
         onPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}
-        style={styles.orderPressable}
-        testID={`card-order-${order.id}`}
-      >
-        <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null]}>
-          <View style={[styles.statusStripe, { backgroundColor: getStatusBorderColor(order.status) }]} />
-          <View style={styles.orderInner}>
-            <View style={styles.orderRow}>
-              <View style={styles.timeColumn}>
-                <ThemedText variant="subheading" color={Colors.primary}>
-                  {order.scheduledTimeStart || '--:--'}
-                </ThemedText>
-                <ThemedText variant="caption">{order.estimatedDuration} min</ThemedText>
-                {order.isLocked ? (
-                  <Feather name="lock" size={14} color={Colors.danger} style={styles.lockIcon} />
-                ) : null}
-              </View>
-              <View style={styles.orderContent}>
-                <View style={styles.orderTopRow}>
-                  <View style={styles.orderNumberWithCodes}>
-                    <ThemedText variant="label">{order.orderNumber}</ThemedText>
-                    {order.executionCodes && order.executionCodes.length > 0 ? (
-                      <View style={styles.execCodesRow}>
-                        {order.executionCodes.map(ec => (
-                          <View key={ec.id} style={styles.execCodeBadge}>
-                            <ThemedText variant="caption" color={Colors.primaryLight} style={styles.execCodeText}>
-                              {ec.code}
-                            </ThemedText>
-                          </View>
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                  <StatusBadge status={order.status} size="sm" />
-                </View>
-                <ThemedText variant="subheading" numberOfLines={1}>
-                  {order.customerName}
-                </ThemedText>
-                <View style={styles.addressRow}>
-                  <Feather name="map-pin" size={12} color={Colors.textSecondary} />
-                  <ThemedText variant="caption" numberOfLines={1}>
-                    {order.address}, {order.city}
-                  </ThemedText>
-                </View>
-                <ThemedText variant="caption" numberOfLines={1} color={Colors.textMuted}>
-                  {order.description}
-                </ThemedText>
-
-                {totalSteps > 0 ? (
-                  <View style={styles.progressSection}>
-                    <View style={styles.progressBarBg}>
-                      <View style={[styles.progressBarFill, { width: `${stepProgress * 100}%` }]} />
-                    </View>
-                    <ThemedText variant="caption" color={Colors.secondary} style={styles.progressText}>
-                      {completedSteps}/{totalSteps}
-                    </ThemedText>
-                  </View>
-                ) : null}
-
-                <View style={styles.badgeRow}>
-                  {order.priority === 'urgent' ? (
-                    <View style={styles.urgentTag}>
-                      <Feather name="alert-circle" size={10} color={Colors.danger} />
-                      <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
-                        BRÅDSKANDE
-                      </ThemedText>
-                    </View>
-                  ) : null}
-
-                  {order.dependencies && order.dependencies.length > 0 ? (
-                    <View style={styles.dependencyTag}>
-                      <Feather name="link" size={10} color={Colors.info} />
-                      <ThemedText variant="caption" color={Colors.info} style={styles.tagText}>
-                        {order.isLocked ? 'LÅST' : 'BEROENDE'}
-                      </ThemedText>
-                    </View>
-                  ) : null}
-
-                  {order.timeRestrictions && order.timeRestrictions.filter(r => r.isActive).length > 0 ? (
-                    <View style={styles.restrictionTag}>
-                      <Feather name="alert-triangle" size={10} color={Colors.danger} />
-                      <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
-                        BEGRÄNSNING
-                      </ThemedText>
-                    </View>
-                  ) : null}
-                </View>
-              </View>
-              <Feather name="chevron-right" size={20} color={Colors.textMuted} />
-            </View>
-          </View>
-        </Card>
-      </Pressable>
+        onAdvance={handleAdvance}
+        onDeviation={handleDeviation}
+        travelTime={formatTravelTime(travelMin)}
+      />
     );
   };
 
@@ -242,6 +496,7 @@ const styles = StyleSheet.create({
   },
   orderPressable: {
     marginBottom: Spacing.sm,
+    position: 'relative',
   },
   orderCard: {
     padding: 0,
@@ -308,6 +563,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
   },
+  travelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.sm,
+  },
+  travelText: {
+    fontSize: 10,
+  },
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -325,6 +592,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   restrictionTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+  },
+  swipeHint: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
@@ -363,5 +635,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.md,
     paddingTop: Spacing.xxxl * 2,
+  },
+  swipeActionsContainer: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderRadius: BorderRadius.lg,
+    overflow: 'hidden',
+  },
+  swipeActionRight: {
+    width: ACTION_WIDTH,
+    height: '100%',
+    backgroundColor: Colors.success,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopLeftRadius: BorderRadius.lg,
+    borderBottomLeftRadius: BorderRadius.lg,
+    gap: 2,
+  },
+  swipeActionLeft: {
+    width: ACTION_WIDTH,
+    height: '100%',
+    backgroundColor: Colors.warning,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderTopRightRadius: BorderRadius.lg,
+    borderBottomRightRadius: BorderRadius.lg,
+    gap: 2,
+    marginLeft: 'auto',
+  },
+  swipeActionText: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

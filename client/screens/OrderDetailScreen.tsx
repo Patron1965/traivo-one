@@ -13,6 +13,8 @@ import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
+import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
+import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote, ImpossibleReason } from '../types';
 import { TIME_RESTRICTION_LABELS, ORDER_STATUS_SEQUENCE, IMPOSSIBLE_REASONS } from '../types';
 
@@ -43,6 +45,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const [showImpossibleModal, setShowImpossibleModal] = useState(false);
   const [selectedReason, setSelectedReason] = useState<ImpossibleReason | null>(null);
   const [impossibleText, setImpossibleText] = useState('');
+  const { currentPosition } = useGpsTracking();
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/mobile/orders/${orderId}`],
@@ -347,6 +350,21 @@ export function OrderDetailScreen({ route, navigation }: any) {
               </ThemedText>
             </View>
           ) : null}
+          {(() => {
+            const travelMin = estimateTravelMinutes(
+              currentPosition?.latitude, currentPosition?.longitude,
+              order.latitude, order.longitude
+            );
+            const travelStr = formatTravelTime(travelMin);
+            return travelStr ? (
+              <View style={styles.travelTimeRow}>
+                <Feather name="navigation" size={14} color={Colors.primary} />
+                <ThemedText variant="body" color={Colors.primary}>
+                  Uppskattad restid: {travelStr}
+                </ThemedText>
+              </View>
+            ) : null;
+          })()}
           <Pressable style={styles.navButton} onPress={openNavigation} testID="button-navigate">
             <Feather name="navigation" size={16} color={Colors.textInverse} />
             <ThemedText variant="body" color={Colors.textInverse}>
@@ -887,6 +905,13 @@ const styles = StyleSheet.create({
   },
   infoContent: {
     flex: 1,
+  },
+  travelTimeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingVertical: Spacing.xs,
   },
   navButton: {
     flexDirection: 'row',

@@ -1,16 +1,84 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState, useRef } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Platform, Animated } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
-import { getApiUrl } from '../lib/query-client';
-import type { Order, OrderStatus, DaySummary } from '../types';
+import { getApiUrl, apiRequest } from '../lib/query-client';
+import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
+import { useGpsTracking } from '../hooks/useGpsTracking';
+import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
+
+interface BreakSuggestion {
+  hoursWorked: number;
+  nextJobTime: string | null;
+  gapMinutes: number | null;
+  message: string;
+}
+
+function computeBreakSuggestion(orders: Order[] | undefined): BreakSuggestion | null {
+  if (!orders || orders.length === 0) return null;
+
+  const startedOrders = orders.filter(o => o.actualStartTime);
+  if (startedOrders.length === 0) return null;
+
+  const startTimes = startedOrders
+    .map(o => {
+      const t = new Date(o.actualStartTime!);
+      return isNaN(t.getTime()) ? null : t.getTime();
+    })
+    .filter((t): t is number => t !== null);
+
+  if (startTimes.length === 0) return null;
+
+  const workStartMs = Math.min(...startTimes);
+  const now = Date.now();
+  const hoursWorked = (now - workStartMs) / (1000 * 60 * 60);
+
+  if (hoursWorked < 4) return null;
+
+  const remaining = orders.filter(
+    o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'failed'
+  );
+
+  let nextJobTime: string | null = null;
+  let gapMinutes: number | null = null;
+
+  const upcoming = remaining
+    .filter(o => o.scheduledTimeStart)
+    .map(o => {
+      const today = new Date();
+      const [h, m] = (o.scheduledTimeStart || '').split(':').map(Number);
+      if (isNaN(h) || isNaN(m)) return null;
+      const jobDate = new Date(today.getFullYear(), today.getMonth(), today.getDate(), h, m);
+      return { time: jobDate.getTime(), label: o.scheduledTimeStart! };
+    })
+    .filter((x): x is { time: number; label: string } => x !== null && x.time > now)
+    .sort((a, b) => a.time - b.time);
+
+  if (upcoming.length > 0) {
+    nextJobTime = upcoming[0].label;
+    gapMinutes = Math.round((upcoming[0].time - now) / (1000 * 60));
+  }
+
+  const h = Math.floor(hoursWorked);
+  const mins = Math.round((hoursWorked - h) * 60);
+  const workedStr = mins > 0 ? `${h}h ${mins}min` : `${h}h`;
+
+  let message = `Du har jobbat i ${workedStr}`;
+  if (nextJobTime && gapMinutes !== null && gapMinutes > 10) {
+    message += ` \u2014 dags f\u00f6r rast? N\u00e4sta jobb kl ${nextJobTime}, ${gapMinutes} min lucka`;
+  } else {
+    message += ` \u2014 dags f\u00f6r en paus?`;
+  }
+
+  return { hoursWorked, nextJobTime, gapMinutes, message };
+}
 
 function getStatusBorderColor(status: OrderStatus): string {
   switch (status) {
@@ -34,23 +102,200 @@ export function HomeScreen({ navigation }: any) {
     queryKey: ['/api/mobile/my-orders'],
   });
 
-  const { data: summary } = useQuery<DaySummary>({
+  const { data: summary, refetch: refetchSummary } = useQuery<DaySummary>({
     queryKey: ['/api/mobile/summary'],
   });
+
+  const { data: weather } = useQuery<WeatherData>({
+    queryKey: ['/api/mobile/weather'],
+    staleTime: 600000,
+  });
+
+  const { currentPosition } = useGpsTracking();
 
   const [refreshing, setRefreshing] = React.useState(false);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await refetchOrders();
+    await Promise.all([refetchOrders(), refetchSummary()]);
     setRefreshing(false);
-  }, [refetchOrders]);
+  }, [refetchOrders, refetchSummary]);
 
   const activeOrders = orders?.filter(o => o.status !== 'completed' && o.status !== 'cancelled') || [];
   const completedCount = orders?.filter(o => o.status === 'completed').length || 0;
   const totalCount = orders?.length || 0;
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const lockedCount = orders?.filter(o => o.isLocked).length || 0;
+
+  const breakSuggestion = useMemo(() => computeBreakSuggestion(orders), [orders]);
+  const [breakDismissed, setBreakDismissed] = React.useState(false);
+
+  const queryClient = useQueryClient();
+  const [voiceRecording, setVoiceRecording] = useState(false);
+  const [voiceProcessing, setVoiceProcessing] = useState(false);
+  const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+  const voiceRecorderRef = useRef<any>(null);
+  const voiceChunksRef = useRef<any[]>([]);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  function showVoiceFeedback(msg: string) {
+    setVoiceFeedback(msg);
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setVoiceFeedback(null), 3500);
+  }
+
+  function executeVoiceAction(action: string, displayMessage: string) {
+    showVoiceFeedback(displayMessage);
+    switch (action) {
+      case 'navigate_orders':
+        navigation.navigate('OrdersTab');
+        break;
+      case 'start_next': {
+        const next = activeOrders.find(o => !o.isLocked) || activeOrders[0];
+        if (next) {
+          navigation.navigate('OrderDetail', { orderId: next.id });
+        } else {
+          showVoiceFeedback('Inga aktiva uppdrag att starta.');
+        }
+        break;
+      }
+      case 'report_deviation': {
+        const current = activeOrders.find(o => o.status === 'in_progress' || o.status === 'on_site') || activeOrders[0];
+        if (current) {
+          navigation.navigate('ReportDeviation', { orderId: current.id });
+        } else {
+          showVoiceFeedback('Inget aktivt uppdrag för avvikelse.');
+        }
+        break;
+      }
+      case 'on_site': {
+        const onSiteOrder = activeOrders.find(o => o.status === 'dispatched' || o.status === 'planerad_resurs') || activeOrders[0];
+        if (onSiteOrder) {
+          apiRequest('POST', `/api/mobile/orders/${onSiteOrder.id}/status`, { status: 'on_site' })
+            .then(() => {
+              queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+              showVoiceFeedback(`Markerad som "P\u00e5 plats" f\u00f6r ${onSiteOrder.customerName}`);
+            })
+            .catch(() => showVoiceFeedback('Kunde inte uppdatera status.'));
+        } else {
+          showVoiceFeedback('Inget uppdrag att markera som p\u00e5 plats.');
+        }
+        break;
+      }
+      default:
+        showVoiceFeedback('Kommandot k\u00e4ndes inte igen. F\u00f6rs\u00f6k igen.');
+        break;
+    }
+  }
+
+  async function handleVoiceCommand() {
+    if (voiceRecording) {
+      stopVoiceRecording();
+      return;
+    }
+    startVoiceRecording();
+  }
+
+  function startPulseAnimation() {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+      ])
+    ).start();
+  }
+
+  function stopPulseAnimation() {
+    pulseAnim.stopAnimation();
+    pulseAnim.setValue(1);
+  }
+
+  async function startVoiceRecording() {
+    if (Platform.OS === 'web') {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+        voiceChunksRef.current = [];
+        mediaRecorder.ondataavailable = (e: any) => {
+          if (e.data.size > 0) voiceChunksRef.current.push(e.data);
+        };
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach(track => track.stop());
+          const blob = new Blob(voiceChunksRef.current, { type: 'audio/webm;codecs=opus' });
+          const reader = new FileReader();
+          reader.onloadend = async () => {
+            const base64 = (reader.result as string).split(',')[1];
+            processVoiceAudio(base64);
+          };
+          reader.readAsDataURL(blob);
+        };
+        mediaRecorder.start();
+        voiceRecorderRef.current = mediaRecorder;
+        setVoiceRecording(true);
+        startPulseAnimation();
+      } catch {
+        showVoiceFeedback('Kunde inte starta mikrofonen.');
+      }
+    } else {
+      try {
+        const { Audio } = require('expo-av');
+        const permission = await Audio.requestPermissionsAsync();
+        if (!permission.granted) {
+          showVoiceFeedback('Mikrofontillst\u00e5nd kr\u00e4vs.');
+          return;
+        }
+        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+        const recording = new Audio.Recording();
+        await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+        await recording.startAsync();
+        voiceRecorderRef.current = recording;
+        setVoiceRecording(true);
+        startPulseAnimation();
+      } catch {
+        showVoiceFeedback('Kunde inte starta inspelning.');
+      }
+    }
+  }
+
+  async function stopVoiceRecording() {
+    setVoiceRecording(false);
+    stopPulseAnimation();
+    if (Platform.OS === 'web') {
+      if (voiceRecorderRef.current) {
+        voiceRecorderRef.current.stop();
+        voiceRecorderRef.current = null;
+      }
+    } else {
+      try {
+        const recording = voiceRecorderRef.current;
+        if (recording) {
+          await recording.stopAndUnloadAsync();
+          const uri = recording.getURI();
+          voiceRecorderRef.current = null;
+          if (uri) {
+            const { readAsStringAsync, EncodingType } = require('expo-file-system');
+            const base64 = await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
+            processVoiceAudio(base64);
+          }
+        }
+      } catch {
+        showVoiceFeedback('Kunde inte stoppa inspelningen.');
+      }
+    }
+  }
+
+  async function processVoiceAudio(base64: string) {
+    setVoiceProcessing(true);
+    try {
+      const result = await apiRequest('POST', '/api/mobile/ai/voice-command', { audio: base64 });
+      executeVoiceAction(result.action, result.displayMessage);
+    } catch {
+      showVoiceFeedback('R\u00f6stkommandot kunde inte bearbetas.');
+    } finally {
+      setVoiceProcessing(false);
+    }
+  }
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('sv-SE', {
@@ -60,6 +305,7 @@ export function HomeScreen({ navigation }: any) {
   });
 
   return (
+    <View style={styles.outerContainer}>
     <ScrollView
       style={styles.container}
       contentContainerStyle={[
@@ -105,6 +351,42 @@ export function HomeScreen({ navigation }: any) {
           </View>
         ) : null}
       </View>
+
+      {weather ? (
+        <Card style={styles.weatherCard}>
+          <View style={styles.weatherRow}>
+            <View style={styles.weatherMain}>
+              <Feather name={weather.icon as any} size={22} color={Colors.primaryLight} />
+              <ThemedText variant="subheading" color={Colors.primary}>
+                {weather.temperature}°
+              </ThemedText>
+              <ThemedText variant="body" color={Colors.textSecondary}>
+                {weather.description}
+              </ThemedText>
+            </View>
+            <View style={styles.weatherDetails}>
+              <View style={styles.weatherDetailItem}>
+                <Feather name="wind" size={12} color={Colors.textSecondary} />
+                <ThemedText variant="caption">{weather.windSpeed} m/s</ThemedText>
+              </View>
+              <View style={styles.weatherDetailItem}>
+                <Feather name="thermometer" size={12} color={Colors.textSecondary} />
+                <ThemedText variant="caption">Känns {weather.feelsLike}°</ThemedText>
+              </View>
+            </View>
+          </View>
+          {weather.warnings.length > 0 ? (
+            <View style={styles.weatherWarnings}>
+              {weather.warnings.map((w, i) => (
+                <View key={i} style={styles.weatherWarningBadge}>
+                  <Feather name="alert-triangle" size={11} color={Colors.warning} />
+                  <ThemedText variant="caption" color={Colors.warning}>{w}</ThemedText>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </Card>
+      ) : null}
 
       <Card style={styles.progressCard}>
         <View style={styles.progressHeader}>
@@ -154,6 +436,29 @@ export function HomeScreen({ navigation }: any) {
           ) : null}
         </View>
       </Card>
+
+      {breakSuggestion && !breakDismissed ? (
+        <Card style={styles.breakBanner}>
+          <View style={styles.breakBannerContent} testID="banner-break-suggestion">
+            <View style={styles.breakIconCircle}>
+              <Feather name="coffee" size={20} color={Colors.secondary} />
+            </View>
+            <View style={styles.breakTextContainer}>
+              <ThemedText variant="label" color={Colors.secondary}>Rastf\u00f6rslag</ThemedText>
+              <ThemedText variant="body" color={Colors.textSecondary} style={styles.breakMessage}>
+                {breakSuggestion.message}
+              </ThemedText>
+            </View>
+            <Pressable
+              onPress={() => setBreakDismissed(true)}
+              hitSlop={8}
+              testID="button-dismiss-break"
+            >
+              <Feather name="x" size={18} color={Colors.textMuted} />
+            </Pressable>
+          </View>
+        </Card>
+      ) : null}
 
       {!ordersLoading && activeOrders.length > 0 ? (
         <Pressable
@@ -237,9 +542,24 @@ export function HomeScreen({ navigation }: any) {
                 <View style={styles.orderDetails}>
                   <View style={styles.orderDetailRow}>
                     <Feather name="map-pin" size={14} color={Colors.textSecondary} />
-                    <ThemedText variant="body" color={Colors.textSecondary} numberOfLines={1}>
+                    <ThemedText variant="body" color={Colors.textSecondary} numberOfLines={1} style={{ flex: 1 }}>
                       {order.address}, {order.city}
                     </ThemedText>
+                    {(() => {
+                      const travelMin = estimateTravelMinutes(
+                        currentPosition?.latitude, currentPosition?.longitude,
+                        order.latitude, order.longitude
+                      );
+                      const travelStr = formatTravelTime(travelMin);
+                      return travelStr ? (
+                        <View style={styles.travelBadge}>
+                          <Feather name="navigation" size={10} color={Colors.primary} />
+                          <ThemedText variant="caption" color={Colors.primary} style={styles.travelText}>
+                            {travelStr}
+                          </ThemedText>
+                        </View>
+                      ) : null;
+                    })()}
                   </View>
                   {order.scheduledTimeStart ? (
                     <View style={styles.orderDetailRow}>
@@ -301,6 +621,55 @@ export function HomeScreen({ navigation }: any) {
         ))
       )}
     </ScrollView>
+
+      {voiceFeedback ? (
+        <View style={[styles.voiceFeedbackToast, { bottom: tabBarHeight + 80 }]}>
+          <Feather name="info" size={16} color={Colors.textInverse} />
+          <ThemedText variant="body" color={Colors.textInverse} style={styles.voiceFeedbackText}>
+            {voiceFeedback}
+          </ThemedText>
+        </View>
+      ) : null}
+
+      <Pressable
+        style={[styles.chatFab, { bottom: tabBarHeight + Spacing.lg + 64 }]}
+        onPress={() => navigation.navigate('TeamChat')}
+        testID="button-team-chat"
+      >
+        <Feather name="message-circle" size={22} color={Colors.textInverse} />
+      </Pressable>
+
+      <Animated.View style={[
+        styles.voiceFab,
+        { bottom: tabBarHeight + Spacing.lg, transform: [{ scale: pulseAnim }] },
+        voiceRecording ? styles.voiceFabRecording : null,
+      ]}>
+        <Pressable
+          style={styles.voiceFabInner}
+          onPress={handleVoiceCommand}
+          disabled={voiceProcessing}
+          testID="button-voice-command"
+        >
+          {voiceProcessing ? (
+            <ActivityIndicator size="small" color={Colors.textInverse} />
+          ) : (
+            <Feather
+              name={voiceRecording ? 'square' : 'mic'}
+              size={24}
+              color={Colors.textInverse}
+            />
+          )}
+        </Pressable>
+      </Animated.View>
+
+      {voiceRecording ? (
+        <View style={[styles.voiceRecordingLabel, { bottom: tabBarHeight + Spacing.lg + 60 }]}>
+          <ThemedText variant="caption" color={Colors.textInverse}>
+            Lyssnar...
+          </ThemedText>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -509,6 +878,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
   },
+  travelBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.sm,
+  },
+  travelText: {
+    fontSize: 10,
+  },
   badgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -550,5 +931,126 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
+  },
+  weatherCard: {
+    backgroundColor: Colors.surface,
+    paddingVertical: Spacing.md,
+  },
+  weatherRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  weatherMain: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  weatherDetails: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  weatherDetailItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  weatherWarnings: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
+  },
+  weatherWarningBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.warningLight,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+  },
+  breakBanner: {
+    backgroundColor: '#E8F8F5',
+    borderWidth: 1,
+    borderColor: Colors.secondaryLight,
+  },
+  breakBannerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  breakIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: 'rgba(23, 165, 137, 0.15)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  breakTextContainer: {
+    flex: 1,
+    gap: 2,
+  },
+  breakMessage: {
+    fontSize: FontSize.sm,
+    lineHeight: 18,
+  },
+  outerContainer: {
+    flex: 1,
+  },
+  chatFab: {
+    position: 'absolute',
+    right: Spacing.lg,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: Colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 4,
+  },
+  voiceFab: {
+    position: 'absolute',
+    right: Spacing.lg,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.primary,
+  },
+  voiceFabRecording: {
+    backgroundColor: Colors.danger,
+  },
+  voiceFabInner: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  voiceRecordingLabel: {
+    position: 'absolute',
+    right: Spacing.lg,
+    backgroundColor: Colors.danger,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+    alignSelf: 'flex-end',
+  },
+  voiceFeedbackToast: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingHorizontal: Spacing.lg,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+  },
+  voiceFeedbackText: {
+    flex: 1,
   },
 });

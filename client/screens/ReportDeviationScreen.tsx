@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { View, ScrollView, Pressable, TextInput, StyleSheet, ActivityIndicator, Platform, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, ScrollView, Pressable, TextInput, StyleSheet, ActivityIndicator, Platform, Image, Animated } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -13,6 +13,91 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { DEVIATION_CATEGORIES, DeviationCategory } from '../types';
 
+type Severity = 'low' | 'medium' | 'high' | 'critical';
+
+const SEVERITY_LABELS: Record<Severity, string> = {
+  low: 'Låg',
+  medium: 'Medel',
+  high: 'Hög',
+  critical: 'Kritisk',
+};
+
+const SEVERITY_COLORS: Record<Severity, string> = {
+  low: Colors.success,
+  medium: Colors.warning,
+  high: '#E67E22',
+  critical: Colors.danger,
+};
+
+function SkeletonLine({ width, height = 14, style }: { width: number | string; height?: number; style?: any }) {
+  const shimmer = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const anim = Animated.loop(
+      Animated.sequence([
+        Animated.timing(shimmer, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(shimmer, { toValue: 0, duration: 800, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  const opacity = shimmer.interpolate({ inputRange: [0, 1], outputRange: [0.3, 0.7] });
+
+  return (
+    <Animated.View
+      style={[
+        {
+          width: width as any,
+          height,
+          borderRadius: BorderRadius.sm,
+          backgroundColor: Colors.textMuted,
+          opacity,
+        },
+        style,
+      ]}
+    />
+  );
+}
+
+function AnalysisSkeleton() {
+  return (
+    <View style={styles.skeletonContainer}>
+      <View style={styles.skeletonHeader}>
+        <ActivityIndicator size="small" color={Colors.secondary} />
+        <ThemedText variant="caption" color={Colors.secondary}>
+          AI analyserar bilden...
+        </ThemedText>
+      </View>
+      <SkeletonLine width="90%" style={{ marginBottom: Spacing.sm }} />
+      <SkeletonLine width="75%" style={{ marginBottom: Spacing.sm }} />
+      <SkeletonLine width="60%" style={{ marginBottom: Spacing.md }} />
+      <View style={{ flexDirection: 'row', gap: Spacing.sm }}>
+        <SkeletonLine width={80} height={28} />
+        <SkeletonLine width={60} height={28} />
+      </View>
+    </View>
+  );
+}
+
+function ConfidenceBadge({ confidence }: { confidence: number }) {
+  const pct = Math.round(confidence * 100);
+  let color = Colors.danger;
+  if (pct >= 80) color = Colors.success;
+  else if (pct >= 60) color = Colors.warning;
+  else if (pct >= 40) color = '#E67E22';
+
+  return (
+    <View style={[styles.confidenceBadge, { borderColor: color }]}>
+      <Feather name="bar-chart-2" size={12} color={color} />
+      <ThemedText variant="caption" color={color}>
+        {pct}% säkerhet
+      </ThemedText>
+    </View>
+  );
+}
+
 export function ReportDeviationScreen({ route, navigation }: any) {
   const { orderId } = route.params;
   const headerHeight = useHeaderHeight();
@@ -21,10 +106,14 @@ export function ReportDeviationScreen({ route, navigation }: any) {
 
   const [category, setCategory] = useState<DeviationCategory | null>(null);
   const [description, setDescription] = useState('');
+  const [severity, setSeverity] = useState<Severity | null>(null);
   const [photoUri, setPhotoUri] = useState<string | null>(null);
   const [photoBase64, setPhotoBase64] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const [aiAccepted, setAiAccepted] = useState(false);
+  const hasAutoAnalyzed = useRef(false);
 
   const mutation = useMutation({
     mutationFn: async (data: any) => {
@@ -50,12 +139,20 @@ export function ReportDeviationScreen({ route, navigation }: any) {
     },
   });
 
+  useEffect(() => {
+    if (photoBase64 && !hasAutoAnalyzed.current) {
+      hasAutoAnalyzed.current = true;
+      handleAiAnalyze();
+    }
+  }, [photoBase64]);
+
   async function handleTakePhoto() {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         return;
       }
+      hasAutoAnalyzed.current = false;
       const result = await ImagePicker.launchCameraAsync({
         mediaTypes: ['images'],
         quality: 0.7,
@@ -74,6 +171,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
 
   async function handlePickPhoto() {
     try {
+      hasAutoAnalyzed.current = false;
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
         quality: 0.7,
@@ -94,6 +192,8 @@ export function ReportDeviationScreen({ route, navigation }: any) {
     if (!photoBase64) return;
     setIsAnalyzing(true);
     setAiSuggestion(null);
+    setAiConfidence(null);
+    setAiAccepted(false);
     try {
       const result = await apiRequest('POST', '/api/mobile/ai/analyze-image', {
         image: photoBase64,
@@ -105,6 +205,12 @@ export function ReportDeviationScreen({ route, navigation }: any) {
       if (result.suggestedDescription) {
         setDescription(result.suggestedDescription);
       }
+      if (result.suggestedSeverity && result.suggestedSeverity in SEVERITY_LABELS) {
+        setSeverity(result.suggestedSeverity as Severity);
+      }
+      if (typeof result.confidence === 'number') {
+        setAiConfidence(result.confidence);
+      }
       setAiSuggestion(result.description || null);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch {
@@ -114,9 +220,14 @@ export function ReportDeviationScreen({ route, navigation }: any) {
     }
   }
 
+  function handleAcceptAi() {
+    setAiAccepted(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  }
+
   function handleSubmit() {
     if (!category) return;
-    mutation.mutate({ category, description });
+    mutation.mutate({ category, description, severity });
   }
 
   return (
@@ -132,27 +243,24 @@ export function ReportDeviationScreen({ route, navigation }: any) {
       </ThemedText>
 
       <Card style={styles.photoSection}>
-        <ThemedText variant="label" style={styles.sectionLabel}>Foto (valfritt)</ThemedText>
+        <ThemedText variant="label" style={styles.sectionLabel}>Foto</ThemedText>
         {photoUri ? (
           <View>
             <Image source={{ uri: photoUri }} style={styles.photoPreview} />
             <View style={styles.photoActions}>
               <Pressable
-                style={styles.aiAnalyzeButton}
-                onPress={handleAiAnalyze}
+                style={styles.retryAnalyzeButton}
+                onPress={() => {
+                  hasAutoAnalyzed.current = false;
+                  handleAiAnalyze();
+                }}
                 disabled={isAnalyzing || !photoBase64}
-                testID="button-ai-analyze"
+                testID="button-ai-retry"
               >
-                {isAnalyzing ? (
-                  <ActivityIndicator size="small" color={Colors.textInverse} />
-                ) : (
-                  <>
-                    <Feather name="cpu" size={16} color={Colors.textInverse} />
-                    <ThemedText variant="caption" color={Colors.textInverse}>
-                      AI-analys
-                    </ThemedText>
-                  </>
-                )}
+                <Feather name="refresh-cw" size={14} color={Colors.secondary} />
+                <ThemedText variant="caption" color={Colors.secondary}>
+                  Analysera igen
+                </ThemedText>
               </Pressable>
               <Pressable
                 style={styles.removePhotoButton}
@@ -160,6 +268,9 @@ export function ReportDeviationScreen({ route, navigation }: any) {
                   setPhotoUri(null);
                   setPhotoBase64(null);
                   setAiSuggestion(null);
+                  setAiConfidence(null);
+                  setAiAccepted(false);
+                  hasAutoAnalyzed.current = false;
                 }}
                 testID="button-remove-photo"
               >
@@ -179,20 +290,66 @@ export function ReportDeviationScreen({ route, navigation }: any) {
             </Pressable>
           </View>
         )}
-        {aiSuggestion ? (
+        {isAnalyzing ? <AnalysisSkeleton /> : null}
+        {aiSuggestion && !isAnalyzing ? (
           <View style={styles.aiSuggestionBox}>
             <View style={styles.aiSuggestionHeader}>
               <Feather name="cpu" size={14} color={Colors.secondary} />
               <ThemedText variant="caption" color={Colors.secondary}>
                 AI-analys
               </ThemedText>
+              {aiConfidence !== null ? <ConfidenceBadge confidence={aiConfidence} /> : null}
             </View>
             <ThemedText variant="body" color={Colors.textSecondary} style={styles.aiSuggestionText}>
               {aiSuggestion}
             </ThemedText>
+            {!aiAccepted ? (
+              <Pressable
+                style={styles.acceptAiButton}
+                onPress={handleAcceptAi}
+                testID="button-accept-ai"
+              >
+                <Feather name="check-circle" size={16} color={Colors.textInverse} />
+                <ThemedText variant="caption" color={Colors.textInverse}>
+                  Acceptera AI-förslag
+                </ThemedText>
+              </Pressable>
+            ) : (
+              <View style={styles.acceptedBadge}>
+                <Feather name="check" size={14} color={Colors.success} />
+                <ThemedText variant="caption" color={Colors.success}>
+                  AI-förslag accepterat
+                </ThemedText>
+              </View>
+            )}
           </View>
         ) : null}
       </Card>
+
+      <ThemedText variant="label" style={styles.sectionLabel}>Allvarlighetsgrad</ThemedText>
+      <View style={styles.severityRow}>
+        {(Object.entries(SEVERITY_LABELS) as [Severity, string][]).map(([key, label]) => (
+          <Pressable
+            key={key}
+            style={[
+              styles.severityChip,
+              severity === key ? { backgroundColor: SEVERITY_COLORS[key], borderColor: SEVERITY_COLORS[key] } : null,
+            ]}
+            onPress={() => {
+              setSeverity(key);
+              Haptics.selectionAsync();
+            }}
+            testID={`button-severity-${key}`}
+          >
+            <ThemedText
+              variant="caption"
+              color={severity === key ? Colors.textInverse : Colors.text}
+            >
+              {label}
+            </ThemedText>
+          </Pressable>
+        ))}
+      </View>
 
       <ThemedText variant="label" style={styles.sectionLabel}>Kategori</ThemedText>
       <View style={styles.categoryGrid}>
@@ -280,14 +437,15 @@ const styles = StyleSheet.create({
     gap: Spacing.sm,
     justifyContent: 'flex-end',
   },
-  aiAnalyzeButton: {
+  retryAnalyzeButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: Spacing.xs,
-    backgroundColor: Colors.secondary,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
     borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: Colors.secondary,
   },
   removePhotoButton: {
     width: 32,
@@ -313,6 +471,18 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     borderColor: Colors.border,
   },
+  skeletonContainer: {
+    marginTop: Spacing.md,
+    backgroundColor: Colors.infoLight,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.md,
+  },
+  skeletonHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
   aiSuggestionBox: {
     marginTop: Spacing.md,
     backgroundColor: Colors.infoLight,
@@ -324,9 +494,51 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.xs,
     marginBottom: Spacing.xs,
+    flexWrap: 'wrap',
   },
   aiSuggestionText: {
     lineHeight: 20,
+    marginBottom: Spacing.md,
+  },
+  confidenceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderWidth: 1,
+    borderRadius: BorderRadius.round,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    marginLeft: 'auto',
+  },
+  acceptAiButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.secondary,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    borderRadius: BorderRadius.md,
+  },
+  acceptedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.xs,
+  },
+  severityRow: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginBottom: Spacing.xl,
+  },
+  severityChip: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
   },
   categoryGrid: {
     flexDirection: 'row',

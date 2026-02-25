@@ -11,6 +11,7 @@ import { CameraCaptureScreen } from '../screens/CameraCaptureScreen';
 import { SignatureScreen } from '../screens/SignatureScreen';
 import { InspectionScreen } from '../screens/InspectionScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { TeamChatScreen } from '../screens/TeamChatScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 
@@ -71,6 +72,11 @@ export function RootNavigator() {
             name="Settings"
             component={SettingsScreen}
             options={{ headerTitle: 'Inställningar' }}
+          />
+          <Stack.Screen
+            name="TeamChat"
+            component={TeamChatScreen}
+            options={{ headerTitle: 'Teamchat' }}
           />
         </>
       ) : (

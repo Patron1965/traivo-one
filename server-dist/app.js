@@ -377,9 +377,9 @@ var MOCK_CHECKLIST_TEMPLATES = {
     name: "K\xE4rlkontroll",
     articleType: "K\xE4rl",
     questions: [
-      { id: "q1", text: "\xC4r k\xE4rlet skadat?", type: "boolean" },
-      { id: "q2", text: "\xC4r k\xE4rlet \xF6verfyllt?", type: "boolean" },
-      { id: "q3", text: "Finns felsortering?", type: "boolean" },
+      { id: "q1", text: "\xC4r k\xE4rlet skadat?", type: "boolean", photoRequired: true, photoType: "before_after" },
+      { id: "q2", text: "\xC4r k\xE4rlet \xF6verfyllt?", type: "boolean", photoRequired: true, photoType: "single" },
+      { id: "q3", text: "Finns felsortering?", type: "boolean", photoRequired: true, photoType: "single" },
       { id: "q4", text: "Tillg\xE4nglighet", type: "select", options: ["Bra", "Begr\xE4nsad", "Blockerad"] },
       { id: "q5", text: "Kommentar", type: "text" }
     ]
@@ -389,8 +389,8 @@ var MOCK_CHECKLIST_TEMPLATES = {
     name: "Containerkontroll",
     articleType: "Container",
     questions: [
-      { id: "q1", text: "\xC4r containern skadad?", type: "boolean" },
-      { id: "q2", text: "Finns l\xE4ckage?", type: "boolean" },
+      { id: "q1", text: "\xC4r containern skadad?", type: "boolean", photoRequired: true, photoType: "before_after" },
+      { id: "q2", text: "Finns l\xE4ckage?", type: "boolean", photoRequired: true, photoType: "single" },
       { id: "q3", text: "Fyllnadsgrad", type: "select", options: ["Under 50%", "50-75%", "75-100%", "\xD6verfylld"] },
       { id: "q4", text: "Kommentar", type: "text" }
     ]
@@ -400,13 +400,20 @@ var MOCK_CHECKLIST_TEMPLATES = {
     name: "Komprimatorkontroll",
     articleType: "Komprimator",
     questions: [
-      { id: "q1", text: "Fungerar komprimatorn?", type: "boolean" },
-      { id: "q2", text: "Finns hydraulikl\xE4ckage?", type: "boolean" },
+      { id: "q1", text: "Fungerar komprimatorn?", type: "boolean", photoRequired: true, photoType: "single" },
+      { id: "q2", text: "Finns hydraulikl\xE4ckage?", type: "boolean", photoRequired: true, photoType: "single" },
       { id: "q3", text: "Fyllnadsgrad", type: "select", options: ["Under 50%", "50-75%", "75-100%", "\xD6verfylld"] },
       { id: "q4", text: "Kommentar", type: "text" }
     ]
   }
 };
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 function mapKinabStatus(kinabStatus, orderStatus) {
   const statusMap = {
     "draft": "planned",
@@ -1136,13 +1143,23 @@ router.get("/summary", async (req, res) => {
     const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const todayOrders = MOCK_ORDERS.filter((o) => o.scheduledDate === today);
     const remaining = todayOrders.filter((o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "failed");
+    let totalDistance = 0;
+    const sortedOrders = [...todayOrders].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (let i = 1; i < sortedOrders.length; i++) {
+      const prev = sortedOrders[i - 1];
+      const curr = sortedOrders[i];
+      if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
+        totalDistance += haversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+      }
+    }
     res.json({
       totalOrders: todayOrders.length,
       completedOrders: todayOrders.filter((o) => o.status === "completed").length,
       remainingOrders: remaining.length,
       failedOrders: todayOrders.filter((o) => o.status === "failed").length,
       totalDuration: todayOrders.reduce((sum, o) => sum + o.estimatedDuration, 0),
-      estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0)
+      estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0),
+      totalDistance: Math.round(totalDistance * 10) / 10
     });
     return;
   }
@@ -1181,6 +1198,47 @@ router.get("/summary", async (req, res) => {
     }
   } catch {
     res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
+  }
+});
+router.get("/team-chat", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM team_messages ORDER BY created_at DESC LIMIT 50"
+    );
+    res.json(result.rows.reverse());
+  } catch (error) {
+    console.error("Team chat fetch error:", error.message);
+    res.json([]);
+  }
+});
+router.post("/team-chat", async (req, res) => {
+  const io2 = req.app.io;
+  const { message } = req.body;
+  if (!message || !message.trim()) {
+    res.status(400).json({ error: "Meddelandet f\xE5r inte vara tomt" });
+    return;
+  }
+  const token = req.headers.authorization?.replace("Bearer ", "") || "";
+  let senderId = "unknown";
+  let senderName = "Ok\xE4nd";
+  if (IS_MOCK_MODE) {
+    if (token === MOCK_TOKEN) {
+      senderId = String(MOCK_RESOURCE.id);
+      senderName = MOCK_RESOURCE.name;
+    }
+  }
+  try {
+    const result = await pool.query(
+      "INSERT INTO team_messages (sender_id, sender_name, message) VALUES ($1, $2, $3) RETURNING *",
+      [senderId, senderName, message.trim()]
+    );
+    if (io2) {
+      io2.emit("team:message", result.rows[0]);
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Team chat send error:", error.message);
+    res.status(500).json({ error: "Kunde inte skicka meddelande" });
   }
 });
 
@@ -1258,15 +1316,85 @@ router2.post("/transcribe", async (req, res) => {
     res.status(500).json({ error: "Kunde inte transkribera ljudet" });
   }
 });
+router2.post("/voice-command", async (req, res) => {
+  try {
+    const { audio } = req.body;
+    if (!audio) {
+      return res.status(400).json({ error: "Ljuddata kr\xE4vs" });
+    }
+    const audioBuffer = Buffer.from(audio, "base64");
+    const file = await (0, import_openai.toFile)(audioBuffer, "audio.webm");
+    const transcription = await openai.audio.transcriptions.create({
+      file,
+      model: "gpt-4o-mini-transcribe"
+    });
+    const spokenText = transcription.text;
+    const classifyPrompt = `Du \xE4r en r\xF6stkommandotolk f\xF6r en f\xE4ltservice-app (avfallshantering/logistik). Analysera f\xF6ljande transkriberad text och klassificera vilken \xE5tg\xE4rd anv\xE4ndaren vill utf\xF6ra.
+
+M\xF6jliga kommandon:
+1. "navigate_orders" - Anv\xE4ndaren vill se sina jobb/ordrar/uppdrag (t.ex. "Visa mina jobb", "Visa ordrar", "Mina uppdrag")
+2. "start_next" - Anv\xE4ndaren vill starta n\xE4sta jobb (t.ex. "Starta n\xE4sta jobb", "B\xF6rja n\xE4sta uppdrag", "Starta")
+3. "report_deviation" - Anv\xE4ndaren vill rapportera en avvikelse (t.ex. "Rapportera avvikelse", "Anm\xE4l problem", "Rapportera fel")
+4. "on_site" - Anv\xE4ndaren har anl\xE4nt till platsen (t.ex. "Jag \xE4r p\xE5 plats", "Framme", "Ankommit")
+5. "unknown" - Kommandot kunde inte tolkas
+
+Svara ENBART i JSON-format:
+{
+  "action": "en_av_ovanst\xE5ende",
+  "transcript": "den transkriberade texten",
+  "confidence": 0.0-1.0,
+  "displayMessage": "kort bekr\xE4ftelsemeddelande p\xE5 svenska"
+}`;
+    const response = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      messages: [
+        { role: "system", content: classifyPrompt },
+        { role: "user", content: spokenText }
+      ]
+    });
+    const content = response.choices[0]?.message?.content || "";
+    try {
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        res.json({
+          action: parsed.action || "unknown",
+          transcript: parsed.transcript || spokenText,
+          confidence: parsed.confidence || 0,
+          displayMessage: parsed.displayMessage || "Kommandot kunde inte tolkas."
+        });
+      } else {
+        res.json({
+          action: "unknown",
+          transcript: spokenText,
+          confidence: 0,
+          displayMessage: "Kommandot kunde inte tolkas."
+        });
+      }
+    } catch {
+      res.json({
+        action: "unknown",
+        transcript: spokenText,
+        confidence: 0,
+        displayMessage: "Kommandot kunde inte tolkas."
+      });
+    }
+  } catch (error) {
+    console.error("Voice command error:", error);
+    res.status(500).json({ error: "Kunde inte bearbeta r\xF6stkommandot" });
+  }
+});
 router2.post("/analyze-image", async (req, res) => {
   try {
     const { image, context } = req.body;
     if (!image) {
       return res.status(400).json({ error: "Bilddata kr\xE4vs" });
     }
-    const systemPrompt = `Du \xE4r en AI som analyserar foton fr\xE5n f\xE4ltservicearbete. Beskriv vad du ser, identifiera problem eller avvikelser, och f\xF6resl\xE5 en kategori och beskrivning f\xF6r avvikelserapporteringen.
+    const systemPrompt = `Du \xE4r en AI som analyserar foton fr\xE5n f\xE4ltservicearbete. Beskriv vad du ser, identifiera problem eller avvikelser, och f\xF6resl\xE5 en kategori, allvarlighetsgrad och beskrivning f\xF6r avvikelserapporteringen.
 
-Kategorier: broken_container, wrong_address, blocked_access, contamination, overfilled, missing_container, other
+Kategorier: broken_container, wrong_address, blocked_access, contamination, overfilled, missing_container, damaged_container, wrong_waste, overloaded, other
+
+Allvarlighetsgrader: low, medium, high, critical
 
 Svara alltid p\xE5 svenska.
 
@@ -1274,8 +1402,12 @@ Svara i f\xF6ljande JSON-format:
 {
   "description": "En beskrivning av vad du ser p\xE5 bilden",
   "suggestedCategory": "en_av_kategorierna_ovan",
-  "suggestedDescription": "En f\xF6reslagen beskrivning f\xF6r avvikelserapporten"
-}${context ? `
+  "suggestedDescription": "En f\xF6reslagen beskrivning f\xF6r avvikelserapporten",
+  "suggestedSeverity": "en_av_allvarlighetsgraderna_ovan",
+  "confidence": 0.85
+}
+
+confidence ska vara ett tal mellan 0 och 1 som anger hur s\xE4ker du \xE4r p\xE5 din analys.${context ? `
 
 Ytterligare kontext: ${context}` : ""}`;
     const response = await openai.chat.completions.create({
@@ -1299,20 +1431,26 @@ Ytterligare kontext: ${context}` : ""}`;
         res.json({
           description: parsed.description || content,
           suggestedCategory: parsed.suggestedCategory || "other",
-          suggestedDescription: parsed.suggestedDescription || content
+          suggestedDescription: parsed.suggestedDescription || content,
+          suggestedSeverity: parsed.suggestedSeverity || "medium",
+          confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5
         });
       } else {
         res.json({
           description: content,
           suggestedCategory: "other",
-          suggestedDescription: content
+          suggestedDescription: content,
+          suggestedSeverity: "medium",
+          confidence: 0.5
         });
       }
     } catch {
       res.json({
         description: content,
         suggestedCategory: "other",
-        suggestedDescription: content
+        suggestedDescription: content,
+        suggestedSeverity: "medium",
+        confidence: 0.5
       });
     }
   } catch (error) {

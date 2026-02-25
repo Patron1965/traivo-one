@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, TextInput, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, TextInput, ActivityIndicator, Image, Platform } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
@@ -15,12 +16,20 @@ import {
   INSPECTION_STATUS_LABELS,
   type InspectionStatus,
   type InspectionItem,
+  type PhotoRequirement,
 } from '../types';
+
+interface CategoryPhotos {
+  photo?: string;
+  beforePhoto?: string;
+  afterPhoto?: string;
+}
 
 interface CategoryState {
   status: InspectionStatus;
   issues: string[];
   comment: string;
+  photos: CategoryPhotos;
 }
 
 export function InspectionScreen({ route, navigation }: any) {
@@ -33,7 +42,7 @@ export function InspectionScreen({ route, navigation }: any) {
   const [categories, setCategories] = useState<Record<string, CategoryState>>(() => {
     const init: Record<string, CategoryState> = {};
     INSPECTION_CATEGORIES.forEach(cat => {
-      init[cat.key] = { status: 'not_checked', issues: [], comment: '' };
+      init[cat.key] = { status: 'not_checked', issues: [], comment: '', photos: {} };
     });
     return init;
   });
@@ -76,14 +85,112 @@ export function InspectionScreen({ route, navigation }: any) {
     }));
   }
 
-  function handleSave() {
-    const inspections: InspectionItem[] = INSPECTION_CATEGORIES.map((cat, idx) => ({
-      id: idx + 1,
-      category: cat.key,
-      status: categories[cat.key].status,
-      issues: categories[cat.key].issues,
-      comment: categories[cat.key].comment,
+  async function capturePhoto(categoryKey: string, photoSlot: 'photo' | 'beforePhoto' | 'afterPhoto') {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') return;
+
+    const result = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+      allowsEditing: false,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setCategories(prev => ({
+        ...prev,
+        [categoryKey]: {
+          ...prev[categoryKey],
+          photos: {
+            ...prev[categoryKey].photos,
+            [photoSlot]: result.assets[0].uri,
+          },
+        },
+      }));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  async function pickPhoto(categoryKey: string, photoSlot: 'photo' | 'beforePhoto' | 'afterPhoto') {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      quality: 0.7,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      setCategories(prev => ({
+        ...prev,
+        [categoryKey]: {
+          ...prev[categoryKey],
+          photos: {
+            ...prev[categoryKey].photos,
+            [photoSlot]: result.assets[0].uri,
+          },
+        },
+      }));
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    }
+  }
+
+  function removePhoto(categoryKey: string, photoSlot: 'photo' | 'beforePhoto' | 'afterPhoto') {
+    setCategories(prev => ({
+      ...prev,
+      [categoryKey]: {
+        ...prev[categoryKey],
+        photos: {
+          ...prev[categoryKey].photos,
+          [photoSlot]: undefined,
+        },
+      },
     }));
+  }
+
+  function isCategoryPhotoComplete(catKey: string): boolean {
+    const cat = INSPECTION_CATEGORIES.find(c => c.key === catKey);
+    if (!cat || !cat.photoRequired) return true;
+    const photos = categories[catKey].photos;
+    if (cat.photoType === 'single') {
+      return !!photos.photo;
+    }
+    if (cat.photoType === 'before_after') {
+      return !!photos.beforePhoto && !!photos.afterPhoto;
+    }
+    return true;
+  }
+
+  function getMissingPhotoCategories(): string[] {
+    return INSPECTION_CATEGORIES
+      .filter(cat => cat.photoRequired && categories[cat.key].status !== 'not_checked' && !isCategoryPhotoComplete(cat.key))
+      .map(cat => cat.label);
+  }
+
+  function handleSave() {
+    const missing = getMissingPhotoCategories();
+    if (missing.length > 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      return;
+    }
+
+    const inspections: InspectionItem[] = INSPECTION_CATEGORIES.map((cat, idx) => {
+      const state = categories[cat.key];
+      const photos: string[] = [];
+      if (state.photos.photo) photos.push(state.photos.photo);
+      if (state.photos.beforePhoto) photos.push(state.photos.beforePhoto);
+      if (state.photos.afterPhoto) photos.push(state.photos.afterPhoto);
+
+      return {
+        id: idx + 1,
+        category: cat.key,
+        status: state.status,
+        issues: state.issues,
+        comment: state.comment,
+        photos: photos.length > 0 ? photos : undefined,
+        beforePhoto: state.photos.beforePhoto,
+        afterPhoto: state.photos.afterPhoto,
+      };
+    });
     saveMutation.mutate(inspections);
   }
 
@@ -105,8 +212,105 @@ export function InspectionScreen({ route, navigation }: any) {
     }
   }
 
+  function renderPhotoSlot(
+    categoryKey: string,
+    photoSlot: 'photo' | 'beforePhoto' | 'afterPhoto',
+    label: string,
+  ) {
+    const uri = categories[categoryKey].photos[photoSlot];
+    return (
+      <View style={styles.photoSlotContainer}>
+        <ThemedText variant="caption" color={Colors.textSecondary} style={styles.photoSlotLabel}>
+          {label}
+        </ThemedText>
+        {uri ? (
+          <View style={styles.photoPreviewContainer}>
+            <Image source={{ uri }} style={styles.photoPreview} />
+            <Pressable
+              style={styles.photoRemoveBtn}
+              onPress={() => removePhoto(categoryKey, photoSlot)}
+              testID={`button-remove-photo-${categoryKey}-${photoSlot}`}
+            >
+              <Feather name="x" size={12} color={Colors.textInverse} />
+            </Pressable>
+            <View style={styles.photoCheckmark}>
+              <Feather name="check-circle" size={16} color={Colors.success} />
+            </View>
+          </View>
+        ) : (
+          <View style={styles.photoCaptureRow}>
+            <Pressable
+              style={styles.photoCaptureBtn}
+              onPress={() => capturePhoto(categoryKey, photoSlot)}
+              testID={`button-capture-${categoryKey}-${photoSlot}`}
+            >
+              <Feather name="camera" size={20} color={Colors.primary} />
+              <ThemedText variant="caption" color={Colors.primary}>Ta foto</ThemedText>
+            </Pressable>
+            {Platform.OS !== 'web' ? (
+              <Pressable
+                style={styles.photoPickBtn}
+                onPress={() => pickPhoto(categoryKey, photoSlot)}
+                testID={`button-pick-${categoryKey}-${photoSlot}`}
+              >
+                <Feather name="image" size={16} color={Colors.textSecondary} />
+              </Pressable>
+            ) : null}
+          </View>
+        )}
+      </View>
+    );
+  }
+
+  function renderPhotoSection(catKey: string, photoType: PhotoRequirement, isRequired: boolean) {
+    if (photoType === 'none') return null;
+
+    const isComplete = isCategoryPhotoComplete(catKey);
+    const hasChecked = categories[catKey].status !== 'not_checked';
+
+    return (
+      <View style={styles.photoSection}>
+        <View style={styles.photoSectionHeader}>
+          <View style={styles.photoSectionTitleRow}>
+            <Feather name="camera" size={14} color={isRequired ? Colors.primary : Colors.textSecondary} />
+            <ThemedText variant="label" color={isRequired ? Colors.primary : Colors.textSecondary}>
+              Foto {isRequired ? '(obligatoriskt)' : '(valfritt)'}
+            </ThemedText>
+          </View>
+          {hasChecked && isRequired ? (
+            isComplete ? (
+              <View style={[styles.photoStatusBadge, { backgroundColor: Colors.successLight }]}>
+                <Feather name="check" size={12} color={Colors.success} />
+                <ThemedText variant="caption" color={Colors.success}>Klart</ThemedText>
+              </View>
+            ) : (
+              <View style={[styles.photoStatusBadge, { backgroundColor: Colors.warningLight }]}>
+                <Feather name="alert-triangle" size={12} color={Colors.warning} />
+                <ThemedText variant="caption" color={Colors.warning}>Saknas</ThemedText>
+              </View>
+            )
+          ) : null}
+        </View>
+
+        {photoType === 'single' ? (
+          renderPhotoSlot(catKey, 'photo', 'Foto')
+        ) : (
+          <View style={styles.beforeAfterRow}>
+            {renderPhotoSlot(catKey, 'beforePhoto', 'Före')}
+            <View style={styles.beforeAfterDivider}>
+              <Feather name="arrow-right" size={16} color={Colors.textMuted} />
+            </View>
+            {renderPhotoSlot(catKey, 'afterPhoto', 'Efter')}
+          </View>
+        )}
+      </View>
+    );
+  }
+
   const checkedCount = Object.values(categories).filter(c => c.status !== 'not_checked').length;
   const hasIssues = Object.values(categories).some(c => c.status === 'warning' || c.status === 'error');
+  const missingPhotos = getMissingPhotoCategories();
+  const canSave = missingPhotos.length === 0;
 
   return (
     <View style={styles.container}>
@@ -127,6 +331,7 @@ export function InspectionScreen({ route, navigation }: any) {
           const state = categories[cat.key];
           const isExpanded = expandedCategory === cat.key;
           const issues = INSPECTION_ISSUES[cat.key] || [];
+          const photoMissing = cat.photoRequired && state.status !== 'not_checked' && !isCategoryPhotoComplete(cat.key);
 
           return (
             <Card key={cat.key} style={StyleSheet.flatten([styles.categoryCard, { borderLeftColor: getStatusColor(state.status), borderLeftWidth: 3 }])}>
@@ -138,6 +343,9 @@ export function InspectionScreen({ route, navigation }: any) {
                 <View style={styles.categoryTitleRow}>
                   <Feather name={cat.icon as any} size={18} color={Colors.primary} />
                   <ThemedText variant="subheading">{cat.label}</ThemedText>
+                  {cat.photoRequired ? (
+                    <Feather name="camera" size={14} color={photoMissing ? Colors.warning : Colors.textMuted} />
+                  ) : null}
                 </View>
                 <View style={styles.categoryHeaderRight}>
                   {state.status !== 'not_checked' ? (
@@ -210,6 +418,8 @@ export function InspectionScreen({ route, navigation }: any) {
                     </>
                   ) : null}
 
+                  {renderPhotoSection(cat.key, cat.photoType, cat.photoRequired)}
+
                   <ThemedText variant="label" style={styles.bodyLabel}>Kommentar</ThemedText>
                   <TextInput
                     style={styles.commentInput}
@@ -237,11 +447,19 @@ export function InspectionScreen({ route, navigation }: any) {
               </ThemedText>
             </View>
           ) : null}
+          {missingPhotos.length > 0 ? (
+            <View style={styles.issueWarning}>
+              <Feather name="camera" size={14} color={Colors.danger} />
+              <ThemedText variant="caption" color={Colors.danger}>
+                Foto saknas: {missingPhotos.join(', ')}
+              </ThemedText>
+            </View>
+          ) : null}
         </View>
         <Pressable
-          style={[styles.saveButton, saveMutation.isPending ? styles.saveButtonDisabled : null]}
+          style={[styles.saveButton, (saveMutation.isPending || !canSave) ? styles.saveButtonDisabled : null]}
           onPress={handleSave}
-          disabled={saveMutation.isPending}
+          disabled={saveMutation.isPending || !canSave}
           testID="button-save-inspection"
         >
           {saveMutation.isPending ? (
@@ -355,6 +573,107 @@ const styles = StyleSheet.create({
     maxHeight: 100,
     textAlignVertical: 'top',
   },
+  photoSection: {
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+  },
+  photoSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: Spacing.sm,
+  },
+  photoSectionTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  photoStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: BorderRadius.round,
+  },
+  photoSlotContainer: {
+    flex: 1,
+  },
+  photoSlotLabel: {
+    marginBottom: Spacing.xs,
+    textAlign: 'center',
+  },
+  photoPreviewContainer: {
+    position: 'relative',
+    width: '100%',
+    aspectRatio: 1,
+    borderRadius: BorderRadius.md,
+    overflow: 'hidden',
+  },
+  photoPreview: {
+    width: '100%',
+    height: '100%',
+  },
+  photoRemoveBtn: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  photoCheckmark: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(255,255,255,0.9)',
+    borderRadius: 10,
+    padding: 2,
+  },
+  photoCaptureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  photoCaptureBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.surface,
+    borderWidth: 2,
+    borderColor: Colors.primaryLight,
+    borderStyle: 'dashed',
+    minHeight: 80,
+  },
+  photoPickBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: BorderRadius.md,
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  beforeAfterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  beforeAfterDivider: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingTop: Spacing.lg,
+  },
   bottomBar: {
     position: 'absolute',
     bottom: 0,
@@ -368,6 +687,7 @@ const styles = StyleSheet.create({
   },
   bottomInfo: {
     marginBottom: Spacing.sm,
+    gap: Spacing.xs,
   },
   issueWarning: {
     flexDirection: 'row',

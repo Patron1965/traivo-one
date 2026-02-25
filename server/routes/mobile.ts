@@ -345,9 +345,9 @@ const MOCK_CHECKLIST_TEMPLATES: Record<string, any> = {
     name: 'Kärlkontroll',
     articleType: 'Kärl',
     questions: [
-      { id: 'q1', text: 'Är kärlet skadat?', type: 'boolean' },
-      { id: 'q2', text: 'Är kärlet överfyllt?', type: 'boolean' },
-      { id: 'q3', text: 'Finns felsortering?', type: 'boolean' },
+      { id: 'q1', text: 'Är kärlet skadat?', type: 'boolean', photoRequired: true, photoType: 'before_after' },
+      { id: 'q2', text: 'Är kärlet överfyllt?', type: 'boolean', photoRequired: true, photoType: 'single' },
+      { id: 'q3', text: 'Finns felsortering?', type: 'boolean', photoRequired: true, photoType: 'single' },
       { id: 'q4', text: 'Tillgänglighet', type: 'select', options: ['Bra', 'Begränsad', 'Blockerad'] },
       { id: 'q5', text: 'Kommentar', type: 'text' },
     ],
@@ -357,8 +357,8 @@ const MOCK_CHECKLIST_TEMPLATES: Record<string, any> = {
     name: 'Containerkontroll',
     articleType: 'Container',
     questions: [
-      { id: 'q1', text: 'Är containern skadad?', type: 'boolean' },
-      { id: 'q2', text: 'Finns läckage?', type: 'boolean' },
+      { id: 'q1', text: 'Är containern skadad?', type: 'boolean', photoRequired: true, photoType: 'before_after' },
+      { id: 'q2', text: 'Finns läckage?', type: 'boolean', photoRequired: true, photoType: 'single' },
       { id: 'q3', text: 'Fyllnadsgrad', type: 'select', options: ['Under 50%', '50-75%', '75-100%', 'Överfylld'] },
       { id: 'q4', text: 'Kommentar', type: 'text' },
     ],
@@ -368,13 +368,23 @@ const MOCK_CHECKLIST_TEMPLATES: Record<string, any> = {
     name: 'Komprimatorkontroll',
     articleType: 'Komprimator',
     questions: [
-      { id: 'q1', text: 'Fungerar komprimatorn?', type: 'boolean' },
-      { id: 'q2', text: 'Finns hydraulikläckage?', type: 'boolean' },
+      { id: 'q1', text: 'Fungerar komprimatorn?', type: 'boolean', photoRequired: true, photoType: 'single' },
+      { id: 'q2', text: 'Finns hydraulikläckage?', type: 'boolean', photoRequired: true, photoType: 'single' },
       { id: 'q3', text: 'Fyllnadsgrad', type: 'select', options: ['Under 50%', '50-75%', '75-100%', 'Överfylld'] },
       { id: 'q4', text: 'Kommentar', type: 'text' },
     ],
   },
 };
+
+function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 function mapKinabStatus(kinabStatus: string, orderStatus?: string): string {
   const statusMap: Record<string, string> = {
@@ -1045,6 +1055,17 @@ router.get('/summary', async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const todayOrders = MOCK_ORDERS.filter(o => o.scheduledDate === today);
     const remaining = todayOrders.filter(o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'failed');
+
+    let totalDistance = 0;
+    const sortedOrders = [...todayOrders].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (let i = 1; i < sortedOrders.length; i++) {
+      const prev = sortedOrders[i - 1];
+      const curr = sortedOrders[i];
+      if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
+        totalDistance += haversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+      }
+    }
+
     res.json({
       totalOrders: todayOrders.length,
       completedOrders: todayOrders.filter(o => o.status === 'completed').length,
@@ -1052,6 +1073,7 @@ router.get('/summary', async (req, res) => {
       failedOrders: todayOrders.filter(o => o.status === 'failed').length,
       totalDuration: todayOrders.reduce((sum, o) => sum + o.estimatedDuration, 0),
       estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0),
+      totalDistance: Math.round(totalDistance * 10) / 10,
     });
     return;
   }
@@ -1088,6 +1110,49 @@ router.get('/summary', async (req, res) => {
     }
   } catch {
     res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
+  }
+});
+
+router.get('/team-chat', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM team_messages ORDER BY created_at DESC LIMIT 50'
+    );
+    res.json(result.rows.reverse());
+  } catch (error: any) {
+    console.error('Team chat fetch error:', error.message);
+    res.json([]);
+  }
+});
+
+router.post('/team-chat', async (req, res) => {
+  const io = (req.app as any).io;
+  const { message } = req.body;
+  if (!message || !message.trim()) {
+    res.status(400).json({ error: 'Meddelandet får inte vara tomt' });
+    return;
+  }
+  const token = req.headers.authorization?.replace('Bearer ', '') || '';
+  let senderId = 'unknown';
+  let senderName = 'Okänd';
+  if (IS_MOCK_MODE) {
+    if (token === MOCK_TOKEN) {
+      senderId = String(MOCK_RESOURCE.id);
+      senderName = MOCK_RESOURCE.name;
+    }
+  }
+  try {
+    const result = await pool.query(
+      'INSERT INTO team_messages (sender_id, sender_name, message) VALUES ($1, $2, $3) RETURNING *',
+      [senderId, senderName, message.trim()]
+    );
+    if (io) {
+      io.emit('team:message', result.rows[0]);
+    }
+    res.json(result.rows[0]);
+  } catch (error: any) {
+    console.error('Team chat send error:', error.message);
+    res.status(500).json({ error: 'Kunde inte skicka meddelande' });
   }
 });
 
