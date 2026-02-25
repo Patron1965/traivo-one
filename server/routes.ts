@@ -7991,6 +7991,187 @@ setInterval(loadRoutes, 30000);
     }
   });
 
+  // Tenant Onboarding - Create new tenant with package and admin user
+  app.post("/api/system/onboard-tenant", requireAdmin, async (req, res) => {
+    try {
+      const { company, industryPackageId, adminUser } = req.body;
+      const currentUserId = (req.user as any)?.id;
+
+      if (!company?.name) {
+        return res.status(400).json({ error: "Företagsnamn krävs" });
+      }
+      if (!adminUser?.email || !adminUser?.password) {
+        return res.status(400).json({ error: "E-post och lösenord krävs för admin-användaren" });
+      }
+
+      const existingUser = await storage.getUserByUsername(adminUser.email);
+      if (existingUser) {
+        return res.status(409).json({ error: "En användare med den e-postadressen finns redan" });
+      }
+
+      const tenantId = `tenant-${Date.now()}`;
+      const tenant = await storage.createTenant({
+        id: tenantId,
+        name: company.name,
+        orgNumber: company.orgNumber || null,
+        contactEmail: company.contactEmail || null,
+        contactPhone: company.contactPhone || null,
+        industry: company.industry || null,
+      });
+
+      let packageSummary = null;
+      if (industryPackageId) {
+        const pkg = await storage.getIndustryPackage(industryPackageId);
+        if (pkg) {
+          const packageData = await storage.getIndustryPackageData(industryPackageId);
+          let articlesInstalled = 0;
+          let metadataInstalled = 0;
+          let structuralArticlesInstalled = 0;
+
+          const articlesData = packageData.find(d => d.dataType === "articles");
+          if (articlesData && Array.isArray(articlesData.data)) {
+            for (const article of articlesData.data as any[]) {
+              try {
+                await storage.createArticle({
+                  tenantId,
+                  articleNumber: article.articleNumber,
+                  name: article.name,
+                  description: article.description,
+                  articleType: article.articleType,
+                  unitPrice: article.unitPrice?.toString(),
+                  unit: article.unit,
+                  objectTypes: article.objectTypes,
+                });
+                articlesInstalled++;
+              } catch (err) {
+                console.warn(`Skipping duplicate article ${article.articleNumber}:`, err);
+              }
+            }
+          }
+
+          const metadataData = packageData.find(d => d.dataType === "metadataDefinitions");
+          if (metadataData && Array.isArray(metadataData.data)) {
+            for (const meta of metadataData.data as any[]) {
+              try {
+                await storage.createMetadataDefinition({
+                  tenantId,
+                  fieldKey: meta.fieldKey,
+                  fieldLabel: meta.fieldLabel,
+                  dataType: meta.dataType,
+                  objectTypes: meta.objectTypes,
+                  propagationType: meta.propagationType,
+                  isRequired: meta.isRequired,
+                  description: meta.description,
+                  defaultValue: meta.defaultValue,
+                  validationRules: meta.validationRules,
+                });
+                metadataInstalled++;
+              } catch (err) {
+                console.warn(`Skipping duplicate metadata ${meta.fieldKey}:`, err);
+              }
+            }
+          }
+
+          const structuralData = packageData.find(d => d.dataType === "structuralArticles");
+          if (structuralData && Array.isArray(structuralData.data)) {
+            const tenantArticles = await storage.getArticles(tenantId);
+            const articleMap = new Map(tenantArticles.map(a => [a.articleNumber, a.id]));
+            for (const sa of structuralData.data as any[]) {
+              try {
+                const parentId = articleMap.get(sa.parentArticleNumber);
+                const childId = articleMap.get(sa.childArticleNumber);
+                if (parentId && childId) {
+                  await storage.createStructuralArticle({
+                    tenantId,
+                    parentArticleId: parentId,
+                    childArticleId: childId,
+                    sequenceOrder: sa.sequenceOrder || 1,
+                    quantity: sa.quantity?.toString() || "1",
+                    isConditional: sa.isConditional || false,
+                    conditionType: sa.conditionType,
+                    conditionValue: sa.conditionValue,
+                  });
+                  structuralArticlesInstalled++;
+                }
+              } catch (err) {
+                console.warn(`Skipping structural article:`, err);
+              }
+            }
+          }
+
+          await storage.createTenantPackageInstallation({
+            tenantId,
+            packageId: industryPackageId,
+            installedBy: currentUserId,
+            articlesInstalled,
+            metadataInstalled,
+            structuralArticlesInstalled,
+            status: "completed",
+          });
+
+          packageSummary = {
+            packageName: pkg.name,
+            articlesInstalled,
+            metadataInstalled,
+            structuralArticlesInstalled,
+          };
+        }
+      }
+
+      const hashedPassword = hashPassword(adminUser.password);
+      const user = await storage.createUser({
+        email: adminUser.email,
+        firstName: adminUser.firstName || null,
+        lastName: adminUser.lastName || null,
+        passwordHash: hashedPassword,
+        role: "admin",
+        isActive: true,
+      });
+
+      await storage.createUserTenantRole({
+        userId: user.id,
+        tenantId,
+        role: "owner",
+        assignedBy: currentUserId,
+      });
+
+      await storage.createAuditLog({
+        tenantId,
+        userId: currentUserId,
+        action: "onboard_tenant",
+        resourceType: "tenant",
+        resourceId: tenantId,
+        changes: {
+          companyName: company.name,
+          adminEmail: adminUser.email,
+          packageInstalled: packageSummary?.packageName || null,
+        },
+      });
+
+      console.log(`[onboarding] New tenant "${company.name}" (${tenantId}) created with admin "${adminUser.email}"`);
+
+      res.status(201).json({
+        success: true,
+        tenant: {
+          id: tenant.id,
+          name: tenant.name,
+          orgNumber: tenant.orgNumber,
+          industry: tenant.industry,
+        },
+        adminUser: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        },
+        packageSummary,
+      });
+    } catch (error) {
+      console.error("Failed to onboard tenant:", error);
+      res.status(500).json({ error: "Kunde inte skapa företagskonto" });
+    }
+  });
+
   // Industry Packages - Seed default packages (admin only, one-time setup)
   app.post("/api/system/industry-packages/seed", requireAdmin, async (req, res) => {
     try {

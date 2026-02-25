@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { 
   Calendar, Map, Upload, FileText, Users, Truck, 
-  ClipboardList, Receipt, BarChart3, Settings2, Layers, Sparkles
+  ClipboardList, Receipt, BarChart3, Settings2, Layers, Sparkles, Building2
 } from "lucide-react";
 
 const quickLinks = [
@@ -18,6 +18,7 @@ const quickLinks = [
   { title: "AI-optimering", url: "/optimization", icon: Sparkles },
   { title: "Import", url: "/import", icon: Upload },
   { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2 },
+  { title: "Nytt företag", url: "/onboarding", icon: Building2 },
   { title: "Prislistor", url: "/price-lists", icon: FileText },
 ];
 

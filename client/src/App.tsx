@@ -28,6 +28,7 @@ import OrderStockPage from "@/pages/OrderStockPage";
 import VehiclesPage from "@/pages/VehiclesPage";
 import SubscriptionsPage from "@/pages/SubscriptionsPage";
 import PlanningParametersPage from "@/pages/PlanningParametersPage";
+import OnboardingWizardPage from "@/pages/OnboardingWizardPage";
 import SystemOverviewPage from "@/pages/SystemOverviewPage";
 import ClustersPage from "@/pages/ClustersPage";
 import ClusterDetailPage from "@/pages/ClusterDetailPage";
@@ -149,6 +150,7 @@ function Router() {
       <Route path="/historical-map" component={HistoricalMapPage} />
       <Route path="/checklist-templates" component={ChecklistTemplatesPage} />
       <Route path="/tenant-config" component={TenantConfigPage} />
+      <Route path="/onboarding" component={OnboardingWizardPage} />
       <Route component={NotFound} />
     </Switch>
   );

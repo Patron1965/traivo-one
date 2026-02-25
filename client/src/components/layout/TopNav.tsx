@@ -100,6 +100,7 @@ const systemItems = [
   { title: "Arkitektur", url: "/architecture", icon: Network, description: "Systemöversikt" },
   { title: "Användarhantering", url: "/user-management", icon: Users, description: "Hantera användare och roller" },
   { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2, description: "Företag, artiklar, koder" },
+  { title: "Nytt företagskonto", url: "/onboarding", icon: Building2, description: "Skapa ny kund/företag" },
   { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
 ];
 

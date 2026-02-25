@@ -58,6 +58,8 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup with 4 tabs: Företagsinfo (company details, org number, contact, industry), Artiklar & Exekveringskoder (inline execution code assignment on articles), Prislistor (overview with link to full management), Resurser & Behörigheter (toggle execution codes per resource). Includes setup completion progress indicator.
 - **Fleet Management:** Comprehensive fleet management page at `/fleet` with three tabs: Fordonsöversikt (vehicle dashboard with KPI cards, service/inspection status badges, per-vehicle fuel/maintenance summaries), Underhållsplanering (service urgency alerts, maintenance type chart, filterable maintenance history table with cost tracking), and Bränsleuppföljning (monthly fuel trend chart, fuel type distribution pie chart, per-vehicle consumption bar chart, filterable fuel log table). Backend: `fuel_logs` and `maintenance_logs` tables with full CRUD API endpoints including tenant ownership verification.
 
+- **Tenant Onboarding Wizard:** Admin wizard at `/onboarding` for creating new company accounts. 4-step flow: Company info (name, org number, contact, industry), Industry package selection (auto-installs articles/metadata), Admin user creation (owner role), and Summary with credentials. Backend endpoint `POST /api/system/onboard-tenant` handles atomic tenant+user+package creation.
+
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
 - **External Optimization:** Route optimization is offloaded to a separate Unicorn optimization service.
