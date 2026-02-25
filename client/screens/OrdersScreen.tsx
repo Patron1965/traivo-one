@@ -11,6 +11,8 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  withDelay,
+  withSequence,
   runOnJS,
   interpolate,
   Extrapolation,
@@ -25,8 +27,8 @@ import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus } from '../types';
 
-const SWIPE_THRESHOLD = 80;
-const ACTION_WIDTH = 90;
+const SWIPE_THRESHOLD = 60;
+const ACTION_WIDTH = 100;
 
 const FILTER_OPTIONS: { label: string; value: OrderStatus | 'all' }[] = [
   { label: 'Alla', value: 'all' },
@@ -126,8 +128,8 @@ function SwipeableOrderCard({
   }, []);
 
   const pan = Gesture.Pan()
-    .activeOffsetX([-15, 15])
-    .failOffsetY([-10, 10])
+    .activeOffsetX([-20, 20])
+    .failOffsetY([-15, 15])
     .enabled(swipeable)
     .onUpdate((e) => {
       const clampedX = Math.max(-ACTION_WIDTH, Math.min(ACTION_WIDTH, e.translationX));
@@ -135,13 +137,17 @@ function SwipeableOrderCard({
     })
     .onEnd((e) => {
       if (e.translationX > SWIPE_THRESHOLD && nextStatus) {
-        translateX.value = withTiming(ACTION_WIDTH, { duration: 200 });
+        translateX.value = withSequence(
+          withTiming(ACTION_WIDTH, { duration: 150 }),
+          withDelay(100, withTiming(0, { duration: 250 }))
+        );
         runOnJS(handleAdvance)();
-        translateX.value = withTiming(0, { duration: 300 });
       } else if (e.translationX < -SWIPE_THRESHOLD) {
-        translateX.value = withTiming(-ACTION_WIDTH, { duration: 200 });
+        translateX.value = withSequence(
+          withTiming(-ACTION_WIDTH, { duration: 150 }),
+          withDelay(100, withTiming(0, { duration: 250 }))
+        );
         runOnJS(handleDeviation)();
-        translateX.value = withTiming(0, { duration: 300 });
       } else {
         translateX.value = withSpring(0, { damping: 20, stiffness: 200 });
       }
