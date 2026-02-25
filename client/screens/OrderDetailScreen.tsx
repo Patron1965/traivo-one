@@ -54,11 +54,15 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const statusMutation = useMutation({
     mutationFn: (params: { status: OrderStatus; impossibleReason?: string }) =>
       apiRequest('PATCH', `/api/mobile/orders/${orderId}/status`, params),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      const finishStatuses: OrderStatus[] = ['completed', 'utford', 'fakturerad', 'impossible'];
+      if (finishStatuses.includes(variables.status)) {
+        navigation.navigate('MainTabs', { screen: 'OrdersTab' });
+      }
     },
     onError: () => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
