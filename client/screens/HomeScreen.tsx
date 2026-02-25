@@ -487,6 +487,30 @@ export function HomeScreen({ navigation }: any) {
         </Pressable>
       ) : null}
 
+      <Animated.View style={[
+        styles.voiceCommandRow,
+        voiceRecording ? styles.voiceCommandRowActive : null,
+        { transform: [{ scale: pulseAnim }] },
+      ]}>
+        <Pressable
+          style={styles.voiceCommandPressable}
+          onPress={handleVoiceCommand}
+          disabled={voiceProcessing}
+          testID="button-voice-command"
+        >
+          <View style={[styles.voiceIconCircle, voiceRecording ? styles.voiceIconCircleActive : null]}>
+            {voiceProcessing ? (
+              <ActivityIndicator size="small" color={Colors.textInverse} />
+            ) : (
+              <Feather name={voiceRecording ? 'square' : 'mic'} size={16} color={Colors.textInverse} />
+            )}
+          </View>
+          <ThemedText variant="caption" color={voiceRecording ? Colors.danger : Colors.textSecondary}>
+            {voiceRecording ? 'Lyssnar... tryck för att stoppa' : 'Röstkommando'}
+          </ThemedText>
+        </Pressable>
+      </Animated.View>
+
       <View style={styles.sectionHeader}>
         <ThemedText variant="subheading">
           Kommande uppdrag
@@ -632,36 +656,6 @@ export function HomeScreen({ navigation }: any) {
         </View>
       ) : null}
 
-      <Animated.View style={[
-        styles.voiceFab,
-        { bottom: tabBarHeight + Spacing.lg, transform: [{ scale: pulseAnim }] },
-        voiceRecording ? styles.voiceFabRecording : null,
-      ]}>
-        <Pressable
-          style={styles.voiceFabInner}
-          onPress={handleVoiceCommand}
-          disabled={voiceProcessing}
-          testID="button-voice-command"
-        >
-          {voiceProcessing ? (
-            <ActivityIndicator size="small" color={Colors.textInverse} />
-          ) : (
-            <Feather
-              name={voiceRecording ? 'square' : 'mic'}
-              size={24}
-              color={Colors.textInverse}
-            />
-          )}
-        </Pressable>
-      </Animated.View>
-
-      {voiceRecording ? (
-        <View style={[styles.voiceRecordingLabel, { bottom: tabBarHeight + Spacing.lg + 60 }]}>
-          <ThemedText variant="caption" color={Colors.textInverse}>
-            Lyssnar...
-          </ThemedText>
-        </View>
-      ) : null}
     </View>
   );
 }
@@ -995,30 +989,35 @@ const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
   },
-  voiceFab: {
-    position: 'absolute',
-    right: Spacing.lg,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: Colors.primary,
+  voiceCommandRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: Spacing.xs,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.surface,
+    overflow: 'hidden',
   },
-  voiceFabRecording: {
-    backgroundColor: Colors.danger,
+  voiceCommandRowActive: {
+    backgroundColor: '#FDF2F2',
   },
-  voiceFabInner: {
+  voiceCommandPressable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.md,
     flex: 1,
+  },
+  voiceIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  voiceRecordingLabel: {
-    position: 'absolute',
-    right: Spacing.lg,
+  voiceIconCircleActive: {
     backgroundColor: Colors.danger,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs,
-    borderRadius: BorderRadius.round,
-    alignSelf: 'flex-end',
   },
   voiceFeedbackToast: {
     position: 'absolute',
