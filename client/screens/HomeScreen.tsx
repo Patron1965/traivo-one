@@ -353,40 +353,15 @@ export function HomeScreen({ navigation }: any) {
         ) : null}
       </View>
 
-      {weather ? (
-        <Card style={styles.weatherCard}>
-          <View style={styles.weatherRow}>
-            <View style={styles.weatherMain}>
-              <Feather name={weather.icon as any} size={22} color={Colors.primaryLight} />
-              <ThemedText variant="subheading" color={Colors.primary}>
-                {weather.temperature}°
-              </ThemedText>
-              <ThemedText variant="body" color={Colors.textSecondary}>
-                {weather.description}
-              </ThemedText>
+      {weather && weather.warnings.length > 0 ? (
+        <View style={styles.weatherWarnings}>
+          {weather.warnings.map((w, i) => (
+            <View key={i} style={styles.weatherWarningBadge}>
+              <Feather name="alert-triangle" size={13} color={Colors.warning} />
+              <ThemedText variant="caption" color={Colors.warning}>{w}</ThemedText>
             </View>
-            <View style={styles.weatherDetails}>
-              <View style={styles.weatherDetailItem}>
-                <Feather name="wind" size={12} color={Colors.textSecondary} />
-                <ThemedText variant="caption">{weather.windSpeed} m/s</ThemedText>
-              </View>
-              <View style={styles.weatherDetailItem}>
-                <Feather name="thermometer" size={12} color={Colors.textSecondary} />
-                <ThemedText variant="caption">Känns {weather.feelsLike}°</ThemedText>
-              </View>
-            </View>
-          </View>
-          {weather.warnings.length > 0 ? (
-            <View style={styles.weatherWarnings}>
-              {weather.warnings.map((w, i) => (
-                <View key={i} style={styles.weatherWarningBadge}>
-                  <Feather name="alert-triangle" size={11} color={Colors.warning} />
-                  <ThemedText variant="caption" color={Colors.warning}>{w}</ThemedText>
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </Card>
+          ))}
+        </View>
       ) : null}
 
       <Card style={styles.progressCard}>
@@ -704,7 +679,7 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.secondary,
   },
   onlineDotInactive: {
-    backgroundColor: Colors.textSecondary,
+    backgroundColor: Colors.danger,
   },
   onlineLabel: {
     fontSize: 11,
@@ -919,37 +894,10 @@ const styles = StyleSheet.create({
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
   },
-  weatherCard: {
-    backgroundColor: Colors.surface,
-    paddingVertical: Spacing.md,
-  },
-  weatherRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  weatherMain: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  weatherDetails: {
-    flexDirection: 'row',
-    gap: Spacing.md,
-  },
-  weatherDetailItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
   weatherWarnings: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: Spacing.sm,
-    marginTop: Spacing.sm,
-    paddingTop: Spacing.sm,
-    borderTopWidth: 1,
-    borderTopColor: Colors.borderLight,
   },
   weatherWarningBadge: {
     flexDirection: 'row',
