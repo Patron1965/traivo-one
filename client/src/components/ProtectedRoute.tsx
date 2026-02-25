@@ -1,5 +1,5 @@
 import { useAuth } from "@/hooks/use-auth";
-import { canAccessRoute } from "@/lib/role-config";
+import { canAccessRoute, isTechnicianRole } from "@/lib/role-config";
 import { Redirect } from "wouter";
 
 interface ProtectedRouteProps {
@@ -12,7 +12,8 @@ export function ProtectedRoute({ component: Component, path }: ProtectedRoutePro
   const userRole = user?.role || "user";
 
   if (path && !canAccessRoute(userRole, path)) {
-    return <Redirect to="/" />;
+    const redirectTo = isTechnicianRole(userRole) ? "/mobile" : "/";
+    return <Redirect to={redirectTo} />;
   }
 
   return <Component />;

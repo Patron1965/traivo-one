@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { canAccessRoute, isTechnicianRole } from "@/lib/role-config";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -17,7 +19,7 @@ import {
   Truck,
 } from "lucide-react";
 
-const quickActions = [
+const allQuickActions = [
   { title: "Ny order", url: "/order-stock", icon: ClipboardList },
   { title: "Ny kund", url: "/objects", icon: Users },
   { title: "Nytt kluster", url: "/clusters", icon: Target },
@@ -27,6 +29,16 @@ const quickActions = [
 
 export function FloatingActionButton() {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const userRole = user?.role;
+
+  const quickActions = useMemo(() => {
+    return allQuickActions.filter((action) => canAccessRoute(userRole, action.url));
+  }, [userRole]);
+
+  if (isTechnicianRole(userRole) || quickActions.length === 0) {
+    return null;
+  }
 
   return (
     <div className="fixed bottom-6 right-6 z-50">

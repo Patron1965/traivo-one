@@ -1,4 +1,7 @@
+import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { canAccessRoute } from "@/lib/role-config";
 import { 
   Home, 
   Calendar, 
@@ -7,7 +10,7 @@ import {
   Smartphone
 } from "lucide-react";
 
-const navItems = [
+const allNavItems = [
   { href: "/", icon: Home, label: "Hem" },
   { href: "/planner", icon: Calendar, label: "Planering" },
   { href: "/order-stock", icon: ClipboardList, label: "Ordrar" },
@@ -17,6 +20,12 @@ const navItems = [
 
 export function MobileBottomNav() {
   const [location] = useLocation();
+  const { user } = useAuth();
+  const userRole = user?.role;
+
+  const navItems = useMemo(() => {
+    return allNavItems.filter((item) => canAccessRoute(userRole, item.href));
+  }, [userRole]);
 
   return (
     <nav 
