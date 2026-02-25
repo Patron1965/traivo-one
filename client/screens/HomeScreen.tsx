@@ -246,13 +246,14 @@ export function HomeScreen({ navigation }: any) {
           return;
         }
         await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-        const recording = new Audio.Recording();
-        await recording.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
-        await recording.startAsync();
+        const { recording } = await Audio.Recording.createAsync(
+          Audio.RecordingOptionsPresets.HIGH_QUALITY
+        );
         voiceRecorderRef.current = recording;
         setVoiceRecording(true);
         startPulseAnimation();
-      } catch {
+      } catch (err: any) {
+        console.error('Voice recording error:', err);
         showVoiceFeedback('Kunde inte starta inspelning.');
       }
     }
