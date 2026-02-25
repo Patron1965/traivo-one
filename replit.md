@@ -4,7 +4,10 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
-- 2026-02-25: Added 8 new features: enhanced daily summary with weather, swipe gestures on order cards, travel time estimation, team chat, photo-required checklists, smart break suggestions, voice commands, AI-powered deviation reports
+- 2026-02-25: Removed team chat feature (TeamChatScreen, team_messages table, team-chat endpoints)
+- 2026-02-25: Completed orders now visually distinct: green check circle, tinted background, muted text
+- 2026-02-25: Auto-navigate back to order list after completing a job
+- 2026-02-25: Added 7 new features: enhanced daily summary with weather, swipe gestures on order cards, travel time estimation, photo-required checklists, smart break suggestions, voice commands, AI-powered deviation reports
 - 2026-02-25: Fixed order status flow for drivers: planned→dispatched→on_site→in_progress→completed with descriptive sub-labels
 - 2026-02-25: Added online/offline toggle with green/grey dot indicator, persists via AsyncStorage, filters driver from planner map
 - 2026-02-23: GPS tracking hook (useGpsTracking) with foreground location, 30s interval reporting to /position endpoint, permission handling for web and native
@@ -65,7 +68,6 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 │   │   ├── OrdersScreen.tsx    # Filterable order list with swipe gestures
 │   │   ├── OrderDetailScreen.tsx  # Order detail with sub-steps, notes, travel time, actions
 │   │   ├── InspectionScreen.tsx   # 6-category inspection with photo requirements
-│   │   ├── TeamChatScreen.tsx     # Driver-to-driver team messaging
 │   │   ├── MapScreen.tsx
 │   │   ├── ProfileScreen.tsx
 │   │   ├── AIAssistantScreen.tsx     # Unicorn Assist chat + voice
@@ -113,8 +115,6 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 - `GET /api/mobile/articles?search=` - Search articles
 - `GET /api/mobile/weather` - Get weather (Open-Meteo API)
 - `GET /api/mobile/summary` - Get daily summary (includes totalDistance)
-- `GET /api/mobile/team-chat` - Get last 50 team messages
-- `POST /api/mobile/team-chat` - Send team message (real-time via Socket.io)
 - `POST /api/mobile/ai/chat` - AI chat (GPT-5.2)
 - `POST /api/mobile/ai/transcribe` - Voice transcription (gpt-4o-mini-transcribe)
 - `POST /api/mobile/ai/analyze-image` - AI image analysis with severity + confidence
@@ -124,7 +124,6 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 
 ### Database Tables
 - `driver_locations` - Stores latest GPS position per driver
-- `team_messages` - Team chat messages (id, sender_id, sender_name, message, created_at)
 
 ### Key Features
 - PIN-based login (4-6 digits) alongside username/password authentication
@@ -137,7 +136,6 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 - Sub-steps with progress tracking, order notes
 - **Inspection checklists with photo requirements**: some categories require before/after photos
 - **Smart break suggestions**: after 4h continuous work, shows schedule gap info
-- **Team chat (Kollegachat)**: real-time driver-to-driver messaging via Socket.io
 - Route map view, weather info with warnings
 - Deviation reporting with GPS position
 - Material logging with article autocomplete

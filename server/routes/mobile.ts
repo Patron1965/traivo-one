@@ -1113,47 +1113,4 @@ router.get('/summary', async (req, res) => {
   }
 });
 
-router.get('/team-chat', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT * FROM team_messages ORDER BY created_at DESC LIMIT 50'
-    );
-    res.json(result.rows.reverse());
-  } catch (error: any) {
-    console.error('Team chat fetch error:', error.message);
-    res.json([]);
-  }
-});
-
-router.post('/team-chat', async (req, res) => {
-  const io = (req.app as any).io;
-  const { message } = req.body;
-  if (!message || !message.trim()) {
-    res.status(400).json({ error: 'Meddelandet får inte vara tomt' });
-    return;
-  }
-  const token = req.headers.authorization?.replace('Bearer ', '') || '';
-  let senderId = 'unknown';
-  let senderName = 'Okänd';
-  if (IS_MOCK_MODE) {
-    if (token === MOCK_TOKEN) {
-      senderId = String(MOCK_RESOURCE.id);
-      senderName = MOCK_RESOURCE.name;
-    }
-  }
-  try {
-    const result = await pool.query(
-      'INSERT INTO team_messages (sender_id, sender_name, message) VALUES ($1, $2, $3) RETURNING *',
-      [senderId, senderName, message.trim()]
-    );
-    if (io) {
-      io.emit('team:message', result.rows[0]);
-    }
-    res.json(result.rows[0]);
-  } catch (error: any) {
-    console.error('Team chat send error:', error.message);
-    res.status(500).json({ error: 'Kunde inte skicka meddelande' });
-  }
-});
-
 export { router as mobileRoutes, MOCK_ORDERS };

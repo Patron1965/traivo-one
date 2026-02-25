@@ -631,14 +631,6 @@ export function HomeScreen({ navigation }: any) {
         </View>
       ) : null}
 
-      <Pressable
-        style={[styles.chatFab, { bottom: tabBarHeight + Spacing.lg + 64 }]}
-        onPress={() => navigation.navigate('TeamChat')}
-        testID="button-team-chat"
-      >
-        <Feather name="message-circle" size={22} color={Colors.textInverse} />
-      </Pressable>
-
       <Animated.View style={[
         styles.voiceFab,
         { bottom: tabBarHeight + Spacing.lg, transform: [{ scale: pulseAnim }] },
@@ -1001,17 +993,6 @@ const styles = StyleSheet.create({
   },
   outerContainer: {
     flex: 1,
-  },
-  chatFab: {
-    position: 'absolute',
-    right: Spacing.lg,
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Colors.secondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
   },
   voiceFab: {
     position: 'absolute',
