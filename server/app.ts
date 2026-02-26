@@ -159,7 +159,7 @@ app.get('/bundles/:platform/index.bundle', (req, res) => {
     return res.status(404).send('Bundle not found. Run: bash scripts/build.sh');
   }
   const host = (req.headers['x-forwarded-host'] || req.headers.host || '') as string;
-  const domainPatch = `;(function(){if(typeof process==='undefined'){global.process={env:{}};}if(!process.env){process.env={};}process.env.EXPO_PUBLIC_DOMAIN='${host.replace(/'/g, "")}';})();\n`;
+  const domainPatch = `;(function(){var g=typeof globalThis!=='undefined'?globalThis:this;if(!g.process)g.process={env:{}};if(!g.process.env)g.process.env={};g.process.env.EXPO_PUBLIC_DOMAIN='${host.replace(/'/g, "")}';})();\n`;
   const bundle = fs.readFileSync(bundlePath, 'utf-8');
   res.setHeader('Content-Type', 'application/javascript');
   res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
