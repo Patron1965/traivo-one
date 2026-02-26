@@ -48,9 +48,12 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'driver-core-api' });
 });
 
-const projectRoot = path.resolve(__dirname, '..');
+const projectRoot = fs.existsSync(path.resolve(__dirname, '..', 'app.json'))
+  ? path.resolve(__dirname, '..')
+  : process.cwd();
 const metroDir = path.join(projectRoot, 'dist-metro');
 const templatesDir = path.join(projectRoot, 'server', 'templates');
+console.log(`[init] projectRoot=${projectRoot}, templatesDir=${templatesDir}, exists=${fs.existsSync(templatesDir)}`);
 
 function getAppJson() {
   return JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf-8'));

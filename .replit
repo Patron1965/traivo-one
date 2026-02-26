@@ -38,9 +38,9 @@ KINAB_MOCK_MODE = "true"
 integrations = ["javascript_openai_ai_integrations:2.0.0"]
 
 [deployment]
-deploymentTarget = "cloudrun"
-build = ["sh", "-c", "npm install && bash scripts/build.sh"]
-run = ["npx", "tsx", "server/index.ts"]
+deploymentTarget = "autoscale"
+build = ["sh", "-c", "npm install && npx esbuild server/index.ts --bundle --platform=node --target=node20 --outfile=server-dist/index.js --external:pg-native --packages=external && bash scripts/build.sh"]
+run = ["node", "server-dist/index.js"]
 
 [[ports]]
 localPort = 5000

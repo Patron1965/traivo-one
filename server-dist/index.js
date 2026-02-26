@@ -1647,9 +1647,10 @@ app.use("/api/planner", router3);
 app.get("/api/health", (_req, res) => {
   res.json({ status: "ok", service: "driver-core-api" });
 });
-var projectRoot = import_path.default.resolve(__dirname, "..");
+var projectRoot = import_fs.default.existsSync(import_path.default.resolve(__dirname, "..", "app.json")) ? import_path.default.resolve(__dirname, "..") : process.cwd();
 var metroDir = import_path.default.join(projectRoot, "dist-metro");
 var templatesDir = import_path.default.join(projectRoot, "server", "templates");
+console.log(`[init] projectRoot=${projectRoot}, templatesDir=${templatesDir}, exists=${import_fs.default.existsSync(templatesDir)}`);
 function getAppJson() {
   return JSON.parse(import_fs.default.readFileSync(import_path.default.join(projectRoot, "app.json"), "utf-8"));
 }
