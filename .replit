@@ -13,35 +13,18 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start Backend"
-
-[[workflows.workflow.tasks]]
-task = "workflow.run"
-args = "Start Frontend"
+args = "Start application"
 
 [[workflows.workflow]]
-name = "Start Backend"
+name = "Start application"
 author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "npx tsx server/index.ts"
-waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "console"
-
-[[workflows.workflow]]
-name = "Start Frontend"
-author = "agent"
-
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "EXPO_PACKAGER_PROXY_URL=\"https://${REPL_SLUG}.${REPL_OWNER}.repl.co\" REACT_NATIVE_PACKAGER_HOSTNAME=\"0.0.0.0\" npx expo start --web --port 8081"
-waitForPort = 8081
-
-[workflows.workflow.metadata]
-outputType = "webview"
 
 [userenv]
 
