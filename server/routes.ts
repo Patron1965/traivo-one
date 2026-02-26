@@ -5617,6 +5617,44 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   // ============================================
   // POSITION TRACKING API ENDPOINTS
   // ============================================
+
+  app.post("/api/resources/position", isAuthenticated, async (req: any, res) => {
+    try {
+      const { resourceId, latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
+      
+      if (!resourceId) {
+        return res.status(400).json({ error: "resourceId is required" });
+      }
+      if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
+        return res.status(400).json({ error: "Latitude and longitude are required" });
+      }
+
+      const resource = await storage.getResource(resourceId);
+      if (!resource) {
+        return res.status(404).json({ error: "Resource not found" });
+      }
+      const tenantId = getTenantIdWithFallback(req);
+      if (resource.tenantId && resource.tenantId !== tenantId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      await notificationService.handlePositionUpdate({
+        resourceId,
+        latitude,
+        longitude,
+        speed: speed || 0,
+        heading: heading || 0,
+        accuracy: accuracy || 0,
+        status: status || "traveling",
+        workOrderId
+      });
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to update resource position:", error);
+      res.status(500).json({ error: "Failed to update position" });
+    }
+  });
   
   // Update position from mobile app (also handled via WebSocket)
   app.post("/api/mobile/position", isMobileAuthenticated, async (req: any, res) => {

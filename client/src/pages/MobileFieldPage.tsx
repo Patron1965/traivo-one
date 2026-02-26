@@ -6,7 +6,7 @@ export default function MobileFieldPage() {
   
   return (
     <div className="h-screen">
-      <SimpleFieldApp resourceId={user?.id} />
+      <SimpleFieldApp resourceId={user?.resourceId || user?.id} />
     </div>
   );
 }

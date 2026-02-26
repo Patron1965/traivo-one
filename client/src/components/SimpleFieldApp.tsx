@@ -208,6 +208,79 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     };
   }, [isOnBreak, breakStartTime]);
 
+  const [gpsActive, setGpsActive] = useState(false);
+  const gpsWatchRef = useRef<number | null>(null);
+  const gpsIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastPositionRef = useRef<{ lat: number; lng: number; speed: number; heading: number; accuracy: number } | null>(null);
+  const statusRef = useRef({ isOnBreak, jobStarted, selectedJobId });
+
+  useEffect(() => {
+    statusRef.current = { isOnBreak, jobStarted, selectedJobId };
+  }, [isOnBreak, jobStarted, selectedJobId]);
+
+  const sendPositionUpdate = useCallback(async () => {
+    const pos = lastPositionRef.current;
+    if (!pos || !resourceId) return;
+    const { isOnBreak: brk, jobStarted: started, selectedJobId: jobId } = statusRef.current;
+    const currentStatus = brk ? "break" : started ? "on_site" : "traveling";
+    try {
+      await fetch("/api/resources/position", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          resourceId,
+          latitude: pos.lat,
+          longitude: pos.lng,
+          speed: pos.speed,
+          heading: pos.heading,
+          accuracy: pos.accuracy,
+          status: currentStatus,
+          workOrderId: jobId || undefined,
+        }),
+      });
+    } catch {
+    }
+  }, [resourceId]);
+
+  useEffect(() => {
+    if (!resourceId || !navigator.geolocation) return;
+
+    gpsWatchRef.current = navigator.geolocation.watchPosition(
+      (position) => {
+        lastPositionRef.current = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          speed: position.coords.speed || 0,
+          heading: position.coords.heading || 0,
+          accuracy: position.coords.accuracy || 0,
+        };
+        setGpsActive(true);
+      },
+      () => {
+        setGpsActive(false);
+      },
+      { enableHighAccuracy: true, maximumAge: 10000, timeout: 15000 }
+    );
+
+    sendPositionUpdate();
+    gpsIntervalRef.current = setInterval(sendPositionUpdate, 15000);
+
+    return () => {
+      if (gpsWatchRef.current !== null) {
+        navigator.geolocation.clearWatch(gpsWatchRef.current);
+        gpsWatchRef.current = null;
+      }
+      if (gpsIntervalRef.current) {
+        clearInterval(gpsIntervalRef.current);
+        gpsIntervalRef.current = null;
+      }
+    };
+  }, [resourceId, sendPositionUpdate]);
+
+  useEffect(() => {
+    sendPositionUpdate();
+  }, [isOnBreak, jobStarted, selectedJobId, sendPositionUpdate]);
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -1344,6 +1417,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               lastSyncAt={lastSyncAt}
               onSyncNow={syncNow}
             />
+            {resourceId && (
+              <div className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${gpsActive ? "text-green-600 bg-green-50 dark:bg-green-950/30 dark:text-green-400" : "text-muted-foreground bg-muted"}`} data-testid="indicator-gps-status">
+                <Navigation className="h-3 w-3" />
+                <span>{gpsActive ? "GPS" : "Ingen GPS"}</span>
+              </div>
+            )}
             {resourceId && isOnline && (
               <Button
                 variant="ghost"
