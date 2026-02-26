@@ -136,9 +136,10 @@ process.on('exit', (code) => {
     app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
       const status = err.status || err.statusCode || 500;
       const message = err.message || "Internal Server Error";
-
-      res.status(status).json({ message });
-      throw err;
+      console.error(`[error] ${status} ${message}`, err.stack || '');
+      if (!res.headersSent) {
+        res.status(status).json({ message });
+      }
     });
 
     // importantly only setup vite in development and after
@@ -158,7 +159,6 @@ process.on('exit', (code) => {
       {
         port,
         host: "0.0.0.0",
-        reusePort: true,
       },
       () => {
         log(`serving on port ${port}`);
