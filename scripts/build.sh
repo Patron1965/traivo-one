@@ -6,12 +6,7 @@ echo "Building Driver Core..."
 METRO_URL="http://localhost:8081"
 OUTPUT_DIR="dist-metro"
 
-echo "Step 1: Compiling TypeScript server..."
-mkdir -p server-dist
-npx esbuild server/app.ts --bundle --platform=node --target=node20 --outfile=server-dist/app.js --external:pg-native --packages=external
-echo "  Server compiled to server-dist/app.js"
-
-echo "Step 2: Metro JS bundles..."
+echo "Step 1: Metro JS bundles..."
 if curl -s --max-time 5 "$METRO_URL/status" 2>/dev/null | grep -q "packager-status:running"; then
   echo "  Metro dev server detected, fetching fresh bundles..."
   mkdir -p "$OUTPUT_DIR/ios" "$OUTPUT_DIR/android"
