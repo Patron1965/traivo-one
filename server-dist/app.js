@@ -38,7 +38,13 @@ var import_express = require("express");
 // server/db.ts
 var import_pg = require("pg");
 var pool = new import_pg.Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: process.env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 3e4,
+  connectionTimeoutMillis: 5e3
+});
+pool.on("error", (err) => {
+  console.error("Unexpected PostgreSQL pool error:", err.message);
 });
 
 // server/routes/mobile.ts
