@@ -223,7 +223,13 @@ app.get('/', (req, res) => {
     return serveManifest(platform as 'ios' | 'android', req, res);
   }
 
-  res.sendFile(path.join(templatesDir, 'landing-page.html'));
+  const landingPath = path.join(templatesDir, 'landing-page.html');
+  res.sendFile(landingPath, (err) => {
+    if (err) {
+      console.error('Landing page not found:', landingPath);
+      res.status(200).send(`<!DOCTYPE html><html><head><title>Driver Core</title></head><body><h1>Driver Core API</h1><p>Server is running. Landing page not found at expected path.</p><p>API: <a href="/api/health">/api/health</a></p></body></html>`);
+    }
+  });
 });
 
 process.on('uncaughtException', (err) => {
