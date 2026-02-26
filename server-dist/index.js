@@ -1748,12 +1748,14 @@ app.get("/bundles/:platform/index.bundle", (req, res) => {
     return res.status(404).send("Bundle not found. Run: bash scripts/build.sh");
   }
   const host = req.headers["x-forwarded-host"] || req.headers.host || "";
-  const domainPatch = `;(function(){var g=typeof globalThis!=='undefined'?globalThis:this;if(!g.process)g.process={env:{}};if(!g.process.env)g.process.env={};g.process.env.EXPO_PUBLIC_DOMAIN='${host.replace(/'/g, "")}';})();
-`;
-  const bundle = import_fs.default.readFileSync(bundlePath, "utf-8");
+  let bundle = import_fs.default.readFileSync(bundlePath, "utf-8");
+  const devDomain = "143744bc-0950-40ae-a71f-7334bd02d088-00-2jqn3h1bml74q.kirk.replit.dev";
+  if (host && host !== "localhost:5000" && host !== "localhost") {
+    bundle = bundle.replace(devDomain, host);
+  }
   res.setHeader("Content-Type", "application/javascript");
   res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
-  res.send(domainPatch + bundle);
+  res.send(bundle);
 });
 app.use("/assets", import_express4.default.static(import_path.default.join(projectRoot, "assets"), {
   setHeaders: (res, filePath) => {
