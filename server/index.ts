@@ -155,6 +155,21 @@ process.on('exit', (code) => {
     }
 
     const port = parseInt(process.env.PORT || "5000", 10);
+    
+    httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.log(`[startup] Port ${port} in use, retrying in 2s...`);
+        setTimeout(() => {
+          httpServer.listen({ port, host: "0.0.0.0" }, () => {
+            log(`serving on port ${port}`);
+          });
+        }, 2000);
+      } else {
+        console.error('[FATAL] Server error:', err);
+        process.exit(1);
+      }
+    });
+
     httpServer.listen(
       {
         port,
