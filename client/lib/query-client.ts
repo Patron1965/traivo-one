@@ -4,6 +4,16 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export function getApiUrl(): string {
+  const manifestHost = Constants.expoConfig?.hostUri
+    || (Constants as any).manifest?.debuggerHost
+    || (Constants as any).manifest2?.extra?.expoClient?.hostUri;
+  if (manifestHost) {
+    const host = manifestHost.split(':')[0];
+    if (host && host !== 'localhost' && host !== '127.0.0.1') {
+      return `https://${host}`;
+    }
+  }
+
   const domain = process.env.EXPO_PUBLIC_DOMAIN;
   if (domain) {
     return `https://${domain}`;
