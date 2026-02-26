@@ -83,3 +83,11 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Twilio API:** SMS notification service.
 - **jsPDF:** PDF generation library.
 - **Replit Object Storage:** Photo uploads and file storage.
+- **PM2:** Process manager for automatic restart and stability.
+
+## Workflow & Process Management
+- **PM2 Process Manager:** The production server runs via PM2 (`ecosystem.config.cjs`) which auto-restarts the Node.js process if it crashes. This was implemented to work around Replit workflow infrastructure issues that caused SIGINT kills after ~20 seconds.
+- **Build before run:** After code changes, run `npm run build` before restarting the workflow. The workflow command is: `npx pm2 delete all 2>/dev/null; npx pm2 start ecosystem.config.cjs && npx pm2 logs --lines 100`
+- **Production mode:** The workflow runs `NODE_ENV=production node dist/index.cjs` via PM2, not the dev server (`tsx`). This significantly reduces memory usage.
+- **Health endpoint:** `GET /health` returns `{"status":"ok"}` for monitoring.
+- **Note:** `.replit` file has `run = "npm run dev"` on top level which cannot be changed via agent tools. The PM2 approach works around any conflicts this causes.

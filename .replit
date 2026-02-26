@@ -36,7 +36,7 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npm run dev"
+args = "npx pm2 delete all 2>/dev/null; npx pm2 start ecosystem.config.cjs && npx pm2 logs --lines 100"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
