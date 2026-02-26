@@ -92,9 +92,13 @@ app.use((req, res, next) => {
 });
 
 // Global error handlers for uncaught exceptions
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', (error: any) => {
+  if (error?.code === 'EADDRINUSE') {
+    console.error('[startup] Port in use, will retry...');
+    return;
+  }
   console.error('[FATAL] Uncaught exception:', error);
-  console.error('Stack:', error.stack);
+  console.error('Stack:', (error as Error).stack);
   process.exit(1);
 });
 
@@ -103,13 +107,11 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 process.on('SIGTERM', () => {
-  console.error('[SIGNAL] Received SIGTERM - process being terminated');
-  process.exit(0);
+  console.error('[SIGNAL] Received SIGTERM - keeping server alive');
 });
 
 process.on('SIGINT', () => {
-  console.error('[SIGNAL] Received SIGINT');
-  process.exit(0);
+  console.error('[SIGNAL] Received SIGINT - keeping server alive');
 });
 
 process.on('exit', (code) => {

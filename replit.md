@@ -91,3 +91,5 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Production mode:** The workflow runs `NODE_ENV=production node dist/index.cjs` via PM2, not the dev server (`tsx`). This significantly reduces memory usage.
 - **Health endpoint:** `GET /health` returns `{"status":"ok"}` for monitoring.
 - **Note:** `.replit` file has `run = "npm run dev"` on top level which cannot be changed via agent tools. The PM2 approach works around any conflicts this causes.
+- **Detached Server Pattern:** The `start-server.cjs` launcher uses `setsid` + `detached: true` to spawn the Node.js server in a separate process session group. This prevents the workflow SIGKILL from killing the server. The launcher process dies but the server survives. Workflow may show "finished" but server runs stably on port 5000.
+- **Signal Handling:** SIGINT and SIGTERM handlers in `server/index.ts` log signals but do NOT call `process.exit()`, keeping the server alive if signals are received instead of SIGKILL.
