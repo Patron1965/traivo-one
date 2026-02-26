@@ -83,13 +83,10 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Twilio API:** SMS notification service.
 - **jsPDF:** PDF generation library.
 - **Replit Object Storage:** Photo uploads and file storage.
-- **PM2:** Process manager for automatic restart and stability.
-
 ## Workflow & Process Management
-- **PM2 Process Manager:** The production server runs via PM2 (`ecosystem.config.cjs`) which auto-restarts the Node.js process if it crashes. This was implemented to work around Replit workflow infrastructure issues that caused SIGINT kills after ~20 seconds.
-- **Build before run:** After code changes, run `npm run build` before restarting the workflow. The workflow command is: `npx pm2 delete all 2>/dev/null; npx pm2 start ecosystem.config.cjs && npx pm2 logs --lines 100`
-- **Production mode:** The workflow runs `NODE_ENV=production node dist/index.cjs` via PM2, not the dev server (`tsx`). This significantly reduces memory usage.
+- **Known Workflow Limitation:** Replit workflow infrastructure sends SIGKILL to processes after ~20 seconds. This is a platform limitation, not a bug in the server code. The server runs perfectly from bash for 90+ seconds.
+- **Deployment (Production):** Use Replit Deployments for stable production hosting. Deployment config in `.replit`: `deploymentTarget = "autoscale"`, `build = ["npm", "run", "build"]`, `run = ["node", "./dist/index.cjs"]`. Deployments do NOT have the SIGKILL problem.
+- **Build before run:** After code changes, run `npm run build` before restarting the workflow or redeploying.
+- **Production mode:** `NODE_ENV=production node dist/index.cjs` uses ~142 MB vs ~725 MB for dev mode (`tsx`).
 - **Health endpoint:** `GET /health` returns `{"status":"ok"}` for monitoring.
-- **Note:** `.replit` file has `run = "npm run dev"` on top level which cannot be changed via agent tools. The PM2 approach works around any conflicts this causes.
-- **Detached Server Pattern:** The `start-server.cjs` launcher uses `setsid` + `detached: true` to spawn the Node.js server in a separate process session group. This prevents the workflow SIGKILL from killing the server. The launcher process dies but the server survives. Workflow may show "finished" but server runs stably on port 5000.
 - **Signal Handling:** SIGINT and SIGTERM handlers in `server/index.ts` log signals but do NOT call `process.exit()`, keeping the server alive if signals are received instead of SIGKILL.
