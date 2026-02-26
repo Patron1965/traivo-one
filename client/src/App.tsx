@@ -271,6 +271,19 @@ function AppContent() {
   return <AuthenticatedApp />;
 }
 
+function TechnicianRedirect() {
+  const { user } = useAuth();
+  const [location, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (user?.role === "technician" && location !== "/mobile" && location !== "/field" && location !== "/simple" && location !== "/settings") {
+      setLocation("/mobile");
+    }
+  }, [user, location, setLocation]);
+
+  return null;
+}
+
 function AuthenticatedApp() {
   const { theme, toggleTheme } = useTheme();
   
@@ -278,6 +291,7 @@ function AuthenticatedApp() {
     <TenantBrandingProvider>
       <TourProvider>
         <div className="flex flex-col min-h-screen bg-background pb-16 md:pb-0">
+          <TechnicianRedirect />
           <TopNav />
           <main className="flex-1">
             <ErrorBoundary>
