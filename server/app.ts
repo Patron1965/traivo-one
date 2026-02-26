@@ -270,3 +270,7 @@ server.on('error', (err: any) => {
     process.exit(1);
   }
 });
+
+setInterval(() => {
+  process.stdout.write('');
+}, 15000);
