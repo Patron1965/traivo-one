@@ -105,18 +105,6 @@ process.on('unhandledRejection', (reason, promise) => {
 (async () => {
   try {
     console.log('[startup] Beginning server initialization...');
-
-    const port = parseInt(process.env.PORT || "5000", 10);
-    httpServer.listen(
-      {
-        port,
-        host: "0.0.0.0",
-        reusePort: true,
-      },
-      () => {
-        log(`serving on port ${port}`);
-      },
-    );
     
     // Seed database on startup (skips if already seeded)
     try {
@@ -151,7 +139,17 @@ process.on('unhandledRejection', (reason, promise) => {
       await setupVite(httpServer, app);
     }
 
-    console.log('[startup] Server fully initialized');
+    const port = parseInt(process.env.PORT || "5000", 10);
+    httpServer.listen(
+      {
+        port,
+        host: "0.0.0.0",
+        reusePort: true,
+      },
+      () => {
+        log(`serving on port ${port}`);
+      },
+    );
   } catch (error) {
     console.error('[FATAL] Server startup failed:', error);
     console.error('Stack:', (error as Error).stack);
