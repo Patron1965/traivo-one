@@ -102,6 +102,20 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('[FATAL] Unhandled rejection at:', promise, 'reason:', reason);
 });
 
+process.on('SIGTERM', () => {
+  console.error('[SIGNAL] Received SIGTERM - process being terminated');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.error('[SIGNAL] Received SIGINT');
+  process.exit(0);
+});
+
+process.on('exit', (code) => {
+  console.error(`[EXIT] Process exiting with code ${code}`);
+});
+
 (async () => {
   try {
     console.log('[startup] Beginning server initialization...');
