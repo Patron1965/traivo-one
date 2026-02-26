@@ -226,6 +226,25 @@ app.get('/', (req, res) => {
   res.sendFile(path.join(templatesDir, 'landing-page.html'));
 });
 
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err.message);
+  console.error(err.stack);
+  setTimeout(() => process.exit(1), 500);
+});
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err);
+});
+process.on('SIGTERM', () => {
+  console.log('Received SIGTERM, shutting down gracefully');
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000);
+});
+process.on('SIGINT', () => {
+  console.log('Received SIGINT, shutting down gracefully');
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000);
+});
+
 const PORT = 5000;
 server.listen(PORT, '0.0.0.0', () => {
   const kinabUrl = process.env.KINAB_API_URL;
@@ -241,5 +260,13 @@ server.listen(PORT, '0.0.0.0', () => {
   if (hasAndroid) console.log(`  Android: ${(fs.statSync(androidBundle).size / 1024 / 1024).toFixed(1)} MB`);
   if (!hasIos || !hasAndroid) {
     console.log('Warning: Bundles missing. Run: bash scripts/build.sh');
+  }
+});
+
+server.on('error', (err: any) => {
+  console.error('Server error:', err.message);
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} is already in use`);
+    process.exit(1);
   }
 });
