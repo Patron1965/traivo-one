@@ -1,6 +1,29 @@
 import type { Express, Request as ExpressRequest, Response as ExpressResponse } from "express";
 import { createServer, type Server } from "http";
+import crypto from "crypto";
 import { storage } from "./storage";
+
+const importJobs = new Map<string, {
+  tenantId: string;
+  status: "running" | "completed" | "failed";
+  phase: string;
+  processed: number;
+  total: number;
+  created: number;
+  updated: number;
+  errors: number;
+  result?: any;
+  listeners: Set<ExpressResponse>;
+}>();
+
+function notifyImportProgress(jobId: string) {
+  const job = importJobs.get(jobId);
+  if (!job) return;
+  const data = { status: job.status, phase: job.phase, processed: job.processed, total: job.total, created: job.created, updated: job.updated, errors: job.errors, result: job.result };
+  for (const res of job.listeners) {
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
+  }
+}
 import { db } from "./db";
 import { eq, sql, desc, and, gte } from "drizzle-orm";
 import { 
@@ -1879,6 +1902,190 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/import/progress/:jobId", (req, res) => {
+    const { jobId } = req.params;
+    const tenantId = getTenantIdWithFallback(req);
+    
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    });
+    
+    const job = importJobs.get(jobId);
+    if (!job || job.tenantId !== tenantId) {
+      res.write(`data: ${JSON.stringify({ status: "not_found" })}\n\n`);
+      res.end();
+      return;
+    }
+    
+    job.listeners.add(res);
+    notifyImportProgress(jobId);
+    
+    req.on("close", () => {
+      job.listeners.delete(res);
+    });
+  });
+
+  app.post("/api/import/modus/validate", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, {
+        header: true,
+        skipEmptyLines: true,
+        delimiter: ";",
+      });
+
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      }
+
+      const rows = result.data as Record<string, string>[];
+      const totalRows = rows.length;
+      const columns = rows.length > 0 ? Object.keys(rows[0]) : [];
+
+      const missingFields: { row: number; fields: string[] }[] = [];
+      const duplicateModusIds: { modusId: string; rows: number[] }[] = [];
+      const invalidCoordinates: { row: number; lat: string; lng: string }[] = [];
+      const warnings: string[] = [];
+
+      const modusIdOccurrences = new Map<string, number[]>();
+      for (let i = 0; i < rows.length; i++) {
+        const row = rows[i];
+        const rowNum = i + 2;
+
+        const missing: string[] = [];
+        if (!row["Id"]?.trim()) missing.push("Id");
+        if (!row["Namn"]?.trim()) missing.push("Namn");
+        if (missing.length > 0) {
+          missingFields.push({ row: rowNum, fields: missing });
+        }
+
+        const modusId = (row["Id"] || "").trim();
+        if (modusId) {
+          if (!modusIdOccurrences.has(modusId)) {
+            modusIdOccurrences.set(modusId, []);
+          }
+          modusIdOccurrences.get(modusId)!.push(rowNum);
+        }
+
+        const latStr = (row["Latitud"] || "").trim();
+        const lngStr = (row["Longitud"] || "").trim();
+        if (latStr || lngStr) {
+          const lat = parseFloat(latStr.replace(",", "."));
+          const lng = parseFloat(lngStr.replace(",", "."));
+          if (latStr && (isNaN(lat) || lat < 55 || lat > 70)) {
+            invalidCoordinates.push({ row: rowNum, lat: latStr, lng: lngStr });
+          } else if (lngStr && (isNaN(lng) || lng < 10 || lng > 25)) {
+            invalidCoordinates.push({ row: rowNum, lat: latStr, lng: lngStr });
+          }
+        }
+      }
+
+      for (const [modusId, rowNums] of modusIdOccurrences) {
+        if (rowNums.length > 1) {
+          duplicateModusIds.push({ modusId, rows: rowNums });
+        }
+      }
+
+      const customerNames = new Set<string>();
+      for (const row of rows) {
+        const kundName = row["Kund"];
+        if (kundName) {
+          const match = kundName.match(/^(.+?)\s*\(\d+\)$/);
+          const cleanName = match ? match[1].trim() : kundName.trim();
+          if (cleanName) customerNames.add(cleanName);
+        }
+      }
+
+      const tenantId = getTenantIdWithFallback(req);
+      const existingCustomers = await storage.getCustomers(tenantId);
+      const existingCustomerNames = new Set(existingCustomers.map(c => c.name.toLowerCase()));
+
+      const customersExisting: string[] = [];
+      const customersNew: string[] = [];
+      for (const name of Array.from(customerNames)) {
+        if (existingCustomerNames.has(name.toLowerCase())) {
+          customersExisting.push(name);
+        } else {
+          customersNew.push(name);
+        }
+      }
+
+      const existingObjects = await storage.getObjects(tenantId);
+      const existingObjectNumbers = new Set(existingObjects.map(o => o.objectNumber?.toLowerCase()).filter(Boolean));
+
+      let objectsExisting = 0;
+      let objectsNew = 0;
+      for (const row of rows) {
+        const modusId = (row["Id"] || "").trim();
+        if (modusId) {
+          const objNumber = `MODUS-${modusId}`.toLowerCase();
+          if (existingObjectNumbers.has(objNumber)) {
+            objectsExisting++;
+          } else {
+            objectsNew++;
+          }
+        }
+      }
+
+      const parentIds = new Set<string>();
+      const allIds = new Set<string>();
+      for (const row of rows) {
+        const id = (row["Id"] || "").trim();
+        const parent = (row["Parent"] || "").trim();
+        if (id) allIds.add(id);
+        if (parent) parentIds.add(parent);
+      }
+      const missingParents: string[] = [];
+      for (const pid of parentIds) {
+        if (!allIds.has(pid)) {
+          const existsInDb = existingObjectNumbers.has(`MODUS-${pid}`.toLowerCase());
+          if (!existsInDb) {
+            missingParents.push(pid);
+          }
+        }
+      }
+      if (missingParents.length > 0) {
+        warnings.push(`${missingParents.length} föräldra-ID:n refereras men finns varken i CSV:n eller databasen`);
+      }
+
+      const metadataColumns: string[] = [];
+      if (rows.length > 0) {
+        for (const key of Object.keys(rows[0])) {
+          if (key.startsWith("Metadata - ")) {
+            metadataColumns.push(key.replace("Metadata - ", "").trim());
+          }
+        }
+      }
+
+      res.json({
+        totalRows,
+        columns,
+        missingFields: missingFields.slice(0, 50),
+        missingFieldsCount: missingFields.length,
+        duplicateModusIds: duplicateModusIds.slice(0, 50),
+        duplicateModusIdsCount: duplicateModusIds.length,
+        invalidCoordinates: invalidCoordinates.slice(0, 50),
+        invalidCoordinatesCount: invalidCoordinates.length,
+        customersExisting,
+        customersNew,
+        objectsExisting,
+        objectsNew,
+        missingParents: missingParents.slice(0, 20),
+        metadataColumns,
+        warnings,
+      });
+    } catch (error) {
+      console.error("Modus validate error:", error);
+      res.status(500).json({ error: "Validering misslyckades", details: String(error) });
+    }
+  });
+
   // Modus 2.0 Import - Objects (semicolon-separated)
   app.post("/api/import/modus/objects", upload.single("file"), async (req, res) => {
     try {
@@ -1890,27 +2097,33 @@ export async function registerRoutes(
       const result = Papa.parse(csvText, { 
         header: true, 
         skipEmptyLines: true,
-        delimiter: ";", // Modus uses semicolon
+        delimiter: ";",
       });
       
       if (result.errors.length > 0) {
         return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
       }
 
-      // Get existing customers or create them from unique Kund values
       const customerNames = new Set<string>();
       for (const row of result.data as Record<string, string>[]) {
         const kundName = row["Kund"];
         if (kundName) {
-          // Extract customer name without the ID in parentheses
           const match = kundName.match(/^(.+?)\s*\(\d+\)$/);
           const cleanName = match ? match[1].trim() : kundName.trim();
           if (cleanName) customerNames.add(cleanName);
         }
       }
 
-      // Create customers that don't exist
       const tenantId = getTenantIdWithFallback(req);
+      const importBatchId = crypto.randomUUID();
+      const totalRows = (result.data as unknown[]).length;
+      
+      importJobs.set(importBatchId, { tenantId, status: "running", phase: "kunder", processed: 0, total: totalRows, created: 0, updated: 0, errors: 0, listeners: new Set() });
+      
+      res.json({ importBatchId, status: "started", totalRows });
+      
+      // Continue import in background
+      
       const existingCustomers = await storage.getCustomers(tenantId);
       const customerMap = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c.id]));
       
@@ -1919,19 +2132,22 @@ export async function registerRoutes(
           const newCustomer = await storage.createCustomer({
             tenantId,
             name: name,
+            importBatchId,
           });
           customerMap.set(name.toLowerCase(), newCustomer.id);
         }
       }
 
-      // Track created objects by Modus ID for parent lookups
-      const modusIdMap = new Map<string, string>();
+      const job = importJobs.get(importBatchId)!;
+      job.phase = "objekt";
+      notifyImportProgress(importBatchId);
       
-      const imported: string[] = [];
+      const modusIdMap = new Map<string, string>();
+      const created: string[] = [];
+      const updated: string[] = [];
       const errors: string[] = [];
       const skipped: string[] = [];
       
-      // First pass: create all objects without parents
       for (const row of result.data as Record<string, string>[]) {
         try {
           const modusId = row["Id"];
@@ -2016,12 +2232,13 @@ export async function registerRoutes(
           if (objectType === "rum" || objectType === "soprum" || objectType === "kok" || 
               objectType === "matafall" || objectType === "atervinning") objectLevel = 3;
           
-          const objectData = {
-            tenantId,
+          const objectNumber = `MODUS-${modusId}`;
+          
+          const objectFields = {
             customerId,
             parentId: null as string | null,
             name,
-            objectNumber: `MODUS-${modusId}`,
+            objectNumber,
             objectType,
             objectLevel,
             address: row["Adress 1"] || null,
@@ -2036,16 +2253,34 @@ export async function registerRoutes(
             containerCount,
           };
           
-          const createdObject = await storage.createObject(objectData);
-          modusIdMap.set(modusId, createdObject.id);
-          imported.push(name);
+          const existingObject = await storage.getObjectByObjectNumber(tenantId, objectNumber);
+          
+          if (existingObject) {
+            const { parentId: _p, ...updateFields } = objectFields;
+            const updatedObject = await storage.updateObject(existingObject.id, updateFields);
+            if (updatedObject) {
+              modusIdMap.set(modusId, updatedObject.id);
+              updated.push(name);
+              job.updated++;
+            }
+          } else {
+            const createdObject = await storage.createObject({ tenantId, ...objectFields, importBatchId });
+            modusIdMap.set(modusId, createdObject.id);
+            created.push(name);
+            job.created++;
+          }
         } catch (err) {
           console.error("Modus object import error:", err);
-          errors.push(`Fel vid import av "${row["Namn"] || "okänd"}": ${err}`);
+          errors.push(`Rad ${row["Id"] || "?"}: ${err}`);
+          job.errors++;
         }
+        job.processed++;
+        if (job.processed % 10 === 0) notifyImportProgress(importBatchId);
       }
       
-      // Second pass: update parent references
+      job.phase = "hierarki";
+      notifyImportProgress(importBatchId);
+      
       let parentsUpdated = 0;
       for (const row of result.data as Record<string, string>[]) {
         const modusId = row["Id"];
@@ -2062,7 +2297,9 @@ export async function registerRoutes(
         }
       }
       
-      // Third pass: write metadata from CSV "Metadata - *" columns to EAV system
+      job.phase = "metadata";
+      notifyImportProgress(importBatchId);
+      
       let metadataWritten = 0;
       const metadataErrors: string[] = [];
       
@@ -2126,19 +2363,35 @@ export async function registerRoutes(
         }
       }
       
-      res.json({ 
-        imported: imported.length, 
+      const responseData = { 
+        importBatchId,
+        imported: created.length + updated.length,
+        created: created.length,
+        updated: updated.length,
         parentsUpdated,
         customersCreated: customerNames.size,
         skipped: skipped.length,
         metadataWritten,
         metadataColumns: metadataColumns.map(c => c.metadataName),
-        errors: [...errors, ...metadataErrors].slice(0, 30),
+        errors: [...errors, ...metadataErrors].slice(0, 50),
         totalRows: (result.data as unknown[]).length,
-      });
+      };
+      
+      job.status = "completed";
+      job.phase = "klar";
+      job.result = responseData;
+      notifyImportProgress(importBatchId);
+      setTimeout(() => importJobs.delete(importBatchId), 300000);
     } catch (error) {
       console.error("Modus import error:", error);
-      res.status(500).json({ error: "Modus import misslyckades", details: String(error) });
+      const failedJob = importJobs.get(importBatchId);
+      if (failedJob) {
+        failedJob.status = "failed";
+        failedJob.phase = "fel";
+        failedJob.result = { error: String(error), importBatchId };
+        notifyImportProgress(importBatchId);
+      }
+      setTimeout(() => importJobs.delete(importBatchId), 300000);
     }
   });
 
@@ -2160,19 +2413,19 @@ export async function registerRoutes(
         return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
       }
 
-      // Get existing objects and customers
       const tenantId = getTenantIdWithFallback(req);
+      const taskBatchId = crypto.randomUUID();
       const objects = await storage.getObjects(tenantId);
       const objectMap = new Map(objects.map(o => [o.objectNumber, o]));
       
       const customers = await storage.getCustomers(tenantId);
       const customerMap = new Map(customers.map(c => [c.name.toLowerCase(), c.id]));
       
-      // Get or create resources from Team field
       const resources = await storage.getResources(tenantId);
       const resourceMap = new Map(resources.map(r => [r.name.toLowerCase(), r.id]));
       
-      const imported: string[] = [];
+      const created: string[] = [];
+      const updated: string[] = [];
       const errors: string[] = [];
       
       for (const row of result.data as Record<string, string>[]) {
@@ -2229,8 +2482,7 @@ export async function registerRoutes(
           else if (status === "in_progress") mappedStatus = "in_progress";
           else if (status === "not_started" || status === "scheduled") mappedStatus = "scheduled";
           
-          const workOrderData = {
-            tenantId,
+          const workOrderFields = {
             customerId: object.customerId,
             objectId: object.id,
             resourceId,
@@ -2246,16 +2498,26 @@ export async function registerRoutes(
             metadata: { modusId: uppgiftsId },
           };
           
-          await storage.createWorkOrder(workOrderData);
-          imported.push(uppgiftsnamn);
+          const existingWo = await storage.getWorkOrderByModusId(tenantId, uppgiftsId);
+          
+          if (existingWo) {
+            await storage.updateWorkOrder(existingWo.id, workOrderFields);
+            updated.push(uppgiftsnamn);
+          } else {
+            await storage.createWorkOrder({ tenantId, ...workOrderFields, importBatchId: taskBatchId });
+            created.push(uppgiftsnamn);
+          }
         } catch (err) {
           errors.push(`Fel vid import av uppgift: ${err}`);
         }
       }
       
       res.json({ 
-        imported: imported.length, 
-        errors: errors.slice(0, 20),
+        importBatchId: taskBatchId,
+        imported: created.length + updated.length,
+        created: created.length,
+        updated: updated.length,
+        errors: errors.slice(0, 50),
         totalRows: (result.data as unknown[]).length,
       });
     } catch (error) {
@@ -5248,6 +5510,97 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // Delete all data (for re-import)
+  app.get("/api/import/batches", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      
+      const allObjects = await storage.getObjects(tenantId);
+      const allWorkOrders = await storage.getWorkOrders(tenantId);
+      const allCustomers = await storage.getCustomers(tenantId);
+      
+      const batchMap = new Map<string, { batchId: string; objects: number; workOrders: number; customers: number; importedAt: string | null }>();
+      
+      for (const obj of allObjects) {
+        if (obj.importBatchId) {
+          if (!batchMap.has(obj.importBatchId)) {
+            batchMap.set(obj.importBatchId, { batchId: obj.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: obj.createdAt ? new Date(obj.createdAt).toISOString() : null });
+          }
+          batchMap.get(obj.importBatchId)!.objects++;
+        }
+      }
+      
+      for (const wo of allWorkOrders) {
+        if (wo.importBatchId) {
+          if (!batchMap.has(wo.importBatchId)) {
+            batchMap.set(wo.importBatchId, { batchId: wo.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: wo.createdAt ? new Date(wo.createdAt).toISOString() : null });
+          }
+          batchMap.get(wo.importBatchId)!.workOrders++;
+        }
+      }
+      
+      for (const c of allCustomers) {
+        if (c.importBatchId) {
+          if (!batchMap.has(c.importBatchId)) {
+            batchMap.set(c.importBatchId, { batchId: c.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: c.createdAt ? new Date(c.createdAt).toISOString() : null });
+          }
+          batchMap.get(c.importBatchId)!.customers++;
+        }
+      }
+      
+      const batches = Array.from(batchMap.values()).sort((a, b) => 
+        (b.importedAt || '').localeCompare(a.importedAt || '')
+      );
+      
+      res.json(batches);
+    } catch (error) {
+      console.error("Failed to list import batches:", error);
+      res.status(500).json({ error: "Kunde inte lista import-batchar" });
+    }
+  });
+
+  app.delete("/api/import/batch/:batchId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { batchId } = req.params;
+      
+      let deletedObjects = 0;
+      let deletedWorkOrders = 0;
+      let deletedCustomers = 0;
+      
+      const allWorkOrders = await storage.getWorkOrders(tenantId);
+      for (const wo of allWorkOrders) {
+        if (wo.importBatchId === batchId) {
+          await storage.deleteWorkOrder(wo.id);
+          deletedWorkOrders++;
+        }
+      }
+      
+      const allObjects = await storage.getObjects(tenantId);
+      const batchObjects = allObjects.filter(o => o.importBatchId === batchId);
+      const childFirst = batchObjects.sort((a, b) => (b.objectLevel || 0) - (a.objectLevel || 0));
+      for (const obj of childFirst) {
+        await storage.deleteObject(obj.id);
+        deletedObjects++;
+      }
+      
+      const allCustomers = await storage.getCustomers(tenantId);
+      for (const c of allCustomers) {
+        if (c.importBatchId === batchId) {
+          await storage.deleteCustomer(c.id);
+          deletedCustomers++;
+        }
+      }
+      
+      res.json({ 
+        deleted: { objects: deletedObjects, workOrders: deletedWorkOrders, customers: deletedCustomers },
+        batchId 
+      });
+    } catch (error) {
+      console.error("Failed to undo import batch:", error);
+      res.status(500).json({ error: "Kunde inte ångra import" });
+    }
+  });
+
   app.delete("/api/import/clear/:type", async (req, res) => {
     try {
       const { type } = req.params;

@@ -23,7 +23,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Multi-tenancy (Flerföretagsstöd):** Full tenant isolation at database and API level with middleware, dynamic tenant selection, and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI (gpt-4o-mini, gpt-4o) via Replit AI Integrations. Includes AI Cards, an AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner with natural language chat.
 - **MCP Server:** Enables external AI assistants to interact with Unicorn data via SSE.
-- **Modus 2.0 Import System:** Dedicated `/import` page for step-by-step data migration from Modus 2.0 via CSV, supporting Objects, Tasks, and Events, with manual CSV import options.
+- **Modus 2.0 Import System:** Dedicated `/import` page for step-by-step data migration from Modus 2.0 via CSV, supporting Objects, Tasks, and Events, with manual CSV import options. Enhanced with: upsert logic (duplicate detection via objectNumber/modusId), pre-import validation endpoint (`POST /api/import/modus/validate`), import batch tracking (`importBatchId` on objects/customers/workOrders), batch undo capability (`DELETE /api/import/batch/:batchId`) limited to newly created records (not updated pre-existing), SSE-based real-time progress feedback during async background import (tenant-scoped), and import history UI with per-batch undo.
 - **Performance:** Lazy Object Loading, Address Search/Autocomplete (OpenStreetMap Nominatim).
 - **Real-time Capabilities:** Real-time Notifications (WebSocket), Real-time GPS Position Tracking.
 - **Offline Architecture:** Complete offline-first architecture for mobile field workers using IndexedDB and outbox pattern.

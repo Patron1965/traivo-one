@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,11 +6,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
-  ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks
+  ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -26,7 +28,10 @@ interface ImportResult {
 }
 
 interface ModusObjectResult {
+  importBatchId: string;
   imported: number;
+  created: number;
+  updated: number;
   parentsUpdated: number;
   customersCreated: number;
   skipped: number;
@@ -34,6 +39,25 @@ interface ModusObjectResult {
   metadataColumns: string[];
   errors: string[];
   totalRows: number;
+}
+
+interface ImportBatch {
+  batchId: string;
+  objects: number;
+  workOrders: number;
+  customers: number;
+  importedAt: string | null;
+}
+
+interface SSEProgress {
+  status: "running" | "completed" | "failed" | "not_found";
+  phase: string;
+  processed: number;
+  total: number;
+  created: number;
+  updated: number;
+  errors: number;
+  result?: ModusObjectResult;
 }
 
 interface ModusEventsResult {
@@ -47,6 +71,24 @@ interface ModusEventsResult {
     "15to30min": number;
     over30min: number;
   };
+}
+
+interface ModusValidationResult {
+  totalRows: number;
+  columns: string[];
+  missingFields: { row: number; fields: string[] }[];
+  missingFieldsCount: number;
+  duplicateModusIds: { modusId: string; rows: number[] }[];
+  duplicateModusIdsCount: number;
+  invalidCoordinates: { row: number; lat: string; lng: string }[];
+  invalidCoordinatesCount: number;
+  customersExisting: string[];
+  customersNew: string[];
+  objectsExisting: number;
+  objectsNew: number;
+  missingParents: string[];
+  metadataColumns: string[];
+  warnings: string[];
 }
 
 interface ParsedRow {
@@ -207,11 +249,80 @@ export default function ImportPage() {
     tasks: ImportResult | null;
     events: ModusEventsResult | null;
   }>({ objects: null, tasks: null, events: null });
+  const [modusObjectFile, setModusObjectFile] = useState<File | null>(null);
+  const [modusValidation, setModusValidation] = useState<ModusValidationResult | null>(null);
+  const [isValidating, setIsValidating] = useState(false);
+  const [importProgress, setImportProgress] = useState<SSEProgress | null>(null);
+  const [undoBatchId, setUndoBatchId] = useState<string | null>(null);
+  const eventSourceRef = useRef<EventSource | null>(null);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: workOrders = [] } = useQuery<{ id: string }[]>({ queryKey: ["/api/work-orders"] });
   const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
   const { data: objects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
+  const { data: importBatches = [], isLoading: batchesLoading } = useQuery<ImportBatch[]>({ queryKey: ["/api/import/batches"] });
+
+  const undoBatchMutation = useMutation({
+    mutationFn: async (batchId: string) => {
+      return apiRequest("DELETE", `/api/import/batch/${batchId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/import/batches"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+      setUndoBatchId(null);
+      toast({ title: "Import ångrad", description: "All data från denna import har tagits bort." });
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte ångra importen.", variant: "destructive" });
+      setUndoBatchId(null);
+    },
+  });
+
+  useEffect(() => {
+    return () => {
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  const connectSSE = useCallback((jobId: string) => {
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close();
+    }
+    const es = new EventSource(`/api/import/progress/${jobId}`);
+    eventSourceRef.current = es;
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as SSEProgress;
+        setImportProgress(data);
+        if (data.status === "completed") {
+          es.close();
+          eventSourceRef.current = null;
+          if (data.result) {
+            setModusResults(prev => ({ ...prev, objects: data.result as ModusObjectResult }));
+          }
+          setModusUploading(null);
+          queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+          queryClient.invalidateQueries({ queryKey: ["/api/import/batches"] });
+        } else if (data.status === "failed" || data.status === "not_found") {
+          es.close();
+          eventSourceRef.current = null;
+          setModusUploading(null);
+        }
+      } catch {}
+    };
+    es.onerror = () => {
+      es.close();
+      eventSourceRef.current = null;
+    };
+  }, []);
 
   const counts = {
     customers: customers.length,
@@ -388,10 +499,60 @@ export default function ImportPage() {
     }
   };
 
+  const handleModusValidate = async (file: File) => {
+    setModusObjectFile(file);
+    setModusValidation(null);
+    setIsValidating(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch("/api/import/modus/validate", {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Validering misslyckades");
+      }
+
+      const result = await response.json() as ModusValidationResult;
+      setModusValidation(result);
+
+      toast({
+        title: "Validering klar",
+        description: `${result.totalRows} rader analyserade`,
+      });
+    } catch (error) {
+      toast({
+        title: "Validering misslyckades",
+        description: error instanceof Error ? error.message : "Okänt fel",
+        variant: "destructive",
+      });
+      setModusObjectFile(null);
+    } finally {
+      setIsValidating(false);
+    }
+  };
+
+  const handleModusImportAfterValidation = async () => {
+    if (!modusObjectFile) return;
+    setImportProgress(null);
+    await handleModusUpload("objects", modusObjectFile);
+    setModusObjectFile(null);
+    setModusValidation(null);
+  };
+
   const handleModusUpload = async (type: ModusImportType, file: File) => {
     setModusUploading(type);
     const formData = new FormData();
     formData.append("file", file);
+    
+    if (type === "objects") {
+      setImportProgress({ status: "running", phase: "startar", processed: 0, total: 0, created: 0, updated: 0, errors: 0 });
+    }
     
     try {
       const response = await fetch(`/api/import/modus/${type}`, {
@@ -406,6 +567,12 @@ export default function ImportPage() {
       }
       
       const result = await response.json();
+      
+      if (type === "objects" && result.importBatchId && result.status === "started") {
+        connectSSE(result.importBatchId);
+        return;
+      }
+      
       setModusResults(prev => ({ ...prev, [type]: result }));
       
       if (type === "events") {
@@ -414,16 +581,14 @@ export default function ImportPage() {
           description: `Analyserade ${(result as ModusEventsResult).totalEvents} händelser`,
         });
       } else {
-        toast({
-          title: "Import klar",
-          description: `${(result as ImportResult).imported} poster importerade`,
-        });
         queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
         queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
         queryClient.invalidateQueries({ queryKey: ["/api/resources"] });
         queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/import/batches"] });
       }
     } catch (error) {
+      setImportProgress(null);
       toast({
         title: "Import misslyckades",
         description: error instanceof Error ? error.message : "Okänt fel",
@@ -582,7 +747,7 @@ export default function ImportPage() {
                 {showObjectColumns && <ColumnTable columns={MODUS_OBJECT_COLUMNS} />}
               </div>
 
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <input
                   type="file"
                   accept=".csv"
@@ -590,23 +755,29 @@ export default function ImportPage() {
                   id="modus-objects"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleModusUpload("objects", file);
+                    if (file) handleModusValidate(file);
                     e.target.value = "";
                   }}
                 />
                 <Button
-                  variant="default"
-                  disabled={modusUploading !== null}
+                  variant="outline"
+                  disabled={modusUploading !== null || isValidating}
                   onClick={() => document.getElementById("modus-objects")?.click()}
-                  data-testid="button-modus-objects"
+                  data-testid="button-modus-objects-validate"
                 >
-                  {modusUploading === "objects" ? (
+                  {isValidating ? (
                     <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   ) : (
-                    <Upload className="h-4 w-4 mr-2" />
+                    <Eye className="h-4 w-4 mr-2" />
                   )}
-                  Välj objekt-CSV från Modus
+                  {isValidating ? "Validerar..." : "Välj & validera objekt-CSV"}
                 </Button>
+                {modusValidation && !modusResults.objects && (
+                  <Badge variant="secondary">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    Validerad
+                  </Badge>
+                )}
                 {modusResults.objects && (
                   <Badge variant="default" className="bg-green-600">
                     <CheckCircle className="h-3 w-3 mr-1" />
@@ -615,46 +786,216 @@ export default function ImportPage() {
                 )}
               </div>
 
-              {modusResults.objects && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-3 border rounded-lg bg-muted/30">
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-green-600">{modusResults.objects.imported}</div>
-                    <div className="text-xs text-muted-foreground">Objekt importerade</div>
+              {modusValidation && !modusResults.objects && (
+                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Eye className="h-4 w-4 text-blue-600" />
+                    <span className="font-medium text-sm">Valideringsresultat</span>
+                    <Badge variant="secondary" className="text-xs">{modusObjectFile?.name}</Badge>
                   </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">{modusResults.objects.customersCreated}</div>
-                    <div className="text-xs text-muted-foreground">Kunder skapade</div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    <div className="text-center p-2 bg-background rounded-md">
+                      <div className="text-lg font-bold" data-testid="text-validation-total">{modusValidation.totalRows}</div>
+                      <div className="text-xs text-muted-foreground">Totalt rader</div>
+                    </div>
+                    <div className="text-center p-2 bg-background rounded-md">
+                      <div className="text-lg font-bold text-green-600" data-testid="text-validation-new-objects">{modusValidation.objectsNew}</div>
+                      <div className="text-xs text-muted-foreground">Nya objekt</div>
+                    </div>
+                    <div className="text-center p-2 bg-background rounded-md">
+                      <div className="text-lg font-bold text-blue-600" data-testid="text-validation-existing-objects">{modusValidation.objectsExisting}</div>
+                      <div className="text-xs text-muted-foreground">Redan finns (uppdateras)</div>
+                    </div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold">{modusResults.objects.parentsUpdated}</div>
-                    <div className="text-xs text-muted-foreground">Hierarkiska kopplingar</div>
+
+                  <div className="space-y-1 text-sm">
+                    <div className="flex items-center gap-2" data-testid="text-validation-customers">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      <span>
+                        {modusValidation.customersNew.length + modusValidation.customersExisting.length} kunder identifierade
+                        {modusValidation.customersExisting.length > 0 && (
+                          <span className="text-muted-foreground"> ({modusValidation.customersExisting.length} redan finns)</span>
+                        )}
+                        {modusValidation.customersNew.length > 0 && (
+                          <span className="text-green-600"> ({modusValidation.customersNew.length} nya)</span>
+                        )}
+                      </span>
+                    </div>
+                    {modusValidation.metadataColumns.length > 0 && (
+                      <div className="flex items-center gap-2">
+                        <Database className="h-4 w-4 text-muted-foreground" />
+                        <span>{modusValidation.metadataColumns.length} metadata-kolumner: {modusValidation.metadataColumns.join(", ")}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="text-center">
-                    <div className="text-lg font-bold text-purple-600">{modusResults.objects.metadataWritten || 0}</div>
-                    <div className="text-xs text-muted-foreground">Metadata-värden</div>
-                  </div>
-                  {(modusResults.objects.metadataColumns?.length || 0) > 0 && (
-                    <div className="col-span-full text-xs text-muted-foreground">
-                      <span className="font-medium">Metadata-kolumner:</span> {modusResults.objects.metadataColumns.join(", ")}
+
+                  {(modusValidation.missingFieldsCount > 0 || modusValidation.duplicateModusIdsCount > 0 || modusValidation.invalidCoordinatesCount > 0 || modusValidation.missingParents.length > 0 || modusValidation.warnings.length > 0) && (
+                    <div className="space-y-2 border-t pt-3">
+                      <p className="text-xs font-medium text-orange-600 flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" />
+                        Varningar
+                      </p>
+                      {modusValidation.missingFieldsCount > 0 && (
+                        <div className="text-xs text-muted-foreground flex items-start gap-2">
+                          <X className="h-3 w-3 text-red-500 mt-0.5 shrink-0" />
+                          <span>{modusValidation.missingFieldsCount} rader saknar obligatoriska fält (Id eller Namn)</span>
+                        </div>
+                      )}
+                      {modusValidation.duplicateModusIdsCount > 0 && (
+                        <div className="text-xs text-muted-foreground flex items-start gap-2">
+                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
+                          <span>{modusValidation.duplicateModusIdsCount} duplicerade Modus-ID i filen</span>
+                        </div>
+                      )}
+                      {modusValidation.invalidCoordinatesCount > 0 && (
+                        <div className="text-xs text-muted-foreground flex items-start gap-2">
+                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
+                          <span>{modusValidation.invalidCoordinatesCount} rader med ogiltiga koordinater (utanför Sverige)</span>
+                        </div>
+                      )}
+                      {modusValidation.missingParents.length > 0 && (
+                        <div className="text-xs text-muted-foreground flex items-start gap-2">
+                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
+                          <span>{modusValidation.missingParents.length} saknade föräldra-ID:n</span>
+                        </div>
+                      )}
+                      {modusValidation.warnings.map((w, i) => (
+                        <div key={i} className="text-xs text-muted-foreground flex items-start gap-2">
+                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
+                          <span>{w}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
-                  {modusResults.objects.errors.length > 0 && (
-                    <div className="col-span-full">
-                      <details className="text-xs">
-                        <summary className="text-orange-600 cursor-pointer font-medium">
-                          {modusResults.objects.errors.length} varningar
-                        </summary>
-                        <ScrollArea className="h-24 mt-1">
-                          <ul className="text-muted-foreground space-y-0.5 ml-4 list-disc">
-                            {modusResults.objects.errors.map((err, i) => (
-                              <li key={i}>{err}</li>
-                            ))}
-                          </ul>
-                        </ScrollArea>
-                      </details>
-                    </div>
-                  )}
+
+                  <div className="flex items-center gap-3 pt-2 border-t">
+                    <Button
+                      variant="default"
+                      disabled={modusUploading !== null}
+                      onClick={handleModusImportAfterValidation}
+                      data-testid="button-modus-start-import"
+                    >
+                      {modusUploading === "objects" ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      Starta import ({modusValidation.totalRows} objekt)
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={() => { setModusValidation(null); setModusObjectFile(null); }}
+                      data-testid="button-modus-cancel-validation"
+                    >
+                      Avbryt
+                    </Button>
+                  </div>
                 </div>
+              )}
+
+              {importProgress && importProgress.status === "running" && (
+                <Card className="border-blue-200 dark:border-blue-800" data-testid="card-import-progress">
+                  <CardContent className="pt-6 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                      <span className="text-sm font-medium">Importerar...</span>
+                      <Badge variant="secondary" className="text-xs">
+                        {importProgress.phase === "kunder" && "Skapar kunder"}
+                        {importProgress.phase === "objekt" && "Importerar objekt"}
+                        {importProgress.phase === "hierarki" && "Bygger hierarki"}
+                        {importProgress.phase === "metadata" && "Skriver metadata"}
+                        {importProgress.phase === "klar" && "Klar"}
+                        {importProgress.phase === "startar" && "Startar"}
+                      </Badge>
+                    </div>
+                    <Progress 
+                      value={importProgress.total > 0 ? (importProgress.processed / importProgress.total) * 100 : 0} 
+                      data-testid="progress-import"
+                    />
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{importProgress.processed} / {importProgress.total} rader</span>
+                      <span className="text-green-600">{importProgress.created} skapade</span>
+                      <span className="text-blue-600">{importProgress.updated} uppdaterade</span>
+                      {importProgress.errors > 0 && (
+                        <span className="text-orange-600">{importProgress.errors} fel</span>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {modusResults.objects && (
+                <Card className="border-green-200 dark:border-green-800" data-testid="card-import-summary">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600" />
+                      Import slutförd
+                    </CardTitle>
+                    {modusResults.objects.importBatchId && (
+                      <CardDescription className="font-mono text-xs">
+                        Batch: {modusResults.objects.importBatchId.slice(0, 8)}...
+                      </CardDescription>
+                    )}
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="text-center p-2 bg-green-50 dark:bg-green-950/20 rounded-md">
+                        <div className="text-lg font-bold text-green-600" data-testid="text-summary-created">{modusResults.objects.created || 0}</div>
+                        <div className="text-xs text-muted-foreground">Objekt skapade</div>
+                      </div>
+                      <div className="text-center p-2 bg-blue-50 dark:bg-blue-950/20 rounded-md">
+                        <div className="text-lg font-bold text-blue-600" data-testid="text-summary-updated">{modusResults.objects.updated || 0}</div>
+                        <div className="text-xs text-muted-foreground">Objekt uppdaterade</div>
+                      </div>
+                      <div className="text-center p-2 bg-purple-50 dark:bg-purple-950/20 rounded-md">
+                        <div className="text-lg font-bold text-purple-600" data-testid="text-summary-customers">{modusResults.objects.customersCreated}</div>
+                        <div className="text-xs text-muted-foreground">Kunder</div>
+                      </div>
+                      <div className="text-center p-2 rounded-md" style={{ background: modusResults.objects.errors.length > 0 ? undefined : undefined }}>
+                        <div className={`text-lg font-bold ${modusResults.objects.errors.length > 0 ? "text-orange-600" : "text-muted-foreground"}`} data-testid="text-summary-errors">
+                          {modusResults.objects.errors.length}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Fel</div>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-4 text-xs text-muted-foreground">
+                      <span>{modusResults.objects.parentsUpdated} hierarkiska kopplingar</span>
+                      <span>{modusResults.objects.metadataWritten || 0} metadata-värden</span>
+                      {(modusResults.objects.metadataColumns?.length || 0) > 0 && (
+                        <span>Kolumner: {modusResults.objects.metadataColumns.join(", ")}</span>
+                      )}
+                    </div>
+
+                    {modusResults.objects.errors.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-orange-600 flex items-center gap-1">
+                          <AlertCircle className="h-3 w-3" />
+                          {modusResults.objects.errors.length} fel vid import
+                        </p>
+                        <ScrollArea className="h-40 border rounded-md">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-12 text-xs">#</TableHead>
+                                <TableHead className="text-xs">Felmeddelande</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {modusResults.objects.errors.map((err, i) => (
+                                <TableRow key={i}>
+                                  <TableCell className="font-mono text-xs text-muted-foreground">{i + 1}</TableCell>
+                                  <TableCell className="text-xs">{err}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </ScrollArea>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
               )}
             </CardContent>
           </Card>
@@ -875,6 +1216,67 @@ export default function ImportPage() {
             </CardContent>
           </Card>
 
+          {importBatches.length > 0 && (
+            <Card data-testid="card-import-history">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  Importhistorik
+                </CardTitle>
+                <CardDescription>Tidigare importer med möjlighet att ångra</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ScrollArea className="max-h-60">
+                  <div className="space-y-2">
+                    {importBatches.map((batch) => (
+                      <div 
+                        key={batch.batchId} 
+                        className="flex items-center justify-between gap-4 p-3 border rounded-md"
+                        data-testid={`batch-row-${batch.batchId.slice(0, 8)}`}
+                      >
+                        <div className="flex items-center gap-4 flex-wrap text-sm">
+                          <span className="text-muted-foreground text-xs">
+                            {batch.importedAt ? new Date(batch.importedAt).toLocaleString("sv-SE") : "Okänt datum"}
+                          </span>
+                          <div className="flex items-center gap-3 flex-wrap">
+                            {batch.objects > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Building2 className="h-3 w-3 mr-1" />
+                                {batch.objects} objekt
+                              </Badge>
+                            )}
+                            {batch.workOrders > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Truck className="h-3 w-3 mr-1" />
+                                {batch.workOrders} ordrar
+                              </Badge>
+                            )}
+                            {batch.customers > 0 && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Users className="h-3 w-3 mr-1" />
+                                {batch.customers} kunder
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setUndoBatchId(batch.batchId)}
+                          disabled={undoBatchMutation.isPending}
+                          data-testid={`button-undo-batch-${batch.batchId.slice(0, 8)}`}
+                        >
+                          <Undo2 className="h-3 w-3 mr-1" />
+                          Ångra import
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </CardContent>
+            </Card>
+          )}
+
           <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
             <CardContent className="pt-6">
               <div className="flex items-start gap-3">
@@ -1070,6 +1472,32 @@ export default function ImportPage() {
           </Tabs>
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={!!undoBatchId} onOpenChange={(open) => { if (!open) setUndoBatchId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ångra import</AlertDialogTitle>
+            <AlertDialogDescription>
+              Är du säker på att du vill ångra denna import? Alla objekt, arbetsordrar och kunder som skapades i denna import kommer att tas bort permanent.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-undo">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => { if (undoBatchId) undoBatchMutation.mutate(undoBatchId); }}
+              className="bg-destructive text-destructive-foreground"
+              data-testid="button-confirm-undo"
+            >
+              {undoBatchMutation.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4 mr-2" />
+              )}
+              Ja, ångra import
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={showPreview} onOpenChange={setShowPreview}>
         <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">

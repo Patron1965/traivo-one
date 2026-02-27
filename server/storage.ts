@@ -130,6 +130,7 @@ export interface IStorage {
   getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObject(id: string): Promise<ServiceObject | undefined>;
+  getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
   getObjectsByCustomer(customerId: string): Promise<ServiceObject[]>;
   createObject(object: InsertObject): Promise<ServiceObject>;
   updateObject(id: string, object: Partial<InsertObject>): Promise<ServiceObject | undefined>;
@@ -151,6 +152,7 @@ export interface IStorage {
   createWorkOrder(workOrder: InsertWorkOrder): Promise<WorkOrder>;
   updateWorkOrder(id: string, workOrder: Partial<InsertWorkOrder>): Promise<WorkOrder | undefined>;
   deleteWorkOrder(id: string): Promise<void>;
+  getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined>;
   
   createSetupTimeLog(log: InsertSetupTimeLog): Promise<SetupTimeLog>;
   getSetupTimeLogs(tenantId: string, objectId?: string): Promise<SetupTimeLog[]>;
@@ -793,6 +795,13 @@ export class DatabaseStorage implements IStorage {
     return object || undefined;
   }
 
+  async getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined> {
+    const [object] = await db.select().from(objects).where(
+      and(eq(objects.tenantId, tenantId), eq(objects.objectNumber, objectNumber), isNull(objects.deletedAt))
+    );
+    return object || undefined;
+  }
+
   async getObjectsByCustomer(customerId: string): Promise<ServiceObject[]> {
     return db.select().from(objects).where(and(eq(objects.customerId, customerId), isNull(objects.deletedAt)));
   }
@@ -1122,6 +1131,17 @@ export class DatabaseStorage implements IStorage {
 
   async deleteWorkOrder(id: string): Promise<void> {
     await db.update(workOrders).set({ deletedAt: new Date() }).where(eq(workOrders.id, id));
+  }
+
+  async getWorkOrderByModusId(tenantId: string, modusId: string): Promise<WorkOrder | undefined> {
+    const [wo] = await db.select().from(workOrders).where(
+      and(
+        eq(workOrders.tenantId, tenantId),
+        sql`${workOrders.metadata}->>'modusId' = ${modusId}`,
+        isNull(workOrders.deletedAt)
+      )
+    );
+    return wo || undefined;
   }
 
   async createSetupTimeLog(insertLog: InsertSetupTimeLog): Promise<SetupTimeLog> {

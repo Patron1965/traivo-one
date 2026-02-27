@@ -57,6 +57,7 @@ export const customers = pgTable("customers", {
   city: text("city"),
   postalCode: text("postal_code"),
   notes: text("notes"),
+  importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });
@@ -141,6 +142,7 @@ export const objects = pgTable("objects", {
   status: text("status").default("active").notNull(),
   notes: text("notes"),
   lastServiceDate: timestamp("last_service_date"),
+  importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });
@@ -271,6 +273,7 @@ export const workOrders = pgTable("work_orders", {
   plannedNotes: text("planned_notes"),
   notes: text("notes"),
   metadata: jsonb("metadata").default({}),
+  importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });
