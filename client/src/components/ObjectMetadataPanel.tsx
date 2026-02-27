@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Loader2, Database, Lock, Plus, Save, X, History, Edit2, 
   ArrowDown, ExternalLink, Trash2, Image, FileText, MapPin, Clock, Hash, Type, ToggleLeft,
-  Share2, ChevronRight, ChevronDown, TreeDeciduous
+  Share2, ChevronRight, ChevronDown, TreeDeciduous, RotateCcw, Pencil
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { ServiceObject, MetadataKatalog, MetadataHistorik } from "@shared/schema";
@@ -125,16 +125,31 @@ function getSourceBadge(entry: MetadataEntry) {
   }
   if (entry.source === 'inherited') {
     return (
-      <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-green-500 text-green-700 dark:text-green-400" data-testid={`badge-inherited-${entry.id}`}>
-        <ArrowDown className="h-3 w-3" />
-        {entry.fromObject ? `Arvd fran ${entry.fromObject.namn}` : "Arvd"}
-      </Badge>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-green-500 text-green-700 dark:text-green-400 cursor-help" data-testid={`badge-inherited-${entry.id}`}>
+            <ArrowDown className="h-3 w-3" />
+            {entry.fromObject ? `Arvt fran ${entry.fromObject.namn}` : "Arvt"}
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          <p>{entry.fromObject ? `Vardet arvs fran foralderobjekt "${entry.fromObject.namn}" (niva ${entry.fromObject.level})` : "Vardet arvs fran ett foralderobjekt"}</p>
+        </TooltipContent>
+      </Tooltip>
     );
   }
   return (
-    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-blue-500 text-blue-700 dark:text-blue-400" data-testid={`badge-local-${entry.id}`}>
-      Lokal
-    </Badge>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge variant="outline" className="text-[10px] px-1.5 py-0 gap-1 border-blue-500 text-blue-700 dark:text-blue-400 cursor-help" data-testid={`badge-local-${entry.id}`}>
+          <Pencil className="h-3 w-3" />
+          Eget varde
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent>
+        <p>Detta varde ar satt direkt pa detta objekt och overskriver eventuellt arvda varden</p>
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -807,10 +822,10 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
           </DialogTitle>
           <DialogDescription className="flex items-center gap-4 text-xs">
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Arvd
+              <span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Arvt varde
             </span>
             <span className="flex items-center gap-1">
-              <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> Lokal
+              <span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> Eget varde
             </span>
             <span className="flex items-center gap-1">
               <span className="w-3 h-3 rounded-sm bg-red-500 inline-block" /> Niva-las
@@ -889,6 +904,27 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                     </TooltipTrigger>
                                     <TooltipContent>Redigera</TooltipContent>
                                   </Tooltip>
+                                  {object.parentId && (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon" 
+                                          className="h-7 w-7 text-green-600 dark:text-green-400" 
+                                          onClick={() => {
+                                            if (confirm("Vill du ta bort det egna vardet och aterstalla till arvt varde fran foraldern?")) {
+                                              deleteMutation.mutate(entry.id);
+                                            }
+                                          }}
+                                          disabled={deleteMutation.isPending}
+                                          data-testid={`button-reset-inherited-${entry.id}`}
+                                        >
+                                          <RotateCcw className="h-3.5 w-3.5" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>Aterstall till arvt varde</TooltipContent>
+                                    </Tooltip>
+                                  )}
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button 
@@ -934,9 +970,22 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                             </div>
                           ) : (
                             <div className="mt-1 text-sm">
-                              <span className={entry.source === 'inherited' ? 'italic text-muted-foreground' : ''}>
-                                {getDisplayValue(entry) || <span className="text-muted-foreground">Inget varde</span>}
-                              </span>
+                              {entry.source === 'inherited' ? (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="italic text-muted-foreground cursor-help">
+                                      {getDisplayValue(entry) || <span className="text-muted-foreground">Inget varde</span>}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{entry.fromObject ? `Arvt fran "${entry.fromObject.namn}"` : "Arvt fran foralderobjekt"}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              ) : (
+                                <span className="font-medium">
+                                  {getDisplayValue(entry) || <span className="text-muted-foreground">Inget varde</span>}
+                                </span>
+                              )}
                             </div>
                           )}
                         </CardContent>
@@ -1025,7 +1074,7 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
           </Dialog>
 
           <span className="text-xs text-muted-foreground">
-            {metadata.length} metadata ({metadata.filter(m => m.source === 'local').length} lokala, {metadata.filter(m => m.source === 'inherited').length} arvda)
+            {metadata.length} metadata ({metadata.filter(m => m.source === 'local').length} egna varden, {metadata.filter(m => m.source === 'inherited').length} arvda)
           </span>
         </div>
       </DialogContent>

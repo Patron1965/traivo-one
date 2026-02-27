@@ -15,7 +15,7 @@ import {
   insertObjectImageSchema, insertObjectContactSchema, insertTaskDesiredTimewindowSchema,
   insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
-  insertFuelLogSchema, insertMaintenanceLogSchema,
+  insertFuelLogSchema, insertMaintenanceLogSchema, insertObjectParentSchema,
   type ServiceObject,
   apiUsageLogs, apiBudgets, articles, taskDependencyInstances
 } from "@shared/schema";
@@ -369,6 +369,88 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to delete object:", error);
       res.status(500).json({ error: "Failed to delete object" });
+    }
+  });
+
+  // === FLERFÖRÄLDRA-API (Multi-parent relationships) ===
+
+  app.get("/api/objects/:id/parents", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const parents = await storage.getObjectParents(req.params.id);
+      res.json(parents);
+    } catch (error) {
+      console.error("Failed to fetch object parents:", error);
+      res.status(500).json({ error: "Failed to fetch object parents" });
+    }
+  });
+
+  app.post("/api/objects/:id/parents", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const parentObj = await storage.getObject(req.body.parentId);
+      if (!verifyTenantOwnership(parentObj, tenantId)) {
+        return res.status(404).json({ error: "Parent object not found" });
+      }
+      const data = insertObjectParentSchema.parse({
+        ...req.body,
+        objectId: req.params.id,
+        tenantId,
+      });
+      const result = await storage.addObjectParent(data);
+      res.status(201).json(result);
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json(formatZodError(error));
+      }
+      console.error("Failed to add object parent:", error);
+      res.status(500).json({ error: "Failed to add object parent" });
+    }
+  });
+
+  app.delete("/api/objects/:id/parents/:parentRelationId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      await storage.removeObjectParent(req.params.parentRelationId, req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Failed to remove object parent:", error);
+      res.status(500).json({ error: "Failed to remove object parent" });
+    }
+  });
+
+  app.patch("/api/objects/:id/parents/:parentRelationId/primary", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const parents = await storage.getObjectParents(req.params.id);
+      const relation = parents.find(p => p.id === req.params.parentRelationId);
+      if (!relation) {
+        return res.status(404).json({ error: "Parent relation not found" });
+      }
+      const result = await storage.setPrimaryParent(req.params.id, relation.parentId, tenantId);
+      if (!result) {
+        return res.status(404).json({ error: "Failed to set primary parent" });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to set primary parent:", error);
+      res.status(500).json({ error: "Failed to set primary parent" });
     }
   });
 
@@ -11093,12 +11175,35 @@ setInterval(loadRoutes, 30000);
       // Get invoice rules
       const rules = await storage.getInvoiceRules(tenantId, orderConceptId as string | undefined);
       
-      // Group orders by customer for invoicing
-      const ordersByCustomer: Record<string, typeof completedOrders> = {};
+      // Group orders by invoice stop-level (or customer as fallback)
+      const ordersByInvoiceTarget: Record<string, { customerId: string; stopObjectName: string | null; invoiceReference: string | null; orders: typeof completedOrders }> = {};
       for (const order of completedOrders) {
-        const cid = order.customerId || 'unknown';
-        if (!ordersByCustomer[cid]) ordersByCustomer[cid] = [];
-        ordersByCustomer[cid].push(order);
+        let targetKey = order.customerId || 'unknown';
+        let stopObjectName: string | null = null;
+        let invoiceReference: string | null = null;
+        
+        if (order.objectId) {
+          const stopLevel = await storage.findInvoiceStopLevel(order.objectId, tenantId);
+          if (stopLevel) {
+            targetKey = stopLevel.customerId;
+            stopObjectName = stopLevel.objectName;
+            invoiceReference = stopLevel.invoiceReference;
+          }
+        }
+        
+        if (!ordersByInvoiceTarget[targetKey]) {
+          ordersByInvoiceTarget[targetKey] = { customerId: targetKey, stopObjectName, invoiceReference, orders: [] };
+        }
+        ordersByInvoiceTarget[targetKey].orders.push(order);
+      }
+      
+      const ordersByCustomer: Record<string, typeof completedOrders> = {};
+      const invoiceStopInfo: Record<string, { stopObjectName: string | null; invoiceReference: string | null }> = {};
+      for (const [key, target] of Object.entries(ordersByInvoiceTarget)) {
+        ordersByCustomer[target.customerId] = [...(ordersByCustomer[target.customerId] || []), ...target.orders];
+        if (!invoiceStopInfo[target.customerId] && target.stopObjectName) {
+          invoiceStopInfo[target.customerId] = { stopObjectName: target.stopObjectName, invoiceReference: target.invoiceReference };
+        }
       }
       
       // Get all customers for name lookup
@@ -11190,9 +11295,12 @@ setInterval(loadRoutes, 30000);
           }
         }
         
+        const stopInfo = invoiceStopInfo[cid];
         invoicePreviews.push({
           customerId: cid,
           customerName: customer?.name || 'Okänd kund',
+          invoiceStopObject: stopInfo?.stopObjectName || null,
+          invoiceReference: stopInfo?.invoiceReference || null,
           invoiceType,
           headerMetadata,
           lines,

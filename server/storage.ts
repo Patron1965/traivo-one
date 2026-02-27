@@ -80,8 +80,9 @@ import {
   type OfflineSyncLog, type InsertOfflineSyncLog,
   type FuelLog, type InsertFuelLog,
   type MaintenanceLog, type InsertMaintenanceLog,
+  type ObjectParent, type InsertObjectParent,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
-  fuelLogs, maintenanceLogs,
+  fuelLogs, maintenanceLogs, objectParents,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -313,7 +314,8 @@ export interface IStorage {
   createObjectMetadata(metadata: InsertObjectMetadata): Promise<ObjectMetadata>;
   updateObjectMetadata(id: string, objectId: string, tenantId: string, data: Partial<InsertObjectMetadata>): Promise<ObjectMetadata | undefined>;
   deleteObjectMetadata(id: string, objectId: string, tenantId: string): Promise<void>;
-  getEffectiveMetadata(objectId: string, tenantId: string): Promise<Record<string, unknown>>;
+  getEffectiveMetadata(objectId: string, tenantId: string, contextParentId?: string): Promise<Record<string, unknown>>;
+  findInvoiceStopLevel(objectId: string, tenantId: string): Promise<{ objectId: string; objectName: string; customerId: string; invoiceReference: string | null } | null>;
   
   // Object Payers
   getObjectPayers(objectId: string): Promise<ObjectPayer[]>;
@@ -588,6 +590,13 @@ export interface IStorage {
   getMaintenanceLogs(tenantId: string, vehicleId?: string): Promise<MaintenanceLog[]>;
   createMaintenanceLog(log: InsertMaintenanceLog): Promise<MaintenanceLog>;
   deleteMaintenanceLog(id: string, tenantId: string): Promise<void>;
+
+  // Object Parents (multi-parent relationships)
+  getObjectParents(objectId: string): Promise<ObjectParent[]>;
+  getObjectChildren(parentId: string): Promise<ObjectParent[]>;
+  addObjectParent(data: InsertObjectParent): Promise<ObjectParent>;
+  removeObjectParent(id: string, objectId?: string): Promise<void>;
+  setPrimaryParent(objectId: string, parentId: string, tenantId: string): Promise<ObjectParent | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -2432,19 +2441,30 @@ export class DatabaseStorage implements IStorage {
       ));
   }
 
-  async getEffectiveMetadata(objectId: string, tenantId: string): Promise<Record<string, unknown>> {
-    // Get metadata definitions scoped to tenant
+  async getEffectiveMetadata(objectId: string, tenantId: string, contextParentId?: string): Promise<Record<string, unknown>> {
     const definitions = await db.select()
       .from(metadataDefinitions)
       .where(eq(metadataDefinitions.tenantId, tenantId));
     const result: Record<string, unknown> = {};
     
-    // Build the ancestor chain once - cache object lookups
     const ancestorChain: string[] = [];
     let currentObj = await this.getObject(objectId);
-    while (currentObj?.parentId) {
-      ancestorChain.push(currentObj.parentId);
-      currentObj = await this.getObject(currentObj.parentId);
+    
+    if (contextParentId && currentObj) {
+      const contextParent = await this.getObject(contextParentId);
+      if (contextParent) {
+        let cp: any = contextParent;
+        ancestorChain.push(cp.id);
+        while (cp?.parentId) {
+          ancestorChain.push(cp.parentId);
+          cp = await this.getObject(cp.parentId);
+        }
+      }
+    } else {
+      while (currentObj?.parentId) {
+        ancestorChain.push(currentObj.parentId);
+        currentObj = await this.getObject(currentObj.parentId);
+      }
     }
     
     // For each definition, try to get the effective value
@@ -2511,6 +2531,48 @@ export class DatabaseStorage implements IStorage {
     }
     
     return result;
+  }
+
+  async findInvoiceStopLevel(objectId: string, tenantId: string): Promise<{ objectId: string; objectName: string; customerId: string; invoiceReference: string | null } | null> {
+    let currentObj = await this.getObject(objectId);
+    
+    while (currentObj) {
+      const meta = await db.select()
+        .from(objectMetadata)
+        .where(and(eq(objectMetadata.objectId, currentObj.id), eq(objectMetadata.tenantId, tenantId)));
+      
+      const defs = await db.select()
+        .from(metadataDefinitions)
+        .where(eq(metadataDefinitions.tenantId, tenantId));
+      
+      const invoiceStopDef = defs.find(d => d.fieldKey === 'invoice_stop');
+      if (invoiceStopDef) {
+        const stopMeta = meta.find(m => m.definitionId === invoiceStopDef.id);
+        if (stopMeta && (stopMeta.value === 'true' || stopMeta.value === '1')) {
+          const refDef = defs.find(d => d.fieldKey === 'fakturaref');
+          const refMeta = meta.find(m => refDef && m.definitionId === refDef.id);
+          return {
+            objectId: currentObj.id,
+            objectName: currentObj.name,
+            customerId: currentObj.customerId,
+            invoiceReference: refMeta?.value || null,
+          };
+        }
+      }
+      
+      if (!currentObj.parentId) {
+        return {
+          objectId: currentObj.id,
+          objectName: currentObj.name,
+          customerId: currentObj.customerId,
+          invoiceReference: null,
+        };
+      }
+      
+      currentObj = await this.getObject(currentObj.parentId);
+    }
+    
+    return null;
   }
 
   // Object Payers
@@ -4115,6 +4177,51 @@ export class DatabaseStorage implements IStorage {
 
   async deleteMaintenanceLog(id: string, tenantId: string): Promise<void> {
     await db.delete(maintenanceLogs).where(and(eq(maintenanceLogs.id, id), eq(maintenanceLogs.tenantId, tenantId)));
+  }
+
+  // ============== OBJECT PARENTS (multi-parent relationships) ==============
+  async getObjectParents(objectId: string): Promise<ObjectParent[]> {
+    return db.select().from(objectParents).where(eq(objectParents.objectId, objectId)).orderBy(desc(objectParents.isPrimary), objectParents.createdAt);
+  }
+
+  async getObjectChildren(parentId: string): Promise<ObjectParent[]> {
+    return db.select().from(objectParents).where(eq(objectParents.parentId, parentId)).orderBy(objectParents.createdAt);
+  }
+
+  async addObjectParent(data: InsertObjectParent): Promise<ObjectParent> {
+    const [result] = await db.insert(objectParents).values(data).returning();
+    return result;
+  }
+
+  async removeObjectParent(id: string, objectId?: string): Promise<void> {
+    const conditions = [eq(objectParents.id, id)];
+    if (objectId) {
+      conditions.push(eq(objectParents.objectId, objectId));
+    }
+    await db.delete(objectParents).where(and(...conditions));
+  }
+
+  async setPrimaryParent(objectId: string, parentId: string, tenantId: string): Promise<ObjectParent | undefined> {
+    await db.update(objectParents)
+      .set({ isPrimary: false })
+      .where(and(eq(objectParents.objectId, objectId), eq(objectParents.tenantId, tenantId)));
+
+    const [updated] = await db.update(objectParents)
+      .set({ isPrimary: true })
+      .where(and(
+        eq(objectParents.objectId, objectId),
+        eq(objectParents.parentId, parentId),
+        eq(objectParents.tenantId, tenantId)
+      ))
+      .returning();
+
+    if (updated) {
+      await db.update(objects)
+        .set({ parentId })
+        .where(eq(objects.id, objectId));
+    }
+
+    return updated || undefined;
   }
 }
 

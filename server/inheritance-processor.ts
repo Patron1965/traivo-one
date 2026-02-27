@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { objects, clusters } from "@shared/schema";
-import { eq, and, isNull } from "drizzle-orm";
+import { objects, clusters, objectParents } from "@shared/schema";
+import { eq, and, isNull, desc } from "drizzle-orm";
 import type { ServiceObject, Cluster } from "@shared/schema";
 
 interface ResolvedObjectData {
@@ -40,9 +40,10 @@ export class InheritanceProcessor {
     this.tenantId = tenantId;
   }
 
-  async getAncestorChain(objectId: string): Promise<ServiceObject[]> {
+  async getAncestorChain(objectId: string, contextParentId?: string): Promise<ServiceObject[]> {
     const ancestors: ServiceObject[] = [];
     let currentId: string | null = objectId;
+    let isFirst = true;
 
     while (currentId) {
       const [obj] = await db
@@ -59,10 +60,36 @@ export class InheritanceProcessor {
       if (!obj) break;
 
       ancestors.push(obj);
-      currentId = obj.parentId;
+
+      if (isFirst && contextParentId) {
+        currentId = contextParentId;
+        isFirst = false;
+      } else {
+        currentId = obj.parentId;
+        isFirst = false;
+      }
     }
 
     return ancestors.reverse();
+  }
+
+  async getContextualAncestorChain(objectId: string, relationContext: string): Promise<ServiceObject[]> {
+    const contextParents = await db
+      .select()
+      .from(objectParents)
+      .where(
+        and(
+          eq(objectParents.objectId, objectId),
+          eq(objectParents.tenantId, this.tenantId)
+        )
+      );
+
+    const contextParent = contextParents.find(p => p.relationContext === relationContext);
+    if (contextParent) {
+      return this.getAncestorChain(objectId, contextParent.parentId);
+    }
+
+    return this.getAncestorChain(objectId);
   }
 
   async resolveInheritance(objectId: string): Promise<ResolvedObjectData> {

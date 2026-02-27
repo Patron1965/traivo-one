@@ -21,6 +21,7 @@ import {
 import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
+import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
@@ -567,6 +568,7 @@ export default function ObjectsPage() {
                 <ObjectImagesDialog object={obj} />
                 <ObjectMetadataPanel object={obj} />
                 <ObjectPayersPanel object={obj} />
+                <ObjectParentsPanel object={obj} />
                 <ObjectApplicableArticlesPanel object={obj} />
               </>
             )}

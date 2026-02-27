@@ -1433,6 +1433,38 @@ export const objectPayers = pgTable("object_payers", {
 ]);
 
 // ============================================
+// FLERFÖRÄLDRA-RELATIONER (MULTI-PARENT)
+// ============================================
+
+export const OBJECT_RELATION_CONTEXTS = [
+  "primary",     // Primär organisatorisk tillhörighet
+  "billing",     // Faktureringsrelation
+  "operational", // Driftsrelation
+  "ownership",   // Ägarrelation
+] as const;
+export type ObjectRelationContext = typeof OBJECT_RELATION_CONTEXTS[number];
+
+export const objectParents = pgTable("object_parents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  parentId: varchar("parent_id").references(() => objects.id).notNull(),
+  isPrimary: boolean("is_primary").default(false).notNull(),
+  relationContext: text("relation_context").default("primary"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_object_parents_object").on(table.objectId),
+  index("idx_object_parents_parent").on(table.parentId),
+  index("idx_object_parents_tenant").on(table.tenantId),
+]);
+
+export const objectParentsRelations = relations(objectParents, ({ one }) => ({
+  tenant: one(tenants, { fields: [objectParents.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [objectParents.objectId], references: [objects.id] }),
+  parent: one(objects, { fields: [objectParents.parentId], references: [objects.id] }),
+}));
+
+// ============================================
 // METADATA PROPAGATION SYSTEM
 // ============================================
 
@@ -1658,6 +1690,10 @@ export const objectTimeRestrictions = pgTable("object_time_restrictions", {
   startTime: text("start_time"),
   endTime: text("end_time"),
   isBlockingAllDay: boolean("is_blocking_all_day").default(false),
+  validFromDate: timestamp("valid_from_date"),
+  validToDate: timestamp("valid_to_date"),
+  recurrenceInterval: integer("recurrence_interval"),
+  recurrenceUnit: text("recurrence_unit"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
@@ -2215,6 +2251,7 @@ export const insertObjectContactSchema = createInsertSchema(objectContacts).omit
 export const insertTaskDesiredTimewindowSchema = createInsertSchema(taskDesiredTimewindows).omit({ id: true, createdAt: true });
 export const insertTaskDependencySchema = createInsertSchema(taskDependencies).omit({ id: true, createdAt: true });
 export const insertTaskInformationSchema = createInsertSchema(taskInformation).omit({ id: true, createdAt: true });
+export const insertObjectParentSchema = createInsertSchema(objectParents).omit({ id: true, createdAt: true });
 export const insertObjectTimeRestrictionSchema = createInsertSchema(objectTimeRestrictions).omit({ id: true, createdAt: true });
 export const insertStructuralArticleSchema = createInsertSchema(structuralArticles).omit({ id: true, createdAt: true });
 
@@ -2244,6 +2281,8 @@ export type TaskDependency = typeof taskDependencies.$inferSelect;
 export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
 export type TaskInformation = typeof taskInformation.$inferSelect;
 export type InsertTaskInformation = z.infer<typeof insertTaskInformationSchema>;
+export type ObjectParent = typeof objectParents.$inferSelect;
+export type InsertObjectParent = z.infer<typeof insertObjectParentSchema>;
 export type ObjectTimeRestriction = typeof objectTimeRestrictions.$inferSelect;
 export type InsertObjectTimeRestriction = z.infer<typeof insertObjectTimeRestrictionSchema>;
 export type StructuralArticle = typeof structuralArticles.$inferSelect;
