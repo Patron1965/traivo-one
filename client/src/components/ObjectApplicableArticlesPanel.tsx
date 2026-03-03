@@ -123,18 +123,39 @@ export function ObjectApplicableArticlesPanel({ object }: ObjectApplicableArticl
     },
   });
 
-  const handleSavePrice = useCallback((ap: ResolvedArticlePrice) => {
-    if (!ap.objectArticleId) return;
+  const handleSavePrice = useCallback(async (ap: ResolvedArticlePrice) => {
     const val = editPriceValue.trim();
     const price = val === "" ? null : parseInt(val, 10);
     if (val !== "" && isNaN(price!)) return;
-    updatePriceMutation.mutate({ linkId: ap.objectArticleId, overridePrice: price });
-  }, [editPriceValue, updatePriceMutation]);
 
-  const handleResetPrice = useCallback((ap: ResolvedArticlePrice) => {
+    if (ap.objectArticleId) {
+      updatePriceMutation.mutate({ linkId: ap.objectArticleId, overridePrice: price });
+    } else {
+      try {
+        await apiRequest("POST", `/api/objects/${object.id}/articles`, { articleId: ap.articleId, overridePrice: price });
+        queryClient.invalidateQueries({ queryKey });
+        setEditingPriceId(null);
+        toast({ title: "Pris uppdaterat" });
+      } catch {
+        toast({ title: "Kunde inte spara pris", variant: "destructive" });
+      }
+    }
+  }, [editPriceValue, updatePriceMutation, object.id, queryKey, toast]);
+
+  const handleResetPrice = useCallback(async (ap: ResolvedArticlePrice) => {
     if (!ap.objectArticleId) return;
-    updatePriceMutation.mutate({ linkId: ap.objectArticleId, overridePrice: null });
-  }, [updatePriceMutation]);
+    if (ap.isManual) {
+      updatePriceMutation.mutate({ linkId: ap.objectArticleId, overridePrice: null });
+    } else {
+      try {
+        await apiRequest("DELETE", `/api/objects/${object.id}/articles/${ap.objectArticleId}`);
+        queryClient.invalidateQueries({ queryKey });
+        toast({ title: "Pris återställt" });
+      } catch {
+        toast({ title: "Kunde inte återställa pris", variant: "destructive" });
+      }
+    }
+  }, [updatePriceMutation, object.id, queryKey, toast]);
 
   const handleAddArticle = useCallback(() => {
     if (!selectedArticleId) return;
@@ -396,22 +417,20 @@ function ArticleRow({
                   {ap.priceListName && ` (${ap.priceListName})`}
                 </span>
               </div>
-              {(ap.objectArticleId || ap.isManual) && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      className="h-6 w-6"
-                      onClick={() => onStartEdit(ap.articleId, ap.resolvedPrice)}
-                      data-testid={`button-edit-price-${ap.articleId}`}
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Överskrid pris</p></TooltipContent>
-                </Tooltip>
-              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-6 w-6"
+                    onClick={() => onStartEdit(ap.articleId, ap.resolvedPrice)}
+                    data-testid={`button-edit-price-${ap.articleId}`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent><p>Överskrid pris</p></TooltipContent>
+              </Tooltip>
               {ap.overridePrice != null && ap.objectArticleId && (
                 <Tooltip>
                   <TooltipTrigger asChild>

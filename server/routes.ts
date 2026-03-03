@@ -2720,7 +2720,7 @@ export async function registerRoutes(
       if (!verifyTenantOwnership(object, tenantId)) {
         return res.status(404).json({ error: "Object not found" });
       }
-      const { articleId } = req.body;
+      const { articleId, overridePrice } = req.body;
       if (!articleId) {
         return res.status(400).json({ error: "articleId is required" });
       }
@@ -2736,6 +2736,7 @@ export async function registerRoutes(
         tenantId,
         objectId: req.params.objectId,
         articleId,
+        overridePrice: overridePrice ?? undefined,
       });
       res.json(result);
     } catch (error) {
