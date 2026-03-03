@@ -13080,10 +13080,6 @@ setInterval(loadRoutes, 30000);
 
   app.post("/api/portal/auth/demo-login", async (req, res) => {
     try {
-      if (process.env.NODE_ENV === "production" && !process.env.ENABLE_DEMO_LOGIN) {
-        return res.status(403).json({ error: "Demo-inloggning är inaktiverad i produktion" });
-      }
-
       const demoEmail = "demo@unicorn.se";
       const tenantId = "default-tenant";
       
