@@ -20,7 +20,7 @@ import Papa from "papaparse";
 import type { Customer, Resource, ServiceObject } from "@shared/schema";
 
 type ImportType = "customers" | "resources" | "objects";
-type ModusImportType = "objects" | "tasks" | "events";
+type ModusImportType = "objects" | "tasks" | "events" | "invoice-lines";
 
 interface ImportResult {
   imported: number;
@@ -162,16 +162,42 @@ const MODUS_OBJECT_COLUMNS = [
 const MODUS_TASK_COLUMNS = [
   { name: "Uppgifts Id", required: true, description: "Unikt ID för uppgiften" },
   { name: "Objekt", required: true, description: "Referens till Modus objekt-ID" },
+  { name: "Kund", required: false, description: "Kundnamn i format 'Namn (ID)'" },
   { name: "Uppgiftsnamn", required: false, description: "Titel på arbetsorderna" },
-  { name: "Uppgiftstyp", required: false, description: "Typ: karlttvatt, rumstvatt, hamtning etc." },
-  { name: "Status", required: false, description: "Status: done → slutförd, etc." },
-  { name: "Team", required: false, description: "Resursnamn (skapas automatiskt om den saknas)" },
-  { name: "Planerad dag o tid", required: false, description: "Datum i ISO-format eller standardformat" },
+  { name: "Uppgiftstyp", required: false, description: "Kärltvätt, Rumstvätt, Tvätt UJ-behållare" },
+  { name: "Jobb", required: false, description: "Jobbgruppering, format 'Namn (ID)'" },
+  { name: "Beställning", required: false, description: "Beställningsnummer" },
+  { name: "Prislista", required: false, description: "Prislistans namn (t.ex. Vafab Miljö)" },
+  { name: "Varaktighet", required: false, description: "Uppskattad tid i minuter" },
+  { name: "Kostnad", required: false, description: "Beräknad kostnad (komma-decimal)" },
+  { name: "Pris", required: false, description: "Beräknat pris (komma-decimal)" },
+  { name: "Status", required: false, description: "done, not_started, in_progress, not_feasible" },
+  { name: "Resultat", required: false, description: "Anteckningar/kommentarer från fältarbetare" },
+  { name: "Fakturerad", required: false, description: "1 = fakturerad, 0 = ej fakturerad" },
+  { name: "Starttid", required: false, description: "Startdatum i ISO-format" },
+  { name: "Sluttid", required: false, description: "Slutdatum i ISO-format" },
+  { name: "Planerad år", required: false, description: "Planerat år (t.ex. 2024)" },
+  { name: "Planerad vecka", required: false, description: "Planerad vecka (1-52)" },
+  { name: "Planerad dag o tid", required: false, description: "Datum och tid i ISO-format" },
+  { name: "Team", required: false, description: "Resursnamn/fordons-ID (skapas automatiskt)" },
+];
+
+const MODUS_INVOICE_COLUMNS = [
+  { name: "Uppgift Id", required: true, description: "Kopplar fakturaraden till en uppgift" },
+  { name: "Rad", required: false, description: "Radnummer inom uppgiften" },
+  { name: "Beskrivning", required: false, description: "Beskrivning: 'Adress: Tjänstetyp'" },
+  { name: "Antal", required: false, description: "Antal enheter" },
+  { name: "Pris", required: false, description: "Styckpris (komma-decimal, t.ex. 156,56)" },
+  { name: "Fortnox Artikel Id", required: false, description: "Artikelkod: K100 (kärltvätt), UJ100 (underjord)" },
+  { name: "Fortnox Kostnadsställe", required: false, description: "Kostnadsställe i Fortnox" },
+  { name: "Fortnox Projekt", required: false, description: "Projektkod/team-referens" },
 ];
 
 const MODUS_EVENT_COLUMNS = [
+  { name: "Event Id", required: false, description: "Löpnummer för händelsen" },
   { name: "Uppgifts Id", required: true, description: "Kopplar händelsen till en uppgift" },
-  { name: "Event Typ", required: true, description: "Typ av händelse: in_progress, done" },
+  { name: "Event Typ", required: true, description: "in_progress, done, not_started, not_feasible" },
+  { name: "Beskrivning", required: false, description: "Statusbeskrivning" },
   { name: "Tid", required: true, description: "Tidsstämpel för händelsen" },
 ];
 
@@ -244,11 +270,13 @@ export default function ImportPage() {
   const [showEventColumns, setShowEventColumns] = useState(false);
   
   const [modusUploading, setModusUploading] = useState<ModusImportType | null>(null);
+  const [showInvoiceColumns, setShowInvoiceColumns] = useState(false);
   const [modusResults, setModusResults] = useState<{
     objects: ModusObjectResult | null;
     tasks: ImportResult | null;
     events: ModusEventsResult | null;
-  }>({ objects: null, tasks: null, events: null });
+    "invoice-lines": ImportResult | null;
+  }>({ objects: null, tasks: null, events: null, "invoice-lines": null });
   const [modusObjectFile, setModusObjectFile] = useState<File | null>(null);
   const [modusValidation, setModusValidation] = useState<ModusValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -331,10 +359,11 @@ export default function ImportPage() {
   };
 
   const importStep = useMemo(() => {
+    if (objects.length > 0 && workOrders.length > 0 && modusResults["invoice-lines"]) return 5;
     if (objects.length > 0 && workOrders.length > 0) return 4;
     if (objects.length > 0) return 3;
     return 1;
-  }, [objects.length, workOrders.length]);
+  }, [objects.length, workOrders.length, modusResults]);
 
   const importMutation = useMutation({
     mutationFn: async ({ type, file }: { type: ImportType; file: File }) => {
@@ -580,6 +609,14 @@ export default function ImportPage() {
           title: "Analys klar",
           description: `Analyserade ${(result as ModusEventsResult).totalEvents} händelser`,
         });
+      } else if (type === "invoice-lines") {
+        toast({
+          title: "Fakturarader importerade",
+          description: `${result.imported} rader importerade${result.articlesAutoCreated ? `, ${result.articlesAutoCreated} artiklar skapade` : ""}`,
+        });
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/articles"] });
+        queryClient.invalidateQueries({ queryKey: ["/api/import/batches"] });
       } else {
         queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
         queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
@@ -668,7 +705,9 @@ export default function ImportPage() {
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
             <StepIndicator step={3} title="Importera uppgifter" active={importStep === 3} completed={importStep >= 4} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={4} title="Analysera händelser" active={importStep === 4} completed={false} />
+            <StepIndicator step={4} title="Fakturarader" active={importStep === 4} completed={importStep >= 5} />
+            <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
+            <StepIndicator step={5} title="Analysera händelser" active={importStep === 5} completed={false} />
           </div>
 
           <Card>
@@ -1114,7 +1153,114 @@ export default function ImportPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">4</div>
+                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-amber-600 text-white text-sm font-bold">4</div>
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <FileSpreadsheet className="h-4 w-4" />
+                    Importera fakturarader (valfritt)
+                  </CardTitle>
+                  <CardDescription>
+                    Kopplar Fortnox-artiklar och priser till importerade uppgifter
+                  </CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-md text-sm space-y-1">
+                <p className="font-medium text-amber-700 dark:text-amber-300">Vad händer:</p>
+                <ul className="text-amber-600 dark:text-amber-400 text-xs space-y-0.5 ml-4 list-disc">
+                  <li>Kopplar fakturarader till importerade uppgifter via Uppgift Id</li>
+                  <li>Skapar artiklar automatiskt baserat på Fortnox Artikel Id (K100, UJ100)</li>
+                  <li>Importerar priser med korrekt hantering av komma-decimaler</li>
+                </ul>
+              </div>
+
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowInvoiceColumns(!showInvoiceColumns)}
+                  className="text-xs text-muted-foreground"
+                  data-testid="button-toggle-invoice-columns"
+                >
+                  {showInvoiceColumns ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                  {showInvoiceColumns ? "Dölj" : "Visa"} förväntade kolumner
+                </Button>
+                {showInvoiceColumns && <ColumnTable columns={MODUS_INVOICE_COLUMNS} />}
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  id="modus-invoice-lines"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleModusUpload("invoice-lines", file);
+                    e.target.value = "";
+                  }}
+                />
+                <Button
+                  variant="outline"
+                  disabled={modusUploading !== null}
+                  onClick={() => document.getElementById("modus-invoice-lines")?.click()}
+                  data-testid="button-modus-invoice-lines"
+                >
+                  {modusUploading === "invoice-lines" ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Välj fakturarader-CSV från Modus
+                </Button>
+                {modusResults["invoice-lines"] && (
+                  <Badge variant="default" className="bg-green-600">
+                    <CheckCircle className="h-3 w-3 mr-1" />
+                    {modusResults["invoice-lines"].imported} rader
+                  </Badge>
+                )}
+              </div>
+
+              {modusResults["invoice-lines"] && (
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-amber-600">{modusResults["invoice-lines"].imported}</div>
+                    <div className="text-xs text-muted-foreground">Fakturarader importerade</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-amber-600">{(modusResults["invoice-lines"] as any).articlesAutoCreated || 0}</div>
+                    <div className="text-xs text-muted-foreground">Artiklar skapade</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-red-500">{modusResults["invoice-lines"].errors?.length || 0}</div>
+                    <div className="text-xs text-muted-foreground">Fel</div>
+                  </div>
+                  {modusResults["invoice-lines"].errors && modusResults["invoice-lines"].errors.length > 0 && (
+                    <div className="col-span-full">
+                      <details>
+                        <summary className="text-xs text-muted-foreground cursor-pointer hover:text-foreground">
+                          Visa felmeddelanden ({modusResults["invoice-lines"].errors.length})
+                        </summary>
+                        <ScrollArea className="max-h-32 mt-2">
+                          <ul className="text-xs text-red-500 space-y-0.5 ml-4 list-disc">
+                            {modusResults["invoice-lines"].errors.map((e: string, i: number) => (
+                              <li key={i}>{e}</li>
+                            ))}
+                          </ul>
+                        </ScrollArea>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">5</div>
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Clock className="h-4 w-4" />

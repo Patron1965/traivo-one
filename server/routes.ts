@@ -1952,6 +1952,9 @@ export async function registerRoutes(
       const duplicateModusIds: { modusId: string; rows: number[] }[] = [];
       const invalidCoordinates: { row: number; lat: string; lng: string }[] = [];
       const warnings: string[] = [];
+      const typeStats: Record<string, number> = {};
+      let emptyTypeCount = 0;
+      let parentWithSpaces = 0;
 
       const modusIdOccurrences = new Map<string, number[]>();
       for (let i = 0; i < rows.length; i++) {
@@ -1965,12 +1968,25 @@ export async function registerRoutes(
           missingFields.push({ row: rowNum, fields: missing });
         }
 
-        const modusId = (row["Id"] || "").trim();
+        const rawModusId = (row["Id"] || "").trim();
+        const modusId = rawModusId.replace(/\s/g, "");
         if (modusId) {
           if (!modusIdOccurrences.has(modusId)) {
             modusIdOccurrences.set(modusId, []);
           }
           modusIdOccurrences.get(modusId)!.push(rowNum);
+        }
+
+        const typ = (row["Typ"] || "").trim();
+        if (typ) {
+          typeStats[typ] = (typeStats[typ] || 0) + 1;
+        } else {
+          emptyTypeCount++;
+        }
+
+        const rawParent = (row["Parent"] || "").trim();
+        if (rawParent && rawParent !== rawParent.replace(/\s/g, "")) {
+          parentWithSpaces++;
         }
 
         const latStr = (row["Latitud"] || "").trim();
@@ -2022,7 +2038,7 @@ export async function registerRoutes(
       let objectsExisting = 0;
       let objectsNew = 0;
       for (const row of rows) {
-        const modusId = (row["Id"] || "").trim();
+        const modusId = (row["Id"] || "").trim().replace(/\s/g, "");
         if (modusId) {
           const objNumber = `MODUS-${modusId}`.toLowerCase();
           if (existingObjectNumbers.has(objNumber)) {
@@ -2036,8 +2052,8 @@ export async function registerRoutes(
       const parentIds = new Set<string>();
       const allIds = new Set<string>();
       for (const row of rows) {
-        const id = (row["Id"] || "").trim();
-        const parent = (row["Parent"] || "").trim();
+        const id = (row["Id"] || "").trim().replace(/\s/g, "");
+        const parent = (row["Parent"] || "").trim().replace(/\s/g, "");
         if (id) allIds.add(id);
         if (parent) parentIds.add(parent);
       }
@@ -2052,6 +2068,12 @@ export async function registerRoutes(
       }
       if (missingParents.length > 0) {
         warnings.push(`${missingParents.length} föräldra-ID:n refereras men finns varken i CSV:n eller databasen`);
+      }
+      if (parentWithSpaces > 0) {
+        warnings.push(`${parentWithSpaces} föräldra-ID:n innehåller mellanslag (rensas automatiskt vid import)`);
+      }
+      if (emptyTypeCount > 0) {
+        warnings.push(`${emptyTypeCount} objekt saknar typ (importeras som "Område")`);
       }
 
       const metadataColumns: string[] = [];
@@ -2079,6 +2101,8 @@ export async function registerRoutes(
         missingParents: missingParents.slice(0, 20),
         metadataColumns,
         warnings,
+        typeStats,
+        emptyTypeCount,
       });
     } catch (error) {
       console.error("Modus validate error:", error);
@@ -2150,10 +2174,10 @@ export async function registerRoutes(
       
       for (const row of result.data as Record<string, string>[]) {
         try {
-          const modusId = row["Id"];
+          const modusId = (row["Id"] || "").replace(/\s/g, "");
           const name = row["Namn"] || "";
           const typ = row["Typ"] || "Område";
-          const parent = row["Parent"] || "";
+          const parent = (row["Parent"] || "").replace(/\s/g, "");
           const kundRaw = row["Kund"] || "";
           
           if (!name || !modusId) {
@@ -2179,16 +2203,20 @@ export async function registerRoutes(
           if (latitude && (latitude < 55 || latitude > 70)) latitude = null;
           if (longitude && (longitude < 10 || longitude > 25)) longitude = null;
           
-          // Map object type
+          // Map object type (matches real Modus export: Område, Fastighet / Byggnad, Miljörum, Miljökärl, Underjordsbehållare)
           let objectType = "omrade";
-          const typLower = typ.toLowerCase();
-          if (typLower.includes("fastighet") || typLower.includes("adress")) objectType = "fastighet";
+          const typLower = typ.toLowerCase().trim();
+          if (typLower.includes("miljökärl") || typLower === "miljokarl") objectType = "miljokarl";
+          else if (typLower.includes("miljörum")) objectType = "rum";
+          else if (typLower.includes("underjord")) objectType = "underjord";
+          else if (typLower.includes("fastighet") || typLower.includes("byggnad") || typLower.includes("adress")) objectType = "fastighet";
           else if (typLower.includes("rum") || typLower.includes("soprum")) objectType = "rum";
           else if (typLower.includes("kök")) objectType = "kok";
           else if (typLower.includes("matavfall")) objectType = "matafall";
           else if (typLower.includes("återvinning")) objectType = "atervinning";
           else if (typLower.includes("uj") || typLower.includes("hushåll")) objectType = "uj_hushallsavfall";
           else if (typLower.includes("serviceboende") || typLower.includes("boende")) objectType = "serviceboende";
+          else if (typLower === "område" || typLower === "omrade" || typLower === "") objectType = "omrade";
           
           // Determine access type from metadata
           let accessType = "open";
@@ -2226,11 +2254,13 @@ export async function registerRoutes(
             }
           }
           
-          // Determine object level
-          let objectLevel = 1;
-          if (parent) objectLevel = 2;
-          if (objectType === "rum" || objectType === "soprum" || objectType === "kok" || 
-              objectType === "matafall" || objectType === "atervinning") objectLevel = 3;
+          // Determine object level based on type hierarchy
+          let objectLevel = 1; // Område = top level
+          if (objectType === "fastighet") objectLevel = 2;
+          else if (objectType === "rum" || objectType === "miljokarl" || objectType === "underjord" || 
+                   objectType === "kok" || objectType === "matafall" || objectType === "atervinning" ||
+                   objectType === "uj_hushallsavfall") objectLevel = 3;
+          else if (objectType === "omrade" && parent) objectLevel = 2;
           
           const objectNumber = `MODUS-${modusId}`;
           
@@ -2283,8 +2313,8 @@ export async function registerRoutes(
       
       let parentsUpdated = 0;
       for (const row of result.data as Record<string, string>[]) {
-        const modusId = row["Id"];
-        const parentModusId = row["Parent"];
+        const modusId = (row["Id"] || "").replace(/\s/g, "");
+        const parentModusId = (row["Parent"] || "").replace(/\s/g, "");
         
         if (modusId && parentModusId) {
           const objectId = modusIdMap.get(modusId);
@@ -2320,7 +2350,7 @@ export async function registerRoutes(
       
       if (metadataColumns.length > 0) {
         for (const row of result.data as Record<string, string>[]) {
-          const modusId = row["Id"];
+          const modusId = (row["Id"] || "").replace(/\s/g, "");
           const objectId = modusId ? modusIdMap.get(modusId) : null;
           if (!objectId) continue;
           
@@ -2431,16 +2461,26 @@ export async function registerRoutes(
       for (const row of result.data as Record<string, string>[]) {
         try {
           const uppgiftsId = row["Uppgifts Id"];
-          const objekt = row["Objekt"];
+          const objekt = (row["Objekt"] || "").replace(/\s/g, "");
           const kundRaw = row["Kund"] || "";
-          const uppgiftsnamn = row["Uppgiftsnamn"] || "";
+          let uppgiftsnamn = row["Uppgiftsnamn"] || "";
           const uppgiftstyp = row["Uppgiftstyp"] || "";
           const status = row["Status"] || "draft";
           const varaktighet = row["Varaktighet"] || "60";
           const team = row["Team"] || "";
           const planeradDagOTid = row["Planerad dag o tid"] || "";
+          const prislista = row["Prislista"] || "";
+          const kostnad = row["Kostnad"] || "0";
+          const pris = row["Pris"] || "0";
+          const fakturerad = row["Fakturerad"] || "0";
+          const resultat = row["Resultat"] || "";
+          const jobb = row["Jobb"] || "";
+          const bestallning = row["Beställning"] || "";
+          const starttid = row["Starttid"] || "";
+          const sluttid = row["Sluttid"] || "";
           
-          if (!uppgiftsId || !uppgiftsnamn) continue;
+          if (!uppgiftsId) continue;
+          if (!uppgiftsnamn) uppgiftsnamn = `Uppgift ${uppgiftsId}`;
           
           // Find object by Modus ID
           const objectNumber = `MODUS-${objekt}`;
@@ -2481,6 +2521,20 @@ export async function registerRoutes(
           if (status === "done") mappedStatus = "completed";
           else if (status === "in_progress") mappedStatus = "in_progress";
           else if (status === "not_started" || status === "scheduled") mappedStatus = "scheduled";
+          else if (status === "not_feasible") mappedStatus = "cancelled";
+          
+          // Map task type
+          const typLower = uppgiftstyp.toLowerCase();
+          let orderType = "hamtning";
+          if (typLower.includes("kärltvätt") || typLower.includes("karlttvatt")) orderType = "karlttvatt";
+          else if (typLower.includes("rumstvätt") || typLower.includes("rumstvatt")) orderType = "rumstvatt";
+          else if (typLower.includes("uj") || typLower.includes("underjord")) orderType = "uj_tvatt";
+          else if (typLower.includes("tvätt")) orderType = "karlttvatt";
+          
+          // Parse monetary values (Swedish comma decimals)
+          const parsedKostnad = parseFloat(kostnad.replace(",", ".")) || 0;
+          const parsedPris = parseFloat(pris.replace(",", ".")) || 0;
+          const parsedVaraktighet = parseFloat(varaktighet.replace(",", ".")) || 60;
           
           const workOrderFields = {
             customerId: object.customerId,
@@ -2488,14 +2542,24 @@ export async function registerRoutes(
             resourceId,
             title: uppgiftsnamn,
             description: `Modus ID: ${uppgiftsId}, Typ: ${uppgiftstyp}`,
-            orderType: uppgiftstyp.toLowerCase().includes("tvätt") ? "karlttvatt" : 
-                       uppgiftstyp.toLowerCase().includes("rum") ? "rumstvatt" : "hamtning",
+            orderType,
             priority: "normal",
             status: mappedStatus,
             scheduledDate,
             scheduledStartTime,
-            estimatedDuration: parseInt(varaktighet) || 60,
-            metadata: { modusId: uppgiftsId },
+            estimatedDuration: Math.round(parsedVaraktighet),
+            cachedCost: Math.round(parsedKostnad * 100),
+            cachedValue: Math.round(parsedPris * 100),
+            notes: resultat || null,
+            metadata: { 
+              modusId: uppgiftsId, 
+              prislista: prislista || undefined, 
+              jobb: jobb || undefined,
+              bestallning: bestallning || undefined,
+              fakturerad: fakturerad === "1",
+              starttid: starttid || undefined,
+              sluttid: sluttid || undefined,
+            },
           };
           
           const existingWo = await storage.getWorkOrderByModusId(tenantId, uppgiftsId);
@@ -2599,6 +2663,129 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Modus events import error:", error);
       res.status(500).json({ error: "Modus events import misslyckades" });
+    }
+  });
+
+  // Modus 2.0 Import - Invoice Lines (fakturarader)
+  app.post("/api/import/modus/invoice-lines", upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "Ingen fil uppladdad" });
+      }
+      
+      const csvText = req.file.buffer.toString("utf-8");
+      const result = Papa.parse(csvText, { 
+        header: true, 
+        skipEmptyLines: true,
+        delimiter: ";",
+      });
+      
+      if (result.errors.length > 0) {
+        return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+      }
+
+      const tenantId = getTenantIdWithFallback(req);
+      const invoiceBatchId = crypto.randomUUID();
+      
+      const allWorkOrders = await storage.getWorkOrders(tenantId);
+      const woByModusId = new Map<string, any>();
+      for (const wo of allWorkOrders) {
+        const meta = wo.metadata as any;
+        if (meta?.modusId) {
+          woByModusId.set(String(meta.modusId), wo);
+        }
+      }
+      
+      const existingArticles = await storage.getArticles(tenantId);
+      const articleByFortnox = new Map<string, any>();
+      for (const a of existingArticles) {
+        if ((a as any).fortnoxId) {
+          articleByFortnox.set((a as any).fortnoxId.toLowerCase(), a);
+        }
+        if (a.name) {
+          articleByFortnox.set(a.name.toLowerCase(), a);
+        }
+      }
+      
+      const created: string[] = [];
+      const errors: string[] = [];
+      let articlesAutoCreated = 0;
+      
+      for (const row of result.data as Record<string, string>[]) {
+        try {
+          const rawUppgiftId = row["Uppgift Id"];
+          const rad = row["Rad"] || "1";
+          const beskrivning = row["Beskrivning"] || "";
+          const antalStr = row["Antal"] || "0";
+          const prisStr = row["Pris"] || "0";
+          const fortnoxArtikelId = (row["Fortnox Artikel Id"] || "").trim();
+          const fortnoxProjekt = (row["Fortnox Projekt"] || "").trim();
+          
+          if (!rawUppgiftId) continue;
+          const uppgiftId = rawUppgiftId.replace(/\s/g, "");
+          
+          const workOrder = woByModusId.get(uppgiftId);
+          if (!workOrder) {
+            errors.push(`Uppgift ${uppgiftId} hittades inte i systemet`);
+            continue;
+          }
+          
+          const antal = Math.round(parseFloat(antalStr.replace(",", ".")) || 0);
+          const pris = Math.round(parseFloat(prisStr.replace(",", ".")) * 100) || 0;
+          
+          let article = fortnoxArtikelId ? articleByFortnox.get(fortnoxArtikelId.toLowerCase()) : null;
+          
+          if (!article && fortnoxArtikelId) {
+            let articleName = fortnoxArtikelId;
+            if (fortnoxArtikelId === "K100") articleName = "Kärltvätt Standard";
+            else if (fortnoxArtikelId === "UJ100") articleName = "Tvätt UJ-behållare";
+            
+            article = await storage.createArticle({
+              tenantId,
+              name: articleName,
+              articleNumber: fortnoxArtikelId,
+              articleType: "tjanst",
+              listPrice: pris,
+              objectTypes: [],
+            });
+            articleByFortnox.set(fortnoxArtikelId.toLowerCase(), article);
+            articlesAutoCreated++;
+          }
+          
+          if (!article) {
+            errors.push(`Ingen artikel kunde skapas för rad ${uppgiftId}/${rad}`);
+            continue;
+          }
+          
+          await storage.createWorkOrderLine({
+            tenantId,
+            workOrderId: workOrder.id,
+            articleId: article.id,
+            quantity: antal,
+            resolvedPrice: pris,
+            resolvedCost: 0,
+            resolvedProductionMinutes: 0,
+            priceSource: "modus_import",
+            notes: beskrivning || null,
+          });
+          
+          created.push(`${uppgiftId}/${rad}: ${beskrivning.substring(0, 40)}`);
+        } catch (err) {
+          errors.push(`Fel vid import av fakturarad ${row["Uppgift Id"] || "?"}/${row["Rad"] || "?"}: ${err}`);
+        }
+      }
+      
+      res.json({ 
+        importBatchId: invoiceBatchId,
+        imported: created.length,
+        created: created.length,
+        articlesAutoCreated,
+        errors: errors.slice(0, 50),
+        totalRows: (result.data as unknown[]).length,
+      });
+    } catch (error) {
+      console.error("Modus invoice lines import error:", error);
+      res.status(500).json({ error: "Modus fakturarader import misslyckades" });
     }
   });
 
@@ -5656,9 +5843,15 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       let deletedWorkOrders = 0;
       let deletedCustomers = 0;
       
+      let deletedWorkOrderLines = 0;
       const allWorkOrders = await storage.getWorkOrders(tenantId);
       for (const wo of allWorkOrders) {
         if (wo.importBatchId === batchId) {
+          const lines = await storage.getWorkOrderLines(wo.id);
+          for (const line of lines) {
+            await storage.deleteWorkOrderLine(line.id);
+            deletedWorkOrderLines++;
+          }
           await storage.deleteWorkOrder(wo.id);
           deletedWorkOrders++;
         }
@@ -5681,7 +5874,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       }
       
       res.json({ 
-        deleted: { objects: deletedObjects, workOrders: deletedWorkOrders, customers: deletedCustomers },
+        deleted: { objects: deletedObjects, workOrders: deletedWorkOrders, customers: deletedCustomers, workOrderLines: deletedWorkOrderLines },
         batchId 
       });
     } catch (error) {
