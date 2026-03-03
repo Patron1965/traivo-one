@@ -2696,6 +2696,94 @@ export async function registerRoutes(
     }
   });
 
+  // Resolved article prices for an object (includes auto-hooked + manual + price resolution)
+  app.get("/api/objects/:objectId/article-prices", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const object = await storage.getObject(req.params.objectId);
+      if (!verifyTenantOwnership(object, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const prices = await storage.getResolvedArticlePricesForObject(tenantId, req.params.objectId);
+      res.json(prices);
+    } catch (error) {
+      console.error("Failed to get article prices:", error);
+      res.status(500).json({ error: "Failed to fetch article prices" });
+    }
+  });
+
+  // Manual object-article links
+  app.post("/api/objects/:objectId/articles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const object = await storage.getObject(req.params.objectId);
+      if (!verifyTenantOwnership(object, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const { articleId } = req.body;
+      if (!articleId) {
+        return res.status(400).json({ error: "articleId is required" });
+      }
+      const article = await storage.getArticle(articleId);
+      if (!article || article.tenantId !== tenantId) {
+        return res.status(404).json({ error: "Article not found" });
+      }
+      const existing = await storage.getObjectArticles(tenantId, req.params.objectId);
+      if (existing.some(e => e.articleId === articleId)) {
+        return res.status(409).json({ error: "Article already linked to this object" });
+      }
+      const result = await storage.addObjectArticle({
+        tenantId,
+        objectId: req.params.objectId,
+        articleId,
+      });
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to add object article:", error);
+      res.status(500).json({ error: "Failed to add article" });
+    }
+  });
+
+  app.delete("/api/objects/:objectId/articles/:linkId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const object = await storage.getObject(req.params.objectId);
+      if (!verifyTenantOwnership(object, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const deleted = await storage.removeObjectArticle(tenantId, req.params.objectId, req.params.linkId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Article link not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Failed to remove object article:", error);
+      res.status(500).json({ error: "Failed to remove article" });
+    }
+  });
+
+  app.patch("/api/objects/:objectId/articles/:linkId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const object = await storage.getObject(req.params.objectId);
+      if (!verifyTenantOwnership(object, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const { overridePrice } = req.body;
+      if (overridePrice !== null && overridePrice !== undefined && typeof overridePrice !== 'number') {
+        return res.status(400).json({ error: "overridePrice must be a number or null" });
+      }
+      const result = await storage.updateObjectArticlePrice(tenantId, req.params.objectId, req.params.linkId, overridePrice ?? null);
+      if (!result) {
+        return res.status(404).json({ error: "Object article link not found" });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to update object article price:", error);
+      res.status(500).json({ error: "Failed to update price" });
+    }
+  });
+
   // ============== PRICE LISTS ==============
   app.get("/api/price-lists", async (req, res) => {
     try {

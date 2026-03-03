@@ -1436,6 +1436,33 @@ export const objectPayers = pgTable("object_payers", {
 ]);
 
 // ============================================
+// MANUELLA ARTIKELKOPPLINGAR PER OBJEKT
+// ============================================
+
+export const objectArticles = pgTable("object_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  overridePrice: integer("override_price"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_object_articles_object").on(table.objectId),
+  index("idx_object_articles_article").on(table.articleId),
+  index("idx_object_articles_tenant").on(table.tenantId),
+]);
+
+export const objectArticlesRelations = relations(objectArticles, ({ one }) => ({
+  tenant: one(tenants, { fields: [objectArticles.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [objectArticles.objectId], references: [objects.id] }),
+  article: one(articles, { fields: [objectArticles.articleId], references: [articles.id] }),
+}));
+
+export const insertObjectArticleSchema = createInsertSchema(objectArticles).omit({ id: true, createdAt: true });
+export type InsertObjectArticle = z.infer<typeof insertObjectArticleSchema>;
+export type ObjectArticle = typeof objectArticles.$inferSelect;
+
+// ============================================
 // FLERFÖRÄLDRA-RELATIONER (MULTI-PARENT)
 // ============================================
 

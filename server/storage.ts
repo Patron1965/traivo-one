@@ -81,8 +81,9 @@ import {
   type FuelLog, type InsertFuelLog,
   type MaintenanceLog, type InsertMaintenanceLog,
   type ObjectParent, type InsertObjectParent,
+  type ObjectArticle, type InsertObjectArticle,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
-  fuelLogs, maintenanceLogs, objectParents,
+  fuelLogs, maintenanceLogs, objectParents, objectArticles,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -102,6 +103,22 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
+
+export interface ResolvedArticlePrice {
+  articleId: string;
+  articleNumber: string;
+  name: string;
+  articleType: string;
+  hookLevel: string | null;
+  productionTime: number;
+  listPrice: number;
+  resolvedPrice: number;
+  priceSource: string;
+  priceListName: string | null;
+  isManual: boolean;
+  objectArticleId: string | null;
+  overridePrice: number | null;
+}
 
 export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
@@ -170,6 +187,15 @@ export interface IStorage {
   createArticle(article: InsertArticle): Promise<Article>;
   updateArticle(id: string, article: Partial<InsertArticle>): Promise<Article | undefined>;
   deleteArticle(id: string): Promise<void>;
+  
+  // Object Articles (manual article links)
+  getObjectArticles(tenantId: string, objectId: string): Promise<ObjectArticle[]>;
+  addObjectArticle(data: InsertObjectArticle): Promise<ObjectArticle>;
+  removeObjectArticle(tenantId: string, objectId: string, id: string): Promise<boolean>;
+  updateObjectArticlePrice(tenantId: string, objectId: string, id: string, overridePrice: number | null): Promise<ObjectArticle | undefined>;
+  
+  // Resolved article prices
+  getResolvedArticlePricesForObject(tenantId: string, objectId: string): Promise<ResolvedArticlePrice[]>;
   
   // Price Lists
   getPriceLists(tenantId: string): Promise<PriceList[]>;
@@ -1321,6 +1347,133 @@ export class DatabaseStorage implements IStorage {
 
   async deleteArticle(id: string): Promise<void> {
     await db.update(articles).set({ deletedAt: new Date() }).where(eq(articles.id, id));
+  }
+
+  async getObjectArticles(tenantId: string, objectId: string): Promise<ObjectArticle[]> {
+    return db.select().from(objectArticles)
+      .where(and(
+        eq(objectArticles.tenantId, tenantId),
+        eq(objectArticles.objectId, objectId),
+      ));
+  }
+
+  async addObjectArticle(data: InsertObjectArticle): Promise<ObjectArticle> {
+    const [result] = await db.insert(objectArticles).values(data).returning();
+    return result;
+  }
+
+  async removeObjectArticle(tenantId: string, objectId: string, id: string): Promise<boolean> {
+    const result = await db.delete(objectArticles)
+      .where(and(
+        eq(objectArticles.id, id),
+        eq(objectArticles.tenantId, tenantId),
+        eq(objectArticles.objectId, objectId),
+      ))
+      .returning();
+    return result.length > 0;
+  }
+
+  async updateObjectArticlePrice(tenantId: string, objectId: string, id: string, overridePrice: number | null): Promise<ObjectArticle | undefined> {
+    const [result] = await db.update(objectArticles)
+      .set({ overridePrice })
+      .where(and(
+        eq(objectArticles.id, id),
+        eq(objectArticles.tenantId, tenantId),
+        eq(objectArticles.objectId, objectId),
+      ))
+      .returning();
+    return result || undefined;
+  }
+
+  async getResolvedArticlePricesForObject(tenantId: string, objectId: string): Promise<ResolvedArticlePrice[]> {
+    const applicableArticles = await this.getApplicableArticlesForObject(tenantId, objectId);
+    const manualLinks = await this.getObjectArticles(tenantId, objectId);
+    
+    const manualArticleIds = new Set(manualLinks.map(m => m.articleId));
+    const allPriceLists = await this.getPriceLists(tenantId);
+    const activePriceLists = allPriceLists.filter(pl => pl.status === 'active' && !pl.deletedAt);
+    
+    const object = await this.getObject(objectId);
+    const customerId = object?.customerId;
+    
+    const plIds = activePriceLists.map(pl => pl.id);
+    const allPriceListArticles = plIds.length > 0
+      ? await db.select().from(priceListArticles).where(inArray(priceListArticles.priceListId, plIds))
+      : [];
+    
+    const plArticleMap = new Map<string, { price: number; productionTime: number | null; priceListName: string; priority: number }>();
+    for (const pla of allPriceListArticles) {
+      const pl = activePriceLists.find(p => p.id === pla.priceListId);
+      if (!pl) continue;
+      if (pl.customerId && pl.customerId !== customerId) continue;
+      
+      const existing = plArticleMap.get(pla.articleId);
+      const priority = pl.priority || 1;
+      if (!existing || priority > existing.priority) {
+        plArticleMap.set(pla.articleId, {
+          price: pla.price,
+          productionTime: pla.productionTime,
+          priceListName: pl.name,
+          priority,
+        });
+      }
+    }
+    
+    const resolvePrice = (article: Article): { resolvedPrice: number; priceSource: string; priceListName: string | null } => {
+      const plEntry = plArticleMap.get(article.id);
+      if (plEntry) {
+        return { resolvedPrice: plEntry.price, priceSource: 'prislista', priceListName: plEntry.priceListName };
+      }
+      return { resolvedPrice: article.listPrice || 0, priceSource: 'listpris', priceListName: null };
+    };
+    
+    const results: ResolvedArticlePrice[] = [];
+    
+    for (const article of applicableArticles) {
+      const { resolvedPrice, priceSource, priceListName } = resolvePrice(article);
+      const manualLink = manualLinks.find(m => m.articleId === article.id);
+      results.push({
+        articleId: article.id,
+        articleNumber: article.articleNumber,
+        name: article.name,
+        articleType: article.articleType,
+        hookLevel: article.hookLevel,
+        productionTime: article.productionTime || 0,
+        listPrice: article.listPrice || 0,
+        resolvedPrice: manualLink?.overridePrice ?? resolvedPrice,
+        priceSource: manualLink?.overridePrice != null ? 'objektpris' : priceSource,
+        priceListName: manualLink?.overridePrice != null ? null : priceListName,
+        isManual: false,
+        objectArticleId: manualLink?.id || null,
+        overridePrice: manualLink?.overridePrice ?? null,
+      });
+    }
+    
+    for (const manual of manualLinks) {
+      if (manualArticleIds.has(manual.articleId) && results.some(r => r.articleId === manual.articleId)) {
+        continue;
+      }
+      const article = await this.getArticle(manual.articleId);
+      if (!article || article.deletedAt) continue;
+      const { resolvedPrice, priceSource, priceListName } = resolvePrice(article);
+      results.push({
+        articleId: article.id,
+        articleNumber: article.articleNumber,
+        name: article.name,
+        articleType: article.articleType,
+        hookLevel: article.hookLevel,
+        productionTime: article.productionTime || 0,
+        listPrice: article.listPrice || 0,
+        resolvedPrice: manual.overridePrice ?? resolvedPrice,
+        priceSource: manual.overridePrice != null ? 'objektpris' : priceSource,
+        priceListName: manual.overridePrice != null ? null : priceListName,
+        isManual: true,
+        objectArticleId: manual.id,
+        overridePrice: manual.overridePrice ?? null,
+      });
+    }
+    
+    return results;
   }
 
   // Price Lists

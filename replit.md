@@ -31,7 +31,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Mobile API Endpoints:** Dedicated REST API for mobile features including login, order/resource retrieval, status updates, notes, deviations, material logging, signature, inspection, GPS tracking, weather, AI chat, transcription, and image analysis, with offline sync capabilities.
 - **Checklist Templates:** Article-type-based inspection checklist templates with admin CRUD and mobile API integration.
 - **Driver Push Notifications:** Persistent notification storage with REST polling endpoints and WebSocket integration.
-- **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, and comprehensive work order management.
+- **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, comprehensive work order management, and per-object article management with resolved pricing (manual article links via `object_articles` table, price override support, price resolution from price lists).
 - **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, and self-booking.
 - **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
