@@ -25,7 +25,7 @@ function notifyImportProgress(jobId: string) {
   }
 }
 import { db } from "./db";
-import { eq, sql, desc, and, gte } from "drizzle-orm";
+import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { 
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
   insertWorkOrderSchema, insertSetupTimeLogSchema, insertTenantSchema, insertProcurementSchema,
@@ -40,7 +40,8 @@ import {
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   insertFuelLogSchema, insertMaintenanceLogSchema, insertObjectParentSchema,
   type ServiceObject,
-  apiUsageLogs, apiBudgets, articles, taskDependencyInstances
+  apiUsageLogs, apiBudgets, articles, taskDependencyInstances,
+  objects, workOrders
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
@@ -5705,6 +5706,422 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     } catch (error) {
       console.error("Cluster weather error:", error);
       res.status(500).json({ error: "Kunde inte hämta väderprognos för kluster" });
+    }
+  });
+
+  // Multi-strategi klustergenerering
+  app.post("/api/clusters/auto-generate", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { strategy, config } = req.body;
+      
+      if (!strategy || !["geographic", "frequency", "team", "customer", "manual"].includes(strategy)) {
+        return res.status(400).json({ error: "Ogiltig strategi. Välj: geographic, frequency, team, customer, manual" });
+      }
+      
+      const allObjects = await storage.getObjects(tenantId);
+      const allWorkOrders = await storage.getWorkOrders(tenantId);
+      const allCustomers = await storage.getCustomers(tenantId);
+      const allResources = await storage.getResources(tenantId);
+      
+      const woCountPerObject = new Map<string, number>();
+      for (const wo of allWorkOrders) {
+        if (wo.objectId) woCountPerObject.set(wo.objectId, (woCountPerObject.get(wo.objectId) || 0) + 1);
+      }
+      
+      const COLORS = [
+        "#3B82F6", "#EF4444", "#10B981", "#F59E0B", "#8B5CF6",
+        "#EC4899", "#06B6D4", "#84CC16", "#F97316", "#6366F1",
+        "#14B8A6", "#E11D48", "#A855F7", "#0EA5E9", "#22C55E",
+        "#D946EF", "#F43F5E", "#64748B", "#78716C", "#0D9488"
+      ];
+      let colorIdx = 0;
+      const nextColor = () => COLORS[colorIdx++ % COLORS.length];
+      
+      const computeGroupStats = (objs: typeof allObjects) => {
+        const coords = objs.filter(o => o.latitude && o.longitude);
+        const centerLat = coords.length > 0 ? coords.reduce((s, o) => s + (o.latitude || 0), 0) / coords.length : null;
+        const centerLng = coords.length > 0 ? coords.reduce((s, o) => s + (o.longitude || 0), 0) / coords.length : null;
+        const postalCodes = [...new Set(objs.map(o => o.postalCode).filter(Boolean))] as string[];
+        const woCount = objs.reduce((sum, o) => sum + (woCountPerObject.get(o.id) || 0), 0);
+        return { centerLat, centerLng, postalCodes, woCount };
+      };
+      
+      interface ClusterSuggestion {
+        id: string;
+        name: string;
+        description: string;
+        objectIds: string[];
+        objectCount: number;
+        workOrderCount: number;
+        centerLatitude: number | null;
+        centerLongitude: number | null;
+        radiusKm: number;
+        color: string;
+        primaryTeamId?: string | null;
+        rootCustomerId?: string | null;
+        postalCodes: string[];
+      }
+      
+      const suggestions: ClusterSuggestion[] = [];
+      const unclusteredObjectIds: string[] = [];
+      
+      if (strategy === "geographic") {
+        const targetSize = config?.targetSize || 50;
+        
+        // Group objects by city
+        const cityGroups = new Map<string, typeof allObjects>();
+        for (const obj of allObjects) {
+          const city = (obj.city || "Okänd stad").trim();
+          if (!cityGroups.has(city)) cityGroups.set(city, []);
+          cityGroups.get(city)!.push(obj);
+        }
+        
+        for (const [city, cityObjects] of cityGroups) {
+          if (cityObjects.length <= targetSize) {
+            const stats = computeGroupStats(cityObjects);
+            suggestions.push({
+              id: `geo-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}`,
+              name: city,
+              description: `${cityObjects.length} objekt i ${city}`,
+              objectIds: cityObjects.map(o => o.id),
+              objectCount: cityObjects.length,
+              workOrderCount: stats.woCount,
+              centerLatitude: stats.centerLat,
+              centerLongitude: stats.centerLng,
+              radiusKm: 5,
+              color: nextColor(),
+              postalCodes: stats.postalCodes
+            });
+          } else {
+            const postalGroups = new Map<string, typeof allObjects>();
+            for (const obj of cityObjects) {
+              const postal = obj.postalCode || "Okänt";
+              if (!postalGroups.has(postal)) postalGroups.set(postal, []);
+              postalGroups.get(postal)!.push(obj);
+            }
+            
+            const mergedGroups: { name: string; objects: typeof allObjects; postals: string[] }[] = [];
+            let currentBucket: { name: string; objects: typeof allObjects; postals: string[] } | null = null;
+            
+            const sortedPostals = [...postalGroups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+            for (const [postal, objs] of sortedPostals) {
+              if (!currentBucket || currentBucket.objects.length + objs.length > targetSize) {
+                if (currentBucket) mergedGroups.push(currentBucket);
+                currentBucket = { name: `${city} - ${postal}`, objects: [...objs], postals: [postal] };
+              } else {
+                currentBucket.objects.push(...objs);
+                currentBucket.postals.push(postal);
+                currentBucket.name = `${city} - ${currentBucket.postals[0]}–${postal}`;
+              }
+            }
+            if (currentBucket) mergedGroups.push(currentBucket);
+            
+            for (const group of mergedGroups) {
+              const stats = computeGroupStats(group.objects);
+              suggestions.push({
+                id: `geo-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}-${group.postals[0]}`,
+                name: group.name,
+                description: `${group.objects.length} objekt, postnr ${group.postals.join(", ")}`,
+                objectIds: group.objects.map(o => o.id),
+                objectCount: group.objects.length,
+                workOrderCount: stats.woCount,
+                centerLatitude: stats.centerLat,
+                centerLongitude: stats.centerLng,
+                radiusKm: 5,
+                color: nextColor(),
+                postalCodes: group.postals
+              });
+            }
+          }
+        }
+        
+      } else if (strategy === "frequency") {
+        const highThreshold = config?.highThreshold || 10;
+        const mediumThreshold = config?.mediumThreshold || 3;
+        
+        const freqCategories: Record<string, typeof allObjects> = { high: [], medium: [], low: [], none: [] };
+        for (const obj of allObjects) {
+          const count = woCountPerObject.get(obj.id) || 0;
+          if (count >= highThreshold) freqCategories.high.push(obj);
+          else if (count >= mediumThreshold) freqCategories.medium.push(obj);
+          else if (count > 0) freqCategories.low.push(obj);
+          else freqCategories.none.push(obj);
+        }
+        
+        const freqLabels: Record<string, string> = {
+          high: `Hög frekvens (≥${highThreshold} ordrar)`,
+          medium: `Medel frekvens (${mediumThreshold}-${highThreshold - 1} ordrar)`,
+          low: `Låg frekvens (1-${mediumThreshold - 1} ordrar)`,
+          none: "Inga ordrar"
+        };
+        
+        // Sub-group each frequency category by city
+        for (const [freqKey, freqObjects] of Object.entries(freqCategories)) {
+          if (freqObjects.length === 0) continue;
+          
+          const cityGroups = new Map<string, typeof allObjects>();
+          for (const obj of freqObjects) {
+            const city = (obj.city || "Okänd stad").trim();
+            if (!cityGroups.has(city)) cityGroups.set(city, []);
+            cityGroups.get(city)!.push(obj);
+          }
+          
+          for (const [city, cityObjects] of cityGroups) {
+            const stats = computeGroupStats(cityObjects);
+            suggestions.push({
+              id: `freq-${freqKey}-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}`,
+              name: `${city} – ${freqLabels[freqKey]}`,
+              description: `${cityObjects.length} objekt med ${freqLabels[freqKey].toLowerCase()} i ${city}`,
+              objectIds: cityObjects.map(o => o.id),
+              objectCount: cityObjects.length,
+              workOrderCount: stats.woCount,
+              centerLatitude: stats.centerLat,
+              centerLongitude: stats.centerLng,
+              radiusKm: 5,
+              color: nextColor(),
+              postalCodes: stats.postalCodes
+            });
+          }
+        }
+        
+      } else if (strategy === "team") {
+        // Group by resource (who performed the work orders)
+        const resourceObjects = new Map<string, Set<string>>();
+        const resourceWoCount = new Map<string, number>();
+        
+        for (const wo of allWorkOrders) {
+          const resId = wo.resourceId || "__unassigned__";
+          if (!resourceObjects.has(resId)) {
+            resourceObjects.set(resId, new Set());
+            resourceWoCount.set(resId, 0);
+          }
+          if (wo.objectId) resourceObjects.get(resId)!.add(wo.objectId);
+          resourceWoCount.set(resId, (resourceWoCount.get(resId) || 0) + 1);
+        }
+        
+        // Also find objects without any work orders
+        const assignedObjectIds = new Set<string>();
+        for (const objIds of resourceObjects.values()) {
+          for (const id of objIds) assignedObjectIds.add(id);
+        }
+        const unassignedObjects = allObjects.filter(o => !assignedObjectIds.has(o.id));
+        if (unassignedObjects.length > 0) {
+          if (!resourceObjects.has("__unassigned__")) {
+            resourceObjects.set("__unassigned__", new Set());
+            resourceWoCount.set("__unassigned__", 0);
+          }
+          for (const o of unassignedObjects) {
+            resourceObjects.get("__unassigned__")!.add(o.id);
+          }
+        }
+        
+        const objectMap = new Map(allObjects.map(o => [o.id, o]));
+        const resourceMap = new Map(allResources.map(r => [r.id, r]));
+        
+        for (const [resId, objIdSet] of resourceObjects) {
+          const objs = [...objIdSet].map(id => objectMap.get(id)).filter(Boolean) as typeof allObjects;
+          const resource = resId !== "__unassigned__" ? resourceMap.get(resId) : null;
+          const name = resource ? (resource.name || `Resurs ${resId.slice(0, 6)}`) : "Ej tilldelad";
+          const stats = computeGroupStats(objs);
+          
+          suggestions.push({
+            id: `team-${resId.slice(0, 8)}`,
+            name: `Team: ${name}`,
+            description: `${objs.length} objekt, ${resourceWoCount.get(resId) || 0} ordrar`,
+            objectIds: objs.map(o => o.id),
+            objectCount: objs.length,
+            workOrderCount: resourceWoCount.get(resId) || 0,
+            centerLatitude: stats.centerLat,
+            centerLongitude: stats.centerLng,
+            radiusKm: 10,
+            color: nextColor(),
+            primaryTeamId: resId !== "__unassigned__" ? resId : null,
+            postalCodes: stats.postalCodes
+          });
+        }
+        
+      } else if (strategy === "customer") {
+        // Group by customer
+        const customerObjects = new Map<string, typeof allObjects>();
+        for (const obj of allObjects) {
+          const custId = obj.customerId || "__no_customer__";
+          if (!customerObjects.has(custId)) customerObjects.set(custId, []);
+          customerObjects.get(custId)!.push(obj);
+        }
+        
+        const customerMap = new Map(allCustomers.map(c => [c.id, c]));
+        
+        for (const [custId, custObjs] of customerObjects) {
+          const customer = custId !== "__no_customer__" ? customerMap.get(custId) : null;
+          const name = customer ? (customer.name || `Kund ${custId.slice(0, 6)}`) : "Utan kund";
+          const stats = computeGroupStats(custObjs);
+          
+          suggestions.push({
+            id: `cust-${custId.slice(0, 8)}`,
+            name: name,
+            description: `${custObjs.length} objekt, ${stats.woCount} ordrar`,
+            objectIds: custObjs.map(o => o.id),
+            objectCount: custObjs.length,
+            workOrderCount: stats.woCount,
+            centerLatitude: stats.centerLat,
+            centerLongitude: stats.centerLng,
+            radiusKm: 5,
+            color: nextColor(),
+            rootCustomerId: custId !== "__no_customer__" ? custId : null,
+            postalCodes: stats.postalCodes
+          });
+        }
+        
+      } else if (strategy === "manual") {
+        const cityStats = new Map<string, number>();
+        for (const obj of allObjects) {
+          const city = (obj.city || "Okänd stad").trim();
+          cityStats.set(city, (cityStats.get(city) || 0) + 1);
+        }
+        
+        const freqStats = { high: 0, medium: 0, low: 0, none: 0 };
+        for (const obj of allObjects) {
+          const count = woCountPerObject.get(obj.id) || 0;
+          if (count >= 10) freqStats.high++;
+          else if (count >= 3) freqStats.medium++;
+          else if (count > 0) freqStats.low++;
+          else freqStats.none++;
+        }
+        
+        return res.json({
+          strategy: "manual",
+          suggestions: [],
+          statistics: {
+            totalObjects: allObjects.length,
+            totalWorkOrders: allWorkOrders.length,
+            totalCustomers: allCustomers.length,
+            totalResources: allResources.length,
+            objectsWithCoordinates: allObjects.filter(o => o.latitude && o.longitude).length,
+            objectsWithoutCoordinates: allObjects.filter(o => !o.latitude || !o.longitude).length,
+            citiesBreakdown: [...cityStats.entries()].map(([city, count]) => ({ city, count })).sort((a, b) => b.count - a.count),
+            frequencyBreakdown: freqStats,
+            unclustered: allObjects.filter(o => !o.clusterId).length,
+            alreadyClustered: allObjects.filter(o => o.clusterId).length
+          }
+        });
+      }
+      
+      // Sort by objectCount descending
+      suggestions.sort((a, b) => b.objectCount - a.objectCount);
+      
+      const totalCoveredObjects = suggestions.reduce((s, c) => s + c.objectCount, 0);
+      
+      res.json({
+        strategy,
+        suggestions,
+        summary: {
+          totalSuggested: suggestions.length,
+          totalCoveredObjects,
+          totalObjects: allObjects.length,
+          coverage: allObjects.length > 0 ? Math.round((totalCoveredObjects / allObjects.length) * 100) : 0
+        }
+      });
+    } catch (error) {
+      console.error("Multi-strategy auto-cluster error:", error);
+      res.status(500).json({ error: "Kunde inte generera klusterförslag" });
+    }
+  });
+
+  // Applicera kluster från multi-strategi förslag
+  app.post("/api/clusters/auto-generate/apply", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { suggestions } = req.body;
+      
+      if (!suggestions || !Array.isArray(suggestions) || suggestions.length === 0) {
+        return res.status(400).json({ error: "Inga förslag att tillämpa" });
+      }
+      
+      let totalObjectsLinked = 0;
+      let totalWorkOrdersLinked = 0;
+      const createdClusters: any[] = [];
+      const errors: string[] = [];
+      
+      for (const suggestion of suggestions) {
+        if (!suggestion.name || typeof suggestion.name !== "string") {
+          errors.push("Saknar klusternamn");
+          continue;
+        }
+        
+        try {
+          const cluster = await storage.createCluster({
+            tenantId,
+            name: String(suggestion.name).trim(),
+            description: String(suggestion.description || "").trim() || null,
+            centerLatitude: typeof suggestion.centerLatitude === "number" ? suggestion.centerLatitude : null,
+            centerLongitude: typeof suggestion.centerLongitude === "number" ? suggestion.centerLongitude : null,
+            radiusKm: typeof suggestion.radiusKm === "number" ? suggestion.radiusKm : 5,
+            postalCodes: Array.isArray(suggestion.postalCodes) ? suggestion.postalCodes.map((pc: unknown) => String(pc)) : [],
+            color: typeof suggestion.color === "string" ? suggestion.color : "#3B82F6",
+            rootCustomerId: suggestion.rootCustomerId || null,
+            primaryTeamId: suggestion.primaryTeamId || null,
+            slaLevel: "standard",
+            defaultPeriodicity: "vecka",
+            status: "active"
+          });
+          
+          // Link objects to cluster
+          const objectIds = suggestion.objectIds || [];
+          if (objectIds.length > 0) {
+            const batchSize = 500;
+            for (let i = 0; i < objectIds.length; i += batchSize) {
+              const batch = objectIds.slice(i, i + batchSize);
+              await db.update(objects)
+                .set({ clusterId: cluster.id })
+                .where(and(
+                  inArray(objects.id, batch),
+                  eq(objects.tenantId, tenantId),
+                  isNull(objects.deletedAt)
+                ));
+            }
+            totalObjectsLinked += objectIds.length;
+            
+            for (let i = 0; i < objectIds.length; i += batchSize) {
+              const woBatch = objectIds.slice(i, i + batchSize);
+              const woResult = await db.update(workOrders)
+                .set({ clusterId: cluster.id })
+                .where(and(
+                  inArray(workOrders.objectId, woBatch),
+                  eq(workOrders.tenantId, tenantId),
+                  isNull(workOrders.deletedAt)
+                ))
+                .returning({ id: workOrders.id });
+              totalWorkOrdersLinked += woResult.length;
+            }
+          }
+          
+          // Update cached stats
+          await storage.updateCluster(cluster.id, {
+            cachedObjectCount: objectIds.length
+          });
+          
+          createdClusters.push({
+            id: cluster.id,
+            name: cluster.name,
+            objectCount: objectIds.length
+          });
+        } catch (err) {
+          errors.push(`${suggestion.name}: Kunde inte skapa kluster - ${(err as Error).message}`);
+        }
+      }
+      
+      res.json({
+        success: createdClusters.length > 0,
+        message: `Skapade ${createdClusters.length} kluster. ${totalObjectsLinked} objekt och ${totalWorkOrdersLinked} arbetsordrar kopplades.`,
+        clusters: createdClusters,
+        totalObjectsLinked,
+        totalWorkOrdersLinked,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } catch (error) {
+      console.error("Apply multi-strategy cluster error:", error);
+      res.status(500).json({ error: "Kunde inte skapa kluster" });
     }
   });
 
