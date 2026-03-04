@@ -39,6 +39,19 @@ interface UnclusteredObjects {
   postalCodes: string[];
 }
 
+interface AutoAssignResult {
+  assignments: { clusterId: string; objectIds: string[]; method: "postalCode" | "coordinates"; count: number }[];
+  remaining: { count: number; objectIds: string[] };
+  totalAssigned: number;
+  totalUnclustered: number;
+}
+
+interface PendingMove {
+  fromClusterId: string;
+  objectIds: string[];
+  method: "postalCode" | "coordinates";
+}
+
 interface GenerateResult {
   strategy: string;
   suggestions: ClusterSuggestion[];
@@ -222,6 +235,9 @@ export default function AutoClusterPage() {
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [assignTarget, setAssignTarget] = useState<string | null>(null);
   const [showObjectMarkers, setShowObjectMarkers] = useState(true);
+  const [autoAssignResult, setAutoAssignResult] = useState<AutoAssignResult | null>(null);
+  const [autoAssignApplied, setAutoAssignApplied] = useState(false);
+  const [recentAssignments, setRecentAssignments] = useState<{ clusterId: string; clusterName: string; objectIds: string[]; method: string }[]>([]);
 
   const clusterStatus = useQuery<{ total: number }>({
     queryKey: ["/api/clusters/status"],
@@ -274,6 +290,30 @@ export default function AutoClusterPage() {
     },
   });
 
+  const autoAssignMutation = useMutation({
+    mutationFn: async () => {
+      if (!generatedResult?.unclusteredObjects || !generatedResult.suggestions) throw new Error("No data");
+      const response = await apiRequest("POST", "/api/clusters/auto-assign-unclustered", {
+        unclusteredObjectIds: generatedResult.unclusteredObjects.objectIds,
+        suggestions: generatedResult.suggestions.map(s => ({
+          id: s.id,
+          postalCodes: s.postalCodes,
+          centerLatitude: s.centerLatitude,
+          centerLongitude: s.centerLongitude,
+          radiusKm: s.radiusKm
+        }))
+      });
+      return response.json() as Promise<AutoAssignResult>;
+    },
+    onSuccess: (result) => {
+      setAutoAssignResult(result);
+      setAutoAssignApplied(false);
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte analysera objekt utan stad.", variant: "destructive" });
+    },
+  });
+
   const recalculateMutation = useMutation({
     mutationFn: async (params: { id: string; centerLatitude: number; centerLongitude: number; radiusKm: number }) => {
       const response = await apiRequest("POST", "/api/clusters/auto-generate/recalculate", params);
@@ -310,6 +350,9 @@ export default function AutoClusterPage() {
     setGeneratedResult(null);
     setFocusedCluster(null);
     setEditingNameId(null);
+    setAutoAssignResult(null);
+    setAutoAssignApplied(false);
+    setRecentAssignments([]);
     generateMutation.mutate();
   };
 
@@ -481,22 +524,62 @@ export default function AutoClusterPage() {
     staleTime: 30000,
   });
 
-  const handleAssignUnclustered = useCallback(() => {
+  const applyAutoAssign = useCallback(() => {
+    if (!autoAssignResult || !generatedResult) return;
+    const newAssignments: typeof recentAssignments = [];
+    setGeneratedResult(prev => {
+      if (!prev) return prev;
+      const addedPerCluster = new Map<string, string[]>();
+      for (const a of autoAssignResult.assignments) {
+        const existing = addedPerCluster.get(a.clusterId) || [];
+        existing.push(...a.objectIds);
+        addedPerCluster.set(a.clusterId, existing);
+        const cluster = prev.suggestions.find(s => s.id === a.clusterId);
+        newAssignments.push({
+          clusterId: a.clusterId,
+          clusterName: cluster?.name || a.clusterId,
+          objectIds: a.objectIds,
+          method: a.method === "postalCode" ? "Postnummer" : "Koordinater"
+        });
+      }
+      return {
+        ...prev,
+        suggestions: prev.suggestions.map(s => {
+          const added = addedPerCluster.get(s.id);
+          if (!added) return s;
+          return {
+            ...s,
+            objectIds: [...s.objectIds, ...added],
+            objectCount: s.objectCount + added.length,
+          };
+        }),
+        unclusteredObjects: autoAssignResult.remaining.count > 0
+          ? { count: autoAssignResult.remaining.count, objectIds: autoAssignResult.remaining.objectIds, postalCodes: [] }
+          : { count: 0, objectIds: [], postalCodes: [] },
+        summary: prev.summary ? {
+          ...prev.summary,
+          totalCoveredObjects: prev.summary.totalCoveredObjects + autoAssignResult.totalAssigned,
+          unclusteredCount: autoAssignResult.remaining.count,
+          coverage: prev.summary.totalObjects > 0
+            ? Math.round(((prev.summary.totalCoveredObjects + autoAssignResult.totalAssigned) / prev.summary.totalObjects) * 100) : 0
+        } : prev.summary
+      };
+    });
+    setRecentAssignments(newAssignments);
+    setAutoAssignApplied(true);
+    toast({ title: "Tilldelat", description: `${autoAssignResult.totalAssigned.toLocaleString("sv")} objekt tilldelade automatiskt.` });
+  }, [autoAssignResult, generatedResult, toast]);
+
+  const handleManualAssign = useCallback(() => {
     if (!assignTarget || !generatedResult?.unclusteredObjects) return;
+    const targetCluster = generatedResult.suggestions.find(s => s.id === assignTarget);
     setGeneratedResult(prev => {
       if (!prev || !prev.unclusteredObjects) return prev;
-      const targetSuggestion = prev.suggestions.find(s => s.id === assignTarget);
-      if (!targetSuggestion) return prev;
       return {
         ...prev,
         suggestions: prev.suggestions.map(s =>
           s.id === assignTarget
-            ? {
-                ...s,
-                objectIds: [...s.objectIds, ...prev.unclusteredObjects!.objectIds],
-                objectCount: s.objectCount + prev.unclusteredObjects!.count,
-                postalCodes: [...new Set([...s.postalCodes, ...prev.unclusteredObjects!.postalCodes])]
-              }
+            ? { ...s, objectIds: [...s.objectIds, ...prev.unclusteredObjects!.objectIds], objectCount: s.objectCount + prev.unclusteredObjects!.count }
             : s
         ),
         unclusteredObjects: { count: 0, objectIds: [], postalCodes: [] },
@@ -508,9 +591,41 @@ export default function AutoClusterPage() {
         } : prev.summary
       };
     });
+    if (targetCluster) {
+      setRecentAssignments(prev => [...prev, {
+        clusterId: assignTarget,
+        clusterName: targetCluster.name,
+        objectIds: generatedResult.unclusteredObjects!.objectIds,
+        method: "Manuell"
+      }]);
+    }
     setAssignTarget(null);
-    toast({ title: "Tilldelat", description: "Objekt utan stad har tilldelats valt kluster." });
+    toast({ title: "Tilldelat", description: "Kvarvarande objekt har tilldelats valt kluster." });
   }, [assignTarget, generatedResult, toast]);
+
+  const moveAssignment = useCallback((assignment: typeof recentAssignments[0], newClusterId: string) => {
+    const newCluster = generatedResult?.suggestions.find(s => s.id === newClusterId);
+    setGeneratedResult(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        suggestions: prev.suggestions.map(s => {
+          if (s.id === assignment.clusterId) {
+            const remaining = s.objectIds.filter(id => !assignment.objectIds.includes(id));
+            return { ...s, objectIds: remaining, objectCount: remaining.length };
+          }
+          if (s.id === newClusterId) {
+            return { ...s, objectIds: [...s.objectIds, ...assignment.objectIds], objectCount: s.objectCount + assignment.objectIds.length };
+          }
+          return s;
+        })
+      };
+    });
+    setRecentAssignments(prev => prev.map(a =>
+      a === assignment ? { ...a, clusterId: newClusterId, clusterName: newCluster?.name || newClusterId } : a
+    ));
+    toast({ title: "Flyttat", description: `${assignment.objectIds.length.toLocaleString("sv")} objekt flyttade till ${newCluster?.name || "annat kluster"}.` });
+  }, [generatedResult, toast]);
 
   const existingClusters = clusterStatus.data?.total || 0;
   const hasSuggestions = generatedResult && generatedResult.suggestions.length > 0 && !generateMutation.isPending;
@@ -854,36 +969,123 @@ export default function AutoClusterPage() {
 
           {generatedResult!.unclusteredObjects && generatedResult!.unclusteredObjects.count > 0 && (
             <Card className="border-amber-300/30 bg-amber-50/50 dark:bg-amber-950/20">
-              <CardContent className="py-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                  <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
-                    {generatedResult!.unclusteredObjects.count.toLocaleString("sv")} objekt utan stad
-                  </span>
-                  <span className="text-xs text-muted-foreground">
-                    ({generatedResult!.unclusteredObjects.postalCodes.length} postnummer)
+              <CardContent className="py-4 space-y-4">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                      {generatedResult!.unclusteredObjects.count.toLocaleString("sv")} objekt utan stad
+                    </span>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => autoAssignMutation.mutate()}
+                    disabled={autoAssignMutation.isPending || autoAssignApplied}
+                    data-testid="button-auto-assign"
+                  >
+                    {autoAssignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Target className="h-4 w-4 mr-2" />}
+                    {autoAssignApplied ? "Tilldelad" : "Auto-tilldela via postnummer & koordinater"}
+                  </Button>
+                </div>
+
+                {autoAssignResult && !autoAssignApplied && (
+                  <div className="bg-white dark:bg-background rounded border p-3 space-y-3">
+                    <div className="text-sm font-medium">Förhandsvisning av tilldelning</div>
+                    <div className="space-y-1.5 text-sm">
+                      {autoAssignResult.assignments.map((a, i) => {
+                        const cluster = generatedResult!.suggestions.find(s => s.id === a.clusterId);
+                        return (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: cluster?.color || "#888" }} />
+                            <span className="font-medium">{cluster?.name || "?"}</span>
+                            <span className="text-muted-foreground">← {a.count.toLocaleString("sv")} objekt via {a.method === "postalCode" ? "postnummer" : "koordinater"}</span>
+                          </div>
+                        );
+                      })}
+                      {autoAssignResult.remaining.count > 0 && (
+                        <div className="text-muted-foreground pt-1">
+                          {autoAssignResult.remaining.count.toLocaleString("sv")} objekt kunde inte matchas automatiskt
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <Button size="sm" onClick={applyAutoAssign} data-testid="button-confirm-auto-assign">
+                        <Check className="h-4 w-4 mr-1" /> Godkänn tilldelning ({autoAssignResult.totalAssigned.toLocaleString("sv")} objekt)
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setAutoAssignResult(null)} data-testid="button-cancel-auto-assign">
+                        Avbryt
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {autoAssignApplied && generatedResult!.unclusteredObjects.count > 0 && (
+                  <div className="flex items-center gap-3 flex-wrap pt-1">
+                    <span className="text-sm text-muted-foreground">
+                      {generatedResult!.unclusteredObjects.count.toLocaleString("sv")} kvarvarande — tilldela manuellt:
+                    </span>
+                    <Select value={assignTarget || ""} onValueChange={setAssignTarget}>
+                      <SelectTrigger className="w-[250px] h-8 text-sm" data-testid="select-assign-target">
+                        <SelectValue placeholder="Välj kluster..." />
+                      </SelectTrigger>
+                      <SelectContent className="z-[1000]">
+                        {generatedResult!.suggestions.map(s => (
+                          <SelectItem key={s.id} value={s.id}>
+                            <span className="flex items-center gap-2">
+                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                              {s.name} ({s.objectCount.toLocaleString("sv")} obj)
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <Button size="sm" onClick={handleManualAssign} disabled={!assignTarget} data-testid="button-manual-assign">
+                      Tilldela
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {recentAssignments.length > 0 && (
+            <Card className="border-blue-300/30 bg-blue-50/50 dark:bg-blue-950/20">
+              <CardContent className="py-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-sm font-medium text-blue-700 dark:text-blue-300">
+                    Senaste tilldelningar — flytta om det automatiska blev fel
                   </span>
                 </div>
-                <div className="flex items-center gap-3 flex-wrap">
-                  <span className="text-sm text-muted-foreground">Tilldela till:</span>
-                  <Select value={assignTarget || ""} onValueChange={setAssignTarget}>
-                    <SelectTrigger className="w-[250px] h-8 text-sm" data-testid="select-assign-target">
-                      <SelectValue placeholder="Välj kluster..." />
-                    </SelectTrigger>
-                    <SelectContent className="z-[1000]">
-                      {generatedResult!.suggestions.map(s => (
-                        <SelectItem key={s.id} value={s.id}>
-                          <span className="flex items-center gap-2">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
-                            {s.name} ({s.objectCount.toLocaleString("sv")} obj)
-                          </span>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button size="sm" onClick={handleAssignUnclustered} disabled={!assignTarget} data-testid="button-assign-unclustered">
-                    Tilldela
-                  </Button>
+                <div className="space-y-2">
+                  {recentAssignments.map((a, i) => (
+                    <div key={i} className="flex items-center gap-3 text-sm bg-white dark:bg-background rounded border px-3 py-2">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="font-medium truncate">{a.objectIds.length.toLocaleString("sv")} objekt</span>
+                        <Badge variant="outline" className="text-xs shrink-0">{a.method}</Badge>
+                        <span className="text-muted-foreground">→</span>
+                        <span className="font-medium truncate">{a.clusterName}</span>
+                      </div>
+                      <Select value="" onValueChange={(newId) => moveAssignment(a, newId)}>
+                        <SelectTrigger className="w-[180px] h-7 text-xs shrink-0" data-testid={`select-move-${i}`}>
+                          <SelectValue placeholder="Flytta till..." />
+                        </SelectTrigger>
+                        <SelectContent className="z-[1000]">
+                          {generatedResult!.suggestions
+                            .filter(s => s.id !== a.clusterId)
+                            .map(s => (
+                              <SelectItem key={s.id} value={s.id}>
+                                <span className="flex items-center gap-2">
+                                  <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                                  {s.name}
+                                </span>
+                              </SelectItem>
+                            ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ))}
                 </div>
               </CardContent>
             </Card>

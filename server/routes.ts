@@ -6076,6 +6076,107 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  app.post("/api/clusters/auto-assign-unclustered", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { unclusteredObjectIds, suggestions } = req.body as {
+        unclusteredObjectIds: string[];
+        suggestions: { id: string; postalCodes: string[]; centerLatitude: number | null; centerLongitude: number | null; radiusKm: number }[];
+      };
+
+      if (!Array.isArray(unclusteredObjectIds) || !Array.isArray(suggestions)) {
+        return res.status(400).json({ error: "Missing data" });
+      }
+
+      const allObjects = await storage.getObjectsByTenant(tenantId);
+      const idSet = new Set(unclusteredObjectIds);
+      const unclustered = allObjects.filter(o => idSet.has(o.id));
+
+      const postalToCluster = new Map<string, string>();
+      for (const s of suggestions) {
+        for (const pc of (s.postalCodes || [])) {
+          const normalized = pc.replace(/\s/g, "");
+          postalToCluster.set(normalized, s.id);
+        }
+      }
+
+      const assignments: { clusterId: string; objectIds: string[]; method: "postalCode" | "coordinates"; count: number }[] = [];
+      const assignmentMap = new Map<string, { postalCode: string[]; coordinates: string[] }>();
+      for (const s of suggestions) {
+        assignmentMap.set(s.id, { postalCode: [], coordinates: [] });
+      }
+
+      const remaining: string[] = [];
+
+      for (const obj of unclustered) {
+        const normalizedPostal = (obj.postalCode || "").replace(/\s/g, "");
+        let matched = false;
+
+        if (normalizedPostal) {
+          const exactMatch = postalToCluster.get(normalizedPostal);
+          if (exactMatch) {
+            assignmentMap.get(exactMatch)!.postalCode.push(obj.id);
+            matched = true;
+          } else {
+            const prefix3 = normalizedPostal.substring(0, 3);
+            for (const s of suggestions) {
+              const clusterPrefixes = new Set(s.postalCodes.map(pc => pc.replace(/\s/g, "").substring(0, 3)));
+              if (clusterPrefixes.has(prefix3)) {
+                assignmentMap.get(s.id)!.postalCode.push(obj.id);
+                matched = true;
+                break;
+              }
+            }
+          }
+        }
+
+        if (!matched && obj.latitude && obj.longitude) {
+          const toRad = (d: number) => d * Math.PI / 180;
+          let minDist = Infinity;
+          let closestId: string | null = null;
+          for (const s of suggestions) {
+            if (!s.centerLatitude || !s.centerLongitude) continue;
+            const dLat = toRad(obj.latitude - s.centerLatitude);
+            const dLon = toRad(obj.longitude - s.centerLongitude);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(s.centerLatitude)) * Math.cos(toRad(obj.latitude)) * Math.sin(dLon / 2) ** 2;
+            const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            if (dist < minDist) {
+              minDist = dist;
+              closestId = s.id;
+            }
+          }
+          if (closestId && minDist < 100) {
+            assignmentMap.get(closestId)!.coordinates.push(obj.id);
+            matched = true;
+          }
+        }
+
+        if (!matched) {
+          remaining.push(obj.id);
+        }
+      }
+
+      for (const [clusterId, methods] of assignmentMap) {
+        if (methods.postalCode.length > 0) {
+          assignments.push({ clusterId, objectIds: methods.postalCode, method: "postalCode", count: methods.postalCode.length });
+        }
+        if (methods.coordinates.length > 0) {
+          assignments.push({ clusterId, objectIds: methods.coordinates, method: "coordinates", count: methods.coordinates.length });
+        }
+      }
+
+      res.json({
+        assignments,
+        remaining: { count: remaining.length, objectIds: remaining },
+        totalAssigned: unclusteredObjectIds.length - remaining.length,
+        totalUnclustered: unclusteredObjectIds.length
+      });
+    } catch (error) {
+      console.error("Auto-assign unclustered error:", error);
+      res.status(500).json({ error: "Kunde inte auto-tilldela objekt" });
+    }
+  });
+
   app.post("/api/clusters/auto-generate/recalculate", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
