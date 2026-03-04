@@ -599,11 +599,11 @@ export default function AutoClusterPage() {
                       />
                       <MapFitBounds suggestions={suggestionsWithCoords} fitKey={mapFitKey} />
                       {focusedCluster && <FlyToCluster lat={focusedCluster.lat} lng={focusedCluster.lng} />}
-                      {suggestionsWithCoords.map(s => (
+                      {suggestionsWithCoords.filter(s => selectedSuggestions.has(s.id)).map(s => (
                         <DraggableCluster
                           key={s.id}
                           suggestion={s}
-                          isSelected={selectedSuggestions.has(s.id)}
+                          isSelected={true}
                           isHovered={hoveredCluster === s.id}
                           onSelect={handleClusterSelect}
                           onHover={setHoveredCluster}
