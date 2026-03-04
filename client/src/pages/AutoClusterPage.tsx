@@ -334,11 +334,10 @@ export default function AutoClusterPage() {
   }, [generatedResult, toggleSuggestion]);
 
   const handleRowClick = useCallback((s: ClusterSuggestion) => {
-    toggleSuggestion(s.id);
     if (s.centerLatitude && s.centerLongitude) {
       setFocusedCluster({ lat: s.centerLatitude, lng: s.centerLongitude });
     }
-  }, [toggleSuggestion]);
+  }, []);
 
   const handleMoveCenter = useCallback((id: string, lat: number, lng: number) => {
     setGeneratedResult(prev => {
