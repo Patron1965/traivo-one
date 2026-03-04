@@ -4229,8 +4229,43 @@ export async function registerRoutes(
     try {
       const tenantId = getTenantIdWithFallback(req);
       const data = insertClusterSchema.parse({ ...req.body, tenantId });
+      if (data.radiusKm && data.radiusKm > 50) data.radiusKm = 50;
       const cluster = await storage.createCluster(data);
-      res.status(201).json(cluster);
+
+      if (cluster.postalCodes && cluster.postalCodes.length > 0) {
+        const normalizedPostals = [...new Set(cluster.postalCodes.map(pc => pc.replace(/\s/g, "")))];
+        const matchingObjects = await db.select({ id: objects.id, postalCode: objects.postalCode })
+          .from(objects)
+          .where(and(
+            eq(objects.tenantId, tenantId),
+            isNull(objects.deletedAt),
+            isNull(objects.clusterId)
+          ));
+        const objectsToLink = matchingObjects.filter(obj => {
+          const objPostal = (obj.postalCode || "").replace(/\s/g, "");
+          return normalizedPostals.some(pc => objPostal === pc || objPostal.startsWith(pc));
+        });
+        if (objectsToLink.length > 0) {
+          const objectIds = objectsToLink.map(o => o.id);
+          const batchSize = 500;
+          for (let i = 0; i < objectIds.length; i += batchSize) {
+            const batch = objectIds.slice(i, i + batchSize);
+            await db.update(objects)
+              .set({ clusterId: cluster.id })
+              .where(and(inArray(objects.id, batch), eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+          }
+          for (let i = 0; i < objectIds.length; i += batchSize) {
+            const woBatch = objectIds.slice(i, i + batchSize);
+            await db.update(workOrders)
+              .set({ clusterId: cluster.id })
+              .where(and(inArray(workOrders.objectId, woBatch), eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)));
+          }
+        }
+      }
+
+      await storage.updateClusterCaches(cluster.id);
+      const updated = await storage.getCluster(cluster.id);
+      res.status(201).json(updated || cluster);
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json(formatZodError(error));
