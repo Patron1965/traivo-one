@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { MapContainer, TileLayer, Circle, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
@@ -205,6 +206,9 @@ export default function AutoClusterPage() {
   const [focusedCluster, setFocusedCluster] = useState<{ lat: number; lng: number } | null>(null);
   const [showMap, setShowMap] = useState(true);
   const [mapFitKey, setMapFitKey] = useState(0);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState("");
+  const nameInputRef = useRef<HTMLInputElement>(null);
 
   const clusterStatus = useQuery<{ total: number }>({
     queryKey: ["/api/clusters/status"],
@@ -292,8 +296,32 @@ export default function AutoClusterPage() {
   const handleGenerate = () => {
     setGeneratedResult(null);
     setFocusedCluster(null);
+    setEditingNameId(null);
     generateMutation.mutate();
   };
+
+  const startEditingName = useCallback((id: string, currentName: string) => {
+    setEditingNameId(id);
+    setEditingNameValue(currentName);
+    setTimeout(() => nameInputRef.current?.focus(), 50);
+  }, []);
+
+  const commitNameEdit = useCallback(() => {
+    if (!editingNameId || !editingNameValue.trim()) {
+      setEditingNameId(null);
+      return;
+    }
+    setGeneratedResult(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        suggestions: prev.suggestions.map(s =>
+          s.id === editingNameId ? { ...s, name: editingNameValue.trim() } : s
+        )
+      };
+    });
+    setEditingNameId(null);
+  }, [editingNameId, editingNameValue]);
 
   const handleClusterSelect = useCallback((id: string) => {
     toggleSuggestion(id);
@@ -640,7 +668,32 @@ export default function AutoClusterPage() {
                         <td className="p-3">
                           <div className="w-4 h-4 rounded-full" style={{ backgroundColor: s.color }} />
                         </td>
-                        <td className="p-3 font-medium max-w-[200px] truncate">{s.name}</td>
+                        <td className="p-3 max-w-[200px]">
+                          {editingNameId === s.id ? (
+                            <Input
+                              ref={nameInputRef}
+                              value={editingNameValue}
+                              onChange={(e) => setEditingNameValue(e.target.value)}
+                              onBlur={commitNameEdit}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") commitNameEdit();
+                                if (e.key === "Escape") setEditingNameId(null);
+                              }}
+                              onClick={(e) => e.stopPropagation()}
+                              className="h-7 text-sm px-2"
+                              data-testid={`input-name-${s.id}`}
+                            />
+                          ) : (
+                            <div
+                              className="flex items-center gap-1.5 group cursor-text font-medium truncate"
+                              onDoubleClick={(e) => { e.stopPropagation(); startEditingName(s.id, s.name); }}
+                              title="Dubbelklicka för att byta namn"
+                            >
+                              <span className="truncate">{s.name}</span>
+                              <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+                            </div>
+                          )}
+                        </td>
                         <td className="p-3 text-right">
                           <Badge variant="secondary">{s.objectCount.toLocaleString("sv")}</Badge>
                         </td>
