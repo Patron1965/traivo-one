@@ -659,7 +659,13 @@ export default function AutoClusterPage() {
                         <td className="p-3">
                           <Checkbox
                             checked={selectedSuggestions.has(s.id)}
-                            onCheckedChange={() => toggleSuggestion(s.id)}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setSelectedSuggestions(prev => new Set([...prev, s.id]));
+                              } else {
+                                setSelectedSuggestions(prev => { const next = new Set(prev); next.delete(s.id); return next; });
+                              }
+                            }}
                             onClick={(e) => e.stopPropagation()}
                             data-testid={`checkbox-${s.id}`}
                           />
