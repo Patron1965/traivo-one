@@ -6190,6 +6190,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       
       const createdClusters = [];
       const errors: string[] = [];
+      let totalObjectsLinked = 0;
+      let totalWorkOrdersLinked = 0;
       
       const tenantId = getTenantIdWithFallback(req);
       
@@ -6217,6 +6219,55 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
             defaultPeriodicity: "vecka",
             status: "active"
           });
+
+          const postalCodes = suggestion.postalCodes.map((pc: unknown) => String(pc).replace(/\s/g, ""));
+          const normalizedPostals = [...new Set(postalCodes)];
+          
+          if (normalizedPostals.length > 0) {
+            const matchingObjects = await db.select({ id: objects.id, postalCode: objects.postalCode })
+              .from(objects)
+              .where(and(
+                eq(objects.tenantId, tenantId),
+                isNull(objects.deletedAt),
+                isNull(objects.clusterId)
+              ));
+            
+            const objectsToLink = matchingObjects.filter(obj => {
+              const objPostal = (obj.postalCode || "").replace(/\s/g, "");
+              return normalizedPostals.some(pc => objPostal === pc || objPostal.startsWith(pc));
+            });
+            
+            if (objectsToLink.length > 0) {
+              const objectIds = objectsToLink.map(o => o.id);
+              const batchSize = 500;
+              for (let i = 0; i < objectIds.length; i += batchSize) {
+                const batch = objectIds.slice(i, i + batchSize);
+                await db.update(objects)
+                  .set({ clusterId: cluster.id })
+                  .where(and(
+                    inArray(objects.id, batch),
+                    eq(objects.tenantId, tenantId),
+                    isNull(objects.deletedAt)
+                  ));
+              }
+              totalObjectsLinked += objectIds.length;
+
+              for (let i = 0; i < objectIds.length; i += batchSize) {
+                const woBatch = objectIds.slice(i, i + batchSize);
+                const woResult = await db.update(workOrders)
+                  .set({ clusterId: cluster.id })
+                  .where(and(
+                    inArray(workOrders.objectId, woBatch),
+                    eq(workOrders.tenantId, tenantId),
+                    isNull(workOrders.deletedAt)
+                  ))
+                  .returning({ id: workOrders.id });
+                totalWorkOrdersLinked += woResult.length;
+              }
+            }
+          }
+
+          await storage.updateClusterCaches(cluster.id);
           createdClusters.push(cluster);
         } catch (err) {
           errors.push(`${suggestion.suggestedName}: Kunde inte skapa kluster`);
@@ -6226,8 +6277,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       res.json({ 
         success: createdClusters.length > 0, 
         message: errors.length > 0
-          ? `Skapade ${createdClusters.length} kluster. ${errors.length} fel uppstod.`
-          : `Skapade ${createdClusters.length} nya kluster.`,
+          ? `Skapade ${createdClusters.length} kluster med ${totalObjectsLinked} objekt och ${totalWorkOrdersLinked} ordrar. ${errors.length} fel uppstod.`
+          : `Skapade ${createdClusters.length} nya kluster med ${totalObjectsLinked} objekt och ${totalWorkOrdersLinked} ordrar.`,
         clusters: createdClusters,
         errors: errors.length > 0 ? errors : undefined
       });
