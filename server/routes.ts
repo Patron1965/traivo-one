@@ -5837,24 +5837,28 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const unclusteredObjectIds: string[] = [];
       
       if (strategy === "geographic") {
-        const cityGroups = new Map<string, typeof allObjects>();
+        const cityGroups = new Map<string, { displayName: string; objects: typeof allObjects }>();
         for (const obj of allObjects) {
-          const city = (obj.city || "Okänd stad").trim();
-          if (!cityGroups.has(city)) cityGroups.set(city, []);
-          cityGroups.get(city)!.push(obj);
+          const rawCity = (obj.city || "Okänd stad").trim();
+          const key = rawCity.toLowerCase();
+          if (!cityGroups.has(key)) {
+            cityGroups.set(key, { displayName: rawCity, objects: [] });
+          }
+          cityGroups.get(key)!.objects.push(obj);
         }
         
         const unknownCityObjects: typeof allObjects = [];
-        for (const [city, cityObjects] of cityGroups) {
-          if (city === "Okänd stad" || !city.trim()) {
+        for (const [key, { displayName, objects: cityObjects }] of cityGroups) {
+          if (key === "okänd stad" || !key.trim()) {
             unknownCityObjects.push(...cityObjects);
             continue;
           }
           const stats = computeGroupStats(cityObjects);
+          const capitalizedName = displayName.charAt(0).toUpperCase() + displayName.slice(1).toLowerCase();
           suggestions.push({
-            id: `geo-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}`,
-            name: city,
-            description: `${cityObjects.length} objekt i ${city}, ${stats.postalCodes.length} postnummer`,
+            id: `geo-${key.replace(/[^a-zåäö0-9]/gi, "_")}`,
+            name: capitalizedName,
+            description: `${cityObjects.length} objekt i ${capitalizedName}, ${stats.postalCodes.length} postnummer`,
             objectIds: cityObjects.map(o => o.id),
             objectCount: cityObjects.length,
             workOrderCount: stats.woCount,
