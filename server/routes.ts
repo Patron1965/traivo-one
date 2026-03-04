@@ -6133,10 +6133,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
             }
           }
           
-          // Update cached stats
-          await storage.updateCluster(cluster.id, {
-            cachedObjectCount: objectIds.length
-          });
+          // Update all cached stats from actual DB counts
+          await storage.updateClusterCaches(cluster.id);
           
           createdClusters.push({
             id: cluster.id,
