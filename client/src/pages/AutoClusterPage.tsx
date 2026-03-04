@@ -324,14 +324,14 @@ export default function AutoClusterPage() {
   }, [editingNameId, editingNameValue]);
 
   const handleClusterSelect = useCallback((id: string) => {
-    toggleSuggestion(id);
     if (generatedResult?.suggestions) {
       const s = generatedResult.suggestions.find(s => s.id === id);
       if (s?.centerLatitude && s?.centerLongitude) {
         setFocusedCluster({ lat: s.centerLatitude, lng: s.centerLongitude });
       }
     }
-  }, [generatedResult, toggleSuggestion]);
+    setHoveredCluster(id);
+  }, [generatedResult]);
 
   const handleRowClick = useCallback((s: ClusterSuggestion) => {
     if (s.centerLatitude && s.centerLongitude) {
