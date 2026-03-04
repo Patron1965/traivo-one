@@ -5810,7 +5810,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
             const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             if (dist > maxDist) maxDist = dist;
           }
-          radiusKm = Math.max(1, Math.min(50, Math.round(maxDist * 11) / 10));
+          radiusKm = Math.max(1, Math.min(50, Math.round(maxDist * 1.1 * 10) / 10));
         }
         return { centerLat, centerLng, postalCodes, woCount, radiusKm };
       };
