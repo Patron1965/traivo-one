@@ -5802,15 +5802,17 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         let radiusKm = 2;
         if (centerLat && centerLng && coords.length > 1) {
           const toRad = (d: number) => d * Math.PI / 180;
-          let maxDist = 0;
+          const distances: number[] = [];
           for (const o of coords) {
             const dLat = toRad((o.latitude || 0) - centerLat);
             const dLon = toRad((o.longitude || 0) - centerLng);
             const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(centerLat)) * Math.cos(toRad(o.latitude || 0)) * Math.sin(dLon / 2) ** 2;
-            const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            if (dist > maxDist) maxDist = dist;
+            distances.push(6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
           }
-          radiusKm = Math.max(1, Math.min(50, Math.round(maxDist * 1.1 * 10) / 10));
+          distances.sort((a, b) => a - b);
+          const p95Index = Math.floor(distances.length * 0.95);
+          const p95Dist = distances[Math.min(p95Index, distances.length - 1)];
+          radiusKm = Math.max(1, Math.min(30, Math.round(p95Dist * 1.1 * 10) / 10));
         }
         return { centerLat, centerLng, postalCodes, woCount, radiusKm };
       };
