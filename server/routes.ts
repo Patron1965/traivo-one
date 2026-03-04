@@ -341,6 +341,26 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/objects/coordinates", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectIds } = req.body as { objectIds: string[] };
+      if (!Array.isArray(objectIds) || objectIds.length === 0) {
+        return res.json([]);
+      }
+      const limited = objectIds.slice(0, 3000);
+      const allObjects = await storage.getObjectsByTenant(tenantId);
+      const idSet = new Set(limited);
+      const coords = allObjects
+        .filter(o => idSet.has(o.id) && o.latitude && o.longitude)
+        .map(o => ({ id: o.id, latitude: o.latitude, longitude: o.longitude }));
+      res.json(coords);
+    } catch (error) {
+      console.error("Error fetching object coordinates:", error);
+      res.status(500).json({ error: "Failed to fetch coordinates" });
+    }
+  });
+
   app.post("/api/objects", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -5779,7 +5799,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         const centerLng = coords.length > 0 ? coords.reduce((s, o) => s + (o.longitude || 0), 0) / coords.length : null;
         const postalCodes = [...new Set(objs.map(o => o.postalCode).filter(Boolean))] as string[];
         const woCount = objs.reduce((sum, o) => sum + (woCountPerObject.get(o.id) || 0), 0);
-        return { centerLat, centerLng, postalCodes, woCount };
+        let radiusKm = 2;
+        if (centerLat && centerLng && coords.length > 1) {
+          const toRad = (d: number) => d * Math.PI / 180;
+          let maxDist = 0;
+          for (const o of coords) {
+            const dLat = toRad((o.latitude || 0) - centerLat);
+            const dLon = toRad((o.longitude || 0) - centerLng);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(centerLat)) * Math.cos(toRad(o.latitude || 0)) * Math.sin(dLon / 2) ** 2;
+            const dist = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            if (dist > maxDist) maxDist = dist;
+          }
+          radiusKm = Math.max(1, Math.min(50, Math.round(maxDist * 11) / 10));
+        }
+        return { centerLat, centerLng, postalCodes, woCount, radiusKm };
       };
       
       interface ClusterSuggestion {
@@ -5809,7 +5842,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           cityGroups.get(city)!.push(obj);
         }
         
+        const unknownCityObjects: typeof allObjects = [];
         for (const [city, cityObjects] of cityGroups) {
+          if (city === "Okänd stad" || !city.trim()) {
+            unknownCityObjects.push(...cityObjects);
+            continue;
+          }
           const stats = computeGroupStats(cityObjects);
           suggestions.push({
             id: `geo-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}`,
@@ -5820,10 +5858,13 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
             workOrderCount: stats.woCount,
             centerLatitude: stats.centerLat,
             centerLongitude: stats.centerLng,
-            radiusKm: 5,
+            radiusKm: stats.radiusKm,
             color: nextColor(),
             postalCodes: stats.postalCodes
           });
+        }
+        for (const obj of unknownCityObjects) {
+          unclusteredObjectIds.push(obj.id);
         }
         
       } else if (strategy === "frequency") {
@@ -5868,7 +5909,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
               workOrderCount: stats.woCount,
               centerLatitude: stats.centerLat,
               centerLongitude: stats.centerLng,
-              radiusKm: 5,
+              radiusKm: stats.radiusKm,
               color: nextColor(),
               postalCodes: stats.postalCodes
             });
@@ -5924,7 +5965,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
             workOrderCount: resourceWoCount.get(resId) || 0,
             centerLatitude: stats.centerLat,
             centerLongitude: stats.centerLng,
-            radiusKm: 10,
+            radiusKm: stats.radiusKm,
             color: nextColor(),
             primaryTeamId: resId !== "__unassigned__" ? resId : null,
             postalCodes: stats.postalCodes
@@ -5956,7 +5997,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
             workOrderCount: stats.woCount,
             centerLatitude: stats.centerLat,
             centerLongitude: stats.centerLng,
-            radiusKm: 5,
+            radiusKm: stats.radiusKm,
             color: nextColor(),
             rootCustomerId: custId !== "__no_customer__" ? custId : null,
             postalCodes: stats.postalCodes
@@ -6001,14 +6042,25 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       suggestions.sort((a, b) => b.objectCount - a.objectCount);
       
       const totalCoveredObjects = suggestions.reduce((s, c) => s + c.objectCount, 0);
+      const unclusteredPostalCodes = [...new Set(
+        allObjects
+          .filter(o => unclusteredObjectIds.includes(o.id) && o.postalCode)
+          .map(o => o.postalCode!)
+      )];
       
       res.json({
         strategy,
         suggestions,
+        unclusteredObjects: {
+          count: unclusteredObjectIds.length,
+          objectIds: unclusteredObjectIds,
+          postalCodes: unclusteredPostalCodes
+        },
         summary: {
           totalSuggested: suggestions.length,
           totalCoveredObjects,
           totalObjects: allObjects.length,
+          unclusteredCount: unclusteredObjectIds.length,
           coverage: allObjects.length > 0 ? Math.round((totalCoveredObjects / allObjects.length) * 100) : 0
         }
       });

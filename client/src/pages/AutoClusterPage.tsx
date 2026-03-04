@@ -7,10 +7,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil } from "lucide-react";
+import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Info } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { MapContainer, TileLayer, Circle, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -32,13 +33,21 @@ interface ClusterSuggestion {
   postalCodes: string[];
 }
 
+interface UnclusteredObjects {
+  count: number;
+  objectIds: string[];
+  postalCodes: string[];
+}
+
 interface GenerateResult {
   strategy: string;
   suggestions: ClusterSuggestion[];
+  unclusteredObjects?: UnclusteredObjects;
   summary?: {
     totalSuggested: number;
     totalCoveredObjects: number;
     totalObjects: number;
+    unclusteredCount?: number;
     coverage: number;
   };
   statistics?: {
@@ -209,6 +218,10 @@ export default function AutoClusterPage() {
   const [editingNameId, setEditingNameId] = useState<string | null>(null);
   const [editingNameValue, setEditingNameValue] = useState("");
   const nameInputRef = useRef<HTMLInputElement>(null);
+  const [sortField, setSortField] = useState<"name" | "objectCount" | "workOrderCount">("objectCount");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
+  const [assignTarget, setAssignTarget] = useState<string | null>(null);
+  const [showObjectMarkers, setShowObjectMarkers] = useState(true);
 
   const clusterStatus = useQuery<{ total: number }>({
     queryKey: ["/api/clusters/status"],
@@ -406,6 +419,99 @@ export default function AutoClusterPage() {
     [generatedResult]
   );
 
+  const sortedSuggestions = useMemo(() => {
+    if (!generatedResult?.suggestions) return [];
+    const sorted = [...generatedResult.suggestions];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      if (sortField === "name") cmp = a.name.localeCompare(b.name, "sv");
+      else if (sortField === "objectCount") cmp = a.objectCount - b.objectCount;
+      else cmp = a.workOrderCount - b.workOrderCount;
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+    return sorted;
+  }, [generatedResult, sortField, sortDir]);
+
+  const toggleSort = useCallback((field: "name" | "objectCount" | "workOrderCount") => {
+    if (sortField === field) setSortDir(d => d === "asc" ? "desc" : "asc");
+    else { setSortField(field); setSortDir(field === "name" ? "asc" : "desc"); }
+  }, [sortField]);
+
+  const overlappingPairs = useMemo(() => {
+    const selected = suggestionsWithCoords.filter(s => selectedSuggestions.has(s.id));
+    const pairs: [string, string][] = [];
+    const toRad = (d: number) => d * Math.PI / 180;
+    for (let i = 0; i < selected.length; i++) {
+      for (let j = i + 1; j < selected.length; j++) {
+        const a = selected[i], b = selected[j];
+        const dLat = toRad(b.centerLatitude! - a.centerLatitude!);
+        const dLon = toRad(b.centerLongitude! - a.centerLongitude!);
+        const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.centerLatitude!)) * Math.cos(toRad(b.centerLatitude!)) * Math.sin(dLon / 2) ** 2;
+        const dist = 6371 * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
+        if (dist < a.radiusKm + b.radiusKm) pairs.push([a.id, b.id]);
+      }
+    }
+    return pairs;
+  }, [suggestionsWithCoords, selectedSuggestions]);
+
+  const overlappingIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const [a, b] of overlappingPairs) { ids.add(a); ids.add(b); }
+    return ids;
+  }, [overlappingPairs]);
+
+  const objectCoordsQuery = useQuery<{ lat: number; lng: number; color: string }[]>({
+    queryKey: ["/api/objects/coordinates", Array.from(selectedSuggestions).sort().join(",")],
+    queryFn: async () => {
+      if (!generatedResult?.suggestions || selectedSuggestions.size === 0) return [];
+      const selected = generatedResult.suggestions.filter(s => selectedSuggestions.has(s.id));
+      const allIds = selected.flatMap(s => s.objectIds);
+      if (allIds.length === 0) return [];
+      const res = await apiRequest("POST", "/api/objects/coordinates", { objectIds: allIds.slice(0, 3000) });
+      const data = await res.json() as { id: string; latitude: number; longitude: number }[];
+      const idToColor = new Map<string, string>();
+      for (const s of selected) {
+        for (const id of s.objectIds) idToColor.set(id, s.color);
+      }
+      return data
+        .filter(o => o.latitude && o.longitude)
+        .map(o => ({ lat: o.latitude, lng: o.longitude, color: idToColor.get(o.id) || "#888" }));
+    },
+    enabled: showObjectMarkers && selectedSuggestions.size > 0 && !!generatedResult,
+    staleTime: 30000,
+  });
+
+  const handleAssignUnclustered = useCallback(() => {
+    if (!assignTarget || !generatedResult?.unclusteredObjects) return;
+    setGeneratedResult(prev => {
+      if (!prev || !prev.unclusteredObjects) return prev;
+      const targetSuggestion = prev.suggestions.find(s => s.id === assignTarget);
+      if (!targetSuggestion) return prev;
+      return {
+        ...prev,
+        suggestions: prev.suggestions.map(s =>
+          s.id === assignTarget
+            ? {
+                ...s,
+                objectIds: [...s.objectIds, ...prev.unclusteredObjects!.objectIds],
+                objectCount: s.objectCount + prev.unclusteredObjects!.count,
+                postalCodes: [...new Set([...s.postalCodes, ...prev.unclusteredObjects!.postalCodes])]
+              }
+            : s
+        ),
+        unclusteredObjects: { count: 0, objectIds: [], postalCodes: [] },
+        summary: prev.summary ? {
+          ...prev.summary,
+          totalCoveredObjects: prev.summary.totalCoveredObjects + prev.unclusteredObjects!.count,
+          unclusteredCount: 0,
+          coverage: prev.summary.totalObjects > 0 ? Math.round(((prev.summary.totalCoveredObjects + prev.unclusteredObjects!.count) / prev.summary.totalObjects) * 100) : 0
+        } : prev.summary
+      };
+    });
+    setAssignTarget(null);
+    toast({ title: "Tilldelat", description: "Objekt utan stad har tilldelats valt kluster." });
+  }, [assignTarget, generatedResult, toast]);
+
   const existingClusters = clusterStatus.data?.total || 0;
   const hasSuggestions = generatedResult && generatedResult.suggestions.length > 0 && !generateMutation.isPending;
 
@@ -487,11 +593,7 @@ export default function AutoClusterPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {key === "geographic" && (
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Max objekt per kluster: {targetSize}</label>
-                    <Slider value={[targetSize]} onValueChange={(v) => setTargetSize(v[0])} min={20} max={500} step={10} data-testid="slider-target-size" />
-                    <p className="text-xs text-muted-foreground">Städer med fler objekt än detta delas upp per postnummerområde</p>
-                  </div>
+                  <p className="text-sm text-muted-foreground">Grupperar objekt per stad. Varje stad blir ett kluster med alla postnummerserier.</p>
                 )}
                 {key === "frequency" && (
                   <div className="space-y-4">
@@ -599,6 +701,14 @@ export default function AutoClusterPage() {
                       />
                       <MapFitBounds suggestions={suggestionsWithCoords} fitKey={mapFitKey} />
                       {focusedCluster && <FlyToCluster lat={focusedCluster.lat} lng={focusedCluster.lng} />}
+                      {showObjectMarkers && objectCoordsQuery.data?.map((o, i) => (
+                        <CircleMarker
+                          key={`obj-${i}`}
+                          center={[o.lat, o.lng]}
+                          radius={3}
+                          pathOptions={{ color: o.color, fillColor: o.color, fillOpacity: 0.6, weight: 1, opacity: 0.7 }}
+                        />
+                      ))}
                       {suggestionsWithCoords.filter(s => selectedSuggestions.has(s.id)).map(s => (
                         <DraggableCluster
                           key={s.id}
@@ -617,8 +727,12 @@ export default function AutoClusterPage() {
                         <Loader2 className="h-3 w-3 animate-spin" /> Beräknar om...
                       </div>
                     )}
-                    <div className="absolute bottom-2 left-2 bg-background/90 rounded px-2 py-1 text-xs text-muted-foreground shadow">
-                      Dra mittpunkt = flytta kluster. Dra övre kant = ändra radie.
+                    <div className="absolute bottom-2 left-2 bg-background/90 rounded px-2 py-1 text-xs text-muted-foreground shadow flex items-center gap-2">
+                      <span>Dra mittpunkt = flytta. Dra kanten = ändra radie.</span>
+                      <label className="flex items-center gap-1 cursor-pointer">
+                        <Checkbox checked={showObjectMarkers} onCheckedChange={(c) => setShowObjectMarkers(!!c)} className="h-3 w-3" />
+                        <span>Visa objekt</span>
+                      </label>
                     </div>
                   </div>
                 </CardContent>
@@ -626,6 +740,12 @@ export default function AutoClusterPage() {
             )}
 
             <div className="border rounded-lg overflow-hidden">
+              {overlappingPairs.length > 0 && (
+                <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 px-3 py-2 flex items-center gap-2 text-sm text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>{overlappingPairs.length} klusterpar överlappar geografiskt</span>
+                </div>
+              )}
               <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 sticky top-0 z-10">
@@ -638,14 +758,29 @@ export default function AutoClusterPage() {
                         />
                       </th>
                       <th className="text-left p-3 w-10">Färg</th>
-                      <th className="text-left p-3">Namn</th>
-                      <th className="text-right p-3">Objekt</th>
-                      <th className="text-right p-3">Ordrar</th>
+                      <th className="text-left p-3 cursor-pointer select-none" onClick={() => toggleSort("name")} data-testid="sort-name">
+                        <span className="flex items-center gap-1">
+                          Namn
+                          {sortField === "name" ? (sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />}
+                        </span>
+                      </th>
+                      <th className="text-right p-3 cursor-pointer select-none" onClick={() => toggleSort("objectCount")} data-testid="sort-objects">
+                        <span className="flex items-center justify-end gap-1">
+                          Objekt
+                          {sortField === "objectCount" ? (sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />}
+                        </span>
+                      </th>
+                      <th className="text-right p-3 cursor-pointer select-none" onClick={() => toggleSort("workOrderCount")} data-testid="sort-orders">
+                        <span className="flex items-center justify-end gap-1">
+                          Ordrar
+                          {sortField === "workOrderCount" ? (sortDir === "asc" ? <ArrowUp className="h-3 w-3" /> : <ArrowDown className="h-3 w-3" />) : <ArrowUpDown className="h-3 w-3 text-muted-foreground/50" />}
+                        </span>
+                      </th>
                       <th className="text-right p-3 hidden lg:table-cell">Radie</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {generatedResult!.suggestions.map((s) => (
+                    {sortedSuggestions.map((s) => (
                       <tr
                         key={s.id}
                         className={`border-t cursor-pointer transition-colors ${
@@ -695,6 +830,7 @@ export default function AutoClusterPage() {
                               title="Dubbelklicka för att byta namn"
                             >
                               <span className="truncate">{s.name}</span>
+                              {overlappingIds.has(s.id) && <AlertTriangle className="h-3 w-3 text-amber-500 shrink-0" title="Överlappar med annat kluster" />}
                               <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
                             </div>
                           )}
@@ -716,22 +852,81 @@ export default function AutoClusterPage() {
             </div>
           </div>
 
+          {generatedResult!.unclusteredObjects && generatedResult!.unclusteredObjects.count > 0 && (
+            <Card className="border-amber-300/30 bg-amber-50/50 dark:bg-amber-950/20">
+              <CardContent className="py-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Info className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                    {generatedResult!.unclusteredObjects.count.toLocaleString("sv")} objekt utan stad
+                  </span>
+                  <span className="text-xs text-muted-foreground">
+                    ({generatedResult!.unclusteredObjects.postalCodes.length} postnummer)
+                  </span>
+                </div>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-sm text-muted-foreground">Tilldela till:</span>
+                  <Select value={assignTarget || ""} onValueChange={setAssignTarget}>
+                    <SelectTrigger className="w-[250px] h-8 text-sm" data-testid="select-assign-target">
+                      <SelectValue placeholder="Välj kluster..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {generatedResult!.suggestions.map(s => (
+                        <SelectItem key={s.id} value={s.id}>
+                          <span className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
+                            {s.name} ({s.objectCount.toLocaleString("sv")} obj)
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" onClick={handleAssignUnclustered} disabled={!assignTarget} data-testid="button-assign-unclustered">
+                    Tilldela
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {selectedSuggestions.size > 0 && (
             <Card className="border-primary/20 bg-primary/5">
               <CardContent className="py-4">
                 <div className="flex items-center justify-between gap-4 flex-wrap">
-                  <div className="text-sm">
-                    <span className="font-medium">{selectedSuggestions.size}</span> kluster markerade med totalt{" "}
-                    <span className="font-medium">
-                      {generatedResult!.suggestions
-                        .filter(s => selectedSuggestions.has(s.id))
-                        .reduce((sum, s) => sum + s.objectCount, 0)
-                        .toLocaleString("sv")}
-                    </span>{" "}objekt
+                  <div className="text-sm space-y-1">
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <span><span className="font-semibold">{selectedSuggestions.size}</span> kluster markerade</span>
+                      <span>
+                        <span className="font-semibold">
+                          {generatedResult!.suggestions.filter(s => selectedSuggestions.has(s.id)).reduce((sum, s) => sum + s.objectCount, 0).toLocaleString("sv")}
+                        </span> objekt täcks
+                      </span>
+                      {generatedResult!.summary && (
+                        <>
+                          <span className="text-muted-foreground">
+                            ({Math.round((generatedResult!.suggestions.filter(s => selectedSuggestions.has(s.id)).reduce((sum, s) => sum + s.objectCount, 0) / generatedResult!.summary.totalObjects) * 100)}% av {generatedResult!.summary.totalObjects.toLocaleString("sv")} totalt)
+                          </span>
+                          {(generatedResult!.unclusteredObjects?.count || 0) > 0 && (
+                            <span className="text-amber-600 dark:text-amber-400">
+                              {generatedResult!.unclusteredObjects!.count.toLocaleString("sv")} utan stad
+                            </span>
+                          )}
+                          <span className="text-muted-foreground">
+                            {[...new Set(generatedResult!.suggestions.filter(s => selectedSuggestions.has(s.id)).flatMap(s => s.postalCodes))].length} postnummer
+                          </span>
+                        </>
+                      )}
+                    </div>
+                    {overlappingPairs.length > 0 && (
+                      <div className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                        <AlertTriangle className="h-3 w-3" />
+                        <span>{overlappingPairs.length} överlappningar</span>
+                      </div>
+                    )}
                   </div>
                   <Button onClick={handleApply} disabled={applyMutation.isPending} data-testid="button-apply-bottom">
                     {applyMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-                    Applicera markerade kluster
+                    Skapa {selectedSuggestions.size} kluster
                   </Button>
                 </div>
               </CardContent>
