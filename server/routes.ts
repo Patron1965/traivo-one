@@ -5802,9 +5802,6 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const unclusteredObjectIds: string[] = [];
       
       if (strategy === "geographic") {
-        const targetSize = config?.targetSize || 50;
-        
-        // Group objects by city
         const cityGroups = new Map<string, typeof allObjects>();
         for (const obj of allObjects) {
           const city = (obj.city || "Okänd stad").trim();
@@ -5813,62 +5810,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         }
         
         for (const [city, cityObjects] of cityGroups) {
-          if (cityObjects.length <= targetSize) {
-            const stats = computeGroupStats(cityObjects);
-            suggestions.push({
-              id: `geo-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}`,
-              name: city,
-              description: `${cityObjects.length} objekt i ${city}`,
-              objectIds: cityObjects.map(o => o.id),
-              objectCount: cityObjects.length,
-              workOrderCount: stats.woCount,
-              centerLatitude: stats.centerLat,
-              centerLongitude: stats.centerLng,
-              radiusKm: 5,
-              color: nextColor(),
-              postalCodes: stats.postalCodes
-            });
-          } else {
-            const postalGroups = new Map<string, typeof allObjects>();
-            for (const obj of cityObjects) {
-              const postal = obj.postalCode || "Okänt";
-              if (!postalGroups.has(postal)) postalGroups.set(postal, []);
-              postalGroups.get(postal)!.push(obj);
-            }
-            
-            const mergedGroups: { name: string; objects: typeof allObjects; postals: string[] }[] = [];
-            let currentBucket: { name: string; objects: typeof allObjects; postals: string[] } | null = null;
-            
-            const sortedPostals = [...postalGroups.entries()].sort((a, b) => a[0].localeCompare(b[0]));
-            for (const [postal, objs] of sortedPostals) {
-              if (!currentBucket || currentBucket.objects.length + objs.length > targetSize) {
-                if (currentBucket) mergedGroups.push(currentBucket);
-                currentBucket = { name: `${city} - ${postal}`, objects: [...objs], postals: [postal] };
-              } else {
-                currentBucket.objects.push(...objs);
-                currentBucket.postals.push(postal);
-                currentBucket.name = `${city} - ${currentBucket.postals[0]}–${postal}`;
-              }
-            }
-            if (currentBucket) mergedGroups.push(currentBucket);
-            
-            for (const group of mergedGroups) {
-              const stats = computeGroupStats(group.objects);
-              suggestions.push({
-                id: `geo-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}-${group.postals[0]}`,
-                name: group.name,
-                description: `${group.objects.length} objekt, postnr ${group.postals.join(", ")}`,
-                objectIds: group.objects.map(o => o.id),
-                objectCount: group.objects.length,
-                workOrderCount: stats.woCount,
-                centerLatitude: stats.centerLat,
-                centerLongitude: stats.centerLng,
-                radiusKm: 5,
-                color: nextColor(),
-                postalCodes: group.postals
-              });
-            }
-          }
+          const stats = computeGroupStats(cityObjects);
+          suggestions.push({
+            id: `geo-${city.replace(/[^a-zåäö0-9]/gi, "_").toLowerCase()}`,
+            name: city,
+            description: `${cityObjects.length} objekt i ${city}, ${stats.postalCodes.length} postnummer`,
+            objectIds: cityObjects.map(o => o.id),
+            objectCount: cityObjects.length,
+            workOrderCount: stats.woCount,
+            centerLatitude: stats.centerLat,
+            centerLongitude: stats.centerLng,
+            radiusKm: 5,
+            color: nextColor(),
+            postalCodes: stats.postalCodes
+          });
         }
         
       } else if (strategy === "frequency") {
