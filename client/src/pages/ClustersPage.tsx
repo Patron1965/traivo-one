@@ -458,7 +458,7 @@ export default function ClustersPage() {
                         {cluster.radiusKm && (
                           <Circle
                             center={[cluster.centerLatitude!, cluster.centerLongitude!]}
-                            radius={cluster.radiusKm * 1000}
+                            radius={Math.min(cluster.radiusKm, 100) * 1000}
                             pathOptions={{
                               color: color,
                               fillColor: color,
