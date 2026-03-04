@@ -870,7 +870,7 @@ export default function AutoClusterPage() {
                     <SelectTrigger className="w-[250px] h-8 text-sm" data-testid="select-assign-target">
                       <SelectValue placeholder="Välj kluster..." />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="z-[1000]">
                       {generatedResult!.suggestions.map(s => (
                         <SelectItem key={s.id} value={s.id}>
                           <span className="flex items-center gap-2">
