@@ -6028,6 +6028,43 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  app.post("/api/clusters/auto-generate/recalculate", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { centerLatitude, centerLongitude, radiusKm, currentObjectIds } = req.body;
+      
+      if (typeof centerLatitude !== "number" || typeof centerLongitude !== "number" || typeof radiusKm !== "number") {
+        return res.status(400).json({ error: "centerLatitude, centerLongitude och radiusKm krävs" });
+      }
+      
+      const allObjects = await storage.getObjects(tenantId);
+      
+      const toRad = (deg: number) => deg * Math.PI / 180;
+      const haversine = (lat1: number, lon1: number, lat2: number, lon2: number) => {
+        const R = 6371;
+        const dLat = toRad(lat2 - lat1);
+        const dLon = toRad(lon2 - lon1);
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+        return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      };
+      
+      const objectIds: string[] = [];
+      for (const obj of allObjects) {
+        if (obj.latitude && obj.longitude) {
+          const dist = haversine(centerLatitude, centerLongitude, obj.latitude, obj.longitude);
+          if (dist <= radiusKm) {
+            objectIds.push(obj.id);
+          }
+        }
+      }
+      
+      res.json({ objectIds, objectCount: objectIds.length });
+    } catch (error) {
+      console.error("Recalculate cluster error:", error);
+      res.status(500).json({ error: "Kunde inte beräkna om kluster" });
+    }
+  });
+
   // Applicera kluster från multi-strategi förslag
   app.post("/api/clusters/auto-generate/apply", async (req, res) => {
     try {

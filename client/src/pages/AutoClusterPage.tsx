@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,9 +6,12 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
-import { Loader2, MapPin, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3 } from "lucide-react";
+import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { MapContainer, TileLayer, Circle, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
 type Strategy = "geographic" | "frequency" | "team" | "customer" | "manual";
 
@@ -68,6 +71,128 @@ const STRATEGY_INFO: Record<Strategy, { label: string; icon: typeof Globe; descr
   manual: { label: "Manuellt", icon: Hand, description: "Visa statistik utan förslag" },
 };
 
+function createClusterIcon(color: string, isSelected: boolean, isHovered: boolean) {
+  const size = isSelected ? 16 : 12;
+  const border = isSelected ? 3 : isHovered ? 2 : 1;
+  return L.divIcon({
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html: `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${color};border:${border}px solid white;box-shadow:0 0 4px rgba(0,0,0,0.4);cursor:grab;"></div>`,
+  });
+}
+
+function createResizeIcon(color: string) {
+  return L.divIcon({
+    className: "",
+    iconSize: [10, 10],
+    iconAnchor: [5, 5],
+    html: `<div style="width:10px;height:10px;border-radius:50%;background:white;border:2px solid ${color};box-shadow:0 0 3px rgba(0,0,0,0.3);cursor:ns-resize;"></div>`,
+  });
+}
+
+function MapFitBounds({ suggestions, fitKey }: { suggestions: ClusterSuggestion[]; fitKey: number }) {
+  const map = useMap();
+  useEffect(() => {
+    const points = suggestions
+      .filter(s => s.centerLatitude && s.centerLongitude)
+      .map(s => [s.centerLatitude!, s.centerLongitude!] as [number, number]);
+    if (points.length > 0) {
+      const bounds = L.latLngBounds(points);
+      map.fitBounds(bounds, { padding: [30, 30], maxZoom: 10 });
+    }
+  }, [fitKey, map]);
+  return null;
+}
+
+function FlyToCluster({ lat, lng }: { lat: number; lng: number }) {
+  const map = useMap();
+  useEffect(() => {
+    map.flyTo([lat, lng], 11, { duration: 0.8 });
+  }, [lat, lng, map]);
+  return null;
+}
+
+interface DraggableClusterProps {
+  suggestion: ClusterSuggestion;
+  isSelected: boolean;
+  isHovered: boolean;
+  onSelect: (id: string) => void;
+  onHover: (id: string | null) => void;
+  onMoveCenter: (id: string, lat: number, lng: number) => void;
+  onResizeRadius: (id: string, radiusKm: number) => void;
+}
+
+function DraggableCluster({ suggestion, isSelected, isHovered, onSelect, onHover, onMoveCenter, onResizeRadius }: DraggableClusterProps) {
+  const { centerLatitude, centerLongitude, radiusKm, color, name, objectCount } = suggestion;
+  if (!centerLatitude || !centerLongitude) return null;
+
+  const radiusHandleLat = centerLatitude + (radiusKm / 111.32);
+
+  return (
+    <>
+      <Circle
+        center={[centerLatitude, centerLongitude]}
+        radius={radiusKm * 1000}
+        pathOptions={{
+          color: color,
+          fillColor: color,
+          fillOpacity: isSelected ? 0.25 : isHovered ? 0.18 : 0.12,
+          weight: isSelected ? 3 : isHovered ? 2 : 1,
+          dashArray: isSelected ? undefined : "5 5",
+        }}
+        eventHandlers={{
+          click: (e) => { L.DomEvent.stopPropagation(e); onSelect(suggestion.id); },
+          mouseover: () => onHover(suggestion.id),
+          mouseout: () => onHover(null),
+        }}
+      />
+      <Marker
+        position={[centerLatitude, centerLongitude]}
+        icon={createClusterIcon(color, isSelected, isHovered)}
+        draggable={true}
+        eventHandlers={{
+          click: () => onSelect(suggestion.id),
+          dragend: (e) => {
+            const latlng = e.target.getLatLng();
+            onMoveCenter(suggestion.id, latlng.lat, latlng.lng);
+          },
+          mouseover: () => onHover(suggestion.id),
+          mouseout: () => onHover(null),
+        }}
+      >
+        <Popup>
+          <div className="text-xs space-y-1 min-w-[120px]">
+            <div className="font-semibold flex items-center gap-1.5">
+              <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: color }} />
+              {name}
+            </div>
+            <div>{objectCount.toLocaleString("sv")} objekt</div>
+            <div>Radie: {radiusKm.toFixed(1)} km</div>
+            <div className="text-muted-foreground pt-1">Dra mittpunkten för att flytta. Dra kanten för att ändra radie.</div>
+          </div>
+        </Popup>
+      </Marker>
+      <Marker
+        position={[radiusHandleLat, centerLongitude]}
+        icon={createResizeIcon(color)}
+        draggable={true}
+        eventHandlers={{
+          dragend: (e) => {
+            const latlng = e.target.getLatLng();
+            const toRad = (d: number) => d * Math.PI / 180;
+            const dLat = toRad(latlng.lat - centerLatitude);
+            const dLon = toRad(latlng.lng - centerLongitude);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(centerLatitude)) * Math.cos(toRad(latlng.lat)) * Math.sin(dLon / 2) ** 2;
+            const newRadius = 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            onResizeRadius(suggestion.id, Math.max(0.5, Math.round(newRadius * 10) / 10));
+          },
+        }}
+      />
+    </>
+  );
+}
+
 export default function AutoClusterPage() {
   const { toast } = useToast();
   const [strategy, setStrategy] = useState<Strategy>("geographic");
@@ -76,6 +201,10 @@ export default function AutoClusterPage() {
   const [highThreshold, setHighThreshold] = useState(10);
   const [mediumThreshold, setMediumThreshold] = useState(3);
   const [generatedResult, setGeneratedResult] = useState<GenerateResult | null>(null);
+  const [hoveredCluster, setHoveredCluster] = useState<string | null>(null);
+  const [focusedCluster, setFocusedCluster] = useState<{ lat: number; lng: number } | null>(null);
+  const [showMap, setShowMap] = useState(true);
+  const [mapFitKey, setMapFitKey] = useState(0);
 
   const clusterStatus = useQuery<{ total: number }>({
     queryKey: ["/api/clusters/status"],
@@ -100,6 +229,8 @@ export default function AutoClusterPage() {
     onSuccess: (result) => {
       setGeneratedResult(result);
       setSelectedSuggestions(new Set());
+      setFocusedCluster(null);
+      setMapFitKey(k => k + 1);
       if (result.suggestions.length > 0) {
         toast({ title: "Förslag genererade", description: `${result.suggestions.length} kluster föreslagna` });
       }
@@ -126,14 +257,21 @@ export default function AutoClusterPage() {
     },
   });
 
-  const toggleSuggestion = (id: string) => {
+  const recalculateMutation = useMutation({
+    mutationFn: async (params: { id: string; centerLatitude: number; centerLongitude: number; radiusKm: number }) => {
+      const response = await apiRequest("POST", "/api/clusters/auto-generate/recalculate", params);
+      return response.json() as Promise<{ objectIds: string[]; objectCount: number }>;
+    },
+  });
+
+  const toggleSuggestion = useCallback((id: string) => {
     setSelectedSuggestions(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  };
+  }, []);
 
   const selectAll = () => {
     if (generatedResult?.suggestions) {
@@ -153,21 +291,120 @@ export default function AutoClusterPage() {
 
   const handleGenerate = () => {
     setGeneratedResult(null);
+    setFocusedCluster(null);
     generateMutation.mutate();
   };
 
+  const handleClusterSelect = useCallback((id: string) => {
+    toggleSuggestion(id);
+    if (generatedResult?.suggestions) {
+      const s = generatedResult.suggestions.find(s => s.id === id);
+      if (s?.centerLatitude && s?.centerLongitude) {
+        setFocusedCluster({ lat: s.centerLatitude, lng: s.centerLongitude });
+      }
+    }
+  }, [generatedResult, toggleSuggestion]);
+
+  const handleRowClick = useCallback((s: ClusterSuggestion) => {
+    toggleSuggestion(s.id);
+    if (s.centerLatitude && s.centerLongitude) {
+      setFocusedCluster({ lat: s.centerLatitude, lng: s.centerLongitude });
+    }
+  }, [toggleSuggestion]);
+
+  const handleMoveCenter = useCallback((id: string, lat: number, lng: number) => {
+    setGeneratedResult(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        suggestions: prev.suggestions.map(s =>
+          s.id === id ? { ...s, centerLatitude: lat, centerLongitude: lng } : s
+        )
+      };
+    });
+    const s = generatedResult?.suggestions.find(s => s.id === id);
+    if (s) {
+      recalculateMutation.mutate(
+        { id, centerLatitude: lat, centerLongitude: lng, radiusKm: s.radiusKm },
+        {
+          onSuccess: (data) => {
+            setGeneratedResult(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                suggestions: prev.suggestions.map(s =>
+                  s.id === id ? { ...s, objectIds: data.objectIds, objectCount: data.objectCount } : s
+                )
+              };
+            });
+          }
+        }
+      );
+    }
+  }, [generatedResult, recalculateMutation]);
+
+  const handleResizeRadius = useCallback((id: string, radiusKm: number) => {
+    setGeneratedResult(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        suggestions: prev.suggestions.map(s =>
+          s.id === id ? { ...s, radiusKm } : s
+        )
+      };
+    });
+    const s = generatedResult?.suggestions.find(s => s.id === id);
+    if (s && s.centerLatitude && s.centerLongitude) {
+      recalculateMutation.mutate(
+        { id, centerLatitude: s.centerLatitude, centerLongitude: s.centerLongitude, radiusKm },
+        {
+          onSuccess: (data) => {
+            setGeneratedResult(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                suggestions: prev.suggestions.map(s =>
+                  s.id === id ? { ...s, objectIds: data.objectIds, objectCount: data.objectCount } : s
+                )
+              };
+            });
+          }
+        }
+      );
+    }
+  }, [generatedResult, recalculateMutation]);
+
+  const suggestionsWithCoords = useMemo(() =>
+    generatedResult?.suggestions.filter(s => s.centerLatitude && s.centerLongitude) || [],
+    [generatedResult]
+  );
+
   const existingClusters = clusterStatus.data?.total || 0;
+  const hasSuggestions = generatedResult && generatedResult.suggestions.length > 0 && !generateMutation.isPending;
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-          <Target className="h-6 w-6 text-primary" />
-          Automatisk Klusterbildning
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Gruppera importerade objekt i kluster med olika strategier
-        </p>
+    <div className="p-6 space-y-6 max-w-[1600px] mx-auto">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
+            <Target className="h-6 w-6 text-primary" />
+            Automatisk Klusterbildning
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Gruppera importerade objekt i kluster med olika strategier
+          </p>
+        </div>
+        {hasSuggestions && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowMap(!showMap)}
+            data-testid="button-toggle-map"
+          >
+            {showMap ? <List className="h-4 w-4 mr-2" /> : <MapIcon className="h-4 w-4 mr-2" />}
+            {showMap ? "Dölj karta" : "Visa karta"}
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -201,7 +438,7 @@ export default function AutoClusterPage() {
         )}
       </div>
 
-      <Tabs value={strategy} onValueChange={(v) => { setStrategy(v as Strategy); setGeneratedResult(null); setSelectedSuggestions(new Set()); }}>
+      <Tabs value={strategy} onValueChange={(v) => { setStrategy(v as Strategy); setGeneratedResult(null); setSelectedSuggestions(new Set()); setFocusedCluster(null); }}>
         <TabsList className="w-full grid grid-cols-5">
           {(Object.entries(STRATEGY_INFO) as [Strategy, typeof STRATEGY_INFO[Strategy]][]).map(([key, info]) => {
             const Icon = info.icon;
@@ -225,66 +462,27 @@ export default function AutoClusterPage() {
                 {key === "geographic" && (
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Max objekt per kluster: {targetSize}</label>
-                    <Slider
-                      value={[targetSize]}
-                      onValueChange={(v) => setTargetSize(v[0])}
-                      min={20}
-                      max={500}
-                      step={10}
-                      data-testid="slider-target-size"
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Städer med fler objekt än detta delas upp per postnummerområde
-                    </p>
+                    <Slider value={[targetSize]} onValueChange={(v) => setTargetSize(v[0])} min={20} max={500} step={10} data-testid="slider-target-size" />
+                    <p className="text-xs text-muted-foreground">Städer med fler objekt än detta delas upp per postnummerområde</p>
                   </div>
                 )}
                 {key === "frequency" && (
                   <div className="space-y-4">
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Hög frekvens: ≥{highThreshold} ordrar</label>
-                      <Slider
-                        value={[highThreshold]}
-                        onValueChange={(v) => setHighThreshold(v[0])}
-                        min={5}
-                        max={50}
-                        step={1}
-                        data-testid="slider-high-threshold"
-                      />
+                      <Slider value={[highThreshold]} onValueChange={(v) => setHighThreshold(v[0])} min={5} max={50} step={1} data-testid="slider-high-threshold" />
                     </div>
                     <div className="space-y-2">
                       <label className="text-sm font-medium">Medel frekvens: ≥{mediumThreshold} ordrar</label>
-                      <Slider
-                        value={[mediumThreshold]}
-                        onValueChange={(v) => setMediumThreshold(v[0])}
-                        min={1}
-                        max={highThreshold - 1}
-                        step={1}
-                        data-testid="slider-medium-threshold"
-                      />
+                      <Slider value={[mediumThreshold]} onValueChange={(v) => setMediumThreshold(v[0])} min={1} max={highThreshold - 1} step={1} data-testid="slider-medium-threshold" />
                     </div>
                   </div>
                 )}
-                {key === "team" && (
-                  <p className="text-sm text-muted-foreground">
-                    Varje resurs som utfört arbetsordrar blir ett eget kluster. Objekt utan arbetsordrar samlas i "Ej tilldelad".
-                  </p>
-                )}
-                {key === "customer" && (
-                  <p className="text-sm text-muted-foreground">
-                    Varje kund med minst ett objekt blir ett eget kluster.
-                  </p>
-                )}
-                {key === "manual" && (
-                  <p className="text-sm text-muted-foreground">
-                    Visa statistik om objekten utan att generera klusterförslag. Använd informationen för att skapa kluster manuellt.
-                  </p>
-                )}
+                {key === "team" && <p className="text-sm text-muted-foreground">Varje resurs som utfört arbetsordrar blir ett eget kluster.</p>}
+                {key === "customer" && <p className="text-sm text-muted-foreground">Varje kund med minst ett objekt blir ett eget kluster.</p>}
+                {key === "manual" && <p className="text-sm text-muted-foreground">Visa statistik om objekten utan att generera klusterförslag.</p>}
                 <Button onClick={handleGenerate} disabled={generateMutation.isPending} data-testid="button-generate">
-                  {generateMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <BarChart3 className="h-4 w-4 mr-2" />
-                  )}
+                  {generateMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <BarChart3 className="h-4 w-4 mr-2" />}
                   {key === "manual" ? "Visa statistik" : "Generera förslag"}
                 </Button>
               </CardContent>
@@ -306,9 +504,7 @@ export default function AutoClusterPage() {
       {generatedResult && strategy === "manual" && generatedResult.statistics && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Översikt</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Översikt</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Totalt objekt</span><span className="font-medium">{generatedResult.statistics.totalObjects.toLocaleString("sv")}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Med koordinater</span><span className="font-medium">{generatedResult.statistics.objectsWithCoordinates.toLocaleString("sv")}</span></div>
@@ -320,11 +516,8 @@ export default function AutoClusterPage() {
               <div className="flex justify-between"><span className="text-muted-foreground">Oklustrade</span><span className="font-medium">{generatedResult.statistics.unclustered.toLocaleString("sv")}</span></div>
             </CardContent>
           </Card>
-
           <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Besöksfrekvens</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Besöksfrekvens</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-muted-foreground">Hög (≥10 ordrar)</span><span className="font-medium">{generatedResult.statistics.frequencyBreakdown.high.toLocaleString("sv")}</span></div>
               <div className="flex justify-between"><span className="text-muted-foreground">Medel (3-9 ordrar)</span><span className="font-medium">{generatedResult.statistics.frequencyBreakdown.medium.toLocaleString("sv")}</span></div>
@@ -332,11 +525,8 @@ export default function AutoClusterPage() {
               <div className="flex justify-between"><span className="text-muted-foreground">Inga ordrar</span><span className="font-medium">{generatedResult.statistics.frequencyBreakdown.none.toLocaleString("sv")}</span></div>
             </CardContent>
           </Card>
-
           <Card className="md:col-span-2">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Objekt per stad (topp 20)</CardTitle>
-            </CardHeader>
+            <CardHeader className="pb-3"><CardTitle className="text-base">Objekt per stad (topp 20)</CardTitle></CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 text-sm">
                 {generatedResult.statistics.citiesBreakdown.slice(0, 20).map((c) => (
@@ -351,82 +541,120 @@ export default function AutoClusterPage() {
         </div>
       )}
 
-      {generatedResult && generatedResult.suggestions.length > 0 && !generateMutation.isPending && (
+      {hasSuggestions && (
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-4 flex-wrap">
-            <h2 className="text-lg font-semibold">Föreslagna kluster ({generatedResult.suggestions.length})</h2>
+            <h2 className="text-lg font-semibold">Föreslagna kluster ({generatedResult!.suggestions.length})</h2>
             <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={selectAll} data-testid="button-select-all">
-                Markera alla
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setSelectedSuggestions(new Set())} data-testid="button-deselect-all">
-                Avmarkera
-              </Button>
-              <Button
-                onClick={handleApply}
-                disabled={selectedSuggestions.size === 0 || applyMutation.isPending}
-                data-testid="button-apply"
-              >
-                {applyMutation.isPending ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Check className="h-4 w-4 mr-2" />
-                )}
+              <Button variant="outline" size="sm" onClick={selectAll} data-testid="button-select-all">Markera alla</Button>
+              <Button variant="outline" size="sm" onClick={() => setSelectedSuggestions(new Set())} data-testid="button-deselect-all">Avmarkera</Button>
+              <Button onClick={handleApply} disabled={selectedSuggestions.size === 0 || applyMutation.isPending} data-testid="button-apply">
+                {applyMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
                 Skapa {selectedSuggestions.size} kluster
               </Button>
             </div>
           </div>
 
-          <div className="border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 sticky top-0">
-                  <tr>
-                    <th className="text-left p-3 w-10">
-                      <Checkbox
-                        checked={selectedSuggestions.size === generatedResult.suggestions.length && generatedResult.suggestions.length > 0}
-                        onCheckedChange={(checked) => { if (checked) selectAll(); else setSelectedSuggestions(new Set()); }}
-                        data-testid="checkbox-select-all"
-                      />
-                    </th>
-                    <th className="text-left p-3">Färg</th>
-                    <th className="text-left p-3">Namn</th>
-                    <th className="text-right p-3">Objekt</th>
-                    <th className="text-right p-3">Ordrar</th>
-                    <th className="text-left p-3 hidden md:table-cell">Beskrivning</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {generatedResult.suggestions.map((s) => (
-                    <tr
-                      key={s.id}
-                      className={`border-t cursor-pointer hover:bg-muted/30 transition-colors ${selectedSuggestions.has(s.id) ? "bg-primary/5" : ""}`}
-                      onClick={() => toggleSuggestion(s.id)}
-                      data-testid={`row-suggestion-${s.id}`}
+          <div className={`grid gap-4 ${showMap && suggestionsWithCoords.length > 0 ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1"}`}>
+            {showMap && suggestionsWithCoords.length > 0 && (
+              <Card className="overflow-hidden">
+                <CardContent className="p-0">
+                  <div className="relative" style={{ height: "500px" }}>
+                    <MapContainer
+                      center={[62.0, 15.0]}
+                      zoom={5}
+                      style={{ height: "100%", width: "100%" }}
+                      scrollWheelZoom={true}
                     >
-                      <td className="p-3">
-                        <Checkbox
-                          checked={selectedSuggestions.has(s.id)}
-                          onCheckedChange={() => toggleSuggestion(s.id)}
-                          onClick={(e) => e.stopPropagation()}
-                          data-testid={`checkbox-${s.id}`}
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <MapFitBounds suggestions={suggestionsWithCoords} fitKey={mapFitKey} />
+                      {focusedCluster && <FlyToCluster lat={focusedCluster.lat} lng={focusedCluster.lng} />}
+                      {suggestionsWithCoords.map(s => (
+                        <DraggableCluster
+                          key={s.id}
+                          suggestion={s}
+                          isSelected={selectedSuggestions.has(s.id)}
+                          isHovered={hoveredCluster === s.id}
+                          onSelect={handleClusterSelect}
+                          onHover={setHoveredCluster}
+                          onMoveCenter={handleMoveCenter}
+                          onResizeRadius={handleResizeRadius}
                         />
-                      </td>
-                      <td className="p-3">
-                        <div className="w-4 h-4 rounded-full" style={{ backgroundColor: s.color }} />
-                      </td>
-                      <td className="p-3 font-medium max-w-[200px] truncate">{s.name}</td>
-                      <td className="p-3 text-right">
-                        <Badge variant="secondary">{s.objectCount.toLocaleString("sv")}</Badge>
-                      </td>
-                      <td className="p-3 text-right">
-                        <Badge variant="outline">{s.workOrderCount.toLocaleString("sv")}</Badge>
-                      </td>
-                      <td className="p-3 text-muted-foreground text-xs hidden md:table-cell max-w-[300px] truncate">{s.description}</td>
+                      ))}
+                    </MapContainer>
+                    {recalculateMutation.isPending && (
+                      <div className="absolute top-2 right-2 bg-background/90 rounded px-2 py-1 text-xs flex items-center gap-1 shadow">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Beräknar om...
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 left-2 bg-background/90 rounded px-2 py-1 text-xs text-muted-foreground shadow">
+                      Dra mittpunkt = flytta kluster. Dra övre kant = ändra radie.
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            <div className="border rounded-lg overflow-hidden">
+              <div className="overflow-x-auto max-h-[500px] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 sticky top-0 z-10">
+                    <tr>
+                      <th className="text-left p-3 w-10">
+                        <Checkbox
+                          checked={selectedSuggestions.size === generatedResult!.suggestions.length && generatedResult!.suggestions.length > 0}
+                          onCheckedChange={(checked) => { if (checked) selectAll(); else setSelectedSuggestions(new Set()); }}
+                          data-testid="checkbox-select-all"
+                        />
+                      </th>
+                      <th className="text-left p-3 w-10">Färg</th>
+                      <th className="text-left p-3">Namn</th>
+                      <th className="text-right p-3">Objekt</th>
+                      <th className="text-right p-3">Ordrar</th>
+                      <th className="text-right p-3 hidden lg:table-cell">Radie</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {generatedResult!.suggestions.map((s) => (
+                      <tr
+                        key={s.id}
+                        className={`border-t cursor-pointer transition-colors ${
+                          selectedSuggestions.has(s.id) ? "bg-primary/5" : ""
+                        } ${hoveredCluster === s.id ? "bg-muted/40" : "hover:bg-muted/30"}`}
+                        onClick={() => handleRowClick(s)}
+                        onMouseEnter={() => setHoveredCluster(s.id)}
+                        onMouseLeave={() => setHoveredCluster(null)}
+                        data-testid={`row-suggestion-${s.id}`}
+                      >
+                        <td className="p-3">
+                          <Checkbox
+                            checked={selectedSuggestions.has(s.id)}
+                            onCheckedChange={() => toggleSuggestion(s.id)}
+                            onClick={(e) => e.stopPropagation()}
+                            data-testid={`checkbox-${s.id}`}
+                          />
+                        </td>
+                        <td className="p-3">
+                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: s.color }} />
+                        </td>
+                        <td className="p-3 font-medium max-w-[200px] truncate">{s.name}</td>
+                        <td className="p-3 text-right">
+                          <Badge variant="secondary">{s.objectCount.toLocaleString("sv")}</Badge>
+                        </td>
+                        <td className="p-3 text-right">
+                          <Badge variant="outline">{s.workOrderCount.toLocaleString("sv")}</Badge>
+                        </td>
+                        <td className="p-3 text-right text-muted-foreground hidden lg:table-cell">
+                          {s.radiusKm.toFixed(1)} km
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
 
@@ -437,19 +665,14 @@ export default function AutoClusterPage() {
                   <div className="text-sm">
                     <span className="font-medium">{selectedSuggestions.size}</span> kluster markerade med totalt{" "}
                     <span className="font-medium">
-                      {generatedResult.suggestions
+                      {generatedResult!.suggestions
                         .filter(s => selectedSuggestions.has(s.id))
                         .reduce((sum, s) => sum + s.objectCount, 0)
                         .toLocaleString("sv")}
-                    </span>{" "}
-                    objekt
+                    </span>{" "}objekt
                   </div>
                   <Button onClick={handleApply} disabled={applyMutation.isPending} data-testid="button-apply-bottom">
-                    {applyMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    ) : (
-                      <Check className="h-4 w-4 mr-2" />
-                    )}
+                    {applyMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
                     Applicera markerade kluster
                   </Button>
                 </div>
