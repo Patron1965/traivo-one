@@ -48,6 +48,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Switch } from "@/components/ui/switch";
@@ -215,21 +216,45 @@ export default function ChecklistTemplatesPage() {
   }
 
   return (
-    <div className="space-y-6" data-testid="checklist-templates-page">
-      <div className="flex items-center justify-between">
+    <div className="p-6 space-y-6" data-testid="checklist-templates-page">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
-            <ClipboardCheck className="h-6 w-6" />
+          <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
+            <ClipboardCheck className="h-6 w-6 text-primary" />
             Checklista-mallar
           </h1>
-          <p className="text-muted-foreground mt-1">
-            Definiera inspektionsfrågor per artikeltyp. Fältarbetare får automatiskt rätt checklista.
-          </p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-sm text-muted-foreground">
+              Definiera inspektionsfrågor per artikeltyp. Fältarbetare får automatiskt rätt checklista.
+            </span>
+            {templates.length > 0 && (
+              <>
+                <Badge variant="secondary" className="text-xs font-normal">
+                  {templates.length} {templates.length === 1 ? "mall" : "mallar"}
+                </Badge>
+                <Badge variant="outline" className="text-xs font-normal text-green-600 border-green-300">
+                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                  {templates.filter(t => t.isActive).length} aktiva
+                </Badge>
+                {templates.filter(t => !t.isActive).length > 0 && (
+                  <Badge variant="outline" className="text-xs font-normal text-muted-foreground">
+                    <XCircle className="h-3 w-3 mr-1" />
+                    {templates.filter(t => !t.isActive).length} inaktiva
+                  </Badge>
+                )}
+              </>
+            )}
+          </div>
         </div>
-        <Button onClick={openNew} data-testid="button-create-template">
-          <Plus className="h-4 w-4 mr-2" />
-          Ny mall
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button onClick={openNew} data-testid="button-create-template">
+              <Plus className="h-4 w-4 mr-2" />
+              Ny mall
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Skapa en ny checklista-mall</TooltipContent>
+        </Tooltip>
       </div>
 
       {templates.length === 0 ? (
@@ -264,12 +289,16 @@ export default function ChecklistTemplatesPage() {
               </TableHeader>
               <TableBody>
                 {templates.map((t) => (
-                  <TableRow key={t.id} data-testid={`row-template-${t.id}`}>
+                  <TableRow key={t.id} className="hover-elevate" data-testid={`row-template-${t.id}`}>
                     <TableCell className="font-medium">{t.name}</TableCell>
                     <TableCell>
                       <Badge variant="outline">{typeLabel(t.articleType)}</Badge>
                     </TableCell>
-                    <TableCell>{Array.isArray(t.questions) ? t.questions.length : 0}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className="text-xs">
+                        {Array.isArray(t.questions) ? t.questions.length : 0} frågor
+                      </Badge>
+                    </TableCell>
                     <TableCell>
                       {t.isActive ? (
                         <Badge className="bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">
@@ -284,12 +313,22 @@ export default function ChecklistTemplatesPage() {
                       )}
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(t)} data-testid={`button-edit-template-${t.id}`}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setDeleteId(t.id)} data-testid={`button-delete-template-${t.id}`}>
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(t)} data-testid={`button-edit-template-${t.id}`}>
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Redigera mall</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteId(t.id)} data-testid={`button-delete-template-${t.id}`}>
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Ta bort mall</TooltipContent>
+                      </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}

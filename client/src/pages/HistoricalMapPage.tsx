@@ -16,6 +16,7 @@ import {
   Play, Pause, SkipBack, SkipForward, Clock, MapPin, Navigation,
   CheckCircle2, Timer, TrendingUp, Users, Loader2, CalendarIcon, History
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface ResourcePosition {
   id: string;
@@ -230,12 +231,17 @@ export default function HistoricalMapPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Popover>
-            <PopoverTrigger asChild>
-              <Button variant="outline" className="gap-2" data-testid="button-date-picker">
-                <CalendarIcon className="h-4 w-4" />
-                {safeFormatDate(selectedDate + "T12:00:00", "d MMMM yyyy", { locale: sv })}
-              </Button>
-            </PopoverTrigger>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="gap-2" data-testid="button-date-picker">
+                    <CalendarIcon className="h-4 w-4" />
+                    {safeFormatDate(selectedDate + "T12:00:00", "d MMMM yyyy", { locale: sv })}
+                  </Button>
+                </PopoverTrigger>
+              </TooltipTrigger>
+              <TooltipContent>Välj datum</TooltipContent>
+            </Tooltip>
             <PopoverContent className="w-auto p-0 z-[1500]" align="end">
               <CalendarWidget
                 mode="single"
@@ -253,23 +259,30 @@ export default function HistoricalMapPage() {
               />
             </PopoverContent>
           </Popover>
-          <Select value={selectedResourceId} onValueChange={setSelectedResourceId}>
-            <SelectTrigger className="w-[200px]" data-testid="select-resource">
-              <SelectValue placeholder="Välj resurs..." />
-            </SelectTrigger>
-            <SelectContent className="z-[1500]">
-              {resources?.map(r => (
-                <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div>
+                <Select value={selectedResourceId} onValueChange={setSelectedResourceId}>
+                  <SelectTrigger className="w-[200px]" data-testid="select-resource">
+                    <SelectValue placeholder="Välj resurs..." />
+                  </SelectTrigger>
+                  <SelectContent className="z-[1500]">
+                    {resources?.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent>Välj resurs att följa</TooltipContent>
+          </Tooltip>
         </div>
       </div>
 
       <div className="flex-1 relative">
         {kpis && (
           <div className="absolute top-3 right-3 z-[1000] w-72" data-testid="kpi-overlay">
-            <Card className="bg-background/95 backdrop-blur shadow-lg">
+            <Card className="bg-background/95 backdrop-blur shadow-lg hover-elevate">
               <CardHeader className="pb-2 pt-3 px-4">
                 <CardTitle className="text-sm flex items-center gap-1.5">
                   <TrendingUp className="h-4 w-4 text-primary" />
@@ -278,38 +291,58 @@ export default function HistoricalMapPage() {
               </CardHeader>
               <CardContent className="px-4 pb-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="bg-muted/50 rounded-lg p-2 text-center">
-                    <div className="text-lg font-bold" data-testid="text-kpi-completed">
-                      {kpis.completedTasks}/{kpis.totalTasks}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
-                      <CheckCircle2 className="h-3 w-3" /> Slutförda
-                    </div>
-                  </div>
-                  <div className="bg-muted/50 rounded-lg p-2 text-center">
-                    <div className="text-lg font-bold" data-testid="text-kpi-remaining">
-                      {kpis.remainingTasks}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
-                      <Clock className="h-3 w-3" /> Kvarvarande
-                    </div>
-                  </div>
-                  <div className="bg-muted/50 rounded-lg p-2 text-center">
-                    <div className="text-lg font-bold" data-testid="text-kpi-avg-time">
-                      {kpis.avgTimePerTaskMinutes}<span className="text-xs font-normal">min</span>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
-                      <Timer className="h-3 w-3" /> Snittid
-                    </div>
-                  </div>
-                  <div className="bg-muted/50 rounded-lg p-2 text-center">
-                    <div className="text-lg font-bold" data-testid="text-kpi-completion-rate">
-                      {kpis.completionRate}%
-                    </div>
-                    <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
-                      <TrendingUp className="h-3 w-3" /> Mål
-                    </div>
-                  </div>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="bg-muted/50 rounded-lg p-2 text-center hover-elevate cursor-help">
+                        <div className="text-lg font-bold" data-testid="text-kpi-completed">
+                          {kpis.completedTasks}/{kpis.totalTasks}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <CheckCircle2 className="h-3 w-3" /> Slutförda
+                        </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Antal slutförda uppgifter av totalt</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="bg-muted/50 rounded-lg p-2 text-center hover-elevate cursor-help">
+                        <div className="text-lg font-bold" data-testid="text-kpi-remaining">
+                          {kpis.remainingTasks}
+                        </div>
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <Clock className="h-3 w-3" /> Kvarvarande
+                        </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Uppgifter som återstår</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="bg-muted/50 rounded-lg p-2 text-center hover-elevate cursor-help">
+                        <div className="text-lg font-bold" data-testid="text-kpi-avg-time">
+                          {kpis.avgTimePerTaskMinutes}<span className="text-xs font-normal">min</span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <Timer className="h-3 w-3" /> Snittid
+                        </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Genomsnittlig tid per uppgift</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="bg-muted/50 rounded-lg p-2 text-center hover-elevate cursor-help">
+                        <div className="text-lg font-bold" data-testid="text-kpi-completion-rate">
+                          {kpis.completionRate}%
+                        </div>
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-0.5">
+                          <TrendingUp className="h-3 w-3" /> Mål
+                        </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>Måluppfyllnad idag</TooltipContent>
+                  </Tooltip>
                 </div>
                 <div className="flex items-center gap-1 text-[10px] text-muted-foreground pt-1 border-t">
                   <Users className="h-3 w-3" /> {kpis.activeResources} aktiva resurser
@@ -457,33 +490,48 @@ export default function HistoricalMapPage() {
           <div className="absolute bottom-0 left-0 right-0 z-[1000] bg-background/95 backdrop-blur border-t p-3" data-testid="playback-controls">
             <div className="flex items-center gap-3 max-w-4xl mx-auto">
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => { stopPlayback(); setPlaybackIndex(0); }}
-                  data-testid="button-skip-back"
-                >
-                  <SkipBack className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="default"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => isPlaying ? stopPlayback() : startPlayback()}
-                  data-testid="button-play-pause"
-                >
-                  {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => { stopPlayback(); setPlaybackIndex(sortedPositions.length - 1); }}
-                  data-testid="button-skip-forward"
-                >
-                  <SkipForward className="h-4 w-4" />
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => { stopPlayback(); setPlaybackIndex(0); }}
+                      data-testid="button-skip-back"
+                    >
+                      <SkipBack className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Spola till start</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="default"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => isPlaying ? stopPlayback() : startPlayback()}
+                      data-testid="button-play-pause"
+                    >
+                      {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{isPlaying ? "Pausa" : "Spela upp"}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => { stopPlayback(); setPlaybackIndex(sortedPositions.length - 1); }}
+                      data-testid="button-skip-forward"
+                    >
+                      <SkipForward className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Hoppa till slut</TooltipContent>
+                </Tooltip>
               </div>
 
               <div className="flex-1">
@@ -521,18 +569,25 @@ export default function HistoricalMapPage() {
                 </Badge>
               </div>
 
-              <Select value={String(playbackSpeed)} onValueChange={(v) => setPlaybackSpeed(Number(v))}>
-                <SelectTrigger className="w-[70px] h-8 text-xs" data-testid="select-speed">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0.5">0.5x</SelectItem>
-                  <SelectItem value="1">1x</SelectItem>
-                  <SelectItem value="2">2x</SelectItem>
-                  <SelectItem value="4">4x</SelectItem>
-                  <SelectItem value="8">8x</SelectItem>
-                </SelectContent>
-              </Select>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div>
+                    <Select value={String(playbackSpeed)} onValueChange={(v) => setPlaybackSpeed(Number(v))}>
+                      <SelectTrigger className="w-[70px] h-8 text-xs" data-testid="select-speed">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="0.5">0.5x</SelectItem>
+                        <SelectItem value="1">1x</SelectItem>
+                        <SelectItem value="2">2x</SelectItem>
+                        <SelectItem value="4">4x</SelectItem>
+                        <SelectItem value="8">8x</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>Uppspelningshastighet</TooltipContent>
+              </Tooltip>
             </div>
           </div>
         )}
