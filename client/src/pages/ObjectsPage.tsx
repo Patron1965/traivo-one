@@ -16,8 +16,10 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
-  Check, X, FileSpreadsheet, Download, BarChart3
+  Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
+  Image, GitFork, Link2
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
 import { ObjectMetadataPanel } from "@/components/ObjectMetadataPanel";
 import { ObjectPayersPanel } from "@/components/ObjectPayersPanel";
@@ -124,6 +126,8 @@ export default function ObjectsPage() {
   const [historyObject, setHistoryObject] = useState<ServiceObject | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "payers" | "parents" | "articles" } | null>(null);
   const [newObject, setNewObject] = useState({
     name: "",
     objectType: "fastighet",
@@ -236,6 +240,46 @@ export default function ObjectsPage() {
   }, [objects, typeFilter, accessFilter, customerFilter, hierarchyFilter, setupTimeRange]);
 
   const filteredTopLevel = filteredObjects.filter(obj => !obj.parentId);
+
+  const activeFilterCount = [
+    typeFilter !== "all" ? 1 : 0,
+    accessFilter !== "all" ? 1 : 0,
+    customerFilter !== "all" ? 1 : 0,
+    hierarchyFilter !== "all" ? 1 : 0,
+    (setupTimeRange[0] !== 0 || setupTimeRange[1] !== 60) ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  const quickStats = useMemo(() => {
+    const typeCounts: Record<string, number> = {};
+    let totalSetup = 0;
+    let setupCount = 0;
+    let missingCity = 0;
+    for (const obj of objects) {
+      const label = objectTypeLabels[obj.objectType] || obj.objectType;
+      typeCounts[label] = (typeCounts[label] || 0) + 1;
+      if (obj.avgSetupTime && obj.avgSetupTime > 0) {
+        totalSetup += obj.avgSetupTime;
+        setupCount++;
+      }
+      if (!obj.city || obj.city.trim() === "") missingCity++;
+    }
+    const topTypes = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+    return {
+      topTypes,
+      avgSetup: setupCount > 0 ? Math.round(totalSetup / setupCount) : 0,
+      missingCity,
+    };
+  }, [objects]);
+
+  const clearAllFilters = () => {
+    setTypeFilter("all");
+    setAccessFilter("all");
+    setCustomerFilter("all");
+    setHierarchyFilter("all");
+    setSetupTimeRange([0, 60]);
+  };
 
   const objectsWithCoords = filteredObjects.filter(o => o.latitude && o.longitude);
   const mapPositions: [number, number][] = objectsWithCoords.map(o => [o.latitude!, o.longitude!]);
@@ -459,10 +503,20 @@ export default function ObjectsPage() {
                   <TooltipTrigger asChild>
                     <span className="flex items-center gap-1 cursor-help">
                       <MapPin className="h-3 w-3" />
-                      {obj.address}, {obj.city}
+                      {obj.address}{obj.postalCode || obj.city ? ", " : ""}{[obj.postalCode, obj.city].filter(Boolean).join(" ")}
                     </span>
                   </TooltipTrigger>
                   <TooltipContent>Adress</TooltipContent>
+                </Tooltip>
+              )}
+              {obj.address && (!obj.city || obj.city.trim() === "") && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 text-amber-500 cursor-help">
+                      <AlertTriangle className="h-3 w-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Stad saknas</TooltipContent>
                 </Tooltip>
               )}
               {level === 0 && (
@@ -548,28 +602,41 @@ export default function ObjectsPage() {
                   </TooltipTrigger>
                   <TooltipContent><p>Redigera ställtid</p></TooltipContent>
                 </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); handleCopyObject(obj); }} data-testid={`button-copy-${obj.id}`}>
-                      <Copy className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Kopiera</p></TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button size="icon" variant="ghost" onClick={(e) => { e.stopPropagation(); showHistory(obj); }} data-testid={`button-history-${obj.id}`}>
-                      <Clock className="h-4 w-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent><p>Visa historik</p></TooltipContent>
-                </Tooltip>
-                <ObjectContactsDialog object={obj} />
-                <ObjectImagesDialog object={obj} />
                 <ObjectMetadataPanel object={obj} />
-                <ObjectPayersPanel object={obj} />
-                <ObjectParentsPanel object={obj} />
-                <ObjectApplicableArticlesPanel object={obj} />
+                <ObjectContactsDialog object={obj} />
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button size="icon" variant="ghost" onClick={(e) => e.stopPropagation()} data-testid={`button-more-actions-${obj.id}`}>
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenuItem onClick={() => handleCopyObject(obj)} data-testid={`menu-copy-${obj.id}`}>
+                      <Copy className="h-4 w-4 mr-2" />
+                      Kopiera
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => showHistory(obj)} data-testid={`menu-history-${obj.id}`}>
+                      <Clock className="h-4 w-4 mr-2" />
+                      Ställtidshistorik
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "images" })} data-testid={`menu-images-${obj.id}`}>
+                      <Image className="h-4 w-4 mr-2" />
+                      Bilder
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "payers" })} data-testid={`menu-payers-${obj.id}`}>
+                      <Users className="h-4 w-4 mr-2" />
+                      Betalare
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "parents" })} data-testid={`menu-parents-${obj.id}`}>
+                      <GitFork className="h-4 w-4 mr-2" />
+                      Föräldrar
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "articles" })} data-testid={`menu-articles-${obj.id}`}>
+                      <Link2 className="h-4 w-4 mr-2" />
+                      Artiklar & Priser
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             )}
           </div>
@@ -599,9 +666,28 @@ export default function ObjectsPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Objekt</h1>
-          <p className="text-sm text-muted-foreground">
-            {filteredObjects.length} av {objects.length} objekt visas
-          </p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-sm text-muted-foreground">
+              {filteredObjects.length} av {totalObjects.toLocaleString("sv")} objekt visas
+            </span>
+            {quickStats.topTypes.map(([label, count]) => (
+              <Badge key={label} variant="secondary" className="text-xs font-normal">{count} {label}</Badge>
+            ))}
+            {quickStats.avgSetup > 0 && (
+              <Badge variant="outline" className="text-xs font-normal">Snitt ställtid: {quickStats.avgSetup} min</Badge>
+            )}
+            {quickStats.missingCity > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 gap-1 cursor-help">
+                    <AlertTriangle className="h-3 w-3" />
+                    {quickStats.missingCity} utan stad
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>Objekt som saknar stadsuppgift</TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" onClick={() => setImportDialogOpen(true)} data-testid="button-import">
@@ -632,81 +718,139 @@ export default function ObjectsPage() {
 
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Filter className="h-4 w-4" />
-            Filter
-          </CardTitle>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4 flex-1">
+              <div className="relative flex-1 min-w-[200px] max-w-md">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input 
+                  placeholder="Sök objekt, kund, adress, stad..." 
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-objects"
+                />
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setFiltersOpen(!filtersOpen)}
+                className="gap-2"
+                data-testid="button-toggle-filters"
+              >
+                <Filter className="h-4 w-4" />
+                Filter
+                {activeFilterCount > 0 && (
+                  <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
+                    {activeFilterCount}
+                  </Badge>
+                )}
+                {filtersOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </Button>
+              {activeFilterCount > 0 && (
+                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
+                  <XCircle className="h-4 w-4" />
+                  Rensa filter
+                </Button>
+              )}
+            </div>
+          </div>
+          {activeFilterCount > 0 && (
+            <div className="flex items-center gap-2 flex-wrap mt-3">
+              {typeFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTypeFilter("all")} data-testid="badge-filter-type">
+                  Typ: {objectTypeLabels[typeFilter] || typeFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {accessFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setAccessFilter("all")} data-testid="badge-filter-access">
+                  Tillgång: {accessTypeLabels[accessFilter]?.label || accessFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {customerFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setCustomerFilter("all")} data-testid="badge-filter-customer">
+                  Kund: {customers.find(c => c.id === customerFilter)?.name || customerFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {hierarchyFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHierarchyFilter("all")} data-testid="badge-filter-hierarchy">
+                  Nivå: {hierarchyLevelLabels[hierarchyFilter]?.label || hierarchyFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {(setupTimeRange[0] !== 0 || setupTimeRange[1] !== 60) && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setSetupTimeRange([0, 60])} data-testid="badge-filter-setuptime">
+                  Ställtid: {setupTimeRange[0]}-{setupTimeRange[1]} min
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+            </div>
+          )}
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="relative flex-1 min-w-[200px] max-w-md">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input 
-                placeholder="Sök objekt, kund, adress, stad..." 
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-                data-testid="input-search-objects"
+        {filtersOpen && (
+          <CardContent className="space-y-4 pt-0">
+            <div className="flex items-center gap-4 flex-wrap">
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="w-[160px]" data-testid="select-type-filter">
+                  <SelectValue placeholder="Objekttyp" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla typer</SelectItem>
+                  {Object.entries(objectTypeLabels).map(([key, label]) => (
+                    <SelectItem key={key} value={key}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={accessFilter} onValueChange={setAccessFilter}>
+                <SelectTrigger className="w-[160px]" data-testid="select-access-filter">
+                  <SelectValue placeholder="Tillgångstyp" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla tillgångar</SelectItem>
+                  {Object.entries(accessTypeLabels).map(([key, config]) => (
+                    <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={customerFilter} onValueChange={setCustomerFilter}>
+                <SelectTrigger className="w-[180px]" data-testid="select-customer-filter">
+                  <SelectValue placeholder="Kund" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla kunder</SelectItem>
+                  {customers.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={hierarchyFilter} onValueChange={setHierarchyFilter}>
+                <SelectTrigger className="w-[140px]" data-testid="select-hierarchy-filter">
+                  <SelectValue placeholder="Nivå" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla nivåer</SelectItem>
+                  {Object.entries(hierarchyLevelLabels).map(([key, config]) => (
+                    <SelectItem key={key} value={key}>{config.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-4">
+              <Label className="text-sm text-muted-foreground shrink-0">Ställtid: {setupTimeRange[0]}-{setupTimeRange[1]} min</Label>
+              <Slider
+                value={setupTimeRange}
+                onValueChange={(v) => setSetupTimeRange(v as [number, number])}
+                min={0}
+                max={60}
+                step={5}
+                className="w-64"
+                data-testid="slider-setup-time"
               />
             </div>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-[160px]" data-testid="select-type-filter">
-                <SelectValue placeholder="Objekttyp" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alla typer</SelectItem>
-                {Object.entries(objectTypeLabels).map(([key, label]) => (
-                  <SelectItem key={key} value={key}>{label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={accessFilter} onValueChange={setAccessFilter}>
-              <SelectTrigger className="w-[160px]" data-testid="select-access-filter">
-                <SelectValue placeholder="Tillgångstyp" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alla tillgångar</SelectItem>
-                {Object.entries(accessTypeLabels).map(([key, config]) => (
-                  <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={customerFilter} onValueChange={setCustomerFilter}>
-              <SelectTrigger className="w-[180px]" data-testid="select-customer-filter">
-                <SelectValue placeholder="Kund" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alla kunder</SelectItem>
-                {customers.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={hierarchyFilter} onValueChange={setHierarchyFilter}>
-              <SelectTrigger className="w-[140px]" data-testid="select-hierarchy-filter">
-                <SelectValue placeholder="Nivå" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Alla nivåer</SelectItem>
-                {Object.entries(hierarchyLevelLabels).map(([key, config]) => (
-                  <SelectItem key={key} value={key}>{config.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex items-center gap-4">
-            <Label className="text-sm text-muted-foreground shrink-0">Ställtid: {setupTimeRange[0]}-{setupTimeRange[1]} min</Label>
-            <Slider
-              value={setupTimeRange}
-              onValueChange={(v) => setSetupTimeRange(v as [number, number])}
-              min={0}
-              max={60}
-              step={5}
-              className="w-64"
-              data-testid="slider-setup-time"
-            />
-          </div>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
 
       <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "map")}>
@@ -1042,6 +1186,24 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {overflowPanel && (() => {
+        const panelObj = objects.find(o => o.id === overflowPanel.objectId);
+        if (!panelObj) return null;
+        const closePanel = () => setOverflowPanel(null);
+        switch (overflowPanel.panel) {
+          case "images":
+            return <ObjectImagesDialog object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
+          case "payers":
+            return <ObjectPayersPanel object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
+          case "parents":
+            return <ObjectParentsPanel object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
+          case "articles":
+            return <ObjectApplicableArticlesPanel object={panelObj} controlled open onOpenChange={(v) => { if (!v) closePanel(); }} />;
+          default:
+            return null;
+        }
+      })()}
     </div>
   );
 }

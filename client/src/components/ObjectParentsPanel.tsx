@@ -28,6 +28,9 @@ interface ObjectParentRelation {
 
 interface ObjectParentsPanelProps {
   object: ServiceObject;
+  controlled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const RELATION_CONTEXTS = [
@@ -37,9 +40,11 @@ const RELATION_CONTEXTS = [
   { value: "ownership", label: "Ägare" },
 ];
 
-export function ObjectParentsPanel({ object }: ObjectParentsPanelProps) {
+export function ObjectParentsPanel({ object, controlled, open: controlledOpen, onOpenChange: controlledOnOpenChange }: ObjectParentsPanelProps) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlled ? (controlledOpen ?? false) : internalOpen;
+  const setOpen = controlled ? (controlledOnOpenChange ?? (() => {})) : setInternalOpen;
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [selectedParentId, setSelectedParentId] = useState("");
   const [selectedContext, setSelectedContext] = useState("primary");
@@ -115,11 +120,13 @@ export function ObjectParentsPanel({ object }: ObjectParentsPanelProps) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button size="icon" variant="ghost" data-testid={`button-parents-${object.id}`}>
-          <GitFork className="h-4 w-4" />
-        </Button>
-      </SheetTrigger>
+      {!controlled && (
+        <SheetTrigger asChild>
+          <Button size="icon" variant="ghost" data-testid={`button-parents-${object.id}`}>
+            <GitFork className="h-4 w-4" />
+          </Button>
+        </SheetTrigger>
+      )}
       <SheetContent className="w-[400px] sm:w-[450px]">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">

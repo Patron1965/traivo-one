@@ -28,6 +28,9 @@ interface ResolvedArticlePrice {
 }
 
 interface ObjectApplicableArticlesPanelProps {
+  controlled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   object: ServiceObject;
 }
 
@@ -57,8 +60,10 @@ const priceSourceLabels: Record<string, string> = {
   objektpris: "Objektpris",
 };
 
-export function ObjectApplicableArticlesPanel({ object }: ObjectApplicableArticlesPanelProps) {
-  const [open, setOpen] = useState(false);
+export function ObjectApplicableArticlesPanel({ object, controlled, open: controlledOpen, onOpenChange: controlledOnOpenChange }: ObjectApplicableArticlesPanelProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlled ? (controlledOpen ?? false) : internalOpen;
+  const setOpen = controlled ? (controlledOnOpenChange ?? (() => {})) : setInternalOpen;
   const [showAddArticle, setShowAddArticle] = useState(false);
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
@@ -167,20 +172,22 @@ export function ObjectApplicableArticlesPanel({ object }: ObjectApplicableArticl
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <SheetTrigger asChild>
-            <Button
-              size="icon"
-              variant="ghost"
-              data-testid={`button-applicable-articles-${object.id}`}
-            >
-              <Link2 className="h-4 w-4" />
-            </Button>
-          </SheetTrigger>
-        </TooltipTrigger>
-        <TooltipContent><p>Artiklar & Priser</p></TooltipContent>
-      </Tooltip>
+      {!controlled && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SheetTrigger asChild>
+              <Button
+                size="icon"
+                variant="ghost"
+                data-testid={`button-applicable-articles-${object.id}`}
+              >
+                <Link2 className="h-4 w-4" />
+              </Button>
+            </SheetTrigger>
+          </TooltipTrigger>
+          <TooltipContent><p>Artiklar & Priser</p></TooltipContent>
+        </Tooltip>
+      )}
 
       <SheetContent className="w-full sm:max-w-lg overflow-y-auto">
         <SheetHeader>

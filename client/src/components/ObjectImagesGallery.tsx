@@ -24,6 +24,9 @@ interface ObjectImagesGalleryProps {
 interface ObjectImagesDialogProps {
   object: ServiceObject;
   trigger?: React.ReactNode;
+  controlled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const IMAGE_TYPES = [
@@ -269,23 +272,27 @@ export function ObjectImagesGallery({ objectId, tenantId, readOnly = false }: Ob
   );
 }
 
-export function ObjectImagesDialog({ object, trigger }: ObjectImagesDialogProps) {
-  const [open, setOpen] = useState(false);
+export function ObjectImagesDialog({ object, trigger, controlled, open: controlledOpen, onOpenChange: controlledOnOpenChange }: ObjectImagesDialogProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = controlled ? (controlledOpen ?? false) : internalOpen;
+  const setIsOpen = controlled ? (controlledOnOpenChange ?? (() => {})) : setInternalOpen;
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <DialogTrigger asChild>
-            {trigger || (
-              <Button variant="ghost" size="icon" data-testid={`button-images-${object.id}`}>
-                <Image className="h-4 w-4" />
-              </Button>
-            )}
-          </DialogTrigger>
-        </TooltipTrigger>
-        <TooltipContent><p>Bilder</p></TooltipContent>
-      </Tooltip>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      {!controlled && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <DialogTrigger asChild>
+              {trigger || (
+                <Button variant="ghost" size="icon" data-testid={`button-images-${object.id}`}>
+                  <Image className="h-4 w-4" />
+                </Button>
+              )}
+            </DialogTrigger>
+          </TooltipTrigger>
+          <TooltipContent><p>Bilder</p></TooltipContent>
+        </Tooltip>
+      )}
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">

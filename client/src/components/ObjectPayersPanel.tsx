@@ -24,6 +24,9 @@ import {
 
 interface ObjectPayersPanelProps {
   object: ServiceObject;
+  controlled?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 const PAYER_TYPES = [
@@ -40,9 +43,11 @@ const ARTICLE_TYPES = [
   { value: "transport", label: "Transport" },
 ];
 
-export function ObjectPayersPanel({ object }: ObjectPayersPanelProps) {
+export function ObjectPayersPanel({ object, controlled, open: controlledOpen, onOpenChange: controlledOnOpenChange }: ObjectPayersPanelProps) {
   const { toast } = useToast();
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlled ? (controlledOpen ?? false) : internalOpen;
+  const setOpen = controlled ? (controlledOnOpenChange ?? (() => {})) : setInternalOpen;
   const [editingPayer, setEditingPayer] = useState<ObjectPayer | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [newPayer, setNewPayer] = useState({
@@ -126,16 +131,18 @@ export function ObjectPayersPanel({ object }: ObjectPayersPanelProps) {
 
   return (
     <Sheet open={open} onOpenChange={setOpen}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon" data-testid={`button-payers-${object.id}`}>
-              <Users className="w-4 h-4" />
-            </Button>
-          </SheetTrigger>
-        </TooltipTrigger>
-        <TooltipContent><p>Betalare{payers.length > 0 ? ` (${payers.length})` : ""}</p></TooltipContent>
-      </Tooltip>
+      {!controlled && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" data-testid={`button-payers-${object.id}`}>
+                <Users className="w-4 h-4" />
+              </Button>
+            </SheetTrigger>
+          </TooltipTrigger>
+          <TooltipContent><p>Betalare{payers.length > 0 ? ` (${payers.length})` : ""}</p></TooltipContent>
+        </Tooltip>
+      )}
       <SheetContent className="w-[500px] sm:max-w-[500px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
