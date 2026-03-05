@@ -504,6 +504,21 @@ export async function registerRoutes(
     return targets;
   }
 
+  app.post("/api/objects/by-ids", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { ids } = req.body;
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.json([]);
+      }
+      const objects = await storage.getObjectsByIds(tenantId, ids.slice(0, 500));
+      res.json(objects);
+    } catch (error) {
+      console.error("Failed to get objects by ids:", error);
+      res.status(500).json({ error: "Failed to get objects" });
+    }
+  });
+
   app.post("/api/objects/batch-geocode/preview", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -568,6 +583,7 @@ export async function registerRoutes(
       const results = await batchGeocode(addresses, tenantId);
 
       let updated = 0;
+      const updatedIds: string[] = [];
       for (const [objectId, geoResult] of results) {
         const updateData: any = {};
         if (!targets.find(t => t.id === objectId)?.latitude && geoResult.latitude) {
@@ -584,6 +600,7 @@ export async function registerRoutes(
         if (Object.keys(updateData).length > 0) {
           await storage.updateObject(objectId, updateData);
           updated++;
+          updatedIds.push(objectId);
         }
       }
 
@@ -591,6 +608,7 @@ export async function registerRoutes(
         total: addresses.length,
         geocoded: results.size,
         updated,
+        updatedIds,
         googleAvailable: isGoogleGeocodingAvailable(),
       });
     } catch (error) {

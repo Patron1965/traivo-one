@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -102,6 +102,24 @@ function MapFitBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
+function BatchGeoMapFitter({ objects }: { objects: ServiceObject[] }) {
+  const map = useMap();
+  const positions: L.LatLng[] = [];
+  for (const o of objects) {
+    if (o.latitude && o.longitude) {
+      positions.push(L.latLng(o.latitude, o.longitude));
+    }
+    if (o.entranceLatitude && o.entranceLongitude) {
+      positions.push(L.latLng(o.entranceLatitude, o.entranceLongitude));
+    }
+  }
+  if (positions.length > 0) {
+    const bounds = L.latLngBounds(positions);
+    map.fitBounds(bounds, { padding: [30, 30] });
+  }
+  return null;
+}
+
 const PAGE_SIZE = 100;
 
 export default function ObjectsPage() {
@@ -134,7 +152,9 @@ export default function ObjectsPage() {
   const [batchGeoCluster, setBatchGeoCluster] = useState("");
   const [batchGeoLimit, setBatchGeoLimit] = useState(500);
   const [batchGeoRunning, setBatchGeoRunning] = useState(false);
-  const [batchGeoResult, setBatchGeoResult] = useState<{ total: number; geocoded: number; updated: number } | null>(null);
+  const [batchGeoResult, setBatchGeoResult] = useState<{ total: number; geocoded: number; updated: number; updatedIds?: string[] } | null>(null);
+  const [batchGeoMapObjects, setBatchGeoMapObjects] = useState<ServiceObject[]>([]);
+  const [batchGeoShowMap, setBatchGeoShowMap] = useState(false);
   const [newObject, setNewObject] = useState({
     name: "",
     objectType: "fastighet",
@@ -1272,8 +1292,8 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
         </DialogContent>
       </Dialog>
 
-      <Dialog open={batchGeoOpen} onOpenChange={(v) => { if (!batchGeoRunning) { setBatchGeoOpen(v); } }}>
-        <DialogContent className="max-w-2xl">
+      <Dialog open={batchGeoOpen} onOpenChange={(v) => { if (!batchGeoRunning) { setBatchGeoOpen(v); setBatchGeoShowMap(false); } }}>
+        <DialogContent className={batchGeoShowMap ? "max-w-5xl" : "max-w-2xl"}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5" />
@@ -1392,31 +1412,108 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
             )}
 
             {batchGeoResult && !batchGeoRunning && (
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Check className="h-5 w-5 text-green-500" />
-                    <span className="font-medium">Batch-geocodning klar</span>
+              <div className="space-y-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Check className="h-5 w-5 text-green-500" />
+                        <span className="font-medium">Batch-geocodning klar</span>
+                      </div>
+                      {batchGeoMapObjects.length > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setBatchGeoShowMap(!batchGeoShowMap)}
+                          data-testid="button-toggle-batch-geo-map"
+                        >
+                          <MapIcon className="h-4 w-4 mr-2" />
+                          {batchGeoShowMap ? "Dölj karta" : "Visa på karta"}
+                        </Button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold">{batchGeoResult.total}</div>
+                        <div className="text-xs text-muted-foreground">Skickade</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-green-500">{batchGeoResult.geocoded}</div>
+                        <div className="text-xs text-muted-foreground">Geocodade</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-blue-500">{batchGeoResult.updated}</div>
+                        <div className="text-xs text-muted-foreground">Uppdaterade</div>
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">
+                      Kostnad: ${(batchGeoResult.total * 0.005).toFixed(2)}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                {batchGeoShowMap && batchGeoMapObjects.length > 0 && (
+                  <div className="rounded-lg overflow-hidden border" style={{ height: "400px" }}>
+                    <MapContainer
+                      center={[62.39, 17.31]}
+                      zoom={12}
+                      style={{ height: "100%", width: "100%" }}
+                    >
+                      <TileLayer
+                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      />
+                      <BatchGeoMapFitter objects={batchGeoMapObjects} />
+                      {batchGeoMapObjects.map((obj) => {
+                        if (!obj.latitude || !obj.longitude) return null;
+                        return (
+                          <Fragment key={obj.id}>
+                            <Marker
+                              position={[obj.latitude, obj.longitude]}
+                              icon={L.divIcon({
+                                className: "batch-geo-marker",
+                                html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:12px;height:12px;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
+                                iconSize: [12, 12],
+                                iconAnchor: [6, 6],
+                              })}
+                            >
+                              <Popup>
+                                <div className="text-sm">
+                                  <div className="font-medium">{obj.name}</div>
+                                  <div className="text-muted-foreground">{obj.address}</div>
+                                  {obj.entranceLatitude && (
+                                    <div className="text-green-600 text-xs mt-1 flex items-center gap-1">
+                                      <DoorOpen className="h-3 w-3" /> Entrékoordinater
+                                    </div>
+                                  )}
+                                </div>
+                              </Popup>
+                            </Marker>
+                            {obj.entranceLatitude && obj.entranceLongitude && (
+                              <Marker
+                                position={[obj.entranceLatitude, obj.entranceLongitude]}
+                                icon={L.divIcon({
+                                  className: "batch-geo-entrance-marker",
+                                  html: `<div style="background:#22c55e;color:white;border-radius:4px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg></div>`,
+                                  iconSize: [14, 14],
+                                  iconAnchor: [7, 7],
+                                })}
+                              >
+                                <Popup>
+                                  <div className="text-sm">
+                                    <div className="font-medium text-green-600">Entré: {obj.name}</div>
+                                    <div className="text-muted-foreground">{obj.address}</div>
+                                  </div>
+                                </Popup>
+                              </Marker>
+                            )}
+                          </Fragment>
+                        );
+                      })}
+                    </MapContainer>
                   </div>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div>
-                      <div className="text-2xl font-bold">{batchGeoResult.total}</div>
-                      <div className="text-xs text-muted-foreground">Skickade</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-green-500">{batchGeoResult.geocoded}</div>
-                      <div className="text-xs text-muted-foreground">Geocodade</div>
-                    </div>
-                    <div>
-                      <div className="text-2xl font-bold text-primary">{batchGeoResult.updated}</div>
-                      <div className="text-xs text-muted-foreground">Uppdaterade</div>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-3">
-                    Kostnad: ${(batchGeoResult.total * 0.005).toFixed(2)}
-                  </p>
-                </CardContent>
-              </Card>
+                )}
+              </div>
             )}
           </div>
           <DialogFooter>
@@ -1442,8 +1539,24 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
                     if (!res.ok) throw new Error("Batch geocode failed");
                     const result = await res.json();
                     setBatchGeoResult(result);
+                    setBatchGeoShowMap(false);
+                    setBatchGeoMapObjects([]);
                     queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
                     toast({ title: `${result.updated} objekt uppdaterade med entrékoordinater` });
+                    if (result.updatedIds?.length > 0) {
+                      try {
+                        const objRes = await fetch("/api/objects/by-ids", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({ ids: result.updatedIds }),
+                        });
+                        if (objRes.ok) {
+                          const objs = await objRes.json();
+                          setBatchGeoMapObjects(objs);
+                        }
+                      } catch {}
+                    }
                   } catch (error) {
                     toast({ title: "Batch-geocodning misslyckades", variant: "destructive" });
                   } finally {
