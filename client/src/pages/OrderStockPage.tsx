@@ -54,8 +54,10 @@ import {
   Camera,
   User,
   Database,
-  X
+  X,
+  Search
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AICard } from "@/components/AICard";
 import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
 import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
@@ -633,7 +635,8 @@ export default function OrderStockPage() {
           );
         })}
         {statusFilter !== "all" && (
-          <Button variant="ghost" size="sm" onClick={() => handleStatusFilterChange("all")} data-testid="button-clear-filter">
+          <Button variant="ghost" size="sm" onClick={() => handleStatusFilterChange("all")} className="gap-1 text-muted-foreground" data-testid="button-clear-filter">
+            <XCircle className="h-4 w-4" />
             Rensa filter
           </Button>
         )}
@@ -663,7 +666,7 @@ export default function OrderStockPage() {
                 <Label className="text-xs">Metadata-typ</Label>
                 <Select value={newFilterName} onValueChange={setNewFilterName}>
                   <SelectTrigger className="w-44" data-testid="select-metadata-type">
-                    <SelectValue placeholder="Valj typ..." />
+                    <SelectValue placeholder="Välj typ..." />
                   </SelectTrigger>
                   <SelectContent>
                     {metadataTypes.map(t => (
@@ -681,16 +684,16 @@ export default function OrderStockPage() {
                   <SelectContent>
                     <SelectItem value="eq">= Lika med</SelectItem>
                     <SelectItem value="neq">≠ Ej lika</SelectItem>
-                    <SelectItem value="gt">&gt; Storre an</SelectItem>
-                    <SelectItem value="gte">≥ Storre/lika</SelectItem>
-                    <SelectItem value="lt">&lt; Mindre an</SelectItem>
+                    <SelectItem value="gt">&gt; Större än</SelectItem>
+                    <SelectItem value="gte">≥ Större/lika</SelectItem>
+                    <SelectItem value="lt">&lt; Mindre än</SelectItem>
                     <SelectItem value="lte">≤ Mindre/lika</SelectItem>
-                    <SelectItem value="contains">Innehaller</SelectItem>
+                    <SelectItem value="contains">Innehåller</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <Label className="text-xs">Varde</Label>
+                <Label className="text-xs">Värde</Label>
                 <Input
                   value={newFilterValue}
                   onChange={e => setNewFilterValue(e.target.value)}
@@ -702,7 +705,7 @@ export default function OrderStockPage() {
               </div>
               <Button size="sm" onClick={addMetadataFilter} disabled={!newFilterName || !newFilterValue} data-testid="button-add-metadata-filter">
                 <Plus className="h-4 w-4 mr-1" />
-                Lagg till
+                Lägg till
               </Button>
             </div>
             
@@ -738,13 +741,16 @@ export default function OrderStockPage() {
               <Filter className="h-5 w-5" />
               Orderlista
             </CardTitle>
-            <Input
-              placeholder="Sök order, kund, objekt..."
-              value={searchTerm}
-              onChange={e => handleSearchChange(e.target.value)}
-              className="max-w-sm"
-              data-testid="input-search-orders"
-            />
+            <div className="relative max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök order, kund, objekt..."
+                value={searchTerm}
+                onChange={e => handleSearchChange(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-orders"
+              />
+            </div>
           </div>
         </CardHeader>
         <Separator />
