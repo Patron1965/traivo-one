@@ -67,6 +67,13 @@ function getCoordinates(obj: ServiceObject): Coordinates | null {
   return null;
 }
 
+function getNavigationCoordinates(obj: ServiceObject): Coordinates | null {
+  if ((obj as any).entranceLatitude && (obj as any).entranceLongitude) {
+    return { lat: (obj as any).entranceLatitude, lng: (obj as any).entranceLongitude };
+  }
+  return getCoordinates(obj);
+}
+
 function haversineDistance(coord1: Coordinates, coord2: Coordinates): number {
   const R = 6371;
   const dLat = (coord2.lat - coord1.lat) * Math.PI / 180;
@@ -213,12 +220,13 @@ export async function optimizeResourceDayRoute(
     const obj = objectMap.get(order.objectId);
     if (!obj || !obj.latitude || !obj.longitude) continue;
     
+    const navCoords = getNavigationCoordinates(obj);
     stops.push({
       workOrderId: order.id,
       objectId: obj.id,
       objectName: obj.name,
-      latitude: obj.latitude,
-      longitude: obj.longitude,
+      latitude: navCoords?.lat || obj.latitude,
+      longitude: navCoords?.lng || obj.longitude,
       estimatedDuration: order.estimatedDuration || 60,
       priority: order.priority || "normal",
     });
@@ -416,11 +424,15 @@ export async function optimizeRoutesVRP(
   for (const order of workOrders) {
     let coords: [number, number] | null = null;
 
-    // Try object coordinates
     const obj = objectMap.get(order.objectId);
-    if (obj?.latitude && obj?.longitude) {
-      coords = [obj.longitude, obj.latitude];
-    } 
+    if (obj) {
+      const navCoords = getNavigationCoordinates(obj);
+      if (navCoords) {
+        coords = [navCoords.lng, navCoords.lat];
+      } else if (obj.latitude && obj.longitude) {
+        coords = [obj.longitude, obj.latitude];
+      }
+    }
     // Try cluster center
     else if (order.clusterId) {
       const cluster = clusterMap.get(order.clusterId);

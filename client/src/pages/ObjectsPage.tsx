@@ -512,6 +512,21 @@ export default function ObjectsPage() {
                   <TooltipContent>Adress</TooltipContent>
                 </Tooltip>
               )}
+              {(obj as any).entranceLatitude && (obj as any).entranceLongitude && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 text-green-600 cursor-help">
+                      <DoorOpen className="h-3 w-3" />
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Entrékoordinater tillgängliga
+                    {(obj as any).addressDescriptor && (
+                      <span className="block text-xs mt-1">{(obj as any).addressDescriptor}</span>
+                    )}
+                  </TooltipContent>
+                </Tooltip>
+              )}
               {obj.address && (!obj.city || obj.city.trim() === "") && (
                 <Tooltip>
                   <TooltipTrigger asChild>

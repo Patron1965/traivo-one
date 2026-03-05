@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, Fragment } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +37,26 @@ const createNumberedIcon = (number: number, color: string) => {
     ">${number}</div>`,
     iconSize: [28, 28],
     iconAnchor: [14, 14],
+  });
+};
+
+const createEntranceIcon = () => {
+  return L.divIcon({
+    className: "entrance-marker",
+    html: `<div style="
+      background-color: #22c55e;
+      color: white;
+      border-radius: 4px;
+      width: 20px;
+      height: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    "><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
   });
 };
 
@@ -670,58 +690,74 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                 (obj.containerCountK4 || 0);
               
               return (
-                <Marker
-                  key={job.id}
-                  position={[obj.latitude, obj.longitude]}
-                  icon={createNumberedIcon(index + 1, markerColor)}
-                  eventHandlers={{
-                    click: () => onNavigate?.(job.id),
-                  }}
-                >
-                  <Popup>
-                    <div className="p-1 min-w-[200px]">
-                      <div className="font-medium text-base">{job.title}</div>
-                      <div className="text-sm text-gray-600">{obj.name}</div>
-                      <div className="text-sm text-gray-600">{obj.address}</div>
-                      
-                      <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
-                        <div className="text-sm flex items-center gap-2">
-                          <span className="font-medium">Tillgång:</span>
-                          <span className="flex items-center gap-1">
-                            {accessTypeLabels[accessType]?.label || accessType}
-                            {showAccessCodes && obj.accessCode && (
-                              <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-mono">
-                                {obj.accessCode}
-                              </span>
-                            )}
-                            {showAccessCodes && obj.keyNumber && (
-                              <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-mono">
-                                Nyckel: {obj.keyNumber}
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        <div className="text-sm">
-                          <span className="font-medium">Ställtid:</span> {setupTime} min
-                        </div>
-                        <div className="text-sm">
-                          <span className="font-medium">Arbetstid:</span> {job.estimatedDuration} min
-                        </div>
+                <Fragment key={job.id}>
+                  <Marker
+                    position={[obj.latitude, obj.longitude]}
+                    icon={createNumberedIcon(index + 1, markerColor)}
+                    eventHandlers={{
+                      click: () => onNavigate?.(job.id),
+                    }}
+                  >
+                    <Popup>
+                      <div className="p-1 min-w-[200px]">
+                        <div className="font-medium text-base">{job.title}</div>
+                        <div className="text-sm text-gray-600">{obj.name}</div>
+                        <div className="text-sm text-gray-600">{obj.address}</div>
                         
-                        {totalContainers > 0 && (
-                          <div className="text-sm pt-1 border-t border-gray-200 mt-1">
-                            <span className="font-medium">Kärl:</span>{" "}
-                            {obj.containerCount ? `K1: ${obj.containerCount}` : ""}
-                            {obj.containerCountK2 ? ` K2: ${obj.containerCountK2}` : ""}
-                            {obj.containerCountK3 ? ` K3: ${obj.containerCountK3}` : ""}
-                            {obj.containerCountK4 ? ` K4: ${obj.containerCountK4}` : ""}
-                            <span className="text-gray-500 ml-1">({totalContainers} st)</span>
+                        <div className="mt-2 pt-2 border-t border-gray-200 space-y-1">
+                          <div className="text-sm flex items-center gap-2">
+                            <span className="font-medium">Tillgång:</span>
+                            <span className="flex items-center gap-1">
+                              {accessTypeLabels[accessType]?.label || accessType}
+                              {showAccessCodes && obj.accessCode && (
+                                <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded text-xs font-mono">
+                                  {obj.accessCode}
+                                </span>
+                              )}
+                              {showAccessCodes && obj.keyNumber && (
+                                <span className="ml-1 px-1.5 py-0.5 bg-orange-100 text-orange-800 rounded text-xs font-mono">
+                                  Nyckel: {obj.keyNumber}
+                                </span>
+                              )}
+                            </span>
                           </div>
-                        )}
+                          <div className="text-sm">
+                            <span className="font-medium">Ställtid:</span> {setupTime} min
+                          </div>
+                          <div className="text-sm">
+                            <span className="font-medium">Arbetstid:</span> {job.estimatedDuration} min
+                          </div>
+                          
+                          {totalContainers > 0 && (
+                            <div className="text-sm pt-1 border-t border-gray-200 mt-1">
+                              <span className="font-medium">Kärl:</span>{" "}
+                              {obj.containerCount ? `K1: ${obj.containerCount}` : ""}
+                              {obj.containerCountK2 ? ` K2: ${obj.containerCountK2}` : ""}
+                              {obj.containerCountK3 ? ` K3: ${obj.containerCountK3}` : ""}
+                              {obj.containerCountK4 ? ` K4: ${obj.containerCountK4}` : ""}
+                              <span className="text-gray-500 ml-1">({totalContainers} st)</span>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  </Popup>
-                </Marker>
+                    </Popup>
+                  </Marker>
+                  {(obj as any).entranceLatitude && (obj as any).entranceLongitude && (
+                    <Marker
+                      position={[(obj as any).entranceLatitude, (obj as any).entranceLongitude]}
+                      icon={createEntranceIcon()}
+                    >
+                      <Popup>
+                        <div className="p-1">
+                          <div className="font-medium text-sm">Entré — {obj.name}</div>
+                          {(obj as any).addressDescriptor && (
+                            <div className="text-xs text-gray-600 mt-1">{(obj as any).addressDescriptor}</div>
+                          )}
+                        </div>
+                      </Popup>
+                    </Marker>
+                  )}
+                </Fragment>
               );
             })}
           </MapContainer>

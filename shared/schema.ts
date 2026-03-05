@@ -94,6 +94,11 @@ export const objects = pgTable("objects", {
   // GPS-koordinater (läggs till vid geokodning/ruttoptimering)
   latitude: real("latitude"),
   longitude: real("longitude"),
+  // Entrékoordinater (Google Geocoding v4 SearchDestinations)
+  entranceLatitude: real("entrance_latitude"),
+  entranceLongitude: real("entrance_longitude"),
+  // Kontextuell adressbeskrivning (t.ex. "Runt hörnet från ICA")
+  addressDescriptor: text("address_descriptor"),
   
   // === ÅTKOMSTINFORMATION (kan ärvas) ===
   accessType: text("access_type").default("open"),

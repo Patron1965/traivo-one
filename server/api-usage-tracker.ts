@@ -12,6 +12,7 @@ const PRICING = {
   openrouteservice: { perRequest: 0 },
   "open-meteo": { perRequest: 0 },
   nominatim: { perRequest: 0 },
+  "google-geocoding": { perRequest: 0.005 },
 };
 
 function estimateOpenAICost(model: string, inputTokens: number, outputTokens: number): number {
@@ -48,6 +49,8 @@ export async function trackApiUsage(params: {
       estimatedCostUsd = (params.units || 1) * PRICING.resend.perEmail;
     } else if (params.service === "twilio") {
       estimatedCostUsd = (params.units || 1) * PRICING.twilio.perSms;
+    } else if (params.service === "google-geocoding") {
+      estimatedCostUsd = (params.units || 1) * PRICING["google-geocoding"].perRequest;
     }
 
     await db.insert(apiUsageLogs).values({

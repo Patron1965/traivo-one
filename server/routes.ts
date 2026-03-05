@@ -25,6 +25,7 @@ function notifyImportProgress(jobId: string) {
   }
 }
 import { db } from "./db";
+import { geocodeAddress, searchDestinations, batchGeocode, isGoogleGeocodingAvailable } from "./google-geocoding";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { 
   insertCustomerSchema, insertObjectSchema, insertResourceSchema, 
@@ -413,6 +414,123 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to delete object:", error);
       res.status(500).json({ error: "Failed to delete object" });
+    }
+  });
+
+  // === GOOGLE GEOCODING v4 API ===
+
+  app.post("/api/geocode/address", async (req, res) => {
+    try {
+      const { address } = req.body;
+      if (!address || typeof address !== "string") {
+        return res.status(400).json({ error: "Address is required" });
+      }
+      const tenantId = getTenantIdWithFallback(req);
+      const result = await geocodeAddress(address, tenantId);
+      if (!result) {
+        return res.status(404).json({ error: "Address not found" });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to geocode address:", error);
+      res.status(500).json({ error: "Geocoding failed" });
+    }
+  });
+
+  app.post("/api/geocode/search-destinations", async (req, res) => {
+    try {
+      const { address } = req.body;
+      if (!address || typeof address !== "string") {
+        return res.status(400).json({ error: "Address is required" });
+      }
+      const tenantId = getTenantIdWithFallback(req);
+      const result = await searchDestinations(address, tenantId);
+      if (!result) {
+        return res.status(404).json({ error: "No destinations found" });
+      }
+      res.json(result);
+    } catch (error) {
+      console.error("Failed to search destinations:", error);
+      res.status(500).json({ error: "Search destinations failed" });
+    }
+  });
+
+  app.get("/api/geocode/status", async (_req, res) => {
+    res.json({ googleAvailable: isGoogleGeocodingAvailable() });
+  });
+
+  app.post("/api/objects/:id/update-entrance", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const { entranceLatitude, entranceLongitude, addressDescriptor } = req.body;
+      const updateData: any = {};
+      if (entranceLatitude !== undefined) updateData.entranceLatitude = entranceLatitude;
+      if (entranceLongitude !== undefined) updateData.entranceLongitude = entranceLongitude;
+      if (addressDescriptor !== undefined) updateData.addressDescriptor = addressDescriptor;
+
+      const object = await storage.updateObject(req.params.id, updateData);
+      if (!object) return res.status(404).json({ error: "Object not found" });
+      res.json(object);
+    } catch (error) {
+      console.error("Failed to update entrance:", error);
+      res.status(500).json({ error: "Failed to update entrance" });
+    }
+  });
+
+  app.post("/api/objects/batch-geocode", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectIds } = req.body;
+
+      const allObjects = await storage.getObjects(tenantId);
+      let targets = allObjects.filter(o =>
+        o.address && (!o.entranceLatitude || !o.entranceLongitude)
+      );
+
+      if (objectIds && Array.isArray(objectIds) && objectIds.length > 0) {
+        targets = targets.filter(o => objectIds.includes(o.id));
+      }
+
+      const addresses = targets.map(o => ({
+        id: o.id,
+        address: [o.address, o.postalCode, o.city].filter(Boolean).join(", "),
+      }));
+
+      const results = await batchGeocode(addresses, tenantId);
+
+      let updated = 0;
+      for (const [objectId, geoResult] of results) {
+        const updateData: any = {};
+        if (!targets.find(t => t.id === objectId)?.latitude && geoResult.latitude) {
+          updateData.latitude = geoResult.latitude;
+          updateData.longitude = geoResult.longitude;
+        }
+        if (geoResult.entranceLatitude) {
+          updateData.entranceLatitude = geoResult.entranceLatitude;
+          updateData.entranceLongitude = geoResult.entranceLongitude;
+        }
+        if (geoResult.addressDescriptor) {
+          updateData.addressDescriptor = geoResult.addressDescriptor;
+        }
+        if (Object.keys(updateData).length > 0) {
+          await storage.updateObject(objectId, updateData);
+          updated++;
+        }
+      }
+
+      res.json({
+        total: addresses.length,
+        geocoded: results.size,
+        updated,
+        googleAvailable: isGoogleGeocodingAvailable(),
+      });
+    } catch (error) {
+      console.error("Failed to batch geocode:", error);
+      res.status(500).json({ error: "Batch geocoding failed" });
     }
   });
 
