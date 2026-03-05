@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, Check, Map, Cloud, CloudRain, Wind, Thermometer, Lightbulb } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { format } from "date-fns";
@@ -169,7 +170,7 @@ export default function RoutesPage() {
       {recommendations && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {recommendations.weather && (
-            <Card data-testid="card-weather-info">
+            <Card className="hover-elevate" data-testid="card-weather-info">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   {recommendations.weather.precipitation > 5 ? (
@@ -209,7 +210,7 @@ export default function RoutesPage() {
           )}
           
           {recommendations?.recommendations?.length > 0 && (
-            <Card data-testid="card-ai-recommendations">
+            <Card className="hover-elevate" data-testid="card-ai-recommendations">
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm flex items-center gap-2">
                   <Lightbulb className="h-4 w-4 text-yellow-500" />
@@ -269,18 +270,23 @@ export default function RoutesPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button
-              onClick={() => vrpMutation.mutate()}
-              disabled={vrpMutation.isPending}
-              data-testid="button-run-vrp"
-            >
-              {vrpMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <RouteIcon className="h-4 w-4 mr-2" />
-              )}
-              Kör VRP-optimering
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  onClick={() => vrpMutation.mutate()}
+                  disabled={vrpMutation.isPending}
+                  data-testid="button-run-vrp"
+                >
+                  {vrpMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <RouteIcon className="h-4 w-4 mr-2" />
+                  )}
+                  Kör VRP-optimering
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Optimera rutter med VROOM-algoritmen</TooltipContent>
+            </Tooltip>
           </div>
 
           {vrpResult && (
@@ -293,35 +299,60 @@ export default function RoutesPage() {
               ) : (
                 <>
                   <div className="grid grid-cols-2 md:grid-cols-5 gap-3" data-testid="vrp-summary-grid">
-                    <div className="bg-muted rounded-md p-3 text-center" data-testid="stat-assigned-orders">
-                      <div className="text-xl font-semibold">{vrpResult.summary.assignedOrders}</div>
-                      <div className="text-xs text-muted-foreground">Tilldelade ordrar</div>
-                    </div>
-                    <div className="bg-muted rounded-md p-3 text-center" data-testid="stat-routes-count">
-                      <div className="text-xl font-semibold">{vrpResult.routes.length}</div>
-                      <div className="text-xs text-muted-foreground">Rutter</div>
-                    </div>
-                    <div className="bg-muted rounded-md p-3 text-center" data-testid="stat-total-duration">
-                      <div className="text-xl font-semibold flex items-center justify-center gap-1">
-                        <Clock className="h-4 w-4" />
-                        {vrpResult.summary.totalDurationMinutes}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Total tid (min)</div>
-                    </div>
-                    <div className="bg-muted rounded-md p-3 text-center" data-testid="stat-total-distance">
-                      <div className="text-xl font-semibold flex items-center justify-center gap-1">
-                        <MapPin className="h-4 w-4" />
-                        {vrpResult.summary.totalDistanceKm}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Total distans (km)</div>
-                    </div>
-                    <div className="bg-muted rounded-md p-3 text-center" data-testid="stat-efficiency">
-                      <div className="text-xl font-semibold flex items-center justify-center gap-1">
-                        <TrendingUp className="h-4 w-4" />
-                        {vrpResult.summary.avgEfficiency}%
-                      </div>
-                      <div className="text-xs text-muted-foreground">Effektivitet</div>
-                    </div>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="bg-muted rounded-md p-3 text-center hover-elevate cursor-help" data-testid="stat-assigned-orders">
+                          <div className="text-xl font-semibold">{vrpResult.summary.assignedOrders}</div>
+                          <div className="text-xs text-muted-foreground">Tilldelade ordrar</div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Antal ordrar som tilldelades en rutt</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="bg-muted rounded-md p-3 text-center hover-elevate cursor-help" data-testid="stat-routes-count">
+                          <div className="text-xl font-semibold">{vrpResult.routes.length}</div>
+                          <div className="text-xs text-muted-foreground">Rutter</div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Antal genererade rutter</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="bg-muted rounded-md p-3 text-center hover-elevate cursor-help" data-testid="stat-total-duration">
+                          <div className="text-xl font-semibold flex items-center justify-center gap-1">
+                            <Clock className="h-4 w-4" />
+                            {vrpResult.summary.totalDurationMinutes}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Total tid (min)</div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Total tid inkl. körning och service</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="bg-muted rounded-md p-3 text-center hover-elevate cursor-help" data-testid="stat-total-distance">
+                          <div className="text-xl font-semibold flex items-center justify-center gap-1">
+                            <MapPin className="h-4 w-4" />
+                            {vrpResult.summary.totalDistanceKm}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Total distans (km)</div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Total körsträcka för alla rutter</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="bg-muted rounded-md p-3 text-center hover-elevate cursor-help" data-testid="stat-efficiency">
+                          <div className="text-xl font-semibold flex items-center justify-center gap-1">
+                            <TrendingUp className="h-4 w-4" />
+                            {vrpResult.summary.avgEfficiency}%
+                          </div>
+                          <div className="text-xs text-muted-foreground">Effektivitet</div>
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>Andel arbetsminuter av total tid</TooltipContent>
+                    </Tooltip>
                   </div>
 
                   <div className="flex items-center gap-2 flex-wrap">
@@ -331,24 +362,29 @@ export default function RoutesPage() {
                       </div>
                     )}
                     <div className="flex-1" />
-                    <Button
-                      onClick={() => applyMutation.mutate(vrpResult.routes)}
-                      disabled={applyMutation.isPending || vrpResult.routes.length === 0}
-                      variant="default"
-                      data-testid="button-apply-vrp"
-                    >
-                      {applyMutation.isPending ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Check className="h-4 w-4 mr-2" />
-                      )}
-                      Tillämpa optimering
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          onClick={() => applyMutation.mutate(vrpResult.routes)}
+                          disabled={applyMutation.isPending || vrpResult.routes.length === 0}
+                          variant="default"
+                          data-testid="button-apply-vrp"
+                        >
+                          {applyMutation.isPending ? (
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          ) : (
+                            <Check className="h-4 w-4 mr-2" />
+                          )}
+                          Tillämpa optimering
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Spara de optimerade rutterna till planeringen</TooltipContent>
+                    </Tooltip>
                   </div>
 
                   <div className="space-y-3" data-testid="vrp-routes-list">
                     {vrpResult.routes.map((route, idx) => (
-                      <Card key={route.resourceId || idx} className="p-3" data-testid={`vrp-route-${route.resourceId || idx}`}>
+                      <Card key={route.resourceId || idx} className="p-3 hover-elevate" data-testid={`vrp-route-${route.resourceId || idx}`}>
                         <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
                           <div className="flex items-center gap-2">
                             <Truck className="h-4 w-4 text-muted-foreground" />
@@ -357,15 +393,20 @@ export default function RoutesPage() {
                             </span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSelectedRouteForMap(selectedRouteForMap?.resourceId === route.resourceId ? null : route)}
-                              data-testid={`button-show-map-${route.resourceId || idx}`}
-                            >
-                              <Map className="h-3 w-3 mr-1" />
-                              {selectedRouteForMap?.resourceId === route.resourceId ? "Dölj karta" : "Visa karta"}
-                            </Button>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setSelectedRouteForMap(selectedRouteForMap?.resourceId === route.resourceId ? null : route)}
+                                  data-testid={`button-show-map-${route.resourceId || idx}`}
+                                >
+                                  <Map className="h-3 w-3 mr-1" />
+                                  {selectedRouteForMap?.resourceId === route.resourceId ? "Dölj karta" : "Visa karta"}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Visa rutten på kartan</TooltipContent>
+                            </Tooltip>
                             <Badge variant="secondary" className="text-xs no-default-hover-elevate">
                               {route.stops.length} stopp
                             </Badge>

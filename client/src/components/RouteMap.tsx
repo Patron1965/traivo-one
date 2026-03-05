@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
-import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Sparkles, Package, Eye, EyeOff, Palette } from "lucide-react";
+import { MapPin, Clock, Car, ArrowRight, Route, GripVertical, Loader2, Key, Keyboard, Users, DoorOpen, BarChart3, MapPinned, Sparkles, Package, Eye, EyeOff, Palette, PackageSearch } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, startOfDay, endOfDay, addDays, startOfWeek, endOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
@@ -312,74 +313,114 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
             </div>
             <div className="flex items-center gap-2 mt-2">
               <div className="flex border rounded-md">
-                <Button 
-                  variant={viewMode === "day" ? "default" : "ghost"}
-                  size="sm"
-                  className="rounded-r-none"
-                  onClick={() => setViewMode("day")}
-                  data-testid="button-view-day"
-                >
-                  Dag
-                </Button>
-                <Button 
-                  variant={viewMode === "week" ? "default" : "ghost"}
-                  size="sm"
-                  className="rounded-l-none"
-                  onClick={() => setViewMode("week")}
-                  data-testid="button-view-week"
-                >
-                  Vecka
-                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant={viewMode === "day" ? "default" : "ghost"}
+                      size="sm"
+                      className="rounded-r-none"
+                      onClick={() => setViewMode("day")}
+                      data-testid="button-view-day"
+                    >
+                      Dag
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Visa en dag</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button 
+                      variant={viewMode === "week" ? "default" : "ghost"}
+                      size="sm"
+                      className="rounded-l-none"
+                      onClick={() => setViewMode("week")}
+                      data-testid="button-view-week"
+                    >
+                      Vecka
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Visa hela veckan</TooltipContent>
+                </Tooltip>
               </div>
             </div>
             <div className="flex items-center gap-2 mt-2">
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setSelectedDate(addDays(selectedDate, viewMode === "week" ? -7 : -1))}
-                data-testid="button-prev-period"
-              >
-                Föregående
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setSelectedDate(addDays(selectedDate, viewMode === "week" ? -7 : -1))}
+                    data-testid="button-prev-period"
+                  >
+                    Föregående
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Föregående {viewMode === "week" ? "vecka" : "dag"}</TooltipContent>
+              </Tooltip>
               <span className="text-sm font-medium flex-1 text-center">
                 {viewMode === "week" 
                   ? `v${format(selectedDate, "w", { locale: sv })} (${format(periodStart, "d/M")} - ${format(periodEnd, "d/M")})`
                   : format(selectedDate, "EEEE d/M", { locale: sv })
                 }
               </span>
-              <Button 
-                variant="outline" 
-                size="sm"
-                onClick={() => setSelectedDate(addDays(selectedDate, viewMode === "week" ? 7 : 1))}
-                data-testid="button-next-period"
-              >
-                Nästa
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setSelectedDate(addDays(selectedDate, viewMode === "week" ? 7 : 1))}
+                    data-testid="button-next-period"
+                  >
+                    Nästa
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Nästa {viewMode === "week" ? "vecka" : "dag"}</TooltipContent>
+              </Tooltip>
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-4 gap-2 text-center">
-              <div className="p-2 bg-muted rounded-md">
-                <div className="text-lg font-semibold">{displayJobs.length}</div>
-                <div className="text-[10px] text-muted-foreground">Jobb</div>
-              </div>
-              <div className="p-2 bg-muted rounded-md">
-                <div className="text-lg font-semibold">{totalDistance.toFixed(1)}</div>
-                <div className="text-[10px] text-muted-foreground">km</div>
-              </div>
-              <div className="p-2 bg-muted rounded-md">
-                <div className="text-lg font-semibold flex items-center gap-1">
-                  {isLoadingRoute ? <Loader2 className="h-4 w-4 animate-spin" /> : estimatedDriveTime}
-                </div>
-                <div className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  {routeData ? <MapPinned className="h-3 w-3" /> : null}
-                  min kör
-                </div>
-              </div>
-              <div className="p-2 bg-muted rounded-md">
-                <div className="text-lg font-semibold">{totalSetupTime}</div>
-                <div className="text-[10px] text-muted-foreground">min ställ</div>
-              </div>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2 bg-muted rounded-md hover-elevate cursor-help">
+                    <div className="text-lg font-semibold">{displayJobs.length}</div>
+                    <div className="text-[10px] text-muted-foreground">Jobb</div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>Antal schemalagda jobb</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2 bg-muted rounded-md hover-elevate cursor-help">
+                    <div className="text-lg font-semibold">{totalDistance.toFixed(1)}</div>
+                    <div className="text-[10px] text-muted-foreground">km</div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>Total körsträcka</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2 bg-muted rounded-md hover-elevate cursor-help">
+                    <div className="text-lg font-semibold flex items-center justify-center gap-1">
+                      {isLoadingRoute ? <Loader2 className="h-4 w-4 animate-spin" /> : estimatedDriveTime}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground flex items-center justify-center gap-1">
+                      {routeData ? <MapPinned className="h-3 w-3" /> : null}
+                      min kör
+                    </div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>{routeData ? "Körtid beräknad via OpenRouteService" : "Uppskattad körtid"}</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="p-2 bg-muted rounded-md hover-elevate cursor-help">
+                    <div className="text-lg font-semibold">{totalSetupTime}</div>
+                    <div className="text-[10px] text-muted-foreground">min ställ</div>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>Total ställtid inkl. reducering vid samma tillgångstyp</TooltipContent>
+              </Tooltip>
             </div>
 
             <div className="space-y-2">
@@ -421,46 +462,66 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              <Button 
-                size="sm" 
-                variant={colorMode === "accessType" ? "default" : "outline"}
-                onClick={() => setColorMode("accessType")}
-                data-testid="button-color-access"
-              >
-                <Palette className="h-3 w-3 mr-1" />
-                Tillgång
-              </Button>
-              <Button 
-                size="sm" 
-                variant={colorMode === "setupTime" ? "default" : "outline"}
-                onClick={() => setColorMode("setupTime")}
-                data-testid="button-color-setup"
-              >
-                <Clock className="h-3 w-3 mr-1" />
-                Ställtid
-              </Button>
-              <Button 
-                size="sm" 
-                variant={showAccessCodes ? "default" : "outline"}
-                onClick={() => setShowAccessCodes(!showAccessCodes)}
-                data-testid="button-toggle-codes"
-              >
-                {showAccessCodes ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
-                Koder
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    size="sm" 
+                    variant={colorMode === "accessType" ? "default" : "outline"}
+                    onClick={() => setColorMode("accessType")}
+                    data-testid="button-color-access"
+                  >
+                    <Palette className="h-3 w-3 mr-1" />
+                    Tillgång
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Färglägg efter tillgångstyp</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    size="sm" 
+                    variant={colorMode === "setupTime" ? "default" : "outline"}
+                    onClick={() => setColorMode("setupTime")}
+                    data-testid="button-color-setup"
+                  >
+                    <Clock className="h-3 w-3 mr-1" />
+                    Ställtid
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Färglägg efter ställtid</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button 
+                    size="sm" 
+                    variant={showAccessCodes ? "default" : "outline"}
+                    onClick={() => setShowAccessCodes(!showAccessCodes)}
+                    data-testid="button-toggle-codes"
+                  >
+                    {showAccessCodes ? <Eye className="h-3 w-3 mr-1" /> : <EyeOff className="h-3 w-3 mr-1" />}
+                    Koder
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{showAccessCodes ? "Dölj portkoder" : "Visa portkoder på kartan"}</TooltipContent>
+              </Tooltip>
             </div>
 
-            <Button 
-              className="w-full" 
-              variant="outline"
-              asChild
-              data-testid="button-go-to-optimization"
-            >
-              <Link href="/optimization">
-                <Sparkles className="h-4 w-4 mr-2" />
-                Inför Optimering
-              </Link>
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  className="w-full" 
+                  variant="outline"
+                  asChild
+                  data-testid="button-go-to-optimization"
+                >
+                  <Link href="/optimization">
+                    <Sparkles className="h-4 w-4 mr-2" />
+                    Inför Optimering
+                  </Link>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Förbered data och konfiguration inför ruttoptimering</TooltipContent>
+            </Tooltip>
           </CardContent>
         </Card>
 
@@ -473,11 +534,20 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
           </CardHeader>
           <CardContent className="p-0">
             {displayJobs.length === 0 ? (
-              <div className="p-4 text-center text-sm text-muted-foreground">
-                Inga jobb schemalagda för {viewMode === "week" 
-                  ? `vecka ${format(selectedDate, "w", { locale: sv })}`
-                  : format(selectedDate, "d MMMM", { locale: sv })
-                }
+              <div className="p-6 text-center space-y-3">
+                <PackageSearch className="h-8 w-8 text-muted-foreground mx-auto" />
+                <p className="text-sm text-muted-foreground">
+                  Inga jobb schemalagda för {viewMode === "week" 
+                    ? `vecka ${format(selectedDate, "w", { locale: sv })}`
+                    : format(selectedDate, "d MMMM", { locale: sv })
+                  }
+                </p>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/order-stock">
+                    <Package className="h-4 w-4 mr-2" />
+                    Gå till Orderstock
+                  </Link>
+                </Button>
               </div>
             ) : (
               <div className="divide-y max-h-[350px] overflow-auto">
@@ -495,7 +565,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                   return (
                     <div key={job.id}>
                       <div 
-                        className="p-3 flex items-start gap-3 cursor-pointer"
+                        className="p-3 flex items-start gap-3 cursor-pointer hover-elevate"
                         onClick={() => { onNavigate?.(job.id); }}
                         data-testid={`route-job-${job.id}`}
                       >
