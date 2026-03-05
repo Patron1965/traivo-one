@@ -6177,6 +6177,89 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  app.post("/api/objects/export-unclustered", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectIds } = req.body as { objectIds: string[] };
+      if (!Array.isArray(objectIds) || objectIds.length === 0) {
+        return res.status(400).json({ error: "Missing objectIds" });
+      }
+      const allObjects = await storage.getObjectsByTenant(tenantId);
+      const idSet = new Set(objectIds);
+      const objects = allObjects.filter(o => idSet.has(o.id));
+
+      const BOM = "\uFEFF";
+      const header = ["Id", "Objektnummer", "Namn", "Adress", "Postnummer", "Stad", "Latitude", "Longitude"];
+      const rows = objects.map(o => [
+        o.id,
+        o.objectNumber || "",
+        (o.name || "").replace(/;/g, ","),
+        (o.address || "").replace(/;/g, ","),
+        o.postalCode || "",
+        o.city || "",
+        o.latitude != null ? String(o.latitude) : "",
+        o.longitude != null ? String(o.longitude) : ""
+      ].join(";"));
+
+      const csv = BOM + header.join(";") + "\n" + rows.join("\n");
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename=oklustrade-objekt.csv");
+      res.send(csv);
+    } catch (error) {
+      console.error("Export unclustered error:", error);
+      res.status(500).json({ error: "Kunde inte exportera" });
+    }
+  });
+
+  app.post("/api/objects/import-corrections", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { corrections } = req.body as {
+        corrections: { id: string; postalCode?: string; city?: string; latitude?: number | null; longitude?: number | null }[];
+      };
+      if (!Array.isArray(corrections) || corrections.length === 0) {
+        return res.status(400).json({ error: "Missing corrections" });
+      }
+
+      const allObjects = await storage.getObjectsByTenant(tenantId);
+      const objectMap = new Map(allObjects.map(o => [o.id, o]));
+
+      let updated = 0;
+      const errors: string[] = [];
+
+      const tenantObjectIds = new Set(allObjects.map(o => o.id));
+
+      for (const c of corrections) {
+        if (!tenantObjectIds.has(c.id)) {
+          errors.push(`Objekt ${c.id} hittades inte`);
+          continue;
+        }
+
+        const updates: Record<string, any> = {};
+        if (c.city && c.city.trim()) updates.city = c.city.trim();
+        if (c.postalCode && c.postalCode.trim()) updates.postalCode = c.postalCode.trim();
+        if (c.latitude != null && !isNaN(Number(c.latitude))) {
+          const lat = Number(c.latitude);
+          if (lat >= 55 && lat <= 70) updates.latitude = lat;
+        }
+        if (c.longitude != null && !isNaN(Number(c.longitude))) {
+          const lng = Number(c.longitude);
+          if (lng >= 10 && lng <= 25) updates.longitude = lng;
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await storage.updateObject(c.id, updates);
+          updated++;
+        }
+      }
+
+      res.json({ updated, errors, total: corrections.length });
+    } catch (error) {
+      console.error("Import corrections error:", error);
+      res.status(500).json({ error: "Kunde inte importera korrigeringar" });
+    }
+  });
+
   app.post("/api/clusters/auto-generate/recalculate", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

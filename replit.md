@@ -58,7 +58,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, and permissions.
 - **Fleet Management:** Comprehensive fleet management page at `/fleet` with vehicle dashboard, maintenance planning, and fuel tracking.
 - **Tenant Onboarding Wizard:** Admin wizard at `/onboarding` for creating new company accounts with industry package selection and admin user creation.
-- **Multi-Strategy Auto-Clustering:** Enhanced `/auto-cluster` page with 5 strategies (geographic, frequency, team, customer, manual) for automatic cluster generation. Backend endpoints: `POST /api/clusters/auto-generate` (preview) and `POST /api/clusters/auto-generate/apply` (create & link). Automatically links objects and work orders to clusters via `clusterId`.
+- **Multi-Strategy Auto-Clustering:** Enhanced `/auto-cluster` page with 5 strategies (geographic, frequency, team, customer, manual) for automatic cluster generation. Backend endpoints: `POST /api/clusters/auto-generate` (preview) and `POST /api/clusters/auto-generate/apply` (create & link). Automatically links objects and work orders to clusters via `clusterId`. Includes smart auto-assignment of unclustered objects (postal code → prefix → coordinates), manual move between clusters, and CSV export/import for data correction of objects without city.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

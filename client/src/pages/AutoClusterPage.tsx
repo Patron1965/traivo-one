@@ -7,7 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Info } from "lucide-react";
+import { Loader2, Check, AlertTriangle, Target, Globe, Clock, Users, Building2, Hand, BarChart3, Map as MapIcon, List, Pencil, ArrowUpDown, ArrowUp, ArrowDown, Info, Download, Upload } from "lucide-react";
+import Papa from "papaparse";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup, useMap, useMapEvents } from "react-leaflet";
@@ -238,6 +239,9 @@ export default function AutoClusterPage() {
   const [autoAssignResult, setAutoAssignResult] = useState<AutoAssignResult | null>(null);
   const [autoAssignApplied, setAutoAssignApplied] = useState(false);
   const [recentAssignments, setRecentAssignments] = useState<{ clusterId: string; clusterName: string; objectIds: string[]; method: string }[]>([]);
+  const [isExporting, setIsExporting] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const clusterStatus = useQuery<{ total: number }>({
     queryKey: ["/api/clusters/status"],
@@ -627,6 +631,85 @@ export default function AutoClusterPage() {
     toast({ title: "Flyttat", description: `${assignment.objectIds.length.toLocaleString("sv")} objekt flyttade till ${newCluster?.name || "annat kluster"}.` });
   }, [generatedResult, toast]);
 
+  const handleExportUnclustered = useCallback(async () => {
+    if (!generatedResult?.unclusteredObjects?.objectIds?.length) return;
+    setIsExporting(true);
+    try {
+      const response = await apiRequest("POST", "/api/objects/export-unclustered", {
+        objectIds: generatedResult.unclusteredObjects.objectIds
+      });
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "oklustrade-objekt.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Exporterad", description: `${generatedResult.unclusteredObjects.count.toLocaleString("sv")} objekt exporterade till CSV.` });
+    } catch {
+      toast({ title: "Fel", description: "Kunde inte exportera objekt.", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  }, [generatedResult, toast]);
+
+  const handleImportCorrections = useCallback((file: File) => {
+    setIsImporting(true);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      let text = e.target?.result as string || "";
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      Papa.parse(text, {
+      header: true,
+      delimiter: ";",
+      skipEmptyLines: true,
+      complete: async (results) => {
+        try {
+          const corrections = (results.data as Record<string, string>[])
+            .filter(row => row.Id)
+            .map(row => ({
+              id: row.Id,
+              postalCode: row.Postnummer || undefined,
+              city: row.Stad || undefined,
+              latitude: row.Latitude ? parseFloat(row.Latitude) : undefined,
+              longitude: row.Longitude ? parseFloat(row.Longitude) : undefined,
+            }))
+            .filter(c => c.city || c.postalCode || c.latitude || c.longitude);
+
+          if (corrections.length === 0) {
+            toast({ title: "Ingen data", description: "Inga korrigeringar hittades i filen. Fyll i Stad eller Postnummer-kolumnen.", variant: "destructive" });
+            setIsImporting(false);
+            return;
+          }
+
+          const response = await apiRequest("POST", "/api/objects/import-corrections", { corrections });
+          const result = await response.json() as { updated: number; errors: string[]; total: number };
+          toast({
+            title: "Importerad",
+            description: `${result.updated} av ${result.total} objekt uppdaterade.${result.errors.length > 0 ? ` ${result.errors.length} fel.` : ""} Generera om kluster för att se effekten.`,
+          });
+        } catch {
+          toast({ title: "Fel", description: "Kunde inte importera korrigeringar.", variant: "destructive" });
+        } finally {
+          setIsImporting(false);
+          if (fileInputRef.current) fileInputRef.current.value = "";
+        }
+      },
+      error: () => {
+        toast({ title: "Fel", description: "Kunde inte läsa CSV-filen.", variant: "destructive" });
+        setIsImporting(false);
+      }
+    });
+    };
+    reader.onerror = () => {
+      toast({ title: "Fel", description: "Kunde inte läsa filen.", variant: "destructive" });
+      setIsImporting(false);
+    };
+    reader.readAsText(file, "utf-8");
+  }, [toast]);
+
   const existingClusters = clusterStatus.data?.total || 0;
   const hasSuggestions = generatedResult && generatedResult.suggestions.length > 0 && !generateMutation.isPending;
 
@@ -977,16 +1060,48 @@ export default function AutoClusterPage() {
                       {generatedResult!.unclusteredObjects.count.toLocaleString("sv")} objekt utan stad
                     </span>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => autoAssignMutation.mutate()}
-                    disabled={autoAssignMutation.isPending || autoAssignApplied}
-                    data-testid="button-auto-assign"
-                  >
-                    {autoAssignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Target className="h-4 w-4 mr-2" />}
-                    {autoAssignApplied ? "Tilldelad" : "Auto-tilldela via postnummer & koordinater"}
-                  </Button>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleExportUnclustered}
+                      disabled={isExporting}
+                      data-testid="button-export-unclustered"
+                    >
+                      {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Download className="h-4 w-4 mr-2" />}
+                      Exportera CSV
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={isImporting}
+                      data-testid="button-import-corrections"
+                    >
+                      {isImporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Upload className="h-4 w-4 mr-2" />}
+                      Importera korrigeringar
+                    </Button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleImportCorrections(file);
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => autoAssignMutation.mutate()}
+                      disabled={autoAssignMutation.isPending || autoAssignApplied}
+                      data-testid="button-auto-assign"
+                    >
+                      {autoAssignMutation.isPending ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Target className="h-4 w-4 mr-2" />}
+                      {autoAssignApplied ? "Tilldelad" : "Auto-tilldela"}
+                    </Button>
+                  </div>
                 </div>
 
                 {autoAssignResult && !autoAssignApplied && (
