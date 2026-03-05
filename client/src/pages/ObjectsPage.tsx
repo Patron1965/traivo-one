@@ -27,6 +27,7 @@ import { ObjectParentsPanel } from "@/components/ObjectParentsPanel";
 import { ObjectApplicableArticlesPanel } from "@/components/ObjectApplicableArticlesPanel";
 import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
+import { AddressSearch } from "@/components/AddressSearch";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -135,6 +136,13 @@ export default function ObjectsPage() {
     accessCode: "",
     address: "",
     customerId: "",
+    latitude: null as number | null,
+    longitude: null as number | null,
+    city: "",
+    postalCode: "",
+    entranceLatitude: null as number | null,
+    entranceLongitude: null as number | null,
+    addressDescriptor: "",
   });
 
   // Debounce search for server-side filtering
@@ -202,7 +210,7 @@ export default function ObjectsPage() {
       setCopyDialogOpen(false);
       setObjectToCopy(null);
       setCreateDialogOpen(false);
-      setNewObject({ name: "", objectType: "fastighet", accessType: "open", accessCode: "", address: "", customerId: "" });
+      setNewObject({ name: "", objectType: "fastighet", accessType: "open", accessCode: "", address: "", customerId: "", latitude: null, longitude: null, city: "", postalCode: "", entranceLatitude: null, entranceLongitude: null, addressDescriptor: "" });
     },
     onError: () => {
       toast({ title: "Fel vid skapande", variant: "destructive" });
@@ -1168,11 +1176,20 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
             )}
             <div>
               <Label>Adress</Label>
-              <Input
-                value={newObject.address}
-                onChange={(e) => setNewObject({ ...newObject, address: e.target.value })}
-                placeholder="Gatuadress"
-                data-testid="input-new-object-address"
+              <AddressSearch
+                defaultValue={newObject.address}
+                placeholder="Sök gatuadress..."
+                onSelect={(result) => setNewObject({
+                  ...newObject,
+                  address: result.address,
+                  latitude: result.lat,
+                  longitude: result.lon,
+                  city: result.city || "",
+                  postalCode: result.postalCode || "",
+                  entranceLatitude: result.entranceLat || null,
+                  entranceLongitude: result.entranceLon || null,
+                  addressDescriptor: result.addressDescriptor || "",
+                })}
               />
             </div>
             <div>
@@ -1200,6 +1217,13 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
                 accessCode: newObject.accessCode || undefined,
                 address: newObject.address || undefined,
                 customerId: newObject.customerId || undefined,
+                latitude: newObject.latitude || undefined,
+                longitude: newObject.longitude || undefined,
+                city: newObject.city || undefined,
+                postalCode: newObject.postalCode || undefined,
+                entranceLatitude: newObject.entranceLatitude || undefined,
+                entranceLongitude: newObject.entranceLongitude || undefined,
+                addressDescriptor: newObject.addressDescriptor || undefined,
               })} 
               disabled={!newObject.name || createObjectMutation.isPending}
               data-testid="button-create-object"
