@@ -42,6 +42,7 @@ app.use((req, res, next) => {
 
 app.use(
   express.json({
+    limit: "5mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
