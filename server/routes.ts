@@ -481,19 +481,84 @@ export async function registerRoutes(
     }
   });
 
+  function applyBatchGeoFilters(objects: ServiceObject[], filters: any): ServiceObject[] {
+    let targets = objects.filter(o =>
+      o.address && (!o.entranceLatitude || !o.entranceLongitude)
+    );
+    if (filters.objectIds && Array.isArray(filters.objectIds) && filters.objectIds.length > 0) {
+      targets = targets.filter(o => filters.objectIds.includes(o.id));
+    }
+    if (filters.city && typeof filters.city === "string") {
+      const cityLower = filters.city.toLowerCase();
+      targets = targets.filter(o => o.city && o.city.toLowerCase() === cityLower);
+    }
+    if (filters.clusterId && typeof filters.clusterId === "string") {
+      targets = targets.filter(o => o.clusterId === filters.clusterId);
+    }
+    if (filters.postalCode && typeof filters.postalCode === "string") {
+      targets = targets.filter(o => o.postalCode && o.postalCode.startsWith(filters.postalCode));
+    }
+    if (filters.limit && typeof filters.limit === "number" && filters.limit > 0) {
+      targets = targets.slice(0, filters.limit);
+    }
+    return targets;
+  }
+
+  app.post("/api/objects/batch-geocode/preview", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const allObjects = await storage.getObjects(tenantId);
+      const needsGeo = allObjects.filter(o =>
+        o.address && (!o.entranceLatitude || !o.entranceLongitude)
+      );
+      const targets = applyBatchGeoFilters(allObjects, req.body);
+      const costPerRequest = 0.005;
+
+      const cityMap = new Map<string, number>();
+      for (const obj of needsGeo) {
+        const city = obj.city || "(ingen stad)";
+        cityMap.set(city, (cityMap.get(city) || 0) + 1);
+      }
+      const byCity = Array.from(cityMap.entries())
+        .map(([city, count]) => ({ city, count }))
+        .sort((a, b) => b.count - a.count);
+
+      const clusters = await storage.getClusters(tenantId);
+      const clusterMap = new Map<string, { name: string; count: number }>();
+      for (const obj of needsGeo) {
+        if (obj.clusterId) {
+          const existing = clusterMap.get(obj.clusterId);
+          if (existing) {
+            existing.count++;
+          } else {
+            const cluster = clusters.find(c => c.id === obj.clusterId);
+            clusterMap.set(obj.clusterId, { name: cluster?.name || obj.clusterId, count: 1 });
+          }
+        }
+      }
+      const byCluster = Array.from(clusterMap.entries())
+        .map(([clusterId, { name, count }]) => ({ clusterId, clusterName: name, count }))
+        .sort((a, b) => b.count - a.count);
+
+      res.json({
+        totalNeedsGeo: needsGeo.length,
+        filteredCount: targets.length,
+        estimatedCost: +(targets.length * costPerRequest).toFixed(2),
+        byCity,
+        byCluster,
+        googleAvailable: isGoogleGeocodingAvailable(),
+      });
+    } catch (error) {
+      console.error("Failed to preview batch geocode:", error);
+      res.status(500).json({ error: "Preview failed" });
+    }
+  });
+
   app.post("/api/objects/batch-geocode", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const { objectIds } = req.body;
-
       const allObjects = await storage.getObjects(tenantId);
-      let targets = allObjects.filter(o =>
-        o.address && (!o.entranceLatitude || !o.entranceLongitude)
-      );
-
-      if (objectIds && Array.isArray(objectIds) && objectIds.length > 0) {
-        targets = targets.filter(o => objectIds.includes(o.id));
-      }
+      const targets = applyBatchGeoFilters(allObjects, req.body);
 
       const addresses = targets.map(o => ({
         id: o.id,
