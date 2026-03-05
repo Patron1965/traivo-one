@@ -48,7 +48,14 @@ import {
   DollarSign,
   Timer,
   UserPlus,
+  XCircle,
+  X,
+  ChevronDown,
+  ChevronUp,
+  ArrowRight,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Assignment, Resource, Cluster, ServiceObject, Article, AssignmentArticle } from "@shared/schema";
@@ -112,6 +119,7 @@ export default function AssignmentsPage() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [resourceFilter, setResourceFilter] = useState<string>("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [statusUpdateOpen, setStatusUpdateOpen] = useState(false);
@@ -218,6 +226,17 @@ export default function AssignmentsPage() {
     time: acc.time + (a.estimatedDuration || 0),
   }), { value: 0, cost: 0, time: 0 });
 
+  const activeFilterCount = [
+    statusFilter !== "all" ? 1 : 0,
+    resourceFilter !== "all" ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  const clearAllFilters = () => {
+    setStatusFilter("all");
+    setResourceFilter("all");
+    setSearchTerm("");
+  };
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64" data-testid="loading-assignments">
@@ -231,9 +250,23 @@ export default function AssignmentsPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Uppgifter</h1>
-          <p className="text-muted-foreground">
-            Hantera och följ upp genererade arbetsuppgifter
-          </p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-sm text-muted-foreground">
+              Hantera och följ upp genererade arbetsuppgifter
+            </span>
+            {assignments.length > 0 && (
+              <>
+                <Badge variant="secondary" className="text-xs font-normal">
+                  {filteredAssignments.length} av {assignments.length} visas
+                </Badge>
+                {assignments.filter(a => a.status === "not_planned").length > 0 && (
+                  <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300">
+                    {assignments.filter(a => a.status === "not_planned").length} ej planerade
+                  </Badge>
+                )}
+              </>
+            )}
+          </div>
         </div>
         <PageHelp
           title="Uppgifter (Assignments)"
@@ -286,14 +319,14 @@ export default function AssignmentsPage() {
         {statusOptions.map((status) => (
           <Card
             key={status.value}
-            className={`cursor-pointer transition-all ${
+            className={`cursor-pointer hover-elevate ${
               statusFilter === status.value ? "ring-2 ring-primary" : ""
             }`}
             onClick={() => setStatusFilter(statusFilter === status.value ? "all" : status.value)}
             data-testid={`card-status-${status.value}`}
           >
             <CardContent className="p-3 text-center">
-              <status.icon className="h-5 w-5 mx-auto mb-1 text-muted-foreground" />
+              <status.icon className={`h-5 w-5 mx-auto mb-1 ${statusFilter === status.value ? "text-primary" : "text-muted-foreground"}`} />
               <div className="text-lg font-bold">{statusCounts[status.value] || 0}</div>
               <div className="text-xs text-muted-foreground truncate">{status.label}</div>
             </CardContent>
@@ -301,58 +334,92 @@ export default function AssignmentsPage() {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap items-center gap-4">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Sök uppgifter..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="input-search-assignments"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
-            <SelectValue placeholder="Alla statusar" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alla statusar</SelectItem>
-            {statusOptions.map((s) => (
-              <SelectItem key={s.value} value={s.value}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={resourceFilter} onValueChange={setResourceFilter}>
-          <SelectTrigger className="w-[180px]" data-testid="select-resource-filter">
-            <SelectValue placeholder="Alla resurser" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Alla resurser</SelectItem>
-            {resources.map((r) => (
-              <SelectItem key={r.id} value={r.id}>
-                {r.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {(statusFilter !== "all" || resourceFilter !== "all" || searchTerm) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setStatusFilter("all");
-              setResourceFilter("all");
-              setSearchTerm("");
-            }}
-          >
-            Rensa filter
-          </Button>
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center gap-4 flex-1 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Sök uppgifter..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9"
+                data-testid="input-search-assignments"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFiltersOpen(!filtersOpen)}
+              className="gap-2"
+              data-testid="button-toggle-filters"
+            >
+              <Filter className="h-4 w-4" />
+              Filter
+              {activeFilterCount > 0 && (
+                <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
+                  {activeFilterCount}
+                </Badge>
+              )}
+              {filtersOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </Button>
+            {activeFilterCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
+                <XCircle className="h-4 w-4" />
+                Rensa filter
+              </Button>
+            )}
+          </div>
+          {activeFilterCount > 0 && (
+            <div className="flex items-center gap-2 flex-wrap mt-3">
+              {statusFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setStatusFilter("all")} data-testid="badge-filter-status">
+                  Status: {statusOptions.find(s => s.value === statusFilter)?.label || statusFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+              {resourceFilter !== "all" && (
+                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setResourceFilter("all")} data-testid="badge-filter-resource">
+                  Resurs: {resources.find(r => r.id === resourceFilter)?.name || resourceFilter}
+                  <X className="h-3 w-3" />
+                </Badge>
+              )}
+            </div>
+          )}
+        </CardHeader>
+        {filtersOpen && (
+          <CardContent className="space-y-4 pt-0">
+            <div className="flex items-center gap-4 flex-wrap">
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
+                  <SelectValue placeholder="Alla statusar" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla statusar</SelectItem>
+                  {statusOptions.map((s) => (
+                    <SelectItem key={s.value} value={s.value}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={resourceFilter} onValueChange={setResourceFilter}>
+                <SelectTrigger className="w-[180px]" data-testid="select-resource-filter">
+                  <SelectValue placeholder="Alla resurser" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla resurser</SelectItem>
+                  {resources.map((r) => (
+                    <SelectItem key={r.id} value={r.id}>
+                      {r.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
         )}
-      </div>
+      </Card>
 
       {/* Assignments Table */}
       <Card>
@@ -428,31 +495,46 @@ export default function AssignmentsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant={!resource ? "default" : "ghost"}
-                          onClick={() => handleAssignResource(assignment)}
-                          data-testid={`button-assign-${assignment.id}`}
-                        >
-                          <UserPlus className="h-3 w-3 mr-1" />
-                          {resource ? "Ändra" : "Tilldela"}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleUpdateStatus(assignment)}
-                          data-testid={`button-status-${assignment.id}`}
-                        >
-                          Ändra status
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleViewDetails(assignment)}
-                          data-testid={`button-details-${assignment.id}`}
-                        >
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant={!resource ? "default" : "ghost"}
+                              onClick={() => handleAssignResource(assignment)}
+                              data-testid={`button-assign-${assignment.id}`}
+                            >
+                              <UserPlus className="h-3 w-3 mr-1" />
+                              {resource ? "Ändra" : "Tilldela"}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>{resource ? "Ändra tilldelad resurs" : "Tilldela resurs till uppgiften"}</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleUpdateStatus(assignment)}
+                              data-testid={`button-status-${assignment.id}`}
+                            >
+                              Ändra status
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Uppdatera uppgiftens status</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handleViewDetails(assignment)}
+                              data-testid={`button-details-${assignment.id}`}
+                            >
+                              <ChevronRight className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Visa detaljer</p></TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -460,10 +542,28 @@ export default function AssignmentsPage() {
               })}
               {filteredAssignments.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                    {searchTerm || statusFilter !== "all" || resourceFilter !== "all"
-                      ? "Inga uppgifter matchade filtren"
-                      : "Inga uppgifter skapade än. Kör ett orderkoncept för att generera uppgifter."}
+                  <TableCell colSpan={8} className="text-center py-12">
+                    {searchTerm || statusFilter !== "all" || resourceFilter !== "all" ? (
+                      <div className="space-y-2">
+                        <p className="text-muted-foreground">Inga uppgifter matchade filtren</p>
+                        <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1" data-testid="button-clear-filters-empty">
+                          <XCircle className="h-4 w-4" />
+                          Rensa filter
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <Package className="h-10 w-10 mx-auto text-muted-foreground/50" />
+                        <p className="text-muted-foreground">Inga uppgifter skapade än</p>
+                        <p className="text-sm text-muted-foreground/70">Kör ett orderkoncept för att automatiskt generera uppgifter</p>
+                        <Link href="/order-concepts">
+                          <Button variant="outline" size="sm" className="gap-2 mt-1" data-testid="button-goto-concepts">
+                            Gå till Orderkoncept
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        </Link>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
