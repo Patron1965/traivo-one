@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -355,6 +355,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [filterTeam, setFilterTeam] = useState<string>("all");
   const [filterExecutionCode, setFilterExecutionCode] = useState<string>("all");
   const [orderstockSearch, setOrderstockSearch] = useState("");
+  const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(false);
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({
     queryKey: ["/api/teams"],
@@ -653,6 +654,32 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     });
   }, [workOrders, filterCustomer, filterPriority, filterCluster, filterTeam, teamResourceIds, filterExecutionCode, orderstockSearch, customerMap]);
   
+  const sidebarActiveFilterCount = [
+    filterCustomer !== "all" ? 1 : 0,
+    filterPriority !== "all" ? 1 : 0,
+    filterCluster !== "all" ? 1 : 0,
+    filterTeam !== "all" ? 1 : 0,
+    filterExecutionCode !== "all" ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  const clearAllSidebarFilters = () => {
+    setFilterCustomer("all");
+    setFilterPriority("all");
+    setFilterCluster("all");
+    setFilterTeam("all");
+    setFilterExecutionCode("all");
+    setOrderstockSearch("");
+  };
+
+  const sidebarQuickStats = useMemo(() => {
+    const allUnscheduled = workOrders.filter(job => !job.scheduledDate || !job.resourceId);
+    const urgentCount = allUnscheduled.filter(j => j.priority === "urgent").length;
+    const highCount = allUnscheduled.filter(j => j.priority === "high").length;
+    const overdueCount = allUnscheduled.filter(j => j.plannedWindowEnd && new Date(j.plannedWindowEnd) < new Date()).length;
+    const totalHours = allUnscheduled.reduce((sum, j) => sum + (j.estimatedDuration || 0) / 60, 0);
+    return { urgentCount, highCount, overdueCount, totalHours: Math.round(totalHours * 10) / 10 };
+  }, [workOrders]);
+
   const scheduledJobs = useMemo(
     () => workOrders.filter(job => job.scheduledDate && job.resourceId),
     [workOrders]
@@ -2327,6 +2354,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                         </Tooltip>
                       )}
                       <div className="space-y-1">
+                        {jobs.length === 0 && (
+                          <div className="flex items-center justify-center py-4 text-muted-foreground/40">
+                            <Plus className="h-4 w-4" />
+                          </div>
+                        )}
                         {jobs.map((job) => renderJobCard(job, true))}
                       </div>
                       {totalTravelMin > 0 && (
@@ -2830,94 +2862,182 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     <div className="flex h-full">
       <Collapsible open={showUnscheduled} onOpenChange={setShowUnscheduled} className="flex">
         <CollapsibleContent className="w-[280px] border-r bg-muted/20 flex flex-col">
-          <div className="p-3 border-b space-y-3">
-            <div className="flex items-center gap-2">
-              <Inbox className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-medium">Oschemalagda</span>
-              <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}</Badge>
+          <div className="p-3 border-b space-y-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Inbox className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-medium">Oschemalagda</span>
+                <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}</Badge>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Input
-                placeholder="Sök jobb, objekt, kund..."
-                value={orderstockSearch}
-                onChange={(e) => setOrderstockSearch(e.target.value)}
-                className="h-8 text-xs"
-                data-testid="input-orderstock-search"
-              />
-              <Select value={filterCustomer} onValueChange={setFilterCustomer}>
-                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-customer">
-                  <SelectValue placeholder="Alla kunder" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla kunder</SelectItem>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Select value={filterPriority} onValueChange={setFilterPriority}>
-                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-priority">
-                  <SelectValue placeholder="Alla prioriteter" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla prioriteter</SelectItem>
-                  <SelectItem value="urgent">Akut</SelectItem>
-                  <SelectItem value="high">Hög</SelectItem>
-                  <SelectItem value="normal">Normal</SelectItem>
-                  <SelectItem value="low">Låg</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={filterCluster} onValueChange={setFilterCluster}>
-                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-cluster">
-                  <SelectValue placeholder="Alla områden" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla områden</SelectItem>
-                  <SelectItem value="none">Utan område</SelectItem>
-                  {clusters.map((cluster) => (
-                    <SelectItem key={cluster.id} value={cluster.id}>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cluster.color || "#3B82F6" }} />
-                        {cluster.name}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {teamsData.length > 0 && (
-                <Select value={filterTeam} onValueChange={setFilterTeam}>
-                  <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-team">
-                    <SelectValue placeholder="Alla team" />
+            <div className="flex items-center gap-1.5 flex-wrap" data-testid="sidebar-quick-stats">
+              {sidebarQuickStats.urgentCount > 0 && (
+                <Badge variant="destructive" className="text-[10px] h-5 gap-1">
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                  {sidebarQuickStats.urgentCount} akut
+                </Badge>
+              )}
+              {sidebarQuickStats.highCount > 0 && (
+                <Badge className="text-[10px] h-5 bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200 border-orange-300">
+                  {sidebarQuickStats.highCount} hög
+                </Badge>
+              )}
+              {sidebarQuickStats.overdueCount > 0 && (
+                <Badge variant="outline" className="text-[10px] h-5 gap-1 text-red-600 border-red-300">
+                  <Clock className="h-2.5 w-2.5" />
+                  {sidebarQuickStats.overdueCount} försenade
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-[10px] h-5 font-normal">
+                {sidebarQuickStats.totalHours}h totalt
+              </Badge>
+            </div>
+            <Input
+              placeholder="Sök jobb, objekt, kund..."
+              value={orderstockSearch}
+              onChange={(e) => setOrderstockSearch(e.target.value)}
+              className="h-8 text-xs"
+              data-testid="input-orderstock-search"
+            />
+            <div className="flex items-center gap-1">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 flex-1"
+                onClick={() => setSidebarFiltersOpen(!sidebarFiltersOpen)}
+                data-testid="button-toggle-sidebar-filters"
+              >
+                <Filter className="h-3.5 w-3.5" />
+                Filter
+                {sidebarActiveFilterCount > 0 && (
+                  <Badge variant="secondary" className="text-xs rounded-full">
+                    {sidebarActiveFilterCount}
+                  </Badge>
+                )}
+                {sidebarFiltersOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              </Button>
+              {sidebarActiveFilterCount > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost" size="icon" onClick={clearAllSidebarFilters} data-testid="button-clear-sidebar-filters">
+                      <XCircle className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Rensa alla filter</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+            {sidebarActiveFilterCount > 0 && (
+              <div className="flex items-center gap-1 flex-wrap" data-testid="sidebar-active-filters">
+                {filterCustomer !== "all" && (
+                  <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => setFilterCustomer("all")} data-testid="badge-sidebar-filter-customer">
+                    {customers.find(c => c.id === filterCustomer)?.name || "Kund"}
+                    <X className="h-2.5 w-2.5" />
+                  </Badge>
+                )}
+                {filterPriority !== "all" && (
+                  <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => setFilterPriority("all")} data-testid="badge-sidebar-filter-priority">
+                    {priorityLabels[filterPriority] || filterPriority}
+                    <X className="h-2.5 w-2.5" />
+                  </Badge>
+                )}
+                {filterCluster !== "all" && (
+                  <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => setFilterCluster("all")} data-testid="badge-sidebar-filter-cluster">
+                    {filterCluster === "none" ? "Utan område" : clusters.find(c => c.id === filterCluster)?.name || "Område"}
+                    <X className="h-2.5 w-2.5" />
+                  </Badge>
+                )}
+                {filterTeam !== "all" && (
+                  <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => setFilterTeam("all")} data-testid="badge-sidebar-filter-team">
+                    {teamsData.find(t => t.id === filterTeam)?.name || "Team"}
+                    <X className="h-2.5 w-2.5" />
+                  </Badge>
+                )}
+                {filterExecutionCode !== "all" && (
+                  <Badge variant="secondary" className="text-[10px] gap-0.5 cursor-pointer" onClick={() => setFilterExecutionCode("all")} data-testid="badge-sidebar-filter-exec-code">
+                    {EXECUTION_CODE_LABELS[filterExecutionCode] || filterExecutionCode}
+                    <X className="h-2.5 w-2.5" />
+                  </Badge>
+                )}
+              </div>
+            )}
+            {sidebarFiltersOpen && (
+              <div className="space-y-2 pt-1" data-testid="sidebar-filter-dropdowns">
+                <Select value={filterCustomer} onValueChange={setFilterCustomer}>
+                  <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-customer">
+                    <SelectValue placeholder="Alla kunder" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">Alla team</SelectItem>
-                    {teamsData.map((team) => (
-                      <SelectItem key={team.id} value={team.id}>
+                    <SelectItem value="all">Alla kunder</SelectItem>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>{customer.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={filterPriority} onValueChange={setFilterPriority}>
+                  <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-priority">
+                    <SelectValue placeholder="Alla prioriteter" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alla prioriteter</SelectItem>
+                    <SelectItem value="urgent">Akut</SelectItem>
+                    <SelectItem value="high">Hög</SelectItem>
+                    <SelectItem value="normal">Normal</SelectItem>
+                    <SelectItem value="low">Låg</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={filterCluster} onValueChange={setFilterCluster}>
+                  <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-cluster">
+                    <SelectValue placeholder="Alla områden" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alla områden</SelectItem>
+                    <SelectItem value="none">Utan område</SelectItem>
+                    {clusters.map((cluster) => (
+                      <SelectItem key={cluster.id} value={cluster.id}>
                         <span className="flex items-center gap-1.5">
-                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color || "#3B82F6" }} />
-                          {team.name}
+                          <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: cluster.color || "#3B82F6" }} />
+                          {cluster.name}
                         </span>
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-              )}
-              <Select value={filterExecutionCode} onValueChange={setFilterExecutionCode}>
-                <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-execution-code">
-                  <SelectValue placeholder="Alla utförandekoder" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Alla utförandekoder</SelectItem>
-                  {Object.entries(EXECUTION_CODE_LABELS).map(([code, label]) => (
-                    <SelectItem key={code} value={code}>
-                      <span className="flex items-center gap-1.5">
-                        {EXECUTION_CODE_ICONS[code]} {label}
-                      </span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+                {teamsData.length > 0 && (
+                  <Select value={filterTeam} onValueChange={setFilterTeam}>
+                    <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-team">
+                      <SelectValue placeholder="Alla team" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla team</SelectItem>
+                      {teamsData.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          <span className="flex items-center gap-1.5">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team.color || "#3B82F6" }} />
+                            {team.name}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <Select value={filterExecutionCode} onValueChange={setFilterExecutionCode}>
+                  <SelectTrigger className="w-full h-8 text-xs" data-testid="select-unscheduled-execution-code">
+                    <SelectValue placeholder="Alla utförandekoder" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Alla utförandekoder</SelectItem>
+                    {Object.entries(EXECUTION_CODE_LABELS).map(([code, label]) => (
+                      <SelectItem key={code} value={code}>
+                        <span className="flex items-center gap-1.5">
+                          {EXECUTION_CODE_ICONS[code]} {label}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
           <ScrollArea className="flex-1 p-2">
             <div className="space-y-2">
@@ -3027,16 +3147,21 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                               </Badge>
                             )}
                           </div>
-                          <Button
-                            size="sm"
-                            variant="default"
-                            className="w-full mt-2"
-                            onClick={(e) => handleOpenAssignDialog(job, e)}
-                            data-testid={`button-assign-job-${job.id}`}
-                          >
-                            <UserPlus className="h-3 w-3 mr-1" />
-                            Tilldela resurs
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="default"
+                                className="w-full mt-1.5"
+                                onClick={(e) => handleOpenAssignDialog(job, e)}
+                                data-testid={`button-assign-job-${job.id}`}
+                              >
+                                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                                Tilldela
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Tilldela resurs och datum</TooltipContent>
+                          </Tooltip>
                         </div>
                       </Card>
                     </DraggableJobCard>
