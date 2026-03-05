@@ -63,7 +63,18 @@ import {
   Target,
   CheckCircle2,
   Database,
+  MoreHorizontal,
+  X,
+  XCircle,
+  CircleCheck,
+  CircleX,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Article, ServiceObject } from "@shared/schema";
@@ -305,6 +316,33 @@ export default function ArticlesPage() {
     });
   }, [articles, searchQuery, typeFilter, objectTypeFilter, hookLevelFilter]);
 
+  const activeFilterCount = [
+    typeFilter !== "all" ? 1 : 0,
+    objectTypeFilter !== "all" ? 1 : 0,
+    hookLevelFilter !== "all" ? 1 : 0,
+  ].reduce((a, b) => a + b, 0);
+
+  const clearAllFilters = () => {
+    setTypeFilter("all");
+    setObjectTypeFilter("all");
+    setHookLevelFilter("all");
+  };
+
+  const quickStats = useMemo(() => {
+    const activeCount = articles.filter(a => a.status === "active").length;
+    const inactiveCount = articles.filter(a => a.status !== "active").length;
+    const withHook = articles.filter(a => a.hookLevel).length;
+    const typeCounts: Record<string, number> = {};
+    for (const a of articles) {
+      const label = articleTypeLabels[a.articleType] || a.articleType;
+      typeCounts[label] = (typeCounts[label] || 0) + 1;
+    }
+    const topTypes = Object.entries(typeCounts)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3);
+    return { activeCount, inactiveCount, withHook, topTypes };
+  }, [articles]);
+
   const formatPrice = (price: number | null | undefined) => {
     if (price === null || price === undefined) return "-";
     return `${price.toFixed(2)} kr`;
@@ -332,9 +370,39 @@ export default function ArticlesPage() {
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-page-title">Artiklar</h1>
-            <p className="text-muted-foreground">
-              Produkter och tjänster som kan läggas på ordrar
-            </p>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <span className="text-sm text-muted-foreground">
+                Produkter och tjänster som kan läggas på ordrar
+              </span>
+              {quickStats.topTypes.map(([label, count]) => (
+                <Badge key={label} variant="secondary" className="text-xs font-normal" data-testid={`badge-stat-type-${label}`}>
+                  {count} {label}
+                </Badge>
+              ))}
+              {quickStats.activeCount > 0 && (
+                <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
+                  <CircleCheck className="h-3 w-3" />
+                  {quickStats.activeCount} aktiva
+                </Badge>
+              )}
+              {quickStats.inactiveCount > 0 && (
+                <Badge variant="outline" className="text-xs font-normal gap-1 text-muted-foreground">
+                  <CircleX className="h-3 w-3" />
+                  {quickStats.inactiveCount} inaktiva
+                </Badge>
+              )}
+              {quickStats.withHook > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="text-xs font-normal gap-1 cursor-help">
+                      <Link className="h-3 w-3" />
+                      {quickStats.withHook} med fasthakning
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>Artiklar kopplade till en hierarkinivå</TooltipContent>
+                </Tooltip>
+              )}
+            </div>
           </div>
           <Button onClick={openCreateDialog} data-testid="button-create-article">
             <Plus className="h-4 w-4 mr-2" />
@@ -356,29 +424,51 @@ export default function ArticlesPage() {
           <Button
             variant="outline"
             onClick={() => setShowFilters(!showFilters)}
+            className="gap-2"
             data-testid="button-toggle-filters"
           >
-            <Filter className="h-4 w-4 mr-2" />
+            <Filter className="h-4 w-4" />
             Filter
-            {showFilters ? <ChevronUp className="h-4 w-4 ml-2" /> : <ChevronDown className="h-4 w-4 ml-2" />}
+            {activeFilterCount > 0 && (
+              <Badge variant="secondary" className="h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full">
+                {activeFilterCount}
+              </Badge>
+            )}
+            {showFilters ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
           </Button>
+          {activeFilterCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
+              <XCircle className="h-4 w-4" />
+              Rensa filter
+            </Button>
+          )}
           <div className="flex items-center border rounded-md">
-            <Button
-              variant={viewMode === "list" ? "secondary" : "ghost"}
-              size="icon"
-              onClick={() => setViewMode("list")}
-              data-testid="button-view-list"
-            >
-              <List className="h-4 w-4" />
-            </Button>
-            <Button
-              variant={viewMode === "hooks" ? "secondary" : "ghost"}
-              size="icon"
-              onClick={() => setViewMode("hooks")}
-              data-testid="button-view-hooks"
-            >
-              <Link className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={viewMode === "list" ? "secondary" : "ghost"}
+                  size="icon"
+                  onClick={() => setViewMode("list")}
+                  data-testid="button-view-list"
+                >
+                  <List className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Listvy</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant={viewMode === "hooks" ? "secondary" : "ghost"}
+                  size="icon"
+                  onClick={() => setViewMode("hooks")}
+                  data-testid="button-view-hooks"
+                >
+                  <Link className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent><p>Fasthakningsvy</p></TooltipContent>
+            </Tooltip>
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -396,6 +486,29 @@ export default function ArticlesPage() {
             </TooltipContent>
           </Tooltip>
         </div>
+
+        {activeFilterCount > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {typeFilter !== "all" && (
+              <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setTypeFilter("all")} data-testid="badge-filter-type">
+                Typ: {articleTypeLabels[typeFilter] || typeFilter}
+                <X className="h-3 w-3" />
+              </Badge>
+            )}
+            {objectTypeFilter !== "all" && (
+              <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setObjectTypeFilter("all")} data-testid="badge-filter-object-type">
+                Objekttyp: {objectTypeLabels[objectTypeFilter] || objectTypeFilter}
+                <X className="h-3 w-3" />
+              </Badge>
+            )}
+            {hookLevelFilter !== "all" && (
+              <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHookLevelFilter("all")} data-testid="badge-filter-hook-level">
+                Fasthakning: {hookLevelFilter === "none" ? "Utan fasthakning" : (hookLevelLabels[hookLevelFilter] || hookLevelFilter)}
+                <X className="h-3 w-3" />
+              </Badge>
+            )}
+          </div>
+        )}
 
         {showFilters && (
           <div className="flex flex-wrap items-center gap-3 p-4 rounded-md bg-muted/50">
@@ -541,7 +654,9 @@ export default function ArticlesPage() {
         <Card className="flex-1 flex flex-col overflow-hidden">
           <CardHeader className="flex flex-row items-center justify-between gap-2 pb-4">
             <CardTitle className="text-lg">
-              {filteredArticles.length} artiklar
+              {filteredArticles.length === articles.length
+                ? `${articles.length} artiklar`
+                : `${filteredArticles.length} av ${articles.length} artiklar`}
             </CardTitle>
           </CardHeader>
           <CardContent className="flex-1 overflow-auto p-0">
@@ -600,11 +715,16 @@ export default function ArticlesPage() {
                     </TableCell>
                     <TableCell>
                       {article.hookLevel ? (
-                        <Badge variant="outline">
-                          {hookLevelLabels[article.hookLevel] || article.hookLevel}
-                        </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Badge variant="outline" className="cursor-help">
+                              {hookLevelLabels[article.hookLevel] || article.hookLevel}
+                            </Badge>
+                          </TooltipTrigger>
+                          <TooltipContent>Artikeln hakar fast på nivå: {hookLevelLabels[article.hookLevel] || article.hookLevel}</TooltipContent>
+                        </Tooltip>
                       ) : (
-                        <span className="text-muted-foreground text-sm">-</span>
+                        <span className="text-muted-foreground text-xs">Ingen</span>
                       )}
                     </TableCell>
                     <TableCell className="text-center">
@@ -620,25 +740,49 @@ export default function ArticlesPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => openEditDialog(article)}
-                          data-testid={`button-edit-article-${article.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setArticleToDelete(article);
-                            setDeleteDialogOpen(true);
-                          }}
-                          data-testid={`button-delete-article-${article.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => openEditDialog(article)}
+                              data-testid={`button-edit-article-${article.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Redigera</p></TooltipContent>
+                        </Tooltip>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" data-testid={`button-more-article-${article.id}`}>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedObjectId("");
+                                setTestDialogOpen(true);
+                              }}
+                              data-testid={`menu-test-article-${article.id}`}
+                            >
+                              <Target className="h-4 w-4 mr-2" />
+                              Testa fasthakning
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => {
+                                setArticleToDelete(article);
+                                setDeleteDialogOpen(true);
+                              }}
+                              data-testid={`menu-delete-article-${article.id}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Ta bort artikel
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </TableCell>
                   </TableRow>
