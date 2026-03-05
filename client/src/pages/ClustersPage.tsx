@@ -59,7 +59,17 @@ import {
   Users,
   List,
   Map,
+  MoreHorizontal,
+  Sparkles,
+  Layers,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { QueryErrorState } from "@/components/ErrorBoundary";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -358,6 +368,19 @@ export default function ClustersPage() {
     ? (clusters || []).find(c => c.id === selectedClusterId) 
     : null;
 
+  const quickStats = useMemo(() => {
+    const total = clusters.length;
+    const totalObjects = clusters.reduce((sum, c) => sum + (c.cachedObjectCount ?? 0), 0);
+    const totalOrders = clusters.reduce((sum, c) => sum + (c.cachedActiveOrders ?? 0), 0);
+    const slaCounts: Record<string, number> = {};
+    for (const c of clusters) {
+      const sla = c.slaLevel || "standard";
+      slaCounts[sla] = (slaCounts[sla] || 0) + 1;
+    }
+    const withCoords = clusters.filter(c => c.centerLatitude && c.centerLongitude).length;
+    return { total, totalObjects, totalOrders, slaCounts, withCoords };
+  }, [clusters]);
+
   if (error) {
     return (
       <div className="p-6">
@@ -371,14 +394,40 @@ export default function ClustersPage() {
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold">Kluster</h1>
-          <p className="text-muted-foreground">
-            Kundhierarkier med dataärvning - navet i verksamheten
-          </p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-sm text-muted-foreground">
+              Kundhierarkier med dataärvning - navet i verksamheten
+            </span>
+            {quickStats.total > 0 && (
+              <Badge variant="secondary" className="text-xs font-normal gap-1">
+                <Layers className="h-3 w-3" />
+                {quickStats.total} kluster
+              </Badge>
+            )}
+            {quickStats.totalObjects > 0 && (
+              <Badge variant="outline" className="text-xs font-normal gap-1">
+                <Package className="h-3 w-3" />
+                {quickStats.totalObjects.toLocaleString("sv")} objekt totalt
+              </Badge>
+            )}
+            {quickStats.totalOrders > 0 && (
+              <Badge variant="outline" className="text-xs font-normal gap-1">
+                <FileText className="h-3 w-3" />
+                {quickStats.totalOrders} aktiva ordrar
+              </Badge>
+            )}
+          </div>
         </div>
-        <Button onClick={handleOpenCreate} data-testid="button-create-cluster">
-          <Plus className="mr-2 h-4 w-4" />
-          Nytt Kluster
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster">
+            <Sparkles className="mr-2 h-4 w-4" />
+            Auto-klustring
+          </Button>
+          <Button onClick={handleOpenCreate} data-testid="button-create-cluster">
+            <Plus className="mr-2 h-4 w-4" />
+            Nytt Kluster
+          </Button>
+        </div>
       </div>
 
       <AICard
@@ -429,10 +478,16 @@ export default function ClustersPage() {
             <p className="text-muted-foreground mb-4">
               Skapa ditt första kluster för att bygga kundhierarkier med dataärvning
             </p>
-            <Button onClick={handleOpenCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Skapa Kluster
-            </Button>
+            <div className="flex items-center justify-center gap-3">
+              <Button onClick={handleOpenCreate} data-testid="button-create-cluster-empty">
+                <Plus className="mr-2 h-4 w-4" />
+                Skapa Kluster
+              </Button>
+              <Button variant="outline" onClick={() => navigate("/auto-cluster")} data-testid="button-auto-cluster-empty">
+                <Sparkles className="mr-2 h-4 w-4" />
+                Auto-klustring
+              </Button>
+            </div>
           </CardContent>
         </Card>
       ) : viewMode === "map" ? (
@@ -643,47 +698,70 @@ export default function ClustersPage() {
                   )}
 
                   <div className="flex items-center gap-2 pt-2 border-t">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        refreshCacheMutation.mutate(cluster.id);
-                      }}
-                      disabled={refreshCacheMutation.isPending}
-                      data-testid={`button-refresh-${cluster.id}`}
-                    >
-                      <RefreshCw
-                        className={`h-4 w-4 ${refreshCacheMutation.isPending ? "animate-spin" : ""}`}
-                      />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleOpenEdit(cluster);
-                      }}
-                      data-testid={`button-edit-${cluster.id}`}
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(cluster);
-                      }}
-                      data-testid={`button-delete-${cluster.id}`}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            refreshCacheMutation.mutate(cluster.id);
+                          }}
+                          disabled={refreshCacheMutation.isPending}
+                          data-testid={`button-refresh-${cluster.id}`}
+                        >
+                          <RefreshCw
+                            className={`h-4 w-4 ${refreshCacheMutation.isPending ? "animate-spin" : ""}`}
+                          />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Uppdatera statistik</p></TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenEdit(cluster);
+                          }}
+                          data-testid={`button-edit-${cluster.id}`}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent><p>Redigera</p></TooltipContent>
+                    </Tooltip>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="sm" variant="ghost" onClick={(e) => e.stopPropagation()} data-testid={`button-more-${cluster.id}`}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenuItem onClick={() => navigate(`/clusters/${cluster.id}`)}>
+                          <ChevronRight className="h-4 w-4 mr-2" />
+                          Visa detaljer
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="text-destructive"
+                          onClick={() => handleDelete(cluster)}
+                          data-testid={`menu-delete-${cluster.id}`}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Ta bort kluster
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                     <div className="flex-1" />
                     <Button
                       size="sm"
                       variant="outline"
-                      onClick={() => navigate(`/clusters/${cluster.id}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/clusters/${cluster.id}`);
+                      }}
                       data-testid={`button-view-${cluster.id}`}
                     >
                       Visa snöret
