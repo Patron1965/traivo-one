@@ -55,7 +55,16 @@ import {
   AlertTriangle,
   CheckCircle,
   Settings,
+  MoreHorizontal,
+  BarChart3,
+  CalendarClock,
+  Gauge,
+  CircleCheck,
+  CircleAlert,
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, differenceInDays } from "date-fns";
@@ -341,14 +350,59 @@ export default function VehiclesPage() {
 
   const isLoading = loadingVehicles || loadingEquipment;
 
+  const fleetStats = useMemo(() => {
+    const activeVehicles = vehicles.filter(v => v.status === "active");
+    let serviceOverdue = 0;
+    let serviceSoon = 0;
+    let serviceOk = 0;
+    for (const v of activeVehicles) {
+      const s = getServiceStatus(v);
+      if (s.status === "overdue") serviceOverdue++;
+      else if (s.status === "soon") serviceSoon++;
+      else if (s.status === "ok") serviceOk++;
+    }
+    return {
+      total: vehicles.length,
+      active: activeVehicles.length,
+      equipmentCount: equipment.length,
+      serviceOverdue,
+      serviceSoon,
+      serviceOk,
+    };
+  }, [vehicles, equipment]);
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">Fordonspark och Utrustning</h1>
-          <p className="text-muted-foreground">
-            Hantera fordon, maskiner och verktyg
-          </p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-sm text-muted-foreground">Hantera fordon, maskiner och verktyg</span>
+            {fleetStats.active > 0 && (
+              <Badge variant="secondary" className="text-xs font-normal gap-1">
+                <Truck className="h-3 w-3" />
+                {fleetStats.active} aktiva fordon
+              </Badge>
+            )}
+            {fleetStats.serviceOverdue > 0 && (
+              <Badge variant="outline" className="text-xs font-normal gap-1 text-red-600 border-red-300">
+                <CircleAlert className="h-3 w-3" />
+                {fleetStats.serviceOverdue} service försenad
+              </Badge>
+            )}
+            {fleetStats.serviceSoon > 0 && (
+              <Badge variant="outline" className="text-xs font-normal gap-1 text-amber-600 border-amber-300">
+                <AlertTriangle className="h-3 w-3" />
+                {fleetStats.serviceSoon} service snart
+              </Badge>
+            )}
+            {fleetStats.serviceOk > 0 && fleetStats.serviceOverdue === 0 && fleetStats.serviceSoon === 0 && (
+              <Badge variant="outline" className="text-xs font-normal gap-1 text-green-600 border-green-300">
+                <CircleCheck className="h-3 w-3" />
+                Alla servade
+              </Badge>
+            )}
+          </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="relative">
@@ -361,6 +415,12 @@ export default function VehiclesPage() {
               data-testid="input-search"
             />
           </div>
+          <Link href="/fleet">
+            <Button variant="outline" size="sm" data-testid="button-fleet-dashboard">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Fordonsdashboard
+            </Button>
+          </Link>
         </div>
       </div>
 
@@ -390,7 +450,6 @@ export default function VehiclesPage() {
               Lägg till fordon
             </Button>
           </div>
-
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -423,73 +482,101 @@ export default function VehiclesPage() {
                             </p>
                           </div>
                         </div>
-                        <Badge variant={vehicle.status === "active" ? "default" : "secondary"}>
-                          {vehicle.status === "active" ? "Aktiv" : "Inaktiv"}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge variant={vehicle.status === "active" ? "default" : "secondary"}>
+                            {vehicle.status === "active" ? "Aktiv" : "Inaktiv"}
+                          </Badge>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditVehicle(vehicle)}
+                                data-testid={`button-edit-vehicle-${vehicle.id}`}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent><p>Redigera</p></TooltipContent>
+                          </Tooltip>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" data-testid={`button-more-vehicle-${vehicle.id}`}>
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem asChild>
+                                <Link href="/fleet">
+                                  <BarChart3 className="h-4 w-4 mr-2" />
+                                  Bränsle & underhåll
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className="text-destructive"
+                                onClick={() => {
+                                  setItemToDelete({ type: "vehicle", id: vehicle.id, name: vehicle.name });
+                                  setDeleteDialogOpen(true);
+                                }}
+                                data-testid={`menu-delete-vehicle-${vehicle.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Ta bort fordon
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2 text-sm">
-                        <div className="flex items-center gap-2 text-muted-foreground">
+                      <div className="flex items-center gap-3 text-sm text-muted-foreground flex-wrap">
+                        <span className="flex items-center gap-1">
                           <Fuel className="h-3 w-3" />
                           {fuelTypeOptions.find((f) => f.value === vehicle.fuelType)?.label || vehicle.fuelType}
-                        </div>
+                        </span>
                         {vehicle.capacityTons && (
-                          <div className="text-muted-foreground">{vehicle.capacityTons} ton</div>
+                          <span>{vehicle.capacityTons} ton</span>
+                        )}
+                        {vehicle.costCenter && (
+                          <Badge variant="outline" className="text-[10px]">{vehicle.costCenter}</Badge>
                         )}
                       </div>
 
                       <Separator />
 
-                      <div className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <Settings className="h-3 w-3" />
-                          <span>Nästa service:</span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {serviceStatus.status === "overdue" && (
-                            <AlertTriangle className="h-3 w-3 text-red-500" />
-                          )}
-                          {serviceStatus.status === "soon" && (
-                            <AlertTriangle className="h-3 w-3 text-orange-500" />
-                          )}
-                          {serviceStatus.status === "ok" && (
-                            <CheckCircle className="h-3 w-3 text-green-500" />
-                          )}
-                          <span
-                            className={
-                              serviceStatus.status === "overdue"
-                                ? "text-red-500"
-                                : serviceStatus.status === "soon"
-                                ? "text-orange-500"
-                                : ""
-                            }
-                          >
-                            {serviceStatus.label}
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-muted-foreground">
+                            <Settings className="h-3 w-3" />
+                            Nästa service
+                          </span>
+                          <span className="flex items-center gap-1">
+                            {serviceStatus.status === "overdue" && <AlertTriangle className="h-3 w-3 text-red-500" />}
+                            {serviceStatus.status === "soon" && <AlertTriangle className="h-3 w-3 text-amber-500" />}
+                            {serviceStatus.status === "ok" && <CheckCircle className="h-3 w-3 text-green-500" />}
+                            <span className={serviceStatus.status === "overdue" ? "text-red-500 font-medium" : serviceStatus.status === "soon" ? "text-amber-500" : ""}>
+                              {serviceStatus.status === "unknown" ? "Ej planerad" : serviceStatus.label}
+                            </span>
                           </span>
                         </div>
-                      </div>
-
-                      <div className="flex justify-end gap-2 pt-2">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => handleEditVehicle(vehicle)}
-                          data-testid={`button-edit-vehicle-${vehicle.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            setItemToDelete({ type: "vehicle", id: vehicle.id, name: vehicle.name });
-                            setDeleteDialogOpen(true);
-                          }}
-                          data-testid={`button-delete-vehicle-${vehicle.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        {vehicle.odometerReading && (
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-2 text-muted-foreground">
+                              <Gauge className="h-3 w-3" />
+                              Mätarställning
+                            </span>
+                            <span>{vehicle.odometerReading.toLocaleString("sv")} km</span>
+                          </div>
+                        )}
+                        {vehicle.inspectionDate && (
+                          <div className="flex items-center justify-between">
+                            <span className="flex items-center gap-2 text-muted-foreground">
+                              <CalendarClock className="h-3 w-3" />
+                              Besiktning
+                            </span>
+                            <span>{format(new Date(vehicle.inspectionDate), "d MMM yyyy", { locale: sv })}</span>
+                          </div>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
@@ -539,9 +626,40 @@ export default function VehiclesPage() {
                           </p>
                         )}
                       </div>
-                      <Badge variant={eq.status === "active" ? "default" : "secondary"}>
-                        {eq.status === "active" ? "Aktiv" : "Inaktiv"}
-                      </Badge>
+                      <div className="flex items-center gap-1">
+                        <Badge variant={eq.status === "active" ? "default" : "secondary"}>
+                          {eq.status === "active" ? "Aktiv" : "Inaktiv"}
+                        </Badge>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleEditEquipment(eq)}
+                              data-testid={`button-edit-equipment-${eq.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Redigera</p></TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => {
+                                setItemToDelete({ type: "equipment", id: eq.id, name: eq.name });
+                                setDeleteDialogOpen(true);
+                              }}
+                              data-testid={`button-delete-equipment-${eq.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent><p>Ta bort</p></TooltipContent>
+                        </Tooltip>
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -553,28 +671,6 @@ export default function VehiclesPage() {
                         {eq.manufacturer} {eq.model}
                       </div>
                     )}
-
-                    <div className="flex justify-end gap-2 pt-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEditEquipment(eq)}
-                        data-testid={`button-edit-equipment-${eq.id}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          setItemToDelete({ type: "equipment", id: eq.id, name: eq.name });
-                          setDeleteDialogOpen(true);
-                        }}
-                        data-testid={`button-delete-equipment-${eq.id}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
                   </CardContent>
                 </Card>
               ))}
