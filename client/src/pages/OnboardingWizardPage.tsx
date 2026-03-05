@@ -1,14 +1,16 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import {
   Building2, User, Package, CheckCircle, ArrowRight, ArrowLeft,
-  Loader2, Eye, EyeOff, Sparkles, Copy, ExternalLink
+  Loader2, Eye, EyeOff, Sparkles, Copy, ExternalLink, AlertCircle,
+  RefreshCw, Shield, Info
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
@@ -30,10 +32,10 @@ interface OnboardingResult {
 }
 
 const INDUSTRIES = [
-  { value: "waste", label: "Avfallshantering" },
-  { value: "cleaning", label: "Städtjänster" },
-  { value: "property", label: "Fastighetsservice" },
-  { value: "other", label: "Annat" },
+  { value: "waste", label: "Avfallshantering", description: "Sophämtning, kärlhantering, containerservice" },
+  { value: "cleaning", label: "Städtjänster", description: "Kontorsstäd, fastighetsstäd, fönsterputsning" },
+  { value: "property", label: "Fastighetsservice", description: "Underhåll, reparationer, fastighetsskötsel" },
+  { value: "other", label: "Annat", description: "Övrig fältservice" },
 ];
 
 const STEPS = [
@@ -42,6 +44,52 @@ const STEPS = [
   { label: "Admin-användare", icon: User },
   { label: "Sammanfattning", icon: CheckCircle },
 ];
+
+function formatOrgNumber(value: string): string {
+  const digits = value.replace(/\D/g, "").slice(0, 10);
+  if (digits.length > 6) {
+    return digits.slice(0, 6) + "-" + digits.slice(6);
+  }
+  return digits;
+}
+
+function isValidOrgNumber(value: string): boolean {
+  if (!value) return true;
+  return /^\d{6}-\d{4}$/.test(value);
+}
+
+function isValidEmail(value: string): boolean {
+  if (!value) return true;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
+function generatePassword(): string {
+  const chars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const specials = "!@#$%&*";
+  let password = "";
+  for (let i = 0; i < 10; i++) {
+    password += chars[Math.floor(Math.random() * chars.length)];
+  }
+  password += specials[Math.floor(Math.random() * specials.length)];
+  password += Math.floor(Math.random() * 10);
+  return password.split("").sort(() => Math.random() - 0.5).join("");
+}
+
+function getPasswordStrength(password: string): { level: number; label: string; color: string } {
+  if (!password) return { level: 0, label: "", color: "" };
+  let score = 0;
+  if (password.length >= 6) score++;
+  if (password.length >= 8) score++;
+  if (/[A-Z]/.test(password)) score++;
+  if (/[0-9]/.test(password)) score++;
+  if (/[^A-Za-z0-9]/.test(password)) score++;
+
+  if (score <= 1) return { level: 1, label: "Svagt", color: "bg-red-500" };
+  if (score <= 2) return { level: 2, label: "Okej", color: "bg-orange-500" };
+  if (score <= 3) return { level: 3, label: "Bra", color: "bg-yellow-500" };
+  if (score <= 4) return { level: 4, label: "Starkt", color: "bg-green-500" };
+  return { level: 5, label: "Mycket starkt", color: "bg-green-600" };
+}
 
 function StepIndicator({ currentStep }: { currentStep: number }) {
   return (
@@ -81,6 +129,7 @@ export default function OnboardingWizardPage() {
   const { toast } = useToast();
   const [currentStep, setCurrentStep] = useState(0);
   const [showPassword, setShowPassword] = useState(false);
+  const [showSummaryPassword, setShowSummaryPassword] = useState(false);
   const [result, setResult] = useState<OnboardingResult | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -96,6 +145,10 @@ export default function OnboardingWizardPage() {
   const [adminLastName, setAdminLastName] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [adminPassword, setAdminPassword] = useState("");
+  const [adminPasswordConfirm, setAdminPasswordConfirm] = useState("");
+
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const markTouched = (field: string) => setTouchedFields(prev => ({ ...prev, [field]: true }));
 
   const { data: packages = [] } = useQuery<IndustryPackage[]>({
     queryKey: ["/api/system/industry-packages"],
@@ -137,11 +190,39 @@ export default function OnboardingWizardPage() {
     },
   });
 
+  const validationErrors = useMemo(() => {
+    const errors: Record<string, string> = {};
+    if (orgNumber && !isValidOrgNumber(orgNumber)) {
+      errors.orgNumber = "Ogiltigt format — använd XXXXXX-XXXX";
+    }
+    if (contactEmail && !isValidEmail(contactEmail)) {
+      errors.contactEmail = "Ogiltig e-postadress";
+    }
+    if (adminEmail && !isValidEmail(adminEmail)) {
+      errors.adminEmail = "Ogiltig e-postadress";
+    }
+    if (adminPassword && adminPassword.length < 6) {
+      errors.adminPassword = "Lösenordet måste vara minst 6 tecken";
+    }
+    if (adminPasswordConfirm && adminPassword !== adminPasswordConfirm) {
+      errors.adminPasswordConfirm = "Lösenorden matchar inte";
+    }
+    return errors;
+  }, [orgNumber, contactEmail, adminEmail, adminPassword, adminPasswordConfirm]);
+
   const canProceed = () => {
     switch (currentStep) {
-      case 0: return companyName.trim().length > 0;
+      case 0:
+        return companyName.trim().length > 0
+          && !validationErrors.orgNumber
+          && !validationErrors.contactEmail;
       case 1: return true;
-      case 2: return adminEmail.trim().length > 0 && adminPassword.length >= 6;
+      case 2:
+        return adminEmail.trim().length > 0
+          && isValidEmail(adminEmail)
+          && adminPassword.length >= 6
+          && adminPassword === adminPasswordConfirm
+          && !validationErrors.adminEmail;
       case 3: return true;
       default: return false;
     }
@@ -157,6 +238,14 @@ export default function OnboardingWizardPage() {
 
   const handleBack = () => {
     if (currentStep > 0) setCurrentStep(currentStep - 1);
+  };
+
+  const handleGeneratePassword = () => {
+    const pw = generatePassword();
+    setAdminPassword(pw);
+    setAdminPasswordConfirm(pw);
+    setShowPassword(true);
+    toast({ title: "Lösenord genererat", description: "Ett starkt lösenord har skapats" });
   };
 
   const copyCredentials = () => {
@@ -180,7 +269,13 @@ export default function OnboardingWizardPage() {
     setAdminLastName("");
     setAdminEmail("");
     setAdminPassword("");
+    setAdminPasswordConfirm("");
+    setShowPassword(false);
+    setShowSummaryPassword(false);
+    setTouchedFields({});
   };
+
+  const passwordStrength = getPasswordStrength(adminPassword);
 
   if (result) {
     return (
@@ -225,7 +320,20 @@ export default function OnboardingWizardPage() {
           <CardContent className="space-y-3">
             <div className="bg-muted p-4 rounded-lg space-y-2 font-mono text-sm">
               <div><span className="text-muted-foreground">E-post:</span> {adminEmail}</div>
-              <div><span className="text-muted-foreground">Lösenord:</span> {adminPassword}</div>
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">Lösenord:</span>
+                <span>{showSummaryPassword ? adminPassword : "••••••••••"}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => setShowSummaryPassword(!showSummaryPassword)}
+                  data-testid="button-toggle-result-password"
+                >
+                  {showSummaryPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                </Button>
+              </div>
             </div>
             <Button variant="outline" size="sm" onClick={copyCredentials} data-testid="button-copy-credentials">
               {copied ? <CheckCircle className="h-4 w-4 mr-2 text-green-600" /> : <Copy className="h-4 w-4 mr-2" />}
@@ -318,10 +426,19 @@ export default function OnboardingWizardPage() {
               <Input
                 id="org-number"
                 value={orgNumber}
-                onChange={(e) => setOrgNumber(e.target.value)}
-                placeholder="t.ex. 556123-4567"
+                onChange={(e) => setOrgNumber(formatOrgNumber(e.target.value))}
+                onBlur={() => markTouched("orgNumber")}
+                placeholder="XXXXXX-XXXX"
+                maxLength={11}
                 data-testid="input-org-number"
+                className={touchedFields.orgNumber && validationErrors.orgNumber ? "border-red-500" : ""}
               />
+              {touchedFields.orgNumber && validationErrors.orgNumber && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationErrors.orgNumber}
+                </p>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -331,9 +448,17 @@ export default function OnboardingWizardPage() {
                   type="email"
                   value={contactEmail}
                   onChange={(e) => setContactEmail(e.target.value)}
+                  onBlur={() => markTouched("contactEmail")}
                   placeholder="info@foretag.se"
                   data-testid="input-contact-email"
+                  className={touchedFields.contactEmail && validationErrors.contactEmail ? "border-red-500" : ""}
                 />
+                {touchedFields.contactEmail && validationErrors.contactEmail && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {validationErrors.contactEmail}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="contact-phone">Kontakttelefon</Label>
@@ -347,14 +472,31 @@ export default function OnboardingWizardPage() {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="industry">Bransch</Label>
+              <div className="flex items-center gap-2">
+                <Label htmlFor="industry">Bransch</Label>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" data-testid="icon-industry-tooltip" />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs max-w-[200px]">Valet av bransch styr vilka branschpaket som föreslås i nästa steg</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
               <Select value={industry} onValueChange={setIndustry}>
                 <SelectTrigger id="industry" data-testid="select-industry">
                   <SelectValue placeholder="Välj bransch" />
                 </SelectTrigger>
                 <SelectContent>
                   {INDUSTRIES.map((ind) => (
-                    <SelectItem key={ind.value} value={ind.value}>{ind.label}</SelectItem>
+                    <SelectItem key={ind.value} value={ind.value}>
+                      <div className="flex flex-col">
+                        <span>{ind.label}</span>
+                        <span className="text-xs text-muted-foreground">{ind.description}</span>
+                      </div>
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -474,19 +616,40 @@ export default function OnboardingWizardPage() {
                 type="email"
                 value={adminEmail}
                 onChange={(e) => setAdminEmail(e.target.value)}
+                onBlur={() => markTouched("adminEmail")}
                 placeholder="admin@foretag.se"
                 data-testid="input-admin-email"
+                className={touchedFields.adminEmail && validationErrors.adminEmail ? "border-red-500" : ""}
               />
+              {touchedFields.adminEmail && validationErrors.adminEmail && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationErrors.adminEmail}
+                </p>
+              )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="admin-password">Lösenord * (minst 6 tecken)</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="admin-password">Lösenord *</Label>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1 text-muted-foreground"
+                  onClick={handleGeneratePassword}
+                  data-testid="button-generate-password"
+                >
+                  <RefreshCw className="h-3 w-3" />
+                  Generera lösenord
+                </Button>
+              </div>
               <div className="relative">
                 <Input
                   id="admin-password"
                   type={showPassword ? "text" : "password"}
                   value={adminPassword}
                   onChange={(e) => setAdminPassword(e.target.value)}
-                  placeholder="Välj ett säkert lösenord"
+                  placeholder="Minst 6 tecken"
                   data-testid="input-admin-password"
                 />
                 <Button
@@ -500,8 +663,53 @@ export default function OnboardingWizardPage() {
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
-              {adminPassword.length > 0 && adminPassword.length < 6 && (
-                <p className="text-xs text-red-500">Lösenordet måste vara minst 6 tecken</p>
+              {adminPassword.length > 0 && (
+                <div className="space-y-1">
+                  <div className="flex gap-1 h-1.5">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <div
+                        key={level}
+                        className={`flex-1 rounded-full transition-colors ${
+                          level <= passwordStrength.level ? passwordStrength.color : "bg-muted"
+                        }`}
+                      />
+                    ))}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Shield className="h-3 w-3" />
+                      {passwordStrength.label}
+                    </p>
+                    {adminPassword.length < 6 && (
+                      <p className="text-xs text-red-500">Minst 6 tecken</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="admin-password-confirm">Upprepa lösenord *</Label>
+              <Input
+                id="admin-password-confirm"
+                type={showPassword ? "text" : "password"}
+                value={adminPasswordConfirm}
+                onChange={(e) => setAdminPasswordConfirm(e.target.value)}
+                onBlur={() => markTouched("adminPasswordConfirm")}
+                placeholder="Ange lösenordet igen"
+                data-testid="input-admin-password-confirm"
+                className={touchedFields.adminPasswordConfirm && validationErrors.adminPasswordConfirm ? "border-red-500" : ""}
+              />
+              {touchedFields.adminPasswordConfirm && validationErrors.adminPasswordConfirm && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3" />
+                  {validationErrors.adminPasswordConfirm}
+                </p>
+              )}
+              {adminPasswordConfirm && adminPassword === adminPasswordConfirm && (
+                <p className="text-xs text-green-600 flex items-center gap-1" data-testid="text-password-match">
+                  <CheckCircle className="h-3 w-3" />
+                  Lösenorden matchar
+                </p>
               )}
             </div>
             <div className="bg-muted/50 p-3 rounded-md text-xs text-muted-foreground">
@@ -552,6 +760,19 @@ export default function OnboardingWizardPage() {
                 </p>
                 <p className="text-sm text-muted-foreground">{adminEmail}</p>
                 <p className="text-sm text-muted-foreground">Roll: Ägare</p>
+                <div className="text-sm text-muted-foreground flex items-center gap-1">
+                  Lösenord: {showSummaryPassword ? adminPassword : "••••••••"}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-5 w-5 p-0"
+                    onClick={() => setShowSummaryPassword(!showSummaryPassword)}
+                    data-testid="button-toggle-summary-password"
+                  >
+                    {showSummaryPassword ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                  </Button>
+                </div>
               </div>
             </div>
           </CardContent>
