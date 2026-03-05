@@ -159,8 +159,6 @@ export async function searchDestinations(
       key: GOOGLE_API_KEY,
       region: "se",
       language: "sv",
-      result_type: "street_address|premise|subpremise",
-      enable_address_descriptor: "true",
     });
 
     const res = await fetch(`${GEOCODING_BASE_URL}?${params.toString()}`);
