@@ -16971,6 +16971,31 @@ setInterval(loadRoutes, 30000);
     }
   });
 
+  app.patch("/api/admin/users/bulk", requireAdminAuth, async (req, res) => {
+    try {
+      const { ids, updates } = req.body;
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: "Inga användare valda" });
+      }
+      const validUpdates: Record<string, any> = {};
+      if (updates.role !== undefined) validUpdates.role = updates.role;
+      if (updates.isActive !== undefined) validUpdates.isActive = updates.isActive;
+      if (Object.keys(validUpdates).length === 0) {
+        return res.status(400).json({ error: "Inga uppdateringar angivna" });
+      }
+      let updatedCount = 0;
+      for (const id of ids) {
+        const result = await storage.updateUser(id, validUpdates);
+        if (result) updatedCount++;
+      }
+      console.log(`[user-mgmt] Bulk update: ${updatedCount} users updated with`, validUpdates);
+      res.json({ success: true, updatedCount });
+    } catch (error) {
+      console.error("Bulk update failed:", error);
+      res.status(500).json({ error: "Bulk-uppdatering misslyckades" });
+    }
+  });
+
   app.patch("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
     try {
       const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
@@ -17032,6 +17057,8 @@ setInterval(loadRoutes, 30000);
       (req.session as any).userId = user.id;
       (req.session as any).userEmail = user.email;
       (req.session as any).userRole = user.role;
+
+      await storage.updateUser(user.id, { lastLoginAt: new Date() });
 
       const { passwordHash: _, ...safeUser } = user;
       console.log(`[auth] User "${email}" logged in successfully`);

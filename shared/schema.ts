@@ -39,6 +39,7 @@ export const users = pgTable("users", {
   role: varchar("role", { length: 30 }).default("user"),
   resourceId: varchar("resource_id"),
   isActive: boolean("is_active").default(true),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

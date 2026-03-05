@@ -55,7 +55,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Field Worker Photo Upload:** Two-step presigned URL flow for photo capture.
 - **Inspection & Metadata System:** Structured inspection checklist integrated into the mobile app with a dedicated search page.
 - **Invoice Preview/Generation & Fortnox Export:** Full invoicing page at `/invoicing` with preview, filtering, batch selection, Fortnox export, and export history. Includes invoice stop-level logic for correct recipient determination.
-- **Team Management & User Administration:** User management page at `/user-management` with admin CRUD for users and a team system for grouping resources.
+- **Team Management & User Administration:** User management page at `/user-management` with admin CRUD for users, team system for grouping resources, avatar initials with role-colored backgrounds, inline quick-edit dropdowns for role/resource assignment, sortable table columns, last login tracking with relative time display, and bulk actions (role change, activate/deactivate) via checkbox selection. Bulk endpoint: `PATCH /api/admin/users/bulk`.
 - **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, and permissions.
 - **Fleet Management:** Comprehensive fleet management page at `/fleet` with vehicle dashboard, maintenance planning, and fuel tracking.
 - **Tenant Onboarding Wizard:** Admin wizard at `/onboarding` for creating new company accounts with industry package selection and admin user creation.

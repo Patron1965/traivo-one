@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +39,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Plus,
   Search,
@@ -56,6 +57,10 @@ import {
   UsersRound,
   X,
   UserPlus,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Clock,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -69,15 +74,47 @@ interface UserData {
   role: string | null;
   resourceId: string | null;
   isActive: boolean | null;
+  lastLoginAt: string | null;
   createdAt: string | null;
 }
 
-const ROLE_CONFIG: Record<string, { label: string; color: string; icon: typeof Shield }> = {
-  admin: { label: "Admin", color: "bg-red-500/10 text-red-500 border-red-500/20", icon: ShieldCheck },
-  planner: { label: "Planerare", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: UserCog },
-  user: { label: "Användare", color: "bg-gray-500/10 text-gray-400 border-gray-500/20", icon: Users },
-  technician: { label: "Tekniker", color: "bg-green-500/10 text-green-500 border-green-500/20", icon: Shield },
+const ROLE_CONFIG: Record<string, { label: string; color: string; icon: typeof Shield; avatarBg: string }> = {
+  admin: { label: "Admin", color: "bg-red-500/10 text-red-500 border-red-500/20", icon: ShieldCheck, avatarBg: "bg-red-500" },
+  planner: { label: "Planerare", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: UserCog, avatarBg: "bg-blue-500" },
+  user: { label: "Användare", color: "bg-gray-500/10 text-gray-400 border-gray-500/20", icon: Users, avatarBg: "bg-gray-500" },
+  technician: { label: "Tekniker", color: "bg-green-500/10 text-green-500 border-green-500/20", icon: Shield, avatarBg: "bg-green-500" },
 };
+
+function formatRelativeTime(dateStr: string | null): string {
+  if (!dateStr) return "Aldrig";
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffSeconds = Math.floor(diffMs / 1000);
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
+
+  if (diffSeconds < 60) return "just nu";
+  if (diffMinutes < 60) return `${diffMinutes} ${diffMinutes === 1 ? "minut" : "minuter"} sedan`;
+  if (diffHours < 24) return `${diffHours} ${diffHours === 1 ? "timme" : "timmar"} sedan`;
+  if (diffDays === 1) return "igår";
+  if (diffDays < 7) return `${diffDays} dagar sedan`;
+  if (diffWeeks < 4) return `${diffWeeks} ${diffWeeks === 1 ? "vecka" : "veckor"} sedan`;
+  if (diffMonths < 12) return `${diffMonths} ${diffMonths === 1 ? "månad" : "månader"} sedan`;
+  return date.toLocaleDateString("sv-SE");
+}
+
+function getUserInitials(firstName: string | null, lastName: string | null): string {
+  const f = firstName?.trim()?.[0]?.toUpperCase() || "";
+  const l = lastName?.trim()?.[0]?.toUpperCase() || "";
+  return f || l ? `${f}${l}` : "?";
+}
+
+type SortColumn = "name" | "email" | "role" | "status" | "lastLogin";
+type SortDirection = "asc" | "desc";
 
 export default function UserManagementPage() {
   const { toast } = useToast();
@@ -95,6 +132,14 @@ export default function UserManagementPage() {
   const [addMemberTeamId, setAddMemberTeamId] = useState<string | null>(null);
   const [addMemberResourceId, setAddMemberResourceId] = useState("");
   const [addMemberRole, setAddMemberRole] = useState("medlem");
+
+  const [sortColumn, setSortColumn] = useState<SortColumn>("name");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const [inlineEditingRole, setInlineEditingRole] = useState<string | null>(null);
+  const [inlineEditingResource, setInlineEditingResource] = useState<string | null>(null);
 
   const [form, setForm] = useState({
     email: "",
@@ -139,6 +184,30 @@ export default function UserManagementPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Uppdaterad", description: "Användaren har uppdaterats." });
       closeDialog();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const inlineUpdateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/admin/users/${id}`, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setInlineEditingRole(null);
+      setInlineEditingResource(null);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const bulkUpdateMutation = useMutation({
+    mutationFn: (data: { ids: string[]; updates: any }) => apiRequest("PATCH", "/api/admin/users/bulk", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      setSelectedIds(new Set());
+      toast({ title: "Uppdaterat", description: "Valda användare har uppdaterats." });
     },
     onError: (error: Error) => {
       toast({ title: "Fel", description: error.message, variant: "destructive" });
@@ -304,6 +373,35 @@ export default function UserManagementPage() {
     }
   };
 
+  const handleSort = (column: SortColumn) => {
+    if (sortColumn === column) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortColumn(column);
+      setSortDirection("asc");
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sortedUsers.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(sortedUsers.map(u => u.id)));
+    }
+  };
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   const filteredUsers = users.filter(u => {
     if (!search) return true;
     const q = search.toLowerCase();
@@ -314,6 +412,39 @@ export default function UserManagementPage() {
       u.role?.toLowerCase().includes(q)
     );
   });
+
+  const sortedUsers = useMemo(() => {
+    const sorted = [...filteredUsers].sort((a, b) => {
+      let aVal = "";
+      let bVal = "";
+      switch (sortColumn) {
+        case "name":
+          aVal = `${a.firstName || ""} ${a.lastName || ""}`.trim().toLowerCase();
+          bVal = `${b.firstName || ""} ${b.lastName || ""}`.trim().toLowerCase();
+          break;
+        case "email":
+          aVal = (a.email || "").toLowerCase();
+          bVal = (b.email || "").toLowerCase();
+          break;
+        case "role":
+          aVal = (a.role || "user").toLowerCase();
+          bVal = (b.role || "user").toLowerCase();
+          break;
+        case "status":
+          aVal = a.isActive !== false ? "1" : "0";
+          bVal = b.isActive !== false ? "1" : "0";
+          break;
+        case "lastLogin":
+          aVal = a.lastLoginAt || "";
+          bVal = b.lastLoginAt || "";
+          break;
+      }
+      if (aVal < bVal) return sortDirection === "asc" ? -1 : 1;
+      if (aVal > bVal) return sortDirection === "asc" ? 1 : -1;
+      return 0;
+    });
+    return sorted;
+  }, [filteredUsers, sortColumn, sortDirection]);
 
   const getResourceName = (resourceId: string | null) => {
     if (!resourceId) return null;
@@ -327,6 +458,24 @@ export default function UserManagementPage() {
   const getAvailableResourcesForTeam = (teamId: string) => {
     const memberResourceIds = getTeamMembers(teamId).map(m => m.resourceId);
     return resources.filter(r => !memberResourceIds.includes(r.id));
+  };
+
+  const SortHeader = ({ column, label }: { column: SortColumn; label: string }) => {
+    const isActive = sortColumn === column;
+    return (
+      <button
+        className="flex items-center gap-1 hover:text-foreground transition-colors"
+        onClick={() => handleSort(column)}
+        data-testid={`sort-${column}`}
+      >
+        {label}
+        {isActive ? (
+          sortDirection === "asc" ? <ArrowUp className="h-3.5 w-3.5" /> : <ArrowDown className="h-3.5 w-3.5" />
+        ) : (
+          <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />
+        )}
+      </button>
+    );
   };
 
   const activeCount = users.filter(u => u.isActive !== false).length;
@@ -412,7 +561,7 @@ export default function UserManagementPage() {
         <TabsContent value="users" className="space-y-4 mt-4">
           <Card>
             <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
                 <CardTitle className="text-lg">Användare</CardTitle>
                 <div className="flex items-center gap-3">
                   <div className="relative w-64">
@@ -433,11 +582,50 @@ export default function UserManagementPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {selectedIds.size > 0 && (
+                <div className="flex items-center gap-3 flex-wrap mb-4 p-3 rounded-md bg-muted/50 border" data-testid="bulk-action-bar">
+                  <span className="text-sm font-medium">{selectedIds.size} markerade</span>
+                  <Select
+                    onValueChange={(role) => {
+                      bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), updates: { role } });
+                    }}
+                  >
+                    <SelectTrigger className="w-40" data-testid="bulk-change-role">
+                      <SelectValue placeholder="Ändra roll" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="planner">Planerare</SelectItem>
+                      <SelectItem value="technician">Tekniker</SelectItem>
+                      <SelectItem value="user">Användare</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), updates: { isActive: true } })}
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="bulk-activate"
+                  >
+                    Aktivera
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => bulkUpdateMutation.mutate({ ids: Array.from(selectedIds), updates: { isActive: false } })}
+                    disabled={bulkUpdateMutation.isPending}
+                    data-testid="bulk-deactivate"
+                  >
+                    Inaktivera
+                  </Button>
+                  {bulkUpdateMutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                </div>
+              )}
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 className="h-6 w-6 animate-spin" />
                 </div>
-              ) : filteredUsers.length === 0 ? (
+              ) : sortedUsers.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   {search ? "Inga användare matchade sökningen" : "Inga användare ännu. Klicka på 'Ny användare' för att skapa den första."}
                 </div>
@@ -445,29 +633,55 @@ export default function UserManagementPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Namn</TableHead>
-                      <TableHead>E-post</TableHead>
-                      <TableHead>Roll</TableHead>
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={selectedIds.size === sortedUsers.length && sortedUsers.length > 0}
+                          onCheckedChange={toggleSelectAll}
+                          data-testid="checkbox-select-all"
+                        />
+                      </TableHead>
+                      <TableHead><SortHeader column="name" label="Namn" /></TableHead>
+                      <TableHead><SortHeader column="email" label="E-post" /></TableHead>
+                      <TableHead><SortHeader column="role" label="Roll" /></TableHead>
                       <TableHead>Kopplad resurs</TableHead>
                       <TableHead>Team</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead><SortHeader column="status" label="Status" /></TableHead>
+                      <TableHead><SortHeader column="lastLogin" label="Senaste inloggning" /></TableHead>
                       <TableHead className="text-right">Åtgärder</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredUsers.map(user => {
+                    {sortedUsers.map(user => {
                       const roleConfig = ROLE_CONFIG[user.role || "user"] || ROLE_CONFIG.user;
                       const RoleIcon = roleConfig.icon;
                       const resourceName = getResourceName(user.resourceId);
                       const userTeams = user.resourceId
                         ? teams.filter(t => getTeamMembers(t.id).some(m => m.resourceId === user.resourceId))
                         : [];
+                      const initials = getUserInitials(user.firstName, user.lastName);
                       return (
                         <TableRow key={user.id} data-testid={`row-user-${user.id}`}>
+                          <TableCell>
+                            <Checkbox
+                              checked={selectedIds.has(user.id)}
+                              onCheckedChange={() => toggleSelect(user.id)}
+                              data-testid={`checkbox-user-${user.id}`}
+                            />
+                          </TableCell>
                           <TableCell className="font-medium">
-                            {user.firstName || user.lastName
-                              ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
-                              : "-"}
+                            <div className="flex items-center gap-2.5">
+                              <div
+                                className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold text-white shrink-0 ${roleConfig.avatarBg}`}
+                                data-testid={`avatar-user-${user.id}`}
+                              >
+                                {initials}
+                              </div>
+                              <span>
+                                {user.firstName || user.lastName
+                                  ? `${user.firstName || ""} ${user.lastName || ""}`.trim()
+                                  : "-"}
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5">
@@ -476,16 +690,71 @@ export default function UserManagementPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={`${roleConfig.color} gap-1`}>
-                              <RoleIcon className="h-3 w-3" />
-                              {roleConfig.label}
-                            </Badge>
+                            {inlineEditingRole === user.id ? (
+                              <Select
+                                defaultValue={user.role || "user"}
+                                onValueChange={(newRole) => {
+                                  inlineUpdateMutation.mutate({ id: user.id, data: { role: newRole } });
+                                }}
+                              >
+                                <SelectTrigger className="w-36" data-testid={`inline-role-select-${user.id}`}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="admin">Admin</SelectItem>
+                                  <SelectItem value="planner">Planerare</SelectItem>
+                                  <SelectItem value="technician">Tekniker</SelectItem>
+                                  <SelectItem value="user">Användare</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className={`${roleConfig.color} gap-1 cursor-pointer`}
+                                onClick={() => setInlineEditingRole(user.id)}
+                                data-testid={`badge-role-${user.id}`}
+                              >
+                                <RoleIcon className="h-3 w-3" />
+                                {roleConfig.label}
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell>
-                            {resourceName ? (
-                              <Badge variant="secondary" className="text-xs">{resourceName}</Badge>
+                            {inlineEditingResource === user.id ? (
+                              <Select
+                                defaultValue={user.resourceId || "none"}
+                                onValueChange={(v) => {
+                                  const newResourceId = v === "none" ? null : v;
+                                  inlineUpdateMutation.mutate({ id: user.id, data: { resourceId: newResourceId } });
+                                }}
+                              >
+                                <SelectTrigger className="w-40" data-testid={`inline-resource-select-${user.id}`}>
+                                  <SelectValue placeholder="Ingen" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">Ingen</SelectItem>
+                                  {resources.map(r => (
+                                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            ) : resourceName ? (
+                              <Badge
+                                variant="secondary"
+                                className="text-xs cursor-pointer"
+                                onClick={() => setInlineEditingResource(user.id)}
+                                data-testid={`badge-resource-${user.id}`}
+                              >
+                                {resourceName}
+                              </Badge>
                             ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
+                              <button
+                                className="text-sm text-primary hover:underline cursor-pointer"
+                                onClick={() => setInlineEditingResource(user.id)}
+                                data-testid={`link-assign-resource-${user.id}`}
+                              >
+                                Koppla resurs
+                              </button>
                             )}
                           </TableCell>
                           <TableCell>
@@ -510,6 +779,14 @@ export default function UserManagementPage() {
                             >
                               {user.isActive !== false ? "Aktiv" : "Inaktiv"}
                             </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                              <Clock className="h-3.5 w-3.5" />
+                              <span data-testid={`text-last-login-${user.id}`} title={user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString("sv-SE") : undefined}>
+                                {formatRelativeTime(user.lastLoginAt)}
+                              </span>
+                            </div>
                           </TableCell>
                           <TableCell className="text-right">
                             <div className="flex justify-end gap-1">
