@@ -519,6 +519,58 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/objects/geocoded", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const allObjects = await storage.getObjects(tenantId);
+      const geocoded = allObjects.filter(o => o.latitude && o.longitude);
+
+      const { city, clusterId, limit } = req.body || {};
+      let matched = geocoded;
+      if (city) {
+        matched = matched.filter(o => (o.city || "").toLowerCase() === city.toLowerCase());
+      }
+      if (clusterId) {
+        matched = matched.filter(o => o.clusterId === clusterId);
+      }
+      const maxResults = Math.min(typeof limit === "number" ? limit : 500, 2000);
+      const filtered = maxResults > 0 ? matched.slice(0, maxResults) : [];
+
+      const cityMap = new Map<string, number>();
+      for (const obj of geocoded) {
+        const c = obj.city || "(ingen stad)";
+        cityMap.set(c, (cityMap.get(c) || 0) + 1);
+      }
+      const byCity = Array.from(cityMap.entries())
+        .map(([c, count]) => ({ city: c, count }))
+        .sort((a, b) => b.count - a.count);
+
+      const withEntrance = matched.filter(o => o.entranceLatitude && o.entranceLongitude).length;
+
+      res.json({
+        totalGeocoded: geocoded.length,
+        filteredCount: matched.length,
+        withEntrance,
+        byCity,
+        objects: filtered.map(o => ({
+          id: o.id,
+          name: o.name,
+          address: o.address,
+          city: o.city,
+          postalCode: o.postalCode,
+          latitude: o.latitude,
+          longitude: o.longitude,
+          entranceLatitude: o.entranceLatitude,
+          entranceLongitude: o.entranceLongitude,
+          objectType: o.objectType,
+        })),
+      });
+    } catch (error) {
+      console.error("Failed to get geocoded objects:", error);
+      res.status(500).json({ error: "Failed to get geocoded objects" });
+    }
+  });
+
   app.post("/api/objects/batch-geocode/preview", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

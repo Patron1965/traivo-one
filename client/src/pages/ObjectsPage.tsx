@@ -120,6 +120,82 @@ function BatchGeoMapFitter({ objects }: { objects: ServiceObject[] }) {
   return null;
 }
 
+function GeocodedObjectsMap({ objects }: { objects: Array<{ id: string; name: string; address?: string | null; latitude?: number | null; longitude?: number | null; entranceLatitude?: number | null; entranceLongitude?: number | null }> }) {
+  const validObjects = objects.filter(o => o.latitude && o.longitude);
+  if (validObjects.length === 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1">
+          <div style={{ background: "#3b82f6", borderRadius: "50%", width: 10, height: 10, border: "1px solid white" }} />
+          Koordinater ({validObjects.length})
+        </div>
+        <div className="flex items-center gap-1">
+          <div style={{ background: "#22c55e", borderRadius: "3px", width: 10, height: 10, border: "1px solid white" }} />
+          Entrékoordinater ({validObjects.filter(o => o.entranceLatitude).length})
+        </div>
+      </div>
+      <div className="rounded-lg overflow-hidden border" style={{ height: "420px" }}>
+        <MapContainer
+          center={[62.39, 17.31]}
+          zoom={12}
+          style={{ height: "100%", width: "100%" }}
+        >
+          <TileLayer
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          />
+          <BatchGeoMapFitter objects={validObjects as any} />
+          {validObjects.map((obj) => (
+            <Fragment key={obj.id}>
+              <Marker
+                position={[obj.latitude!, obj.longitude!]}
+                icon={L.divIcon({
+                  className: "batch-geo-marker",
+                  html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:12px;height:12px;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
+                  iconSize: [12, 12],
+                  iconAnchor: [6, 6],
+                })}
+              >
+                <Popup>
+                  <div className="text-sm">
+                    <div className="font-medium">{obj.name}</div>
+                    {obj.address && <div className="text-muted-foreground">{obj.address}</div>}
+                    {obj.entranceLatitude && (
+                      <div className="text-green-600 text-xs mt-1 flex items-center gap-1">
+                        <DoorOpen className="h-3 w-3" /> Entrékoordinater
+                      </div>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+              {obj.entranceLatitude && obj.entranceLongitude && (
+                <Marker
+                  position={[obj.entranceLatitude, obj.entranceLongitude]}
+                  icon={L.divIcon({
+                    className: "batch-geo-entrance-marker",
+                    html: `<div style="background:#22c55e;color:white;border-radius:4px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg></div>`,
+                    iconSize: [14, 14],
+                    iconAnchor: [7, 7],
+                  })}
+                >
+                  <Popup>
+                    <div className="text-sm">
+                      <div className="font-medium text-green-600">Entré: {obj.name}</div>
+                      {obj.address && <div className="text-muted-foreground">{obj.address}</div>}
+                    </div>
+                  </Popup>
+                </Marker>
+              )}
+            </Fragment>
+          ))}
+        </MapContainer>
+      </div>
+    </div>
+  );
+}
+
 const PAGE_SIZE = 100;
 
 export default function ObjectsPage() {
@@ -155,6 +231,21 @@ export default function ObjectsPage() {
   const [batchGeoResult, setBatchGeoResult] = useState<{ total: number; geocoded: number; updated: number; updatedIds?: string[] } | null>(null);
   const [batchGeoMapObjects, setBatchGeoMapObjects] = useState<ServiceObject[]>([]);
   const [batchGeoShowMap, setBatchGeoShowMap] = useState(false);
+  const [batchGeoTab, setBatchGeoTab] = useState<string>("geocode");
+  const [exploreCity, setExploreCity] = useState("");
+  const [exploreLoading, setExploreLoading] = useState(false);
+  const [exploreData, setExploreData] = useState<{
+    totalGeocoded: number;
+    filteredCount: number;
+    withEntrance: number;
+    byCity: { city: string; count: number }[];
+    objects: Array<{
+      id: string; name: string; address: string; city: string; postalCode: string;
+      latitude: number; longitude: number;
+      entranceLatitude: number | null; entranceLongitude: number | null;
+      objectType: string;
+    }>;
+  } | null>(null);
   const [newObject, setNewObject] = useState({
     name: "",
     objectType: "fastighet",
@@ -1293,284 +1384,359 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
       </Dialog>
 
       <Dialog open={batchGeoOpen} onOpenChange={(v) => { if (!batchGeoRunning) { setBatchGeoOpen(v); setBatchGeoShowMap(false); } }}>
-        <DialogContent className={batchGeoShowMap ? "max-w-5xl" : "max-w-2xl"}>
+        <DialogContent className={(batchGeoShowMap || (exploreData?.objects?.length ?? 0) > 0) ? "max-w-5xl max-h-[90vh] overflow-y-auto" : "max-w-2xl"}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5" />
-              Batch-geocodning
+              Geocodning & kartvy
             </DialogTitle>
             <DialogDescription>
-              Hämta entrékoordinater och adressbeskrivningar för objekt via Google Geocoding. Kostnad: $0.005 per objekt.
+              Geocoda nya objekt eller utforska redan geocodade objekt på kartan.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            {batchGeoPreview && !batchGeoPreview.googleAvailable && (
-              <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
-                <AlertTriangle className="h-4 w-4 shrink-0" />
-                Google Geocoding API-nyckel saknas. Kontrollera att GOOGLE_GEOCODING_API_KEY är konfigurerad.
-              </div>
-            )}
 
-            {!batchGeoResult && (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Filtrera per stad</Label>
-                    <Select value={batchGeoCity || "all"} onValueChange={(v) => setBatchGeoCity(v === "all" ? "" : v)}>
-                      <SelectTrigger data-testid="select-batch-geo-city">
-                        <SelectValue placeholder="Alla städer" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Alla städer</SelectItem>
-                        {batchGeoPreview?.byCity.map(({ city, count }) => (
-                          <SelectItem key={city} value={city}>{city} ({count} st)</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Filtrera per kluster</Label>
-                    <Select value={batchGeoCluster || "all"} onValueChange={(v) => setBatchGeoCluster(v === "all" ? "" : v)}>
-                      <SelectTrigger data-testid="select-batch-geo-cluster">
-                        <SelectValue placeholder="Alla kluster" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Alla kluster</SelectItem>
-                        {batchGeoPreview?.byCluster.map(({ clusterId, clusterName, count }) => (
-                          <SelectItem key={clusterId} value={clusterId}>{clusterName} ({count} st)</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+          <Tabs value={batchGeoTab} onValueChange={(v) => {
+            setBatchGeoTab(v);
+            if (v === "explore" && !exploreData) {
+              setExploreLoading(true);
+              fetch("/api/objects/geocoded", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                credentials: "include",
+                body: JSON.stringify({ limit: 0 }),
+              }).then(r => r.ok ? r.json() : null).then(data => {
+                if (data) setExploreData({ ...data, objects: [] });
+              }).finally(() => setExploreLoading(false));
+            }
+          }}>
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="geocode" data-testid="tab-batch-geocode">
+                <Globe className="h-4 w-4 mr-2" />
+                Geocoda
+              </TabsTrigger>
+              <TabsTrigger value="explore" data-testid="tab-explore-geocoded">
+                <MapIcon className="h-4 w-4 mr-2" />
+                Utforska geocodade
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="geocode" className="space-y-4 mt-4">
+              {batchGeoPreview && !batchGeoPreview.googleAvailable && (
+                <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  Google Geocoding API-nyckel saknas. Kontrollera att GOOGLE_GEOCODING_API_KEY är konfigurerad.
                 </div>
+              )}
 
-                <div>
-                  <Label>Max antal objekt per körning: {batchGeoLimit}</Label>
-                  <Slider
-                    value={[batchGeoLimit]}
-                    onValueChange={([v]) => setBatchGeoLimit(v)}
-                    min={10}
-                    max={5000}
-                    step={10}
-                    className="mt-2"
-                    data-testid="slider-batch-geo-limit"
-                  />
-                  <div className="flex justify-between text-xs text-muted-foreground mt-1">
-                    <span>10</span>
-                    <span>5 000</span>
+              {!batchGeoResult && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label>Filtrera per stad</Label>
+                      <Select value={batchGeoCity || "all"} onValueChange={(v) => setBatchGeoCity(v === "all" ? "" : v)}>
+                        <SelectTrigger data-testid="select-batch-geo-city">
+                          <SelectValue placeholder="Alla städer" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Alla städer</SelectItem>
+                          {batchGeoPreview?.byCity.map(({ city, count }) => (
+                            <SelectItem key={city} value={city}>{city} ({count} st)</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label>Filtrera per kluster</Label>
+                      <Select value={batchGeoCluster || "all"} onValueChange={(v) => setBatchGeoCluster(v === "all" ? "" : v)}>
+                        <SelectTrigger data-testid="select-batch-geo-cluster">
+                          <SelectValue placeholder="Alla kluster" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">Alla kluster</SelectItem>
+                          {batchGeoPreview?.byCluster.map(({ clusterId, clusterName, count }) => (
+                            <SelectItem key={clusterId} value={clusterId}>{clusterName} ({count} st)</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
                   </div>
-                </div>
 
-                {batchGeoPreview && (
-                  <Card>
-                    <CardContent className="pt-4 space-y-3">
-                      <div className="grid grid-cols-3 gap-4 text-center">
-                        <div>
-                          <div className="text-2xl font-bold" data-testid="text-batch-geo-total">{batchGeoPreview.totalNeedsGeo.toLocaleString("sv-SE")}</div>
-                          <div className="text-xs text-muted-foreground">Totalt utan entrékoord.</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-primary" data-testid="text-batch-geo-filtered">{batchGeoPreview.filteredCount.toLocaleString("sv-SE")}</div>
-                          <div className="text-xs text-muted-foreground">Matchas av filter</div>
-                        </div>
-                        <div>
-                          <div className="text-2xl font-bold text-orange-500" data-testid="text-batch-geo-cost">${batchGeoPreview.estimatedCost.toFixed(2)}</div>
-                          <div className="text-xs text-muted-foreground">Uppskattad kostnad</div>
-                        </div>
-                      </div>
+                  <div>
+                    <Label>Max antal objekt per körning: {batchGeoLimit}</Label>
+                    <Slider
+                      value={[batchGeoLimit]}
+                      onValueChange={([v]) => setBatchGeoLimit(v)}
+                      min={10}
+                      max={5000}
+                      step={10}
+                      className="mt-2"
+                      data-testid="slider-batch-geo-limit"
+                    />
+                    <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                      <span>10</span>
+                      <span>5 000</span>
+                    </div>
+                  </div>
 
-                      {batchGeoPreview.byCity.length > 0 && (
-                        <div>
-                          <div className="text-sm font-medium mb-2">Nedbrytning per stad (topp 10)</div>
-                          <div className="grid grid-cols-2 gap-1 text-sm">
-                            {batchGeoPreview.byCity.slice(0, 10).map(({ city, count }) => (
-                              <div key={city} className="flex justify-between px-2 py-1 rounded bg-muted/50">
-                                <span className="truncate">{city}</span>
-                                <span className="font-medium ml-2">{count.toLocaleString("sv-SE")}</span>
-                              </div>
-                            ))}
+                  {batchGeoPreview && (
+                    <Card>
+                      <CardContent className="pt-4 space-y-3">
+                        <div className="grid grid-cols-3 gap-4 text-center">
+                          <div>
+                            <div className="text-2xl font-bold" data-testid="text-batch-geo-total">{batchGeoPreview.totalNeedsGeo.toLocaleString("sv-SE")}</div>
+                            <div className="text-xs text-muted-foreground">Totalt utan entrékoord.</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-primary" data-testid="text-batch-geo-filtered">{batchGeoPreview.filteredCount.toLocaleString("sv-SE")}</div>
+                            <div className="text-xs text-muted-foreground">Matchas av filter</div>
+                          </div>
+                          <div>
+                            <div className="text-2xl font-bold text-orange-500" data-testid="text-batch-geo-cost">${batchGeoPreview.estimatedCost.toFixed(2)}</div>
+                            <div className="text-xs text-muted-foreground">Uppskattad kostnad</div>
                           </div>
                         </div>
-                      )}
+
+                        {batchGeoPreview.byCity.length > 0 && (
+                          <div>
+                            <div className="text-sm font-medium mb-2">Nedbrytning per stad (topp 10)</div>
+                            <div className="grid grid-cols-2 gap-1 text-sm">
+                              {batchGeoPreview.byCity.slice(0, 10).map(({ city, count }) => (
+                                <div key={city} className="flex justify-between px-2 py-1 rounded bg-muted/50">
+                                  <span className="truncate">{city}</span>
+                                  <span className="font-medium ml-2">{count.toLocaleString("sv-SE")}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setBatchGeoOpen(false)} data-testid="button-batch-geo-close">
+                      Avbryt
+                    </Button>
+                    <Button
+                      onClick={async () => {
+                        setBatchGeoRunning(true);
+                        setBatchGeoResult(null);
+                        try {
+                          const body: any = {};
+                          if (batchGeoCity) body.city = batchGeoCity;
+                          if (batchGeoCluster) body.clusterId = batchGeoCluster;
+                          if (batchGeoLimit > 0) body.limit = batchGeoLimit;
+                          const res = await fetch("/api/objects/batch-geocode", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            credentials: "include",
+                            body: JSON.stringify(body),
+                          });
+                          if (!res.ok) throw new Error("Batch geocode failed");
+                          const result = await res.json();
+                          setBatchGeoResult(result);
+                          setBatchGeoShowMap(false);
+                          setBatchGeoMapObjects([]);
+                          queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+                          toast({ title: `${result.updated} objekt uppdaterade med entrékoordinater` });
+                          if (result.updatedIds?.length > 0) {
+                            try {
+                              const objRes = await fetch("/api/objects/by-ids", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                credentials: "include",
+                                body: JSON.stringify({ ids: result.updatedIds }),
+                              });
+                              if (objRes.ok) {
+                                const objs = await objRes.json();
+                                setBatchGeoMapObjects(objs);
+                              }
+                            } catch {}
+                          }
+                        } catch (error) {
+                          toast({ title: "Batch-geocodning misslyckades", variant: "destructive" });
+                        } finally {
+                          setBatchGeoRunning(false);
+                        }
+                      }}
+                      disabled={batchGeoRunning || !batchGeoPreview?.googleAvailable || batchGeoPreview?.filteredCount === 0}
+                      data-testid="button-start-batch-geocode"
+                    >
+                      {batchGeoRunning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Globe className="h-4 w-4 mr-2" />}
+                      Starta geocodning ({batchGeoPreview?.filteredCount || 0} objekt)
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              {batchGeoRunning && (
+                <div className="space-y-3 py-4">
+                  <div className="flex items-center gap-2 text-sm">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Geocodning pågår...
+                  </div>
+                  <Progress value={undefined} className="h-2" />
+                  <p className="text-xs text-muted-foreground">
+                    Detta kan ta en stund beroende på antal objekt. Stäng inte dialogen.
+                  </p>
+                </div>
+              )}
+
+              {batchGeoResult && !batchGeoRunning && (
+                <div className="space-y-4">
+                  <Card>
+                    <CardContent className="pt-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <Check className="h-5 w-5 text-green-500" />
+                          <span className="font-medium">Batch-geocodning klar</span>
+                        </div>
+                        {batchGeoMapObjects.length > 0 && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setBatchGeoShowMap(!batchGeoShowMap)}
+                            data-testid="button-toggle-batch-geo-map"
+                          >
+                            <MapIcon className="h-4 w-4 mr-2" />
+                            {batchGeoShowMap ? "Dölj karta" : "Visa på karta"}
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-3 gap-4 text-center">
+                        <div>
+                          <div className="text-2xl font-bold">{batchGeoResult.total}</div>
+                          <div className="text-xs text-muted-foreground">Skickade</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-green-500">{batchGeoResult.geocoded}</div>
+                          <div className="text-xs text-muted-foreground">Geocodade</div>
+                        </div>
+                        <div>
+                          <div className="text-2xl font-bold text-blue-500">{batchGeoResult.updated}</div>
+                          <div className="text-xs text-muted-foreground">Uppdaterade</div>
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-3">
+                        Kostnad: ${(batchGeoResult.total * 0.005).toFixed(2)}
+                      </p>
                     </CardContent>
                   </Card>
-                )}
-              </>
-            )}
 
-            {batchGeoRunning && (
-              <div className="space-y-3 py-4">
-                <div className="flex items-center gap-2 text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Geocodning pågår...
-                </div>
-                <Progress value={undefined} className="h-2" />
-                <p className="text-xs text-muted-foreground">
-                  Detta kan ta en stund beroende på antal objekt. Stäng inte dialogen.
-                </p>
-              </div>
-            )}
+                  {batchGeoShowMap && batchGeoMapObjects.length > 0 && (
+                    <GeocodedObjectsMap objects={batchGeoMapObjects} />
+                  )}
 
-            {batchGeoResult && !batchGeoRunning && (
-              <div className="space-y-4">
-                <Card>
-                  <CardContent className="pt-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center gap-2">
-                        <Check className="h-5 w-5 text-green-500" />
-                        <span className="font-medium">Batch-geocodning klar</span>
-                      </div>
-                      {batchGeoMapObjects.length > 0 && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setBatchGeoShowMap(!batchGeoShowMap)}
-                          data-testid="button-toggle-batch-geo-map"
-                        >
-                          <MapIcon className="h-4 w-4 mr-2" />
-                          {batchGeoShowMap ? "Dölj karta" : "Visa på karta"}
-                        </Button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-center">
-                      <div>
-                        <div className="text-2xl font-bold">{batchGeoResult.total}</div>
-                        <div className="text-xs text-muted-foreground">Skickade</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-green-500">{batchGeoResult.geocoded}</div>
-                        <div className="text-xs text-muted-foreground">Geocodade</div>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-blue-500">{batchGeoResult.updated}</div>
-                        <div className="text-xs text-muted-foreground">Uppdaterade</div>
-                      </div>
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-3">
-                      Kostnad: ${(batchGeoResult.total * 0.005).toFixed(2)}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                {batchGeoShowMap && batchGeoMapObjects.length > 0 && (
-                  <div className="rounded-lg overflow-hidden border" style={{ height: "400px" }}>
-                    <MapContainer
-                      center={[62.39, 17.31]}
-                      zoom={12}
-                      style={{ height: "100%", width: "100%" }}
-                    >
-                      <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      />
-                      <BatchGeoMapFitter objects={batchGeoMapObjects} />
-                      {batchGeoMapObjects.map((obj) => {
-                        if (!obj.latitude || !obj.longitude) return null;
-                        return (
-                          <Fragment key={obj.id}>
-                            <Marker
-                              position={[obj.latitude, obj.longitude]}
-                              icon={L.divIcon({
-                                className: "batch-geo-marker",
-                                html: `<div style="background:#3b82f6;color:white;border-radius:50%;width:12px;height:12px;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>`,
-                                iconSize: [12, 12],
-                                iconAnchor: [6, 6],
-                              })}
-                            >
-                              <Popup>
-                                <div className="text-sm">
-                                  <div className="font-medium">{obj.name}</div>
-                                  <div className="text-muted-foreground">{obj.address}</div>
-                                  {obj.entranceLatitude && (
-                                    <div className="text-green-600 text-xs mt-1 flex items-center gap-1">
-                                      <DoorOpen className="h-3 w-3" /> Entrékoordinater
-                                    </div>
-                                  )}
-                                </div>
-                              </Popup>
-                            </Marker>
-                            {obj.entranceLatitude && obj.entranceLongitude && (
-                              <Marker
-                                position={[obj.entranceLatitude, obj.entranceLongitude]}
-                                icon={L.divIcon({
-                                  className: "batch-geo-entrance-marker",
-                                  html: `<div style="background:#22c55e;color:white;border-radius:4px;width:14px;height:14px;display:flex;align-items:center;justify-content:center;border:2px solid white;box-shadow:0 1px 3px rgba(0,0,0,0.3);"><svg xmlns="http://www.w3.org/2000/svg" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 4h3a2 2 0 0 1 2 2v14"/><path d="M2 20h3"/><path d="M13 20h9"/><path d="M10 12v.01"/><path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 1.515-1.94l4-1A2 2 0 0 1 13 4.561Z"/></svg></div>`,
-                                  iconSize: [14, 14],
-                                  iconAnchor: [7, 7],
-                                })}
-                              >
-                                <Popup>
-                                  <div className="text-sm">
-                                    <div className="font-medium text-green-600">Entré: {obj.name}</div>
-                                    <div className="text-muted-foreground">{obj.address}</div>
-                                  </div>
-                                </Popup>
-                              </Marker>
-                            )}
-                          </Fragment>
-                        );
-                      })}
-                    </MapContainer>
+                  <div className="flex justify-end">
+                    <Button variant="outline" onClick={() => { setBatchGeoResult(null); setBatchGeoShowMap(false); setBatchGeoMapObjects([]); }} data-testid="button-batch-geo-new-run">
+                      Ny körning
+                    </Button>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBatchGeoOpen(false)} disabled={batchGeoRunning} data-testid="button-batch-geo-close">
-              {batchGeoResult ? "Stäng" : "Avbryt"}
-            </Button>
-            {!batchGeoResult && (
-              <Button
-                onClick={async () => {
-                  setBatchGeoRunning(true);
-                  setBatchGeoResult(null);
-                  try {
-                    const body: any = {};
-                    if (batchGeoCity) body.city = batchGeoCity;
-                    if (batchGeoCluster) body.clusterId = batchGeoCluster;
-                    if (batchGeoLimit > 0) body.limit = batchGeoLimit;
-                    const res = await fetch("/api/objects/batch-geocode", {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      credentials: "include",
-                      body: JSON.stringify(body),
-                    });
-                    if (!res.ok) throw new Error("Batch geocode failed");
-                    const result = await res.json();
-                    setBatchGeoResult(result);
-                    setBatchGeoShowMap(false);
-                    setBatchGeoMapObjects([]);
-                    queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
-                    toast({ title: `${result.updated} objekt uppdaterade med entrékoordinater` });
-                    if (result.updatedIds?.length > 0) {
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="explore" className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Välj stad</Label>
+                  <Select
+                    value={exploreCity || "all"}
+                    onValueChange={async (v) => {
+                      const city = v === "all" ? "" : v;
+                      setExploreCity(city);
+                      setExploreLoading(true);
                       try {
-                        const objRes = await fetch("/api/objects/by-ids", {
+                        const res = await fetch("/api/objects/geocoded", {
                           method: "POST",
                           headers: { "Content-Type": "application/json" },
                           credentials: "include",
-                          body: JSON.stringify({ ids: result.updatedIds }),
+                          body: JSON.stringify({ city: city || undefined, limit: 1000 }),
                         });
-                        if (objRes.ok) {
-                          const objs = await objRes.json();
-                          setBatchGeoMapObjects(objs);
+                        if (res.ok) {
+                          setExploreData(await res.json());
                         }
-                      } catch {}
-                    }
-                  } catch (error) {
-                    toast({ title: "Batch-geocodning misslyckades", variant: "destructive" });
-                  } finally {
-                    setBatchGeoRunning(false);
-                  }
-                }}
-                disabled={batchGeoRunning || !batchGeoPreview?.googleAvailable || batchGeoPreview?.filteredCount === 0}
-                data-testid="button-start-batch-geocode"
-              >
-                {batchGeoRunning ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Globe className="h-4 w-4 mr-2" />}
-                Starta geocodning ({batchGeoPreview?.filteredCount || 0} objekt)
-              </Button>
-            )}
-          </DialogFooter>
+                      } catch {} finally {
+                        setExploreLoading(false);
+                      }
+                    }}
+                    data-testid="select-explore-city"
+                  >
+                    <SelectTrigger data-testid="select-explore-city-trigger">
+                      <SelectValue placeholder="Välj stad..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Alla städer</SelectItem>
+                      {(exploreData?.byCity || []).map(({ city, count }) => (
+                        <SelectItem key={city} value={city}>{city} ({count} st)</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    onClick={async () => {
+                      setExploreLoading(true);
+                      try {
+                        const res = await fetch("/api/objects/geocoded", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          credentials: "include",
+                          body: JSON.stringify({ city: exploreCity || undefined, limit: 1000 }),
+                        });
+                        if (res.ok) {
+                          setExploreData(await res.json());
+                        }
+                      } catch {} finally {
+                        setExploreLoading(false);
+                      }
+                    }}
+                    disabled={exploreLoading}
+                    data-testid="button-load-geocoded"
+                  >
+                    {exploreLoading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <MapIcon className="h-4 w-4 mr-2" />}
+                    Visa på karta
+                  </Button>
+                </div>
+              </div>
+
+              {exploreData && (
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="grid grid-cols-3 gap-4 text-center">
+                      <div>
+                        <div className="text-2xl font-bold" data-testid="text-explore-total">{exploreData.totalGeocoded.toLocaleString("sv-SE")}</div>
+                        <div className="text-xs text-muted-foreground">Totalt geocodade</div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-blue-500" data-testid="text-explore-filtered">
+                          {exploreData.objects.length > 0 ? exploreData.objects.length.toLocaleString("sv-SE") : exploreData.filteredCount.toLocaleString("sv-SE")}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {exploreData.objects.length > 0 ? "Visar på karta" : `Matchade${exploreCity ? ` i ${exploreCity}` : ""}`}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-2xl font-bold text-green-500" data-testid="text-explore-entrance">{exploreData.withEntrance.toLocaleString("sv-SE")}</div>
+                        <div className="text-xs text-muted-foreground">Med entrékoord.</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {exploreData && exploreData.objects.length > 0 && (
+                <GeocodedObjectsMap objects={exploreData.objects as any} />
+              )}
+
+              {exploreData && exploreData.objects.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <MapIcon className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                  <p>Inga geocodade objekt hittades{exploreCity ? ` i ${exploreCity}` : ""}.</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </DialogContent>
       </Dialog>
 
