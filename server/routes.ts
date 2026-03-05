@@ -6184,9 +6184,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       if (!Array.isArray(objectIds) || objectIds.length === 0) {
         return res.status(400).json({ error: "Missing objectIds" });
       }
-      const allObjects = await storage.getObjectsByTenant(tenantId);
-      const idSet = new Set(objectIds);
-      const objects = allObjects.filter(o => idSet.has(o.id));
+      const objects = await storage.getObjectsByIds(tenantId, objectIds);
 
       const BOM = "\uFEFF";
       const header = ["Id", "Objektnummer", "Namn", "Adress", "Postnummer", "Stad", "Latitude", "Longitude"];
@@ -6221,13 +6219,12 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         return res.status(400).json({ error: "Missing corrections" });
       }
 
-      const allObjects = await storage.getObjectsByTenant(tenantId);
-      const objectMap = new Map(allObjects.map(o => [o.id, o]));
+      const correctionIds = corrections.map(c => c.id);
+      const existingObjects = await storage.getObjectsByIds(tenantId, correctionIds);
+      const tenantObjectIds = new Set(existingObjects.map(o => o.id));
 
       let updated = 0;
       const errors: string[] = [];
-
-      const tenantObjectIds = new Set(allObjects.map(o => o.id));
 
       for (const c of corrections) {
         if (!tenantObjectIds.has(c.id)) {
