@@ -462,7 +462,10 @@ export default function ObjectsPage() {
           
           <div className="flex-1 min-w-0" onClick={() => hasChildren && toggleExpand(obj.id)}>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium">{obj.name}</span>
+              <span className="font-medium">{obj.name && obj.name !== "0" ? obj.name : obj.objectNumber || obj.name}</span>
+              {obj.objectNumber && obj.name && obj.name !== "0" && (
+                <span className="text-xs text-muted-foreground font-mono">{obj.objectNumber}</span>
+              )}
               {obj.hierarchyLevel && hierarchyLevelLabels[obj.hierarchyLevel] && (
                 <Badge className={`text-xs ${hierarchyLevelLabels[obj.hierarchyLevel].color}`}>
                   {hierarchyLevelLabels[obj.hierarchyLevel].label}
@@ -519,10 +522,10 @@ export default function ObjectsPage() {
                   <TooltipContent>Stad saknas</TooltipContent>
                 </Tooltip>
               )}
-              {level === 0 && (
+              {level === 0 && customerName && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <span className="flex items-center gap-1 cursor-help">
+                    <span className="flex items-center gap-1 cursor-help text-foreground/70">
                       <Building2 className="h-3 w-3" />
                       {customerName}
                     </span>
@@ -557,8 +560,14 @@ export default function ObjectsPage() {
                 />
               ) : (
                 <>
-                  <div className="text-sm font-medium">{obj.avgSetupTime || 0} min</div>
-                  <div className="text-xs text-muted-foreground">ställtid</div>
+                  {(obj.avgSetupTime || 0) > 0 ? (
+                    <>
+                      <div className="text-sm font-medium">{obj.avgSetupTime} min</div>
+                      <div className="text-xs text-muted-foreground">ställtid</div>
+                    </>
+                  ) : (
+                    <div className="text-xs text-muted-foreground/50">0 min</div>
+                  )}
                 </>
               )}
             </div>
