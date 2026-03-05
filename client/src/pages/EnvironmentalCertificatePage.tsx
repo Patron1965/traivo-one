@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Download, Leaf, Factory, Droplets, Truck, FileText, Award, TrendingDown, Recycle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import { format } from "date-fns";
@@ -218,14 +219,21 @@ export default function EnvironmentalCertificatePage() {
   };
 
   return (
-    <div className="container mx-auto py-6 space-y-6">
+    <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold flex items-center gap-2">
             <Leaf className="h-6 w-6 text-green-600" />
             Miljöcertifikat
           </h1>
-          <p className="text-muted-foreground">Generera årliga hållbarhetsrapporter per kund</p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-sm text-muted-foreground">Generera årliga hållbarhetsrapporter per kund</span>
+            {customers && customers.length > 0 && (
+              <Badge variant="secondary" className="text-xs font-normal">
+                {customers.length} kunder
+              </Badge>
+            )}
+          </div>
         </div>
       </div>
 
@@ -266,14 +274,19 @@ export default function EnvironmentalCertificatePage() {
             </Select>
           </div>
           
-          <Button
-            onClick={() => refetch()}
-            disabled={!selectedCustomerId || certLoading}
-            data-testid="button-generate-report"
-          >
-            {certLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
-            Visa rapport
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                onClick={() => refetch()}
+                disabled={!selectedCustomerId || certLoading}
+                data-testid="button-generate-report"
+              >
+                {certLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileText className="h-4 w-4 mr-2" />}
+                Visa rapport
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Generera miljöcertifikat för vald kund och år</TooltipContent>
+          </Tooltip>
         </CardContent>
       </Card>
 
@@ -302,75 +315,100 @@ export default function EnvironmentalCertificatePage() {
                   <Badge className={`${getRatingColor(certificateData.sustainabilityRating)} text-white text-sm px-3 py-1`}>
                     {certificateData.sustainabilityRating}
                   </Badge>
-                  <Button onClick={generatePDF} data-testid="button-download-pdf">
-                    <Download className="h-4 w-4 mr-2" />
-                    Ladda ner PDF
-                  </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button onClick={generatePDF} data-testid="button-download-pdf">
+                        <Download className="h-4 w-4 mr-2" />
+                        Ladda ner PDF
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Exportera certifikatet som PDF-fil</TooltipContent>
+                  </Tooltip>
                 </div>
               </div>
             </CardHeader>
           </Card>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card data-testid="stat-co2">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
-                    <Factory className="h-5 w-5 text-red-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{certificateData.statistics.totalCo2Kg} kg</p>
-                    <p className="text-sm text-muted-foreground">CO2-utsläpp</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="hover-elevate cursor-help" data-testid="stat-co2">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/30">
+                        <Factory className="h-5 w-5 text-red-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{certificateData.statistics.totalCo2Kg} kg</p>
+                        <p className="text-sm text-muted-foreground">CO2-utsläpp</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>Totala koldioxidutsläpp under året</TooltipContent>
+            </Tooltip>
 
-            <Card data-testid="stat-savings">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
-                    <TrendingDown className="h-5 w-5 text-green-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{certificateData.statistics.estimatedCo2SavingsKg} kg</p>
-                    <p className="text-sm text-muted-foreground">CO2-besparing</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="hover-elevate cursor-help" data-testid="stat-savings">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/30">
+                        <TrendingDown className="h-5 w-5 text-green-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{certificateData.statistics.estimatedCo2SavingsKg} kg</p>
+                        <p className="text-sm text-muted-foreground">CO2-besparing</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>Uppskattad CO2-besparing genom effektiv hantering</TooltipContent>
+            </Tooltip>
 
-            <Card data-testid="stat-waste">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
-                    <Recycle className="h-5 w-5 text-blue-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{certificateData.statistics.totalWasteCollectedKg} kg</p>
-                    <p className="text-sm text-muted-foreground">Insamlat avfall</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="hover-elevate cursor-help" data-testid="stat-waste">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/30">
+                        <Recycle className="h-5 w-5 text-blue-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{certificateData.statistics.totalWasteCollectedKg} kg</p>
+                        <p className="text-sm text-muted-foreground">Insamlat avfall</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>Total mängd insamlat och hanterat avfall</TooltipContent>
+            </Tooltip>
 
-            <Card data-testid="stat-distance">
-              <CardContent className="pt-6">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
-                    <Truck className="h-5 w-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold">{certificateData.statistics.totalDistanceKm} km</p>
-                    <p className="text-sm text-muted-foreground">Körd sträcka</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Card className="hover-elevate cursor-help" data-testid="stat-distance">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                        <Truck className="h-5 w-5 text-purple-600" />
+                      </div>
+                      <div>
+                        <p className="text-2xl font-bold">{certificateData.statistics.totalDistanceKm} km</p>
+                        <p className="text-sm text-muted-foreground">Körd sträcka</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </TooltipTrigger>
+              <TooltipContent>Total körd sträcka under året</TooltipContent>
+            </Tooltip>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Card data-testid="card-fuel">
+            <Card className="hover-elevate" data-testid="card-fuel">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Droplets className="h-5 w-5 text-blue-500" />
@@ -396,7 +434,7 @@ export default function EnvironmentalCertificatePage() {
               </CardContent>
             </Card>
 
-            <Card data-testid="card-chemicals">
+            <Card className="hover-elevate" data-testid="card-chemicals">
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Droplets className="h-5 w-5 text-amber-500" />
@@ -426,24 +464,44 @@ export default function EnvironmentalCertificatePage() {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold">{certificateData.statistics.totalWorkOrders}</p>
-                  <p className="text-sm text-muted-foreground">Arbetsordrar</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{certificateData.statistics.completedWorkOrders}</p>
-                  <p className="text-sm text-muted-foreground">Genomförda</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold">{certificateData.statistics.co2PerKm}</p>
-                  <p className="text-sm text-muted-foreground">kg CO2/km</p>
-                </div>
-                <div>
-                  <p className={`text-2xl font-bold ${certificateData.statistics.netCo2ImpactKg <= 0 ? "text-green-600" : "text-orange-600"}`}>
-                    {certificateData.statistics.netCo2ImpactKg} kg
-                  </p>
-                  <p className="text-sm text-muted-foreground">Netto CO2</p>
-                </div>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="bg-muted/50 rounded-lg p-3 hover-elevate cursor-help">
+                      <p className="text-2xl font-bold">{certificateData.statistics.totalWorkOrders}</p>
+                      <p className="text-sm text-muted-foreground">Arbetsordrar</p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Totalt antal arbetsordrar under året</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="bg-muted/50 rounded-lg p-3 hover-elevate cursor-help">
+                      <p className="text-2xl font-bold">{certificateData.statistics.completedWorkOrders}</p>
+                      <p className="text-sm text-muted-foreground">Genomförda</p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Antal genomförda arbetsordrar</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="bg-muted/50 rounded-lg p-3 hover-elevate cursor-help">
+                      <p className="text-2xl font-bold">{certificateData.statistics.co2PerKm}</p>
+                      <p className="text-sm text-muted-foreground">kg CO2/km</p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Genomsnittligt CO2-utsläpp per körd kilometer</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="bg-muted/50 rounded-lg p-3 hover-elevate cursor-help">
+                      <p className={`text-2xl font-bold ${certificateData.statistics.netCo2ImpactKg <= 0 ? "text-green-600" : "text-orange-600"}`}>
+                        {certificateData.statistics.netCo2ImpactKg} kg
+                      </p>
+                      <p className="text-sm text-muted-foreground">Netto CO2</p>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>Netto CO2-påverkan (utsläpp minus besparingar)</TooltipContent>
+                </Tooltip>
               </div>
             </CardContent>
           </Card>
