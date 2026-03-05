@@ -32,6 +32,7 @@ import {
   Plus, Search, Calendar, Gauge, TrendingUp, Clock,
   ChevronRight, ChevronDown, BarChart3, DollarSign, Activity
 } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { format, differenceInDays, addDays, isPast, isFuture } from "date-fns";
 import { sv } from "date-fns/locale";
 import {
@@ -300,58 +301,110 @@ export default function FleetManagementPage() {
 
   return (
     <div className="min-h-screen bg-background" data-testid="fleet-management-page">
-      <div className="container mx-auto px-4 py-6 max-w-7xl">
-        <div className="flex items-center justify-between mb-6">
+      <div className="p-6">
+        <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="text-page-title">Fleethantering</h1>
-            <p className="text-muted-foreground">Fordonsöversikt, underhåll och bränsleuppföljning</p>
+            <h1 className="text-2xl font-semibold tracking-tight flex items-center gap-2" data-testid="text-page-title">
+              <Truck className="h-6 w-6 text-primary" />
+              Fleethantering
+            </h1>
+            <div className="flex items-center gap-3 mt-1 flex-wrap">
+              <span className="text-sm text-muted-foreground">Fordonsöversikt, underhåll och bränsleuppföljning</span>
+              {activeVehicles.length > 0 && (
+                <Badge variant="secondary" className="text-xs font-normal">
+                  {activeVehicles.length} aktiva fordon
+                </Badge>
+              )}
+              {kpis.overdueService > 0 && (
+                <Badge variant="outline" className="text-xs font-normal text-red-600 border-red-300 gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {kpis.overdueService} försenad service
+                </Badge>
+              )}
+              {kpis.overdueInspection > 0 && (
+                <Badge variant="outline" className="text-xs font-normal text-amber-600 border-amber-300 gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  {kpis.overdueInspection} utgången besiktning
+                </Badge>
+              )}
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={() => { setFuelForm(f => ({ ...f, vehicleId: "" })); setFuelDialogOpen(true); }} data-testid="button-add-fuel">
-              <Fuel className="h-4 w-4 mr-1" /> Registrera tankning
-            </Button>
-            <Button onClick={() => { setMaintenanceForm(f => ({ ...f, vehicleId: "" })); setMaintenanceDialogOpen(true); }} data-testid="button-add-maintenance">
-              <Wrench className="h-4 w-4 mr-1" /> Registrera underhåll
-            </Button>
+          <div className="flex gap-2 flex-wrap">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={() => { setFuelForm(f => ({ ...f, vehicleId: "" })); setFuelDialogOpen(true); }} data-testid="button-add-fuel">
+                  <Fuel className="h-4 w-4 mr-1" /> Registrera tankning
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Lägg till en ny tankningspost</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={() => { setMaintenanceForm(f => ({ ...f, vehicleId: "" })); setMaintenanceDialogOpen(true); }} data-testid="button-add-maintenance">
+                  <Wrench className="h-4 w-4 mr-1" /> Registrera underhåll
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Registrera service eller reparation</TooltipContent>
+            </Tooltip>
           </div>
         </div>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <Card data-testid="card-kpi-vehicles">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <Truck className="h-4 w-4" /> Aktiva fordon
-              </div>
-              <div className="text-2xl font-bold" data-testid="text-kpi-vehicle-count">{kpis.vehicleCount}</div>
-            </CardContent>
-          </Card>
-          <Card data-testid="card-kpi-service-alerts">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <AlertTriangle className="h-4 w-4" /> Servicevarningar
-              </div>
-              <div className="text-2xl font-bold text-red-600" data-testid="text-kpi-overdue">{kpis.overdueService}</div>
-              <p className="text-xs text-muted-foreground">{kpis.upcomingService} kommande (30 dagar)</p>
-            </CardContent>
-          </Card>
-          <Card data-testid="card-kpi-fuel-cost">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <Fuel className="h-4 w-4" /> Bränslekostnad
-              </div>
-              <div className="text-2xl font-bold" data-testid="text-kpi-fuel-cost">{formatCurrency(kpis.totalFuelCost)}</div>
-              <p className="text-xs text-muted-foreground">{Math.round(kpis.totalFuelLiters)} liter totalt</p>
-            </CardContent>
-          </Card>
-          <Card data-testid="card-kpi-maintenance-cost">
-            <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                <Wrench className="h-4 w-4" /> Underhållskostnad
-              </div>
-              <div className="text-2xl font-bold" data-testid="text-kpi-maintenance-cost">{formatCurrency(kpis.totalMaintenanceCost)}</div>
-              <p className="text-xs text-muted-foreground">{maintenanceLogs.length} poster totalt</p>
-            </CardContent>
-          </Card>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="hover-elevate cursor-help" data-testid="card-kpi-vehicles">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                    <Truck className="h-4 w-4" /> Aktiva fordon
+                  </div>
+                  <div className="text-2xl font-bold" data-testid="text-kpi-vehicle-count">{kpis.vehicleCount}</div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>Antal fordon med status aktiv</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="hover-elevate cursor-help" data-testid="card-kpi-service-alerts">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                    <AlertTriangle className="h-4 w-4" /> Servicevarningar
+                  </div>
+                  <div className="text-2xl font-bold text-red-600" data-testid="text-kpi-overdue">{kpis.overdueService}</div>
+                  <p className="text-xs text-muted-foreground">{kpis.upcomingService} kommande (30 dagar)</p>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>Fordon med försenad eller kommande service</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="hover-elevate cursor-help" data-testid="card-kpi-fuel-cost">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                    <Fuel className="h-4 w-4" /> Bränslekostnad
+                  </div>
+                  <div className="text-2xl font-bold" data-testid="text-kpi-fuel-cost">{formatCurrency(kpis.totalFuelCost)}</div>
+                  <p className="text-xs text-muted-foreground">{Math.round(kpis.totalFuelLiters)} liter totalt</p>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>Total bränslekostnad för alla fordon</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="hover-elevate cursor-help" data-testid="card-kpi-maintenance-cost">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                    <Wrench className="h-4 w-4" /> Underhållskostnad
+                  </div>
+                  <div className="text-2xl font-bold" data-testid="text-kpi-maintenance-cost">{formatCurrency(kpis.totalMaintenanceCost)}</div>
+                  <p className="text-xs text-muted-foreground">{maintenanceLogs.length} poster totalt</p>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent>Total kostnad för service och reparationer</TooltipContent>
+          </Tooltip>
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -389,7 +442,7 @@ export default function FleetManagementPage() {
                 const vehicleMaintenanceLogs = maintenanceLogs.filter(l => l.vehicleId === vehicle.id);
 
                 return (
-                  <Card key={vehicle.id} className="hover:shadow-md transition-shadow" data-testid={`card-vehicle-${vehicle.id}`}>
+                  <Card key={vehicle.id} className="hover-elevate" data-testid={`card-vehicle-${vehicle.id}`}>
                     <CardHeader className="pb-2">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
@@ -461,7 +514,7 @@ export default function FleetManagementPage() {
 
           <TabsContent value="maintenance">
             <div className="grid gap-4 md:grid-cols-2 mb-6">
-              <Card data-testid="card-maintenance-alerts">
+              <Card className="hover-elevate" data-testid="card-maintenance-alerts">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <AlertTriangle className="h-4 w-4 text-red-500" /> Serviceplanering
@@ -494,7 +547,7 @@ export default function FleetManagementPage() {
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-maintenance-by-type">
+              <Card className="hover-elevate" data-testid="card-maintenance-by-type">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <BarChart3 className="h-4 w-4" /> Underhåll per typ
@@ -580,7 +633,7 @@ export default function FleetManagementPage() {
 
           <TabsContent value="fuel">
             <div className="grid gap-4 md:grid-cols-2 mb-6">
-              <Card data-testid="card-fuel-trend">
+              <Card className="hover-elevate" data-testid="card-fuel-trend">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <TrendingUp className="h-4 w-4" /> Bränsleförbrukning per månad
@@ -603,7 +656,7 @@ export default function FleetManagementPage() {
                 </CardContent>
               </Card>
 
-              <Card data-testid="card-fuel-by-type">
+              <Card className="hover-elevate" data-testid="card-fuel-by-type">
                 <CardHeader>
                   <CardTitle className="text-base flex items-center gap-2">
                     <Fuel className="h-4 w-4" /> Fördelning per drivmedel
