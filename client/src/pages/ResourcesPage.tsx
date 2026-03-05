@@ -55,7 +55,12 @@ import {
   Copy,
   Check,
   Smartphone,
+  MoreHorizontal,
+  Users,
+  TrendingUp,
+  CircleCheck,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
@@ -526,6 +531,16 @@ export default function ResourcesPage() {
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
 
+  const teamStats = useMemo(() => {
+    const activeResources = resources.filter(r => r.status === "active");
+    const availableToday = activeResources.filter(r => getCurrentAvailability(r) === "available").length;
+    const totalWeeklyHours = activeResources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
+    const totalWorkloadMinutes = activeResources.reduce((sum, r) => sum + (resourceWorkloads.get(r.id) || 0), 0);
+    const totalWorkloadHours = Math.round(totalWorkloadMinutes / 60 * 10) / 10;
+    const teamUtilization = totalWeeklyHours > 0 ? Math.round((totalWorkloadMinutes / 60) / totalWeeklyHours * 100) : 0;
+    return { activeResources: activeResources.length, availableToday, totalWeeklyHours, totalWorkloadHours, teamUtilization };
+  }, [resources, resourceWorkloads]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -543,7 +558,17 @@ export default function ResourcesPage() {
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">Resurser</h1>
-          <p className="text-sm text-muted-foreground">{resources.length} tekniker registrerade</p>
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-sm text-muted-foreground">{resources.length} tekniker registrerade</span>
+            <Badge variant="secondary" className="text-xs font-normal gap-1">
+              <CircleCheck className="h-3 w-3 text-green-500" />
+              {teamStats.availableToday} tillgängliga idag
+            </Badge>
+            <Badge variant="outline" className="text-xs font-normal gap-1">
+              <TrendingUp className="h-3 w-3" />
+              {teamStats.totalWorkloadHours} av {teamStats.totalWeeklyHours}h planerat ({teamStats.teamUtilization}%)
+            </Badge>
+          </div>
         </div>
         <div className="flex gap-2">
           <ShareFieldAppButton />
@@ -646,44 +671,31 @@ export default function ResourcesPage() {
             >
               <CardContent className="p-4">
                 <div className="flex items-start gap-4">
-                  <div className="relative">
-                    <Avatar className="h-12 w-12">
-                      <AvatarFallback className="text-sm">
-                        {resource.initials || resource.name.split(" ").map(n => n[0]).join("")}
-                      </AvatarFallback>
-                    </Avatar>
-                    {currentAvail !== "available" && (
-                      <div
-                        className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-background ${availOption?.color || "bg-gray-500"}`}
-                        title={availOption?.label}
-                      />
-                    )}
-                  </div>
+                  <Avatar className="h-12 w-12">
+                    <AvatarFallback className="text-sm">
+                      {resource.initials || resource.name.split(" ").map(n => n[0]).join("")}
+                    </AvatarFallback>
+                  </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between gap-2 mb-1">
-                      <h3 className="font-semibold truncate">{resource.name}</h3>
-                      <div className="flex items-center gap-1">
-                        <Badge variant={resource.status === "active" ? "secondary" : "outline"}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <h3 className="font-semibold truncate">{resource.name}</h3>
+                        <Badge variant={resource.status === "active" ? "secondary" : "outline"} className="shrink-0">
                           {resource.status === "active" ? "Aktiv" : "Inaktiv"}
                         </Badge>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openTidsverkDialog(resource);
-                          }}
-                          data-testid={`button-tidsverk-resource-${resource.id}`}
-                        >
-                          <Wrench className="h-4 w-4 mr-1" />
-                          Hantera tidsverk
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${availOption?.color || "bg-green-500"}`} />
+                          </TooltipTrigger>
+                          <TooltipContent><p>{availOption?.label || "Tillgänglig"}</p></TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openScheduleDialog(resource);
@@ -700,24 +712,6 @@ export default function ResourcesPage() {
                             <Button
                               size="icon"
                               variant="ghost"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openAvailabilityDialog(resource);
-                              }}
-                              data-testid={`button-availability-resource-${resource.id}`}
-                            >
-                              <CalendarOff className="h-4 w-4" />
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Ange frånvaro</p></TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity"
                               onClick={(e) => {
                                 e.stopPropagation();
                                 openEditDialog(resource);
@@ -729,23 +723,27 @@ export default function ResourcesPage() {
                           </TooltipTrigger>
                           <TooltipContent><p>Redigera</p></TooltipContent>
                         </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="opacity-0 group-hover:opacity-100 transition-opacity text-destructive"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openDeleteDialog(resource);
-                              }}
-                              data-testid={`button-delete-resource-${resource.id}`}
-                            >
-                              <Trash2 className="h-4 w-4" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button size="icon" variant="ghost" onClick={(e) => e.stopPropagation()} data-testid={`button-more-resource-${resource.id}`}>
+                              <MoreHorizontal className="h-4 w-4" />
                             </Button>
-                          </TooltipTrigger>
-                          <TooltipContent><p>Ta bort</p></TooltipContent>
-                        </Tooltip>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openAvailabilityDialog(resource)} data-testid={`menu-availability-resource-${resource.id}`}>
+                              <CalendarOff className="h-4 w-4 mr-2" />
+                              Ange frånvaro
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openTidsverkDialog(resource)} data-testid={`menu-tidsverk-resource-${resource.id}`}>
+                              <Wrench className="h-4 w-4 mr-2" />
+                              Hantera tidsverk
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openDeleteDialog(resource)} className="text-destructive" data-testid={`menu-delete-resource-${resource.id}`}>
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Ta bort resurs
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </div>
 
@@ -786,13 +784,13 @@ export default function ResourcesPage() {
                     <div className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
                         <span className="text-muted-foreground">Veckobeläggning</span>
-                        <span className={workloadPercent > 90 ? "text-destructive font-medium" : ""}>
-                          {workloadHours} av {weeklyHours}h ({workloadPercent}%)
+                        <span className={workloadPercent > 90 ? "text-destructive font-medium" : workloadPercent === 0 ? "text-muted-foreground" : ""}>
+                          {workloadPercent === 0 ? `Ingen planering (${weeklyHours}h tillgängligt)` : `${workloadHours} av ${weeklyHours}h (${workloadPercent}%)`}
                         </span>
                       </div>
                       <Progress
                         value={workloadPercent}
-                        className={workloadPercent > 90 ? "[&>div]:bg-destructive" : ""}
+                        className={workloadPercent > 90 ? "[&>div]:bg-destructive" : workloadPercent > 70 ? "[&>div]:bg-amber-500" : ""}
                       />
                       {resourceJobs.length > 0 && (
                         <div className="text-xs text-muted-foreground mt-1">
