@@ -4,6 +4,7 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-03-06: ProfileScreen: initials avatar, online/offline toggle badge, today's stats row (completed/total/remaining), colored icon backgrounds, phone/email always shown with tap-to-call/email, logout confirmation modal, version text
 - 2026-03-06: AIAssistantScreen: redesigned avatar (teal zap icon), compact message bubbles, suggestion cards grid on empty state, 5 quick action chips, always-visible send button, mic button on left, animated typing indicator
 - 2026-03-06: MapScreen: custom numbered markers with customer name labels, driver start position marker (green), route polyline with glow outline, callout popups with order details on tap, expandable legend with per-leg travel times
 - 2026-03-06: OrdersScreen: vertical timeline connector between cards, contextual badge descriptions (dependency order numbers, time restriction details), consistent progress bars on all cards, animated pulsing swipe hint on first card, increased text display (2-line customer name & description), clarified travel time ("X min dit") vs job duration (briefcase icon)
