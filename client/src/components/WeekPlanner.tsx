@@ -398,7 +398,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [autoFillPreview, setAutoFillPreview] = useState<Array<{ workOrderId: string; resourceId: string; scheduledDate: string; scheduledStartTime: string; title: string; address: string; estimatedDuration: number; priority: string }> | null>(null);
   const [autoFillApplying, setAutoFillApplying] = useState(false);
   const [autoFillSkipped, setAutoFillSkipped] = useState(0);
-  const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number } | null>(null);
+  const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number; clusterSkipped: number } | null>(null);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -1810,7 +1810,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       const data = await response.json();
       setAutoFillPreview(data.assignments || []);
       setAutoFillSkipped(data.totalSkipped || 0);
-      setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0 } : null);
+      setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null);
     } catch (error) {
       toast({ title: "Fel", description: "Kunde inte generera planering", variant: "destructive" });
     } finally {
@@ -3765,7 +3765,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 {autoFillSkipped > 0 && <Badge variant="secondary">{autoFillSkipped} ryms ej</Badge>}
               </div>
               {autoFillSkipped > 0 && autoFillPreview.length > 0 && (
-                <p className="text-xs text-muted-foreground">{autoFillSkipped} uppdrag ryms ej i schemat och förblir oplanerade i orderstocken.</p>
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <p>{autoFillSkipped} uppdrag ryms ej i schemat och förblir oplanerade i orderstocken.</p>
+                  {autoFillDiag && autoFillDiag.clusterSkipped > 0 && (
+                    <p className="text-amber-500">{autoFillDiag.clusterSkipped} av dessa saknar matchande resurs för sitt kluster.</p>
+                  )}
+                </div>
               )}
 
               {autoFillPreview.length > 0 && (
@@ -3823,6 +3828,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                                 );
                               })}
                             </div>
+                          )}
+                          {autoFillDiag.clusterSkipped > 0 && (
+                            <p className="text-amber-500 mt-1">{autoFillDiag.clusterSkipped} uppdrag saknar matchande resurs för sitt kluster (geografiskt område).</p>
                           )}
                           <p className="mt-1">Prova att öka överbokningsprocenten eller byta till en annan vecka.</p>
                         </>

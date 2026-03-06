@@ -11052,6 +11052,17 @@ setInterval(loadRoutes, 30000);
         return res.status(400).json({ error: "No valid resources found" });
       }
 
+      const allTeams = await storage.getTeams(tenantId);
+      const allTeamMembers = await storage.getAllTeamMembers(tenantId);
+      const resourceClusterIds = new Map<string, Set<string>>();
+      for (const tm of allTeamMembers) {
+        const team = allTeams.find(t => t.id === tm.teamId);
+        if (team?.clusterId) {
+          if (!resourceClusterIds.has(tm.resourceId)) resourceClusterIds.set(tm.resourceId, new Set());
+          resourceClusterIds.get(tm.resourceId)!.add(team.clusterId);
+        }
+      }
+
       const allObjectIds = [...new Set(allWorkOrders.map(wo => wo.objectId).filter(Boolean) as string[])];
       const timeRestrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, allObjectIds);
       const restrictionsByObject = new Map<string, typeof timeRestrictions>();
@@ -11122,6 +11133,7 @@ setInterval(loadRoutes, 30000);
         priority: string;
       }> = [];
       const skipped: string[] = [];
+      let clusterSkipped = 0;
 
       for (const order of sorted) {
         let assigned = false;
@@ -11153,6 +11165,11 @@ setInterval(loadRoutes, 30000);
           let bestScore = Infinity;
 
           for (const resource of selectedResources) {
+            const resClusters = resourceClusterIds.get(resource.id);
+            if (order.clusterId && resClusters && resClusters.size > 0) {
+              if (!resClusters.has(order.clusterId)) continue;
+            }
+
             if (order.executionCode && resource.executionCodes && resource.executionCodes.length > 0) {
               if (!resource.executionCodes.includes(order.executionCode)) continue;
             }
@@ -11213,6 +11230,13 @@ setInterval(loadRoutes, 30000);
 
         if (!assigned) {
           skipped.push(order.id);
+          if (order.clusterId) {
+            const anyResourceMatchesCluster = selectedResources.some(r => {
+              const rc = resourceClusterIds.get(r.id);
+              return !rc || rc.size === 0 || rc.has(order.clusterId!);
+            });
+            if (!anyResourceMatchesCluster) clusterSkipped++;
+          }
         }
       }
 
@@ -11230,6 +11254,7 @@ setInterval(loadRoutes, 30000);
         totalAssigned: assignments.length,
         totalSkipped: skipped.length,
         totalUnscheduled: unscheduledOrders.length,
+        clusterSkipped,
         skippedIds: skipped,
         capacityPerDay: capacitySummary,
         maxMinutesPerDay: Math.round(maxMinutesPerDay),

@@ -34,7 +34,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Driver Push Notifications:** Persistent notification storage with REST polling endpoints and WebSocket integration.
 - **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, comprehensive work order management, and per-object article management with resolved pricing (manual article links via `object_articles` table, price override support, price resolution from price lists).
 - **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, and self-booking.
-- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality.
+- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality with cluster-aware resource assignment (resources only assigned jobs within their team's cluster/geographic area, fallback to free assignment for unclustered jobs/resources), capacity diagnostics per day, and skip-reason breakdown (capacity vs cluster mismatch).
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
 - **Environmental Statistics & Certificates:** Tracking of mileage, fuel, CO2, and generation of annual environmental certificates.
 - **Metadata-triggers:** System for listing objects with deviations and tracking issue history.
