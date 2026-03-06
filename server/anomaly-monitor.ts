@@ -44,29 +44,27 @@ class AnomalyMonitor {
   }
 
   private async runCheck() {
-    console.log("[anomaly-monitor] Running anomaly check...");
-    
     try {
       const alerts: AnomalyAlert[] = [];
 
-      // Check for stale resource positions
       const stalePositionAlerts = await this.checkStalePositions();
       alerts.push(...stalePositionAlerts);
 
-      // Check for delayed/overdue work orders
       const delayAlerts = await this.checkDelayedOrders();
       alerts.push(...delayAlerts);
 
-      // Check for setup time anomalies from recent logs
       const setupTimeAlerts = await this.checkSetupTimeAnomalies();
       alerts.push(...setupTimeAlerts);
 
-      // Process and send alerts
+      let newAlertCount = 0;
       for (const alert of alerts) {
-        await this.processAlert(alert);
+        const wasNew = await this.processAlert(alert);
+        if (wasNew) newAlertCount++;
       }
 
-      console.log(`[anomaly-monitor] Check complete. ${alerts.length} alerts detected.`);
+      if (newAlertCount > 0) {
+        console.log(`[anomaly-monitor] Check complete. ${alerts.length} total, ${newAlertCount} new alerts.`);
+      }
     } catch (error) {
       console.error("[anomaly-monitor] Error during check:", error);
     }
@@ -232,20 +230,14 @@ class AnomalyMonitor {
     return alerts;
   }
 
-  private async processAlert(alert: AnomalyAlert) {
-    // Check cooldown to avoid alert spam
+  private async processAlert(alert: AnomalyAlert): Promise<boolean> {
     const lastAlert = this.recentAlerts.get(alert.id);
     if (lastAlert && Date.now() - lastAlert.getTime() < this.alertCooldownMs) {
-      return; // Skip, still in cooldown
+      return false;
     }
 
     this.recentAlerts.set(alert.id, new Date());
-    
-    console.log(`[anomaly-monitor] Alert: ${alert.title} (${alert.severity})`);
-    console.log(`[anomaly-monitor] ${alert.severity.toUpperCase()}: ${alert.description}`);
-    
-    // Broadcast high/critical alerts to all connected clients (planners + resources)
-    // This ensures operations staff and dispatchers receive anomaly notifications
+
     if (alert.severity === "high" || alert.severity === "critical") {
       notificationService.broadcastSystemAlert({
         type: "anomaly_alert",
@@ -262,6 +254,8 @@ class AnomalyMonitor {
         }
       });
     }
+
+    return true;
   }
 
   // Manual trigger for testing

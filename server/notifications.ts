@@ -451,7 +451,9 @@ class NotificationService {
       });
     });
 
-    console.log(`[ws] System alert broadcasted to ${sentCount} clients: ${notification.title}`);
+    if (sentCount > 0) {
+      console.log(`[ws] System alert broadcasted to ${sentCount} clients: ${notification.title}`);
+    }
     return fullNotification;
   }
 }
