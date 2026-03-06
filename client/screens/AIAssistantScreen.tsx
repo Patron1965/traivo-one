@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, ScrollView, Pressable, StyleSheet, TextInput,
-  ActivityIndicator, Platform,
+  ActivityIndicator, Platform, Animated,
 } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
@@ -21,9 +21,76 @@ interface Message {
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
-  content: 'Hej! Jag är Unicorn Assist, din AI-assistent. Jag kan hjälpa dig med frågor om dina uppdrag, ge vägledning om procedurer, eller analysera bilder. Vad kan jag hjälpa dig med?',
+  content: 'Hej! Jag är Unicorn Assist, din AI-assistent. Vad kan jag hjälpa dig med?',
   timestamp: new Date(),
 };
+
+const QUICK_ACTIONS = [
+  { id: 'tasks', icon: 'clipboard' as const, label: 'Mina uppdrag', color: Colors.primary, message: 'Kan du ge mig en sammanfattning av mina uppdrag idag?' },
+  { id: 'route', icon: 'navigation' as const, label: 'Rutt', color: Colors.secondary, message: 'Vilken ordning ska jag köra mina uppdrag idag?' },
+  { id: 'deviation', icon: 'alert-triangle' as const, label: 'Avvikelse', color: Colors.warning, message: 'Hur rapporterar jag en avvikelse?' },
+  { id: 'next', icon: 'skip-forward' as const, label: 'Nästa steg', color: Colors.info, message: 'Vad är mitt nästa steg just nu?' },
+  { id: 'help', icon: 'help-circle' as const, label: 'Hjälp', color: Colors.textSecondary, message: 'Vad kan du hjälpa mig med?' },
+];
+
+function TypingIndicator() {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const animate = (dot: Animated.Value, delay: number) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: 1, duration: 300, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 300, useNativeDriver: true }),
+        ])
+      );
+    const a1 = animate(dot1, 0);
+    const a2 = animate(dot2, 200);
+    const a3 = animate(dot3, 400);
+    a1.start(); a2.start(); a3.start();
+    return () => { a1.stop(); a2.stop(); a3.stop(); };
+  }, []);
+
+  return (
+    <View style={styles.typingContainer}>
+      <Animated.View style={[styles.typingDot, { opacity: dot1 }]} />
+      <Animated.View style={[styles.typingDot, { opacity: dot2 }]} />
+      <Animated.View style={[styles.typingDot, { opacity: dot3 }]} />
+    </View>
+  );
+}
+
+function SuggestionCards({ onSend }: { onSend: (text: string) => void }) {
+  return (
+    <View style={styles.suggestionsContainer}>
+      <View style={styles.suggestionsGrid}>
+        <Pressable style={styles.suggestionCard} onPress={() => onSend('Sammanfatta mina uppdrag idag')}>
+          <Feather name="sun" size={20} color={Colors.warning} />
+          <ThemedText variant="caption" style={styles.suggestionTitle}>Dagens sammanfattning</ThemedText>
+          <ThemedText variant="caption" color={Colors.textMuted} style={styles.suggestionDesc}>Se status på alla uppdrag</ThemedText>
+        </Pressable>
+        <Pressable style={styles.suggestionCard} onPress={() => onSend('Vilken ordning ska jag köra mina stopp?')}>
+          <Feather name="map" size={20} color={Colors.secondary} />
+          <ThemedText variant="caption" style={styles.suggestionTitle}>Optimera rutt</ThemedText>
+          <ThemedText variant="caption" color={Colors.textMuted} style={styles.suggestionDesc}>Få den bästa körordningen</ThemedText>
+        </Pressable>
+        <Pressable style={styles.suggestionCard} onPress={() => onSend('Hur rapporterar jag en avvikelse?')}>
+          <Feather name="alert-circle" size={20} color={Colors.danger} />
+          <ThemedText variant="caption" style={styles.suggestionTitle}>Rapportera problem</ThemedText>
+          <ThemedText variant="caption" color={Colors.textMuted} style={styles.suggestionDesc}>Hjälp med avvikelser</ThemedText>
+        </Pressable>
+        <Pressable style={styles.suggestionCard} onPress={() => onSend('Vad kan du hjälpa mig med?')}>
+          <Feather name="zap" size={20} color={Colors.primary} />
+          <ThemedText variant="caption" style={styles.suggestionTitle}>Visa funktioner</ThemedText>
+          <ThemedText variant="caption" color={Colors.textMuted} style={styles.suggestionDesc}>Vad kan Unicorn Assist?</ThemedText>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
 
 export function AIAssistantScreen() {
   const tabBarHeight = useBottomTabBarHeight();
@@ -44,6 +111,8 @@ export function AIAssistantScreen() {
       scrollRef.current?.scrollToEnd({ animated: true });
     }, 100);
   }, [messages]);
+
+  const isOnlyWelcome = messages.length === 1 && messages[0].id === 'welcome';
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -234,14 +303,6 @@ export function AIAssistantScreen() {
     }
   }
 
-  function handleQuickTasks() {
-    sendMessage('Kan du ge mig en sammanfattning av mina uppdrag idag?');
-  }
-
-  function handleQuickHelp() {
-    sendMessage('Jag behöver hjälp. Vad kan du hjälpa mig med?');
-  }
-
   function formatTime(date: Date): string {
     return date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
   }
@@ -269,7 +330,7 @@ export function AIAssistantScreen() {
           >
             {msg.role === 'assistant' ? (
               <View style={styles.avatarContainer}>
-                <Feather name="cpu" size={16} color={Colors.secondary} />
+                <Feather name="zap" size={14} color="#fff" />
               </View>
             ) : null}
             <View
@@ -300,12 +361,16 @@ export function AIAssistantScreen() {
         {isLoading ? (
           <View style={[styles.messageBubbleRow, styles.assistantRow]}>
             <View style={styles.avatarContainer}>
-              <Feather name="cpu" size={16} color={Colors.secondary} />
+              <Feather name="zap" size={14} color="#fff" />
             </View>
             <View style={[styles.messageBubble, styles.assistantBubble]}>
-              <ActivityIndicator size="small" color={Colors.secondary} />
+              <TypingIndicator />
             </View>
           </View>
+        ) : null}
+
+        {isOnlyWelcome && !isLoading ? (
+          <SuggestionCards onSend={sendMessage} />
         ) : null}
       </ScrollView>
 
@@ -316,29 +381,33 @@ export function AIAssistantScreen() {
           style={styles.quickActionsScroll}
           contentContainerStyle={styles.quickActions}
         >
-          <Pressable
-            style={styles.quickChip}
-            onPress={handleQuickTasks}
-            testID="button-quick-tasks"
-          >
-            <Feather name="clipboard" size={14} color={Colors.primary} />
-            <ThemedText variant="caption" color={Colors.primary}>
-              Mina uppdrag
-            </ThemedText>
-          </Pressable>
-          <Pressable
-            style={styles.quickChip}
-            onPress={handleQuickHelp}
-            testID="button-quick-help"
-          >
-            <Feather name="help-circle" size={14} color={Colors.secondary} />
-            <ThemedText variant="caption" color={Colors.secondary}>
-              Hjälp
-            </ThemedText>
-          </Pressable>
+          {QUICK_ACTIONS.map(action => (
+            <Pressable
+              key={action.id}
+              style={styles.quickChip}
+              onPress={() => sendMessage(action.message)}
+              testID={`button-quick-${action.id}`}
+            >
+              <Feather name={action.icon} size={13} color={action.color} />
+              <ThemedText variant="caption" color={action.color} style={styles.quickChipText}>
+                {action.label}
+              </ThemedText>
+            </Pressable>
+          ))}
         </ScrollView>
 
         <View style={styles.inputRow}>
+          <Pressable
+            style={[styles.micButton, isRecording ? styles.micButtonRecording : null]}
+            onPress={handleMicPress}
+            testID="button-mic"
+          >
+            <Feather
+              name={isRecording ? 'square' : 'mic'}
+              size={18}
+              color={isRecording ? Colors.textInverse : Colors.primary}
+            />
+          </Pressable>
           <TextInput
             style={styles.textInput}
             placeholder="Skriv ett meddelande..."
@@ -351,28 +420,14 @@ export function AIAssistantScreen() {
             onSubmitEditing={() => sendMessage(inputText)}
             blurOnSubmit
           />
-          {hasText ? (
-            <Pressable
-              style={styles.sendButton}
-              onPress={() => sendMessage(inputText)}
-              disabled={isLoading}
-              testID="button-send-ai"
-            >
-              <Feather name="send" size={18} color={Colors.textInverse} />
-            </Pressable>
-          ) : (
-            <Pressable
-              style={[styles.micButton, isRecording ? styles.micButtonRecording : null]}
-              onPress={handleMicPress}
-              testID="button-mic"
-            >
-              <Feather
-                name={isRecording ? 'square' : 'mic'}
-                size={18}
-                color={isRecording ? Colors.textInverse : Colors.primary}
-              />
-            </Pressable>
-          )}
+          <Pressable
+            style={[styles.sendButton, !hasText ? styles.sendButtonDisabled : null]}
+            onPress={() => sendMessage(inputText)}
+            disabled={isLoading || !hasText}
+            testID="button-send-ai"
+          >
+            <Feather name="arrow-up" size={20} color={hasText ? Colors.textInverse : Colors.textMuted} />
+          </Pressable>
         </View>
       </View>
     </View>
@@ -404,39 +459,79 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   avatarContainer: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.secondaryLight,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: Colors.secondary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 2,
   },
   messageBubble: {
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
     maxWidth: '100%',
     flexShrink: 1,
   },
   userBubble: {
     backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.xl,
-    borderBottomRightRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.lg,
+    borderBottomRightRadius: BorderRadius.xs,
   },
   assistantBubble: {
     backgroundColor: Colors.surface,
-    borderRadius: BorderRadius.xl,
-    borderBottomLeftRadius: BorderRadius.sm,
+    borderRadius: BorderRadius.lg,
+    borderBottomLeftRadius: BorderRadius.xs,
     borderWidth: 1,
     borderColor: Colors.borderLight,
   },
   messageText: {
-    lineHeight: 22,
+    lineHeight: 21,
+    fontSize: 15,
   },
   timestamp: {
-    marginTop: Spacing.xs,
-    fontSize: FontSize.xs,
+    marginTop: 4,
+    fontSize: 10,
     alignSelf: 'flex-end',
+  },
+  typingContainer: {
+    flexDirection: 'row',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  typingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 3.5,
+    backgroundColor: Colors.textMuted,
+  },
+  suggestionsContainer: {
+    marginTop: Spacing.md,
+    paddingHorizontal: Spacing.xs,
+  },
+  suggestionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: Spacing.sm,
+  },
+  suggestionCard: {
+    width: '48%',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+    gap: 6,
+  },
+  suggestionTitle: {
+    fontFamily: 'Inter_600SemiBold',
+    fontSize: 13,
+    color: Colors.text,
+  },
+  suggestionDesc: {
+    fontSize: 11,
+    lineHeight: 15,
   },
   bottomArea: {
     backgroundColor: Colors.surface,
@@ -450,30 +545,33 @@ const styles = StyleSheet.create({
   },
   quickActions: {
     flexDirection: 'row',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   quickChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: Spacing.xs,
+    gap: 4,
     backgroundColor: Colors.background,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
+    paddingHorizontal: Spacing.sm + 2,
+    paddingVertical: Spacing.xs + 1,
     borderRadius: BorderRadius.round,
     borderWidth: 1,
     borderColor: Colors.borderLight,
   },
+  quickChipText: {
+    fontSize: 12,
+  },
   inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: Spacing.sm,
+    gap: Spacing.xs,
   },
   textInput: {
     flex: 1,
     backgroundColor: Colors.background,
     borderRadius: BorderRadius.xl,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm + 2,
     fontSize: FontSize.md,
     fontFamily: 'Inter_400Regular',
     color: Colors.text,
@@ -482,17 +580,22 @@ const styles = StyleSheet.create({
     borderColor: Colors.borderLight,
   },
   sendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sendButtonDisabled: {
+    backgroundColor: Colors.background,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
   micButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
