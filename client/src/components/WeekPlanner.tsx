@@ -402,11 +402,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number; clusterSkipped: number } | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(2);
   const zoomLevels = [
-    { label: "Kompakt", dayH: 40, weekH: 80, monthH: 70, scale: 0.75 },
-    { label: "Liten", dayH: 50, weekH: 100, monthH: 85, scale: 0.85 },
+    { label: "Kompakt", dayH: 32, weekH: 50, monthH: 48, scale: 0.6 },
+    { label: "Liten", dayH: 44, weekH: 80, monthH: 70, scale: 0.8 },
     { label: "Normal", dayH: 60, weekH: 120, monthH: 100, scale: 1 },
-    { label: "Stor", dayH: 80, weekH: 160, monthH: 130, scale: 1.15 },
-    { label: "Mycket stor", dayH: 100, weekH: 200, monthH: 160, scale: 1.3 },
+    { label: "Stor", dayH: 90, weekH: 200, monthH: 150, scale: 1.3 },
+    { label: "XL", dayH: 130, weekH: 300, monthH: 220, scale: 1.6 },
   ];
   const zoom = zoomLevels[zoomLevel];
   const { toast } = useToast();
@@ -2067,9 +2067,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     );
   };
 
-  const zoomTextClass = zoom.scale <= 0.85 ? "text-[9px]" : zoom.scale >= 1.15 ? "text-sm" : "text-xs";
-  const zoomPadClass = zoom.scale <= 0.85 ? "p-1" : zoom.scale >= 1.15 ? "p-3" : "p-2";
-  const zoomGapClass = zoom.scale <= 0.85 ? "space-y-0.5" : zoom.scale >= 1.15 ? "space-y-2" : "space-y-1";
+  const zoomTextClass = zoom.scale <= 0.6 ? "text-[8px]" : zoom.scale <= 0.8 ? "text-[10px]" : zoom.scale >= 1.6 ? "text-base" : zoom.scale >= 1.3 ? "text-sm" : "text-xs";
+  const zoomPadClass = zoom.scale <= 0.6 ? "p-0.5" : zoom.scale <= 0.8 ? "p-1" : zoom.scale >= 1.6 ? "p-4" : zoom.scale >= 1.3 ? "p-3" : "p-2";
+  const zoomGapClass = zoom.scale <= 0.6 ? "space-y-0" : zoom.scale <= 0.8 ? "space-y-0.5" : zoom.scale >= 1.6 ? "space-y-3" : zoom.scale >= 1.3 ? "space-y-2" : "space-y-1";
 
   const renderDayTimelineView = () => {
     const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
