@@ -4,6 +4,8 @@
 Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-03-06: Added optimized route with real road polylines on MapScreen using OSRM (free routing API), shows total distance/duration, optimized stop order
+- 2026-02-26: Dynamic domain injection in Metro bundles for deployment compatibility; hardened login with mock fallback; robust root endpoint error handling
 - 2026-02-25: Removed team chat feature (TeamChatScreen, team_messages table, team-chat endpoints)
 - 2026-02-25: Completed orders now visually distinct: green check circle, tinted background, muted text
 - 2026-02-25: Auto-navigate back to order list after completing a job
@@ -115,6 +117,7 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 - `GET /api/mobile/articles?search=` - Search articles
 - `GET /api/mobile/weather` - Get weather (Open-Meteo API)
 - `GET /api/mobile/summary` - Get daily summary (includes totalDistance)
+- `GET /api/mobile/route?coords=lon,lat;lon,lat;...` - Get optimized route via OSRM (GeoJSON polyline, distance, duration)
 - `POST /api/mobile/ai/chat` - AI chat (GPT-5.2)
 - `POST /api/mobile/ai/transcribe` - Voice transcription (gpt-4o-mini-transcribe)
 - `POST /api/mobile/ai/analyze-image` - AI image analysis with severity + confidence

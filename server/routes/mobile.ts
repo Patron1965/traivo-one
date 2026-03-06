@@ -1125,4 +1125,57 @@ router.get('/summary', async (req, res) => {
   }
 });
 
+router.get('/route', async (req, res) => {
+  const coords = req.query.coords as string;
+  if (!coords) {
+    return res.status(400).json({ error: 'coords parameter required (lon1,lat1;lon2,lat2;...)' });
+  }
+
+  const points = coords.split(';');
+  if (points.length < 2 || points.length > 25) {
+    return res.status(400).json({ error: 'Between 2 and 25 coordinate pairs required' });
+  }
+
+  for (const point of points) {
+    const parts = point.split(',');
+    if (parts.length !== 2) {
+      return res.status(400).json({ error: `Invalid coordinate: ${point}` });
+    }
+    const lon = parseFloat(parts[0]);
+    const lat = parseFloat(parts[1]);
+    if (isNaN(lon) || isNaN(lat) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      return res.status(400).json({ error: `Invalid coordinate values: ${point}` });
+    }
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000);
+  try {
+    const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?overview=full&geometries=geojson&roundtrip=false&source=first`;
+    const response = await fetch(url, { signal: controller.signal });
+    clearTimeout(timeout);
+    const data = await response.json();
+    if (data.code !== 'Ok') {
+      console.error('OSRM error:', data.code, data.message);
+      return res.status(502).json({ error: 'Route calculation failed', code: data.code });
+    }
+    res.json({
+      waypoints: data.waypoints.map((wp: any) => ({
+        location: wp.location,
+        waypointIndex: wp.waypoint_index,
+        tripsIndex: wp.trips_index,
+      })),
+      trips: data.trips.map((trip: any) => ({
+        geometry: trip.geometry,
+        distance: trip.distance,
+        duration: trip.duration,
+      })),
+    });
+  } catch (error: any) {
+    clearTimeout(timeout);
+    console.error('OSRM fetch error:', error.message);
+    res.status(502).json({ error: 'Could not reach routing service' });
+  }
+});
+
 export { router as mobileRoutes, MOCK_ORDERS };
