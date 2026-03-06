@@ -202,10 +202,10 @@ export default function ObjectsPage() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
-  const [accessFilter, setAccessFilter] = useState("all");
-  const [customerFilter, setCustomerFilter] = useState("all");
-  const [hierarchyFilter, setHierarchyFilter] = useState("all");
+  const [typeFilter, setTypeFilterRaw] = useState("all");
+  const [accessFilter, setAccessFilterRaw] = useState("all");
+  const [customerFilter, setCustomerFilterRaw] = useState("all");
+  const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
   const [setupTimeRange, setSetupTimeRange] = useState<[number, number]>([0, 60]);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
@@ -220,6 +220,10 @@ export default function ObjectsPage() {
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [historyObject, setHistoryObject] = useState<ServiceObject | null>(null);
   const [currentPage, setCurrentPage] = useState(0);
+  const setTypeFilter = (v: string) => { setTypeFilterRaw(v); setCurrentPage(0); };
+  const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
+  const setCustomerFilter = (v: string) => { setCustomerFilterRaw(v); setCurrentPage(0); };
+  const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "payers" | "parents" | "articles" } | null>(null);
@@ -272,7 +276,7 @@ export default function ObjectsPage() {
   }, [searchQuery]);
 
   const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -280,6 +284,18 @@ export default function ObjectsPage() {
       });
       if (debouncedSearch) {
         params.append("search", debouncedSearch);
+      }
+      if (customerFilter !== "all") {
+        params.append("customerId", customerFilter);
+      }
+      if (typeFilter !== "all") {
+        params.append("objectType", typeFilter);
+      }
+      if (accessFilter !== "all") {
+        params.append("accessType", accessFilter);
+      }
+      if (hierarchyFilter !== "all") {
+        params.append("hierarchyLevel", hierarchyFilter);
       }
       const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch objects");
@@ -380,16 +396,11 @@ export default function ObjectsPage() {
 
   const filteredObjects = useMemo(() => {
     return objects.filter(obj => {
-      // Server already filtered by search, so just apply local filters
-      const matchesType = typeFilter === "all" || obj.objectType === typeFilter;
-      const matchesAccess = accessFilter === "all" || obj.accessType === accessFilter;
-      const matchesCustomer = customerFilter === "all" || obj.customerId === customerFilter;
-      const matchesHierarchy = hierarchyFilter === "all" || obj.hierarchyLevel === hierarchyFilter;
       const setupTime = obj.avgSetupTime || 0;
       const matchesSetupTime = setupTime >= setupTimeRange[0] && setupTime <= setupTimeRange[1];
-      return matchesType && matchesAccess && matchesCustomer && matchesHierarchy && matchesSetupTime;
+      return matchesSetupTime;
     });
-  }, [objects, typeFilter, accessFilter, customerFilter, hierarchyFilter, setupTimeRange]);
+  }, [objects, setupTimeRange]);
 
   const filteredTopLevel = filteredObjects.filter(obj => !obj.parentId);
 

@@ -144,7 +144,7 @@ export interface IStorage {
   deleteCustomer(id: string): Promise<void>;
   
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string, filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
@@ -770,13 +770,25 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string, filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
     
     if (customerId) {
       whereConditions = and(whereConditions, eq(objects.customerId, customerId));
+    }
+    
+    if (filters?.objectType) {
+      whereConditions = and(whereConditions, eq(objects.objectType, filters.objectType));
+    }
+    
+    if (filters?.hierarchyLevel) {
+      whereConditions = and(whereConditions, eq(objects.hierarchyLevel, filters.hierarchyLevel));
+    }
+    
+    if (filters?.accessType) {
+      whereConditions = and(whereConditions, eq(objects.accessType, filters.accessType));
     }
     
     if (search && search.trim()) {
