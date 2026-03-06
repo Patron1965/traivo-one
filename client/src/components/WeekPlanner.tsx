@@ -1882,7 +1882,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     return (
       <DraggableJobCard key={job.id} id={job.id}>
         <Card
-          className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-4 ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-950/30" : ""} group touch-none`}
+          className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-4 overflow-hidden ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-950/30" : ""} group touch-none`}
           onClick={() => handleJobClick(job.id)}
           data-testid={`job-card-${job.id}`}
         >
@@ -2225,10 +2225,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   };
 
   const renderWeekView = () => (
-    <div className="flex-1 overflow-auto">
-      <div className="min-w-[1000px]">
-        <div className="grid grid-cols-[200px_repeat(5,1fr)] border-b sticky top-0 bg-background z-10">
-          <div className="p-3 font-medium text-sm text-muted-foreground border-r">Resurser</div>
+    <div className="flex-1 overflow-y-auto overflow-x-hidden">
+      <div className="w-full">
+        <div className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] border-b sticky top-0 bg-background z-10">
+          <div className="p-2 font-medium text-sm text-muted-foreground border-r">Resurser</div>
           {visibleDates.map((day, i) => {
             const isToday = isSameDay(day, new Date());
             return (
@@ -2248,22 +2248,22 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           resources.map((resource) => {
             const weekSummary = resourceWeekSummary[resource.id];
             return (
-            <div key={resource.id} className="grid grid-cols-[200px_repeat(5,1fr)] border-b">
+            <div key={resource.id} className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] border-b">
               <div 
-                className="p-3 border-r flex items-center gap-3 group"
+                className="p-2 border-r flex items-center gap-2 group overflow-hidden"
                 data-testid={`resource-row-${resource.id}`}
               >
                 <Avatar 
-                  className="h-8 w-8 cursor-pointer hover-elevate"
+                  className="h-7 w-7 shrink-0 cursor-pointer hover-elevate"
                   onClick={() => handleResourceClick(resource.id)}
                 >
-                  <AvatarFallback className="text-xs">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
                 </Avatar>
                 <div 
-                  className="min-w-0 flex-1 cursor-pointer"
+                  className="min-w-0 flex-1 cursor-pointer overflow-hidden"
                   onClick={() => handleResourceClick(resource.id)}
                 >
-                  <div className="text-sm font-medium truncate">{resource.name}</div>
+                  <div className="text-xs font-medium truncate">{resource.name}</div>
                   {weekSummary && (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -2345,11 +2345,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   <DroppableCell 
                     key={dayIndex} 
                     id={droppableId}
-                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
+                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
                     dropFitInfo={cellDropFit}
                     style={{ minHeight: `${zoom.weekH}px` }}
                   >
-                    <div data-testid={`drop-zone-${resource.id}-${dayStr}`}>
+                    <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
                         <div className="h-2 flex-1 bg-muted rounded-full overflow-hidden">
                           <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
