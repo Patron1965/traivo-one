@@ -967,8 +967,7 @@ export async function registerRoutes(
         );
         res.json(result);
       } else {
-        const defaultLimit = limit || 500;
-        const workOrders = await storage.getWorkOrders(tenantId, startDate, endDate, includeUnscheduled, defaultLimit);
+        const workOrders = await storage.getWorkOrders(tenantId, startDate, endDate, includeUnscheduled, limit);
         res.json(workOrders);
       }
     } catch (error) {
