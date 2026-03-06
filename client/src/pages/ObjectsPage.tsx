@@ -204,7 +204,7 @@ export default function ObjectsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilterRaw] = useState("all");
   const [accessFilter, setAccessFilterRaw] = useState("all");
-  const [customerFilter, setCustomerFilterRaw] = useState("all");
+  const [customerFilter, setCustomerFilterRaw] = useState<string[]>([]);
   const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
   const [setupTimeRange, setSetupTimeRange] = useState<[number, number]>([0, 60]);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
@@ -222,7 +222,9 @@ export default function ObjectsPage() {
   const [currentPage, setCurrentPage] = useState(0);
   const setTypeFilter = (v: string) => { setTypeFilterRaw(v); setCurrentPage(0); };
   const setAccessFilter = (v: string) => { setAccessFilterRaw(v); setCurrentPage(0); };
-  const setCustomerFilter = (v: string) => { setCustomerFilterRaw(v); setCurrentPage(0); };
+  const setCustomerFilter = (v: string[]) => { setCustomerFilterRaw(v); setCurrentPage(0); };
+  const addCustomerFilter = (id: string) => { if (!customerFilter.includes(id)) { setCustomerFilter([...customerFilter, id]); } };
+  const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
   const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -285,8 +287,8 @@ export default function ObjectsPage() {
       if (debouncedSearch) {
         params.append("search", debouncedSearch);
       }
-      if (customerFilter !== "all") {
-        params.append("customerId", customerFilter);
+      if (customerFilter.length > 0) {
+        params.append("customerId", customerFilter.join(","));
       }
       if (typeFilter !== "all") {
         params.append("objectType", typeFilter);
@@ -407,7 +409,7 @@ export default function ObjectsPage() {
   const activeFilterCount = [
     typeFilter !== "all" ? 1 : 0,
     accessFilter !== "all" ? 1 : 0,
-    customerFilter !== "all" ? 1 : 0,
+    customerFilter.length > 0 ? 1 : 0,
     hierarchyFilter !== "all" ? 1 : 0,
     (setupTimeRange[0] !== 0 || setupTimeRange[1] !== 60) ? 1 : 0,
   ].reduce((a, b) => a + b, 0);
@@ -439,7 +441,7 @@ export default function ObjectsPage() {
   const clearAllFilters = () => {
     setTypeFilter("all");
     setAccessFilter("all");
-    setCustomerFilter("all");
+    setCustomerFilter([]);
     setHierarchyFilter("all");
     setSetupTimeRange([0, 60]);
   };
@@ -959,12 +961,12 @@ export default function ObjectsPage() {
                   <X className="h-3 w-3" />
                 </Badge>
               )}
-              {customerFilter !== "all" && (
-                <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setCustomerFilter("all")} data-testid="badge-filter-customer">
-                  Kund: {customers.find(c => c.id === customerFilter)?.name || customerFilter}
+              {customerFilter.map(cId => (
+                <Badge key={cId} variant="secondary" className="gap-1 cursor-pointer" onClick={() => removeCustomerFilter(cId)} data-testid={`badge-filter-customer-${cId}`}>
+                  Kund: {customers.find(c => c.id === cId)?.name || cId}
                   <X className="h-3 w-3" />
                 </Badge>
-              )}
+              ))}
               {hierarchyFilter !== "all" && (
                 <Badge variant="secondary" className="gap-1 cursor-pointer" onClick={() => setHierarchyFilter("all")} data-testid="badge-filter-hierarchy">
                   Nivå: {hierarchyLevelLabels[hierarchyFilter]?.label || hierarchyFilter}
@@ -1005,15 +1007,22 @@ export default function ObjectsPage() {
                   ))}
                 </SelectContent>
               </Select>
-              <Select value={customerFilter} onValueChange={setCustomerFilter}>
+              <Select value="" onValueChange={(v) => { if (v === "__clear__") { setCustomerFilter([]); } else if (v && v !== "__none__") { addCustomerFilter(v); } }}>
                 <SelectTrigger className="w-[180px]" data-testid="select-customer-filter">
-                  <SelectValue placeholder="Kund" />
+                  <SelectValue placeholder={customerFilter.length > 0 ? `${customerFilter.length} kunder valda` : "Filtrera kund"} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">Alla kunder</SelectItem>
-                  {customers.map(c => (
+                  {customerFilter.length > 0 && (
+                    <SelectItem value="__clear__" data-testid="select-customer-clear">
+                      Rensa alla kunder
+                    </SelectItem>
+                  )}
+                  {customers.filter(c => !customerFilter.includes(c.id)).map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                   ))}
+                  {customers.filter(c => !customerFilter.includes(c.id)).length === 0 && customerFilter.length > 0 && (
+                    <SelectItem value="__none__" disabled>Alla kunder valda</SelectItem>
+                  )}
                 </SelectContent>
               </Select>
               <Select value={hierarchyFilter} onValueChange={setHierarchyFilter}>

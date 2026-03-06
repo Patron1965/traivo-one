@@ -279,7 +279,8 @@ export async function registerRoutes(
       const limit = parseInt(req.query.limit as string) || 100;
       const offset = parseInt(req.query.offset as string) || 0;
       const search = req.query.search as string || "";
-      const customerId = req.query.customerId as string || undefined;
+      const customerIdParam = req.query.customerId as string || undefined;
+      const customerIds = customerIdParam ? customerIdParam.split(",").filter(id => id.trim()) : undefined;
       const objectType = req.query.objectType as string || undefined;
       const hierarchyLevel = req.query.hierarchyLevel as string || undefined;
       const accessType = req.query.accessType as string || undefined;
@@ -301,7 +302,7 @@ export async function registerRoutes(
       // If paginated request
       if (req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
         const filters = hasFilters ? { objectType, hierarchyLevel, accessType } : undefined;
-        const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerId, filters);
+        const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
         
         // Filter out objects that already have a cluster
         if (noCluster) {

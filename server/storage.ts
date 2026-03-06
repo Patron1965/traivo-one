@@ -144,7 +144,7 @@ export interface IStorage {
   deleteCustomer(id: string): Promise<void>;
   
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string, filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
@@ -770,13 +770,17 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerId?: string, filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
-    const { sql, count } = await import("drizzle-orm");
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
+    const { sql, count, inArray } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
     
-    if (customerId) {
-      whereConditions = and(whereConditions, eq(objects.customerId, customerId));
+    if (customerIds && customerIds.length > 0) {
+      if (customerIds.length === 1) {
+        whereConditions = and(whereConditions, eq(objects.customerId, customerIds[0]));
+      } else {
+        whereConditions = and(whereConditions, inArray(objects.customerId, customerIds));
+      }
     }
     
     if (filters?.objectType) {
