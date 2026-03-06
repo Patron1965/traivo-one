@@ -5287,6 +5287,134 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
+  app.post("/api/ai/service-patterns", isAuthenticated, async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectIds } = req.body as { objectIds?: string[] };
+
+      if (objectIds && (!Array.isArray(objectIds) || objectIds.length > 500)) {
+        return res.status(400).json({ error: "objectIds måste vara en array med max 500 element" });
+      }
+
+      const allObjects = objectIds && objectIds.length > 0
+        ? await storage.getObjectsByIds(tenantId, objectIds)
+        : await storage.getObjects(tenantId);
+
+      const orders = await storage.getWorkOrders(tenantId);
+
+      const typeStats: Record<string, { count: number; totalOrders: number; avgInterval: number; intervals: number[] }> = {};
+      const anomalies: { objectId: string; objectName: string; reason: string }[] = [];
+
+      const objectSet = new Set(allObjects.map(o => o.id));
+
+      for (const obj of allObjects) {
+        const objOrders = orders
+          .filter(o => o.objectId === obj.id && (o.completedAt || o.status === "completed" || o.orderStatus === "utford"))
+          .sort((a, b) => {
+            const da = a.completedAt ? new Date(a.completedAt).getTime() : 0;
+            const db = b.completedAt ? new Date(b.completedAt).getTime() : 0;
+            return da - db;
+          });
+
+        const objType = obj.objectType || "unknown";
+        if (!typeStats[objType]) {
+          typeStats[objType] = { count: 0, totalOrders: 0, avgInterval: 0, intervals: [] };
+        }
+        typeStats[objType].count++;
+        typeStats[objType].totalOrders += objOrders.length;
+
+        if (objOrders.length >= 2) {
+          for (let i = 1; i < objOrders.length; i++) {
+            const prev = objOrders[i - 1].completedAt ? new Date(objOrders[i - 1].completedAt!) : null;
+            const curr = objOrders[i].completedAt ? new Date(objOrders[i].completedAt!) : null;
+            if (prev && curr) {
+              const days = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
+              if (days > 0 && days < 365) {
+                typeStats[objType].intervals.push(days);
+              }
+            }
+          }
+        }
+
+        if (objOrders.length === 0) {
+          anomalies.push({ objectId: obj.id, objectName: obj.name, reason: "Aldrig servat — saknar historik" });
+        }
+      }
+
+      for (const [type, stats] of Object.entries(typeStats)) {
+        if (stats.intervals.length > 0) {
+          stats.avgInterval = Math.round(stats.intervals.reduce((a, b) => a + b, 0) / stats.intervals.length);
+        }
+      }
+
+      for (const obj of allObjects) {
+        const objType = obj.objectType || "unknown";
+        const stats = typeStats[objType];
+        if (!stats || stats.avgInterval === 0) continue;
+
+        const objOrders = orders
+          .filter(o => o.objectId === obj.id && o.completedAt)
+          .sort((a, b) => new Date(a.completedAt!).getTime() - new Date(b.completedAt!).getTime());
+
+        if (objOrders.length >= 2) {
+          const lastTwo = objOrders.slice(-2);
+          const interval = (new Date(lastTwo[1].completedAt!).getTime() - new Date(lastTwo[0].completedAt!).getTime()) / (1000 * 60 * 60 * 24);
+          if (interval > stats.avgInterval * 1.8) {
+            anomalies.push({ objectId: obj.id, objectName: obj.name, reason: `Ovanligt långt intervall (${Math.round(interval)} dagar vs snitt ${stats.avgInterval} dagar)` });
+          }
+        }
+      }
+
+      const patterns: { label: string; value: string }[] = [];
+      patterns.push({ label: "Analyserade objekt", value: allObjects.length.toString() });
+
+      for (const [type, stats] of Object.entries(typeStats)) {
+        const typeLabel: Record<string, string> = { miljokarl: "Miljökärl", rum: "Miljörum", underjord: "Underjordsbehållare", fastighet: "Fastighet", omrade: "Område" };
+        if (stats.avgInterval > 0) {
+          patterns.push({ label: `${typeLabel[type] || type} — snittintervall`, value: `${stats.avgInterval} dagar (${stats.count} objekt, ${stats.totalOrders} ordrar)` });
+        } else {
+          patterns.push({ label: `${typeLabel[type] || type}`, value: `${stats.count} objekt, ${stats.totalOrders} ordrar` });
+        }
+      }
+
+      if (anomalies.length > 0) {
+        patterns.push({ label: "Avvikande objekt", value: anomalies.length.toString() });
+      }
+
+      let summary = "";
+      try {
+        const OpenAI = (await import("openai")).default;
+        const aiClient = new OpenAI({
+          apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+          baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+        });
+
+        const dataContext = JSON.stringify({ objectCount: allObjects.length, typeStats: Object.fromEntries(Object.entries(typeStats).map(([k, v]) => [k, { count: v.count, totalOrders: v.totalOrders, avgInterval: v.avgInterval }])), anomalyCount: anomalies.length, topAnomalies: anomalies.slice(0, 5) });
+
+        const completion = await aiClient.chat.completions.create({
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: "Du är en AI-assistent för fältservice-planering i Sverige. Analysera servicemönster och ge en kort sammanfattning på svenska (max 3-4 meningar). Var konkret med siffror." },
+            { role: "user", content: `Analysera dessa servicemönster:\n${dataContext}` }
+          ],
+          max_tokens: 300,
+          temperature: 0.3,
+        });
+
+        summary = completion.choices[0]?.message?.content || "";
+      } catch (aiError) {
+        const totalOrders = Object.values(typeStats).reduce((sum, s) => sum + s.totalOrders, 0);
+        const avgIntervals = Object.entries(typeStats).filter(([_, s]) => s.avgInterval > 0).map(([type, s]) => `${type}: ${s.avgInterval} dagar`).join(", ");
+        summary = `${allObjects.length} objekt analyserade med ${totalOrders} serviceordrar totalt. Snittintervall per typ: ${avgIntervals || "ingen data"}. ${anomalies.length} objekt avviker från normalt mönster.`;
+      }
+
+      res.json({ summary, patterns, anomalies: anomalies.slice(0, 20) });
+    } catch (error) {
+      console.error("Service pattern analysis error:", error);
+      res.status(500).json({ error: "Kunde inte analysera servicemönster" });
+    }
+  });
+
   // AI Proactive Tips - background anomaly analysis for proactive suggestions
   // OPTIMIZED: Uses efficient SQL COUNT queries instead of fetching all records
   app.get("/api/ai/proactive-tips", isAuthenticated, async (req, res) => {

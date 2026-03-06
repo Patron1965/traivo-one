@@ -97,10 +97,18 @@ export function AICard({
                 <div className="space-y-2 mt-2">
                   {insights.slice(0, 3).map((insight, index) => {
                     const Icon = insightIcons[insight.type];
+                    const isClickable = !!insight.action;
                     return (
                       <div
                         key={index}
-                        className="flex items-start gap-2 p-2 rounded-md bg-background/50"
+                        className={`flex items-start gap-2 p-2 rounded-md bg-background/50 ${
+                          isClickable ? "cursor-pointer hover:bg-accent transition-colors" : ""
+                        }`}
+                        onClick={insight.action?.onClick}
+                        onKeyDown={isClickable ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); insight.action?.onClick(); } } : undefined}
+                        role={isClickable ? "button" : undefined}
+                        tabIndex={isClickable ? 0 : undefined}
+                        data-testid={isClickable ? `button-ai-insight-${index}` : undefined}
                       >
                         <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${insightColors[insight.type]}`} />
                         <div className="flex-1 min-w-0">
@@ -109,6 +117,9 @@ export function AICard({
                             {insight.description}
                           </p>
                         </div>
+                        {isClickable && (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 mt-0.5 text-muted-foreground -rotate-90" />
+                        )}
                       </div>
                     );
                   })}

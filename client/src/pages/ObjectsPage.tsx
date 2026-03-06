@@ -228,6 +228,9 @@ export default function ObjectsPage() {
   const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
+  const [clusterDialog, setClusterDialog] = useState<{ open: boolean; loading: boolean; data?: { suggestions?: { suggestedName: string; objectCount: number; postalCodes: string[]; rationale: string }[]; message?: string } }>({ open: false, loading: false });
+  const [maintenanceDialog, setMaintenanceDialog] = useState<{ open: boolean; loading: boolean; data?: { overdue: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; upcoming: { objectName: string; predictedDate: string; daysUntil: number; confidence: number }[]; summary: string; totalPredicted: number } }>({ open: false, loading: false });
   const [overflowPanel, setOverflowPanel] = useState<{ objectId: string; panel: "images" | "payers" | "parents" | "articles" } | null>(null);
   const [batchGeoOpen, setBatchGeoOpen] = useState(false);
   const [batchGeoCity, setBatchGeoCity] = useState("");
@@ -903,9 +906,34 @@ export default function ObjectsPage() {
         variant="compact"
         defaultExpanded={false}
         insights={[
-          { type: "suggestion", title: "Servicemönster", description: "AI kan identifiera mönster i hur objekt servas för bättre planering" },
-          { type: "optimization", title: "Gruppering", description: "Föreslå optimal gruppering av objekt baserat på geografi och servicebehov" },
-          { type: "info", title: "Underhållsprognoser", description: "Prediktera kommande servicebehov baserat på historik" },
+          { type: "suggestion", title: "Servicemönster", description: "AI kan identifiera mönster i hur objekt servas för bättre planering", action: { label: "Analysera", onClick: async () => {
+            setServicePatternDialog({ open: true, loading: true });
+            try {
+              const ids = filteredObjects.map(o => o.id);
+              const res = await apiRequest("POST", "/api/ai/service-patterns", { objectIds: ids.length <= 200 ? ids : undefined });
+              if (!res.ok) throw new Error("API error");
+              const data = await res.json();
+              setServicePatternDialog({ open: true, loading: false, data });
+            } catch { toast({ title: "Fel", description: "Kunde inte analysera servicemönster", variant: "destructive" }); setServicePatternDialog({ open: true, loading: false, data: { summary: "Kunde inte analysera servicemönster.", patterns: [], anomalies: [] } }); }
+          }}},
+          { type: "optimization", title: "Gruppering", description: "Föreslå optimal gruppering av objekt baserat på geografi och servicebehov", action: { label: "Analysera", onClick: async () => {
+            setClusterDialog({ open: true, loading: true });
+            try {
+              const res = await apiRequest("GET", "/api/ai/auto-cluster");
+              if (!res.ok) throw new Error("API error");
+              const data = await res.json();
+              setClusterDialog({ open: true, loading: false, data });
+            } catch { toast({ title: "Fel", description: "Kunde inte generera klusterförslag", variant: "destructive" }); setClusterDialog({ open: true, loading: false, data: { message: "Kunde inte generera klusterförslag." } }); }
+          }}},
+          { type: "info", title: "Underhållsprognoser", description: "Prediktera kommande servicebehov baserat på historik", action: { label: "Analysera", onClick: async () => {
+            setMaintenanceDialog({ open: true, loading: true });
+            try {
+              const res = await apiRequest("GET", "/api/ai/predictive-maintenance");
+              if (!res.ok) throw new Error("API error");
+              const data = await res.json();
+              setMaintenanceDialog({ open: true, loading: false, data });
+            } catch { toast({ title: "Fel", description: "Kunde inte generera prognoser", variant: "destructive" }); setMaintenanceDialog({ open: true, loading: false, data: { overdue: [], upcoming: [], summary: "Kunde inte generera prognoser.", totalPredicted: 0 } }); }
+          }}},
         ]}
       />
 
@@ -1777,6 +1805,166 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
             return null;
         }
       })()}
+
+      <Dialog open={servicePatternDialog.open} onOpenChange={(v) => { if (!v) setServicePatternDialog({ open: false, loading: false }); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" data-testid="text-service-pattern-title">
+              <BarChart3 className="h-5 w-5 text-blue-500" />
+              Servicemönster — AI-analys
+            </DialogTitle>
+            <DialogDescription>Analys av servicehistorik och mönster för filtrerade objekt</DialogDescription>
+          </DialogHeader>
+          {servicePatternDialog.loading ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+              <p className="text-sm text-muted-foreground">AI analyserar servicemönster...</p>
+            </div>
+          ) : servicePatternDialog.data && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-md bg-purple-500/5 border border-purple-500/20">
+                <p className="text-sm" data-testid="text-service-pattern-summary">{servicePatternDialog.data.summary}</p>
+              </div>
+              {servicePatternDialog.data.patterns.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Statistik</p>
+                  {servicePatternDialog.data.patterns.map((p, i) => (
+                    <div key={i} className="flex justify-between items-center py-1.5 border-b border-border/50 last:border-0">
+                      <span className="text-sm">{p.label}</span>
+                      <span className="text-sm font-medium" data-testid={`text-pattern-value-${i}`}>{p.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {servicePatternDialog.data.anomalies.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
+                    Avvikande objekt ({servicePatternDialog.data.anomalies.length})
+                  </p>
+                  {servicePatternDialog.data.anomalies.map((a, i) => (
+                    <div key={i} className="p-2 rounded-md bg-amber-500/5 border border-amber-500/20">
+                      <p className="text-sm font-medium">{a.objectName}</p>
+                      <p className="text-xs text-muted-foreground">{a.reason}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={clusterDialog.open} onOpenChange={(v) => { if (!v) setClusterDialog({ open: false, loading: false }); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" data-testid="text-cluster-title">
+              <MapIcon className="h-5 w-5 text-purple-500" />
+              Gruppering — AI-förslag
+            </DialogTitle>
+            <DialogDescription>Förslag på optimal geografisk gruppering av objekt</DialogDescription>
+          </DialogHeader>
+          {clusterDialog.loading ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+              <p className="text-sm text-muted-foreground">AI analyserar gruppering...</p>
+            </div>
+          ) : clusterDialog.data && (
+            <div className="space-y-4">
+              {clusterDialog.data.message && (
+                <div className="p-3 rounded-md bg-purple-500/5 border border-purple-500/20">
+                  <p className="text-sm" data-testid="text-cluster-message">{clusterDialog.data.message}</p>
+                </div>
+              )}
+              {clusterDialog.data.suggestions && clusterDialog.data.suggestions.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {clusterDialog.data.suggestions.length} kluster föreslagna
+                  </p>
+                  {clusterDialog.data.suggestions.map((s, i) => (
+                    <div key={i} className="p-3 rounded-md bg-background border border-border/50" data-testid={`card-cluster-suggestion-${i}`}>
+                      <div className="flex justify-between items-start">
+                        <p className="text-sm font-medium">{s.suggestedName}</p>
+                        <Badge variant="secondary" className="text-xs">{s.objectCount} objekt</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">{s.rationale}</p>
+                      {s.postalCodes.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {s.postalCodes.slice(0, 6).map((pc, j) => (
+                            <Badge key={j} variant="outline" className="text-xs">{pc}</Badge>
+                          ))}
+                          {s.postalCodes.length > 6 && <Badge variant="outline" className="text-xs">+{s.postalCodes.length - 6}</Badge>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {(!clusterDialog.data.suggestions || clusterDialog.data.suggestions.length === 0) && !clusterDialog.data.message && (
+                <p className="text-sm text-muted-foreground text-center py-4">Inga klusterförslag genererade. Kontrollera att objekt har adresser.</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={maintenanceDialog.open} onOpenChange={(v) => { if (!v) setMaintenanceDialog({ open: false, loading: false }); }}>
+        <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2" data-testid="text-maintenance-title">
+              <Clock className="h-5 w-5 text-green-500" />
+              Underhållsprognoser
+            </DialogTitle>
+            <DialogDescription>Predikterade servicebehov baserat på historisk data</DialogDescription>
+          </DialogHeader>
+          {maintenanceDialog.loading ? (
+            <div className="flex flex-col items-center gap-3 py-8">
+              <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
+              <p className="text-sm text-muted-foreground">Beräknar underhållsprognoser...</p>
+            </div>
+          ) : maintenanceDialog.data && (
+            <div className="space-y-4">
+              <div className="p-3 rounded-md bg-green-500/5 border border-green-500/20">
+                <p className="text-sm" data-testid="text-maintenance-summary">{maintenanceDialog.data.summary}</p>
+              </div>
+              {maintenanceDialog.data.overdue.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-red-500 uppercase tracking-wide flex items-center gap-1">
+                    <AlertTriangle className="h-3.5 w-3.5" />
+                    Försenade ({maintenanceDialog.data.overdue.length})
+                  </p>
+                  {maintenanceDialog.data.overdue.map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-2 rounded-md bg-red-500/5 border border-red-500/20">
+                      <div>
+                        <p className="text-sm font-medium">{item.objectName}</p>
+                        <p className="text-xs text-muted-foreground">Förväntad: {item.predictedDate}</p>
+                      </div>
+                      <Badge variant="destructive" className="text-xs">{Math.abs(item.daysUntil)}d försenad</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {maintenanceDialog.data.upcoming.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Kommande ({maintenanceDialog.data.upcoming.length})</p>
+                  {maintenanceDialog.data.upcoming.map((item, i) => (
+                    <div key={i} className="flex justify-between items-center p-2 rounded-md bg-background border border-border/50">
+                      <div>
+                        <p className="text-sm font-medium">{item.objectName}</p>
+                        <p className="text-xs text-muted-foreground">Förväntad: {item.predictedDate}</p>
+                      </div>
+                      <Badge variant="secondary" className="text-xs">{item.daysUntil}d kvar ({item.confidence}%)</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {maintenanceDialog.data.overdue.length === 0 && maintenanceDialog.data.upcoming.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">Ingen tillräcklig historik för att generera prognoser.</p>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
