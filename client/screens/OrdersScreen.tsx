@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Animated as RNAnimated } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { FlashList } from '@shopify/flash-list';
@@ -26,6 +26,50 @@ import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus } from '../types';
+
+function getStatusProgress(status: OrderStatus): number {
+  const map: Record<string, number> = {
+    planned: 0, skapad: 0,
+    dispatched: 0.25, planerad_pre: 0.15, planerad_resurs: 0.25, planerad_las: 0.35,
+    on_site: 0.5,
+    in_progress: 0.75,
+    completed: 1, utford: 1, fakturerad: 1,
+    failed: 0, cancelled: 0, impossible: 0,
+  };
+  return map[status] ?? 0;
+}
+
+function PulsingSwipeHint({ label }: { label: string }) {
+  const pulseAnim = useRef(new RNAnimated.Value(1)).current;
+
+  useEffect(() => {
+    const anim = RNAnimated.loop(
+      RNAnimated.sequence([
+        RNAnimated.timing(pulseAnim, { toValue: 0.4, duration: 1200, useNativeDriver: true }),
+        RNAnimated.timing(pulseAnim, { toValue: 1, duration: 1200, useNativeDriver: true }),
+      ])
+    );
+    anim.start();
+    return () => anim.stop();
+  }, []);
+
+  return (
+    <RNAnimated.View style={[styles.swipeHintAnimated, { opacity: pulseAnim }]}>
+      <Feather name="chevrons-right" size={12} color={Colors.secondary} />
+      <ThemedText variant="caption" color={Colors.secondary} style={styles.swipeHintLabel}>
+        {label}
+      </ThemedText>
+    </RNAnimated.View>
+  );
+}
+
+function TimelineSeparator() {
+  return (
+    <View style={styles.timelineSeparator}>
+      <View style={styles.timelineLine} />
+    </View>
+  );
+}
 
 const SWIPE_THRESHOLD = 60;
 const ACTION_WIDTH = 100;
@@ -96,12 +140,14 @@ function SwipeableOrderCard({
   onAdvance,
   onDeviation,
   travelTime,
+  isFirstSwipeable,
 }: {
   order: Order;
   onPress: () => void;
   onAdvance: (orderId: number | string, nextStatus: OrderStatus) => void;
   onDeviation: (orderId: number | string) => void;
   travelTime?: string | null;
+  isFirstSwipeable?: boolean;
 }) {
   const translateX = useSharedValue(0);
   const swipeable = canSwipe(order);
@@ -219,6 +265,7 @@ function SwipeableOrderCard({
                   totalSteps={totalSteps}
                   stepProgress={stepProgress}
                   travelTime={travelTime}
+                  isFirstSwipeable={isFirstSwipeable}
                 />
               </Pressable>
             </Animated.View>
@@ -232,6 +279,7 @@ function SwipeableOrderCard({
             totalSteps={totalSteps}
             stepProgress={stepProgress}
             travelTime={travelTime}
+            isFirstSwipeable={false}
           />
         </Pressable>
       )}
@@ -245,14 +293,42 @@ function OrderCardContent({
   totalSteps,
   stepProgress,
   travelTime,
+  isFirstSwipeable,
 }: {
   order: Order;
   completedSteps: number;
   totalSteps: number;
   stepProgress: number;
   travelTime?: string | null;
+  isFirstSwipeable?: boolean;
 }) {
   const finished = isFinishedOrder(order.status);
+  const terminalStatuses: OrderStatus[] = ['failed', 'cancelled', 'impossible'];
+  const showProgress = !terminalStatuses.includes(order.status);
+  const effectiveProgress = totalSteps > 0 ? stepProgress : getStatusProgress(order.status);
+  const progressLabel = totalSteps > 0 ? `${completedSteps}/${totalSteps}` : null;
+  const swipeable = canSwipe({ status: order.status, isLocked: order.isLocked } as Order);
+
+  const dependencyText = (() => {
+    if (!order.dependencies || order.dependencies.length === 0) return null;
+    if (order.isLocked) {
+      const dep = order.dependencies[0];
+      return dep?.dependsOnOrderNumber ? `Väntar på ${dep.dependsOnOrderNumber}` : 'Väntar på föregående';
+    }
+    return `Beroende: ${order.dependencies[0]?.dependsOnOrderNumber || 'annat uppdrag'}`;
+  })();
+
+  const restrictionText = (() => {
+    if (!order.timeRestrictions) return null;
+    const active = order.timeRestrictions.filter(r => r.isActive);
+    if (active.length === 0) return null;
+    const r = active[0];
+    if (r.startTime && r.endTime) return `${r.startTime}-${r.endTime}`;
+    if (r.endTime) return `Före ${r.endTime}`;
+    if (r.startTime) return `Efter ${r.startTime}`;
+    return r.description || 'Tidsbegränsning';
+  })();
+
   return (
     <Card style={[styles.orderCard, order.isLocked ? styles.lockedCard : null, finished ? styles.finishedCard : null]}>
       <View style={[styles.statusStripe, { backgroundColor: getStatusBorderColor(order.status) }]} />
@@ -269,7 +345,12 @@ function OrderCardContent({
             <ThemedText variant="subheading" color={finished ? Colors.textMuted : Colors.primary}>
               {order.scheduledTimeStart || '--:--'}
             </ThemedText>
-            <ThemedText variant="caption" color={finished ? Colors.textMuted : undefined}>{order.estimatedDuration} min</ThemedText>
+            <View style={styles.durationRow}>
+              <Feather name="briefcase" size={9} color={finished ? Colors.textMuted : Colors.textSecondary} />
+              <ThemedText variant="caption" color={finished ? Colors.textMuted : Colors.textSecondary} style={styles.durationText}>
+                {order.estimatedDuration} min
+              </ThemedText>
+            </View>
             {order.isLocked ? (
               <Feather name="lock" size={14} color={Colors.danger} style={styles.lockIcon} />
             ) : null}
@@ -292,7 +373,7 @@ function OrderCardContent({
               </View>
               <StatusBadge status={order.status} size="sm" />
             </View>
-            <ThemedText variant="subheading" numberOfLines={1} color={finished ? Colors.textMuted : undefined}>
+            <ThemedText variant="subheading" numberOfLines={2} color={finished ? Colors.textMuted : undefined}>
               {order.customerName}
             </ThemedText>
             <View style={styles.addressRow}>
@@ -302,25 +383,27 @@ function OrderCardContent({
               </ThemedText>
               {travelTime ? (
                 <View style={styles.travelBadge}>
-                  <Feather name="navigation" size={9} color={Colors.primary} />
+                  <Feather name="truck" size={9} color={Colors.primary} />
                   <ThemedText variant="caption" color={Colors.primary} style={styles.travelText}>
-                    {travelTime}
+                    {travelTime} dit
                   </ThemedText>
                 </View>
               ) : null}
             </View>
-            <ThemedText variant="caption" numberOfLines={1} color={Colors.textMuted}>
+            <ThemedText variant="caption" numberOfLines={2} color={Colors.textMuted}>
               {order.description}
             </ThemedText>
 
-            {totalSteps > 0 ? (
+            {showProgress ? (
               <View style={styles.progressSection}>
                 <View style={styles.progressBarBg}>
-                  <View style={[styles.progressBarFill, { width: `${stepProgress * 100}%` }]} />
+                  <View style={[styles.progressBarFill, { width: `${effectiveProgress * 100}%` }]} />
                 </View>
-                <ThemedText variant="caption" color={Colors.secondary} style={styles.progressText}>
-                  {completedSteps}/{totalSteps}
-                </ThemedText>
+                {progressLabel ? (
+                  <ThemedText variant="caption" color={Colors.secondary} style={styles.progressText}>
+                    {progressLabel}
+                  </ThemedText>
+                ) : null}
               </View>
             ) : null}
 
@@ -334,30 +417,29 @@ function OrderCardContent({
                 </View>
               ) : null}
 
-              {order.dependencies && order.dependencies.length > 0 ? (
+              {dependencyText ? (
                 <View style={styles.dependencyTag}>
-                  <Feather name="link" size={10} color={Colors.info} />
+                  <Feather name={order.isLocked ? 'lock' : 'link'} size={10} color={Colors.info} />
                   <ThemedText variant="caption" color={Colors.info} style={styles.tagText}>
-                    {order.isLocked ? 'LÅST' : 'BEROENDE'}
+                    {dependencyText}
                   </ThemedText>
                 </View>
               ) : null}
 
-              {order.timeRestrictions && order.timeRestrictions.filter(r => r.isActive).length > 0 ? (
+              {restrictionText ? (
                 <View style={styles.restrictionTag}>
-                  <Feather name="alert-triangle" size={10} color={Colors.danger} />
-                  <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
-                    BEGRÄNSNING
+                  <Feather name="clock" size={10} color={Colors.warning} />
+                  <ThemedText variant="caption" color={Colors.warning} style={styles.tagText}>
+                    {restrictionText}
                   </ThemedText>
                 </View>
               ) : null}
 
-              {canSwipe({ status: order.status, isLocked: order.isLocked } as Order) ? (
-                <View style={styles.swipeHint}>
+              {swipeable && isFirstSwipeable ? (
+                <PulsingSwipeHint label={`Svep: ${getNextStatusLabel(order.status)}`} />
+              ) : swipeable ? (
+                <View style={styles.swipeHintSmall}>
                   <Feather name="chevrons-right" size={10} color={Colors.textMuted} />
-                  <ThemedText variant="caption" color={Colors.textMuted} style={styles.tagText}>
-                    svep
-                  </ThemedText>
                 </View>
               ) : null}
             </View>
@@ -412,6 +494,8 @@ export function OrdersScreen({ navigation }: any) {
     navigation.navigate('ReportDeviation', { orderId });
   }, [navigation]);
 
+  const firstSwipeableId = filteredOrders.find(o => canSwipe(o))?.id;
+
   const renderOrder = ({ item: order }: { item: Order }) => {
     const travelMin = estimateTravelMinutes(
       currentPosition?.latitude, currentPosition?.longitude,
@@ -424,6 +508,7 @@ export function OrdersScreen({ navigation }: any) {
         onAdvance={handleAdvance}
         onDeviation={handleDeviation}
         travelTime={formatTravelTime(travelMin)}
+        isFirstSwipeable={order.id === firstSwipeableId}
       />
     );
   };
@@ -460,7 +545,8 @@ export function OrdersScreen({ navigation }: any) {
         <FlashList
           data={filteredOrders}
           renderItem={renderOrder}
-          estimatedItemSize={140}
+          estimatedItemSize={160}
+          ItemSeparatorComponent={TimelineSeparator}
           contentContainerStyle={{
             paddingHorizontal: Spacing.lg,
             paddingBottom: tabBarHeight + Spacing.xl,
@@ -513,7 +599,6 @@ const styles = StyleSheet.create({
     fontSize: FontSize.sm,
   },
   orderPressable: {
-    marginBottom: Spacing.sm,
     position: 'relative',
   },
   orderCard: {
@@ -611,6 +696,15 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: BorderRadius.sm,
   },
+  durationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    marginTop: 1,
+  },
+  durationText: {
+    fontSize: 9,
+  },
   travelText: {
     fontSize: 10,
   },
@@ -628,20 +722,49 @@ const styles = StyleSheet.create({
   dependencyTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.sm,
   },
   restrictionTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: BorderRadius.sm,
   },
-  swipeHint: {
+  swipeHintAnimated: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
+    marginLeft: 'auto',
+  },
+  swipeHintLabel: {
+    fontSize: 10,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  swipeHintSmall: {
+    marginLeft: 'auto',
+    opacity: 0.4,
   },
   tagText: {
     fontSize: 9,
+  },
+  timelineSeparator: {
+    height: 12,
+    paddingLeft: 5 + Spacing.md + 25,
+    justifyContent: 'center',
+  },
+  timelineLine: {
+    width: 2,
+    height: '100%',
+    backgroundColor: Colors.primaryLight,
+    borderRadius: 1,
+    opacity: 0.5,
   },
   progressSection: {
     flexDirection: 'row',
