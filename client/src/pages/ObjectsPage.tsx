@@ -963,7 +963,7 @@ export default function ObjectsPage() {
               )}
               {customerFilter.map(cId => (
                 <Badge key={cId} variant="secondary" className="gap-1 cursor-pointer" onClick={() => removeCustomerFilter(cId)} data-testid={`badge-filter-customer-${cId}`}>
-                  Kund: {customers.find(c => c.id === cId)?.name || cId}
+                  {customers.find(c => c.id === cId)?.name || cId}
                   <X className="h-3 w-3" />
                 </Badge>
               ))}
