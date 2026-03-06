@@ -19,13 +19,13 @@ args = "Start Backend"
 name = "Start Backend"
 author = "agent"
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [[workflows.workflow.tasks]]
 task = "shell.exec"
 args = "node server-dist/index.js"
 waitForPort = 5000
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [userenv]
 
