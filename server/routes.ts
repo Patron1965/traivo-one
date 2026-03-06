@@ -966,6 +966,9 @@ export async function registerRoutes(
           status
         );
         res.json(result);
+      } else if (status === 'unscheduled') {
+        const workOrders = await storage.getUnscheduledWorkOrders(tenantId, limit || 500);
+        res.json(workOrders);
       } else {
         const workOrders = await storage.getWorkOrders(tenantId, startDate, endDate, includeUnscheduled, limit);
         res.json(workOrders);

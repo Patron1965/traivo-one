@@ -443,16 +443,35 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     return { startDate, endDate };
   }, [currentDate.getFullYear(), currentDate.getMonth()]);
 
-  const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
-    queryKey: ["/api/work-orders", dateRange.startDate, dateRange.endDate],
+  const { data: scheduledWorkOrders = [], isLoading: scheduledLoading } = useQuery<WorkOrderWithObject[]>({
+    queryKey: ["/api/work-orders", "scheduled", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
-      const url = `/api/work-orders?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}&includeUnscheduled=true`;
+      const url = `/api/work-orders?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}`;
       const res = await fetch(url, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch work orders");
+      if (!res.ok) throw new Error("Failed to fetch scheduled work orders");
       return res.json();
     },
     staleTime: 60000,
   });
+
+  const { data: unscheduledWorkOrders = [], isLoading: unscheduledLoading } = useQuery<WorkOrderWithObject[]>({
+    queryKey: ["/api/work-orders", "unscheduled"],
+    queryFn: async () => {
+      const url = `/api/work-orders?status=unscheduled&limit=500`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch unscheduled work orders");
+      return res.json();
+    },
+    staleTime: 120000,
+  });
+
+  const workOrders = useMemo(() => {
+    const ids = new Set(scheduledWorkOrders.map(wo => wo.id));
+    const uniqueUnscheduled = unscheduledWorkOrders.filter(wo => !ids.has(wo.id));
+    return [...scheduledWorkOrders, ...uniqueUnscheduled];
+  }, [scheduledWorkOrders, unscheduledWorkOrders]);
+
+  const workOrdersLoading = scheduledLoading || unscheduledLoading;
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
