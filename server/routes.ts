@@ -5194,11 +5194,19 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // AI Predictive Maintenance - analyze order history to predict service needs
-  app.get("/api/ai/predictive-maintenance", isAuthenticated, async (req, res) => {
+  const handlePredictiveMaintenance = async (req: any, res: any) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
       const orders = await storage.getWorkOrders(tenantId);
-      const objects = await storage.getObjects(tenantId);
+
+      const objectIds = req.body?.objectIds as string[] | undefined;
+      if (objectIds && (!Array.isArray(objectIds) || objectIds.length > 500)) {
+        return res.status(400).json({ error: "objectIds måste vara en array med max 500 element" });
+      }
+
+      const objects = objectIds && objectIds.length > 0
+        ? await storage.getObjectsByIds(tenantId, objectIds)
+        : await storage.getObjects(tenantId);
       
       // Build object service history map
       const objectHistory: Map<string, { lastService: Date | null; avgDaysBetweenServices: number; serviceCount: number; objectName: string }> = new Map();
@@ -5285,7 +5293,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       console.error("Predictive maintenance error:", error);
       res.status(500).json({ error: "Kunde inte generera prediktioner" });
     }
-  });
+  };
+  app.get("/api/ai/predictive-maintenance", isAuthenticated, handlePredictiveMaintenance);
+  app.post("/api/ai/predictive-maintenance", isAuthenticated, handlePredictiveMaintenance);
 
   app.post("/api/ai/service-patterns", isAuthenticated, async (req, res) => {
     try {
@@ -6778,13 +6788,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
   });
 
   // AI Auto-Clustering - Föreslå optimala klustergränser
-  app.get("/api/ai/auto-cluster", async (req, res) => {
+  const handleAutoCluster = async (req: any, res: any) => {
     try {
-      const targetSize = parseInt(req.query.targetSize as string) || 50;
+      const targetSize = parseInt(req.query?.targetSize as string || req.body?.targetSize as string) || 50;
       
+      const objectIds = req.body?.objectIds as string[] | undefined;
+      if (objectIds && (!Array.isArray(objectIds) || objectIds.length > 500)) {
+        return res.status(400).json({ error: "objectIds måste vara en array med max 500 element" });
+      }
+
       const { generateAutoClusterSuggestions } = await import("./ai-planner");
       const tenantId = getTenantIdWithFallback(req);
-      const objects = await storage.getObjects(tenantId);
+      const objects = objectIds && objectIds.length > 0
+        ? await storage.getObjectsByIds(tenantId, objectIds)
+        : await storage.getObjects(tenantId);
       const clusters = await storage.getClusters(tenantId);
       
       const result = await generateAutoClusterSuggestions(objects, clusters, targetSize);
@@ -6794,7 +6811,9 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       console.error("Auto-cluster error:", error);
       res.status(500).json({ error: "Kunde inte generera klusterförslag" });
     }
-  });
+  };
+  app.get("/api/ai/auto-cluster", handleAutoCluster);
+  app.post("/api/ai/auto-cluster", handleAutoCluster);
 
   // Skapa kluster från AI-förslag
   app.post("/api/ai/auto-cluster/apply", async (req, res) => {

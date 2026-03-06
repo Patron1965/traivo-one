@@ -919,7 +919,8 @@ export default function ObjectsPage() {
           { type: "optimization", title: "Gruppering", description: "Föreslå optimal gruppering av objekt baserat på geografi och servicebehov", action: { label: "Analysera", onClick: async () => {
             setClusterDialog({ open: true, loading: true });
             try {
-              const res = await apiRequest("GET", "/api/ai/auto-cluster");
+              const ids = filteredObjects.map(o => o.id);
+              const res = await apiRequest("POST", "/api/ai/auto-cluster", { objectIds: ids.length <= 200 ? ids : undefined });
               if (!res.ok) throw new Error("API error");
               const data = await res.json();
               setClusterDialog({ open: true, loading: false, data });
@@ -928,7 +929,8 @@ export default function ObjectsPage() {
           { type: "info", title: "Underhållsprognoser", description: "Prediktera kommande servicebehov baserat på historik", action: { label: "Analysera", onClick: async () => {
             setMaintenanceDialog({ open: true, loading: true });
             try {
-              const res = await apiRequest("GET", "/api/ai/predictive-maintenance");
+              const ids = filteredObjects.map(o => o.id);
+              const res = await apiRequest("POST", "/api/ai/predictive-maintenance", { objectIds: ids.length <= 200 ? ids : undefined });
               if (!res.ok) throw new Error("API error");
               const data = await res.json();
               setMaintenanceDialog({ open: true, loading: false, data });
