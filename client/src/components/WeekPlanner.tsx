@@ -436,7 +436,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders", dateRange.startDate, dateRange.endDate],
     queryFn: async () => {
-      const url = `/api/work-orders?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}&includeUnscheduled=true&limit=500`;
+      const url = `/api/work-orders?startDate=${dateRange.startDate}&endDate=${dateRange.endDate}&includeUnscheduled=true`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch work orders");
       return res.json();
@@ -1826,7 +1826,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         assignments: autoFillPreview,
       });
       const data = await response.json();
-      toast({ title: "Planering tillämpad", description: `${data.applied} uppdrag planerade` });
+      const skippedMsg = autoFillSkipped > 0 ? `, ${autoFillSkipped} ryms ej denna vecka` : "";
+      toast({ title: "Planering tillämpad", description: `${data.applied} uppdrag planerade${skippedMsg}` });
       setAutoFillDialogOpen(false);
       setAutoFillPreview(null);
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
@@ -3763,6 +3764,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 <Badge variant="default">{autoFillPreview.length} tilldelade</Badge>
                 {autoFillSkipped > 0 && <Badge variant="secondary">{autoFillSkipped} ryms ej</Badge>}
               </div>
+              {autoFillSkipped > 0 && autoFillPreview.length > 0 && (
+                <p className="text-xs text-muted-foreground">{autoFillSkipped} uppdrag ryms ej i schemat och förblir oplanerade i orderstocken.</p>
+              )}
 
               {autoFillPreview.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
