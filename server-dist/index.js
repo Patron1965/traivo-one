@@ -1725,7 +1725,14 @@ function buildManifest(platform, req) {
   const hostUri = getHostUri(req);
   const sdkVersion = getExpoSdkVersion();
   const sdkMajor = sdkVersion.split(".")[0] + ".0.0";
-  const bundleUrl = `${hostUrl}/bundles/${platform}/index.bundle`;
+  const bundlePath = import_path.default.join(metroDir, platform, "index.bundle");
+  let bundleHash = "";
+  try {
+    const stat = import_fs.default.statSync(bundlePath);
+    bundleHash = `?v=${stat.mtimeMs.toString(36)}`;
+  } catch {
+  }
+  const bundleUrl = `${hostUrl}/bundles/${platform}/index.bundle${bundleHash}`;
   return {
     id: import_crypto.default.randomUUID(),
     createdAt: (/* @__PURE__ */ new Date()).toISOString(),
@@ -1803,7 +1810,7 @@ app.get("/bundles/:platform/index.bundle", (req, res) => {
     bundle = bundle.replace(devDomain, host);
   }
   res.setHeader("Content-Type", "application/javascript");
-  res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+  res.setHeader("Cache-Control", "no-cache");
   res.send(bundle);
 });
 app.use("/assets", import_express4.default.static(import_path.default.join(projectRoot, "assets"), {

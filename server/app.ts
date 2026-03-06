@@ -83,7 +83,13 @@ function buildManifest(platform: 'ios' | 'android', req: express.Request) {
   const sdkVersion = getExpoSdkVersion();
   const sdkMajor = sdkVersion.split('.')[0] + '.0.0';
 
-  const bundleUrl = `${hostUrl}/bundles/${platform}/index.bundle`;
+  const bundlePath = path.join(metroDir, platform, 'index.bundle');
+  let bundleHash = '';
+  try {
+    const stat = fs.statSync(bundlePath);
+    bundleHash = `?v=${stat.mtimeMs.toString(36)}`;
+  } catch {}
+  const bundleUrl = `${hostUrl}/bundles/${platform}/index.bundle${bundleHash}`;
 
   return {
     id: crypto.randomUUID(),
@@ -165,7 +171,7 @@ app.get('/bundles/:platform/index.bundle', (req, res) => {
     bundle = bundle.replace(devDomain, host);
   }
   res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.setHeader('Cache-Control', 'no-cache');
   res.send(bundle);
 });
 
