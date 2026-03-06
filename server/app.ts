@@ -227,24 +227,29 @@ app.get('/planner/map', (_req, res) => {
 });
 
 app.get('/', (req, res) => {
-  const expoPlatform = req.headers['expo-platform'] as string | undefined;
-  if (expoPlatform === 'ios' || expoPlatform === 'android') {
-    return serveManifest(expoPlatform, req, res);
-  }
-
-  const userAgent = req.headers['user-agent'] || '';
-  if (userAgent.includes('Expo') || userAgent.includes('okhttp')) {
-    const platform = userAgent.includes('iPhone') || userAgent.includes('iOS') ? 'ios' : 'android';
-    return serveManifest(platform as 'ios' | 'android', req, res);
-  }
-
-  const landingPath = path.join(templatesDir, 'landing-page.html');
-  res.sendFile(landingPath, (err) => {
-    if (err) {
-      console.error('Landing page not found:', landingPath);
-      res.status(200).send(`<!DOCTYPE html><html><head><title>Driver Core</title></head><body><h1>Driver Core API</h1><p>Server is running. Landing page not found at expected path.</p><p>API: <a href="/api/health">/api/health</a></p></body></html>`);
+  try {
+    const expoPlatform = req.headers['expo-platform'] as string | undefined;
+    if (expoPlatform === 'ios' || expoPlatform === 'android') {
+      return serveManifest(expoPlatform, req, res);
     }
-  });
+
+    const userAgent = req.headers['user-agent'] || '';
+    if (userAgent.includes('Expo') || userAgent.includes('okhttp')) {
+      const platform = userAgent.includes('iPhone') || userAgent.includes('iOS') ? 'ios' : 'android';
+      return serveManifest(platform as 'ios' | 'android', req, res);
+    }
+
+    const landingPath = path.join(templatesDir, 'landing-page.html');
+    res.sendFile(landingPath, (err) => {
+      if (err && !res.headersSent) {
+        res.status(200).send(`<!DOCTYPE html><html><head><title>Driver Core</title></head><body><h1>Driver Core API</h1><p>Server is running.</p></body></html>`);
+      }
+    });
+  } catch (e) {
+    if (!res.headersSent) {
+      res.status(200).send(`<!DOCTYPE html><html><head><title>Driver Core</title></head><body><h1>Driver Core API</h1><p>Server is running.</p></body></html>`);
+    }
+  }
 });
 
 process.on('uncaughtException', (err) => {
