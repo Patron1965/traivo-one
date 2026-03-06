@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle, ZoomIn, ZoomOut } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -217,7 +217,7 @@ function DraggableJobCard({ id, children, disabled = false }: { id: string; chil
   );
 }
 
-function DroppableCell({ id, children, className = "", dropFitInfo }: { id: string; children: JSX.Element; className?: string; dropFitInfo?: { bg: string; label: string; color: string } | null }) {
+function DroppableCell({ id, children, className = "", dropFitInfo, style }: { id: string; children: JSX.Element; className?: string; dropFitInfo?: { bg: string; label: string; color: string } | null; style?: React.CSSProperties }) {
   const { isOver, setNodeRef } = useDroppable({ id });
 
   const dropClass = isOver && dropFitInfo
@@ -230,6 +230,7 @@ function DroppableCell({ id, children, className = "", dropFitInfo }: { id: stri
     <div
       ref={setNodeRef}
       className={`${className} ${dropClass}`}
+      style={style}
     >
       {isOver && dropFitInfo && (
         <div className={`text-[9px] font-medium mb-1 ${dropFitInfo.color} flex items-center gap-1`} data-testid="drop-fit-indicator">
@@ -399,6 +400,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [autoFillApplying, setAutoFillApplying] = useState(false);
   const [autoFillSkipped, setAutoFillSkipped] = useState(0);
   const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number; clusterSkipped: number } | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(2);
+  const zoomLevels = [
+    { label: "Kompakt", dayH: 40, weekH: 80, monthH: 70, scale: 0.75 },
+    { label: "Liten", dayH: 50, weekH: 100, monthH: 85, scale: 0.85 },
+    { label: "Normal", dayH: 60, weekH: 120, monthH: 100, scale: 1 },
+    { label: "Stor", dayH: 80, weekH: 160, monthH: 130, scale: 1.15 },
+    { label: "Mycket stor", dayH: 100, weekH: 200, monthH: 160, scale: 1.3 },
+  ];
+  const zoom = zoomLevels[zoomLevel];
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -2057,6 +2067,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     );
   };
 
+  const zoomTextClass = zoom.scale <= 0.85 ? "text-[9px]" : zoom.scale >= 1.15 ? "text-sm" : "text-xs";
+  const zoomPadClass = zoom.scale <= 0.85 ? "p-1" : zoom.scale >= 1.15 ? "p-3" : "p-2";
+  const zoomGapClass = zoom.scale <= 0.85 ? "space-y-0.5" : zoom.scale >= 1.15 ? "space-y-2" : "space-y-1";
+
   const renderDayTimelineView = () => {
     const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
     const day = currentDate;
@@ -2139,10 +2153,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   <DroppableCell
                     key={resource.id}
                     id={droppableId}
-                    className={`p-2 border-r last:border-r-0 min-h-[60px] transition-colors ${cellBg}`}
+                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors ${cellBg}`}
                     dropFitInfo={dayCellDropFit}
+                    style={{ minHeight: `${zoom.dayH}px` }}
                   >
-                    <div className="space-y-1" data-testid={`drop-zone-${resource.id}-${hour}`}>
+                    <div className={zoomGapClass} data-testid={`drop-zone-${resource.id}-${hour}`}>
                       {jobs.map((job) => {
                         const travelAfter = resourceTravels.find(t => t.fromJobId === job.id);
                         return (
@@ -2311,8 +2326,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   <DroppableCell 
                     key={dayIndex} 
                     id={droppableId}
-                    className={`p-2 border-r last:border-r-0 min-h-[120px] transition-colors ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
+                    className={`${zoomPadClass} border-r last:border-r-0 transition-colors ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
                     dropFitInfo={cellDropFit}
+                    style={{ minHeight: `${zoom.weekH}px` }}
                   >
                     <div data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
@@ -2356,7 +2372,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                           </TooltipContent>
                         </Tooltip>
                       )}
-                      <div className="space-y-1">
+                      <div className={zoomGapClass}>
                         {jobs.length === 0 && (
                           <div className="flex items-center justify-center py-4 text-muted-foreground/40">
                             <Plus className="h-4 w-4" />
@@ -2408,7 +2424,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           const cells = [];
           
           for (let i = 0; i < emptyCells; i++) {
-            cells.push(<div key={`empty-${i}`} className="min-h-[100px]" />);
+            cells.push(<div key={`empty-${i}`} style={{ minHeight: `${zoom.monthH}px` }} />);
           }
           
           for (let d = 1; d <= daysInCurrentMonth; d++) {
@@ -2434,7 +2450,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             cells.push(
               <div 
                 key={d} 
-                className={`min-h-[100px] p-2 rounded-md border cursor-pointer hover-elevate transition-colors ${isToday ? "border-primary bg-primary/5" : dayRestrictionCount > 0 ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" : "border-border bg-muted/30"}`}
+                className={`p-2 rounded-md border cursor-pointer hover-elevate transition-colors ${isToday ? "border-primary bg-primary/5" : dayRestrictionCount > 0 ? "border-red-300 dark:border-red-800 bg-red-50/50 dark:bg-red-950/20" : "border-border bg-muted/30"}`}
+                style={{ minHeight: `${zoom.monthH}px` }}
                 onClick={() => goToDay(day)}
                 data-testid={`month-day-${d}`}
               >
@@ -3245,6 +3262,52 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             </div>
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            {viewMode !== "route" && (
+              <div className="flex items-center gap-1 border rounded-md px-1" data-testid="zoom-controls">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      disabled={zoomLevel === 0}
+                      onClick={() => setZoomLevel(Math.max(0, zoomLevel - 1))}
+                      data-testid="button-zoom-out"
+                    >
+                      <ZoomOut className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Zooma ut</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span
+                      className="text-[10px] text-muted-foreground w-12 text-center cursor-pointer select-none"
+                      onClick={() => setZoomLevel(2)}
+                      data-testid="text-zoom-level"
+                    >
+                      {zoom.label}
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>Klicka för att återställa zoom</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      disabled={zoomLevel === zoomLevels.length - 1}
+                      onClick={() => setZoomLevel(Math.min(zoomLevels.length - 1, zoomLevel + 1))}
+                      data-testid="button-zoom-in"
+                    >
+                      <ZoomIn className="h-3.5 w-3.5" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Zooma in</TooltipContent>
+                </Tooltip>
+              </div>
+            )}
             <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && handleViewModeChange(v as ViewMode)} data-testid="toggle-view-mode">
               <ToggleGroupItem value="day" aria-label="Dagvy" data-testid="toggle-day">
                 <CalendarDays className="h-4 w-4 mr-1" />
