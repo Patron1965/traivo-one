@@ -11217,11 +11217,24 @@ setInterval(loadRoutes, 30000);
         }
       }
 
+      const capacitySummary: Record<string, number> = {};
+      for (const resource of selectedResources) {
+        for (const day of weekDays) {
+          const dayStr = day.toISOString().split("T")[0];
+          const used = resourceDayMinutes[resource.id][dayStr] || 0;
+          capacitySummary[dayStr] = (capacitySummary[dayStr] || 0) + used;
+        }
+      }
+
       res.json({
         assignments,
         totalAssigned: assignments.length,
         totalSkipped: skipped.length,
+        totalUnscheduled: unscheduledOrders.length,
         skippedIds: skipped,
+        capacityPerDay: capacitySummary,
+        maxMinutesPerDay: Math.round(maxMinutesPerDay),
+        resourceCount: selectedResources.length,
       });
     } catch (error) {
       console.error("Auto-plan week error:", error);

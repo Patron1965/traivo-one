@@ -398,6 +398,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [autoFillPreview, setAutoFillPreview] = useState<Array<{ workOrderId: string; resourceId: string; scheduledDate: string; scheduledStartTime: string; title: string; address: string; estimatedDuration: number; priority: string }> | null>(null);
   const [autoFillApplying, setAutoFillApplying] = useState(false);
   const [autoFillSkipped, setAutoFillSkipped] = useState(0);
+  const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number } | null>(null);
   const { toast } = useToast();
 
   const sensors = useSensors(
@@ -1809,6 +1810,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       const data = await response.json();
       setAutoFillPreview(data.assignments || []);
       setAutoFillSkipped(data.totalSkipped || 0);
+      setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0 } : null);
     } catch (error) {
       toast({ title: "Fel", description: "Kunde inte generera planering", variant: "destructive" });
     } finally {
@@ -3790,8 +3792,39 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               )}
 
               {autoFillPreview.length === 0 && (
-                <div className="p-4 text-center text-muted-foreground text-sm border rounded-lg">
-                  Inga uppdrag kunde tilldelas. Alla tider kan vara fyllda eller det finns inga oplanerade uppdrag.
+                <div className="p-4 text-sm border rounded-lg space-y-2">
+                  <p className="text-center text-muted-foreground font-medium">Inga uppdrag kunde tilldelas denna vecka.</p>
+                  {autoFillDiag && (
+                    <div className="space-y-1 text-xs text-muted-foreground">
+                      {autoFillDiag.totalUnscheduled === 0 ? (
+                        <p className="flex items-center gap-1"><Check className="h-3.5 w-3.5 text-green-500" /> Alla uppdrag är redan planerade.</p>
+                      ) : (
+                        <>
+                          <p>{autoFillDiag.totalUnscheduled} oplanerade uppdrag hittades men ryms ej i schemat.</p>
+                          <p>{autoFillDiag.resourceCount} resurser × 5 dagar = {autoFillDiag.resourceCount * 5} resursdagar (max {Math.round(autoFillDiag.maxMinutesPerDay / 60)}h/dag)</p>
+                          {Object.entries(autoFillDiag.capacityPerDay).length > 0 && (
+                            <div className="grid grid-cols-5 gap-1 mt-1">
+                              {Object.entries(autoFillDiag.capacityPerDay).sort().map(([day, mins]) => {
+                                const pct = Math.min(100, Math.round((mins / autoFillDiag!.maxMinutesPerDay) * 100 / autoFillDiag!.resourceCount * autoFillDiag!.resourceCount));
+                                const totalCapacity = autoFillDiag!.maxMinutesPerDay * autoFillDiag!.resourceCount;
+                                const fillPct = Math.min(100, Math.round((mins / totalCapacity) * 100));
+                                return (
+                                  <div key={day} className="text-center">
+                                    <p className="font-medium">{day.slice(5)}</p>
+                                    <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-0.5">
+                                      <div className={`h-full rounded-full ${fillPct >= 95 ? 'bg-red-500' : fillPct >= 70 ? 'bg-amber-500' : 'bg-green-500'}`} style={{ width: `${fillPct}%` }} />
+                                    </div>
+                                    <p className="mt-0.5">{fillPct}%</p>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                          <p className="mt-1">Prova att öka överbokningsprocenten eller byta till en annan vecka.</p>
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
