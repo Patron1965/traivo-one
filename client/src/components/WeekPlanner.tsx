@@ -723,13 +723,24 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     });
   }, [scheduledJobs, filterCustomer, filterPriority]);
 
-  const currentWeekScheduledJobs = useMemo(() => {
-    const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
-    const weekEnd = addDays(weekStart, 5);
+  const currentViewScheduledJobs = useMemo(() => {
+    let rangeStart: Date;
+    let rangeEnd: Date;
+    if (viewMode === "month") {
+      rangeStart = startOfMonth(currentDate);
+      rangeEnd = addDays(rangeStart, getDaysInMonth(currentDate));
+    } else if (viewMode === "day") {
+      rangeStart = new Date(currentDate);
+      rangeStart.setHours(0, 0, 0, 0);
+      rangeEnd = addDays(rangeStart, 1);
+    } else {
+      rangeStart = currentWeekStart;
+      rangeEnd = addDays(currentWeekStart, 5);
+    }
     return filteredScheduledJobs.filter(job => {
       if (!job.scheduledDate) return false;
       const jobDate = new Date(job.scheduledDate);
-      return jobDate >= weekStart && jobDate < weekEnd;
+      return jobDate >= rangeStart && jobDate < rangeEnd;
     });
   }, [filteredScheduledJobs, viewMode, currentWeekStart, currentDate]);
 
@@ -1839,11 +1850,21 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const handleClearAllScheduled = async () => {
     setClearLoading(true);
     try {
-      const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
-      const weekEnd = addDays(weekStart, 4);
+      let clearStart: Date;
+      let clearEnd: Date;
+      if (viewMode === "month") {
+        clearStart = startOfMonth(currentDate);
+        clearEnd = addDays(clearStart, getDaysInMonth(currentDate) - 1);
+      } else if (viewMode === "day") {
+        clearStart = currentDate;
+        clearEnd = currentDate;
+      } else {
+        clearStart = currentWeekStart;
+        clearEnd = addDays(currentWeekStart, 4);
+      }
       const response = await apiRequest("POST", "/api/work-orders/bulk-unschedule", {
-        startDate: format(weekStart, "yyyy-MM-dd"),
-        endDate: format(weekEnd, "yyyy-MM-dd"),
+        startDate: format(clearStart, "yyyy-MM-dd"),
+        endDate: format(clearEnd, "yyyy-MM-dd"),
       });
       const data = await response.json();
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
@@ -3402,7 +3423,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   <Trash2 className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Rensa all planering för denna vecka</TooltipContent>
+              <TooltipContent>Rensa all planering för {viewMode === "month" ? "denna månad" : viewMode === "day" ? "denna dag" : "denna vecka"}</TooltipContent>
             </Tooltip>
             {onToggleAIPanel && (
               <Button 
@@ -3853,7 +3874,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             Rensa planering
           </DialogTitle>
           <DialogDescription>
-            Är du säker? <strong>{currentWeekScheduledJobs.length} schemalagda jobb</strong> i denna vecka kommer att avplaneras och flyttas tillbaka till orderstocken.
+            Är du säker? <strong>{currentViewScheduledJobs.length} schemalagda jobb</strong> i {viewMode === "month" ? "denna månad" : viewMode === "day" ? "denna dag" : "denna vecka"} kommer att avplaneras och flyttas tillbaka till orderstocken.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
@@ -3862,7 +3883,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           </Button>
           <Button variant="destructive" onClick={handleClearAllScheduled} disabled={clearLoading} data-testid="button-confirm-clear">
             {clearLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-            Rensa {currentWeekScheduledJobs.length} jobb
+            Rensa {currentViewScheduledJobs.length} jobb
           </Button>
         </DialogFooter>
       </DialogContent>
