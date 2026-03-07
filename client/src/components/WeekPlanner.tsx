@@ -14,7 +14,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle, ZoomIn, ZoomOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle, ZoomIn, ZoomOut, Trash2 } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -400,6 +400,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [autoFillApplying, setAutoFillApplying] = useState(false);
   const [autoFillSkipped, setAutoFillSkipped] = useState(0);
   const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number; clusterSkipped: number } | null>(null);
+  const [clearDialogOpen, setClearDialogOpen] = useState(false);
+  const [clearLoading, setClearLoading] = useState(false);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
   const zoomLevels = [
     { label: "Kompakt", dayH: 28, weekH: 36, monthH: 40, scale: 0.5 },
@@ -1822,6 +1824,29 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     }
     
     unscheduleWorkOrderMutation.mutate(jobId);
+  };
+
+  const handleClearAllScheduled = async () => {
+    setClearLoading(true);
+    try {
+      const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
+      const weekEnd = addDays(weekStart, 4);
+      const response = await apiRequest("POST", "/api/work-orders/bulk-unschedule", {
+        startDate: format(weekStart, "yyyy-MM-dd"),
+        endDate: format(weekEnd, "yyyy-MM-dd"),
+      });
+      const data = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setClearDialogOpen(false);
+      toast({
+        title: "Planering rensad",
+        description: `${data.count} jobb avplanerade och flyttade tillbaka till orderstocken.`,
+      });
+    } catch (error) {
+      toast({ title: "Fel", description: "Kunde inte rensa planeringen", variant: "destructive" });
+    } finally {
+      setClearLoading(false);
+    }
   };
 
   const handleAutoFillPreview = async () => {
@@ -3355,6 +3380,22 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               <Wand2 className="h-4 w-4 mr-2" />
               Fyll veckan
             </Button>
+            {filteredScheduledJobs.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="text-destructive hover:bg-destructive/10"
+                    onClick={() => setClearDialogOpen(true)}
+                    data-testid="button-clear-all-scheduled"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Rensa all planering för denna vecka</TooltipContent>
+              </Tooltip>
+            )}
             {onToggleAIPanel && (
               <Button 
                 variant={showAIPanel ? "default" : "ghost"} 
@@ -3796,6 +3837,29 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         </DialogFooter>
       </DialogContent>
     </Dialog>
+    <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-destructive">
+            <Trash2 className="h-5 w-5" />
+            Rensa planering
+          </DialogTitle>
+          <DialogDescription>
+            Är du säker? <strong>{filteredScheduledJobs.length} schemalagda jobb</strong> i denna vecka kommer att avplaneras och flyttas tillbaka till orderstocken.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={() => setClearDialogOpen(false)} data-testid="button-cancel-clear">
+            Avbryt
+          </Button>
+          <Button variant="destructive" onClick={handleClearAllScheduled} disabled={clearLoading} data-testid="button-confirm-clear">
+            {clearLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+            Rensa {filteredScheduledJobs.length} jobb
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
     <Dialog open={autoFillDialogOpen} onOpenChange={(open) => { if (!open) { setAutoFillDialogOpen(false); setAutoFillPreview(null); } }}>
       <DialogContent className="max-w-2xl max-h-[80vh] overflow-auto">
         <DialogHeader>

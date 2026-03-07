@@ -1020,6 +1020,34 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/work-orders/bulk-unschedule", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { startDate, endDate, resourceIds } = req.body;
+      if (!startDate || !endDate) {
+        return res.status(400).json({ error: "startDate and endDate are required" });
+      }
+      const parsedStart = new Date(startDate);
+      const parsedEnd = new Date(endDate);
+      if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
+        return res.status(400).json({ error: "Invalid date format" });
+      }
+      if (resourceIds && (!Array.isArray(resourceIds) || resourceIds.some((id: any) => typeof id !== "string"))) {
+        return res.status(400).json({ error: "resourceIds must be an array of strings" });
+      }
+      const count = await storage.bulkUnscheduleWorkOrders(
+        tenantId,
+        parsedStart,
+        parsedEnd,
+        resourceIds
+      );
+      res.json({ count });
+    } catch (error) {
+      console.error("Bulk unschedule error:", error);
+      res.status(500).json({ error: "Failed to bulk unschedule work orders" });
+    }
+  });
+
   app.post("/api/work-orders", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

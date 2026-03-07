@@ -102,7 +102,7 @@ import {
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, or, isNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
 
 export interface ResolvedArticlePrice {
   articleId: string;
@@ -162,6 +162,7 @@ export interface IStorage {
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
   getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
+  bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
   getWorkOrdersByResource(resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkOrder[]>;
   getWorkOrdersByDate(tenantId: string, date: Date): Promise<WorkOrder[]>;
@@ -1043,6 +1044,32 @@ export class DatabaseStorage implements IStorage {
     ))
     .orderBy(workOrders.priority, workOrders.plannedWindowEnd)
     .limit(limit);
+  }
+
+  async bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number> {
+    const safeguardStatuses = ["draft", "scheduled", "pending"];
+    const conditions = [
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      isNotNull(workOrders.scheduledDate),
+      gte(workOrders.scheduledDate, startDate),
+      lte(workOrders.scheduledDate, endDate),
+      inArray(workOrders.status, safeguardStatuses),
+    ];
+    if (resourceIds && resourceIds.length > 0) {
+      conditions.push(inArray(workOrders.resourceId, resourceIds));
+    }
+    const result = await db.update(workOrders)
+      .set({
+        scheduledDate: null,
+        scheduledStartTime: null,
+        resourceId: null,
+        status: "draft",
+        orderStatus: "skapad",
+      })
+      .where(and(...conditions))
+      .returning({ id: workOrders.id });
+    return result.length;
   }
 
   async getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
