@@ -2168,29 +2168,22 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               const dayHours = getResourceDayHours(resource.id, day);
               const capacityPct = getCapacityPercentage(dayHours);
               return (
-                <div key={resource.id} className="p-2 text-center border-r last:border-r-0">
-                  <div className="flex items-center justify-center gap-1.5 mb-1">
-                    <Avatar className="h-5 w-5">
-                      <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
-                    </Avatar>
-                    <span className="text-xs font-medium truncate">{resource.name}</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <div className="h-1.5 flex-1 bg-muted rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${getCapacityColor(capacityPct)}`} style={{ width: `${Math.min(capacityPct, 100)}%` }} />
-                    </div>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span className={`text-[10px] whitespace-nowrap cursor-help ${capacityPct >= 100 ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
-                          {dayHours.toFixed(1)}h
-                        </span>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{dayHours.toFixed(1)}h av {HOURS_IN_DAY}h</p>
-                        <p>{Math.max(0, HOURS_IN_DAY - dayHours).toFixed(1)}h kvar</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
+                <div key={resource.id} className="p-2 border-r last:border-r-0 flex items-center justify-center gap-1.5 min-w-0">
+                  <Avatar className="h-5 w-5 shrink-0">
+                    <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                  </Avatar>
+                  <span className="text-xs font-medium truncate">{resource.name}</span>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span className={`text-[10px] whitespace-nowrap cursor-help shrink-0 ${capacityPct >= 100 ? "text-red-600 dark:text-red-400 font-semibold" : capacityPct >= 85 ? "text-orange-600 dark:text-orange-400" : "text-muted-foreground"}`}>
+                        {dayHours.toFixed(1)}h
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{dayHours.toFixed(1)}h av {HOURS_IN_DAY}h</p>
+                      <p>{Math.max(0, HOURS_IN_DAY - dayHours).toFixed(1)}h kvar</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
               );
             })}
