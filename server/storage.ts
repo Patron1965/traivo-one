@@ -1047,14 +1047,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   async bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number> {
-    const safeguardStatuses = ["draft", "scheduled", "pending"];
     const conditions = [
       eq(workOrders.tenantId, tenantId),
       isNull(workOrders.deletedAt),
       isNotNull(workOrders.scheduledDate),
       gte(workOrders.scheduledDate, startDate),
       lte(workOrders.scheduledDate, endDate),
-      inArray(workOrders.status, safeguardStatuses),
     ];
     if (resourceIds && resourceIds.length > 0) {
       conditions.push(inArray(workOrders.resourceId, resourceIds));
