@@ -3390,22 +3390,20 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               <Wand2 className="h-4 w-4 mr-2" />
               Fyll veckan
             </Button>
-            {currentWeekScheduledJobs.length > 0 && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    className="text-destructive hover:bg-destructive/10"
-                    onClick={() => setClearDialogOpen(true)}
-                    data-testid="button-clear-all-scheduled"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>Rensa all planering för denna vecka</TooltipContent>
-              </Tooltip>
-            )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="text-destructive hover:bg-destructive/10"
+                  onClick={() => setClearDialogOpen(true)}
+                  data-testid="button-clear-all-scheduled"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Rensa all planering för denna vecka</TooltipContent>
+            </Tooltip>
             {onToggleAIPanel && (
               <Button 
                 variant={showAIPanel ? "default" : "ghost"} 
