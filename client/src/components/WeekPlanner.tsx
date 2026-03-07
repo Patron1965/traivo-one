@@ -723,6 +723,18 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     });
   }, [scheduledJobs, filterCustomer, filterPriority]);
 
+  const currentWeekScheduledJobs = useMemo(() => {
+    const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
+    const weekEnd = addDays(weekStart, 4);
+    const startStr = format(weekStart, "yyyy-MM-dd");
+    const endStr = format(weekEnd, "yyyy-MM-dd");
+    return filteredScheduledJobs.filter(job => {
+      if (!job.scheduledDate) return false;
+      const d = typeof job.scheduledDate === "string" ? job.scheduledDate.split("T")[0] : format(new Date(job.scheduledDate), "yyyy-MM-dd");
+      return d >= startStr && d <= endStr;
+    });
+  }, [filteredScheduledJobs, viewMode, currentWeekStart, currentDate]);
+
   const resourceDayJobMap = useMemo(() => {
     const map: Record<string, Record<string, WorkOrderWithObject[]>> = {};
     const hoursMap: Record<string, Record<string, number>> = {};
@@ -3380,7 +3392,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               <Wand2 className="h-4 w-4 mr-2" />
               Fyll veckan
             </Button>
-            {filteredScheduledJobs.length > 0 && (
+            {currentWeekScheduledJobs.length > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -3845,7 +3857,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             Rensa planering
           </DialogTitle>
           <DialogDescription>
-            Är du säker? <strong>{filteredScheduledJobs.length} schemalagda jobb</strong> i denna vecka kommer att avplaneras och flyttas tillbaka till orderstocken.
+            Är du säker? <strong>{currentWeekScheduledJobs.length} schemalagda jobb</strong> i denna vecka kommer att avplaneras och flyttas tillbaka till orderstocken.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2">
@@ -3854,7 +3866,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           </Button>
           <Button variant="destructive" onClick={handleClearAllScheduled} disabled={clearLoading} data-testid="button-confirm-clear">
             {clearLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
-            Rensa {filteredScheduledJobs.length} jobb
+            Rensa {currentWeekScheduledJobs.length} jobb
           </Button>
         </DialogFooter>
       </DialogContent>
