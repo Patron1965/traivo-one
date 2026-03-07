@@ -2153,7 +2153,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
     return (
       <div className="flex-1 overflow-auto">
-        <div className="min-w-[600px]">
+        <div style={{ minWidth: `${60 + resources.length * 120}px` }}>
           {dayRestrictions.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800" data-testid="day-restrictions-banner">
               <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
