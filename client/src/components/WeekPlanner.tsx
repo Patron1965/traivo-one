@@ -2162,8 +2162,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               </span>
             </div>
           )}
-          <div className="grid border-b sticky top-0 bg-background z-10" style={{ gridTemplateColumns: `200px repeat(${resources.length}, 1fr)` }}>
-            <div className="p-3 font-medium text-sm text-muted-foreground border-r">Tid</div>
+          <div className="grid border-b sticky top-0 bg-background z-10" style={{ gridTemplateColumns: `60px repeat(${resources.length}, 1fr)` }}>
+            <div className="p-2 font-medium text-sm text-muted-foreground border-r flex items-center justify-center">Tid</div>
             {resources.map((resource) => {
               const dayHours = getResourceDayHours(resource.id, day);
               const capacityPct = getCapacityPercentage(dayHours);
@@ -2197,8 +2197,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           </div>
 
           {hours.map((hour) => (
-            <div key={hour} className="grid border-b" style={{ gridTemplateColumns: `200px repeat(${resources.length}, 1fr)` }}>
-              <div className="p-2 border-r text-sm text-muted-foreground font-medium">
+            <div key={hour} className="grid border-b" style={{ gridTemplateColumns: `60px repeat(${resources.length}, 1fr)` }}>
+              <div className="p-2 border-r text-sm text-muted-foreground font-medium text-center">
                 {hour.toString().padStart(2, "0")}:00
               </div>
               {resources.map((resource) => {
