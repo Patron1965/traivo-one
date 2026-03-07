@@ -725,13 +725,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const currentWeekScheduledJobs = useMemo(() => {
     const weekStart = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 });
-    const weekEnd = addDays(weekStart, 4);
-    const startStr = format(weekStart, "yyyy-MM-dd");
-    const endStr = format(weekEnd, "yyyy-MM-dd");
+    const weekEnd = addDays(weekStart, 5);
     return filteredScheduledJobs.filter(job => {
       if (!job.scheduledDate) return false;
-      const d = typeof job.scheduledDate === "string" ? job.scheduledDate.split("T")[0] : format(new Date(job.scheduledDate), "yyyy-MM-dd");
-      return d >= startStr && d <= endStr;
+      const jobDate = new Date(job.scheduledDate);
+      return jobDate >= weekStart && jobDate < weekEnd;
     });
   }, [filteredScheduledJobs, viewMode, currentWeekStart, currentDate]);
 
