@@ -261,7 +261,7 @@ Fysiska platser där service utförs - hierarkisk struktur (Område → Fastighe
 | teams | Arbetslag |
 | teamMembers | Teammedlemskap |
 | planningParameters | SLA-nivåer och regler |
-| resourceArticles | Tidsverk per resurs |
+| resourceArticles | Resurskompetenser per resurs |
 | procurements | Upphandlingar |
 
 ### System/Admin-tabeller
@@ -408,7 +408,7 @@ DELETE /api/price-list-articles/:id        - Ta bort prislistartikel
 GET    /api/resolve-price                  - Beräkna pris (hierarki)
 ```
 
-### Resurstidsverk
+### Resurskompetenser
 ```
 GET    /api/resources/:resourceId/articles - Artiklar för resurs
 POST   /api/resources/:resourceId/articles - Lägg till artikel

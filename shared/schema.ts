@@ -760,7 +760,7 @@ export const planningParameters = pgTable("planning_parameters", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Utförare tidsverk - vilka artiklar en utförare kan utföra
+// Resurskompetenser - vilka artiklar en utförare kan utföra
 export const resourceArticles = pgTable("resource_articles", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   resourceId: varchar("resource_id").references(() => resources.id).notNull(),

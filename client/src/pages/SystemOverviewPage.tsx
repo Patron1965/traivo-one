@@ -61,7 +61,7 @@ const systemFeatures: FeatureSection[] = [
     features: [
       { name: "Teknikerregister", description: "Kompetenser, hemposition, veckoarbetstid" },
       { name: "Team-hantering", description: "Gruppering med ledare, geografiska områden, projektkoder" },
-      { name: "Tidsverk", description: "Vilka artiklar en resurs kan utföra med effektivitetsfaktor" },
+      { name: "Resurskompetenser", description: "Vilka artiklar en resurs kan utföra med effektivitetsfaktor" },
       { name: "Tillgänglighet", description: "Arbetstider, semester, sjukfrånvaro" },
     ]
   },

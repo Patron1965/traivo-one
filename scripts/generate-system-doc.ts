@@ -173,7 +173,7 @@ const doc = new Document({
             createTableRow(["simulationScenarios", "Scenarion for what-if-analys"], false, [30, 70]),
             createTableRow(["resourcePositions", "GPS-positionshistorik for tracking"], false, [30, 70]),
             createTableRow(["planningParameters", "SLA-nivaer och planeringsregler"], false, [30, 70]),
-            createTableRow(["resourceArticles", "Tidsverk per resurs"], false, [30, 70]),
+            createTableRow(["resourceArticles", "Resurskompetenser per resurs"], false, [30, 70]),
             createTableRow(["procurements", "Upphandlingar"], false, [30, 70]),
           ],
         }),

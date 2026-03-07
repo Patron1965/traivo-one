@@ -213,7 +213,7 @@ export interface IStorage {
   updatePriceListArticle(id: string, data: Partial<InsertPriceListArticle>): Promise<PriceListArticle | undefined>;
   deletePriceListArticle(id: string): Promise<void>;
   
-  // Resource Articles (tidsverk)
+  // Resource Articles (resurskompetenser)
   getResourceArticles(resourceId: string): Promise<ResourceArticle[]>;
   getResourceArticle(id: string): Promise<ResourceArticle | undefined>;
   createResourceArticle(resourceArticle: InsertResourceArticle): Promise<ResourceArticle>;
@@ -1639,7 +1639,7 @@ export class DatabaseStorage implements IStorage {
     await db.delete(priceListArticles).where(eq(priceListArticles.id, id));
   }
 
-  // Resource Articles (tidsverk)
+  // Resource Articles (resurskompetenser)
   async getResourceArticles(resourceId: string): Promise<ResourceArticle[]> {
     return db.select().from(resourceArticles).where(eq(resourceArticles.resourceId, resourceId));
   }

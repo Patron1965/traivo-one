@@ -3439,7 +3439,7 @@ export async function registerRoutes(
     }
   });
 
-  // ============== RESOURCE ARTICLES (TIDSVERK) ==============
+  // ============== RESOURCE ARTICLES (RESURSKOMPETENSER) ==============
   app.get("/api/resources/:resourceId/articles", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

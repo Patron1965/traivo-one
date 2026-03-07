@@ -249,8 +249,8 @@ export default function ResourcesPage() {
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
   const [formData, setFormData] = useState<ResourceFormData>(emptyFormData);
   const [showFilters, setShowFilters] = useState(false);
-  const [tidsverkDialogOpen, setTidsverkDialogOpen] = useState(false);
-  const [tidsverkResource, setTidsverkResource] = useState<Resource | null>(null);
+  const [kompetensDialogOpen, setKompetensDialogOpen] = useState(false);
+  const [kompetensResource, setKompetensResource] = useState<Resource | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
   const [efficiencyFactor, setEfficiencyFactor] = useState<number>(1.0);
   const [productionTimeOverride, setProductionTimeOverride] = useState<number | null>(null);
@@ -276,8 +276,8 @@ export default function ResourcesPage() {
   });
 
   const { data: resourceArticles = [] } = useQuery<ResourceArticle[]>({
-    queryKey: ['/api/resources', tidsverkResource?.id, 'articles'],
-    enabled: !!tidsverkResource,
+    queryKey: ['/api/resources', kompetensResource?.id, 'articles'],
+    enabled: !!kompetensResource,
   });
 
   const objectMap = useMemo(() => 
@@ -368,7 +368,7 @@ export default function ResourcesPage() {
     },
   });
 
-  const createTidsverkMutation = useMutation({
+  const createKompetensMutation = useMutation({
     mutationFn: async (data: { resourceId: string; articleId: string; efficiencyFactor: number; productionTime?: number }) => {
       return apiRequest("POST", `/api/resources/${data.resourceId}/articles`, {
         articleId: data.articleId,
@@ -378,26 +378,26 @@ export default function ResourcesPage() {
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
-      toast({ title: "Tidsverk tillagt" });
+      toast({ title: "Resurskompetens tillagd" });
       setSelectedArticleId("");
       setEfficiencyFactor(1.0);
       setProductionTimeOverride(null);
     },
     onError: (error: Error) => {
-      toast({ title: "Kunde inte lägga till tidsverk", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte lägga till resurskompetens", description: error.message, variant: "destructive" });
     },
   });
 
-  const deleteTidsverkMutation = useMutation({
+  const deleteKompetensMutation = useMutation({
     mutationFn: async (data: { id: string; resourceId: string }) => {
       return apiRequest("DELETE", `/api/resource-articles/${data.id}`);
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['/api/resources', variables.resourceId, 'articles'] });
-      toast({ title: "Tidsverk borttaget" });
+      toast({ title: "Resurskompetens borttagen" });
     },
     onError: (error: Error) => {
-      toast({ title: "Kunde inte ta bort tidsverk", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte ta bort resurskompetens", description: error.message, variant: "destructive" });
     },
   });
 
@@ -489,21 +489,21 @@ export default function ResourcesPage() {
     }
   };
 
-  const openTidsverkDialog = (resource: Resource) => {
-    setTidsverkResource(resource);
+  const openKompetensDialog = (resource: Resource) => {
+    setKompetensResource(resource);
     setSelectedArticleId("");
     setEfficiencyFactor(1.0);
     setProductionTimeOverride(null);
-    setTidsverkDialogOpen(true);
+    setKompetensDialogOpen(true);
   };
 
-  const handleAddTidsverk = () => {
-    if (!selectedArticleId || !tidsverkResource) {
+  const handleAddKompetens = () => {
+    if (!selectedArticleId || !kompetensResource) {
       toast({ title: "Välj en artikel", variant: "destructive" });
       return;
     }
-    createTidsverkMutation.mutate({
-      resourceId: tidsverkResource.id,
+    createKompetensMutation.mutate({
+      resourceId: kompetensResource.id,
       articleId: selectedArticleId,
       efficiencyFactor,
       productionTime: productionTimeOverride ?? undefined,
@@ -734,9 +734,9 @@ export default function ResourcesPage() {
                               <CalendarOff className="h-4 w-4 mr-2" />
                               Ange frånvaro
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openTidsverkDialog(resource)} data-testid={`menu-tidsverk-resource-${resource.id}`}>
+                            <DropdownMenuItem onClick={() => openKompetensDialog(resource)} data-testid={`menu-kompetens-resource-${resource.id}`}>
                               <Wrench className="h-4 w-4 mr-2" />
-                              Hantera tidsverk
+                              Hantera kompetenser
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => openDeleteDialog(resource)} className="text-destructive" data-testid={`menu-delete-resource-${resource.id}`}>
                               <Trash2 className="h-4 w-4 mr-2" />
@@ -1104,11 +1104,11 @@ export default function ResourcesPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={tidsverkDialogOpen} onOpenChange={setTidsverkDialogOpen}>
+      <Dialog open={kompetensDialogOpen} onOpenChange={setKompetensDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>
-              Tidsverk för {tidsverkResource?.name}
+              Resurskompetenser för {kompetensResource?.name}
             </DialogTitle>
             <DialogDescription>
               Hantera vilka artiklar denna resurs kan utföra och dess effektivitet
@@ -1120,7 +1120,7 @@ export default function ResourcesPage() {
               <div className="flex-1 min-w-[200px] space-y-2">
                 <Label>Artikel</Label>
                 <Select value={selectedArticleId} onValueChange={setSelectedArticleId}>
-                  <SelectTrigger data-testid="select-tidsverk-article">
+                  <SelectTrigger data-testid="select-kompetens-article">
                     <SelectValue placeholder="Välj artikel..." />
                   </SelectTrigger>
                   <SelectContent>
@@ -1141,7 +1141,7 @@ export default function ResourcesPage() {
                   max="3.0"
                   value={efficiencyFactor}
                   onChange={(e) => setEfficiencyFactor(parseFloat(e.target.value) || 1.0)}
-                  data-testid="input-tidsverk-efficiency"
+                  data-testid="input-kompetens-efficiency"
                 />
               </div>
               <div className="w-32 space-y-2">
@@ -1152,15 +1152,15 @@ export default function ResourcesPage() {
                   placeholder="Standard"
                   value={productionTimeOverride ?? ""}
                   onChange={(e) => setProductionTimeOverride(e.target.value ? parseInt(e.target.value) : null)}
-                  data-testid="input-tidsverk-time"
+                  data-testid="input-kompetens-time"
                 />
               </div>
               <Button
-                onClick={handleAddTidsverk}
-                disabled={!selectedArticleId || createTidsverkMutation.isPending}
-                data-testid="button-add-tidsverk"
+                onClick={handleAddKompetens}
+                disabled={!selectedArticleId || createKompetensMutation.isPending}
+                data-testid="button-add-kompetens"
               >
-                {createTidsverkMutation.isPending ? (
+                {createKompetensMutation.isPending ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   <Plus className="h-4 w-4" />
@@ -1186,7 +1186,7 @@ export default function ResourcesPage() {
                       <div
                         key={ra.id}
                         className="flex items-center justify-between gap-4 p-3 rounded-md bg-muted/50"
-                        data-testid={`tidsverk-item-${ra.id}`}
+                        data-testid={`kompetens-item-${ra.id}`}
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-medium truncate">
@@ -1204,9 +1204,9 @@ export default function ResourcesPage() {
                           size="icon"
                           variant="ghost"
                           className="text-destructive"
-                          onClick={() => tidsverkResource && deleteTidsverkMutation.mutate({ id: ra.id, resourceId: tidsverkResource.id })}
-                          disabled={deleteTidsverkMutation.isPending}
-                          data-testid={`button-delete-tidsverk-${ra.id}`}
+                          onClick={() => kompetensResource && deleteKompetensMutation.mutate({ id: ra.id, resourceId: kompetensResource.id })}
+                          disabled={deleteKompetensMutation.isPending}
+                          data-testid={`button-delete-kompetens-${ra.id}`}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -1219,7 +1219,7 @@ export default function ResourcesPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setTidsverkDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setKompetensDialogOpen(false)}>
               Stäng
             </Button>
           </DialogFooter>
