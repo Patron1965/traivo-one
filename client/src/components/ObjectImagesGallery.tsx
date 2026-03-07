@@ -300,7 +300,7 @@ export function ObjectImagesDialog({ object, trigger, controlled, open: controll
             Bilder - {object.name}
           </DialogTitle>
         </DialogHeader>
-        {open && (
+        {isOpen && (
           <ObjectImagesGallery
             objectId={object.id}
             tenantId={object.tenantId}

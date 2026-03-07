@@ -811,19 +811,19 @@ export default function ObjectsPage() {
                       <Clock className="h-4 w-4 mr-2" />
                       Ställtidshistorik
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "images" })} data-testid={`menu-images-${obj.id}`}>
+                    <DropdownMenuItem onClick={() => setTimeout(() => setOverflowPanel({ objectId: obj.id, panel: "images" }), 0)} data-testid={`menu-images-${obj.id}`}>
                       <Image className="h-4 w-4 mr-2" />
                       Bilder
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "payers" })} data-testid={`menu-payers-${obj.id}`}>
+                    <DropdownMenuItem onClick={() => setTimeout(() => setOverflowPanel({ objectId: obj.id, panel: "payers" }), 0)} data-testid={`menu-payers-${obj.id}`}>
                       <Users className="h-4 w-4 mr-2" />
                       Betalare
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "parents" })} data-testid={`menu-parents-${obj.id}`}>
+                    <DropdownMenuItem onClick={() => setTimeout(() => setOverflowPanel({ objectId: obj.id, panel: "parents" }), 0)} data-testid={`menu-parents-${obj.id}`}>
                       <GitFork className="h-4 w-4 mr-2" />
                       Föräldrar
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setOverflowPanel({ objectId: obj.id, panel: "articles" })} data-testid={`menu-articles-${obj.id}`}>
+                    <DropdownMenuItem onClick={() => setTimeout(() => setOverflowPanel({ objectId: obj.id, panel: "articles" }), 0)} data-testid={`menu-articles-${obj.id}`}>
                       <Link2 className="h-4 w-4 mr-2" />
                       Artiklar & Priser
                     </DropdownMenuItem>
