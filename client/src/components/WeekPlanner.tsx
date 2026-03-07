@@ -14,6 +14,8 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle, ZoomIn, ZoomOut, Trash2 } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -355,6 +357,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [filterCluster, setFilterCluster] = useState<string>("all");
   const [filterTeam, setFilterTeam] = useState<string>("all");
   const [filterExecutionCode, setFilterExecutionCode] = useState<string>("all");
+  const [hiddenResourceIds, setHiddenResourceIds] = useState<Set<string>>(new Set());
   const [orderstockSearch, setOrderstockSearch] = useState("");
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(false);
 
@@ -435,6 +438,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
   });
+
+  const visibleResources = useMemo(() => {
+    if (hiddenResourceIds.size === 0) return resources;
+    return resources.filter(r => !hiddenResourceIds.has(r.id));
+  }, [resources, hiddenResourceIds]);
 
   const dateRange = useMemo(() => {
     const monthStart = startOfMonth(currentDate);
@@ -2153,7 +2161,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
     return (
       <div className="flex-1 overflow-auto">
-        <div style={{ minWidth: `${60 + resources.length * 120}px` }}>
+        <div style={{ minWidth: `${60 + visibleResources.length * 120}px` }}>
           {dayRestrictions.length > 0 && (
             <div className="flex items-center gap-2 px-3 py-1.5 bg-red-50 dark:bg-red-950/30 border-b border-red-200 dark:border-red-800" data-testid="day-restrictions-banner">
               <AlertTriangle className="h-4 w-4 text-red-500 shrink-0" />
@@ -2162,9 +2170,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               </span>
             </div>
           )}
-          <div className="grid border-b sticky top-0 bg-background z-10" style={{ gridTemplateColumns: `60px repeat(${resources.length}, 1fr)` }}>
+          <div className="grid border-b sticky top-0 bg-background z-10" style={{ gridTemplateColumns: `60px repeat(${visibleResources.length}, 1fr)` }}>
             <div className="p-2 font-medium text-sm text-muted-foreground border-r flex items-center justify-center">Tid</div>
-            {resources.map((resource) => {
+            {visibleResources.map((resource) => {
               const dayHours = getResourceDayHours(resource.id, day);
               const capacityPct = getCapacityPercentage(dayHours);
               return (
@@ -2190,11 +2198,11 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           </div>
 
           {hours.map((hour) => (
-            <div key={hour} className="grid border-b" style={{ gridTemplateColumns: `60px repeat(${resources.length}, 1fr)` }}>
+            <div key={hour} className="grid border-b" style={{ gridTemplateColumns: `60px repeat(${visibleResources.length}, 1fr)` }}>
               <div className="p-2 border-r text-sm text-muted-foreground font-medium text-center">
                 {hour.toString().padStart(2, "0")}:00
               </div>
-              {resources.map((resource) => {
+              {visibleResources.map((resource) => {
                 const jobs = getJobsForResourceAndDay(resource.id, day).filter(job => {
                   if (!job.scheduledStartTime) return hour === DAY_START_HOUR;
                   const jobHour = parseInt(job.scheduledStartTime.split(":")[0], 10);
@@ -2287,12 +2295,12 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           })}
         </div>
 
-        {resources.length === 0 ? (
+        {visibleResources.length === 0 ? (
           <div className="p-8 text-center text-muted-foreground">
-            Inga resurser registrerade. Lägg till resurser för att börja planera.
+            {resources.length === 0 ? "Inga resurser registrerade. Lägg till resurser för att börja planera." : "Alla resurser är dolda. Justera resursfiltret."}
           </div>
         ) : (
-          resources.map((resource) => {
+          visibleResources.map((resource) => {
             const weekSummary = resourceWeekSummary[resource.id];
             return (
             <div key={resource.id} className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] border-b">
@@ -3374,6 +3382,57 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                 </Tooltip>
               </div>
             )}
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 gap-1.5" data-testid="button-resource-filter">
+                  <UsersRound className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">Resurser</span>
+                  {hiddenResourceIds.size > 0 && (
+                    <Badge variant="secondary" className="h-4 px-1 text-[10px]">{visibleResources.length}/{resources.length}</Badge>
+                  )}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-3" align="end" data-testid="popover-resource-filter">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Filtrera resurser</span>
+                  {hiddenResourceIds.size > 0 && (
+                    <Button variant="ghost" size="sm" className="h-6 text-xs px-2" onClick={() => setHiddenResourceIds(new Set())} data-testid="button-show-all-resources">
+                      Visa alla
+                    </Button>
+                  )}
+                </div>
+                <ScrollArea className="max-h-64">
+                  <div className="space-y-1">
+                    {resources.map((resource) => (
+                      <label
+                        key={resource.id}
+                        className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-muted cursor-pointer"
+                        data-testid={`resource-filter-${resource.id}`}
+                      >
+                        <Checkbox
+                          checked={!hiddenResourceIds.has(resource.id)}
+                          onCheckedChange={(checked) => {
+                            setHiddenResourceIds(prev => {
+                              const next = new Set(prev);
+                              if (checked) {
+                                next.delete(resource.id);
+                              } else {
+                                next.add(resource.id);
+                              }
+                              return next;
+                            });
+                          }}
+                        />
+                        <Avatar className="h-5 w-5 shrink-0">
+                          <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
+                        </Avatar>
+                        <span className="text-xs truncate">{resource.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </PopoverContent>
+            </Popover>
             <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && handleViewModeChange(v as ViewMode)} data-testid="toggle-view-mode">
               <ToggleGroupItem value="day" aria-label="Dagvy" data-testid="toggle-day">
                 <CalendarDays className="h-4 w-4 mr-1" />
