@@ -28,8 +28,8 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background">
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <img src={nordfieldLogo} alt="Nordfield" className="h-10 w-auto object-contain" data-testid="img-landing-logo" />
+          <div className="flex items-center gap-2">
+            <img src={nordfieldLogo} alt="Nordfield" className="h-[60px] w-auto object-contain" data-testid="img-landing-logo" />
             <span className="font-bold text-xl">Nordfield</span>
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
