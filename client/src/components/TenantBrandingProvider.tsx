@@ -22,7 +22,7 @@ const BrandingContext = createContext<BrandingContextValue>({
   accentColor: "#F59E0B",
   companyName: "Nordfield",
   logoUrl: null,
-  logoIconUrl: null,
+  logoIconUrl: "/nordfield-logo.webp",
   fontFamily: "Inter",
 });
 
@@ -139,7 +139,7 @@ export function TenantBrandingProvider({ children }: { children: React.ReactNode
     accentColor: branding?.accentColor || "#F59E0B",
     companyName: branding?.companyName || "Nordfield",
     logoUrl: branding?.logoUrl || null,
-    logoIconUrl: branding?.logoIconUrl || null,
+    logoIconUrl: branding?.logoIconUrl || "/nordfield-logo.webp",
     fontFamily: branding?.fontFamily || "Inter",
   };
 
