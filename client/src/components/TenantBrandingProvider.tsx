@@ -17,8 +17,8 @@ interface BrandingContextValue {
 const BrandingContext = createContext<BrandingContextValue>({
   branding: null,
   isLoading: true,
-  primaryColor: "#3B82F6",
-  secondaryColor: "#6366F1",
+  primaryColor: "#EA580C",
+  secondaryColor: "#991B1B",
   accentColor: "#F59E0B",
   companyName: "Nordfield",
   logoUrl: null,
@@ -134,8 +134,8 @@ export function TenantBrandingProvider({ children }: { children: React.ReactNode
   const contextValue: BrandingContextValue = {
     branding: branding ?? null,
     isLoading,
-    primaryColor: branding?.primaryColor || "#3B82F6",
-    secondaryColor: branding?.secondaryColor || "#6366F1",
+    primaryColor: branding?.primaryColor || "#EA580C",
+    secondaryColor: branding?.secondaryColor || "#991B1B",
     accentColor: branding?.accentColor || "#F59E0B",
     companyName: branding?.companyName || "Nordfield",
     logoUrl: branding?.logoUrl || null,
