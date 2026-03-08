@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -170,6 +171,7 @@ const defaultForm: FormData = {
 };
 
 export default function OrderConceptsPage() {
+  const [, navigate] = useLocation();
   const [searchTerm, setSearchTerm] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingConcept, setEditingConcept] = useState<OrderConcept | null>(null);
@@ -594,9 +596,9 @@ export default function OrderConceptsPage() {
             data-testid="input-search-concepts"
           />
         </div>
-        <Button onClick={() => { setEditingConcept(null); setFormData({ ...defaultForm }); setIsDialogOpen(true); }} data-testid="button-add-concept">
+        <Button onClick={() => navigate("/order-concepts/new")} data-testid="button-add-concept">
           <Plus className="h-4 w-4 mr-2" />
-          Nytt koncept
+          Nytt koncept (Wizard)
         </Button>
       </div>
 
@@ -766,7 +768,7 @@ export default function OrderConceptsPage() {
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => handleEdit(concept)}
+                          onClick={() => navigate(`/order-concepts/${concept.id}/edit`)}
                           data-testid={`button-edit-${concept.id}`}
                         >
                           <Pencil className="h-4 w-4" />

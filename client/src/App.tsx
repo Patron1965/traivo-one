@@ -49,6 +49,7 @@ import FortnoxSettingsPage from "@/pages/FortnoxSettingsPage";
 import MyTasksPage from "@/pages/MyTasksPage";
 import ArchitecturePage from "@/pages/architecture";
 import OrderConceptsPage from "@/pages/OrderConceptsPage";
+import OrderConceptWizardPage from "@/pages/OrderConceptWizardPage";
 import AssignmentsPage from "@/pages/AssignmentsPage";
 import PitchPage from "@/pages/PitchPage";
 import AIAssistantPage from "@/pages/AIAssistantPage";
@@ -136,6 +137,8 @@ function Router() {
       <Route path="/environmental-certificates" component={EnvironmentalCertificatePage} />
       <Route path="/architecture">{() => <ProtectedRoute component={ArchitecturePage} path="/architecture" />}</Route>
       <Route path="/order-concepts" component={OrderConceptsPage} />
+      <Route path="/order-concepts/new" component={OrderConceptWizardPage} />
+      <Route path="/order-concepts/:id/edit" component={OrderConceptWizardPage} />
       <Route path="/assignments" component={AssignmentsPage} />
       <Route path="/pitch" component={PitchPage} />
       <Route path="/ai-assistant" component={AIAssistantPage} />

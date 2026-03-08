@@ -12815,6 +12815,334 @@ setInterval(loadRoutes, 30000);
   });
 
   // ============================================
+  // ORDER CONCEPT WIZARD API
+  // ============================================
+
+  app.get("/api/order-concepts/:id/wizard", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) return res.status(404).json({ error: "Orderkoncept hittades inte" });
+
+      const [conceptObjects, conceptArticles, mappings, invoiceConfig, documentConfigs, schedules, filters] = await Promise.all([
+        storage.getOrderConceptObjects(concept.id),
+        storage.getOrderConceptArticles(concept.id),
+        storage.getArticleObjectMappings(concept.id),
+        storage.getInvoiceConfiguration(concept.id),
+        storage.getDocumentConfigurations(concept.id),
+        storage.getDeliverySchedules(concept.id),
+        storage.getConceptFilters(concept.id),
+      ]);
+
+      res.json({
+        ...concept,
+        conceptObjects,
+        conceptArticles,
+        mappings,
+        invoiceConfig,
+        documentConfigs,
+        schedules,
+        filters,
+      });
+    } catch (error) {
+      console.error("Failed to get wizard data:", error);
+      res.status(500).json({ error: "Kunde inte hämta wizard-data" });
+    }
+  });
+
+  app.get("/api/order-concepts/:id/objects", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const objs = await storage.getOrderConceptObjects(req.params.id);
+      res.json(objs);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta objekt" });
+    }
+  });
+
+  app.post("/api/order-concepts/:id/objects", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const { objectIds } = req.body;
+      if (!Array.isArray(objectIds) || objectIds.length === 0) {
+        return res.status(400).json({ error: "objectIds krävs" });
+      }
+      const tenantObjects = await storage.getObjects(tenantId);
+      const tenantObjectIds = new Set(tenantObjects.map(o => o.id));
+      const validObjectIds = objectIds.filter((id: string) => tenantObjectIds.has(id));
+      if (validObjectIds.length === 0) {
+        return res.status(400).json({ error: "Inga giltiga objekt hittades" });
+      }
+      const inserts = validObjectIds.map((objectId: string) => ({
+        orderConceptId: req.params.id,
+        objectId,
+      }));
+      const result = await storage.addOrderConceptObjects(inserts);
+      await storage.updateOrderConcept(req.params.id, tenantId, { totalObjects: (await storage.getOrderConceptObjects(req.params.id)).length });
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Failed to add objects:", error);
+      res.status(500).json({ error: "Kunde inte lägga till objekt" });
+    }
+  });
+
+  app.delete("/api/order-concepts/:id/objects/:objectId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      await storage.removeOrderConceptObject(req.params.id, req.params.objectId);
+      await storage.updateOrderConcept(req.params.id, tenantId, { totalObjects: (await storage.getOrderConceptObjects(req.params.id)).length });
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte ta bort objekt" });
+    }
+  });
+
+  app.get("/api/order-concepts/:id/articles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const arts = await storage.getOrderConceptArticles(req.params.id);
+      res.json(arts);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta artiklar" });
+    }
+  });
+
+  app.post("/api/order-concepts/:id/articles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const { articleId, quantity, unitPrice } = req.body;
+      if (!articleId || typeof articleId !== "string") {
+        return res.status(400).json({ error: "articleId krävs" });
+      }
+      const tenantArticles = await storage.getArticles(tenantId);
+      if (!tenantArticles.find(a => a.id === articleId)) {
+        return res.status(400).json({ error: "Artikeln hittades inte" });
+      }
+      const result = await storage.addOrderConceptArticle({
+        orderConceptId: req.params.id,
+        articleId,
+        quantity: quantity || 1,
+        unitPrice: unitPrice ?? null,
+      });
+      const allArticles = await storage.getOrderConceptArticles(req.params.id);
+      await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });
+      res.status(201).json(result);
+    } catch (error) {
+      console.error("Failed to add article:", error);
+      res.status(500).json({ error: "Kunde inte lägga till artikel" });
+    }
+  });
+
+  app.delete("/api/order-concepts/:id/articles/:articleId", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      await storage.removeOrderConceptArticle(req.params.articleId, req.params.id);
+      const allArticles = await storage.getOrderConceptArticles(req.params.id);
+      await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte ta bort artikel" });
+    }
+  });
+
+  app.get("/api/order-concepts/:id/article-mappings", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const mappings = await storage.getArticleObjectMappings(req.params.id);
+      res.json(mappings);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta kopplingar" });
+    }
+  });
+
+  app.post("/api/order-concepts/:id/article-mappings", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const result = await storage.createArticleObjectMapping(req.body);
+      res.status(201).json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte skapa koppling" });
+    }
+  });
+
+  app.post("/api/order-concepts/:id/article-mappings/auto", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+
+      await storage.deleteArticleObjectMappings(req.params.id);
+      const conceptObjects = await storage.getOrderConceptObjects(req.params.id);
+      const conceptArticles = await storage.getOrderConceptArticles(req.params.id);
+
+      let mappingsCreated = 0;
+      for (const article of conceptArticles) {
+        for (const obj of conceptObjects) {
+          if (!obj.included) continue;
+          await storage.createArticleObjectMapping({
+            orderConceptArticleId: article.id,
+            orderConceptObjectId: obj.id,
+            quantity: article.quantity || 1,
+          });
+          mappingsCreated++;
+        }
+      }
+
+      res.json({ mappingsCreated });
+    } catch (error) {
+      console.error("Failed to auto-map:", error);
+      res.status(500).json({ error: "Kunde inte skapa automatiska kopplingar" });
+    }
+  });
+
+  app.put("/api/order-concepts/:id/invoice-config", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const result = await storage.upsertInvoiceConfiguration({
+        orderConceptId: req.params.id,
+        ...req.body,
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte spara fakturakonfiguration" });
+    }
+  });
+
+  app.put("/api/order-concepts/:id/documents", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const { documents } = req.body;
+      const configs = (documents || []).map((d: any) => ({
+        orderConceptId: req.params.id,
+        ...d,
+      }));
+      const result = await storage.upsertDocumentConfigurations(req.params.id, configs);
+      res.json(result);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte spara dokumentkonfiguration" });
+    }
+  });
+
+  app.put("/api/order-concepts/:id/delivery", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+      const { deliveryModel, schedules: scheduleData, ...conceptData } = req.body;
+
+      if (deliveryModel) {
+        await storage.updateOrderConcept(req.params.id, tenantId, { deliveryModel, ...conceptData });
+      }
+
+      if (scheduleData) {
+        const schedulesWithId = scheduleData.map((s: any) => ({
+          orderConceptId: req.params.id,
+          ...s,
+        }));
+        await storage.upsertDeliverySchedules(req.params.id, schedulesWithId);
+      }
+
+      const updatedConcept = await storage.getOrderConcept(req.params.id);
+      const updatedSchedules = await storage.getDeliverySchedules(req.params.id);
+      res.json({ concept: updatedConcept, schedules: updatedSchedules });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte spara leveransmodell" });
+    }
+  });
+
+  app.post("/api/order-concepts/:id/validate", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rawConcept = await storage.getOrderConcept(req.params.id);
+      const concept = verifyTenantOwnership(rawConcept, tenantId);
+      if (!concept) return res.status(404).json({ error: "Ej hittad" });
+
+      const errors: { code: string; message: string }[] = [];
+      const warnings: { code: string; message: string }[] = [];
+
+      const conceptObjects = await storage.getOrderConceptObjects(concept.id);
+      const conceptArticles = await storage.getOrderConceptArticles(concept.id);
+
+      if (!concept.name) errors.push({ code: "MISSING_NAME", message: "Namn saknas" });
+      if (conceptObjects.length === 0) errors.push({ code: "NO_OBJECTS", message: "Inga objekt valda" });
+      if (conceptArticles.length === 0) errors.push({ code: "NO_ARTICLES", message: "Inga artiklar valda" });
+      if (!concept.invoiceLevel) warnings.push({ code: "NO_INVOICE_LEVEL", message: "Faktureringsnivå ej vald" });
+      if (!concept.deliveryModel) warnings.push({ code: "NO_DELIVERY_MODEL", message: "Leveransmodell ej vald" });
+
+      if (concept.deliveryModel === "schedule") {
+        const schedules = await storage.getDeliverySchedules(concept.id);
+        if (schedules.length === 0) warnings.push({ code: "NO_SCHEDULES", message: "Inga leveransscheman definierade" });
+      }
+
+      if (concept.deliveryModel === "subscription" && !concept.monthlyFeeCalc) {
+        warnings.push({ code: "NO_MONTHLY_FEE", message: "Månadsavgift ej beräknad" });
+      }
+
+      res.json({ valid: errors.length === 0, errors, warnings });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte validera orderkoncept" });
+    }
+  });
+
+  app.get("/api/objects/tree", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { customerId } = req.query;
+      const allObjects = await storage.getObjects(tenantId);
+
+      const filtered = customerId
+        ? allObjects.filter(o => o.customerId === customerId)
+        : allObjects;
+
+      const byParent = new Map<string | null, typeof filtered>();
+      for (const obj of filtered) {
+        const parentId = obj.parentId || null;
+        if (!byParent.has(parentId)) byParent.set(parentId, []);
+        byParent.get(parentId)!.push(obj);
+      }
+
+      function buildTree(parentId: string | null): any[] {
+        const children = byParent.get(parentId) || [];
+        return children.map(obj => ({
+          id: obj.id,
+          name: obj.name,
+          objectNumber: obj.objectNumber,
+          objectType: obj.objectType,
+          address: obj.address,
+          customerId: obj.customerId,
+          children: buildTree(obj.id),
+        }));
+      }
+
+      res.json(buildTree(null));
+    } catch (error) {
+      console.error("Failed to get object tree:", error);
+      res.status(500).json({ error: "Kunde inte hämta objektträd" });
+    }
+  });
+
+  // ============================================
   // TASK DEPENDENCY TEMPLATES API
   // ============================================
 

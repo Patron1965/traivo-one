@@ -1841,12 +1841,34 @@ export const orderConcepts = pgTable("order_concepts", {
   // Prioritet vid generering
   priority: text("priority").default("normal"),
   status: text("status").default("active").notNull(),
+
+  // === WIZARD 9-STEG (Orderkoncept-Process) ===
+  currentStep: integer("current_step").default(1),
+  customerId: varchar("customer_id"),
+  invoiceLevel: text("invoice_level"),
+  invoiceModel: text("invoice_model"),
+  invoicePeriod: text("invoice_period"),
+  invoiceLock: boolean("invoice_lock").default(false),
+  deliveryModel: text("delivery_model"),
+  deliveryStart: timestamp("delivery_start"),
+  deliveryEnd: timestamp("delivery_end"),
+  monthlyFeeCalc: real("monthly_fee_calc"),
+  contractLengthMonths: integer("contract_length_months"),
+  totalObjects: integer("total_objects").default(0),
+  totalArticles: integer("total_articles").default(0),
+  totalCost: real("total_cost").default(0),
+  totalValue: real("total_value").default(0),
+  estimatedHours: real("estimated_hours").default(0),
+  orderMetadata: jsonb("order_metadata"),
+
   createdBy: varchar("created_by").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [
   index("idx_order_concepts_tenant").on(table.tenantId),
   index("idx_order_concepts_cluster").on(table.targetClusterId),
+  index("idx_order_concepts_customer").on(table.customerId),
+  index("idx_order_concepts_status").on(table.status),
 ]);
 
 export const insertOrderConceptSchema = createInsertSchema(orderConcepts).omit({
@@ -2349,6 +2371,233 @@ export const ORDER_CONCEPT_SCENARIO_LABELS: Record<OrderConceptScenario, string>
   schema: "Schema (återkommande)",
   abonnemang: "Abonnemang (fast avgift)"
 };
+
+// ============================================
+// WIZARD TABLES - Orderkoncept 9-stegs process
+// ============================================
+
+export const INVOICE_LEVELS = ["customer", "area", "property", "object"] as const;
+export type InvoiceLevel = typeof INVOICE_LEVELS[number];
+export const INVOICE_LEVEL_LABELS: Record<InvoiceLevel, string> = {
+  customer: "Kundnivå",
+  area: "Områdesnivå",
+  property: "Fastighetsnivå",
+  object: "Objektnivå"
+};
+
+export const INVOICE_MODELS = ["call_off", "schedule", "subscription"] as const;
+export type InvoiceModel = typeof INVOICE_MODELS[number];
+export const INVOICE_MODEL_LABELS: Record<InvoiceModel, string> = {
+  call_off: "Avrop (efterfakturering)",
+  schedule: "Schema (efterfakturering)",
+  subscription: "Abonnemang (månadsfakturering)"
+};
+
+export const INVOICE_PERIODS = ["daily", "weekly", "monthly", "quarterly"] as const;
+export type InvoicePeriod = typeof INVOICE_PERIODS[number];
+export const INVOICE_PERIOD_LABELS: Record<InvoicePeriod, string> = {
+  daily: "Dagligen",
+  weekly: "Veckovis",
+  monthly: "Månadsvis",
+  quarterly: "Kvartalsvis"
+};
+
+export const DELIVERY_MODELS = ["call_off", "schedule", "subscription"] as const;
+export type DeliveryModel = typeof DELIVERY_MODELS[number];
+export const DELIVERY_MODEL_LABELS: Record<DeliveryModel, string> = {
+  call_off: "Avrop (engångsbeställning)",
+  schedule: "Schema (återkommande enligt plan)",
+  subscription: "Abonnemang (fast månadsavgift)"
+};
+
+export const DELIVERY_SEASONS = ["spring", "summer", "fall", "winter"] as const;
+export type DeliverySeason = typeof DELIVERY_SEASONS[number];
+export const DELIVERY_SEASON_LABELS: Record<DeliverySeason, string> = {
+  spring: "Vår (feb-apr)",
+  summer: "Sommar (maj-jul)",
+  fall: "Höst (sep-nov)",
+  winter: "Vinter (dec-jan)"
+};
+
+export const DOCUMENT_TYPES = ["order_confirmation", "delivery_note", "invoice"] as const;
+export type DocumentType = typeof DOCUMENT_TYPES[number];
+export const DOCUMENT_TYPE_LABELS: Record<DocumentType, string> = {
+  order_confirmation: "Orderbekräftelse",
+  delivery_note: "Följesedel",
+  invoice: "Faktura"
+};
+
+export const DISTRIBUTION_CHANNELS = ["email", "portal", "sms", "print"] as const;
+export type DistributionChannel = typeof DISTRIBUTION_CHANNELS[number];
+export const DISTRIBUTION_CHANNEL_LABELS: Record<DistributionChannel, string> = {
+  email: "E-post",
+  portal: "Kundportal",
+  sms: "SMS",
+  print: "Utskrift"
+};
+
+export const orderConceptObjects = pgTable("order_concept_objects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id, { onDelete: "cascade" }).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  metadataSnapshot: jsonb("metadata_snapshot"),
+  included: boolean("included").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_oco_order_concept").on(table.orderConceptId),
+  index("idx_oco_object").on(table.objectId),
+]);
+
+export const insertOrderConceptObjectSchema = createInsertSchema(orderConceptObjects).omit({
+  id: true,
+  createdAt: true,
+});
+export type OrderConceptObject = typeof orderConceptObjects.$inferSelect;
+export type InsertOrderConceptObject = z.infer<typeof insertOrderConceptObjectSchema>;
+
+export const orderConceptArticles = pgTable("order_concept_articles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id, { onDelete: "cascade" }).notNull(),
+  articleId: varchar("article_id").references(() => articles.id).notNull(),
+  quantity: integer("quantity").default(1),
+  unitPrice: real("unit_price"),
+  priceOverride: boolean("price_override").default(false),
+  metadataRules: jsonb("metadata_rules"),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_oca_order_concept").on(table.orderConceptId),
+  index("idx_oca_article").on(table.articleId),
+]);
+
+export const insertOrderConceptArticleSchema = createInsertSchema(orderConceptArticles).omit({
+  id: true,
+  createdAt: true,
+});
+export type OrderConceptArticle = typeof orderConceptArticles.$inferSelect;
+export type InsertOrderConceptArticle = z.infer<typeof insertOrderConceptArticleSchema>;
+
+export const articleObjectMappings = pgTable("article_object_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderConceptArticleId: varchar("order_concept_article_id").references(() => orderConceptArticles.id, { onDelete: "cascade" }).notNull(),
+  orderConceptObjectId: varchar("order_concept_object_id").references(() => orderConceptObjects.id, { onDelete: "cascade" }).notNull(),
+  quantity: integer("quantity").default(1),
+  metadataRead: jsonb("metadata_read"),
+  metadataCreate: jsonb("metadata_create"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_aom_article").on(table.orderConceptArticleId),
+  index("idx_aom_object").on(table.orderConceptObjectId),
+]);
+
+export const insertArticleObjectMappingSchema = createInsertSchema(articleObjectMappings).omit({
+  id: true,
+  createdAt: true,
+});
+export type ArticleObjectMapping = typeof articleObjectMappings.$inferSelect;
+export type InsertArticleObjectMapping = z.infer<typeof insertArticleObjectMappingSchema>;
+
+export const invoiceConfigurations = pgTable("invoice_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id, { onDelete: "cascade" }).notNull(),
+  headerMetadata: jsonb("header_metadata"),
+  lineMetadata: jsonb("line_metadata"),
+  recipients: jsonb("recipients"),
+  showPrices: boolean("show_prices").default(true),
+  paymentTermsDays: integer("payment_terms_days").default(30),
+  fortnoxExportEnabled: boolean("fortnox_export_enabled").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ic_order_concept").on(table.orderConceptId),
+]);
+
+export const insertInvoiceConfigurationSchema = createInsertSchema(invoiceConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type InvoiceConfiguration = typeof invoiceConfigurations.$inferSelect;
+export type InsertInvoiceConfiguration = z.infer<typeof insertInvoiceConfigurationSchema>;
+
+export const documentConfigurations = pgTable("document_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id, { onDelete: "cascade" }).notNull(),
+  documentType: text("document_type").notNull(),
+  enabled: boolean("enabled").default(true),
+  metadataFields: jsonb("metadata_fields"),
+  showPrice: boolean("show_price").default(true),
+  recipients: jsonb("recipients"),
+  distributionChannels: jsonb("distribution_channels"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_dc_order_concept").on(table.orderConceptId),
+]);
+
+export const insertDocumentConfigurationSchema = createInsertSchema(documentConfigurations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+export type DocumentConfiguration = typeof documentConfigurations.$inferSelect;
+export type InsertDocumentConfiguration = z.infer<typeof insertDocumentConfigurationSchema>;
+
+export const deliverySchedules = pgTable("delivery_schedules", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderConceptId: varchar("order_concept_id").references(() => orderConcepts.id, { onDelete: "cascade" }).notNull(),
+  season: text("season"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  periodicityValue: integer("periodicity_value").default(1),
+  periodicityUnit: text("periodicity_unit").default("months"),
+  minDaysBetween: integer("min_days_between").default(60),
+  preferredWeekday: integer("preferred_weekday"),
+  preferredTimeFrom: text("preferred_time_from"),
+  preferredTimeTo: text("preferred_time_to"),
+  rollingExtension: boolean("rolling_extension").default(true),
+  rollingMonths: integer("rolling_months").default(12),
+  active: boolean("active").default(true),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ds_order_concept").on(table.orderConceptId),
+]);
+
+export const insertDeliveryScheduleSchema = createInsertSchema(deliverySchedules).omit({
+  id: true,
+  createdAt: true,
+});
+export type DeliverySchedule = typeof deliverySchedules.$inferSelect;
+export type InsertDeliverySchedule = z.infer<typeof insertDeliveryScheduleSchema>;
+
+export const orderConceptObjectsRelations = relations(orderConceptObjects, ({ one }) => ({
+  orderConcept: one(orderConcepts, { fields: [orderConceptObjects.orderConceptId], references: [orderConcepts.id] }),
+  object: one(objects, { fields: [orderConceptObjects.objectId], references: [objects.id] }),
+}));
+
+export const orderConceptArticlesRelations = relations(orderConceptArticles, ({ one, many }) => ({
+  orderConcept: one(orderConcepts, { fields: [orderConceptArticles.orderConceptId], references: [orderConcepts.id] }),
+  article: one(articles, { fields: [orderConceptArticles.articleId], references: [articles.id] }),
+  mappings: many(articleObjectMappings),
+}));
+
+export const articleObjectMappingsRelations = relations(articleObjectMappings, ({ one }) => ({
+  conceptArticle: one(orderConceptArticles, { fields: [articleObjectMappings.orderConceptArticleId], references: [orderConceptArticles.id] }),
+  conceptObject: one(orderConceptObjects, { fields: [articleObjectMappings.orderConceptObjectId], references: [orderConceptObjects.id] }),
+}));
+
+export const invoiceConfigurationsRelations = relations(invoiceConfigurations, ({ one }) => ({
+  orderConcept: one(orderConcepts, { fields: [invoiceConfigurations.orderConceptId], references: [orderConcepts.id] }),
+}));
+
+export const documentConfigurationsRelations = relations(documentConfigurations, ({ one }) => ({
+  orderConcept: one(orderConcepts, { fields: [documentConfigurations.orderConceptId], references: [orderConcepts.id] }),
+}));
+
+export const deliverySchedulesRelations = relations(deliverySchedules, ({ one }) => ({
+  orderConcept: one(orderConcepts, { fields: [deliverySchedules.orderConceptId], references: [orderConcepts.id] }),
+}));
 
 // Delivery schedule entry type
 export interface DeliveryScheduleEntry {

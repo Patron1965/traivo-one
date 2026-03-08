@@ -56,6 +56,12 @@ import {
   type TaskDependencyInstance, type InsertTaskDependencyInstance,
   type InvoiceRule, type InsertInvoiceRule,
   type OrderConceptRunLog, type InsertOrderConceptRunLog,
+  type OrderConceptObject, type InsertOrderConceptObject,
+  type OrderConceptArticle, type InsertOrderConceptArticle,
+  type ArticleObjectMapping, type InsertArticleObjectMapping,
+  type InvoiceConfiguration, type InsertInvoiceConfiguration,
+  type DocumentConfiguration, type InsertDocumentConfiguration,
+  type DeliverySchedule, type InsertDeliverySchedule,
   type CustomerPortalToken, type InsertCustomerPortalToken,
   type CustomerPortalSession, type InsertCustomerPortalSession,
   type CustomerBookingRequest, type InsertCustomerBookingRequest,
@@ -96,6 +102,8 @@ import {
   objectImages, objectContacts, taskDesiredTimewindows, taskDependencies, taskInformation, objectTimeRestrictions, structuralArticles,
   orderConcepts, conceptFilters, assignments, assignmentArticles, subscriptionChanges,
   taskDependencyTemplates, taskDependencyInstances, invoiceRules, orderConceptRunLogs,
+  orderConceptObjects, orderConceptArticles, articleObjectMappings,
+  invoiceConfigurations, documentConfigurations, deliverySchedules,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData,
@@ -476,6 +484,33 @@ export interface IStorage {
   // Order Concept Run Logs
   getOrderConceptRunLogs(tenantId: string, orderConceptId?: string): Promise<OrderConceptRunLog[]>;
   createOrderConceptRunLog(log: InsertOrderConceptRunLog): Promise<OrderConceptRunLog>;
+
+  // Order Concept Wizard - Objects
+  getOrderConceptObjects(orderConceptId: string): Promise<OrderConceptObject[]>;
+  addOrderConceptObjects(objects: InsertOrderConceptObject[]): Promise<OrderConceptObject[]>;
+  removeOrderConceptObject(orderConceptId: string, objectId: string): Promise<void>;
+
+  // Order Concept Wizard - Articles
+  getOrderConceptArticles(orderConceptId: string): Promise<OrderConceptArticle[]>;
+  addOrderConceptArticle(article: InsertOrderConceptArticle): Promise<OrderConceptArticle>;
+  removeOrderConceptArticle(id: string, orderConceptId: string): Promise<void>;
+
+  // Order Concept Wizard - Article-Object Mappings
+  getArticleObjectMappings(orderConceptId: string): Promise<ArticleObjectMapping[]>;
+  createArticleObjectMapping(mapping: InsertArticleObjectMapping): Promise<ArticleObjectMapping>;
+  deleteArticleObjectMappings(orderConceptId: string): Promise<void>;
+
+  // Order Concept Wizard - Invoice Configuration
+  getInvoiceConfiguration(orderConceptId: string): Promise<InvoiceConfiguration | undefined>;
+  upsertInvoiceConfiguration(config: InsertInvoiceConfiguration): Promise<InvoiceConfiguration>;
+
+  // Order Concept Wizard - Document Configurations
+  getDocumentConfigurations(orderConceptId: string): Promise<DocumentConfiguration[]>;
+  upsertDocumentConfigurations(orderConceptId: string, configs: InsertDocumentConfiguration[]): Promise<DocumentConfiguration[]>;
+
+  // Order Concept Wizard - Delivery Schedules
+  getDeliverySchedules(orderConceptId: string): Promise<DeliverySchedule[]>;
+  upsertDeliverySchedules(orderConceptId: string, schedules: InsertDeliverySchedule[]): Promise<DeliverySchedule[]>;
 
   // Customer Portal - Tokens and Sessions
   createPortalToken(token: InsertCustomerPortalToken): Promise<CustomerPortalToken>;
@@ -3650,6 +3685,130 @@ export class DatabaseStorage implements IStorage {
   async createOrderConceptRunLog(log: InsertOrderConceptRunLog): Promise<OrderConceptRunLog> {
     const [result] = await db.insert(orderConceptRunLogs).values(log).returning();
     return result;
+  }
+
+  // ============================================
+  // Order Concept Wizard - Objects
+  // ============================================
+
+  async getOrderConceptObjects(orderConceptId: string): Promise<OrderConceptObject[]> {
+    return db.select().from(orderConceptObjects)
+      .where(eq(orderConceptObjects.orderConceptId, orderConceptId))
+      .orderBy(orderConceptObjects.sortOrder);
+  }
+
+  async addOrderConceptObjects(objs: InsertOrderConceptObject[]): Promise<OrderConceptObject[]> {
+    if (objs.length === 0) return [];
+    return db.insert(orderConceptObjects).values(objs).onConflictDoNothing().returning();
+  }
+
+  async removeOrderConceptObject(orderConceptId: string, objectId: string): Promise<void> {
+    await db.delete(orderConceptObjects).where(and(
+      eq(orderConceptObjects.orderConceptId, orderConceptId),
+      eq(orderConceptObjects.objectId, objectId)
+    ));
+  }
+
+  // ============================================
+  // Order Concept Wizard - Articles
+  // ============================================
+
+  async getOrderConceptArticles(orderConceptId: string): Promise<OrderConceptArticle[]> {
+    return db.select().from(orderConceptArticles)
+      .where(eq(orderConceptArticles.orderConceptId, orderConceptId))
+      .orderBy(orderConceptArticles.sortOrder);
+  }
+
+  async addOrderConceptArticle(article: InsertOrderConceptArticle): Promise<OrderConceptArticle> {
+    const [result] = await db.insert(orderConceptArticles).values(article).returning();
+    return result;
+  }
+
+  async removeOrderConceptArticle(id: string, orderConceptId: string): Promise<void> {
+    await db.delete(orderConceptArticles).where(and(
+      eq(orderConceptArticles.id, id),
+      eq(orderConceptArticles.orderConceptId, orderConceptId)
+    ));
+  }
+
+  // ============================================
+  // Order Concept Wizard - Article-Object Mappings
+  // ============================================
+
+  async getArticleObjectMappings(orderConceptId: string): Promise<ArticleObjectMapping[]> {
+    const conceptArticleIds = await db.select({ id: orderConceptArticles.id })
+      .from(orderConceptArticles)
+      .where(eq(orderConceptArticles.orderConceptId, orderConceptId));
+    if (conceptArticleIds.length === 0) return [];
+    return db.select().from(articleObjectMappings)
+      .where(inArray(articleObjectMappings.orderConceptArticleId, conceptArticleIds.map(a => a.id)));
+  }
+
+  async createArticleObjectMapping(mapping: InsertArticleObjectMapping): Promise<ArticleObjectMapping> {
+    const [result] = await db.insert(articleObjectMappings).values(mapping).returning();
+    return result;
+  }
+
+  async deleteArticleObjectMappings(orderConceptId: string): Promise<void> {
+    const conceptArticleIds = await db.select({ id: orderConceptArticles.id })
+      .from(orderConceptArticles)
+      .where(eq(orderConceptArticles.orderConceptId, orderConceptId));
+    if (conceptArticleIds.length === 0) return;
+    await db.delete(articleObjectMappings)
+      .where(inArray(articleObjectMappings.orderConceptArticleId, conceptArticleIds.map(a => a.id)));
+  }
+
+  // ============================================
+  // Order Concept Wizard - Invoice Configuration
+  // ============================================
+
+  async getInvoiceConfiguration(orderConceptId: string): Promise<InvoiceConfiguration | undefined> {
+    const [result] = await db.select().from(invoiceConfigurations)
+      .where(eq(invoiceConfigurations.orderConceptId, orderConceptId));
+    return result || undefined;
+  }
+
+  async upsertInvoiceConfiguration(config: InsertInvoiceConfiguration): Promise<InvoiceConfiguration> {
+    const existing = await this.getInvoiceConfiguration(config.orderConceptId);
+    if (existing) {
+      const [result] = await db.update(invoiceConfigurations)
+        .set({ ...config, updatedAt: new Date() })
+        .where(eq(invoiceConfigurations.id, existing.id))
+        .returning();
+      return result;
+    }
+    const [result] = await db.insert(invoiceConfigurations).values(config).returning();
+    return result;
+  }
+
+  // ============================================
+  // Order Concept Wizard - Document Configurations
+  // ============================================
+
+  async getDocumentConfigurations(orderConceptId: string): Promise<DocumentConfiguration[]> {
+    return db.select().from(documentConfigurations)
+      .where(eq(documentConfigurations.orderConceptId, orderConceptId));
+  }
+
+  async upsertDocumentConfigurations(orderConceptId: string, configs: InsertDocumentConfiguration[]): Promise<DocumentConfiguration[]> {
+    await db.delete(documentConfigurations).where(eq(documentConfigurations.orderConceptId, orderConceptId));
+    if (configs.length === 0) return [];
+    return db.insert(documentConfigurations).values(configs).returning();
+  }
+
+  // ============================================
+  // Order Concept Wizard - Delivery Schedules
+  // ============================================
+
+  async getDeliverySchedules(orderConceptId: string): Promise<DeliverySchedule[]> {
+    return db.select().from(deliverySchedules)
+      .where(eq(deliverySchedules.orderConceptId, orderConceptId));
+  }
+
+  async upsertDeliverySchedules(orderConceptId: string, schedules: InsertDeliverySchedule[]): Promise<DeliverySchedule[]> {
+    await db.delete(deliverySchedules).where(eq(deliverySchedules.orderConceptId, orderConceptId));
+    if (schedules.length === 0) return [];
+    return db.insert(deliverySchedules).values(schedules).returning();
   }
 
   // ============================================

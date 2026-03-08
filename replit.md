@@ -50,7 +50,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner, with support for period-based and recurring patterns.
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.
 - **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.
-- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with delivery schedule builder and subscription calculation.
+- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with delivery schedule builder and subscription calculation. Full 9-step wizard at `/order-concepts/new` and `/order-concepts/:id/edit` covering: (1) Object selection with hierarchical tree, (2) Object confirmation with filters, (3) Invoice model (level/model/period), (4) Invoice templates with metadata config, (5) Document configuration (order confirmation/delivery note/invoice with distribution channels), (6) Article selection with pricing, (7) Article-object mapping with auto-map, (8) Review with validation, (9) Delivery model (Avrop/Schema/Abonnemang with seasonal schedules). Supporting tables: `order_concept_objects`, `order_concept_articles`, `article_object_mappings`, `invoice_configurations`, `document_configurations`, `delivery_schedules`. Wizard components in `client/src/components/orderkoncept/`.
 - **Field Worker Task Dependency View:** Mobile app displays task dependencies.
 - **Field Worker Photo Upload:** Two-step presigned URL flow for photo capture.
 - **Inspection & Metadata System:** Structured inspection checklist integrated into the mobile app with a dedicated search page.
