@@ -289,6 +289,8 @@ function TechnicianRedirect() {
 
 function AuthenticatedApp() {
   const { theme, toggleTheme } = useTheme();
+  const [location] = useLocation();
+  const hideFloatingButton = location.startsWith("/order-concepts/new") || location.includes("/edit");
   
   return (
     <TenantBrandingProvider>
@@ -301,7 +303,7 @@ function AuthenticatedApp() {
               <Router />
             </ErrorBoundary>
           </main>
-          <FloatingActionButton />
+          {!hideFloatingButton && <FloatingActionButton />}
           <MobileBottomNav />
           <CommandPalette onThemeToggle={toggleTheme} currentTheme={theme} />
           <TourGuide />
