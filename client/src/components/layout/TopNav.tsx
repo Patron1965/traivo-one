@@ -258,16 +258,13 @@ function TenantLogo() {
 
   return (
     <Link href="/">
-      <div className="flex items-center gap-2 cursor-pointer hover-elevate rounded-md px-2 py-1">
+      <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5">
         <img 
           src={logoIconUrl || nordfieldLogo} 
           alt={companyName} 
-          className="h-8 w-8 object-contain"
+          className="h-10 object-contain"
           data-testid="img-tenant-logo"
         />
-        <span className="hidden lg:block font-semibold text-sm text-foreground" data-testid="text-tenant-name">
-          Nordfield
-        </span>
       </div>
     </Link>
   );
