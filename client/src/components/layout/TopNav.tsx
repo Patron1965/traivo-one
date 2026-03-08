@@ -262,7 +262,7 @@ function TenantLogo() {
         <img 
           src={logoIconUrl || nordfieldLogo} 
           alt={companyName} 
-          className="h-[60px] object-contain"
+          className="h-[90px] object-contain"
           data-testid="img-tenant-logo"
         />
       </div>
