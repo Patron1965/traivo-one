@@ -1,7 +1,7 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
-import nordfieldLogo from "@assets/download_1772976379099.webp";
+import nordfieldLogo from "@assets/nordfield-logo-final_1772981791099.png";
 import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
@@ -262,9 +262,12 @@ function TenantLogo() {
         <img 
           src={logoIconUrl || nordfieldLogo} 
           alt={companyName} 
-          className="h-7 object-contain"
+          className="h-8 w-8 object-contain"
           data-testid="img-tenant-logo"
         />
+        <span className="hidden lg:block font-semibold text-sm text-foreground" data-testid="text-tenant-name">
+          Nordfield
+        </span>
       </div>
     </Link>
   );
