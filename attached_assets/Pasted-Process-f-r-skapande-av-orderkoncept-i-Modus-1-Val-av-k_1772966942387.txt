@@ -1,0 +1,616 @@
+Process för skapande av orderkoncept i Modus
+
+
+
+
+
+
+
+1. Val av kund, kluster eller objekt
+
+
+
+
+
+Processen startar genom att administratören definierar vilka objekt ordern ska kopplas till.
+
+
+
+Detta kan göras på tre sätt:
+
+
+
+Välj kund
+Systemet identifierar automatiskt alla associerade:
+kluster
+objekt
+adresser
+kontakter
+övrig metadata
+
+
+Välj objekt eller kluster manuellt
+Administratören kan direkt välja:
+ett objekt
+ett organisatoriskt objekt
+ett materiellt objekt
+ett helt kluster
+
+
+Importera associationsdata
+En fil kan laddas upp med exempelvis:
+adresser
+fastighetsnummer
+fasadnummer
+kontaktuppgifter
+
+Systemet gör då en metadata-matchning mot befintliga objekt och kluster:
+exakt matchning
+delvis matchning
+
+
+
+
+
+
+
+
+
+
+
+2. Bekräftelse och urval av objekt
+
+
+
+
+
+Systemet presenterar en träfflista baserat på sökningen i steg 1.
+
+
+
+Listan kan innehålla:
+
+
+
+enskilda objekt
+hela kluster
+objekt med partiell metadata-matchning
+
+
+
+
+Administratören kan sedan:
+
+
+
+välja alla objekt
+göra manuella urval
+lägga till objekt
+korrigera objekt
+koppla objekt till kluster
+korrigera metadata
+
+
+
+
+
+
+Metadata-baserad filtrering
+
+
+
+
+
+Systemet kan även analysera metadata i urvalet och presentera exempelvis:
+
+
+
+objekt kopplade till en viss person
+objekt av viss typ
+objekt med viss status eller avvikelse
+objekt i viss geografisk zon
+objekt med viss färg eller kategori
+
+
+
+
+Administratören kan därmed förfina urvalet innan ordern skapas.
+
+
+
+
+
+
+
+
+3. Fakturamodell och faktureringsstruktur
+
+
+
+
+
+När objekturvalet är bekräftat definieras vem som står bakom beställningen och hur fakturering ska ske.
+
+
+
+Systemet analyserar metadata och identifierar:
+
+
+
+kund
+fakturareferenser
+områden
+fastigheter
+kontaktpersoner
+
+
+
+
+Administratören kan då definiera faktureringsnivå, exempelvis:
+
+
+
+område (t.ex. Södermalm)
+stadsdel
+fastighet
+objekt
+kundnivå
+
+
+
+
+
+
+Faktureringsmodell
+
+
+
+
+
+Administratören väljer fakturamodell:
+
+
+
+Avrop / efterfakturering
+Schema / efterfakturering
+Abonnemang / månadsfakturering
+
+
+
+
+
+
+Faktureringsperiod
+
+
+
+
+
+Systemet kan skapa fakturor:
+
+
+
+dagligen
+veckovis
+månadsvis
+
+
+
+
+
+
+Hantering av restnoterade uppgifter
+
+
+
+
+
+Administratören kan definiera om faktura ska skapas:
+
+
+
+endast när allt är levererat
+även när delar återstår
+
+
+
+
+Detta styrs genom en faktureringslåsning kopplad till restnoterade artiklar.
+
+
+
+
+
+
+
+
+4. Fakturamallar och dokumentstruktur
+
+
+
+
+
+Administratören väljer vilken fakturamall som ska användas.
+
+
+
+Fakturamallen definierar:
+
+
+
+vilka uppgifter som visas
+hur metadata ska presenteras
+layout enligt svensk fakturastandard
+
+
+
+
+
+
+Grunddata till ekonomisystem
+
+
+
+
+
+Systemet skickar följande till exempelvis Fortnox:
+
+
+
+artikelnummer
+antal levererade
+restnoterat antal
+pris enligt prislista
+manuellt pris (om angivet)
+artikelbeskrivning
+
+
+
+
+
+
+Metadata på fakturarader
+
+
+
+
+
+Metadata kan läggas till från objekten:
+
+
+
+Exempel:
+
+
+
+fastighetsnummer
+beställarreferens
+objektidentitet
+adress
+avvikelse
+serviceinformation
+
+
+
+
+Administratören kan även lägga till beställningsmetadata som kopplas till hela ordern.
+
+
+
+Exempel:
+
+
+
+Beställning 22
+Vårtvätt 2026
+
+
+
+
+Denna metadata följer sedan:
+
+
+
+order
+uppgifter
+objekt
+
+
+
+
+
+
+
+
+
+5. Dokumenthantering
+
+
+
+
+
+Administratören kan välja att skapa:
+
+
+
+orderbekräftelse
+följesedel
+faktura
+
+
+
+
+Det går även att definiera:
+
+
+
+vilka metadata som ska visas
+om pris ska visas
+vilka mottagare dokumenten ska skickas till
+
+
+
+
+Systemet kan även:
+
+
+
+publicera dokument i kundportal
+skicka avisering till kunden
+
+
+
+
+
+
+
+
+
+6. Skapande av uppgifter och artiklar
+
+
+
+
+
+I nästa steg definieras vilka uppgifter eller artiklar som ska utföras.
+
+
+
+Artiklar kan vara:
+
+
+
+tjänster
+material
+kontrollpunkter
+reservdelar
+
+
+
+
+
+
+Strukturartiklar
+
+
+
+
+
+Systemet kan hantera strukturartiklar, dvs artikelpaket.
+
+
+
+Exempel:
+
+
+
+Tvättuppdrag kan bestå av:
+
+
+
+etablering
+tvätt
+fotografering
+reservdelar
+kontrollpunkter
+
+
+
+
+Pris kan styras av:
+
+
+
+strukturartikel
+ingående artiklar
+
+
+
+
+
+
+
+
+
+7. Artikelkoppling till objekt
+
+
+
+
+
+När artiklar läggs till gör systemet en metadata-matchning mot objekten.
+
+
+
+Exempel:
+
+
+
+Artikel:
+
+Tvätt av matavfallskärl
+
+
+
+Matchas mot objekt med metadata:
+
+
+
+typ = matavfallskärl
+
+
+
+
+Systemet kan även läsa metadata som:
+
+
+
+storlek
+antal
+placering
+
+
+
+
+
+
+Artiklar kan även:
+
+
+
+
+
+läsa metadata från objekt
+uppdatera metadata
+skapa ny metadata
+
+
+
+
+Exempel:
+
+
+
+foto
+status
+kontrollresultat
+avvikelse
+
+
+
+
+
+
+
+
+
+8. Kontroll av orderkoncept
+
+
+
+
+
+När artiklar och objekt kopplats samman beräknar systemet:
+
+
+
+antal
+arbetstid
+kostnad
+försäljningsvärde
+
+
+
+
+Administratören kan nu:
+
+
+
+granska hela ordern
+granska detaljer
+korrigera fel
+lägga till saknade artiklar
+
+
+
+
+
+
+
+
+
+9. Leveransmodell
+
+
+
+
+
+I sista steget definieras hur ordern ska levereras.
+
+
+
+Tre huvudtyper:
+
+
+
+
+
+Avrop
+
+
+
+
+
+Engångsbeställning.
+
+
+
+
+
+Schema
+
+
+
+
+
+Återkommande uppdrag enligt plan.
+
+
+
+
+
+Abonnemang
+
+
+
+
+
+Periodisk leverans tillsvidare eller under avtalsperiod.
+
+
+
+Administratören definierar även:
+
+
+
+leveransperiod
+startdatum
+periodicitet
+avtalslängd
+
+
+
+
+
+
+
+✔ Resultatet blir ett orderkoncept där:
+
+
+
+objekt är identifierade
+uppgifter är definierade
+metadata är kopplad
+fakturering är strukturerad
+dokument är konfigurerade
+leveransmodell är satt
