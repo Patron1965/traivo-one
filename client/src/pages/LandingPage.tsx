@@ -31,7 +31,7 @@ export default function LandingPage() {
             <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
               <Sparkles className="h-5 w-5 text-white" />
             </div>
-            <span className="font-bold text-xl">Unicorn</span>
+            <span className="font-bold text-xl">Nordfield</span>
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
@@ -226,9 +226,9 @@ export default function LandingPage() {
                     <Zap className="h-3 w-3" />
                     Designpartner
                   </div>
-                  <h2 className="text-3xl font-bold mb-4">Utvecklat tillsammans med Kinab</h2>
+                  <h2 className="text-3xl font-bold mb-4">Utvecklat tillsammans med Nordfield</h2>
                   <p className="text-muted-foreground mb-6">
-                    Unicorn utvecklas i nära samarbete med Kinab AB, ledande inom avfallshantering i Norden. 
+                    Nordfield utvecklas i nära samarbete med Nordfield AB, ledande inom avfallshantering i Norden. 
                     En plattform byggd för att lösa verkliga utmaningar.
                   </p>
                   <ul className="space-y-3">
@@ -263,7 +263,7 @@ export default function LandingPage() {
                   <blockquote className="text-lg mb-4">
                     "AI-stöd ska genomsyra hela plattformen. Varje funktion bör övervägas för AI-förbättring."
                   </blockquote>
-                  <cite className="text-sm opacity-80">— Unicorn designprincip</cite>
+                  <cite className="text-sm opacity-80">— Nordfield designprincip</cite>
                 </div>
               </div>
             </div>
@@ -312,7 +312,7 @@ export default function LandingPage() {
 
         <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4 text-center">
-            <h2 className="text-3xl font-bold mb-4">Redo att testa Unicorn?</h2>
+            <h2 className="text-3xl font-bold mb-4">Redo att testa Nordfield?</h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
               Logga in för att utforska plattformens alla funktioner.
             </p>
@@ -335,7 +335,7 @@ export default function LandingPage() {
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
                 <Sparkles className="h-4 w-4 text-white" />
               </div>
-              <span className="font-semibold">Unicorn</span>
+              <span className="font-semibold">Nordfield</span>
               <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">

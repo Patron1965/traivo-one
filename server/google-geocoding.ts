@@ -46,7 +46,7 @@ async function nominatimFallback(address: string): Promise<GeocodingResult | nul
     });
 
     const res = await fetch(`${NOMINATIM_BASE_URL}?${params.toString()}`, {
-      headers: { "User-Agent": "Unicorn-FieldService/1.0" },
+      headers: { "User-Agent": "Nordfield-FieldService/1.0" },
     });
 
     if (!res.ok) return null;

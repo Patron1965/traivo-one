@@ -30,7 +30,7 @@ export default function WorkflowGuidePage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Arbetsflödesguide</h1>
         <p className="text-muted-foreground">
-          Steg-för-steg guide för hur Kinabs personal använder Unicorn dag-för-dag
+          Steg-för-steg guide för hur Nordfields personal använder Nordfield dag-för-dag
         </p>
       </div>
 

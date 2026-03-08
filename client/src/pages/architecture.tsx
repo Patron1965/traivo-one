@@ -105,7 +105,7 @@ async function generateVisualPDF(contentRef: React.RefObject<HTMLDivElement>) {
     heightLeft -= pageHeight;
   }
   
-  doc.save("unicorn-systemarkitektur.pdf");
+  doc.save("nordfield-systemarkitektur.pdf");
 }
 
 export default function ArchitecturePage() {
@@ -151,7 +151,7 @@ export default function ArchitecturePage() {
 
       <div ref={contentRef} className="bg-background space-y-6 p-4">
         <div className="text-center space-y-2 mb-8">
-          <h1 className="text-3xl font-bold">Unicorn Systemarkitektur</h1>
+          <h1 className="text-3xl font-bold">Nordfield Systemarkitektur</h1>
           <p className="text-muted-foreground">AI-driven fältserviceplattform för nordisk avfallshantering</p>
         </div>
 

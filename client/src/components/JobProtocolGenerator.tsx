@@ -164,7 +164,7 @@ export async function generateJobProtocol(data: JobProtocolData): Promise<Blob> 
   const footerY = doc.internal.pageSize.getHeight() - 15;
   doc.setFontSize(8);
   doc.setTextColor(128);
-  doc.text("Genererad av Unicorn Field Service", pageWidth / 2, footerY, { align: "center" });
+  doc.text("Genererad av Nordfield Field Service", pageWidth / 2, footerY, { align: "center" });
 
   return doc.output("blob");
 }

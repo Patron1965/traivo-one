@@ -5,7 +5,7 @@ import { z } from "zod";
 import { storage } from "../storage";
 
 export const mcpServer = new McpServer({
-  name: "unicorn-mcp-server",
+  name: "nordfield-mcp-server",
   version: "1.0.0",
 });
 

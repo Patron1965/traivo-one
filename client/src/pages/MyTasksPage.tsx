@@ -291,7 +291,7 @@ function RecentPages() {
   const [recentUrls, setRecentUrls] = useState<string[]>([]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("unicorn-recent-pages");
+    const stored = localStorage.getItem("nordfield-recent-pages");
     if (stored) {
       try {
         const urls = JSON.parse(stored) as string[];

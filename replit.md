@@ -1,7 +1,7 @@
-# Unicorn - AI-Driven Field Service Planning Platform
+# Nordfield - AI-Driven Field Service Planning Platform
 
 ## Overview
-Unicorn is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
+Nordfield is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
@@ -11,7 +11,7 @@ Unicorn is an AI-driven platform designed to optimize field service operations f
 - **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet
 
 ## System Architecture
-The Unicorn platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
+The Nordfield platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
 
 ### UI/UX Decisions
 The user interface features a sticky TopNav, global search, user utilities, a mobile-friendly hamburger menu, Floating Action Button, QuickStats dashboard cards, a drag-and-drop WeekPlanner, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Dedicated mobile interfaces for field technicians include a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help, progressive loading, and white-label multi-tenancy with dynamic CSS, custom logos, and branding templates. An AI Command Center provides a unified dashboard for AI features. An interactive Tour Guide system provides step-by-step onboarding with spotlight overlay, tooltip navigation, and multiple tour definitions. Role-based navigation filtering ensures users only see relevant options.
@@ -22,7 +22,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy (Flerföretagsstöd):** Full tenant isolation at database and API level with middleware, dynamic tenant selection, and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI (gpt-4o-mini, gpt-4o) via Replit AI Integrations. Includes AI Cards, an AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner with natural language chat.
-- **MCP Server:** Enables external AI assistants to interact with Unicorn data via SSE.
+- **MCP Server:** Enables external AI assistants to interact with Nordfield data via SSE.
 - **Modus 2.0 Import System:** Dedicated `/import` page for step-by-step data migration from Modus 2.0 via CSV, supporting 4 data types: Objects (with type mapping: Miljökärl→miljokarl, Miljörum→rum, Underjordsbehållare→underjord, Fastighet/Byggnad→fastighet, empty→omrade), Tasks/Uppgiftshändelser (Kärltvätt/Rumstvätt/Tvätt UJ-behållare with full field import including Prislista, Kostnad, Pris, Fakturerad, Resultat, Jobb, Beställning), Invoice Lines/Fakturarader (auto-creates articles from Fortnox Artikel Id K100/UJ100, comma-decimal price parsing), and Events/Uppgifter (time analysis). Enhanced with: upsert logic (duplicate detection via objectNumber/modusId), pre-import validation endpoint with typeStats/emptyTypeCount/parentWithSpaces warnings, parent-ID whitespace stripping (.replace(/\s/g, "")), import batch tracking (`importBatchId` on objects/customers/workOrders), batch undo capability (`DELETE /api/import/batch/:batchId`) covering work order lines cascade, SSE-based real-time progress feedback during async background import (tenant-scoped), and import history UI with per-batch undo.
 - **Google Geocoding v4 Integration:** Enhanced address resolution via `server/google-geocoding.ts` with SearchDestinations support for entrance coordinates, navigation points, and contextual address descriptors. Fallback to Nominatim when API key unavailable. Objects schema extended with `entranceLatitude`, `entranceLongitude`, `addressDescriptor` fields. API endpoints: `POST /api/geocode/address`, `POST /api/geocode/search-destinations`, `POST /api/objects/:id/update-entrance`, `POST /api/objects/batch-geocode`, `GET /api/geocode/status`. Route optimizer (`server/route-optimizer.ts`) uses entrance coordinates for more precise distance calculations. AddressSearch component (`client/src/components/AddressSearch.tsx`) upgraded to use Google v4 with Nominatim fallback. RouteMap shows entrance markers (green door icon) when available. Cost tracked in API usage tracker at $0.005/request.
 - **Performance:** Lazy Object Loading, Address Search/Autocomplete (Google Geocoding v4 primary, OpenStreetMap Nominatim fallback).
@@ -63,7 +63,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
-- **External Optimization:** Route optimization is offloaded to a separate Unicorn optimization service.
+- **External Optimization:** Route optimization is offloaded to a separate Nordfield optimization service.
 - **Data Validation:** DataClean service handles external data validation and geocoding.
 - **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app.
 
@@ -73,7 +73,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **OpenAI API:** AI planning suggestions, conversational AI.
 - **OpenRouteService:** Route visualization.
 - **OpenStreetMap Nominatim:** Geocoding for Swedish addresses.
-- **External Unicorn Optimization Service:** Dedicated route optimization.
+- **External Nordfield Optimization Service:** Dedicated route optimization.
 - **DataClean Service:** External service for data validation and geocoding.
 - **Modus 2.0:** Source of CSV data for imports.
 - **react-leaflet:** Interactive map visualizations.

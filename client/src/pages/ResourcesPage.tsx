@@ -90,8 +90,8 @@ function ShareFieldAppButton() {
   
   const handleShare = async () => {
     const shareData = {
-      title: "Unicorn Fältapp",
-      text: "Öppna Unicorn Fältapp",
+      title: "Nordfield Fältapp",
+      text: "Öppna Nordfield Fältapp",
       url: fieldAppUrl,
     };
     

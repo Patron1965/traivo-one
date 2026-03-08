@@ -86,9 +86,9 @@ function formatZodError(error: z.ZodError): { error: string; details: Array<{ fi
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
-    name: "Kinab AB",
+    name: "Nordfield AB",
     orgNumber: "556789-1234",
-    contactEmail: "info@kinab.se",
+    contactEmail: "info@nordfield.se",
     contactPhone: "+46701234567",
     settings: {},
   });
@@ -8756,7 +8756,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Unicorn - Planerarvy</title>
+<title>Nordfield - Planerarvy</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
@@ -10175,7 +10175,7 @@ setInterval(loadRoutes, 30000);
     try {
       // Project code statistics (based on actual code count)
       const stats = {
-        projectName: "Unicorn - AI-Driven Field Service Planning Platform",
+        projectName: "Nordfield - AI-Driven Field Service Planning Platform",
         generatedDate: new Date().toISOString(),
         codeStats: {
           totalLines: 43628,
@@ -10258,10 +10258,10 @@ setInterval(loadRoutes, 30000);
       
       const result = await sendEmail({
         to,
-        subject: "Unicorn Projektrapport - Kodstatistik och Kostnadsjämförelse",
+        subject: "Nordfield Projektrapport - Kodstatistik och Kostnadsjämförelse",
         html: `
-          <h1>Unicorn Projektrapport</h1>
-          <p>Bifogat finner du projektrapporten med kodstatistik och kostnadsjämförelse för Unicorn-plattformen.</p>
+          <h1>Nordfield Projektrapport</h1>
+          <p>Bifogat finner du projektrapporten med kodstatistik och kostnadsjämförelse för Nordfield-plattformen.</p>
           <h2>Sammanfattning</h2>
           <ul>
             <li><strong>Totalt antal kodrader:</strong> ~43 600</li>
@@ -10270,11 +10270,11 @@ setInterval(loadRoutes, 30000);
           </ul>
           <p>Se bifogad PDF för detaljerad information.</p>
           <hr>
-          <p><em>Genererad av Unicorn - AI-Driven Field Service Planning Platform</em></p>
+          <p><em>Genererad av Nordfield - AI-Driven Field Service Planning Platform</em></p>
         `,
         attachments: [
           {
-            filename: "Unicorn_Projektrapport_Kostnadsjamforelse.pdf",
+            filename: "Nordfield_Projektrapport_Kostnadsjamforelse.pdf",
             content: pdfBuffer,
           }
         ],
@@ -14299,7 +14299,7 @@ setInterval(loadRoutes, 30000);
       }
 
       const tenant = await storage.getTenant(tenantId);
-      const companyName = tenant?.name || "Unicorn";
+      const companyName = tenant?.name || "Nordfield";
       
       const baseUrl = process.env.REPLIT_DEV_DOMAIN 
         ? `https://${process.env.REPLIT_DEV_DOMAIN}`
@@ -14897,12 +14897,12 @@ setInterval(loadRoutes, 30000);
 
   app.post("/api/portal/auth/demo-login", async (req, res) => {
     try {
-      const demoEmail = "demo@unicorn.se";
+      const demoEmail = "demo@nordfield.se";
       const tenantId = "default-tenant";
       
       const customer = await storage.getCustomerByEmail(demoEmail, tenantId);
       if (!customer) {
-        return res.status(404).json({ error: "Demokund finns inte. Skapa en kund med e-post demo@unicorn.se." });
+        return res.status(404).json({ error: "Demokund finns inte. Skapa en kund med e-post demo@nordfield.se." });
       }
 
       const { generateSessionToken } = await import("./portal-auth");

@@ -134,7 +134,7 @@ export default function HistoricalMapPage() {
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    document.title = "Unicorn - Historisk Kartvy";
+    document.title = "Nordfield - Historisk Kartvy";
   }, []);
 
   const { data: resources } = useQuery<Resource[]>({

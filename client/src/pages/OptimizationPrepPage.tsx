@@ -504,7 +504,7 @@ export default function OptimizationPrepPage() {
             Skicka till optimering
           </CardTitle>
           <CardDescription>
-            Skicka veckodata till Unicorn optimeringstjänst
+            Skicka veckodata till Nordfield optimeringstjänst
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

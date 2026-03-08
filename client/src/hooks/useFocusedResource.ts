@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 
-const CHANNEL_NAME = "unicorn-resource-focus";
-const STORAGE_KEY = "unicorn-focused-resource";
+const CHANNEL_NAME = "nordfield-resource-focus";
+const STORAGE_KEY = "nordfield-focused-resource";
 
 interface FocusedResourceState {
   resourceId: string | null;

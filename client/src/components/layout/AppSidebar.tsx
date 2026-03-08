@@ -1,5 +1,5 @@
 import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain, BookOpen, Database, ClipboardCheck, MapPin, History, LogIn } from "lucide-react";
-import unicornLogo from "@assets/download_(3)_1766432059347.png";
+import nordfieldLogo from "@assets/download_(3)_1766432059347.png";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -122,14 +122,14 @@ export function AppSidebar() {
       <SidebarHeader className="p-4">
         <div className="flex items-center gap-3">
           <img 
-            src={unicornLogo} 
-            alt="Unicorn" 
+            src={nordfieldLogo} 
+            alt="Nordfield" 
             className="h-10 w-auto"
-            data-testid="img-unicorn-logo"
+            data-testid="img-nordfield-logo"
           />
           <div>
-            <h1 className="text-base font-semibold">Unicorn</h1>
-            <p className="text-xs text-muted-foreground">Kinab AB</p>
+            <h1 className="text-base font-semibold">Nordfield</h1>
+            <p className="text-xs text-muted-foreground">Nordfield AB</p>
           </div>
         </div>
       </SidebarHeader>

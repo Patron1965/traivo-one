@@ -172,7 +172,7 @@ export default function SmsSettingsPage() {
               <Input
                 value={localConfig.smsFromName}
                 onChange={(e) => setLocalConfig({ ...localConfig, smsFromName: e.target.value })}
-                placeholder="T.ex. Kinab AB"
+                placeholder="T.ex. Nordfield AB"
                 maxLength={100}
                 disabled={!localConfig.smsEnabled}
                 data-testid="input-sms-from-name"

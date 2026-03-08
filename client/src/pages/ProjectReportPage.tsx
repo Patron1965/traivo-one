@@ -355,7 +355,7 @@ export default function ProjectReportPage() {
       const avgCost = (stats.costComparison.totalCost.min + stats.costComparison.totalCost.max) / 2;
       doc.text(`Ett projekt av denna storlek kostar typiskt ${formatCurrency(avgCost)} i ren utvecklingskostnad.`, 18, yPos);
 
-      doc.save("Unicorn_Projektrapport_Kostnadsjamforelse.pdf");
+      doc.save("Nordfield_Projektrapport_Kostnadsjamforelse.pdf");
     } catch (error) {
       console.error("Failed to generate PDF:", error);
     } finally {

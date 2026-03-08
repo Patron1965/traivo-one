@@ -99,7 +99,7 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
   const [recentItems, setRecentItems] = useState<string[]>([]);
 
   useEffect(() => {
-    const stored = localStorage.getItem("unicorn-recent-pages");
+    const stored = localStorage.getItem("nordfield-recent-pages");
     if (stored) {
       try {
         setRecentItems(JSON.parse(stored));
@@ -113,7 +113,7 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
     setRecentItems((prev) => {
       const filtered = prev.filter((item) => item !== url);
       const updated = [url, ...filtered].slice(0, 5);
-      localStorage.setItem("unicorn-recent-pages", JSON.stringify(updated));
+      localStorage.setItem("nordfield-recent-pages", JSON.stringify(updated));
       return updated;
     });
   }, []);

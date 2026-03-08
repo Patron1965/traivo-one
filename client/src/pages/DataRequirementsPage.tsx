@@ -120,10 +120,10 @@ export default function DataRequirementsPage() {
     const pageWidth = doc.internal.pageSize.getWidth();
     
     doc.setFontSize(20);
-    doc.text("Datakrav för Unicorn-import", pageWidth / 2, 20, { align: "center" });
+    doc.text("Datakrav för Nordfield-import", pageWidth / 2, 20, { align: "center" });
     
     doc.setFontSize(12);
-    doc.text("Kinab AB", pageWidth / 2, 28, { align: "center" });
+    doc.text("Nordfield AB", pageWidth / 2, 28, { align: "center" });
     
     doc.setFontSize(10);
     doc.text(`Genererad: ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, 35, { align: "center" });
@@ -191,19 +191,19 @@ export default function DataRequirementsPage() {
     doc.setFontSize(10);
     doc.text("Vid frågor om dataexporten, kontakta:", 14, yPos);
     yPos += 6;
-    doc.text("E-post: support@unicorn.se", 14, yPos);
+    doc.text("E-post: support@nordfield.se", 14, yPos);
 
-    doc.save("Unicorn_Datakrav_Kinab.pdf");
+    doc.save("Nordfield_Datakrav_Nordfield.pdf");
     
     toast({
       title: "PDF nedladdad",
-      description: "Filen 'Unicorn_Datakrav_Kinab.pdf' har sparats."
+      description: "Filen 'Nordfield_Datakrav_Nordfield.pdf' har sparats."
     });
   };
 
   const emailBody = `Hej,
 
-Vi håller på att implementera Unicorn som nytt planeringssystem och behöver exportera data från Modus 2.0.
+Vi håller på att implementera Nordfield som nytt planeringssystem och behöver exportera data från Modus 2.0.
 
 Bifogat finns en specifikation av vilken data vi behöver. Kortfattat:
 
@@ -226,7 +226,7 @@ En fil per kategori.
 Se bifogad PDF för detaljerad specifikation med alla fält och exempel.
 
 Med vänliga hälsningar,
-Kinab AB`;
+Nordfield AB`;
 
   const copyEmail = () => {
     navigator.clipboard.writeText(emailBody);
@@ -238,9 +238,9 @@ Kinab AB`;
   return (
     <div className="container mx-auto p-6 max-w-5xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Datakrav för Kinab-import</h1>
+        <h1 className="text-3xl font-bold mb-2">Datakrav för Nordfield-import</h1>
         <p className="text-muted-foreground">
-          Specifikation av data som behövs för att ladda in i Unicorn
+          Specifikation av data som behövs för att ladda in i Nordfield
         </p>
       </div>
 

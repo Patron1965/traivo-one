@@ -107,7 +107,7 @@ const systemItems = [
 
 const avanceratItems = [
   { title: "Arbetsflödesguide", url: "/workflow-guide", icon: BookOpen, description: "Hur systemet används" },
-  { title: "Datakrav för import", url: "/data-requirements", icon: FileText, description: "Specifikation för Kinab" },
+  { title: "Datakrav för import", url: "/data-requirements", icon: FileText, description: "Specifikation för Nordfield" },
   { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
   { title: "AI-optimering", url: "/optimization", icon: Sparkles, description: "Automatisk optimering" },
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },

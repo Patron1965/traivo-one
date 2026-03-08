@@ -25,7 +25,7 @@ export default function DashboardPage() {
             {getGreeting()}!
           </h1>
           <p className="text-muted-foreground">
-            {format(today, "EEEE d MMMM yyyy", { locale: sv })} - Unicorn Dashboard
+            {format(today, "EEEE d MMMM yyyy", { locale: sv })} - Nordfield Dashboard
           </p>
         </div>
       </div>
