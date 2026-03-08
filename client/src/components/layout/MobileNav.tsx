@@ -11,7 +11,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import nordfieldLogo from "@assets/download_(3)_1766432059347.png";
+import nordfieldLogo from "@assets/nordfield-logo-final_1772981791099.png";
 import {
   Menu,
   Calendar,

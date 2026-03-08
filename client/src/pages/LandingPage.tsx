@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import nordfieldLogo from "@assets/nordfield-logo-final_1772981791099.png";
 import { 
   Truck, 
   Clock, 
@@ -28,9 +29,7 @@ export default function LandingPage() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
-              <Sparkles className="h-5 w-5 text-white" />
-            </div>
+            <img src={nordfieldLogo} alt="Nordfield" className="h-10 w-auto object-contain" data-testid="img-landing-logo" />
             <span className="font-bold text-xl">Nordfield</span>
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
@@ -44,10 +43,10 @@ export default function LandingPage() {
 
       <main>
         <section className="relative overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 via-transparent to-blue-600/10" />
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-600/10 via-transparent to-amber-500/10" />
           <div className="container mx-auto px-4 py-24 relative">
             <div className="max-w-4xl mx-auto text-center">
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-sm font-medium mb-8">
+              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-sm font-medium mb-8">
                 <Sparkles className="h-4 w-4" />
                 AI-driven fältserviceoptimering
               </div>
@@ -77,11 +76,11 @@ export default function LandingPage() {
           <div className="container mx-auto px-4 py-12">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
               <div>
-                <div className="text-3xl font-bold text-purple-600 mb-1">Flerföretagsstöd</div>
+                <div className="text-3xl font-bold text-orange-600 mb-1">Flerföretagsstöd</div>
                 <div className="text-sm text-muted-foreground">Fullständig dataisolering</div>
               </div>
               <div>
-                <div className="text-3xl font-bold text-blue-600 mb-1">Real-time</div>
+                <div className="text-3xl font-bold text-amber-600 mb-1">Real-time</div>
                 <div className="text-sm text-muted-foreground">GPS & notifieringar</div>
               </div>
               <div>
@@ -108,8 +107,8 @@ export default function LandingPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-6xl mx-auto">
               <Card className="group">
                 <CardContent className="p-6">
-                  <div className="h-12 w-12 rounded-lg bg-purple-500/10 flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
-                    <Shield className="h-6 w-6 text-purple-600" />
+                  <div className="h-12 w-12 rounded-lg bg-orange-500/10 flex items-center justify-center mb-4 group-hover:bg-orange-500/20 transition-colors">
+                    <Shield className="h-6 w-6 text-orange-600" />
                   </div>
                   <h3 className="font-semibold text-lg mb-2">Flerföretagsstöd & säkerhet</h3>
                   <p className="text-muted-foreground">
@@ -120,8 +119,8 @@ export default function LandingPage() {
 
               <Card className="group">
                 <CardContent className="p-6">
-                  <div className="h-12 w-12 rounded-lg bg-blue-500/10 flex items-center justify-center mb-4 group-hover:bg-blue-500/20 transition-colors">
-                    <MapPin className="h-6 w-6 text-blue-600" />
+                  <div className="h-12 w-12 rounded-lg bg-amber-500/10 flex items-center justify-center mb-4 group-hover:bg-amber-500/20 transition-colors">
+                    <MapPin className="h-6 w-6 text-amber-600" />
                   </div>
                   <h3 className="font-semibold text-lg mb-2">GPS-spårning i realtid</h3>
                   <p className="text-muted-foreground">
@@ -222,7 +221,7 @@ export default function LandingPage() {
             <div className="max-w-4xl mx-auto">
               <div className="grid md:grid-cols-2 gap-12 items-center">
                 <div>
-                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 text-sm font-medium mb-4">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/10 text-orange-600 dark:text-orange-400 text-sm font-medium mb-4">
                     <Zap className="h-3 w-3" />
                     Designpartner
                   </div>
@@ -258,7 +257,7 @@ export default function LandingPage() {
                     </li>
                   </ul>
                 </div>
-                <div className="bg-gradient-to-br from-purple-600 to-blue-600 rounded-2xl p-8 text-white">
+                <div className="bg-gradient-to-br from-orange-600 to-red-900 rounded-2xl p-8 text-white">
                   <Sparkles className="h-12 w-12 mb-6 opacity-80" />
                   <blockquote className="text-lg mb-4">
                     "AI-stöd ska genomsyra hela plattformen. Varje funktion bör övervägas för AI-förbättring."
@@ -332,9 +331,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-purple-600 to-blue-600 flex items-center justify-center">
-                <Sparkles className="h-4 w-4 text-white" />
-              </div>
+              <img src={nordfieldLogo} alt="Nordfield" className="h-8 w-auto object-contain" data-testid="img-landing-footer-logo" />
               <span className="font-semibold">Nordfield</span>
               <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>

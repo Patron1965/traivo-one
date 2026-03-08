@@ -1,5 +1,5 @@
 import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain, BookOpen, Database, ClipboardCheck, MapPin, History, LogIn } from "lucide-react";
-import nordfieldLogo from "@assets/download_(3)_1766432059347.png";
+import nordfieldLogo from "@assets/nordfield-logo-final_1772981791099.png";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
