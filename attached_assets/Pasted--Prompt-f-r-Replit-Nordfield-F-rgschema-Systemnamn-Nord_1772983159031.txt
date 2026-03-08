@@ -1,0 +1,102 @@
+🎨 Prompt för Replit: Nordfield Färgschema
+Systemnamn: Nordfield
+Beskrivning: AI-driven plattform för nordisk fältservice
+
+Logotypens Färgpalett ("Midnight Sun")
+Använd följande färgschema från Nordfield-logotypen för att skapa en sammanhängande och professionell design:
+
+Primära Färger (från logotypens gradient):
+css
+Copy
+--nordfield-coral: #FCA5A5;      /* Ljus korall (topp) */
+--nordfield-amber: #F59E0B;      /* Varm amber */
+--nordfield-orange: #EA580C;     /* Bränd orange (text) */
+--nordfield-burgundy: #991B1B;   /* Djup vinröd (botten) */
+--nordfield-maroon: #7C2D12;     /* Mörk maroon */
+Komplementära Färger:
+css
+Copy
+--nordfield-white: #FFFFFF;      /* Vit (kretsmönster, text) */
+--nordfield-navy: #1E3A8A;       /* Marinblå (kontrast) */
+--nordfield-teal: #0F766E;       /* Mörk teal (nordisk accent) */
+--nordfield-grey-light: #F3F4F6; /* Ljusgrå (bakgrunder) */
+--nordfield-grey: #6B7280;       /* Mellangrå (sekundär text) */
+--nordfield-grey-dark: #1F2937;  /* Mörkgrå (primär text) */
+Användningsriktlinjer:
+1. Primär Användning:
+Huvudfärg: --nordfield-orange (#EA580C) för knappar, länkar, call-to-action
+Gradient: Använd gradient från --nordfield-coral → --nordfield-orange → --nordfield-burgundy för headers, hero-sektioner, viktiga element
+Accent: --nordfield-amber (#F59E0B) för hover-effekter, notifikationer
+2. Bakgrunder:
+Ljus tema: --nordfield-white (#FFFFFF) som huvudbakgrund
+Sekundär bakgrund: --nordfield-grey-light (#F3F4F6) för kort, paneler
+Mörk tema: --nordfield-grey-dark (#1F2937) med varma accenter
+3. Text:
+Primär text: --nordfield-grey-dark (#1F2937) på ljusa bakgrunder
+Sekundär text: --nordfield-grey (#6B7280)
+Text på mörkt: --nordfield-white (#FFFFFF)
+Länkar: --nordfield-orange (#EA580C)
+4. Komponenter:
+Knappar (primär): Bakgrund --nordfield-orange, hover: --nordfield-burgundy
+Knappar (sekundär): Border --nordfield-orange, text --nordfield-orange
+Kort/Cards: Vit bakgrund med subtil --nordfield-coral border eller skugga
+Navigation: Gradient från --nordfield-burgundy till --nordfield-orange
+Footer: --nordfield-grey-dark med --nordfield-orange accenter
+5. Statusfärger:
+css
+Copy
+--success: #10B981;    /* Grön (kompletterande) */
+--warning: #F59E0B;    /* Amber (från paletten) */
+--error: #991B1B;      /* Burgundy (från paletten) */
+--info: #1E3A8A;       /* Navy (från paletten) */
+Design-principer:
+Balans: Använd varma färger sparsamt som accenter, inte överallt
+Kontrast: Säkerställ god läsbarhet med tillräcklig kontrast (WCAG AA-standard)
+Hierarki: Använd --nordfield-orange för primära actions, --nordfield-grey för sekundära
+Gradienter: Använd subtila gradienter för depth, inte överallt
+Nordisk minimalism: Håll designen ren med mycket whitespace
+Exempel på Implementation:
+css
+Copy
+/* Primär knapp */
+.btn-primary {
+  background: linear-gradient(135deg, #EA580C 0%, #991B1B 100%);
+  color: #FFFFFF;
+  transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, #991B1B 0%, #7C2D12 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(234, 88, 12, 0.3);
+}
+
+/* Header med gradient */
+.header {
+  background: linear-gradient(135deg, #FCA5A5 0%, #EA580C 50%, #991B1B 100%);
+  color: #FFFFFF;
+}
+
+/* Kort med accent */
+.card {
+  background: #FFFFFF;
+  border-left: 4px solid #EA580C;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Link styling */
+a {
+  color: #EA580C;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: #991B1B;
+}
+Tillgänglighet:
+Säkerställ minst 4.5:1 kontrast för normal text
+Använd --nordfield-orange (#EA580C) på vit bakgrund ✅
+Använd --nordfield-white på --nordfield-burgundy ✅
+Undvik --nordfield-coral för text (för ljus)
+Resultat: Ett professionellt, sammanhängande system som speglar Nordfield-logotypens varma, nordiska och tekniska karaktär med smakfull användning av färger som skapar visuell harmoni och tydlig hierarki.
