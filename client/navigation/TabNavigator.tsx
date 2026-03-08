@@ -16,9 +16,9 @@ const Tab = createBottomTabNavigator();
 function HeaderTitle() {
   return (
     <View style={styles.headerTitle}>
-      <Feather name="truck" size={20} color={Colors.primary} />
+      <Feather name="compass" size={20} color={Colors.primary} />
       <ThemedText variant="subheading" color={Colors.primary}>
-        Driver Core
+        Nordfield
       </ThemedText>
     </View>
   );
@@ -83,7 +83,7 @@ export function TabNavigator() {
         name="AIAssistantTab"
         component={AIAssistantScreen}
         options={{
-          headerTitle: 'Unicorn Assist',
+          headerTitle: 'Nordfield Assist',
           headerStyle: { backgroundColor: Colors.surface },
           headerShadowVisible: true,
           headerTransparent: false,

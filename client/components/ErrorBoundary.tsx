@@ -15,7 +15,7 @@ function ErrorFallback({ error, resetError }: ErrorFallbackProps) {
       <View style={styles.iconContainer}>
         <Feather name="alert-triangle" size={48} color={Colors.warning} />
       </View>
-      <Text style={styles.title}>Driver Core stannade</Text>
+      <Text style={styles.title}>Nordfield stannade</Text>
       <Text style={styles.message}>
         Något gick fel. Starta om appen för att fortsätta.
       </Text>

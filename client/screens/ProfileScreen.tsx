@@ -175,7 +175,7 @@ export function ProfileScreen() {
             <View style={[styles.menuIcon, { backgroundColor: Colors.infoLight }]}>
               <Feather name="info" size={16} color={Colors.info} />
             </View>
-            <ThemedText variant="body">Om Driver Core</ThemedText>
+            <ThemedText variant="body">Om Nordfield</ThemedText>
           </View>
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
@@ -193,7 +193,7 @@ export function ProfileScreen() {
       </Pressable>
 
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-        Driver Core v1.0.0
+        Nordfield v1.0.0
       </ThemedText>
 
       <Modal

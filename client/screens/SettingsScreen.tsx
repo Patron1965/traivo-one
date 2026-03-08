@@ -196,7 +196,7 @@ export function SettingsScreen({ navigation }: any) {
       </Card>
 
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-        Driver Core v2.0 | Unicorn Field Service
+        Nordfield v2.0 | Field Service
       </ThemedText>
     </ScrollView>
   );

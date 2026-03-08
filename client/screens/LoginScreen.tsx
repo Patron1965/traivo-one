@@ -74,13 +74,13 @@ export function LoginScreen() {
       >
         <View style={styles.header}>
           <View style={styles.logoContainer}>
-            <Feather name="truck" size={40} color={Colors.textInverse} />
+            <Feather name="compass" size={40} color={Colors.textInverse} />
           </View>
           <ThemedText variant="title" color={Colors.textInverse}>
-            Driver Core
+            Nordfield
           </ThemedText>
           <ThemedText variant="body" color="rgba(255,255,255,0.7)">
-            Unicorn Field Service
+            Field Service
           </ThemedText>
         </View>
 
@@ -216,7 +216,7 @@ export function LoginScreen() {
           color="rgba(255,255,255,0.5)"
           style={styles.version}
         >
-          Driver Core v2.0
+          Nordfield v2.0
         </ThemedText>
       </KeyboardAvoidingView>
     </LinearGradient>

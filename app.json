@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Fältapp",
+    "name": "Nordfield",
     "slug": "fltapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,21 +11,21 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#1B4F72"
+      "backgroundColor": "#FFF7ED"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fltapp.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Driver Core behöver kameran för att ta bilder av objekt och avvikelser",
-        "NSLocationWhenInUseUsageDescription": "Driver Core behöver din position för GPS-tracking och navigering",
-        "NSPhotoLibraryUsageDescription": "Driver Core behöver åtkomst till dina foton för att bifoga bilder"
+        "NSCameraUsageDescription": "Nordfield behöver kameran för att ta bilder av objekt och avvikelser",
+        "NSLocationWhenInUseUsageDescription": "Nordfield behöver din position för GPS-tracking och navigering",
+        "NSPhotoLibraryUsageDescription": "Nordfield behöver åtkomst till dina foton för att bifoga bilder"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#1B4F72"
+        "backgroundColor": "#FFF7ED"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.fltapp.app",

@@ -45,7 +45,7 @@ app.use('/api/mobile/ai', aiRoutes);
 app.use('/api/planner', plannerRoutes);
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'driver-core-api' });
+  res.json({ status: 'ok', service: 'nordfield-api' });
 });
 
 const projectRoot = fs.existsSync(path.resolve(__dirname, '..', 'app.json'))
@@ -242,12 +242,12 @@ app.get('/', (req, res) => {
     const landingPath = path.join(templatesDir, 'landing-page.html');
     res.sendFile(landingPath, (err) => {
       if (err && !res.headersSent) {
-        res.status(200).send(`<!DOCTYPE html><html><head><title>Driver Core</title></head><body><h1>Driver Core API</h1><p>Server is running.</p></body></html>`);
+        res.status(200).send(`<!DOCTYPE html><html><head><title>Nordfield</title></head><body><h1>Nordfield API</h1><p>Server is running.</p></body></html>`);
       }
     });
   } catch (e) {
     if (!res.headersSent) {
-      res.status(200).send(`<!DOCTYPE html><html><head><title>Driver Core</title></head><body><h1>Driver Core API</h1><p>Server is running.</p></body></html>`);
+      res.status(200).send(`<!DOCTYPE html><html><head><title>Nordfield</title></head><body><h1>Nordfield API</h1><p>Server is running.</p></body></html>`);
     }
   }
 });
@@ -275,7 +275,7 @@ const PORT = 5000;
 server.listen(PORT, '0.0.0.0', () => {
   const kinabUrl = process.env.KINAB_API_URL;
   const mockMode = !kinabUrl || process.env.KINAB_MOCK_MODE === 'true';
-  console.log(`Driver Core API running on port ${PORT}`);
+  console.log(`Nordfield API running on port ${PORT}`);
   console.log(`Kinab Core Concept: ${mockMode ? 'MOCK MODE (no KINAB_API_URL set)' : `LIVE → ${kinabUrl}`}`);
   const iosBundle = path.join(metroDir, 'ios', 'index.bundle');
   const androidBundle = path.join(metroDir, 'android', 'index.bundle');

@@ -1,9 +1,10 @@
-# Driver Core - Unicorn Field Service Mobile App
+# Nordfield - Field Service Mobile App
 
 ## Overview
-Driver Core is a native mobile app (React Native/Expo) for field service drivers in the Unicorn platform. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
+Nordfield is a native mobile app (React Native/Expo) for field service drivers. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-03-08: Rebranded from "Driver Core" / "Unicorn" to "Nordfield" with "Midnight Sun" color scheme (primary: #EA580C burnt orange, secondary: #991B1B burgundy, accent: #F59E0B amber). New compass rose logo/icons. Updated all UI strings, templates, AI assistant name, error boundary, and server branding.
 - 2026-03-06: ProfileScreen: initials avatar, online/offline toggle badge, today's stats row (completed/total/remaining), colored icon backgrounds, phone/email always shown with tap-to-call/email, logout confirmation modal, version text
 - 2026-03-06: AIAssistantScreen: redesigned avatar (teal zap icon), compact message bubbles, suggestion cards grid on empty state, 5 quick action chips, always-visible send button, mic button on left, animated typing indicator
 - 2026-03-06: MapScreen: custom numbered markers with customer name labels, driver start position marker (green), route polyline with glow outline, callout popups with order details on tap, expandable legend with per-leg travel times
@@ -163,5 +164,6 @@ Driver Core is a native mobile app (React Native/Expo) for field service drivers
 
 ## User Preferences
 - **Language:** Swedish (sv) for all UI
-- **Design:** Clean Nordic aesthetic with Inter font
-- **Colors:** Primary #1B4F72, Secondary #17A589
+- **Design:** Clean Nordic minimalism with Inter font, warm accents sparingly
+- **Colors:** Primary #EA580C (burnt orange), Secondary #991B1B (burgundy), Accent #F59E0B (amber)
+- **Brand:** Nordfield with compass rose logo, "Midnight Sun" color scheme
