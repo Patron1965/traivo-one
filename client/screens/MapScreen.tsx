@@ -179,21 +179,7 @@ export function MapScreen({ navigation }: any) {
   const roadPolyline = useMemo(() => {
     if (!routeData?.trips?.[0]) return null;
     const trip = routeData.trips[0];
-    const hasSteps = trip.legs?.some(leg => leg.steps && leg.steps.length > 0);
-    if (hasSteps) {
-      const coords: { latitude: number; longitude: number }[] = [];
-      for (const leg of trip.legs || []) {
-        for (const step of leg.steps || []) {
-          if (step.geometry?.coordinates) {
-            for (const c of step.geometry.coordinates) {
-              coords.push({ latitude: c[1], longitude: c[0] });
-            }
-          }
-        }
-      }
-      if (coords.length > 0) return coords;
-    }
-    if (trip.geometry?.coordinates) {
+    if (trip.geometry?.coordinates && trip.geometry.coordinates.length > 1) {
       return trip.geometry.coordinates.map((c: number[]) => ({
         latitude: c[1],
         longitude: c[0],

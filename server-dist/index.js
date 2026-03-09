@@ -1254,6 +1254,16 @@ function parseCoordPoints(coords) {
   }
   return parsed;
 }
+function simplifyCoordinates(coords, maxPoints) {
+  if (coords.length <= maxPoints) return coords;
+  const step = (coords.length - 1) / (maxPoints - 1);
+  const result = [];
+  for (let i = 0; i < maxPoints - 1; i++) {
+    result.push(coords[Math.round(i * step)]);
+  }
+  result.push(coords[coords.length - 1]);
+  return result;
+}
 function buildFallbackResponse(parsed) {
   return {
     waypoints: parsed.map((p, i) => ({ location: [p.lon, p.lat], waypointIndex: i, tripsIndex: 0 })),
@@ -1315,13 +1325,10 @@ router.get("/route", async (req, res) => {
     const legs = (props.legs || []).map((leg) => ({
       distance: leg.distance || 0,
       duration: leg.time || 0,
-      steps: (leg.steps || []).map((step) => ({
-        geometry: step.geometry || null,
-        distance: step.distance || 0,
-        duration: step.time || 0
-      }))
+      steps: []
     }));
-    console.log("[route] Success: coords=", allCoordinates.length, "dist=", props.distance, "dur=", props.time);
+    const simplified = simplifyCoordinates(allCoordinates, 2e3);
+    console.log("[route] Success: rawCoords=", allCoordinates.length, "simplified=", simplified.length, "dist=", props.distance, "dur=", props.time);
     res.json({
       waypoints: parsed.map((p, i) => ({
         location: [p.lon, p.lat],
@@ -1329,7 +1336,7 @@ router.get("/route", async (req, res) => {
         tripsIndex: 0
       })),
       trips: [{
-        geometry: { type: "LineString", coordinates: allCoordinates },
+        geometry: { type: "LineString", coordinates: simplified },
         distance: props.distance || 0,
         duration: props.time || 0,
         legs
@@ -1457,7 +1464,7 @@ router.get("/route-optimized", async (req, res) => {
           return res.json({
             waypoints: reorderedWaypoints,
             trips: [{
-              geometry: { type: "LineString", coordinates: routeCoords },
+              geometry: { type: "LineString", coordinates: simplifyCoordinates(routeCoords, 2e3) },
               distance: routeProps.distance || props.distance || 0,
               duration: routeProps.time || props.time || 0,
               legs: routeLegs
@@ -1478,7 +1485,7 @@ router.get("/route-optimized", async (req, res) => {
     res.json({
       waypoints: reorderedWaypoints,
       trips: [{
-        geometry: { type: "LineString", coordinates: allCoordinates },
+        geometry: { type: "LineString", coordinates: simplifyCoordinates(allCoordinates, 2e3) },
         distance: props.distance || 0,
         duration: props.time || 0,
         legs
