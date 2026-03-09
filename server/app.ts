@@ -271,6 +271,10 @@ app.get('/planner/map', (_req, res) => {
   res.sendFile(path.join(templatesDir, 'planner-map.html'));
 });
 
+app.get('/support', (_req, res) => {
+  res.sendFile(path.join(templatesDir, 'support.html'));
+});
+
 app.get('/', (req, res) => {
   try {
     const expoPlatform = req.headers['expo-platform'] as string | undefined;

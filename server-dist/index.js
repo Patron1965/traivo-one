@@ -1934,6 +1934,9 @@ app.use(import_express4.default.static(templatesDir));
 app.get("/planner/map", (_req, res) => {
   res.sendFile(import_path.default.join(templatesDir, "planner-map.html"));
 });
+app.get("/support", (_req, res) => {
+  res.sendFile(import_path.default.join(templatesDir, "support.html"));
+});
 app.get("/", (req, res) => {
   try {
     const expoPlatform = req.headers["expo-platform"];
