@@ -65,7 +65,7 @@ export function ProfileScreen() {
           testID="button-online-toggle"
         >
           <View style={[styles.onlineDot, isOnline ? styles.dotOnline : styles.dotOffline]} />
-          <ThemedText variant="caption" color={isOnline ? Colors.success : Colors.textMuted} style={styles.onlineText}>
+          <ThemedText variant="caption" color={isOnline ? '#16A34A' : '#DC2626'} style={styles.onlineText}>
             {isOnline ? 'Online' : 'Offline'}
           </ThemedText>
         </Pressable>
@@ -276,11 +276,11 @@ const styles = StyleSheet.create({
   },
   onlineBadgeActive: {
     backgroundColor: '#E8F5E9',
-    borderColor: Colors.success,
+    borderColor: '#16A34A',
   },
   onlineBadgeInactive: {
-    backgroundColor: Colors.background,
-    borderColor: Colors.borderLight,
+    backgroundColor: '#FEF2F2',
+    borderColor: '#DC2626',
   },
   onlineDot: {
     width: 8,
@@ -288,10 +288,10 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   dotOnline: {
-    backgroundColor: Colors.success,
+    backgroundColor: '#16A34A',
   },
   dotOffline: {
-    backgroundColor: Colors.textMuted,
+    backgroundColor: '#DC2626',
   },
   onlineText: {
     fontSize: 12,

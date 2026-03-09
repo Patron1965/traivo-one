@@ -328,14 +328,14 @@ export function HomeScreen({ navigation }: any) {
               Hej, {user?.name?.split(' ')[0] || 'Chaufor'}
             </ThemedText>
             <Pressable
-              style={styles.onlineToggle}
+              style={[styles.onlineToggle, { backgroundColor: isOnline ? '#E8F5E9' : '#FEF2F2', borderColor: isOnline ? '#16A34A' : '#DC2626' }]}
               onPress={() => setIsOnline(!isOnline)}
               testID="button-toggle-online"
             >
               <View style={[styles.onlineDot, isOnline ? styles.onlineDotActive : styles.onlineDotInactive]} />
               <ThemedText
                 variant="caption"
-                color={isOnline ? Colors.secondary : Colors.textSecondary}
+                color={isOnline ? '#16A34A' : '#DC2626'}
                 style={styles.onlineLabel}
               >
                 {isOnline ? 'Online' : 'Offline'}
@@ -666,9 +666,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: BorderRadius.round,
-    backgroundColor: Colors.surface,
     borderWidth: 1,
-    borderColor: Colors.borderLight,
   },
   onlineDot: {
     width: 10,
@@ -676,10 +674,10 @@ const styles = StyleSheet.create({
     borderRadius: 5,
   },
   onlineDotActive: {
-    backgroundColor: Colors.secondary,
+    backgroundColor: '#16A34A',
   },
   onlineDotInactive: {
-    backgroundColor: Colors.danger,
+    backgroundColor: '#DC2626',
   },
   onlineLabel: {
     fontSize: 11,
