@@ -322,6 +322,68 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/objects/tree", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { customerId, search } = req.query;
+      const allObjects = await storage.getObjects(tenantId);
+
+      if (search && typeof search === "string" && search.trim().length > 0) {
+        const q = search.toLowerCase().trim();
+        const allCustomers = await storage.getCustomers(tenantId);
+        const customerMap = new Map(allCustomers.map(c => [c.id, c.name]));
+
+        const matched = allObjects.filter(o =>
+          o.name.toLowerCase().includes(q) ||
+          (o.address && o.address.toLowerCase().includes(q)) ||
+          (o.objectNumber && o.objectNumber.toLowerCase().includes(q))
+        ).slice(0, 100);
+
+        const results = matched.map(obj => ({
+          id: obj.id,
+          name: obj.name,
+          objectNumber: obj.objectNumber,
+          objectType: obj.objectType,
+          address: obj.address,
+          customerId: obj.customerId,
+          customerName: customerMap.get(obj.customerId) || null,
+          children: [],
+        }));
+
+        return res.json(results);
+      }
+
+      const filtered = customerId
+        ? allObjects.filter(o => o.customerId === customerId)
+        : allObjects;
+
+      const byParent = new Map<string | null, typeof filtered>();
+      for (const obj of filtered) {
+        const parentId = obj.parentId || null;
+        if (!byParent.has(parentId)) byParent.set(parentId, []);
+        byParent.get(parentId)!.push(obj);
+      }
+
+      function buildTree(parentId: string | null): any[] {
+        const children = byParent.get(parentId) || [];
+        return children.map(obj => ({
+          id: obj.id,
+          name: obj.name,
+          objectNumber: obj.objectNumber,
+          objectType: obj.objectType,
+          address: obj.address,
+          customerId: obj.customerId,
+          children: buildTree(obj.id),
+        }));
+      }
+
+      res.json(buildTree(null));
+    } catch (error) {
+      console.error("Failed to get object tree:", error);
+      res.status(500).json({ error: "Kunde inte hämta objektträd" });
+    }
+  });
+
   app.get("/api/objects/:id", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -13102,68 +13164,6 @@ setInterval(loadRoutes, 30000);
       res.json({ valid: errors.length === 0, errors, warnings });
     } catch (error) {
       res.status(500).json({ error: "Kunde inte validera orderkoncept" });
-    }
-  });
-
-  app.get("/api/objects/tree", async (req, res) => {
-    try {
-      const tenantId = getTenantIdWithFallback(req);
-      const { customerId, search } = req.query;
-      const allObjects = await storage.getObjects(tenantId);
-
-      if (search && typeof search === "string" && search.trim().length > 0) {
-        const q = search.toLowerCase().trim();
-        const allCustomers = await storage.getCustomers(tenantId);
-        const customerMap = new Map(allCustomers.map(c => [c.id, c.name]));
-
-        const matched = allObjects.filter(o =>
-          o.name.toLowerCase().includes(q) ||
-          (o.address && o.address.toLowerCase().includes(q)) ||
-          (o.objectNumber && o.objectNumber.toLowerCase().includes(q))
-        ).slice(0, 100);
-
-        const results = matched.map(obj => ({
-          id: obj.id,
-          name: obj.name,
-          objectNumber: obj.objectNumber,
-          objectType: obj.objectType,
-          address: obj.address,
-          customerId: obj.customerId,
-          customerName: customerMap.get(obj.customerId) || null,
-          children: [],
-        }));
-
-        return res.json(results);
-      }
-
-      const filtered = customerId
-        ? allObjects.filter(o => o.customerId === customerId)
-        : allObjects;
-
-      const byParent = new Map<string | null, typeof filtered>();
-      for (const obj of filtered) {
-        const parentId = obj.parentId || null;
-        if (!byParent.has(parentId)) byParent.set(parentId, []);
-        byParent.get(parentId)!.push(obj);
-      }
-
-      function buildTree(parentId: string | null): any[] {
-        const children = byParent.get(parentId) || [];
-        return children.map(obj => ({
-          id: obj.id,
-          name: obj.name,
-          objectNumber: obj.objectNumber,
-          objectType: obj.objectType,
-          address: obj.address,
-          customerId: obj.customerId,
-          children: buildTree(obj.id),
-        }));
-      }
-
-      res.json(buildTree(null));
-    } catch (error) {
-      console.error("Failed to get object tree:", error);
-      res.status(500).json({ error: "Kunde inte hämta objektträd" });
     }
   });
 
