@@ -4,6 +4,7 @@
 Nordfield is a native mobile app (React Native/Expo) for field service drivers. It connects to the existing Kinab Core Concept backend and provides drivers with a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, inspections, and more.
 
 ## Recent Changes
+- 2026-03-09: Replaced OSRM with Geoapify Routing API (GEOAPIFY_API_KEY env secret). Two endpoints: `/route` for standard waypoint routing, `/route-optimized` for optimized order (uses Route Planner API then Routing API for full geometry). Fallback to straight lines if API unavailable. Route optimization planned as PRO feature.
 - 2026-03-09: Route calculation now starts from driver's "start of day" position (captured when going online), stored in AuthContext and persisted via AsyncStorage with local-date validation; MapScreen prefers start-of-day origin with "Dagstart" flag marker; supports single-order routes
 - 2026-03-09: Added /support page (server/templates/support.html) for App Store listing — FAQ, contact info, Nordfield branding
 - 2026-03-09: Comprehensive bug & performance audit (T001-T010): Server bundle caching with mtime invalidation, app.json cached at startup, input validation on status/position/GPS/AI endpoints, error logging in all catch blocks, base64 payload size limits on AI routes. Client: AuthContext race condition fix, WebSocket reconnection backoff, GPS tracking refactored to singleton (prevents duplicate intervals), offline sync mutex + storage limits, OrdersScreen/OrderDetailScreen memoized sub-components, AIAssistantScreen FlatList with inverted pattern, MaterialLogScreen debounced search, SignatureScreen imperative SVG drawing, query-client consistent error handling.
@@ -125,7 +126,8 @@ Nordfield is a native mobile app (React Native/Expo) for field service drivers. 
 - `GET /api/mobile/articles?search=` - Search articles
 - `GET /api/mobile/weather` - Get weather (Open-Meteo API)
 - `GET /api/mobile/summary` - Get daily summary (includes totalDistance)
-- `GET /api/mobile/route?coords=lon,lat;lon,lat;...` - Get optimized route via OSRM (GeoJSON polyline, distance, duration)
+- `GET /api/mobile/route?coords=lon,lat;lon,lat;...` - Get route via Geoapify Routing API (GeoJSON polyline, distance, duration)
+- `GET /api/mobile/route-optimized?coords=lon,lat;lon,lat;...` - Get optimized route order via Geoapify Route Planner + Routing API (PRO feature)
 - `POST /api/mobile/ai/chat` - AI chat (GPT-5.2)
 - `POST /api/mobile/ai/transcribe` - Voice transcription (gpt-4o-mini-transcribe)
 - `POST /api/mobile/ai/analyze-image` - AI image analysis with severity + confidence

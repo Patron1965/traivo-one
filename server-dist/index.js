@@ -1241,109 +1241,250 @@ router.get("/summary", async (req, res) => {
     res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
   }
 });
+function parseCoordPoints(coords) {
+  const points = coords.split(";");
+  const parsed = [];
+  for (const point of points) {
+    const parts = point.split(",");
+    if (parts.length !== 2) return null;
+    const lon = parseFloat(parts[0]);
+    const lat = parseFloat(parts[1]);
+    if (isNaN(lon) || isNaN(lat) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    parsed.push({ lon, lat });
+  }
+  return parsed;
+}
+function buildFallbackResponse(parsed) {
+  return {
+    waypoints: parsed.map((p, i) => ({ location: [p.lon, p.lat], waypointIndex: i, tripsIndex: 0 })),
+    trips: [{
+      geometry: { type: "LineString", coordinates: parsed.map((p) => [p.lon, p.lat]) },
+      distance: 0,
+      duration: 0,
+      legs: []
+    }],
+    fallback: true
+  };
+}
 router.get("/route", async (req, res) => {
   const coords = req.query.coords;
   if (!coords) {
     return res.status(400).json({ error: "coords parameter required (lon1,lat1;lon2,lat2;...)" });
   }
-  const points = coords.split(";");
-  if (points.length < 2 || points.length > 25) {
-    return res.status(400).json({ error: "Between 2 and 25 coordinate pairs required" });
+  const parsed = parseCoordPoints(coords);
+  if (!parsed || parsed.length < 2 || parsed.length > 25) {
+    return res.status(400).json({ error: "Between 2 and 25 valid coordinate pairs required" });
   }
-  for (const point of points) {
-    const parts = point.split(",");
-    if (parts.length !== 2) {
-      return res.status(400).json({ error: `Invalid coordinate: ${point}` });
-    }
-    const lon = parseFloat(parts[0]);
-    const lat = parseFloat(parts[1]);
-    if (isNaN(lon) || isNaN(lat) || lat < -90 || lat > 90 || lon < -180 || lon > 180) {
-      return res.status(400).json({ error: `Invalid coordinate values: ${point}` });
-    }
+  const apiKey = process.env.GEOAPIFY_API_KEY;
+  if (!apiKey) {
+    console.warn("GEOAPIFY_API_KEY not set, returning fallback route");
+    return res.json(buildFallbackResponse(parsed));
   }
-  async function fetchRoute(useSteps) {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 12e3);
-    const stepsParam = useSteps ? "&steps=true" : "";
-    const routeUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson${stepsParam}`;
-    try {
-      const response = await fetch(routeUrl, { signal: ctrl.signal });
-      clearTimeout(t);
-      const text = await response.text();
-      try {
-        return JSON.parse(text);
-      } catch {
-        console.error("OSRM non-JSON response:", text.substring(0, 200));
-        throw new Error("Non-JSON response from routing service");
-      }
-    } catch (err) {
-      clearTimeout(t);
-      throw err;
-    }
-  }
+  const waypoints = parsed.map((p) => `${p.lat},${p.lon}`).join("|");
+  const url = `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&details=route_details&apiKey=${apiKey}`;
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 15e3);
   try {
-    let data;
-    try {
-      data = await fetchRoute(true);
-    } catch (err) {
-      console.warn("OSRM route+steps failed:", err.message, "- retrying without steps");
-      try {
-        data = await fetchRoute(false);
-      } catch (err2) {
-        console.error("OSRM route fallback also failed:", err2.message);
-        const parsedPoints2 = points.map((p) => {
-          const [lon, lat] = p.split(",").map(Number);
-          return [lon, lat];
-        });
-        return res.json({
-          waypoints: parsedPoints2.map((loc, i) => ({ location: loc, waypointIndex: i, tripsIndex: 0 })),
-          trips: [{
-            geometry: { type: "LineString", coordinates: parsedPoints2 },
-            distance: 0,
-            duration: 0,
-            legs: []
-          }],
-          fallback: true
-        });
+    const response = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Geoapify routing error:", response.status, text.substring(0, 300));
+      return res.json(buildFallbackResponse(parsed));
+    }
+    const data = await response.json();
+    const features = data?.features;
+    if (!features || features.length === 0) {
+      console.error("Geoapify: no features in response");
+      return res.json(buildFallbackResponse(parsed));
+    }
+    const feature = features[0];
+    const props = feature.properties;
+    const geometry = feature.geometry;
+    let allCoordinates = [];
+    if (geometry.type === "MultiLineString") {
+      for (const line of geometry.coordinates) {
+        allCoordinates = allCoordinates.concat(line);
       }
+    } else if (geometry.type === "LineString") {
+      allCoordinates = geometry.coordinates;
     }
-    if (data.code !== "Ok") {
-      console.error("OSRM error:", data.code, data.message);
-      return res.status(502).json({ error: "Route calculation failed", code: data.code });
-    }
-    const route = data.routes?.[0];
-    if (!route) {
-      console.error("OSRM: no routes in response");
-      return res.status(502).json({ error: "No route found" });
-    }
-    const parsedPoints = points.map((p) => {
-      const [lon, lat] = p.split(",").map(Number);
-      return [lon, lat];
-    });
+    const legs = (props.legs || []).map((leg) => ({
+      distance: leg.distance || 0,
+      duration: leg.time || 0,
+      steps: (leg.steps || []).map((step) => ({
+        geometry: step.geometry || null,
+        distance: step.distance || 0,
+        duration: step.time || 0
+      }))
+    }));
     res.json({
-      waypoints: data.waypoints.map((wp, i) => ({
-        location: wp.location,
+      waypoints: parsed.map((p, i) => ({
+        location: [p.lon, p.lat],
         waypointIndex: i,
         tripsIndex: 0
       })),
       trips: [{
-        geometry: route.geometry,
-        distance: route.distance,
-        duration: route.duration,
-        legs: (route.legs || []).map((leg) => ({
-          distance: leg.distance,
-          duration: leg.duration,
-          steps: (leg.steps || []).map((step) => ({
-            geometry: step.geometry,
-            distance: step.distance,
-            duration: step.duration
-          }))
-        }))
+        geometry: { type: "LineString", coordinates: allCoordinates },
+        distance: props.distance || 0,
+        duration: props.time || 0,
+        legs
       }]
     });
   } catch (error) {
-    console.error("OSRM fetch error:", error.message);
-    res.status(502).json({ error: "Could not reach routing service" });
+    clearTimeout(timeout);
+    console.error("Geoapify routing fetch error:", error.message);
+    res.json(buildFallbackResponse(parsed));
+  }
+});
+router.get("/route-optimized", async (req, res) => {
+  const coords = req.query.coords;
+  if (!coords) {
+    return res.status(400).json({ error: "coords parameter required (lon1,lat1;lon2,lat2;...)" });
+  }
+  const parsed = parseCoordPoints(coords);
+  if (!parsed || parsed.length < 2 || parsed.length > 25) {
+    return res.status(400).json({ error: "Between 2 and 25 valid coordinate pairs required" });
+  }
+  const apiKey = process.env.GEOAPIFY_API_KEY;
+  if (!apiKey) {
+    console.warn("GEOAPIFY_API_KEY not set, returning fallback");
+    return res.json(buildFallbackResponse(parsed));
+  }
+  const startPoint = parsed[0];
+  const jobPoints = parsed.slice(1);
+  const body = {
+    mode: "drive",
+    agents: [{
+      start_location: [startPoint.lon, startPoint.lat]
+    }],
+    jobs: jobPoints.map((p, i) => ({
+      id: `job_${i}`,
+      location: [p.lon, p.lat],
+      duration: 600
+    }))
+  };
+  const ctrl = new AbortController();
+  const timeout = setTimeout(() => ctrl.abort(), 2e4);
+  try {
+    const response = await fetch(`https://api.geoapify.com/v1/routeplanner?apiKey=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Geoapify planner error:", response.status, text.substring(0, 300));
+      return res.json(buildFallbackResponse(parsed));
+    }
+    const data = await response.json();
+    const features = data?.features;
+    if (!features || features.length === 0) {
+      console.error("Geoapify planner: no features");
+      return res.json(buildFallbackResponse(parsed));
+    }
+    const agentFeature = features.find((f) => f.properties?.agent_index !== void 0);
+    if (!agentFeature) {
+      console.error("Geoapify planner: no agent feature found");
+      return res.json(buildFallbackResponse(parsed));
+    }
+    const props = agentFeature.properties;
+    const geometry = agentFeature.geometry;
+    let allCoordinates = [];
+    if (geometry.type === "MultiLineString") {
+      for (const line of geometry.coordinates) {
+        allCoordinates = allCoordinates.concat(line);
+      }
+    } else if (geometry.type === "LineString") {
+      allCoordinates = geometry.coordinates;
+    }
+    const actions = props.actions || [];
+    const jobActions = actions.filter((a) => a.type === "job");
+    const optimizedOrder = [];
+    for (const a of jobActions) {
+      const jobIdx = parseInt(a.job_id?.replace("job_", "") || "-1", 10);
+      if (jobIdx >= 0 && jobIdx < jobPoints.length) {
+        optimizedOrder.push(jobIdx + 1);
+      }
+    }
+    if (optimizedOrder.length === 0) {
+      console.warn("Geoapify planner: no valid job actions found");
+      return res.json(buildFallbackResponse(parsed));
+    }
+    const allIndices = [0, ...optimizedOrder];
+    const reorderedWaypoints = allIndices.map((origIdx) => ({
+      location: [parsed[origIdx].lon, parsed[origIdx].lat],
+      waypointIndex: origIdx,
+      tripsIndex: 0
+    }));
+    const reorderedPoints = allIndices.map((i) => parsed[i]);
+    const routeWaypoints = reorderedPoints.map((p) => `${p.lat},${p.lon}`).join("|");
+    const routeUrl = `https://api.geoapify.com/v1/routing?waypoints=${routeWaypoints}&mode=drive&details=route_details&apiKey=${apiKey}`;
+    const ctrl2 = new AbortController();
+    const timeout2 = setTimeout(() => ctrl2.abort(), 15e3);
+    try {
+      const routeResp = await fetch(routeUrl, { signal: ctrl2.signal });
+      clearTimeout(timeout2);
+      if (routeResp.ok) {
+        const routeData = await routeResp.json();
+        const routeFeature = routeData?.features?.[0];
+        if (routeFeature) {
+          const routeGeom = routeFeature.geometry;
+          let routeCoords = [];
+          if (routeGeom.type === "MultiLineString") {
+            for (const line of routeGeom.coordinates) {
+              routeCoords = routeCoords.concat(line);
+            }
+          } else if (routeGeom.type === "LineString") {
+            routeCoords = routeGeom.coordinates;
+          }
+          const routeProps = routeFeature.properties;
+          const routeLegs = (routeProps.legs || []).map((leg) => ({
+            distance: leg.distance || 0,
+            duration: leg.time || 0,
+            steps: (leg.steps || []).map((step) => ({
+              geometry: step.geometry || null,
+              distance: step.distance || 0,
+              duration: step.time || 0
+            }))
+          }));
+          return res.json({
+            waypoints: reorderedWaypoints,
+            trips: [{
+              geometry: { type: "LineString", coordinates: routeCoords },
+              distance: routeProps.distance || props.distance || 0,
+              duration: routeProps.time || props.time || 0,
+              legs: routeLegs
+            }],
+            optimized: true
+          });
+        }
+      }
+    } catch (routeErr) {
+      clearTimeout(timeout2);
+      console.warn("Geoapify routing for optimized order failed:", routeErr.message);
+    }
+    const legs = (props.legs || []).map((leg) => ({
+      distance: leg.distance || 0,
+      duration: leg.time || 0,
+      steps: []
+    }));
+    res.json({
+      waypoints: reorderedWaypoints,
+      trips: [{
+        geometry: { type: "LineString", coordinates: allCoordinates },
+        distance: props.distance || 0,
+        duration: props.time || 0,
+        legs
+      }],
+      optimized: true
+    });
+  } catch (error) {
+    clearTimeout(timeout);
+    console.error("Geoapify planner fetch error:", error.message);
+    res.json(buildFallbackResponse(parsed));
   }
 });
 

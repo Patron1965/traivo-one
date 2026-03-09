@@ -41,6 +41,7 @@ interface RouteData {
   waypoints: { location: [number, number]; waypointIndex: number }[];
   trips: { geometry: { type: string; coordinates: number[][] }; distance: number; duration: number; legs?: RouteLeg[] }[];
   fallback?: boolean;
+  optimized?: boolean;
 }
 
 function formatRouteDistance(meters: number): string {
