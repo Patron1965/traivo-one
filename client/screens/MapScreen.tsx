@@ -164,7 +164,8 @@ export function MapScreen({ navigation }: any) {
     },
     enabled: !!coordsParam,
     staleTime: 300000,
-    retry: 1,
+    retry: 3,
+    retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
   const roadPolyline = useMemo(() => {

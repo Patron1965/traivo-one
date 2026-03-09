@@ -1171,7 +1171,7 @@ router.get('/route', async (req, res) => {
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(() => controller.abort(), 15000);
   try {
     const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?overview=full&geometries=geojson&steps=true&roundtrip=false&source=first`;
     const response = await fetch(url, { signal: controller.signal });
