@@ -61,7 +61,9 @@ export const customers = pgTable("customers", {
   importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("idx_customers_tenant").on(table.tenantId),
+]);
 
 // Hierarkinivåer för objekt (Mats klusterfilosofi)
 export const OBJECT_HIERARCHY_LEVELS = [
@@ -151,7 +153,14 @@ export const objects = pgTable("objects", {
   importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("idx_objects_tenant").on(table.tenantId),
+  index("idx_objects_customer").on(table.customerId),
+  index("idx_objects_cluster").on(table.clusterId),
+  index("idx_objects_parent").on(table.parentId),
+  index("idx_objects_object_number").on(table.objectNumber),
+  index("idx_objects_tenant_customer").on(table.tenantId, table.customerId),
+]);
 
 export const resources = pgTable("resources", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -192,7 +201,9 @@ export const resources = pgTable("resources", {
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("idx_resources_tenant").on(table.tenantId),
+]);
 
 // Simuleringsscenarier för att testa ordrar utan att de blir skarpa
 export const simulationScenarios = pgTable("simulation_scenarios", {
@@ -282,7 +293,17 @@ export const workOrders = pgTable("work_orders", {
   importBatchId: text("import_batch_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("idx_work_orders_tenant").on(table.tenantId),
+  index("idx_work_orders_scheduled_date").on(table.scheduledDate),
+  index("idx_work_orders_order_status").on(table.orderStatus),
+  index("idx_work_orders_object").on(table.objectId),
+  index("idx_work_orders_customer").on(table.customerId),
+  index("idx_work_orders_resource").on(table.resourceId),
+  index("idx_work_orders_cluster").on(table.clusterId),
+  index("idx_work_orders_tenant_status").on(table.tenantId, table.orderStatus),
+  index("idx_work_orders_tenant_date").on(table.tenantId, table.scheduledDate),
+]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser
 export const workOrderLines = pgTable("work_order_lines", {
@@ -308,7 +329,9 @@ export const workOrderLines = pgTable("work_order_lines", {
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
-  index("idx_work_order_lines_work_order_id").on(table.workOrderId)
+  index("idx_work_order_lines_work_order_id").on(table.workOrderId),
+  index("idx_work_order_lines_article").on(table.articleId),
+  index("idx_work_order_lines_tenant").on(table.tenantId),
 ]);
 
 // Länkning av flera objekt till en arbetsorder
@@ -409,7 +432,9 @@ export const articles = pgTable("articles", {
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
-});
+}, (table) => [
+  index("idx_articles_tenant").on(table.tenantId),
+]);
 
 // Prislistor - generella, kundunikt eller rabattbrev
 export const priceLists = pgTable("price_lists", {
@@ -441,7 +466,9 @@ export const priceListArticles = pgTable("price_list_articles", {
   // Ev justerad produktionstid för denna prislista
   productionTime: integer("production_time"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => [
+  index("idx_price_list_articles_list_article").on(table.priceListId, table.articleId),
+]);
 
 // Fordon - kopplade till resurser
 export const vehicles = pgTable("vehicles", {

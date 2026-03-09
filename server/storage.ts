@@ -169,6 +169,7 @@ export interface IStorage {
   
   getWorkOrders(tenantId: string, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, limit?: number): Promise<WorkOrderWithObject[]>;
   getUnscheduledWorkOrders(tenantId: string, limit?: number): Promise<WorkOrderWithObject[]>;
+  getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   getWorkOrdersPaginated(tenantId: string, limit: number, offset: number, startDate?: Date, endDate?: Date, includeUnscheduled?: boolean, status?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }>;
   bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number>;
   getWorkOrder(id: string): Promise<WorkOrder | undefined>;
@@ -1079,6 +1080,100 @@ export class DatabaseStorage implements IStorage {
     ))
     .orderBy(workOrders.priority, workOrders.plannedWindowEnd)
     .limit(limit);
+  }
+
+  async getUnscheduledWorkOrdersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ workOrders: WorkOrderWithObject[]; total: number }> {
+    const conditions: any[] = [
+      eq(workOrders.tenantId, tenantId),
+      isNull(workOrders.deletedAt),
+      or(isNull(workOrders.scheduledDate), isNull(workOrders.resourceId))
+    ];
+
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim().toLowerCase()}%`;
+      conditions.push(
+        or(
+          sql`LOWER(${workOrders.title}) LIKE ${searchTerm}`,
+          sql`${workOrders.objectId} IN (SELECT id FROM objects WHERE LOWER(name) LIKE ${searchTerm})`,
+          sql`${workOrders.customerId} IN (SELECT id FROM customers WHERE LOWER(name) LIKE ${searchTerm})`
+        )
+      );
+    }
+
+    const whereClause = and(...conditions);
+
+    const [countResult] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(workOrders)
+      .where(whereClause);
+
+    const rows = await db.select({
+      id: workOrders.id,
+      tenantId: workOrders.tenantId,
+      customerId: workOrders.customerId,
+      objectId: workOrders.objectId,
+      clusterId: workOrders.clusterId,
+      resourceId: workOrders.resourceId,
+      teamId: workOrders.teamId,
+      title: workOrders.title,
+      description: workOrders.description,
+      orderType: workOrders.orderType,
+      priority: workOrders.priority,
+      status: workOrders.status,
+      orderStatus: workOrders.orderStatus,
+      scheduledDate: workOrders.scheduledDate,
+      scheduledStartTime: workOrders.scheduledStartTime,
+      plannedWindowStart: workOrders.plannedWindowStart,
+      plannedWindowEnd: workOrders.plannedWindowEnd,
+      estimatedDuration: workOrders.estimatedDuration,
+      actualDuration: workOrders.actualDuration,
+      setupTime: workOrders.setupTime,
+      setupReason: workOrders.setupReason,
+      lockedAt: workOrders.lockedAt,
+      completedAt: workOrders.completedAt,
+      invoicedAt: workOrders.invoicedAt,
+      cachedValue: workOrders.cachedValue,
+      cachedCost: workOrders.cachedCost,
+      cachedProductionMinutes: workOrders.cachedProductionMinutes,
+      isSimulated: workOrders.isSimulated,
+      simulationScenarioId: workOrders.simulationScenarioId,
+      plannedBy: workOrders.plannedBy,
+      plannedNotes: workOrders.plannedNotes,
+      notes: workOrders.notes,
+      metadata: workOrders.metadata,
+      createdAt: workOrders.createdAt,
+      deletedAt: workOrders.deletedAt,
+      impossibleReason: workOrders.impossibleReason,
+      impossibleReasonText: workOrders.impossibleReasonText,
+      impossibleAt: workOrders.impossibleAt,
+      impossibleBy: workOrders.impossibleBy,
+      impossiblePhotoUrl: workOrders.impossiblePhotoUrl,
+      executionStatus: workOrders.executionStatus,
+      creationMethod: workOrders.creationMethod,
+      structuralArticleId: workOrders.structuralArticleId,
+      what3words: workOrders.what3words,
+      taskLatitude: workOrders.taskLatitude,
+      taskLongitude: workOrders.taskLongitude,
+      externalReference: workOrders.externalReference,
+      onWayAt: workOrders.onWayAt,
+      onSiteAt: workOrders.onSiteAt,
+      inspectedAt: workOrders.inspectedAt,
+      executionCode: workOrders.executionCode,
+      objectName: objects.name,
+      objectAddress: objects.address,
+      objectAccessCode: objects.resolvedAccessCode,
+      objectKeyNumber: objects.resolvedKeyNumber,
+      customerName: customers.name,
+    })
+    .from(workOrders)
+    .leftJoin(objects, eq(workOrders.objectId, objects.id))
+    .leftJoin(customers, eq(workOrders.customerId, customers.id))
+    .where(whereClause)
+    .orderBy(workOrders.priority, workOrders.plannedWindowEnd)
+    .limit(limit)
+    .offset(offset);
+
+    return { workOrders: rows, total: countResult?.count || 0 };
   }
 
   async bulkUnscheduleWorkOrders(tenantId: string, startDate: Date, endDate: Date, resourceIds?: string[]): Promise<number> {

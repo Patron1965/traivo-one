@@ -21,7 +21,9 @@ function notifyImportProgress(jobId: string) {
   if (!job) return;
   const data = { status: job.status, phase: job.phase, processed: job.processed, total: job.total, created: job.created, updated: job.updated, errors: job.errors, result: job.result };
   for (const res of job.listeners) {
-    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {}
+    try { res.write(`data: ${JSON.stringify(data)}\n\n`); } catch {
+      job.listeners.delete(res);
+    }
   }
 }
 import { db } from "./db";
@@ -298,13 +300,12 @@ export async function registerRoutes(
       }
       
       const hasFilters = objectType || hierarchyLevel || accessType;
+      const paginated = req.query.paginated === "true";
       
-      // If paginated request
-      if (req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
+      if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
         const filters = hasFilters ? { objectType, hierarchyLevel, accessType } : undefined;
         const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
         
-        // Filter out objects that already have a cluster
         if (noCluster) {
           const filtered = result.objects.filter((obj: any) => !obj.clusterId);
           res.json(filtered);
@@ -312,7 +313,6 @@ export async function registerRoutes(
           res.json(result);
         }
       } else {
-        // Legacy: return all objects (for backward compatibility)
         const objects = await storage.getObjects(tenantId);
         res.json(objects);
       }
@@ -381,6 +381,97 @@ export async function registerRoutes(
     } catch (error) {
       console.error("Failed to get object tree:", error);
       res.status(500).json({ error: "Kunde inte hämta objektträd" });
+    }
+  });
+
+  // Objects with issues - MUST be before /api/objects/:id
+  app.get("/api/objects/with-issues", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { issueType, status, customerId, limit } = req.query;
+      
+      const allObjects = await storage.getObjects(tenantId);
+      const deviations = await storage.getDeviationReports(tenantId, { 
+        status: status as string || undefined 
+      });
+      
+      type ObjectWithIssue = {
+        object: (typeof allObjects)[0];
+        issueType: string;
+        issueCount: number;
+        latestIssue: Date | null;
+        severity?: string;
+        details?: any[];
+      };
+      
+      const objectsWithIssues: ObjectWithIssue[] = [];
+      
+      const deviationsByObject = new Map<string, typeof deviations>();
+      for (const dev of deviations) {
+        const existing = deviationsByObject.get(dev.objectId) || [];
+        existing.push(dev);
+        deviationsByObject.set(dev.objectId, existing);
+      }
+      
+      for (const [objectId, devList] of deviationsByObject) {
+        const obj = allObjects.find(o => o.id === objectId);
+        if (!obj) continue;
+        if (customerId && obj.customerId !== customerId) continue;
+        
+        const byCategory = new Map<string, typeof devList>();
+        for (const dev of devList) {
+          const cat = dev.category || 'other';
+          const existing = byCategory.get(cat) || [];
+          existing.push(dev);
+          byCategory.set(cat, existing);
+        }
+        
+        for (const [category, categoryDevs] of byCategory) {
+          if (issueType && category !== issueType) continue;
+          
+          const sorted = categoryDevs.sort((a, b) => 
+            new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
+          );
+          const latest = sorted[0];
+          
+          objectsWithIssues.push({
+            object: obj,
+            issueType: category,
+            issueCount: categoryDevs.length,
+            latestIssue: new Date(latest.reportedAt),
+            severity: latest.severity || undefined,
+            details: sorted.slice(0, 5).map(d => ({
+              id: d.id,
+              title: d.title,
+              status: d.status,
+              reportedAt: d.reportedAt,
+              severity: d.severity,
+            })),
+          });
+        }
+      }
+      
+      objectsWithIssues.sort((a, b) => {
+        if (!a.latestIssue) return 1;
+        if (!b.latestIssue) return -1;
+        return b.latestIssue.getTime() - a.latestIssue.getTime();
+      });
+      
+      const limited = limit ? objectsWithIssues.slice(0, parseInt(limit as string)) : objectsWithIssues;
+      
+      const issueTypeCounts: Record<string, number> = {};
+      for (const item of objectsWithIssues) {
+        issueTypeCounts[item.issueType] = (issueTypeCounts[item.issueType] || 0) + 1;
+      }
+      
+      res.json({
+        totalObjectsWithIssues: objectsWithIssues.length,
+        issueTypes: issueTypeCounts,
+        objects: limited,
+      });
+    } catch (error) {
+      console.error("Failed to get objects with issues:", error);
+      res.status(500).json({ error: "Kunde inte hämta objekt med avvikelser" });
     }
   });
 
@@ -939,6 +1030,24 @@ export async function registerRoutes(
     }
   });
 
+  // Get all active resource positions (for planner map view) - MUST be before /:id
+  app.get("/api/resources/active-positions", async (req, res) => {
+    try {
+      const resources = await storage.getActiveResourcePositions();
+      res.json(resources.map(r => ({
+        id: r.id,
+        name: r.name,
+        latitude: r.currentLatitude,
+        longitude: r.currentLongitude,
+        status: r.trackingStatus,
+        lastUpdate: r.lastPositionUpdate
+      })));
+    } catch (error) {
+      console.error("Failed to fetch active positions:", error);
+      res.status(500).json({ error: "Failed to fetch positions" });
+    }
+  });
+
   app.get("/api/resources/:id", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -1017,7 +1126,22 @@ export async function registerRoutes(
       const status = req.query.status as string || undefined;
       const paginated = req.query.paginated === 'true';
 
-      if (paginated || offset !== undefined) {
+      const search = req.query.search as string || undefined;
+
+      if (status === 'unscheduled') {
+        if (search || offset !== undefined) {
+          const result = await storage.getUnscheduledWorkOrdersPaginated(
+            tenantId,
+            limit || 50,
+            offset || 0,
+            search
+          );
+          res.json(result);
+        } else {
+          const workOrders = await storage.getUnscheduledWorkOrders(tenantId, limit || 500);
+          res.json(workOrders);
+        }
+      } else if (paginated || offset !== undefined) {
         const result = await storage.getWorkOrdersPaginated(
           tenantId, 
           limit || 50, 
@@ -1028,9 +1152,6 @@ export async function registerRoutes(
           status
         );
         res.json(result);
-      } else if (status === 'unscheduled') {
-        const workOrders = await storage.getUnscheduledWorkOrders(tenantId, limit || 500);
-        res.json(workOrders);
       } else {
         const workOrders = await storage.getWorkOrders(tenantId, startDate, endDate, includeUnscheduled, limit);
         res.json(workOrders);
@@ -9199,23 +9320,6 @@ setInterval(loadRoutes, 30000);
     }
   });
   
-  // Get all active resource positions (for planner map view)
-  app.get("/api/resources/active-positions", async (req, res) => {
-    try {
-      const resources = await storage.getActiveResourcePositions();
-      res.json(resources.map(r => ({
-        id: r.id,
-        name: r.name,
-        latitude: r.currentLatitude,
-        longitude: r.currentLongitude,
-        status: r.trackingStatus,
-        lastUpdate: r.lastPositionUpdate
-      })));
-    } catch (error) {
-      console.error("Failed to fetch active positions:", error);
-      res.status(500).json({ error: "Failed to fetch positions" });
-    }
-  });
 
   // ============================================
   // KPI / ANALYTICS ENDPOINTS
@@ -16027,6 +16131,93 @@ setInterval(loadRoutes, 30000);
     }
   });
 
+  // Get assessment statistics - MUST be before /:id
+  app.get("/api/protocols/statistics/assessments", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectId, startDate, endDate } = req.query;
+      
+      const allProtocols = await storage.getProtocols(tenantId, {
+        protocolType: 'inspection',
+        objectId: objectId as string,
+      });
+      
+      let protocols = allProtocols;
+      if (startDate) {
+        const start = new Date(startDate as string);
+        protocols = protocols.filter(p => new Date(p.executedAt) >= start);
+      }
+      if (endDate) {
+        const end = new Date(endDate as string);
+        protocols = protocols.filter(p => new Date(p.executedAt) <= end);
+      }
+      
+      const { ASSESSMENT_RATING_SCORES, ASSESSMENT_RATING_LABELS } = await import("@shared/schema");
+      
+      const ratingCounts: Record<string, number> = {};
+      let totalScore = 0;
+      let ratedCount = 0;
+      
+      for (const protocol of protocols) {
+        if (protocol.assessmentRating) {
+          ratingCounts[protocol.assessmentRating] = (ratingCounts[protocol.assessmentRating] || 0) + 1;
+          const score = ASSESSMENT_RATING_SCORES[protocol.assessmentRating as keyof typeof ASSESSMENT_RATING_SCORES];
+          if (score !== undefined) {
+            totalScore += score;
+            ratedCount++;
+          }
+        }
+      }
+      
+      const averageScore = ratedCount > 0 ? totalScore / ratedCount : null;
+      
+      const distribution = Object.entries(ratingCounts).map(([rating, count]) => ({
+        rating,
+        label: ASSESSMENT_RATING_LABELS[rating as keyof typeof ASSESSMENT_RATING_LABELS] || rating,
+        count,
+        percentage: protocols.length > 0 ? Math.round((count / protocols.length) * 100) : 0,
+      }));
+      
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+      
+      const recentProtocols = allProtocols.filter(p => new Date(p.executedAt) >= sixMonthsAgo);
+      const monthlyData: Record<string, { count: number; totalScore: number }> = {};
+      
+      for (const protocol of recentProtocols) {
+        const monthKey = new Date(protocol.executedAt).toISOString().substring(0, 7);
+        if (!monthlyData[monthKey]) {
+          monthlyData[monthKey] = { count: 0, totalScore: 0 };
+        }
+        monthlyData[monthKey].count++;
+        if (protocol.assessmentRating) {
+          const score = ASSESSMENT_RATING_SCORES[protocol.assessmentRating as keyof typeof ASSESSMENT_RATING_SCORES];
+          if (score !== undefined) {
+            monthlyData[monthKey].totalScore += score;
+          }
+        }
+      }
+      
+      const trend = Object.entries(monthlyData)
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([month, data]) => ({
+          month,
+          inspections: data.count,
+          averageScore: data.count > 0 ? Math.round((data.totalScore / data.count) * 10) / 10 : null,
+        }));
+      
+      res.json({
+        totalInspections: protocols.length,
+        averageScore: averageScore !== null ? Math.round(averageScore * 10) / 10 : null,
+        distribution,
+        trend,
+      });
+    } catch (error) {
+      console.error("Failed to get assessment statistics:", error);
+      res.status(500).json({ error: "Kunde inte hämta statistik" });
+    }
+  });
+
   app.get("/api/protocols/:id", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -16092,99 +16283,6 @@ setInterval(loadRoutes, 30000);
     } catch (error) {
       console.error("Failed to delete protocol:", error);
       res.status(500).json({ error: "Kunde inte ta bort protokoll" });
-    }
-  });
-
-  // Get assessment statistics for inspections
-  app.get("/api/protocols/statistics/assessments", async (req, res) => {
-    try {
-      const tenantId = getTenantIdWithFallback(req);
-      const { objectId, startDate, endDate } = req.query;
-      
-      // Get all inspection protocols
-      const allProtocols = await storage.getProtocols(tenantId, {
-        protocolType: 'inspection',
-        objectId: objectId as string,
-      });
-      
-      // Filter by date if specified
-      let protocols = allProtocols;
-      if (startDate) {
-        const start = new Date(startDate as string);
-        protocols = protocols.filter(p => new Date(p.executedAt) >= start);
-      }
-      if (endDate) {
-        const end = new Date(endDate as string);
-        protocols = protocols.filter(p => new Date(p.executedAt) <= end);
-      }
-      
-      // Count by rating
-      const { ASSESSMENT_RATING_SCORES, ASSESSMENT_RATING_LABELS } = await import("@shared/schema");
-      
-      const ratingCounts: Record<string, number> = {};
-      let totalScore = 0;
-      let ratedCount = 0;
-      
-      for (const protocol of protocols) {
-        if (protocol.assessmentRating) {
-          ratingCounts[protocol.assessmentRating] = (ratingCounts[protocol.assessmentRating] || 0) + 1;
-          const score = ASSESSMENT_RATING_SCORES[protocol.assessmentRating as keyof typeof ASSESSMENT_RATING_SCORES];
-          if (score !== undefined) {
-            totalScore += score;
-            ratedCount++;
-          }
-        }
-      }
-      
-      // Calculate average score
-      const averageScore = ratedCount > 0 ? totalScore / ratedCount : null;
-      
-      // Build distribution with labels
-      const distribution = Object.entries(ratingCounts).map(([rating, count]) => ({
-        rating,
-        label: ASSESSMENT_RATING_LABELS[rating as keyof typeof ASSESSMENT_RATING_LABELS] || rating,
-        count,
-        percentage: protocols.length > 0 ? Math.round((count / protocols.length) * 100) : 0,
-      }));
-      
-      // Get trend data (last 6 months)
-      const sixMonthsAgo = new Date();
-      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-      
-      const recentProtocols = allProtocols.filter(p => new Date(p.executedAt) >= sixMonthsAgo);
-      const monthlyData: Record<string, { count: number; totalScore: number }> = {};
-      
-      for (const protocol of recentProtocols) {
-        const monthKey = new Date(protocol.executedAt).toISOString().substring(0, 7);
-        if (!monthlyData[monthKey]) {
-          monthlyData[monthKey] = { count: 0, totalScore: 0 };
-        }
-        monthlyData[monthKey].count++;
-        if (protocol.assessmentRating) {
-          const score = ASSESSMENT_RATING_SCORES[protocol.assessmentRating as keyof typeof ASSESSMENT_RATING_SCORES];
-          if (score !== undefined) {
-            monthlyData[monthKey].totalScore += score;
-          }
-        }
-      }
-      
-      const trend = Object.entries(monthlyData)
-        .sort((a, b) => a[0].localeCompare(b[0]))
-        .map(([month, data]) => ({
-          month,
-          inspections: data.count,
-          averageScore: data.count > 0 ? Math.round((data.totalScore / data.count) * 10) / 10 : null,
-        }));
-      
-      res.json({
-        totalInspections: protocols.length,
-        averageScore: averageScore !== null ? Math.round(averageScore * 10) / 10 : null,
-        distribution,
-        trend,
-      });
-    } catch (error) {
-      console.error("Failed to get assessment statistics:", error);
-      res.status(500).json({ error: "Kunde inte hämta statistik" });
     }
   });
 
@@ -16411,101 +16509,6 @@ setInterval(loadRoutes, 30000);
     } catch (error) {
       console.error("Failed to resolve deviation report:", error);
       res.status(500).json({ error: "Kunde inte markera avvikelse som åtgärdad" });
-    }
-  });
-
-  // ============================================
-  // METADATA-TRIGGERS - Fas 3.2
-  // Lista objekt med klotter, avvikelser och problem
-  // ============================================
-
-  app.get("/api/objects/with-issues", async (req, res) => {
-    try {
-      const tenantId = getTenantIdWithFallback(req);
-      const { issueType, status, customerId, limit } = req.query;
-      
-      const allObjects = await storage.getObjects(tenantId);
-      const deviations = await storage.getDeviationReports(tenantId, { 
-        status: status as string || undefined 
-      });
-      
-      type ObjectWithIssue = {
-        object: (typeof allObjects)[0];
-        issueType: string;
-        issueCount: number;
-        latestIssue: Date | null;
-        severity?: string;
-        details?: any[];
-      };
-      
-      const objectsWithIssues: ObjectWithIssue[] = [];
-      
-      const deviationsByObject = new Map<string, typeof deviations>();
-      for (const dev of deviations) {
-        const existing = deviationsByObject.get(dev.objectId) || [];
-        existing.push(dev);
-        deviationsByObject.set(dev.objectId, existing);
-      }
-      
-      for (const [objectId, devList] of deviationsByObject) {
-        const obj = allObjects.find(o => o.id === objectId);
-        if (!obj) continue;
-        if (customerId && obj.customerId !== customerId) continue;
-        
-        const byCategory = new Map<string, typeof devList>();
-        for (const dev of devList) {
-          const cat = dev.category || 'other';
-          const existing = byCategory.get(cat) || [];
-          existing.push(dev);
-          byCategory.set(cat, existing);
-        }
-        
-        for (const [category, categoryDevs] of byCategory) {
-          if (issueType && category !== issueType) continue;
-          
-          const sorted = categoryDevs.sort((a, b) => 
-            new Date(b.reportedAt).getTime() - new Date(a.reportedAt).getTime()
-          );
-          const latest = sorted[0];
-          
-          objectsWithIssues.push({
-            object: obj,
-            issueType: category,
-            issueCount: categoryDevs.length,
-            latestIssue: new Date(latest.reportedAt),
-            severity: latest.severity || undefined,
-            details: sorted.slice(0, 5).map(d => ({
-              id: d.id,
-              title: d.title,
-              status: d.status,
-              reportedAt: d.reportedAt,
-              severity: d.severity,
-            })),
-          });
-        }
-      }
-      
-      objectsWithIssues.sort((a, b) => {
-        if (!a.latestIssue) return 1;
-        if (!b.latestIssue) return -1;
-        return b.latestIssue.getTime() - a.latestIssue.getTime();
-      });
-      
-      const limited = limit ? objectsWithIssues.slice(0, parseInt(limit as string)) : objectsWithIssues;
-      
-      const issueTypeCounts: Record<string, number> = {};
-      for (const item of objectsWithIssues) {
-        issueTypeCounts[item.issueType] = (issueTypeCounts[item.issueType] || 0) + 1;
-      }
-      
-      res.json({
-        totalObjectsWithIssues: objectsWithIssues.length,
-        issueTypes: issueTypeCounts,
-        objects: limited,
-      });
-    } catch (error) {
-      console.error("Failed to get objects with issues:", error);
-      res.status(500).json({ error: "Kunde inte hämta objekt med avvikelser" });
     }
   });
 

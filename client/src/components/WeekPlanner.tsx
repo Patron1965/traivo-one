@@ -359,7 +359,10 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const [filterExecutionCode, setFilterExecutionCode] = useState<string>("all");
   const [hiddenResourceIds, setHiddenResourceIds] = useState<Set<string>>(new Set());
   const [orderstockSearch, setOrderstockSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(false);
+  const [unscheduledPage, setUnscheduledPage] = useState(0);
+  const UNSCHEDULED_PAGE_SIZE = 50;
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({
     queryKey: ["/api/teams"],
@@ -462,16 +465,85 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     staleTime: 60000,
   });
 
-  const { data: unscheduledWorkOrders = [], isLoading: unscheduledLoading } = useQuery<WorkOrderWithObject[]>({
-    queryKey: ["/api/work-orders", "unscheduled"],
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(orderstockSearch);
+      setUnscheduledPage(0);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [orderstockSearch]);
+
+  const unscheduledQueryParams = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("status", "unscheduled");
+    params.set("limit", String(UNSCHEDULED_PAGE_SIZE));
+    params.set("offset", "0");
+    if (debouncedSearch.trim()) {
+      params.set("search", debouncedSearch.trim());
+    }
+    return params.toString();
+  }, [debouncedSearch, UNSCHEDULED_PAGE_SIZE]);
+
+  const { data: unscheduledData, isLoading: unscheduledLoading } = useQuery<{ workOrders: WorkOrderWithObject[]; total: number }>({
+    queryKey: ["/api/work-orders", "unscheduled-paginated", debouncedSearch],
     queryFn: async () => {
-      const url = `/api/work-orders?status=unscheduled&limit=500`;
+      const url = `/api/work-orders?${unscheduledQueryParams}`;
       const res = await fetch(url, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch unscheduled work orders");
       return res.json();
     },
     staleTime: 120000,
   });
+
+  const [accumulatedUnscheduled, setAccumulatedUnscheduled] = useState<WorkOrderWithObject[]>([]);
+  const [unscheduledTotal, setUnscheduledTotal] = useState(0);
+
+  useEffect(() => {
+    if (unscheduledData) {
+      if (unscheduledPage === 0) {
+        setAccumulatedUnscheduled(unscheduledData.workOrders);
+      } else {
+        setAccumulatedUnscheduled(prev => {
+          const existingIds = new Set(prev.map(wo => wo.id));
+          const newItems = unscheduledData.workOrders.filter(wo => !existingIds.has(wo.id));
+          return [...prev, ...newItems];
+        });
+      }
+      setUnscheduledTotal(unscheduledData.total);
+    }
+  }, [unscheduledData, unscheduledPage]);
+
+  const [loadMoreLoading, setLoadMoreLoading] = useState(false);
+
+  const loadMoreUnscheduled = useCallback(async () => {
+    const nextPage = unscheduledPage + 1;
+    const nextOffset = nextPage * UNSCHEDULED_PAGE_SIZE;
+    setLoadMoreLoading(true);
+    try {
+      const params = new URLSearchParams();
+      params.set("status", "unscheduled");
+      params.set("limit", String(UNSCHEDULED_PAGE_SIZE));
+      params.set("offset", String(nextOffset));
+      if (debouncedSearch.trim()) {
+        params.set("search", debouncedSearch.trim());
+      }
+      const res = await fetch(`/api/work-orders?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to load more");
+      const data: { workOrders: WorkOrderWithObject[]; total: number } = await res.json();
+      setAccumulatedUnscheduled(prev => {
+        const existingIds = new Set(prev.map(wo => wo.id));
+        const newItems = data.workOrders.filter(wo => !existingIds.has(wo.id));
+        return [...prev, ...newItems];
+      });
+      setUnscheduledTotal(data.total);
+      setUnscheduledPage(nextPage);
+    } finally {
+      setLoadMoreLoading(false);
+    }
+  }, [unscheduledPage, UNSCHEDULED_PAGE_SIZE, debouncedSearch]);
+
+  const unscheduledWorkOrders = accumulatedUnscheduled;
+  const hasMoreUnscheduled = accumulatedUnscheduled.length < unscheduledTotal;
 
   const workOrders = useMemo(() => {
     const ids = new Set(scheduledWorkOrders.map(wo => wo.id));
@@ -585,6 +657,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         if (!old) return old;
         return old.map(job => job.id === variables.id ? { ...job, ...updatedWorkOrder } : job);
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] });
+      setUnscheduledPage(0);
     },
     onError: (error, _variables, context) => {
       console.error("MUTATION ERROR:", error);
@@ -630,6 +704,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         if (!old) return old;
         return old.map(job => job.id === id ? { ...job, ...updatedWorkOrder } : job);
       });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] });
+      setUnscheduledPage(0);
       toast({
         title: "Avschemalagt",
         description: "Jobbet flyttades tillbaka till oschemalagda.",
@@ -1294,6 +1370,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workOrdersQueryKey });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] });
+      setUnscheduledPage(0);
     },
     onError: () => {
       toast({
@@ -1876,6 +1954,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       });
       const data = await response.json();
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setUnscheduledPage(0);
       setClearDialogOpen(false);
       toast({
         title: "Planering rensad",
@@ -1922,6 +2001,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       setAutoFillDialogOpen(false);
       setAutoFillPreview(null);
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setUnscheduledPage(0);
     } catch (error) {
       toast({ title: "Fel", description: "Kunde inte tillämpa planering", variant: "destructive" });
     } finally {
@@ -2961,7 +3041,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               <div className="flex items-center gap-2">
                 <Inbox className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium">Oschemalagda</span>
-                <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}</Badge>
+                <Badge variant="secondary" className="text-xs">{unscheduledJobs.length}{unscheduledTotal > accumulatedUnscheduled.length ? ` / ${unscheduledTotal}` : ""}</Badge>
               </div>
             </div>
             <div className="flex items-center gap-1.5 flex-wrap" data-testid="sidebar-quick-stats">
@@ -3140,13 +3220,14 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                   Inga oschemalagda jobb
                 </div>
               ) : (
-                unscheduledJobs.map((job) => {
+                <>
+                {unscheduledJobs.map((job) => {
                   const customer = customerMap.get(job.customerId);
                   const jobCluster = job.clusterId ? clusterMap.get(job.clusterId) : null;
                   return (
                     <DraggableJobCard key={job.id} id={job.id}>
                       <Card
-                        className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "border-l-4 border-l-red-500 bg-red-50/50 dark:bg-red-950/20" : job.priority === "high" ? "border-l-4 border-l-orange-500" : ""}`}
+                        className={`p-3 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 touch-none ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${job.priority === "urgent" ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
                         onClick={() => handleJobClick(job.id)}
                         data-testid={`unscheduled-job-${job.id}`}
                       >
@@ -3260,7 +3341,27 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                       </Card>
                     </DraggableJobCard>
                   );
-                })
+                })}
+                {hasMoreUnscheduled && (
+                  <div className="pt-2 pb-1">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={loadMoreUnscheduled}
+                      disabled={loadMoreLoading}
+                      data-testid="button-load-more-unscheduled"
+                    >
+                      {loadMoreLoading ? (
+                        <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <ChevronDown className="h-3.5 w-3.5 mr-1.5" />
+                      )}
+                      Ladda fler ({accumulatedUnscheduled.length} av {unscheduledTotal})
+                    </Button>
+                  </div>
+                )}
+                </>
               )}
             </div>
           </ScrollArea>

@@ -139,8 +139,6 @@ export async function getUserTenants(userId: string): Promise<TenantContext[]> {
   }));
 }
 
-const DEFAULT_TENANT_ID = "default-tenant";
-
 /**
  * Tenant middleware - requires authentication and tenant membership.
  * - Unauthenticated users: rejected with 401
@@ -180,5 +178,20 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
 };
 
 export function getTenantIdWithFallback(req: Request): string {
-  return req.tenantId || DEFAULT_TENANT_ID;
+  if (!req.tenantId) {
+    const isDevelopment = process.env.NODE_ENV !== "production";
+    
+    if (isDevelopment) {
+      console.warn(
+        "[SECURITY WARNING] getTenantIdWithFallback called without req.tenantId. " +
+        "This indicates the requireTenantWithFallback middleware was not properly applied. " +
+        "In production, this would return 401 Unauthorized."
+      );
+      return "default-tenant";
+    } else {
+      throw new Error("Tenant ID missing - Access denied");
+    }
+  }
+  
+  return req.tenantId;
 }
