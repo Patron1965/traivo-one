@@ -1261,15 +1261,21 @@ router.get("/route", async (req, res) => {
       return res.status(400).json({ error: `Invalid coordinate values: ${point}` });
     }
   }
-  async function fetchOsrm(withSteps) {
+  async function fetchRoute(useSteps) {
     const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 15e3);
-    const stepsParam = withSteps ? "&steps=true" : "";
-    const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?overview=full&geometries=geojson${stepsParam}&roundtrip=false&source=first`;
+    const t = setTimeout(() => ctrl.abort(), 12e3);
+    const stepsParam = useSteps ? "&steps=true" : "";
+    const routeUrl = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson${stepsParam}`;
     try {
-      const response = await fetch(url, { signal: ctrl.signal });
+      const response = await fetch(routeUrl, { signal: ctrl.signal });
       clearTimeout(t);
-      return await response.json();
+      const text = await response.text();
+      try {
+        return JSON.parse(text);
+      } catch {
+        console.error("OSRM non-JSON response:", text.substring(0, 200));
+        throw new Error("Non-JSON response from routing service");
+      }
     } catch (err) {
       clearTimeout(t);
       throw err;
@@ -1278,26 +1284,53 @@ router.get("/route", async (req, res) => {
   try {
     let data;
     try {
-      data = await fetchOsrm(true);
+      data = await fetchRoute(true);
     } catch (err) {
-      console.warn("OSRM steps request failed, retrying without steps:", err.message);
-      data = await fetchOsrm(false);
+      console.warn("OSRM route+steps failed:", err.message, "- retrying without steps");
+      try {
+        data = await fetchRoute(false);
+      } catch (err2) {
+        console.error("OSRM route fallback also failed:", err2.message);
+        const parsedPoints2 = points.map((p) => {
+          const [lon, lat] = p.split(",").map(Number);
+          return [lon, lat];
+        });
+        return res.json({
+          waypoints: parsedPoints2.map((loc, i) => ({ location: loc, waypointIndex: i, tripsIndex: 0 })),
+          trips: [{
+            geometry: { type: "LineString", coordinates: parsedPoints2 },
+            distance: 0,
+            duration: 0,
+            legs: []
+          }],
+          fallback: true
+        });
+      }
     }
     if (data.code !== "Ok") {
       console.error("OSRM error:", data.code, data.message);
       return res.status(502).json({ error: "Route calculation failed", code: data.code });
     }
+    const route = data.routes?.[0];
+    if (!route) {
+      console.error("OSRM: no routes in response");
+      return res.status(502).json({ error: "No route found" });
+    }
+    const parsedPoints = points.map((p) => {
+      const [lon, lat] = p.split(",").map(Number);
+      return [lon, lat];
+    });
     res.json({
-      waypoints: data.waypoints.map((wp) => ({
+      waypoints: data.waypoints.map((wp, i) => ({
         location: wp.location,
-        waypointIndex: wp.waypoint_index,
-        tripsIndex: wp.trips_index
+        waypointIndex: i,
+        tripsIndex: 0
       })),
-      trips: data.trips.map((trip) => ({
-        geometry: trip.geometry,
-        distance: trip.distance,
-        duration: trip.duration,
-        legs: (trip.legs || []).map((leg) => ({
+      trips: [{
+        geometry: route.geometry,
+        distance: route.distance,
+        duration: route.duration,
+        legs: (route.legs || []).map((leg) => ({
           distance: leg.distance,
           duration: leg.duration,
           steps: (leg.steps || []).map((step) => ({
@@ -1306,7 +1339,7 @@ router.get("/route", async (req, res) => {
             duration: step.duration
           }))
         }))
-      }))
+      }]
     });
   } catch (error) {
     console.error("OSRM fetch error:", error.message);

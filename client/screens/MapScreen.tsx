@@ -40,6 +40,7 @@ interface RouteLeg {
 interface RouteData {
   waypoints: { location: [number, number]; waypointIndex: number }[];
   trips: { geometry: { type: string; coordinates: number[][] }; distance: number; duration: number; legs?: RouteLeg[] }[];
+  fallback?: boolean;
 }
 
 function formatRouteDistance(meters: number): string {
@@ -366,6 +367,13 @@ export function MapScreen({ navigation }: any) {
             <Feather name="alert-circle" size={16} color={Colors.warning} />
             <ThemedText variant="caption" color={Colors.textSecondary}>
               Rutten kunde inte beräknas just nu
+            </ThemedText>
+          </View>
+        ) : routeData?.fallback ? (
+          <View style={styles.legendRow}>
+            <Feather name="map-pin" size={16} color={Colors.primary} />
+            <ThemedText variant="caption" color={Colors.textSecondary}>
+              Visar ungefärlig rutt
             </ThemedText>
           </View>
         ) : totalDistance != null && totalDuration != null ? (
