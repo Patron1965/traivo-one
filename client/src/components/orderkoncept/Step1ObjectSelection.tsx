@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -14,6 +14,7 @@ interface TreeNode {
   objectType?: string;
   address?: string;
   customerId?: string;
+  customerName?: string;
   children: TreeNode[];
 }
 
@@ -103,6 +104,43 @@ function ObjectTreeNode({
   );
 }
 
+function SearchResultItem({
+  node,
+  selectedIds,
+  onToggle,
+}: {
+  node: TreeNode;
+  selectedIds: Set<string>;
+  onToggle: (id: string) => void;
+}) {
+  const isSelected = selectedIds.has(node.id);
+
+  return (
+    <div className="flex items-center gap-2 py-1.5 px-2 hover:bg-accent/50 rounded" data-testid={`search-result-${node.id}`}>
+      <Checkbox
+        checked={isSelected}
+        onCheckedChange={() => onToggle(node.id)}
+        data-testid={`search-checkbox-${node.id}`}
+      />
+      <div className="flex-1 min-w-0">
+        <div className="text-sm truncate">{node.name}</div>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {node.customerName && (
+            <span className="flex items-center gap-1">
+              <Building2 className="h-3 w-3" />
+              {node.customerName}
+            </span>
+          )}
+          {node.address && <span className="truncate">{node.address}</span>}
+        </div>
+      </div>
+      {node.objectType && (
+        <span className="text-xs text-muted-foreground shrink-0">{node.objectType}</span>
+      )}
+    </div>
+  );
+}
+
 export default function Step1ObjectSelection({
   selectedObjectIds,
   onToggleObject,
@@ -112,19 +150,38 @@ export default function Step1ObjectSelection({
 }: Step1Props) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [objectSearch, setObjectSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(objectSearch), 300);
+    return () => clearTimeout(timer);
+  }, [objectSearch]);
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
   });
 
+  const isSearching = debouncedSearch.trim().length > 0;
+
   const { data: treeData = [], isLoading: treeLoading } = useQuery<TreeNode[]>({
-    queryKey: ["/api/objects/tree", selectedCustomerId],
+    queryKey: ["/api/objects/tree", selectedCustomerId, isSearching ? null : "tree"],
     queryFn: async () => {
       const params = selectedCustomerId ? `?customerId=${selectedCustomerId}` : "";
       const res = await fetch(`/api/objects/tree${params}`);
       if (!res.ok) throw new Error("Failed to fetch tree");
       return res.json();
     },
+    enabled: !isSearching,
+  });
+
+  const { data: searchResults = [], isLoading: searchLoading } = useQuery<TreeNode[]>({
+    queryKey: ["/api/objects/tree", "search", debouncedSearch],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/tree?search=${encodeURIComponent(debouncedSearch.trim())}`);
+      if (!res.ok) throw new Error("Failed to search objects");
+      return res.json();
+    },
+    enabled: isSearching,
   });
 
   const filteredCustomers = useMemo(() => {
@@ -137,24 +194,13 @@ export default function Step1ObjectSelection({
   }, [customers, customerSearch]);
 
   const filteredTree = useMemo(() => {
-    if (!objectSearch) return treeData;
-    const q = objectSearch.toLowerCase();
-    function filterNode(node: TreeNode): TreeNode | null {
-      const matchesChildren = node.children.map(filterNode).filter(Boolean) as TreeNode[];
-      if (
-        node.name.toLowerCase().includes(q) ||
-        (node.address && node.address.toLowerCase().includes(q)) ||
-        (node.objectNumber && node.objectNumber.toLowerCase().includes(q)) ||
-        matchesChildren.length > 0
-      ) {
-        return { ...node, children: matchesChildren };
-      }
-      return null;
-    }
-    return treeData.map(filterNode).filter(Boolean) as TreeNode[];
-  }, [treeData, objectSearch]);
+    if (isSearching) return [];
+    return treeData;
+  }, [treeData, isSearching]);
 
   const selectedCustomer = customers.find(c => c.id === selectedCustomerId);
+  const loading = isSearching ? searchLoading : treeLoading;
+  const displayData = isSearching ? searchResults : filteredTree;
 
   return (
     <div className="space-y-4" data-testid="step1-object-selection">
@@ -218,22 +264,36 @@ export default function Step1ObjectSelection({
         <div className="relative mb-2">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Filtrera objekt..."
+            placeholder="Sök objekt bland alla kunder..."
             value={objectSearch}
             onChange={e => setObjectSearch(e.target.value)}
             className="pl-9"
             data-testid="input-object-filter"
           />
         </div>
+        {isSearching && (
+          <p className="text-xs text-muted-foreground mb-1" data-testid="text-search-hint">
+            Söker bland alla kunder — {searchResults.length} träffar
+          </p>
+        )}
         <ScrollArea className="h-[400px] border rounded-md p-2">
-          {treeLoading ? (
+          {loading ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
               Laddar objekt...
             </div>
-          ) : filteredTree.length === 0 ? (
+          ) : displayData.length === 0 ? (
             <div className="flex items-center justify-center h-full text-sm text-muted-foreground">
               Inga objekt hittades
             </div>
+          ) : isSearching ? (
+            searchResults.map(node => (
+              <SearchResultItem
+                key={node.id}
+                node={node}
+                selectedIds={selectedObjectIds}
+                onToggle={onToggleObject}
+              />
+            ))
           ) : (
             filteredTree.map(node => (
               <ObjectTreeNode

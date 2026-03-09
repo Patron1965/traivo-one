@@ -13108,8 +13108,33 @@ setInterval(loadRoutes, 30000);
   app.get("/api/objects/tree", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const { customerId } = req.query;
+      const { customerId, search } = req.query;
       const allObjects = await storage.getObjects(tenantId);
+
+      if (search && typeof search === "string" && search.trim().length > 0) {
+        const q = search.toLowerCase().trim();
+        const allCustomers = await storage.getCustomers(tenantId);
+        const customerMap = new Map(allCustomers.map(c => [c.id, c.name]));
+
+        const matched = allObjects.filter(o =>
+          o.name.toLowerCase().includes(q) ||
+          (o.address && o.address.toLowerCase().includes(q)) ||
+          (o.objectNumber && o.objectNumber.toLowerCase().includes(q))
+        ).slice(0, 100);
+
+        const results = matched.map(obj => ({
+          id: obj.id,
+          name: obj.name,
+          objectNumber: obj.objectNumber,
+          objectType: obj.objectType,
+          address: obj.address,
+          customerId: obj.customerId,
+          customerName: customerMap.get(obj.customerId) || null,
+          children: [],
+        }));
+
+        return res.json(results);
+      }
 
       const filtered = customerId
         ? allObjects.filter(o => o.customerId === customerId)
