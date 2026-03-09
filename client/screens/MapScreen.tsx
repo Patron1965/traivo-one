@@ -9,6 +9,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { useGpsTracking } from '../hooks/useGpsTracking';
+import { useAuth } from '../context/AuthContext';
 import type { Order } from '../types';
 
 let MapView: any = null;
@@ -110,6 +111,17 @@ export function MapScreen({ navigation }: any) {
   const mapRef = useRef<any>(null);
   const [legendExpanded, setLegendExpanded] = useState(false);
   const { currentPosition } = useGpsTracking();
+  const { startPosition } = useAuth();
+
+  const routeOrigin = useMemo(() => {
+    if (startPosition) {
+      return { latitude: startPosition.latitude, longitude: startPosition.longitude, isStartOfDay: true };
+    }
+    if (currentPosition?.latitude && currentPosition?.longitude) {
+      return { latitude: currentPosition.latitude, longitude: currentPosition.longitude, isStartOfDay: false };
+    }
+    return null;
+  }, [startPosition, currentPosition?.latitude, currentPosition?.longitude]);
 
   const { data: orders } = useQuery<Order[]>({
     queryKey: ['/api/mobile/my-orders'],
@@ -121,16 +133,16 @@ export function MapScreen({ navigation }: any) {
   );
 
   const coordsParam = useMemo(() => {
-    if (activeOrders.length < 2) return null;
+    if (activeOrders.length === 0) return null;
     const parts: string[] = [];
-    if (currentPosition?.latitude && currentPosition?.longitude) {
-      parts.push(`${currentPosition.longitude},${currentPosition.latitude}`);
+    if (routeOrigin) {
+      parts.push(`${routeOrigin.longitude},${routeOrigin.latitude}`);
     }
     activeOrders.forEach(o => parts.push(`${o.longitude},${o.latitude}`));
     return parts.length >= 2 ? parts.join(';') : null;
-  }, [activeOrders, currentPosition?.latitude, currentPosition?.longitude]);
+  }, [activeOrders, routeOrigin]);
 
-  const hasDriverStart = !!(currentPosition?.latitude && currentPosition?.longitude);
+  const hasDriverStart = !!routeOrigin;
 
   const { data: routeData, isLoading: routeLoading } = useQuery<RouteData>({
     queryKey: ['/api/mobile/route', coordsParam],
@@ -189,8 +201,8 @@ export function MapScreen({ navigation }: any) {
         latitude: o.latitude,
         longitude: o.longitude,
       }));
-      if (currentPosition?.latitude && currentPosition?.longitude) {
-        coords.push({ latitude: currentPosition.latitude, longitude: currentPosition.longitude });
+      if (routeOrigin) {
+        coords.push({ latitude: routeOrigin.latitude, longitude: routeOrigin.longitude });
       }
       setTimeout(() => {
         mapRef.current?.fitToCoordinates(coords, {
@@ -204,7 +216,7 @@ export function MapScreen({ navigation }: any) {
         });
       }, 500);
     }
-  }, [activeOrders.length, currentPosition?.latitude]);
+  }, [activeOrders.length, routeOrigin?.latitude, routeOrigin?.longitude]);
 
   if (!MapView || Platform.OS === 'web') {
     return (
@@ -283,16 +295,16 @@ export function MapScreen({ navigation }: any) {
           />
         ) : null}
 
-        {currentPosition?.latitude && currentPosition?.longitude ? (
+        {routeOrigin ? (
           <Marker
-            coordinate={{ latitude: currentPosition.latitude, longitude: currentPosition.longitude }}
+            coordinate={{ latitude: routeOrigin.latitude, longitude: routeOrigin.longitude }}
             anchor={{ x: 0.5, y: 0.5 }}
           >
             <View style={styles.startMarkerContainer}>
-              <View style={styles.startMarkerCircle}>
-                <Feather name="navigation" size={14} color="#fff" />
+              <View style={[styles.startMarkerCircle, routeOrigin.isStartOfDay ? styles.startOfDayCircle : null]}>
+                <Feather name={routeOrigin.isStartOfDay ? 'flag' : 'navigation'} size={14} color="#fff" />
               </View>
-              <Text style={styles.startMarkerLabel}>Start</Text>
+              <Text style={styles.startMarkerLabel}>{routeOrigin.isStartOfDay ? 'Dagstart' : 'Start'}</Text>
             </View>
           </Marker>
         ) : null}
@@ -448,6 +460,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
+  },
+  startOfDayCircle: {
+    backgroundColor: Colors.primary,
     elevation: 4,
   },
   startMarkerLabel: {

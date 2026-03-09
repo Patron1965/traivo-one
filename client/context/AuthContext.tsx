@@ -1,13 +1,21 @@
 import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
-import type { Resource } from '../types';
+import type { Resource, GpsPosition } from '../types';
+
+interface StartPosition {
+  latitude: number;
+  longitude: number;
+  date: string;
+}
 
 interface AuthContextType {
   user: Resource | null;
   token: string | null;
   isLoading: boolean;
   isOnline: boolean;
+  startPosition: StartPosition | null;
   setIsOnline: (online: boolean) => void;
   login: (username: string, password: string, pin?: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -18,6 +26,7 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   isLoading: true,
   isOnline: false,
+  startPosition: null,
   setIsOnline: () => {},
   login: async () => {},
   logout: async () => {},
@@ -28,12 +37,48 @@ export function useAuth() {
 }
 
 const ONLINE_STATUS_KEY = '@driver_online_status';
+const START_POSITION_KEY = '@driver_start_position';
+
+function getTodayDateString(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+async function captureCurrentPosition(): Promise<{ latitude: number; longitude: number } | null> {
+  if (Platform.OS === 'web') {
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(null);
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+  }
+
+  try {
+    const Location = await import('expo-location');
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') return null;
+    const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+    return { latitude: loc.coords.latitude, longitude: loc.coords.longitude };
+  } catch {
+    return null;
+  }
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Resource | null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnlineState] = useState(false);
+  const [startPosition, setStartPosition] = useState<StartPosition | null>(null);
   const initialLoadCompleteRef = useRef(false);
 
   const setIsOnline = async (online: boolean) => {
@@ -43,6 +88,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await apiRequest('POST', '/api/mobile/status', { online }, token);
         setIsOnlineState(online);
         await AsyncStorage.setItem(ONLINE_STATUS_KEY, JSON.stringify(online));
+
+        if (online) {
+          const today = getTodayDateString();
+          const needsCapture = !startPosition || startPosition.date !== today;
+          if (needsCapture) {
+            const pos = await captureCurrentPosition();
+            if (pos) {
+              const sp: StartPosition = { latitude: pos.latitude, longitude: pos.longitude, date: today };
+              setStartPosition(sp);
+              await AsyncStorage.setItem(START_POSITION_KEY, JSON.stringify(sp));
+            }
+          }
+        }
       } catch (err) {
         console.error('Failed to update online status on server:', err);
         setIsOnlineState(previousOnline);
@@ -63,6 +121,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (onlineStored !== null) {
         setIsOnlineState(JSON.parse(onlineStored));
       }
+
+      const spStored = await AsyncStorage.getItem(START_POSITION_KEY);
+      if (spStored) {
+        const parsed: StartPosition = JSON.parse(spStored);
+        if (parsed.date === getTodayDateString()) {
+          setStartPosition(parsed);
+        } else {
+          await AsyncStorage.removeItem(START_POSITION_KEY);
+        }
+      }
+
       const stored = await AsyncStorage.getItem('auth');
       if (stored) {
         const parsed = JSON.parse(stored);
@@ -118,11 +187,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     setUser(null);
     setToken(null);
+    setStartPosition(null);
     await AsyncStorage.removeItem('auth');
+    await AsyncStorage.removeItem(START_POSITION_KEY);
   }
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, isOnline, setIsOnline, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, isOnline, startPosition, setIsOnline, login, logout }}>
       {children}
     </AuthContext.Provider>
   );
