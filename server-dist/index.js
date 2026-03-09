@@ -1268,6 +1268,7 @@ function buildFallbackResponse(parsed) {
 }
 router.get("/route", async (req, res) => {
   const coords = req.query.coords;
+  console.log("[route] Request received, points:", coords?.split(";").length || 0, "hasApiKey:", !!process.env.GEOAPIFY_API_KEY);
   if (!coords) {
     return res.status(400).json({ error: "coords parameter required (lon1,lat1;lon2,lat2;...)" });
   }
@@ -1277,7 +1278,7 @@ router.get("/route", async (req, res) => {
   }
   const apiKey = process.env.GEOAPIFY_API_KEY;
   if (!apiKey) {
-    console.warn("GEOAPIFY_API_KEY not set, returning fallback route");
+    console.warn("[route] GEOAPIFY_API_KEY not set, returning fallback");
     return res.json(buildFallbackResponse(parsed));
   }
   const waypoints = parsed.map((p) => `${p.lat},${p.lon}`).join("|");
@@ -1287,15 +1288,16 @@ router.get("/route", async (req, res) => {
   try {
     const response = await fetch(url, { signal: ctrl.signal });
     clearTimeout(timeout);
+    console.log("[route] Geoapify response status:", response.status);
     if (!response.ok) {
       const text = await response.text();
-      console.error("Geoapify routing error:", response.status, text.substring(0, 300));
+      console.error("[route] Geoapify error:", response.status, text.substring(0, 300));
       return res.json(buildFallbackResponse(parsed));
     }
     const data = await response.json();
     const features = data?.features;
     if (!features || features.length === 0) {
-      console.error("Geoapify: no features in response");
+      console.error("[route] Geoapify: no features in response");
       return res.json(buildFallbackResponse(parsed));
     }
     const feature = features[0];
@@ -1318,6 +1320,7 @@ router.get("/route", async (req, res) => {
         duration: step.time || 0
       }))
     }));
+    console.log("[route] Success: coords=", allCoordinates.length, "dist=", props.distance, "dur=", props.time);
     res.json({
       waypoints: parsed.map((p, i) => ({
         location: [p.lon, p.lat],
@@ -1333,7 +1336,7 @@ router.get("/route", async (req, res) => {
     });
   } catch (error) {
     clearTimeout(timeout);
-    console.error("Geoapify routing fetch error:", error.message);
+    console.error("[route] Geoapify fetch error:", error.message);
     res.json(buildFallbackResponse(parsed));
   }
 });
