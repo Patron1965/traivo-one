@@ -393,11 +393,12 @@ export default function OrderConceptWizardPage() {
             </h1>
           </div>
           <div className="flex items-center gap-2">
+            <Label className="text-sm text-muted-foreground whitespace-nowrap">Namn:</Label>
             <Input
               placeholder="Namnge orderkonceptet..."
               value={conceptName}
               onChange={(e) => setConceptName(e.target.value)}
-              className="w-64"
+              className={cn("w-64", !conceptName && currentStep === 1 && "border-orange-400 ring-1 ring-orange-400")}
               data-testid="input-concept-name"
             />
           </div>
