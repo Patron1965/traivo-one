@@ -149,11 +149,17 @@ export function MapScreen({ navigation }: any) {
   const coordsParam = useMemo(() => {
     if (activeOrders.length === 0) return null;
     const parts: string[] = [];
-    if (routeOrigin) {
+    if (routeOrigin && routeOrigin.latitude && routeOrigin.longitude) {
       parts.push(`${routeOrigin.longitude},${routeOrigin.latitude}`);
     }
-    activeOrders.forEach(o => parts.push(`${o.longitude},${o.latitude}`));
-    return parts.length >= 2 ? parts.join(';') : null;
+    activeOrders.forEach(o => {
+      if (o.latitude && o.longitude && o.latitude !== 0 && o.longitude !== 0) {
+        parts.push(`${o.longitude},${o.latitude}`);
+      }
+    });
+    if (parts.length < 2) return null;
+    const result = parts.join(';');
+    return result.length > 0 ? result : null;
   }, [activeOrders, routeOrigin]);
 
   const hasDriverStart = !!routeOrigin;
@@ -162,7 +168,7 @@ export function MapScreen({ navigation }: any) {
     queryKey: ['/api/mobile/route', coordsParam],
     queryFn: async () => {
       if (!coordsParam) throw new Error('No coords');
-      return apiRequest('GET', `/api/mobile/route?coords=${coordsParam}`);
+      return apiRequest('GET', `/api/mobile/route?coords=${encodeURIComponent(coordsParam)}`);
     },
     enabled: !!coordsParam,
     staleTime: 300000,

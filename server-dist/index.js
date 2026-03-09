@@ -1267,8 +1267,9 @@ function buildFallbackResponse(parsed) {
   };
 }
 router.get("/route", async (req, res) => {
-  const coords = req.query.coords;
-  console.log("[route] Request received, points:", coords?.split(";").length || 0, "hasApiKey:", !!process.env.GEOAPIFY_API_KEY);
+  const rawCoords = req.query.coords;
+  const coords = typeof rawCoords === "string" ? decodeURIComponent(rawCoords).trim() : "";
+  console.log("[route] raw coords type:", typeof rawCoords, "value:", JSON.stringify(rawCoords), "decoded length:", coords.length, "hasApiKey:", !!process.env.GEOAPIFY_API_KEY);
   if (!coords) {
     return res.status(400).json({ error: "coords parameter required (lon1,lat1;lon2,lat2;...)" });
   }
