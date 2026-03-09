@@ -361,11 +361,11 @@ export function MapScreen({ navigation }: any) {
               Beräknar rutt...
             </ThemedText>
           </View>
-        ) : routeError ? (
+        ) : routeError && coordsParam ? (
           <View style={styles.legendRow}>
-            <Feather name="alert-circle" size={16} color={Colors.danger} />
-            <ThemedText variant="caption" color={Colors.danger}>
-              Kunde inte beräkna rutt
+            <Feather name="alert-circle" size={16} color={Colors.warning} />
+            <ThemedText variant="caption" color={Colors.textSecondary}>
+              Rutten kunde inte beräknas just nu
             </ThemedText>
           </View>
         ) : totalDistance != null && totalDuration != null ? (

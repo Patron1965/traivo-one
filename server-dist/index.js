@@ -1261,13 +1261,28 @@ router.get("/route", async (req, res) => {
       return res.status(400).json({ error: `Invalid coordinate values: ${point}` });
     }
   }
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15e3);
+  async function fetchOsrm(withSteps) {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 15e3);
+    const stepsParam = withSteps ? "&steps=true" : "";
+    const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?overview=full&geometries=geojson${stepsParam}&roundtrip=false&source=first`;
+    try {
+      const response = await fetch(url, { signal: ctrl.signal });
+      clearTimeout(t);
+      return await response.json();
+    } catch (err) {
+      clearTimeout(t);
+      throw err;
+    }
+  }
   try {
-    const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?overview=full&geometries=geojson&steps=true&roundtrip=false&source=first`;
-    const response = await fetch(url, { signal: controller.signal });
-    clearTimeout(timeout);
-    const data = await response.json();
+    let data;
+    try {
+      data = await fetchOsrm(true);
+    } catch (err) {
+      console.warn("OSRM steps request failed, retrying without steps:", err.message);
+      data = await fetchOsrm(false);
+    }
     if (data.code !== "Ok") {
       console.error("OSRM error:", data.code, data.message);
       return res.status(502).json({ error: "Route calculation failed", code: data.code });
@@ -1294,7 +1309,6 @@ router.get("/route", async (req, res) => {
       }))
     });
   } catch (error) {
-    clearTimeout(timeout);
     console.error("OSRM fetch error:", error.message);
     res.status(502).json({ error: "Could not reach routing service" });
   }
