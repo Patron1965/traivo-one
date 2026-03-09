@@ -25,9 +25,21 @@ try {
   Callout = maps.Callout;
 } catch (e) {}
 
+interface RouteStep {
+  geometry: { type: string; coordinates: number[][] };
+  distance: number;
+  duration: number;
+}
+
+interface RouteLeg {
+  distance: number;
+  duration: number;
+  steps?: RouteStep[];
+}
+
 interface RouteData {
   waypoints: { location: [number, number]; waypointIndex: number }[];
-  trips: { geometry: { type: string; coordinates: number[][] }; distance: number; duration: number; legs?: { distance: number; duration: number }[] }[];
+  trips: { geometry: { type: string; coordinates: number[][] }; distance: number; duration: number; legs?: RouteLeg[] }[];
 }
 
 function formatRouteDistance(meters: number): string {
@@ -144,7 +156,7 @@ export function MapScreen({ navigation }: any) {
 
   const hasDriverStart = !!routeOrigin;
 
-  const { data: routeData, isLoading: routeLoading } = useQuery<RouteData>({
+  const { data: routeData, isLoading: routeLoading, isError: routeError } = useQuery<RouteData>({
     queryKey: ['/api/mobile/route', coordsParam],
     queryFn: async () => {
       if (!coordsParam) throw new Error('No coords');
@@ -156,11 +168,29 @@ export function MapScreen({ navigation }: any) {
   });
 
   const roadPolyline = useMemo(() => {
-    if (!routeData?.trips?.[0]?.geometry?.coordinates) return null;
-    return routeData.trips[0].geometry.coordinates.map((c: number[]) => ({
-      latitude: c[1],
-      longitude: c[0],
-    }));
+    if (!routeData?.trips?.[0]) return null;
+    const trip = routeData.trips[0];
+    const hasSteps = trip.legs?.some(leg => leg.steps && leg.steps.length > 0);
+    if (hasSteps) {
+      const coords: { latitude: number; longitude: number }[] = [];
+      for (const leg of trip.legs || []) {
+        for (const step of leg.steps || []) {
+          if (step.geometry?.coordinates) {
+            for (const c of step.geometry.coordinates) {
+              coords.push({ latitude: c[1], longitude: c[0] });
+            }
+          }
+        }
+      }
+      if (coords.length > 0) return coords;
+    }
+    if (trip.geometry?.coordinates) {
+      return trip.geometry.coordinates.map((c: number[]) => ({
+        latitude: c[1],
+        longitude: c[0],
+      }));
+    }
+    return null;
   }, [routeData]);
 
   const optimizedOrders = useMemo(() => {
@@ -277,13 +307,15 @@ export function MapScreen({ navigation }: any) {
           <>
             <Polyline
               coordinates={roadPolyline}
-              strokeColor="rgba(27, 79, 114, 0.25)"
-              strokeWidth={8}
+              strokeColor="rgba(234, 88, 12, 0.2)"
+              strokeWidth={10}
+              geodesic
             />
             <Polyline
               coordinates={roadPolyline}
               strokeColor={Colors.primary}
               strokeWidth={4}
+              geodesic
             />
           </>
         ) : fallbackCoordinates.length > 1 ? (
@@ -292,6 +324,7 @@ export function MapScreen({ navigation }: any) {
             strokeColor={Colors.primaryLight}
             strokeWidth={3}
             lineDashPattern={[10, 5]}
+            geodesic
           />
         ) : null}
 
@@ -325,6 +358,13 @@ export function MapScreen({ navigation }: any) {
             <ActivityIndicator size="small" color={Colors.primary} />
             <ThemedText variant="caption" color={Colors.textSecondary}>
               Beräknar rutt...
+            </ThemedText>
+          </View>
+        ) : routeError ? (
+          <View style={styles.legendRow}>
+            <Feather name="alert-circle" size={16} color={Colors.danger} />
+            <ThemedText variant="caption" color={Colors.danger}>
+              Kunde inte beräkna rutt
             </ThemedText>
           </View>
         ) : totalDistance != null && totalDuration != null ? (

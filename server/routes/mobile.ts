@@ -1173,7 +1173,7 @@ router.get('/route', async (req, res) => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
   try {
-    const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?overview=full&geometries=geojson&roundtrip=false&source=first`;
+    const url = `https://router.project-osrm.org/trip/v1/driving/${coords}?overview=full&geometries=geojson&steps=true&roundtrip=false&source=first`;
     const response = await fetch(url, { signal: controller.signal });
     clearTimeout(timeout);
     const data = await response.json();
@@ -1191,6 +1191,15 @@ router.get('/route', async (req, res) => {
         geometry: trip.geometry,
         distance: trip.distance,
         duration: trip.duration,
+        legs: (trip.legs || []).map((leg: any) => ({
+          distance: leg.distance,
+          duration: leg.duration,
+          steps: (leg.steps || []).map((step: any) => ({
+            geometry: step.geometry,
+            distance: step.distance,
+            duration: step.duration,
+          })),
+        })),
       })),
     });
   } catch (error: any) {
