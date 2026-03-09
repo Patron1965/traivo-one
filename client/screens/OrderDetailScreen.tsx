@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View, ScrollView, Pressable, StyleSheet, Linking, Platform,
   TextInput, ActivityIndicator, Modal
@@ -31,6 +31,181 @@ const DRIVER_STATUS_SEQUENCE: OrderStatus[] = [
 function isDriverFlow(status: OrderStatus): boolean {
   return DRIVER_STATUS_SEQUENCE.includes(status);
 }
+
+const SubStepsList = React.memo(function SubStepsList({
+  subSteps,
+  completedSteps,
+  onToggle,
+}: {
+  subSteps: SubStep[];
+  completedSteps: number;
+  onToggle: (stepId: number, completed: boolean) => void;
+}) {
+  if (subSteps.length === 0) return null;
+  return (
+    <Card>
+      <View style={styles.subStepHeader}>
+        <ThemedText variant="label">Delsteg</ThemedText>
+        <View style={styles.subStepProgress}>
+          <ThemedText variant="caption" color={Colors.secondary}>
+            {completedSteps}/{subSteps.length}
+          </ThemedText>
+          <View style={styles.subStepProgressBarBg}>
+            <View
+              style={[
+                styles.subStepProgressBarFill,
+                { width: `${subSteps.length > 0 ? (completedSteps / subSteps.length) * 100 : 0}%` },
+              ]}
+            />
+          </View>
+        </View>
+      </View>
+      {subSteps.sort((a, b) => a.sortOrder - b.sortOrder).map(step => (
+        <Pressable
+          key={step.id}
+          style={styles.subStepRow}
+          onPress={() => onToggle(Number(step.id), !step.completed)}
+          testID={`button-substep-${step.id}`}
+        >
+          <View style={[styles.checkBox, step.completed ? styles.checkBoxChecked : null]}>
+            {step.completed ? (
+              <Feather name="check" size={14} color={Colors.textInverse} />
+            ) : null}
+          </View>
+          <View style={styles.subStepInfo}>
+            <ThemedText
+              variant="body"
+              style={step.completed ? styles.completedText : undefined}
+            >
+              {step.name}
+            </ThemedText>
+            <ThemedText variant="caption" color={Colors.textMuted}>
+              {step.articleName}
+            </ThemedText>
+          </View>
+        </Pressable>
+      ))}
+    </Card>
+  );
+});
+
+const ContactInfo = React.memo(function ContactInfo({
+  contacts,
+  onCall,
+}: {
+  contacts: Order['contacts'];
+  onCall: (phone: string) => void;
+}) {
+  if (contacts.length === 0) return null;
+  return (
+    <Card>
+      <ThemedText variant="label" style={styles.sectionLabel}>Kontakter</ThemedText>
+      {contacts.map(contact => (
+        <View key={contact.id} style={styles.contactRow}>
+          <View style={styles.contactInfo}>
+            <ThemedText variant="body">{contact.name}</ThemedText>
+            <ThemedText variant="caption">{contact.role}</ThemedText>
+          </View>
+          <Pressable
+            style={styles.callButton}
+            onPress={() => onCall(contact.phone)}
+            testID={`button-call-${contact.id}`}
+          >
+            <Feather name="phone" size={16} color={Colors.secondary} />
+          </Pressable>
+        </View>
+      ))}
+    </Card>
+  );
+});
+
+const ActionButtons = React.memo(function ActionButtons({
+  orderId,
+  articles,
+  onDeviation,
+  onMaterial,
+  onInspection,
+  onCamera,
+  onSignature,
+  onAiTip,
+}: {
+  orderId: number | string;
+  articles: Order['articles'];
+  onDeviation: () => void;
+  onMaterial: () => void;
+  onInspection: () => void;
+  onCamera: () => void;
+  onSignature: () => void;
+  onAiTip: () => void;
+}) {
+  return (
+    <Card>
+      <ThemedText variant="label" style={styles.sectionLabel}>Åtgärder</ThemedText>
+      <View style={styles.actionGrid}>
+        <Pressable
+          style={styles.actionGridItem}
+          onPress={onDeviation}
+          testID="button-report-deviation"
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: Colors.warningLight }]}>
+            <Feather name="alert-triangle" size={24} color={Colors.warning} />
+          </View>
+          <ThemedText variant="caption" style={styles.actionLabel}>Avvikelse</ThemedText>
+        </Pressable>
+        <Pressable
+          style={styles.actionGridItem}
+          onPress={onMaterial}
+          testID="button-material-log"
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
+            <Feather name="package" size={24} color={Colors.primary} />
+          </View>
+          <ThemedText variant="caption" style={styles.actionLabel}>Material</ThemedText>
+        </Pressable>
+        <Pressable
+          style={styles.actionGridItem}
+          onPress={onInspection}
+          testID="button-inspection"
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
+            <Feather name="clipboard" size={24} color={Colors.secondary} />
+          </View>
+          <ThemedText variant="caption" style={styles.actionLabel}>Inspektion</ThemedText>
+        </Pressable>
+        <Pressable
+          style={styles.actionGridItem}
+          onPress={onCamera}
+          testID="button-camera"
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
+            <Feather name="camera" size={24} color={Colors.primaryLight} />
+          </View>
+          <ThemedText variant="caption" style={styles.actionLabel}>Foto</ThemedText>
+        </Pressable>
+        <Pressable
+          style={styles.actionGridItem}
+          onPress={onSignature}
+          testID="button-signature"
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
+            <Feather name="edit-3" size={24} color={Colors.primary} />
+          </View>
+          <ThemedText variant="caption" style={styles.actionLabel}>Signatur</ThemedText>
+        </Pressable>
+        <Pressable
+          style={styles.actionGridItem}
+          onPress={onAiTip}
+          testID="button-ai-tip"
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
+            <Feather name="cpu" size={24} color={Colors.secondary} />
+          </View>
+          <ThemedText variant="caption" style={styles.actionLabel}>AI Tips</ThemedText>
+        </Pressable>
+      </View>
+    </Card>
+  );
+});
 
 export function OrderDetailScreen({ route, navigation }: any) {
   const { orderId } = route.params;
@@ -210,6 +385,31 @@ export function OrderDetailScreen({ route, navigation }: any) {
       noteMutation.mutate(trimmed);
     }
   }
+
+  const handleToggleSubStep = useCallback((stepId: number, completed: boolean) => {
+    subStepMutation.mutate({ stepId, completed });
+  }, [subStepMutation]);
+
+  const handleNavigateDeviation = useCallback(() => {
+    navigation.navigate('ReportDeviation', { orderId });
+  }, [navigation, orderId]);
+
+  const handleNavigateMaterial = useCallback(() => {
+    if (!order) return;
+    navigation.navigate('MaterialLog', { orderId: order.id, articles: order.articles });
+  }, [navigation, order]);
+
+  const handleNavigateInspection = useCallback(() => {
+    navigation.navigate('Inspection', { orderId });
+  }, [navigation, orderId]);
+
+  const handleNavigateCamera = useCallback(() => {
+    navigation.navigate('CameraCapture', { orderId });
+  }, [navigation, orderId]);
+
+  const handleNavigateSignature = useCallback(() => {
+    navigation.navigate('Signature', { orderId });
+  }, [navigation, orderId]);
 
   function formatNoteDate(dateStr: string): string {
     const d = new Date(dateStr);
@@ -398,51 +598,11 @@ export function OrderDetailScreen({ route, navigation }: any) {
           ) : null}
         </Card>
 
-        {subSteps.length > 0 ? (
-          <Card>
-            <View style={styles.subStepHeader}>
-              <ThemedText variant="label">Delsteg</ThemedText>
-              <View style={styles.subStepProgress}>
-                <ThemedText variant="caption" color={Colors.secondary}>
-                  {completedSteps}/{subSteps.length}
-                </ThemedText>
-                <View style={styles.subStepProgressBarBg}>
-                  <View
-                    style={[
-                      styles.subStepProgressBarFill,
-                      { width: `${subSteps.length > 0 ? (completedSteps / subSteps.length) * 100 : 0}%` },
-                    ]}
-                  />
-                </View>
-              </View>
-            </View>
-            {subSteps.sort((a, b) => a.sortOrder - b.sortOrder).map(step => (
-              <Pressable
-                key={step.id}
-                style={styles.subStepRow}
-                onPress={() => subStepMutation.mutate({ stepId: Number(step.id), completed: !step.completed })}
-                testID={`button-substep-${step.id}`}
-              >
-                <View style={[styles.checkBox, step.completed ? styles.checkBoxChecked : null]}>
-                  {step.completed ? (
-                    <Feather name="check" size={14} color={Colors.textInverse} />
-                  ) : null}
-                </View>
-                <View style={styles.subStepInfo}>
-                  <ThemedText
-                    variant="body"
-                    style={step.completed ? styles.completedText : undefined}
-                  >
-                    {step.name}
-                  </ThemedText>
-                  <ThemedText variant="caption" color={Colors.textMuted}>
-                    {step.articleName}
-                  </ThemedText>
-                </View>
-              </Pressable>
-            ))}
-          </Card>
-        ) : null}
+        <SubStepsList
+          subSteps={subSteps}
+          completedSteps={completedSteps}
+          onToggle={handleToggleSubStep}
+        />
 
         {order.articles.length > 0 ? (
           <Card>
@@ -461,26 +621,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
           </Card>
         ) : null}
 
-        {order.contacts.length > 0 ? (
-          <Card>
-            <ThemedText variant="label" style={styles.sectionLabel}>Kontakter</ThemedText>
-            {order.contacts.map(contact => (
-              <View key={contact.id} style={styles.contactRow}>
-                <View style={styles.contactInfo}>
-                  <ThemedText variant="body">{contact.name}</ThemedText>
-                  <ThemedText variant="caption">{contact.role}</ThemedText>
-                </View>
-                <Pressable
-                  style={styles.callButton}
-                  onPress={() => callContact(contact.phone)}
-                  testID={`button-call-${contact.id}`}
-                >
-                  <Feather name="phone" size={16} color={Colors.secondary} />
-                </Pressable>
-              </View>
-            ))}
-          </Card>
-        ) : null}
+        <ContactInfo contacts={order.contacts} onCall={callContact} />
 
         <Card>
           <ThemedText variant="label" style={styles.sectionLabel}>Anteckningar</ThemedText>
@@ -528,71 +669,16 @@ export function OrderDetailScreen({ route, navigation }: any) {
           </View>
         </Card>
 
-        <Card>
-          <ThemedText variant="label" style={styles.sectionLabel}>Åtgärder</ThemedText>
-          <View style={styles.actionGrid}>
-            <Pressable
-              style={styles.actionGridItem}
-              onPress={() => navigation.navigate('ReportDeviation', { orderId: order.id })}
-              testID="button-report-deviation"
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: Colors.warningLight }]}>
-                <Feather name="alert-triangle" size={24} color={Colors.warning} />
-              </View>
-              <ThemedText variant="caption" style={styles.actionLabel}>Avvikelse</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.actionGridItem}
-              onPress={() => navigation.navigate('MaterialLog', { orderId: order.id, articles: order.articles })}
-              testID="button-material-log"
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
-                <Feather name="package" size={24} color={Colors.primary} />
-              </View>
-              <ThemedText variant="caption" style={styles.actionLabel}>Material</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.actionGridItem}
-              onPress={() => navigation.navigate('Inspection', { orderId: order.id })}
-              testID="button-inspection"
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
-                <Feather name="clipboard" size={24} color={Colors.secondary} />
-              </View>
-              <ThemedText variant="caption" style={styles.actionLabel}>Inspektion</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.actionGridItem}
-              onPress={() => navigation.navigate('CameraCapture', { orderId: order.id })}
-              testID="button-camera"
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
-                <Feather name="camera" size={24} color={Colors.primaryLight} />
-              </View>
-              <ThemedText variant="caption" style={styles.actionLabel}>Foto</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.actionGridItem}
-              onPress={() => navigation.navigate('Signature', { orderId: order.id })}
-              testID="button-signature"
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: Colors.infoLight }]}>
-                <Feather name="edit-3" size={24} color={Colors.primary} />
-              </View>
-              <ThemedText variant="caption" style={styles.actionLabel}>Signatur</ThemedText>
-            </Pressable>
-            <Pressable
-              style={styles.actionGridItem}
-              onPress={handleAiTip}
-              testID="button-ai-tip"
-            >
-              <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
-                <Feather name="cpu" size={24} color={Colors.secondary} />
-              </View>
-              <ThemedText variant="caption" style={styles.actionLabel}>AI Tips</ThemedText>
-            </Pressable>
-          </View>
-        </Card>
+        <ActionButtons
+          orderId={order.id}
+          articles={order.articles}
+          onDeviation={handleNavigateDeviation}
+          onMaterial={handleNavigateMaterial}
+          onInspection={handleNavigateInspection}
+          onCamera={handleNavigateCamera}
+          onSignature={handleNavigateSignature}
+          onAiTip={handleAiTip}
+        />
       </ScrollView>
 
       {!isFinished && !order.isLocked ? (

@@ -31,7 +31,9 @@ async function getStoredToken(): Promise<string | null> {
       const parsed = JSON.parse(stored);
       return parsed.token || null;
     }
-  } catch {}
+  } catch (e) {
+    console.warn('Failed to read stored auth token:', e);
+  }
   return null;
 }
 
@@ -71,7 +73,8 @@ async function defaultQueryFn({ queryKey }: { queryKey: readonly unknown[] }) {
   }
   const res = await fetch(url, { headers });
   if (!res.ok) {
-    throw new Error(`${res.status}`);
+    const errText = await res.text().catch(() => 'Unknown error');
+    throw new Error(`${res.status}: ${errText}`);
   }
   return res.json();
 }

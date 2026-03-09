@@ -56,11 +56,16 @@ ${contextInfo ? `Aktuell kontext:\n${contextInfo}` : ''}`;
   }
 });
 
+const MAX_BASE64_SIZE = 10 * 1024 * 1024;
+
 router.post('/transcribe', async (req, res) => {
   try {
     const { audio } = req.body;
     if (!audio) {
       return res.status(400).json({ error: 'Ljuddata krävs' });
+    }
+    if (typeof audio !== 'string' || audio.length > MAX_BASE64_SIZE) {
+      return res.status(400).json({ error: 'Ljudfilen är för stor (max 10MB)' });
     }
 
     const audioBuffer = Buffer.from(audio, 'base64');
@@ -83,6 +88,9 @@ router.post('/voice-command', async (req, res) => {
     const { audio } = req.body;
     if (!audio) {
       return res.status(400).json({ error: 'Ljuddata krävs' });
+    }
+    if (typeof audio !== 'string' || audio.length > MAX_BASE64_SIZE) {
+      return res.status(400).json({ error: 'Ljudfilen är för stor (max 10MB)' });
     }
 
     const audioBuffer = Buffer.from(audio, 'base64');
@@ -159,6 +167,9 @@ router.post('/analyze-image', async (req, res) => {
     const { image, context } = req.body;
     if (!image) {
       return res.status(400).json({ error: 'Bilddata krävs' });
+    }
+    if (typeof image !== 'string' || image.length > MAX_BASE64_SIZE) {
+      return res.status(400).json({ error: 'Bilden är för stor (max 10MB)' });
     }
 
     const systemPrompt = `Du är en AI som analyserar foton från fältservicearbete. Beskriv vad du ser, identifiera problem eller avvikelser, och föreslå en kategori, allvarlighetsgrad och beskrivning för avvikelserapporteringen.

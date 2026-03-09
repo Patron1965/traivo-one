@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import type { Resource } from '../types';
@@ -34,14 +34,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isOnline, setIsOnlineState] = useState(false);
+  const initialLoadCompleteRef = useRef(false);
 
   const setIsOnline = async (online: boolean) => {
-    setIsOnlineState(online);
-    await AsyncStorage.setItem(ONLINE_STATUS_KEY, JSON.stringify(online));
+    const previousOnline = isOnline;
     if (token) {
       try {
         await apiRequest('POST', '/api/mobile/status', { online }, token);
-      } catch {}
+        setIsOnlineState(online);
+        await AsyncStorage.setItem(ONLINE_STATUS_KEY, JSON.stringify(online));
+      } catch (err) {
+        console.error('Failed to update online status on server:', err);
+        setIsOnlineState(previousOnline);
+      }
+    } else {
+      setIsOnlineState(online);
+      await AsyncStorage.setItem(ONLINE_STATUS_KEY, JSON.stringify(online));
     }
   };
 
@@ -77,11 +85,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     } catch (e) {
       console.error('Failed to load auth:', e);
     } finally {
+      initialLoadCompleteRef.current = true;
       setIsLoading(false);
     }
   }
 
   async function login(username: string, password: string, pin?: string) {
+    if (!initialLoadCompleteRef.current) {
+      console.warn('Login called before initial auth load completed, waiting...');
+      await new Promise<void>((resolve) => {
+        const check = setInterval(() => {
+          if (initialLoadCompleteRef.current) {
+            clearInterval(check);
+            resolve();
+          }
+        }, 50);
+      });
+    }
     const body: any = pin ? { pin } : { username, password };
     const data = await apiRequest('POST', '/api/mobile/login', body);
     const resource = data.resource || data.user;
@@ -93,7 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   async function logout() {
     try {
       await apiRequest('POST', '/api/mobile/logout', {}, token);
-    } catch {}
+    } catch (err) {
+      console.error('Logout API call failed:', err);
+    }
     setUser(null);
     setToken(null);
     await AsyncStorage.removeItem('auth');

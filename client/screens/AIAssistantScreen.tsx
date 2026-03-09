@@ -1,6 +1,6 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  View, ScrollView, Pressable, StyleSheet, TextInput,
+  View, FlatList, Pressable, StyleSheet, TextInput,
   ActivityIndicator, Platform, Animated,
 } from 'react-native';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -92,9 +92,48 @@ function SuggestionCards({ onSend }: { onSend: (text: string) => void }) {
   );
 }
 
+const MessageBubble = React.memo(function MessageBubble({ msg, index, formatTime }: { msg: Message; index: number; formatTime: (date: Date) => string }) {
+  return (
+    <View
+      style={[
+        styles.messageBubbleRow,
+        msg.role === 'user' ? styles.userRow : styles.assistantRow,
+      ]}
+    >
+      {msg.role === 'assistant' ? (
+        <View style={styles.avatarContainer}>
+          <Feather name="zap" size={14} color="#fff" />
+        </View>
+      ) : null}
+      <View
+        style={[
+          styles.messageBubble,
+          msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
+        ]}
+      >
+        <ThemedText
+          variant="body"
+          color={msg.role === 'user' ? Colors.textInverse : Colors.text}
+          testID={`text-ai-message-${index}`}
+          style={styles.messageText}
+        >
+          {msg.content}
+        </ThemedText>
+        <ThemedText
+          variant="caption"
+          color={msg.role === 'user' ? 'rgba(255,255,255,0.7)' : Colors.textMuted}
+          style={styles.timestamp}
+        >
+          {formatTime(msg.timestamp)}
+        </ThemedText>
+      </View>
+    </View>
+  );
+});
+
 export function AIAssistantScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const scrollRef = useRef<ScrollView>(null);
+  const flatListRef = useRef<FlatList>(null);
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -106,13 +145,11 @@ export function AIAssistantScreen() {
     queryKey: ['/api/mobile/my-orders'],
   });
 
-  useEffect(() => {
-    setTimeout(() => {
-      scrollRef.current?.scrollToEnd({ animated: true });
-    }, 100);
-  }, [messages]);
-
   const isOnlyWelcome = messages.length === 1 && messages[0].id === 'welcome';
+
+  const formatTime = useCallback((date: Date): string => {
+    return date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+  }, []);
 
   async function sendMessage(text: string) {
     const trimmed = text.trim();
@@ -303,87 +340,64 @@ export function AIAssistantScreen() {
     }
   }
 
-  function formatTime(date: Date): string {
-    return date.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
-  }
-
   const hasText = inputText.trim().length > 0;
+
+  const reversedMessages = messages.slice().reverse();
+
+  const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
+    const originalIndex = messages.length - 1 - index;
+    return <MessageBubble msg={item} index={originalIndex} formatTime={formatTime} />;
+  }, [messages.length, formatTime]);
+
+  const keyExtractor = useCallback((item: Message) => item.id, []);
+
+  const ListHeaderComponent = useCallback(() => {
+    if (!isLoading) return null;
+    return (
+      <View style={[styles.messageBubbleRow, styles.assistantRow]}>
+        <View style={styles.avatarContainer}>
+          <Feather name="zap" size={14} color="#fff" />
+        </View>
+        <View style={[styles.messageBubble, styles.assistantBubble]}>
+          <TypingIndicator />
+        </View>
+      </View>
+    );
+  }, [isLoading]);
+
+  const EmptyState = useCallback(() => {
+    return isOnlyWelcome ? (
+      <SuggestionCards onSend={sendMessage} />
+    ) : null;
+  }, [isOnlyWelcome]);
 
   return (
     <View style={styles.container}>
-      <ScrollView
-        ref={scrollRef}
-        style={styles.messagesContainer}
+      <FlatList
+        ref={flatListRef}
+        inverted={messages.length > 0}
+        data={reversedMessages}
+        renderItem={renderMessage}
+        keyExtractor={keyExtractor}
         contentContainerStyle={[
           styles.messagesContent,
-          { paddingTop: Spacing.lg, paddingBottom: Spacing.md },
+          { paddingTop: Spacing.md, paddingBottom: Spacing.lg },
         ]}
         keyboardShouldPersistTaps="handled"
-      >
-        {messages.map((msg, index) => (
-          <View
-            key={msg.id}
-            style={[
-              styles.messageBubbleRow,
-              msg.role === 'user' ? styles.userRow : styles.assistantRow,
-            ]}
-          >
-            {msg.role === 'assistant' ? (
-              <View style={styles.avatarContainer}>
-                <Feather name="zap" size={14} color="#fff" />
-              </View>
-            ) : null}
-            <View
-              style={[
-                styles.messageBubble,
-                msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
-              ]}
-            >
-              <ThemedText
-                variant="body"
-                color={msg.role === 'user' ? Colors.textInverse : Colors.text}
-                testID={`text-ai-message-${index}`}
-                style={styles.messageText}
-              >
-                {msg.content}
-              </ThemedText>
-              <ThemedText
-                variant="caption"
-                color={msg.role === 'user' ? 'rgba(255,255,255,0.7)' : Colors.textMuted}
-                style={styles.timestamp}
-              >
-                {formatTime(msg.timestamp)}
-              </ThemedText>
-            </View>
-          </View>
-        ))}
-
-        {isLoading ? (
-          <View style={[styles.messageBubbleRow, styles.assistantRow]}>
-            <View style={styles.avatarContainer}>
-              <Feather name="zap" size={14} color="#fff" />
-            </View>
-            <View style={[styles.messageBubble, styles.assistantBubble]}>
-              <TypingIndicator />
-            </View>
-          </View>
-        ) : null}
-
-        {isOnlyWelcome && !isLoading ? (
-          <SuggestionCards onSend={sendMessage} />
-        ) : null}
-      </ScrollView>
+        ListHeaderComponent={ListHeaderComponent}
+        ListEmptyComponent={EmptyState}
+      />
 
       <View style={[styles.bottomArea, { paddingBottom: tabBarHeight + Spacing.sm }]}>
-        <ScrollView
+        <FlatList
           horizontal
           showsHorizontalScrollIndicator={false}
           style={styles.quickActionsScroll}
           contentContainerStyle={styles.quickActions}
-        >
-          {QUICK_ACTIONS.map(action => (
+          data={QUICK_ACTIONS}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item: action }) => (
             <Pressable
-              key={action.id}
               style={styles.quickChip}
               onPress={() => sendMessage(action.message)}
               testID={`button-quick-${action.id}`}
@@ -393,8 +407,8 @@ export function AIAssistantScreen() {
                 {action.label}
               </ThemedText>
             </Pressable>
-          ))}
-        </ScrollView>
+          )}
+        />
 
         <View style={styles.inputRow}>
           <Pressable
@@ -439,9 +453,6 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.background,
   },
-  messagesContainer: {
-    flex: 1,
-  },
   messagesContent: {
     paddingHorizontal: Spacing.lg,
     gap: Spacing.md,
@@ -476,12 +487,12 @@ const styles = StyleSheet.create({
   userBubble: {
     backgroundColor: Colors.primary,
     borderRadius: BorderRadius.lg,
-    borderBottomRightRadius: BorderRadius.xs,
+    borderBottomRightRadius: 4,
   },
   assistantBubble: {
     backgroundColor: Colors.surface,
     borderRadius: BorderRadius.lg,
-    borderBottomLeftRadius: BorderRadius.xs,
+    borderBottomLeftRadius: 4,
     borderWidth: 1,
     borderColor: Colors.borderLight,
   },

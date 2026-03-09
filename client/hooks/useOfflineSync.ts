@@ -8,9 +8,13 @@ import type { SyncAction } from '../types';
 const OUTBOX_KEY = '@offline_outbox';
 const CACHE_PREFIX = '@offline_cache_';
 const SYNC_INTERVAL = 30000;
+const MAX_OUTBOX_ITEMS = 500;
+const MAX_OUTBOX_BYTES = 5 * 1024 * 1024;
 
 let globalPendingCount = 0;
 let globalListeners: Array<(count: number) => void> = [];
+
+let processingMutex: Promise<void> = Promise.resolve();
 
 function notifyListeners() {
   globalListeners.forEach(fn => fn(globalPendingCount));
@@ -20,7 +24,9 @@ export function useOfflinePendingCount(): number {
   const [count, setCount] = useState(globalPendingCount);
   useEffect(() => {
     const listener = (c: number) => setCount(c);
-    globalListeners.push(listener);
+    if (!globalListeners.includes(listener)) {
+      globalListeners.push(listener);
+    }
     return () => {
       globalListeners = globalListeners.filter(l => l !== listener);
     };
@@ -52,34 +58,63 @@ function isOnline(): boolean {
 
 export function useOfflineSync() {
   const queryClient = useQueryClient();
-  const syncInProgress = useRef(false);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
 
   const enqueueAction = useCallback(async (action: Omit<SyncAction, 'clientId' | 'timestamp'>) => {
-    const syncAction: SyncAction = {
-      clientId: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
-      timestamp: Date.now(),
-      ...action,
-    };
-    const outbox = await getOutbox();
-    outbox.push(syncAction);
-    await saveOutbox(outbox);
-    return syncAction.clientId;
+    let resolve!: () => void;
+    const gate = new Promise<void>(r => { resolve = r; });
+    const prev = processingMutex;
+    processingMutex = prev.then(() => gate);
+
+    try {
+      await prev;
+
+      const outbox = await getOutbox();
+
+      if (outbox.length >= MAX_OUTBOX_ITEMS) {
+        console.warn(`Offline outbox full (${MAX_OUTBOX_ITEMS} items). Dropping oldest entry.`);
+        outbox.shift();
+      }
+
+      const serialized = JSON.stringify(outbox);
+      if (serialized.length >= MAX_OUTBOX_BYTES) {
+        console.warn(`Offline outbox approaching size limit (${MAX_OUTBOX_BYTES} bytes). Dropping oldest entries.`);
+        while (outbox.length > 0 && JSON.stringify(outbox).length >= MAX_OUTBOX_BYTES) {
+          outbox.shift();
+        }
+      }
+
+      const syncAction: SyncAction = {
+        clientId: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+        timestamp: Date.now(),
+        ...action,
+      };
+      outbox.push(syncAction);
+      await saveOutbox(outbox);
+      return syncAction.clientId;
+    } finally {
+      resolve();
+    }
   }, []);
 
   const processOutbox = useCallback(async () => {
-    if (syncInProgress.current) return;
     if (!isOnline()) return;
 
-    const outbox = await getOutbox();
-    if (outbox.length === 0) return;
-
-    syncInProgress.current = true;
-    setIsSyncing(true);
+    let resolve!: () => void;
+    const gate = new Promise<void>(r => { resolve = r; });
+    const prev = processingMutex;
+    processingMutex = prev.then(() => gate);
 
     try {
+      await prev;
+
+      const outbox = await getOutbox();
+      if (outbox.length === 0) return;
+
+      setIsSyncing(true);
+
       const result = await apiRequest('POST', '/api/mobile/sync', { actions: outbox });
 
       if (result.success && result.results) {
@@ -89,7 +124,8 @@ export function useOfflineSync() {
             .map((r: any) => r.clientId)
         );
 
-        const remaining = outbox.filter(a => !successIds.has(a.clientId));
+        const freshOutbox = await getOutbox();
+        const remaining = freshOutbox.filter(a => !successIds.has(a.clientId));
         await saveOutbox(remaining);
 
         const now = new Date().toISOString();
@@ -100,10 +136,11 @@ export function useOfflineSync() {
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] });
       }
-    } catch {
+    } catch (err) {
+      console.warn('Offline sync failed:', err);
     } finally {
-      syncInProgress.current = false;
       setIsSyncing(false);
+      resolve();
     }
   }, [queryClient]);
 
@@ -139,7 +176,11 @@ export function useOfflineSync() {
       if (stored) setLastSyncTime(stored);
     })();
 
-    intervalRef.current = setInterval(processOutbox, SYNC_INTERVAL);
+    intervalRef.current = setInterval(async () => {
+      if (globalPendingCount > 0) {
+        processOutbox();
+      }
+    }, SYNC_INTERVAL);
 
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {

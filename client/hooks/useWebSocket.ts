@@ -11,12 +11,19 @@ type WSEvent =
 
 type EventHandler = (event: WSEvent) => void;
 
+const INITIAL_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 30000;
+const BACKOFF_MULTIPLIER = 2;
+
 export function useWebSocket(resourceId?: string | number, tenantId?: string) {
   const queryClient = useQueryClient();
   const socketRef = useRef<any>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [lastEvent, setLastEvent] = useState<WSEvent | null>(null);
   const handlersRef = useRef<EventHandler[]>([]);
+  const connectionIdRef = useRef(0);
+  const backoffRef = useRef(INITIAL_BACKOFF_MS);
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const addHandler = useCallback((handler: EventHandler) => {
     handlersRef.current.push(handler);
@@ -25,32 +32,78 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string) {
     };
   }, []);
 
-  const connect = useCallback(async () => {
-    if (socketRef.current?.connected) return;
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleReconnect = useCallback((connId: number) => {
+    clearReconnectTimer();
+    if (connectionIdRef.current !== connId) return;
+
+    const delay = backoffRef.current;
+    backoffRef.current = Math.min(backoffRef.current * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
+
+    console.log(`[WebSocket] Scheduling reconnect in ${delay}ms`);
+    reconnectTimerRef.current = setTimeout(() => {
+      if (connectionIdRef.current === connId && resourceId) {
+        connectInternal(connId);
+      }
+    }, delay);
+  }, [resourceId]);
+
+  const connectInternal = useCallback(async (connId: number) => {
+    if (connectionIdRef.current !== connId) return;
+
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+    }
 
     try {
       const { io } = await import('socket.io-client');
+
+      if (connectionIdRef.current !== connId) return;
+
       const apiUrl = getApiUrl();
       const socket = io(apiUrl, {
         path: '/ws',
         transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionDelay: 3000,
-        reconnectionAttempts: 10,
+        reconnection: false,
       });
 
       socket.on('connect', () => {
+        if (connectionIdRef.current !== connId) {
+          socket.disconnect();
+          return;
+        }
         setIsConnected(true);
+        backoffRef.current = INITIAL_BACKOFF_MS;
         if (resourceId) {
           socket.emit('join', { resourceId: String(resourceId), tenantId });
         }
       });
 
-      socket.on('disconnect', () => {
+      socket.on('disconnect', (reason: string) => {
+        if (connectionIdRef.current !== connId) return;
         setIsConnected(false);
+        console.log(`[WebSocket] Disconnected: ${reason}`);
+        if (reason !== 'io client disconnect') {
+          scheduleReconnect(connId);
+        }
+      });
+
+      socket.on('connect_error', (err: Error) => {
+        console.error('[WebSocket] Connection error:', err.message);
+        if (connectionIdRef.current !== connId) return;
+        setIsConnected(false);
+        scheduleReconnect(connId);
       });
 
       socket.on('order:updated', (data: any) => {
+        if (connectionIdRef.current !== connId) return;
         const event: WSEvent = { type: 'order:updated', data };
         setLastEvent(event);
         handlersRef.current.forEach(h => h(event));
@@ -61,6 +114,7 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string) {
       });
 
       socket.on('order:assigned', (data: any) => {
+        if (connectionIdRef.current !== connId) return;
         const event: WSEvent = { type: 'order:assigned', data };
         setLastEvent(event);
         handlersRef.current.forEach(h => h(event));
@@ -70,6 +124,7 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string) {
       });
 
       socket.on('notification', (data: any) => {
+        if (connectionIdRef.current !== connId) return;
         const event: WSEvent = { type: 'notification', data };
         setLastEvent(event);
         handlersRef.current.forEach(h => h(event));
@@ -77,19 +132,36 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string) {
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] });
       });
 
+      if (connectionIdRef.current !== connId) {
+        socket.disconnect();
+        return;
+      }
+
       socketRef.current = socket;
     } catch (err) {
-      console.error('WebSocket connection failed:', err);
+      console.error('[WebSocket] Connection setup failed:', err);
+      if (connectionIdRef.current === connId) {
+        scheduleReconnect(connId);
+      }
     }
-  }, [resourceId, tenantId, queryClient]);
+  }, [resourceId, tenantId, queryClient, scheduleReconnect]);
+
+  const connect = useCallback(() => {
+    const connId = ++connectionIdRef.current;
+    clearReconnectTimer();
+    backoffRef.current = INITIAL_BACKOFF_MS;
+    connectInternal(connId);
+  }, [connectInternal, clearReconnectTimer]);
 
   const disconnect = useCallback(() => {
+    connectionIdRef.current++;
+    clearReconnectTimer();
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
       setIsConnected(false);
     }
-  }, []);
+  }, [clearReconnectTimer]);
 
   useEffect(() => {
     if (resourceId) {

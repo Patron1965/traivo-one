@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, ScrollView, Pressable, TextInput, StyleSheet, FlatList } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,20 +17,36 @@ export function MaterialLogScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
 
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [quantity, setQuantity] = useState('1');
   const [note, setNote] = useState('');
   const [loggedItems, setLoggedItems] = useState<any[]>([]);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(search);
+    }, 300);
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, [search]);
 
   const { data: searchResults } = useQuery<any[]>({
-    queryKey: ['/api/mobile/articles', search],
+    queryKey: ['/api/mobile/articles', debouncedSearch],
     queryFn: async () => {
       const url = new URL('/api/mobile/articles', getApiUrl());
-      if (search) url.searchParams.set('search', search);
+      if (debouncedSearch) url.searchParams.set('search', debouncedSearch);
       const res = await fetch(url.toString());
       return res.json();
     },
-    enabled: search.length > 0,
+    enabled: debouncedSearch.length > 0,
   });
 
   const mutation = useMutation({
@@ -58,7 +74,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
   }
 
   const orderArticles = articles || [];
-  const showResults = search.length > 0 && searchResults && searchResults.length > 0;
+  const showResults = debouncedSearch.length > 0 && searchResults && searchResults.length > 0;
 
   return (
     <ScrollView

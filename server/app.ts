@@ -38,7 +38,7 @@ io.on('connection', (socket) => {
 (app as any).io = io;
 
 app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 app.use('/api/mobile', mobileRoutes);
 app.use('/api/mobile/ai', aiRoutes);
@@ -55,14 +55,35 @@ const metroDir = path.join(projectRoot, 'dist-metro');
 const templatesDir = path.join(projectRoot, 'server', 'templates');
 console.log(`[init] projectRoot=${projectRoot}, templatesDir=${templatesDir}, exists=${fs.existsSync(templatesDir)}`);
 
+let cachedAppJson: any = null;
+let cachedSdkVersion: string = '54.0.0';
+
+function loadAppJson() {
+  try {
+    cachedAppJson = JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf-8'));
+  } catch (e) {
+    console.error('Failed to load app.json:', e);
+    cachedAppJson = { expo: { name: 'Nordfield', slug: 'nordfield', splash: {} } };
+  }
+}
+
+function loadSdkVersion() {
+  try {
+    cachedSdkVersion = JSON.parse(fs.readFileSync(path.join(projectRoot, 'node_modules', 'expo', 'package.json'), 'utf-8')).version;
+  } catch {
+    cachedSdkVersion = '54.0.0';
+  }
+}
+
+loadAppJson();
+loadSdkVersion();
+
 function getAppJson() {
-  return JSON.parse(fs.readFileSync(path.join(projectRoot, 'app.json'), 'utf-8'));
+  return cachedAppJson;
 }
 
 function getExpoSdkVersion(): string {
-  try {
-    return JSON.parse(fs.readFileSync(path.join(projectRoot, 'node_modules', 'expo', 'package.json'), 'utf-8')).version;
-  } catch { return '54.0.0'; }
+  return cachedSdkVersion;
 }
 
 function getHostUrl(req: express.Request): string {
@@ -139,12 +160,19 @@ function buildManifest(platform: 'ios' | 'android', req: express.Request) {
 }
 
 function serveManifest(platform: 'ios' | 'android', req: express.Request, res: express.Response) {
-  const manifest = buildManifest(platform, req);
-  res.setHeader('Content-Type', 'text/plain');
-  res.setHeader('expo-protocol-version', '0');
-  res.setHeader('expo-sfv-version', '0');
-  res.setHeader('cache-control', 'private, max-age=0');
-  res.send(JSON.stringify(manifest));
+  try {
+    const manifest = buildManifest(platform, req);
+    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader('expo-protocol-version', '0');
+    res.setHeader('expo-sfv-version', '0');
+    res.setHeader('cache-control', 'private, max-age=0');
+    res.send(JSON.stringify(manifest));
+  } catch (e) {
+    console.error('Failed to serve manifest:', e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate manifest' });
+    }
+  }
 }
 
 app.get('/manifest/:platform', (req, res) => {
@@ -154,6 +182,9 @@ app.get('/manifest/:platform', (req, res) => {
   }
   serveManifest(platform, req, res);
 });
+
+const bundleCache: Record<string, { content: string; mtime: number }> = {};
+const DEV_DOMAIN = '143744bc-0950-40ae-a71f-7334bd02d088-00-2jqn3h1bml74q.kirk.replit.dev';
 
 app.get('/bundles/:platform/index.bundle', (req, res) => {
   const platform = req.params.platform;
@@ -165,14 +196,28 @@ app.get('/bundles/:platform/index.bundle', (req, res) => {
     return res.status(404).send('Bundle not found. Run: bash scripts/build.sh');
   }
   const host = (req.headers['x-forwarded-host'] || req.headers.host || '') as string;
-  let bundle = fs.readFileSync(bundlePath, 'utf-8');
-  const devDomain = '143744bc-0950-40ae-a71f-7334bd02d088-00-2jqn3h1bml74q.kirk.replit.dev';
-  if (host && host !== 'localhost:5000' && host !== 'localhost') {
-    bundle = bundle.replace(devDomain, host);
+  const cacheKey = `${platform}:${host}`;
+
+  try {
+    const stat = fs.statSync(bundlePath);
+    const mtime = stat.mtimeMs;
+    const cached = bundleCache[cacheKey];
+
+    if (!cached || cached.mtime !== mtime) {
+      let bundle = fs.readFileSync(bundlePath, 'utf-8');
+      if (host && host !== 'localhost:5000' && host !== 'localhost') {
+        bundle = bundle.replaceAll(DEV_DOMAIN, host);
+      }
+      bundleCache[cacheKey] = { content: bundle, mtime };
+    }
+
+    res.setHeader('Content-Type', 'application/javascript');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.send(bundleCache[cacheKey].content);
+  } catch (e) {
+    console.error('Bundle serve error:', e);
+    res.status(500).send('Failed to serve bundle');
   }
-  res.setHeader('Content-Type', 'application/javascript');
-  res.setHeader('Cache-Control', 'no-cache');
-  res.send(bundle);
 });
 
 app.use('/assets', express.static(path.join(projectRoot, 'assets'), {

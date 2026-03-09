@@ -496,7 +496,7 @@ export function OrdersScreen({ navigation }: any) {
 
   const firstSwipeableId = filteredOrders.find(o => canSwipe(o))?.id;
 
-  const renderOrder = ({ item: order }: { item: Order }) => {
+  const renderOrder = useCallback(({ item: order }: { item: Order }) => {
     const travelMin = estimateTravelMinutes(
       currentPosition?.latitude, currentPosition?.longitude,
       order.latitude, order.longitude
@@ -511,7 +511,7 @@ export function OrdersScreen({ navigation }: any) {
         isFirstSwipeable={order.id === firstSwipeableId}
       />
     );
-  };
+  }, [currentPosition, navigation, handleAdvance, handleDeviation, firstSwipeableId]);
 
   return (
     <View style={styles.container}>

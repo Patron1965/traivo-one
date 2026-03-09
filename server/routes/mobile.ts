@@ -664,6 +664,14 @@ router.get('/orders/:id/checklist', async (req, res) => {
 });
 
 router.patch('/orders/:id/status', async (req, res) => {
+  const { status: newStatus } = req.body;
+  const allowedStatuses = ['planned', 'dispatched', 'on_site', 'in_progress', 'completed', 'failed', 'cancelled', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'impossible'];
+  if (!newStatus || typeof newStatus !== 'string') {
+    return res.status(400).json({ error: 'Status krävs' });
+  }
+  if (!allowedStatuses.includes(newStatus)) {
+    return res.status(400).json({ error: `Ogiltig status: ${newStatus}` });
+  }
   const io = (req.app as any).io;
   if (IS_MOCK_MODE) {
     const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
@@ -672,22 +680,22 @@ router.patch('/orders/:id/status', async (req, res) => {
         res.status(403).json({ error: 'Uppdraget är låst - beroende uppdrag ej slutförda' });
         return;
       }
-      order.status = req.body.status;
-      if (req.body.status === 'on_site' || req.body.status === 'in_progress' || req.body.status === 'planerad_las') {
+      order.status = newStatus;
+      if (newStatus === 'on_site' || newStatus === 'in_progress' || newStatus === 'planerad_las') {
         order.actualStartTime = order.actualStartTime || new Date().toISOString();
       }
-      if (req.body.status === 'completed' || req.body.status === 'utford') {
+      if (newStatus === 'completed' || newStatus === 'utford') {
         order.completedAt = new Date().toISOString();
         order.actualEndTime = new Date().toISOString();
       }
-      if (req.body.status === 'failed' || req.body.status === 'impossible') {
+      if (newStatus === 'failed' || newStatus === 'impossible') {
         order.actualEndTime = new Date().toISOString();
         if (req.body.impossibleReason) {
           order.impossibleReason = req.body.impossibleReason;
           order.impossibleAt = new Date().toISOString();
         }
       }
-      if (req.body.status === 'fakturerad') {
+      if (newStatus === 'fakturerad') {
         order.completedAt = order.completedAt || new Date().toISOString();
       }
       if (io) {
@@ -726,7 +734,7 @@ router.post('/orders/:id/deviations', async (req, res) => {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
-  } catch { res.status(503).json({ error: 'Kunde inte rapportera avvikelse.' }); }
+  } catch (error: any) { console.error('Deviation proxy error:', error?.message); res.status(503).json({ error: 'Kunde inte rapportera avvikelse.' }); }
 });
 
 router.post('/orders/:id/materials', async (req, res) => {
@@ -739,7 +747,7 @@ router.post('/orders/:id/materials', async (req, res) => {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
-  } catch { res.status(503).json({ error: 'Kunde inte logga material.' }); }
+  } catch (error: any) { console.error('Material proxy error:', error?.message); res.status(503).json({ error: 'Kunde inte logga material.' }); }
 });
 
 router.post('/orders/:id/signature', async (req, res) => {
@@ -754,7 +762,7 @@ router.post('/orders/:id/signature', async (req, res) => {
       method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
     });
     res.status(status).json(data);
-  } catch { res.status(503).json({ error: 'Kunde inte spara signatur.' }); }
+  } catch (error: any) { console.error('Signature proxy error:', error?.message); res.status(503).json({ error: 'Kunde inte spara signatur.' }); }
 });
 
 router.post('/orders/:id/notes', async (req, res) => {
@@ -907,6 +915,13 @@ router.get('/articles', (req, res) => {
 router.post('/position', async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy } = req.body;
 
+  if (latitude == null || longitude == null || typeof latitude !== 'number' || typeof longitude !== 'number') {
+    return res.status(400).json({ error: 'Giltiga latitude och longitude krävs' });
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ error: 'Koordinater utanför giltigt intervall' });
+  }
+
   if (!IS_MOCK_MODE) {
     try {
       await kinabFetch('/api/mobile/position', {
@@ -975,6 +990,13 @@ router.post('/status', async (req, res) => {
 
 router.post('/gps', async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
+
+  if (latitude == null || longitude == null || !driverId) {
+    return res.status(400).json({ error: 'latitude, longitude och driverId krävs' });
+  }
+  if (typeof latitude !== 'number' || typeof longitude !== 'number') {
+    return res.status(400).json({ error: 'Koordinater måste vara nummer' });
+  }
 
   try {
     if (latitude != null && longitude != null && driverId) {

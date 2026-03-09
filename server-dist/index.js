@@ -681,6 +681,14 @@ router.get("/orders/:id/checklist", async (req, res) => {
   }
 });
 router.patch("/orders/:id/status", async (req, res) => {
+  const { status: newStatus } = req.body;
+  const allowedStatuses = ["planned", "dispatched", "on_site", "in_progress", "completed", "failed", "cancelled", "planerad_pre", "planerad_resurs", "planerad_las", "utford", "fakturerad", "impossible"];
+  if (!newStatus || typeof newStatus !== "string") {
+    return res.status(400).json({ error: "Status kr\xE4vs" });
+  }
+  if (!allowedStatuses.includes(newStatus)) {
+    return res.status(400).json({ error: `Ogiltig status: ${newStatus}` });
+  }
   const io2 = req.app.io;
   if (IS_MOCK_MODE) {
     const order = MOCK_ORDERS.find((o) => o.id === parseInt(req.params.id));
@@ -689,22 +697,22 @@ router.patch("/orders/:id/status", async (req, res) => {
         res.status(403).json({ error: "Uppdraget \xE4r l\xE5st - beroende uppdrag ej slutf\xF6rda" });
         return;
       }
-      order.status = req.body.status;
-      if (req.body.status === "on_site" || req.body.status === "in_progress" || req.body.status === "planerad_las") {
+      order.status = newStatus;
+      if (newStatus === "on_site" || newStatus === "in_progress" || newStatus === "planerad_las") {
         order.actualStartTime = order.actualStartTime || (/* @__PURE__ */ new Date()).toISOString();
       }
-      if (req.body.status === "completed" || req.body.status === "utford") {
+      if (newStatus === "completed" || newStatus === "utford") {
         order.completedAt = (/* @__PURE__ */ new Date()).toISOString();
         order.actualEndTime = (/* @__PURE__ */ new Date()).toISOString();
       }
-      if (req.body.status === "failed" || req.body.status === "impossible") {
+      if (newStatus === "failed" || newStatus === "impossible") {
         order.actualEndTime = (/* @__PURE__ */ new Date()).toISOString();
         if (req.body.impossibleReason) {
           order.impossibleReason = req.body.impossibleReason;
           order.impossibleAt = (/* @__PURE__ */ new Date()).toISOString();
         }
       }
-      if (req.body.status === "fakturerad") {
+      if (newStatus === "fakturerad") {
         order.completedAt = order.completedAt || (/* @__PURE__ */ new Date()).toISOString();
       }
       if (io2) {
@@ -743,7 +751,8 @@ router.post("/orders/:id/deviations", async (req, res) => {
       body: JSON.stringify(req.body)
     });
     res.status(status).json(data);
-  } catch {
+  } catch (error) {
+    console.error("Deviation proxy error:", error?.message);
     res.status(503).json({ error: "Kunde inte rapportera avvikelse." });
   }
 });
@@ -759,7 +768,8 @@ router.post("/orders/:id/materials", async (req, res) => {
       body: JSON.stringify(req.body)
     });
     res.status(status).json(data);
-  } catch {
+  } catch (error) {
+    console.error("Material proxy error:", error?.message);
     res.status(503).json({ error: "Kunde inte logga material." });
   }
 });
@@ -779,7 +789,8 @@ router.post("/orders/:id/signature", async (req, res) => {
       body: JSON.stringify(req.body)
     });
     res.status(status).json(data);
-  } catch {
+  } catch (error) {
+    console.error("Signature proxy error:", error?.message);
     res.status(503).json({ error: "Kunde inte spara signatur." });
   }
 });
@@ -977,6 +988,12 @@ router.get("/articles", (req, res) => {
 });
 router.post("/position", async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy } = req.body;
+  if (latitude == null || longitude == null || typeof latitude !== "number" || typeof longitude !== "number") {
+    return res.status(400).json({ error: "Giltiga latitude och longitude kr\xE4vs" });
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ error: "Koordinater utanf\xF6r giltigt intervall" });
+  }
   if (!IS_MOCK_MODE) {
     try {
       await kinabFetch("/api/mobile/position", {
@@ -1044,6 +1061,12 @@ router.post("/status", async (req, res) => {
 });
 router.post("/gps", async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
+  if (latitude == null || longitude == null || !driverId) {
+    return res.status(400).json({ error: "latitude, longitude och driverId kr\xE4vs" });
+  }
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    return res.status(400).json({ error: "Koordinater m\xE5ste vara nummer" });
+  }
   try {
     if (latitude != null && longitude != null && driverId) {
       await pool.query(
@@ -1324,11 +1347,15 @@ ${contextInfo}` : ""}`;
     res.status(500).json({ error: "Kunde inte generera svar fr\xE5n AI" });
   }
 });
+var MAX_BASE64_SIZE = 10 * 1024 * 1024;
 router2.post("/transcribe", async (req, res) => {
   try {
     const { audio } = req.body;
     if (!audio) {
       return res.status(400).json({ error: "Ljuddata kr\xE4vs" });
+    }
+    if (typeof audio !== "string" || audio.length > MAX_BASE64_SIZE) {
+      return res.status(400).json({ error: "Ljudfilen \xE4r f\xF6r stor (max 10MB)" });
     }
     const audioBuffer = Buffer.from(audio, "base64");
     const file = await (0, import_openai.toFile)(audioBuffer, "audio.webm");
@@ -1347,6 +1374,9 @@ router2.post("/voice-command", async (req, res) => {
     const { audio } = req.body;
     if (!audio) {
       return res.status(400).json({ error: "Ljuddata kr\xE4vs" });
+    }
+    if (typeof audio !== "string" || audio.length > MAX_BASE64_SIZE) {
+      return res.status(400).json({ error: "Ljudfilen \xE4r f\xF6r stor (max 10MB)" });
     }
     const audioBuffer = Buffer.from(audio, "base64");
     const file = await (0, import_openai.toFile)(audioBuffer, "audio.webm");
@@ -1415,6 +1445,9 @@ router2.post("/analyze-image", async (req, res) => {
     const { image, context } = req.body;
     if (!image) {
       return res.status(400).json({ error: "Bilddata kr\xE4vs" });
+    }
+    if (typeof image !== "string" || image.length > MAX_BASE64_SIZE) {
+      return res.status(400).json({ error: "Bilden \xE4r f\xF6r stor (max 10MB)" });
     }
     const systemPrompt = `Du \xE4r en AI som analyserar foton fr\xE5n f\xE4ltservicearbete. Beskriv vad du ser, identifiera problem eller avvikelser, och f\xF6resl\xE5 en kategori, allvarlighetsgrad och beskrivning f\xF6r avvikelserapporteringen.
 
@@ -1689,7 +1722,7 @@ io.on("connection", (socket) => {
 });
 app.io = io;
 app.use((0, import_cors.default)());
-app.use(import_express4.default.json({ limit: "50mb" }));
+app.use(import_express4.default.json({ limit: "10mb" }));
 app.use("/api/mobile", router);
 app.use("/api/mobile/ai", router2);
 app.use("/api/planner", router3);
@@ -1700,15 +1733,30 @@ var projectRoot = import_fs.default.existsSync(import_path.default.resolve(__dir
 var metroDir = import_path.default.join(projectRoot, "dist-metro");
 var templatesDir = import_path.default.join(projectRoot, "server", "templates");
 console.log(`[init] projectRoot=${projectRoot}, templatesDir=${templatesDir}, exists=${import_fs.default.existsSync(templatesDir)}`);
+var cachedAppJson = null;
+var cachedSdkVersion = "54.0.0";
+function loadAppJson() {
+  try {
+    cachedAppJson = JSON.parse(import_fs.default.readFileSync(import_path.default.join(projectRoot, "app.json"), "utf-8"));
+  } catch (e) {
+    console.error("Failed to load app.json:", e);
+    cachedAppJson = { expo: { name: "Nordfield", slug: "nordfield", splash: {} } };
+  }
+}
+function loadSdkVersion() {
+  try {
+    cachedSdkVersion = JSON.parse(import_fs.default.readFileSync(import_path.default.join(projectRoot, "node_modules", "expo", "package.json"), "utf-8")).version;
+  } catch {
+    cachedSdkVersion = "54.0.0";
+  }
+}
+loadAppJson();
+loadSdkVersion();
 function getAppJson() {
-  return JSON.parse(import_fs.default.readFileSync(import_path.default.join(projectRoot, "app.json"), "utf-8"));
+  return cachedAppJson;
 }
 function getExpoSdkVersion() {
-  try {
-    return JSON.parse(import_fs.default.readFileSync(import_path.default.join(projectRoot, "node_modules", "expo", "package.json"), "utf-8")).version;
-  } catch {
-    return "54.0.0";
-  }
+  return cachedSdkVersion;
 }
 function getHostUrl(req) {
   const proto = req.headers["x-forwarded-proto"] || req.protocol || "https";
@@ -1780,12 +1828,19 @@ function buildManifest(platform, req) {
   };
 }
 function serveManifest(platform, req, res) {
-  const manifest = buildManifest(platform, req);
-  res.setHeader("Content-Type", "text/plain");
-  res.setHeader("expo-protocol-version", "0");
-  res.setHeader("expo-sfv-version", "0");
-  res.setHeader("cache-control", "private, max-age=0");
-  res.send(JSON.stringify(manifest));
+  try {
+    const manifest = buildManifest(platform, req);
+    res.setHeader("Content-Type", "text/plain");
+    res.setHeader("expo-protocol-version", "0");
+    res.setHeader("expo-sfv-version", "0");
+    res.setHeader("cache-control", "private, max-age=0");
+    res.send(JSON.stringify(manifest));
+  } catch (e) {
+    console.error("Failed to serve manifest:", e);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to generate manifest" });
+    }
+  }
 }
 app.get("/manifest/:platform", (req, res) => {
   const platform = req.params.platform;
@@ -1794,6 +1849,8 @@ app.get("/manifest/:platform", (req, res) => {
   }
   serveManifest(platform, req, res);
 });
+var bundleCache = {};
+var DEV_DOMAIN = "143744bc-0950-40ae-a71f-7334bd02d088-00-2jqn3h1bml74q.kirk.replit.dev";
 app.get("/bundles/:platform/index.bundle", (req, res) => {
   const platform = req.params.platform;
   if (platform !== "ios" && platform !== "android") {
@@ -1804,14 +1861,25 @@ app.get("/bundles/:platform/index.bundle", (req, res) => {
     return res.status(404).send("Bundle not found. Run: bash scripts/build.sh");
   }
   const host = req.headers["x-forwarded-host"] || req.headers.host || "";
-  let bundle = import_fs.default.readFileSync(bundlePath, "utf-8");
-  const devDomain = "143744bc-0950-40ae-a71f-7334bd02d088-00-2jqn3h1bml74q.kirk.replit.dev";
-  if (host && host !== "localhost:5000" && host !== "localhost") {
-    bundle = bundle.replace(devDomain, host);
+  const cacheKey = `${platform}:${host}`;
+  try {
+    const stat = import_fs.default.statSync(bundlePath);
+    const mtime = stat.mtimeMs;
+    const cached = bundleCache[cacheKey];
+    if (!cached || cached.mtime !== mtime) {
+      let bundle = import_fs.default.readFileSync(bundlePath, "utf-8");
+      if (host && host !== "localhost:5000" && host !== "localhost") {
+        bundle = bundle.replaceAll(DEV_DOMAIN, host);
+      }
+      bundleCache[cacheKey] = { content: bundle, mtime };
+    }
+    res.setHeader("Content-Type", "application/javascript");
+    res.setHeader("Cache-Control", "public, max-age=3600");
+    res.send(bundleCache[cacheKey].content);
+  } catch (e) {
+    console.error("Bundle serve error:", e);
+    res.status(500).send("Failed to serve bundle");
   }
-  res.setHeader("Content-Type", "application/javascript");
-  res.setHeader("Cache-Control", "no-cache");
-  res.send(bundle);
 });
 app.use("/assets", import_express4.default.static(import_path.default.join(projectRoot, "assets"), {
   setHeaders: (res, filePath) => {

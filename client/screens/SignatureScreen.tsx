@@ -21,11 +21,13 @@ export function SignatureScreen({ route, navigation }: any) {
   const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const [paths, setPaths] = useState<PathData[]>([]);
-  const [currentPath, setCurrentPath] = useState<string>('');
+  const [isDrawing, setIsDrawing] = useState(false);
   const pathIdRef = useRef(0);
   const layoutRef = useRef({ x: 0, y: 0, width: 0, height: 0 });
+  const currentPathRef = useRef<string>('');
+  const currentPathSvgRef = useRef<any>(null);
 
-  const hasSignature = paths.length > 0 || currentPath.length > 0;
+  const hasSignature = paths.length > 0 || isDrawing;
 
   const mutation = useMutation({
     mutationFn: (signatureData: string) =>
@@ -45,19 +47,28 @@ export function SignatureScreen({ route, navigation }: any) {
         const touch = evt.nativeEvent;
         const x = touch.locationX;
         const y = touch.locationY;
-        setCurrentPath(`M${x.toFixed(1)},${y.toFixed(1)}`);
+        currentPathRef.current = `M${x.toFixed(1)},${y.toFixed(1)}`;
+        if (currentPathSvgRef.current) {
+          currentPathSvgRef.current.setNativeProps({ d: currentPathRef.current });
+        }
+        setIsDrawing(true);
       },
       onPanResponderMove: (evt) => {
         const touch = evt.nativeEvent;
         const x = touch.locationX;
         const y = touch.locationY;
-        setCurrentPath(prev => `${prev} L${x.toFixed(1)},${y.toFixed(1)}`);
+        currentPathRef.current += ` L${x.toFixed(1)},${y.toFixed(1)}`;
+        if (currentPathSvgRef.current) {
+          currentPathSvgRef.current.setNativeProps({ d: currentPathRef.current });
+        }
       },
       onPanResponderRelease: () => {
-        if (currentPath.length > 0) {
+        if (currentPathRef.current.length > 0) {
           pathIdRef.current += 1;
-          setPaths(prev => [...prev, { id: pathIdRef.current, d: currentPath }]);
-          setCurrentPath('');
+          const finishedPath = currentPathRef.current;
+          currentPathRef.current = '';
+          setPaths(prev => [...prev, { id: pathIdRef.current, d: finishedPath }]);
+          setIsDrawing(false);
         }
       },
     })
@@ -65,8 +76,12 @@ export function SignatureScreen({ route, navigation }: any) {
 
   const handleClear = useCallback(() => {
     setPaths([]);
-    setCurrentPath('');
+    currentPathRef.current = '';
+    setIsDrawing(false);
     pathIdRef.current = 0;
+    if (currentPathSvgRef.current) {
+      currentPathSvgRef.current.setNativeProps({ d: '' });
+    }
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   }, []);
 
@@ -103,16 +118,15 @@ export function SignatureScreen({ route, navigation }: any) {
               strokeLinejoin="round"
             />
           ))}
-          {currentPath.length > 0 ? (
-            <Path
-              d={currentPath}
-              stroke={Colors.text}
-              strokeWidth={2.5}
-              fill="none"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          ) : null}
+          <Path
+            ref={currentPathSvgRef}
+            d=""
+            stroke={Colors.text}
+            strokeWidth={2.5}
+            fill="none"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
         </Svg>
         {!hasSignature ? (
           <View style={styles.signaturePlaceholder} pointerEvents="none">
