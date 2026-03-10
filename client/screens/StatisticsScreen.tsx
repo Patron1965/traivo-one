@@ -385,11 +385,13 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: Spacing.sm,
     alignItems: 'center',
+    justifyContent: 'center',
     borderRadius: BorderRadius.sm,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   toggleActive: {
     backgroundColor: Colors.surface,
-    borderWidth: 1,
     borderColor: Colors.border,
   },
   toggleText: {
