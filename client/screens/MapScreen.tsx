@@ -294,8 +294,11 @@ export function MapScreen({ navigation }: any) {
     return totalDuration > totalDurationWithoutTraffic * 1.15;
   }, [totalDuration, totalDurationWithoutTraffic]);
 
+  const hasFittedRef = useRef(false);
+
   useEffect(() => {
-    if (mapRef.current && activeOrders.length > 0) {
+    if (mapRef.current && activeOrders.length > 0 && mapReady && !hasFittedRef.current) {
+      hasFittedRef.current = true;
       const coords = activeOrders.map(o => ({
         latitude: o.latitude,
         longitude: o.longitude,
@@ -315,7 +318,7 @@ export function MapScreen({ navigation }: any) {
         });
       }, 500);
     }
-  }, [activeOrders.length, routeOrigin?.latitude, routeOrigin?.longitude]);
+  }, [activeOrders.length, routeOrigin?.latitude, routeOrigin?.longitude, mapReady]);
 
   if (!MapView || Platform.OS === 'web') {
     return (
@@ -376,6 +379,11 @@ export function MapScreen({ navigation }: any) {
         style={styles.map}
         onMapReady={() => setMapReady(true)}
         cacheEnabled={true}
+        zoomEnabled={true}
+        scrollEnabled={true}
+        rotateEnabled={true}
+        pitchEnabled={true}
+        zoomControlEnabled={true}
         initialRegion={{
           latitude: 57.7089,
           longitude: 11.9746,
@@ -440,7 +448,7 @@ export function MapScreen({ navigation }: any) {
         </View>
       ) : null}
 
-      <View style={[styles.legend, { bottom: tabBarHeight + Spacing.lg }]}>
+      <View style={[styles.legend, { bottom: tabBarHeight + Spacing.lg }]} pointerEvents="box-none">
         {routeLoading ? (
           <View style={styles.legendRow}>
             <ActivityIndicator size="small" color={Colors.primary} />
