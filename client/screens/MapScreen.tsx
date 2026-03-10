@@ -124,6 +124,8 @@ export function MapScreen({ navigation }: any) {
   const tabBarHeight = useBottomTabBarHeight();
   const mapRef = useRef<any>(null);
   const [legendExpanded, setLegendExpanded] = useState(false);
+  const [mapReady, setMapReady] = useState(false);
+  const [displayPolyline, setDisplayPolyline] = useState<{latitude: number; longitude: number}[] | null>(null);
   const { currentPosition } = useGpsTracking();
   const { startPosition } = useAuth();
 
@@ -187,6 +189,17 @@ export function MapScreen({ navigation }: any) {
     }
     return null;
   }, [routeData]);
+
+  useEffect(() => {
+    if (mapReady && roadPolyline && roadPolyline.length > 1) {
+      const timer = setTimeout(() => {
+        setDisplayPolyline(roadPolyline);
+      }, 500);
+      return () => clearTimeout(timer);
+    } else {
+      setDisplayPolyline(null);
+    }
+  }, [mapReady, roadPolyline]);
 
   const optimizedOrders = useMemo(() => {
     if (!routeData?.waypoints || routeData.waypoints.length < 1) return activeOrders;
@@ -291,6 +304,7 @@ export function MapScreen({ navigation }: any) {
       <MapView
         ref={mapRef}
         style={styles.map}
+        onMapReady={() => setMapReady(true)}
         initialRegion={{
           latitude: 57.7089,
           longitude: 11.9746,
@@ -298,29 +312,29 @@ export function MapScreen({ navigation }: any) {
           longitudeDelta: 0.1,
         }}
       >
-        {Polyline && roadPolyline && roadPolyline.length > 1 ? (
+        {Polyline && displayPolyline && displayPolyline.length > 1 ? (
           <Polyline
-            key={`glow-${roadPolyline.length}`}
-            coordinates={roadPolyline}
-            strokeColor="rgba(234, 88, 12, 0.2)"
-            strokeWidth={10}
+            coordinates={displayPolyline}
+            strokeColor="rgba(234, 88, 12, 0.15)"
+            strokeWidth={8}
+            zIndex={1}
           />
         ) : null}
-        {Polyline && roadPolyline && roadPolyline.length > 1 ? (
+        {Polyline && displayPolyline && displayPolyline.length > 1 ? (
           <Polyline
-            key={`route-${roadPolyline.length}`}
-            coordinates={roadPolyline}
-            strokeColor={Colors.primary}
-            strokeWidth={4}
+            coordinates={displayPolyline}
+            strokeColor="#EA580C"
+            strokeWidth={3}
+            zIndex={2}
           />
         ) : null}
-        {Polyline && !roadPolyline && fallbackCoordinates.length > 1 ? (
+        {Polyline && !displayPolyline && !roadPolyline && fallbackCoordinates.length > 1 ? (
           <Polyline
-            key={`fallback-${fallbackCoordinates.length}`}
             coordinates={fallbackCoordinates}
             strokeColor={Colors.primaryLight}
             strokeWidth={3}
             lineDashPattern={[10, 5]}
+            zIndex={1}
           />
         ) : null}
 
