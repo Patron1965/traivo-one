@@ -40,6 +40,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **Metadata-triggers:** System for listing objects with deviations and tracking issue history.
 - **Industry Packages System:** Predefined templates for different industries with configurable articles and metadata.
 - **SMS Infrastructure:** Unified multi-channel notification service supporting email and SMS.
+- **Planner Map (`/planner/map`):** Real-time driver/job map with: real road geometry via Geoapify Routing API (with browser-side `geometryCache` and dashed straight-line fallback), per-route filtering (eye-toggle visibility, focus highlight with thicker line + dimmed others, "Dölj/Visa alla" button), status filter chips (sessionStorage persistence), enhanced job popups (customer, address, resource, time with icons), colored driver avatars matching route color, info-bar with visible jobs/routes/period counts, mobile hamburger menu for collapsible panel, route info popup with distance/time, and waypoint markers with order numbers.
 - **Historical Map View:** Playback of daily GPS movement patterns per resource with timeline slider and KPI overlay.
 - **KPI Dashboard on Map:** Real-time daily KPI overlay on the historical map view.
 - **Automatic Weekly Reports:** Scheduled email reports with weekly KPIs and trend comparisons.
