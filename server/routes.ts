@@ -8948,8 +8948,8 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
     const STATUS_LABELS: Record<string, string> = {
       planned: "Planerad",
-      en_route: "P\\u00e5 v\\u00e4g",
-      in_progress: "P\\u00e5g\\u00e5r",
+      en_route: "På väg",
+      in_progress: "Pågår",
       completed: "Klar",
       deferred: "Uppskjuten",
       cancelled: "Avbruten",
