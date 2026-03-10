@@ -40,11 +40,11 @@ const planeringItems = [
   { title: "Uppdrag", url: "/assignments", icon: UserCheck },
   { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
   { title: "Veckoplanering", url: "/planner", icon: Calendar },
-  { title: "Väderplanering", url: "/weather", icon: Cloud },
   { title: "Ruttplanering", url: "/routes", icon: Map },
-  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
   { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
   { title: "Historisk Kartvy", url: "/historical-map", icon: History },
+  { title: "Väderplanering", url: "/weather", icon: Cloud },
+  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
   { title: "Besiktning", url: "/inspections", icon: ClipboardCheck },
   { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardCheck },
 ];
