@@ -2320,7 +2320,6 @@ export async function registerRoutes(
     }
   });
 
-  // OpenRouteService proxy for route optimization
   app.post("/api/routes/directions", async (req, res) => {
     try {
       const { coordinates } = req.body;
@@ -2329,26 +2328,22 @@ export async function registerRoutes(
         return res.status(400).json({ error: "At least 2 coordinates required" });
       }
 
-      const apiKey = process.env.OPENROUTESERVICE_API_KEY;
+      const apiKey = process.env.GEOAPIFY_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ error: "OpenRouteService API key not configured" });
+        return res.status(500).json({ error: "Geoapify API key not configured" });
       }
 
-      const response = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": apiKey,
-        },
-        body: JSON.stringify({
-          coordinates: coordinates,
-          instructions: false,
-        }),
-      });
+      const waypoints = coordinates
+        .map(([lon, lat]: [number, number]) => `${lat},${lon}`)
+        .join("|");
+
+      const response = await fetch(
+        `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${apiKey}`
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("OpenRouteService error:", errorText);
+        console.error("Geoapify routing error:", errorText);
         return res.status(response.status).json({ error: "Route calculation failed" });
       }
 
@@ -2360,31 +2355,32 @@ export async function registerRoutes(
     }
   });
 
-  // OpenRouteService route optimization (TSP)
   app.post("/api/routes/optimize", async (req, res) => {
     try {
-      const { jobs, vehicles } = req.body;
+      const { jobs, agents, vehicles } = req.body;
+      const resolvedAgents = agents || vehicles;
       
-      const apiKey = process.env.OPENROUTESERVICE_API_KEY;
+      const apiKey = process.env.GEOAPIFY_API_KEY;
       if (!apiKey) {
-        return res.status(500).json({ error: "OpenRouteService API key not configured" });
+        return res.status(500).json({ error: "Geoapify API key not configured" });
       }
 
-      const response = await fetch("https://api.openrouteservice.org/optimization", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": apiKey,
-        },
-        body: JSON.stringify({
-          jobs,
-          vehicles,
-        }),
-      });
+      const response = await fetch(
+        `https://api.geoapify.com/v1/routeplanner?apiKey=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "drive",
+            jobs,
+            agents: resolvedAgents,
+          }),
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error("OpenRouteService optimization error:", errorText);
+        console.error("Geoapify route planner error:", errorText);
         return res.status(response.status).json({ error: "Route optimization failed" });
       }
 
@@ -5818,7 +5814,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     }
   });
 
-  // VRP-based route optimization using VROOM/OpenRouteService
+  // VRP-based route optimization using Geoapify Route Planner
   app.post("/api/ai/optimize-vrp", async (req, res) => {
     try {
       const { optimizeRoutesVRP } = await import("./route-optimizer");
@@ -10352,7 +10348,7 @@ setInterval(loadRoutes, 30000);
         },
         features: [
           "Drag-and-drop veckoplanering",
-          "AI-driven ruttoptimering (VROOM/OpenRouteService)",
+          "AI-driven ruttoptimering (Geoapify Route Planner)",
           "GPS-spårning i realtid med breadcrumb-trails",
           "Automatisk anomali-övervakning",
           "Mobil fältapp med digitala signaturer",

@@ -9,7 +9,7 @@ const PRICING = {
   },
   resend: { perEmail: 0.001 },
   twilio: { perSms: 0.0079 },
-  openrouteservice: { perRequest: 0 },
+  geoapify: { perRequest: 0 },
   "open-meteo": { perRequest: 0 },
   nominatim: { perRequest: 0 },
   "google-geocoding": { perRequest: 0.005 },

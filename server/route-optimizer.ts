@@ -1,7 +1,7 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
 import { trackApiUsage } from "./api-usage-tracker";
 
-const OPENROUTESERVICE_API_KEY = process.env.OPENROUTESERVICE_API_KEY;
+const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
 
 interface RouteCache {
   result: { distance: number; duration: number };
@@ -131,11 +131,11 @@ function calculateTotalDistance(stops: RouteStop[], startCoord?: Coordinates): n
   return total;
 }
 
-async function getRouteFromORS(coordinates: [number, number][]): Promise<{
+async function getRouteFromGeoapify(coordinates: [number, number][]): Promise<{
   distance: number;
   duration: number;
 } | null> {
-  if (!OPENROUTESERVICE_API_KEY || coordinates.length < 2) {
+  if (!GEOAPIFY_API_KEY || coordinates.length < 2) {
     return null;
   }
   
@@ -147,40 +147,37 @@ async function getRouteFromORS(coordinates: [number, number][]): Promise<{
   }
   
   try {
+    const waypoints = coordinates
+      .map(([lng, lat]) => `${lat},${lng}`)
+      .join("|");
+    
     const startTime = Date.now();
-    const response = await fetch("https://api.openrouteservice.org/v2/directions/driving-car/geojson", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": OPENROUTESERVICE_API_KEY,
-      },
-      body: JSON.stringify({
-        coordinates,
-        instructions: false,
-      }),
-    });
+    const response = await fetch(
+      `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${GEOAPIFY_API_KEY}`
+    );
 
     trackApiUsage({
-      service: "openrouteservice",
-      method: "directions",
-      endpoint: "/v2/directions",
+      service: "geoapify",
+      method: "routing",
+      endpoint: "/v1/routing",
       units: 1,
       statusCode: response.status,
       durationMs: Date.now() - startTime,
     });
     
     if (!response.ok) {
-      console.error("ORS route error:", await response.text());
+      console.error("Geoapify routing error:", await response.text());
       return null;
     }
     
     const data = await response.json();
-    const summary = data.features?.[0]?.properties?.summary;
+    const feature = data.features?.[0];
+    const props = feature?.properties;
     
-    if (summary) {
+    if (props && props.distance !== undefined && props.time !== undefined) {
       const result = {
-        distance: summary.distance / 1000,
-        duration: summary.duration / 60,
+        distance: props.distance / 1000,
+        duration: props.time / 60,
       };
       routeCache.set(cacheKey, { result, timestamp: Date.now() });
       return result;
@@ -188,7 +185,7 @@ async function getRouteFromORS(coordinates: [number, number][]): Promise<{
     
     return null;
   } catch (error) {
-    console.error("ORS route fetch error:", error);
+    console.error("Geoapify routing fetch error:", error);
     return null;
   }
 }
@@ -289,68 +286,68 @@ export async function optimizeResourceDayRoute(
 }
 
 // =============================================================================
-// VROOM-based VRP Optimization (OpenRouteService Optimization API)
+// Geoapify Route Planner API (VRP Optimization)
 // =============================================================================
 
-interface VROOMVehicle {
-  id: number;
-  profile: string;
+interface GeoapifyAgent {
+  start_location: [number, number];
+  end_location?: [number, number];
+  time_windows?: [number, number][];
+  id?: string;
   description?: string;
-  start: [number, number]; // [lng, lat]
-  end?: [number, number];
-  capacity?: number[];
-  skills?: number[];
-  time_window?: [number, number];
 }
 
-interface VROOMJob {
-  id: number;
+interface GeoapifyJob {
   location: [number, number];
-  service?: number;
-  delivery?: number[];
-  pickup?: number[];
-  skills?: number[];
+  duration?: number;
   priority?: number;
   time_windows?: [number, number][];
+  id?: string;
   description?: string;
 }
 
-interface VROOMStep {
-  type: "start" | "job" | "end";
-  location?: [number, number];
-  id?: number;
-  service?: number;
-  waiting_time?: number;
-  arrival?: number;
+interface GeoapifyAction {
+  type: "start" | "end" | "job";
+  start_time?: number;
   duration?: number;
-  distance?: number;
-  description?: string;
+  job_index?: number;
+  job_id?: string;
+  waypoint_index?: number;
 }
 
-interface VROOMRoute {
-  vehicle: number;
-  cost: number;
-  service: number;
-  duration: number;
-  distance: number;
-  waiting_time: number;
-  priority: number;
-  steps: VROOMStep[];
-  geometry?: string;
+interface GeoapifyWaypoint {
+  original_location: [number, number];
+  location: [number, number];
+  start_time?: number;
+  duration?: number;
+  actions?: GeoapifyAction[];
 }
 
-interface VROOMResponse {
-  code: number;
-  summary: {
-    cost: number;
-    routes: number;
-    unassigned: number;
-    service: number;
-    duration: number;
+interface GeoapifyAgentPlan {
+  type: "Feature";
+  properties: {
+    agent_index: number;
     distance: number;
+    time: number;
+    total_time: number;
+    start_time: number;
+    mode: string;
+    actions: GeoapifyAction[];
+    waypoints: GeoapifyWaypoint[];
   };
-  unassigned: Array<{ id: number; description?: string }>;
-  routes: VROOMRoute[];
+  geometry: any;
+}
+
+interface GeoapifyRoutePlannerResponse {
+  type: "FeatureCollection";
+  properties: {
+    mode: string;
+    issues?: {
+      unassignedAgents?: number[];
+      unassignedJobs?: number[];
+    };
+  };
+  features: GeoapifyAgentPlan[];
 }
 
 export interface VRPOptimizationResult {
@@ -384,12 +381,12 @@ export interface VRPOptimizationResult {
   error?: string;
 }
 
-const ORS_OPTIMIZATION_URL = "https://api.openrouteservice.org/optimization";
+const GEOAPIFY_ROUTE_PLANNER_URL = "https://api.geoapify.com/v1/routeplanner";
 const DEFAULT_SERVICE_TIME_SECONDS = 30 * 60; // 30 min
 const DEFAULT_WORK_HOURS: [number, number] = [8 * 3600, 17 * 3600]; // 08-17
 
 /**
- * Optimize routes using VROOM via OpenRouteService's optimization API
+ * Optimize routes using Geoapify Route Planner API
  * Supports multi-vehicle VRP with time windows
  */
 export async function optimizeRoutesVRP(
@@ -398,7 +395,7 @@ export async function optimizeRoutesVRP(
   objects: ServiceObject[],
   clusters: Cluster[]
 ): Promise<VRPOptimizationResult> {
-  if (!OPENROUTESERVICE_API_KEY) {
+  if (!GEOAPIFY_API_KEY) {
     return {
       success: false,
       routes: [],
@@ -410,16 +407,15 @@ export async function optimizeRoutesVRP(
         totalDistanceKm: 0,
         avgEfficiency: 0
       },
-      error: "OpenRouteService API-nyckel saknas. Lägg till OPENROUTESERVICE_API_KEY."
+      error: "Geoapify API-nyckel saknas. Lägg till GEOAPIFY_API_KEY."
     };
   }
 
   const objectMap = new Map(objects.map(o => [o.id, o]));
   const clusterMap = new Map(clusters.map(c => [c.id, c]));
 
-  // Build jobs from work orders
-  const validJobs: Array<{ order: WorkOrder; job: VROOMJob }> = [];
-  let jobId = 1;
+  const validJobs: Array<{ order: WorkOrder; job: GeoapifyJob; index: number }> = [];
+  let jobIndex = 0;
 
   for (const order of workOrders) {
     let coords: [number, number] | null = null;
@@ -432,9 +428,7 @@ export async function optimizeRoutesVRP(
       } else if (obj.latitude && obj.longitude) {
         coords = [obj.longitude, obj.latitude];
       }
-    }
-    // Try cluster center
-    else if (order.clusterId) {
+    } else if (order.clusterId) {
       const cluster = clusterMap.get(order.clusterId);
       if (cluster?.centerLatitude && cluster?.centerLongitude) {
         coords = [cluster.centerLongitude, cluster.centerLatitude];
@@ -451,23 +445,22 @@ export async function optimizeRoutesVRP(
       : order.priority === "high" ? 75
       : order.priority === "normal" ? 50 : 25;
 
-    const job: VROOMJob = {
-      id: jobId,
+    const job: GeoapifyJob = {
       location: coords,
-      service: serviceTime,
+      duration: serviceTime,
       priority,
+      id: order.id,
       description: order.title || `Order ${order.id.slice(0, 8)}`
     };
 
-    // Add time window if scheduled
     if (order.scheduledStartTime) {
       const start = new Date(order.scheduledStartTime);
       const startSec = start.getHours() * 3600 + start.getMinutes() * 60;
       job.time_windows = [[startSec, Math.min(startSec + 3600, DEFAULT_WORK_HOURS[1])]];
     }
 
-    validJobs.push({ order, job });
-    jobId++;
+    validJobs.push({ order, job, index: jobIndex });
+    jobIndex++;
   }
 
   if (validJobs.length === 0) {
@@ -486,24 +479,21 @@ export async function optimizeRoutesVRP(
     };
   }
 
-  // Build vehicles from resources
-  const vehicles: VROOMVehicle[] = resources.map((resource, idx) => {
+  const agents: GeoapifyAgent[] = resources.map((resource, idx) => {
     const startCoord: [number, number] = resource.homeLatitude && resource.homeLongitude
       ? [resource.homeLongitude, resource.homeLatitude]
       : [20.263, 63.826]; // Umeå default
 
     return {
-      id: idx + 1,
-      profile: "driving-car",
+      start_location: startCoord,
+      end_location: startCoord,
+      time_windows: [DEFAULT_WORK_HOURS],
+      id: resource.id,
       description: resource.name,
-      start: startCoord,
-      end: startCoord,
-      time_window: DEFAULT_WORK_HOURS,
-      capacity: [8]
     };
   });
 
-  if (vehicles.length === 0) {
+  if (agents.length === 0) {
     return {
       success: false,
       routes: [],
@@ -519,26 +509,22 @@ export async function optimizeRoutesVRP(
     };
   }
 
-  // Call VROOM API
   try {
     const startTime = Date.now();
-    const response = await fetch(ORS_OPTIMIZATION_URL, {
+    const response = await fetch(`${GEOAPIFY_ROUTE_PLANNER_URL}?apiKey=${GEOAPIFY_API_KEY}`, {
       method: "POST",
-      headers: {
-        "Authorization": OPENROUTESERVICE_API_KEY,
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        vehicles,
+        mode: "drive",
+        agents,
         jobs: validJobs.map(j => j.job),
-        options: { g: true }
       })
     });
 
     trackApiUsage({
-      service: "openrouteservice",
-      method: "optimization",
-      endpoint: "/optimization",
+      service: "geoapify",
+      method: "route-planner",
+      endpoint: "/v1/routeplanner",
       units: 1,
       statusCode: response.status,
       durationMs: Date.now() - startTime,
@@ -546,54 +532,65 @@ export async function optimizeRoutesVRP(
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`ORS Optimization API error: ${response.status} - ${errorText}`);
+      throw new Error(`Geoapify Route Planner API error: ${response.status} - ${errorText}`);
     }
 
-    const data: VROOMResponse = await response.json();
+    const data: GeoapifyRoutePlannerResponse = await response.json();
 
-    // Build order ID map using actual job IDs (not array indices)
-    const orderIdMap = new Map(validJobs.map(j => [j.job.id, j.order.id]));
     const orderMap = new Map(workOrders.map(o => [o.id, o]));
+    const jobIndexToOrderId = new Map(validJobs.map(j => [j.index, j.order.id]));
 
-    // Convert routes
-    const routes = data.routes.map(route => {
-      const resource = resources[route.vehicle - 1];
+    let totalAssigned = 0;
+    let totalDistance = 0;
+    let totalTime = 0;
 
-      const stops = route.steps
-        .filter(step => step.type === "job" && step.id !== undefined)
-        .map((step, idx) => {
-          const orderId = orderIdMap.get(step.id!) || "";
-          const order = orderMap.get(orderId);
-          return {
-            orderId,
-            orderTitle: step.description || order?.title || `Order ${orderId.slice(0, 8)}`,
-            sequence: idx + 1,
-            arrivalSeconds: step.arrival,
-            serviceMinutes: Math.round((step.service || 0) / 60),
-            waitingMinutes: Math.round((step.waiting_time || 0) / 60),
-            location: step.location 
-              ? { lat: step.location[1], lng: step.location[0] }
-              : { lat: 0, lng: 0 }
-          };
-        });
+    const routes = data.features.map(feature => {
+      const props = feature.properties;
+      const resource = resources[props.agent_index];
 
-      const totalDur = Math.round(route.duration / 60);
-      const totalSvc = Math.round(route.service / 60);
+      const jobActions = props.actions.filter(a => a.type === "job");
+      const stops = jobActions.map((action, idx) => {
+        const orderId = action.job_id || (action.job_index !== undefined ? jobIndexToOrderId.get(action.job_index) : "") || "";
+        const order = orderMap.get(orderId);
+        const waypoint = action.waypoint_index !== undefined ? props.waypoints[action.waypoint_index] : null;
+
+        return {
+          orderId,
+          orderTitle: order?.title || `Order ${orderId.slice(0, 8)}`,
+          sequence: idx + 1,
+          arrivalSeconds: action.start_time || 0,
+          serviceMinutes: Math.round((action.duration || 0) / 60),
+          waitingMinutes: 0,
+          location: waypoint?.location 
+            ? { lat: waypoint.location[1], lng: waypoint.location[0] }
+            : { lat: 0, lng: 0 }
+        };
+      });
+
+      totalAssigned += stops.length;
+
+      const totalDur = Math.round(props.time / 60);
+      const totalSvc = stops.reduce((s, st) => s + st.serviceMinutes, 0);
+      const distKm = Math.round(props.distance / 100) / 10;
+
+      totalDistance += props.distance;
+      totalTime += props.time;
 
       return {
         resourceId: resource?.id || "",
-        resourceName: resource?.name || `Resurs ${route.vehicle}`,
+        resourceName: resource?.name || `Resurs ${props.agent_index + 1}`,
         stops,
         totalDurationMinutes: totalDur,
-        totalDistanceKm: Math.round(route.distance / 100) / 10,
+        totalDistanceKm: distKm,
         totalServiceMinutes: totalSvc,
         efficiency: totalDur > 0 ? Math.round((totalSvc / totalDur) * 100) : 0,
-        geometry: route.geometry
+        geometry: feature.geometry
       };
     });
 
-    const unassignedOrders = data.unassigned.map(u => ({
-      orderId: orderIdMap.get(u.id) || "",
+    const unassignedJobIndices = data.properties?.issues?.unassignedJobs || [];
+    const unassignedOrders = unassignedJobIndices.map(idx => ({
+      orderId: jobIndexToOrderId.get(idx) || "",
       reason: "Kunde inte tilldelas"
     }));
 
@@ -607,9 +604,9 @@ export async function optimizeRoutesVRP(
       unassignedOrders,
       summary: {
         totalOrders: workOrders.length,
-        assignedOrders: validJobs.length - data.unassigned.length,
-        totalDurationMinutes: Math.round(data.summary.duration / 60),
-        totalDistanceKm: Math.round(data.summary.distance / 100) / 10,
+        assignedOrders: totalAssigned,
+        totalDurationMinutes: Math.round(totalTime / 60),
+        totalDistanceKm: Math.round(totalDistance / 100) / 10,
         avgEfficiency: avgEff
       }
     };

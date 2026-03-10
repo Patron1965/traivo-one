@@ -190,11 +190,10 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
       .filter((p): p is [number, number] => p !== null);
   };
 
-  const fetchRouteFromORS = async (positions: [number, number][]): Promise<RouteData | null> => {
+  const fetchRoute = async (positions: [number, number][]): Promise<RouteData | null> => {
     if (positions.length < 2) return null;
     
     try {
-      // ORS expects [lon, lat] format, we have [lat, lon]
       const coordinates = positions.map(([lat, lon]) => [lon, lat]);
       
       const response = await apiRequest("POST", "/api/routes/directions", { coordinates });
@@ -202,10 +201,10 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
       
       if (data && data.features && data.features.length > 0) {
         const feature = data.features[0];
-        const props = feature.properties?.summary || {};
+        const props = feature.properties || {};
         return {
-          distance: (props.distance || 0) / 1000, // meters to km
-          duration: Math.round((props.duration || 0) / 60), // seconds to minutes
+          distance: (props.distance || 0) / 1000,
+          duration: Math.round((props.time || 0) / 60),
           geometry: feature.geometry as GeoJSON.LineString,
         };
       }
@@ -227,7 +226,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
     const positions = getJobPositions(displayJobs);
     if (positions.length >= 2) {
       setIsLoadingRoute(true);
-      fetchRouteFromORS(positions).then(data => {
+      fetchRoute(positions).then(data => {
         setRouteData(data);
         setIsLoadingRoute(false);
       });
@@ -430,7 +429,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                     </div>
                   </div>
                 </TooltipTrigger>
-                <TooltipContent>{routeData ? "Körtid beräknad via OpenRouteService" : "Uppskattad körtid"}</TooltipContent>
+                <TooltipContent>{routeData ? "Körtid beräknad via Geoapify" : "Uppskattad körtid"}</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

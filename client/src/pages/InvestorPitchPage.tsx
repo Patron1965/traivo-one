@@ -169,7 +169,7 @@ const slides = [
       "Node.js + Express (Backend)",
       "PostgreSQL + Drizzle ORM",
       "OpenAI GPT-4 (AI-motor)",
-      "OpenRouteService (Ruttberäkning)",
+      "Geoapify (Ruttberäkning & VRP)",
       "Replit (Utveckling & Hosting)"
     ],
     highlights: [

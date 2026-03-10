@@ -25,7 +25,7 @@ const SERVICE_CONFIG: Record<string, { label: string; icon: any; color: string }
   openai: { label: "OpenAI", icon: Brain, color: "hsl(var(--chart-1))" },
   resend: { label: "Resend (E-post)", icon: Mail, color: "hsl(var(--chart-2))" },
   twilio: { label: "Twilio (SMS)", icon: MessageSquare, color: "hsl(var(--chart-3))" },
-  openrouteservice: { label: "OpenRouteService", icon: MapPin, color: "hsl(var(--chart-4))" },
+  geoapify: { label: "Geoapify", icon: MapPin, color: "hsl(var(--chart-4))" },
   "open-meteo": { label: "Open-Meteo", icon: Cloud, color: "hsl(var(--chart-5))" },
 };
 

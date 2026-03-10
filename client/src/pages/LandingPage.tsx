@@ -196,7 +196,7 @@ export default function LandingPage() {
                   </div>
                   <h3 className="font-semibold text-lg mb-2">Ruttoptimering</h3>
                   <p className="text-muted-foreground">
-                    Geografisk klusterplanering med interaktiv kartvy och OpenRouteService.
+                    Geografisk klusterplanering med interaktiv kartvy och Geoapify.
                   </p>
                 </CardContent>
               </Card>
@@ -302,7 +302,7 @@ export default function LandingPage() {
                     <Sparkles className="h-6 w-6" />
                   </div>
                   <h3 className="font-semibold mb-2">AI & Integration</h3>
-                  <p className="text-sm text-muted-foreground">OpenAI GPT-4, OpenRouteService, Fortnox API</p>
+                  <p className="text-sm text-muted-foreground">OpenAI GPT-4, Geoapify, Fortnox API</p>
                 </CardContent>
               </Card>
             </div>

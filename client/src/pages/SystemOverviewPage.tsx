@@ -40,7 +40,7 @@ const systemFeatures: FeatureSection[] = [
     features: [
       { name: "Veckoplanering", description: "Drag-drop schemaläggning med prioritetsfärger och resursvy" },
       { name: "Inför Optimering", description: "Förberedelse och validering av data inför extern ruttoptimering" },
-      { name: "Ruttvisualisering", description: "Kartvy med OpenRouteService-integration för ruttplanering" },
+      { name: "Ruttvisualisering", description: "Kartvy med Geoapify-integration för ruttplanering" },
       { name: "Produktionsstyrning", description: "SLA-nivåer, tidsluckor och leveransrestriktioner" },
     ]
   },
@@ -245,7 +245,7 @@ const technicalInfo = [
   { label: "Plattform", value: "React + TypeScript + Vite" },
   { label: "Backend", value: "Express.js + Node.js" },
   { label: "Databas", value: "PostgreSQL med Drizzle ORM" },
-  { label: "Kartintegration", value: "OpenRouteService" },
+  { label: "Kartintegration", value: "Geoapify" },
   { label: "Autentisering", value: "Replit Auth" },
   { label: "Hosting", value: "Replit med automatisk skalning" },
 ];

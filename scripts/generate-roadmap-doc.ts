@@ -382,7 +382,7 @@ const doc = new Document({
           children: [new TextRun("AI-integration: OpenAI via Replit Integrations")],
         }),
         new Paragraph({
-          children: [new TextRun("Kartintegration: OpenRouteService / Leaflet")],
+          children: [new TextRun("Kartintegration: Geoapify / Leaflet")],
         }),
         new Paragraph({
           children: [new TextRun("Ekonomisystem: Fortnox API v3 (OAuth 2.0)")],

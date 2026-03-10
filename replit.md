@@ -71,7 +71,7 @@ The user interface features a sticky TopNav, global search, user utilities, a mo
 - **PostgreSQL:** Primary database.
 - **Drizzle ORM:** Database interactions.
 - **OpenAI API:** AI planning suggestions, conversational AI.
-- **OpenRouteService:** Route visualization.
+- **Geoapify:** Route calculation (Routing API) and VRP optimization (Route Planner API).
 - **OpenStreetMap Nominatim:** Geocoding for Swedish addresses.
 - **External Nordfield Optimization Service:** Dedicated route optimization.
 - **DataClean Service:** External service for data validation and geocoding.
