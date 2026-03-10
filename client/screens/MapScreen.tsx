@@ -378,12 +378,12 @@ export function MapScreen({ navigation }: any) {
         ref={mapRef}
         style={styles.map}
         onMapReady={() => setMapReady(true)}
-        cacheEnabled={true}
         zoomEnabled={true}
+        zoomTapEnabled={true}
+        zoomControlEnabled={true}
         scrollEnabled={true}
         rotateEnabled={true}
         pitchEnabled={true}
-        zoomControlEnabled={true}
         initialRegion={{
           latitude: 57.7089,
           longitude: 11.9746,
