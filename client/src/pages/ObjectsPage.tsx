@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
+import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -61,6 +62,7 @@ const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {
 const PAGE_SIZE = 100;
 
 export default function ObjectsPage() {
+  const [, navigate] = useLocation();
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -509,7 +511,13 @@ export default function ObjectsPage() {
           
           <div className="flex-1 min-w-0" onClick={() => hasChildren && toggleExpand(obj.id)}>
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="font-medium">{obj.name && obj.name !== "0" ? obj.name : obj.objectNumber || obj.name}</span>
+              <span
+                className="font-medium text-primary hover:underline cursor-pointer"
+                onClick={(e) => { e.stopPropagation(); navigate(`/objects/${obj.id}`); }}
+                data-testid={`link-object-detail-${obj.id}`}
+              >
+                {obj.name && obj.name !== "0" ? obj.name : obj.objectNumber || obj.name}
+              </span>
               {obj.objectNumber && obj.name && obj.name !== "0" && (
                 <span className="text-xs text-muted-foreground font-mono">{obj.objectNumber}</span>
               )}

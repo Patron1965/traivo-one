@@ -475,6 +475,24 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/objects/:id/work-orders", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const object = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(object, tenantId)) {
+        return res.status(404).json({ error: "Object not found" });
+      }
+      const allOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true, 500);
+      const objectOrders = allOrders
+        .filter(wo => wo.objectId === req.params.id)
+        .slice(0, 50);
+      res.json(objectOrders);
+    } catch (error) {
+      console.error("Failed to fetch work orders for object:", error);
+      res.status(500).json({ error: "Failed to fetch work orders" });
+    }
+  });
+
   app.get("/api/objects/:id", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -11823,6 +11841,10 @@ setInterval(loadRoutes, 30000);
 
   app.get("/api/objects/:objectId/time-restrictions", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const restrictions = await storage.getObjectTimeRestrictions(req.params.objectId);
       res.json(restrictions);
     } catch (error) {

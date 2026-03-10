@@ -15,6 +15,7 @@ import NotFound from "@/pages/not-found";
 import WeekPlannerPage from "@/pages/WeekPlannerPage";
 import RoutesPage from "@/pages/RoutesPage";
 import ObjectsPage from "@/pages/ObjectsPage";
+import ObjectDetailPage from "@/pages/ObjectDetailPage";
 import ResourcesPage from "@/pages/ResourcesPage";
 import DashboardPage from "@/pages/DashboardPage";
 import SettingsPage from "@/pages/SettingsPage";
@@ -100,6 +101,7 @@ function Router() {
       <Route path="/clusters/:id" component={ClusterDetailPage} />
       <Route path="/routes" component={RoutesPage} />
       <Route path="/optimization" component={OptimizationPrepPage} />
+      <Route path="/objects/:id" component={ObjectDetailPage} />
       <Route path="/objects" component={ObjectsPage} />
       <Route path="/resources" component={ResourcesPage} />
       <Route path="/procurements" component={ProcurementsPage} />
