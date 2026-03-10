@@ -26,7 +26,6 @@ import {
   LogOut,
   Upload,
   FileText,
-  Sparkles,
   Brain,
   Package,
   Receipt,
@@ -36,7 +35,6 @@ import {
   Settings2,
   Target,
   DollarSign,
-  Timer,
   TrendingUp,
   Smartphone,
   Layers,
@@ -47,81 +45,67 @@ import {
   ChevronDown,
   Database,
   BarChart3,
-  BookOpen,
-  Briefcase,
   History,
-  Palette,
   Home,
-  Network,
-  Wrench,
-  Presentation,
   MessageSquare,
-  Leaf,
   MapPin,
   Fuel,
-  ExternalLink,
+  UserCheck,
+  ListChecks,
 } from "lucide-react";
 
 const grunddataItems = [
+  { title: "Kluster", url: "/clusters", icon: Target, description: "Arbetsområden" },
+  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
   { title: "Objekt", url: "/objects", icon: Building2, description: "Fastigheter och platser" },
   { title: "Resurser", url: "/resources", icon: Users, description: "Personal" },
   { title: "Fordon", url: "/vehicles", icon: Truck, description: "Fordon" },
   { title: "Artiklar", url: "/articles", icon: Package, description: "Produkter och tjänster" },
-  { title: "Kluster", url: "/clusters", icon: Target, description: "Arbetsområden" },
+  { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
+];
+
+const ordrarItems = [
+  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
+  { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks, description: "Intelligenta ordergeneratorer" },
+  { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: "Alla ordrar" },
+  { title: "Uppdrag", url: "/assignments", icon: UserCheck, description: "Genererade uppgifter" },
 ];
 
 const planeringItems = [
   { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
-  { title: "AI Command Center", url: "/ai-command-center", icon: Brain, description: "Samlade AI-funktioner" },
-  { title: "AI Planeringsassistent", url: "/ai-planning", icon: Sparkles, description: "AI-analys och optimering" },
-  { title: "Orderkoncept", url: "/order-concepts", icon: Layers, description: "Intelligenta ordergeneratorer" },
-  { title: "Uppgifter", url: "/assignments", icon: ClipboardList, description: "Genererade uppgifter" },
-  { title: "Orderstock", url: "/order-stock", icon: Package, description: "Alla ordrar" },
-  { title: "Mobilapp", url: "/mobile", icon: Smartphone, description: "Fältarbete" },
-  { title: "Rutter", url: "/routes", icon: Map, description: "Körvägar" },
+  { title: "Ruttplanering", url: "/routes", icon: Map, description: "Optimera körvägar" },
   { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
-  { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster och utvärdera effektivitet" },
+  { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
+  { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
+];
+
+const faltItems = [
+  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },
+  { title: "Besiktning", url: "/inspections", icon: ClipboardList, description: "Inspektionsprotokoll" },
   { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardList, description: "Inspektionsfrågor per artikeltyp" },
+  { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
 ];
 
 const analysItems = [
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard, description: "Översikt och nyckeltal" },
+  { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
+  { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
   { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
   { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
   { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
-  { title: "Miljöcertifikat", url: "/environmental-certificates", icon: Leaf, description: "Årliga hållbarhetsrapporter" },
+  { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
 ];
 
-const systemItems = [
-  { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
-  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
-  { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
-  { title: "SMS-inställningar", url: "/sms-settings", icon: MessageSquare, description: "SMS-notifikationer" },
+const adminItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tider" },
-  { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
-  { title: "Arkitektur", url: "/architecture", icon: Network, description: "Systemöversikt" },
   { title: "Användarhantering", url: "/user-management", icon: Users, description: "Hantera användare och roller" },
   { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2, description: "Företag, artiklar, koder" },
   { title: "Nytt företagskonto", url: "/onboarding", icon: Building2, description: "Skapa ny kund/företag" },
-  { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
-];
-
-const avanceratItems = [
-  { title: "Arbetsflödesguide", url: "/workflow-guide", icon: BookOpen, description: "Hur systemet används" },
-  { title: "Datakrav för import", url: "/data-requirements", icon: FileText, description: "Specifikation för Nordfield" },
-  { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
-  { title: "AI-optimering", url: "/optimization", icon: Sparkles, description: "Automatisk optimering" },
-  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
-  { title: "Prediktiv planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
-  { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer, description: "Tidsanalys" },
+  { title: "SMS-inställningar", url: "/sms-settings", icon: MessageSquare, description: "SMS-notifikationer" },
+  { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
+  { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
   { title: "Metadatainställningar", url: "/metadata-settings", icon: Database, description: "Metadatakatalog" },
-  { title: "Upphandlingar", url: "/procurements", icon: Briefcase, description: "Avtalshantering" },
-  { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
-  { title: "Demo Kundportal", url: "/portal/demo", icon: ExternalLink, description: "Testa kundens vy" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
-  { title: "Branschpaket", url: "/industry-packages", icon: Package, description: "Fördefinierade mallar" },
-  { title: "API-kostnader", url: "/api-costs", icon: BarChart3, description: "Övervakning av API-kostnader" },
-  { title: "Admin", url: "/system-dashboard", icon: Palette, description: "Varumärke och roller" },
+  { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
 ];
 
 interface NavDropdownProps {
@@ -276,10 +260,11 @@ export function TopNav() {
 
   const menuGroups: { label: string; items: typeof grunddataItems; icon: React.ElementType; colorClass: string; group: NavMenuGroup }[] = [
     { label: "Grunddata", items: grunddataItems, icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { label: "Planering", items: planeringItems, icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { label: "Ordrar", items: ordrarItems, icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
+    { label: "Planering & Karta", items: planeringItems, icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { label: "Fält & Utförande", items: faltItems, icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
     { label: "Analys", items: analysItems, icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
-    { label: "System", items: systemItems, icon: Settings, group: "system", colorClass: "text-orange-500" },
-    { label: "Avancerat", items: avanceratItems, icon: Wrench, group: "avancerat", colorClass: "text-gray-500" },
+    { label: "Administration", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 
   return (

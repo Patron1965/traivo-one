@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, Timer, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, MessageCircle, Brain, BookOpen, Database, ClipboardCheck, MapPin, History, LogIn } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, Brain, Database, ClipboardCheck, MapPin, History } from "lucide-react";
 import nordfieldLogo from "@assets/nordfield-logo-final_1772981791099.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -17,15 +17,14 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
 
-// Start - dagens arbete och snabb översikt
 const startItems = [
   { title: "Dagens arbete", url: "/", icon: Calendar },
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
 ];
 
-// Grunddata - stamdata som sätts upp en gång (logisk ordning: kunder → objekt → resurser → priser)
 const grunddataItems = [
   { title: "Kluster", url: "/clusters", icon: Target },
+  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
   { title: "Objekt", url: "/objects", icon: Building2 },
   { title: "Resurser", url: "/resources", icon: Users },
   { title: "Fordon", url: "/vehicles", icon: Truck },
@@ -33,45 +32,42 @@ const grunddataItems = [
   { title: "Prislistor", url: "/price-lists", icon: Receipt },
 ];
 
-// Planering - operativt arbetsflöde i kronologisk ordning
-const planeringItems = [
+const ordrarItems = [
   { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
   { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks },
-  { title: "Uppdrag", url: "/assignments", icon: UserCheck },
   { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
+  { title: "Uppdrag", url: "/assignments", icon: UserCheck },
+];
+
+const planeringItems = [
   { title: "Veckoplanering", url: "/planner", icon: Calendar },
   { title: "Ruttplanering", url: "/routes", icon: Map },
   { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
   { title: "Historisk Kartvy", url: "/historical-map", icon: History },
   { title: "Väderplanering", url: "/weather", icon: Cloud },
+];
+
+const faltItems = [
   { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
   { title: "Besiktning", url: "/inspections", icon: ClipboardCheck },
   { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardCheck },
+  { title: "Kundportal", url: "/customer-portal", icon: Building },
 ];
 
-// Analys - rapporter och insikter
 const analysItems = [
-  { title: "AI Command Center", url: "/ai-command-center", icon: Brain },
   { title: "AI-Assistent", url: "/ai-assistant", icon: Brain },
   { title: "Rapportering", url: "/reporting", icon: BarChart3 },
   { title: "Ekonomi", url: "/economics", icon: DollarSign },
-  { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
   { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
 ];
 
-// System Avancerat - administration och verktyg
-const settingsItems = [
-  { title: "Arbetsflödesguide", url: "/workflow-guide", icon: BookOpen },
+const adminItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
-  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
-  { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
   { title: "Upphandlingar", url: "/procurements", icon: FileText },
-  { title: "Kundportal", url: "/customer-portal", icon: Building },
-  { title: "Demo Kundportal", url: "/portal/demo", icon: LogIn },
-  { title: "Kundmeddelanden", url: "/portal-messages", icon: MessageCircle },
+  { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
   { title: "Importera data", url: "/import", icon: Upload },
-  { title: "Systemöversikt", url: "/system-overview", icon: FileText },
   { title: "Metadatainställningar", url: "/metadata-settings", icon: Database },
+  { title: "Systemöversikt", url: "/system-overview", icon: FileText },
   { title: "Inställningar", url: "/settings", icon: Settings },
 ];
 
@@ -172,10 +168,46 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>Planering</SidebarGroupLabel>
+          <SidebarGroupLabel>Ordrar</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {ordrarItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
+                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Planering & Karta</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {planeringItems.map((item) => (
+                <SidebarMenuItem key={item.title}>
+                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
+                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+                      <item.icon className="h-4 w-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Fält & Utförande</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {faltItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
                     <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
@@ -208,13 +240,13 @@ export function AppSidebar() {
         </SidebarGroup>
 
         <SidebarGroup>
-          <SidebarGroupLabel>System Avancerat</SidebarGroupLabel>
+          <SidebarGroupLabel>Administration</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {settingsItems.map((item) => (
+              {adminItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "")}`}>
+                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.title}</span>
                     </Link>

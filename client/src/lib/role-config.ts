@@ -122,14 +122,15 @@ export function canAccessRoute(role: string | undefined | null, route: string): 
   return PLANNER_ROUTES.has(basePath);
 }
 
-export type NavMenuGroup = "grunddata" | "planering" | "analys" | "system" | "avancerat";
+export type NavMenuGroup = "grunddata" | "ordrar" | "planering" | "falt" | "analys" | "admin";
 
 const MENU_ACCESS: Record<NavMenuGroup, UserRole[]> = {
   grunddata: ["owner", "admin", "planner", "user", "viewer"],
+  ordrar: ["owner", "admin", "planner"],
   planering: ["owner", "admin", "planner"],
+  falt: ["owner", "admin", "planner", "user"],
   analys: ["owner", "admin", "planner"],
-  system: ["owner", "admin"],
-  avancerat: ["owner", "admin"],
+  admin: ["owner", "admin"],
 };
 
 export function canAccessMenu(role: string | undefined | null, menu: NavMenuGroup): boolean {

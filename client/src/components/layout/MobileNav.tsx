@@ -22,7 +22,7 @@ import {
   Settings,
   Upload,
   FileText,
-  Sparkles,
+  Brain,
   Package,
   Receipt,
   ClipboardList,
@@ -31,7 +31,6 @@ import {
   Settings2,
   Target,
   DollarSign,
-  Timer,
   TrendingUp,
   Smartphone,
   Layers,
@@ -42,6 +41,9 @@ import {
   Database,
   MapPin,
   History,
+  BarChart3,
+  Fuel,
+  MessageSquare,
 } from "lucide-react";
 
 const navigationGroups = [
@@ -56,6 +58,7 @@ const navigationGroups = [
     title: "Grunddata",
     items: [
       { title: "Kluster", url: "/clusters", icon: Target },
+      { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
       { title: "Objekt", url: "/objects", icon: Building2 },
       { title: "Resurser", url: "/resources", icon: Users },
       { title: "Fordon", url: "/vehicles", icon: Truck },
@@ -64,36 +67,49 @@ const navigationGroups = [
     ],
   },
   {
-    title: "Planering",
+    title: "Ordrar",
     items: [
       { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
       { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks },
-      { title: "Uppdrag", url: "/assignments", icon: UserCheck },
       { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
+      { title: "Uppdrag", url: "/assignments", icon: UserCheck },
+    ],
+  },
+  {
+    title: "Planering & Karta",
+    items: [
       { title: "Veckoplanering", url: "/planner", icon: Calendar },
-      { title: "Väderplanering", url: "/weather", icon: Cloud },
       { title: "Ruttplanering", url: "/routes", icon: Map },
-      { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
       { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
       { title: "Historisk Kartvy", url: "/historical-map", icon: History },
+      { title: "Väderplanering", url: "/weather", icon: Cloud },
+    ],
+  },
+  {
+    title: "Fält & Utförande",
+    items: [
+      { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
+      { title: "Besiktning", url: "/inspections", icon: ClipboardList },
+      { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardList },
+      { title: "Kundportal", url: "/customer-portal", icon: Building },
     ],
   },
   {
     title: "Analys",
     items: [
+      { title: "AI-Assistent", url: "/ai-assistant", icon: Brain },
+      { title: "Rapportering", url: "/reporting", icon: BarChart3 },
       { title: "Ekonomi", url: "/economics", icon: DollarSign },
-      { title: "Ställtidsanalys", url: "/setup-analysis", icon: Timer },
+      { title: "Fakturering", url: "/invoicing", icon: Receipt },
+      { title: "Fleethantering", url: "/fleet", icon: Fuel },
       { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
     ],
   },
   {
-    title: "System Avancerat",
+    title: "Administration",
     items: [
       { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
-      { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
-      { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
-      { title: "Upphandlingar", url: "/procurements", icon: FileText },
-      { title: "Kundportal", url: "/customer-portal", icon: Building },
+      { title: "Användarhantering", url: "/user-management", icon: Users },
       { title: "Importera data", url: "/import", icon: Upload },
       { title: "Metadatainställningar", url: "/metadata-settings", icon: Database },
       { title: "Systemöversikt", url: "/system-overview", icon: FileText },
