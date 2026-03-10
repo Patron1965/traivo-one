@@ -28,7 +28,28 @@ async function initPushTokensTable() {
   }
 }
 
+async function initTimeEntriesTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS time_entries (
+        id SERIAL PRIMARY KEY,
+        order_id VARCHAR(255) NOT NULL,
+        driver_id VARCHAR(255) NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        ended_at TIMESTAMP,
+        duration_seconds INTEGER,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('time_entries table ready');
+  } catch (err: any) {
+    console.error('Failed to create time_entries table:', err.message);
+  }
+}
+
 initPushTokensTable();
+initTimeEntriesTable();
 
 async function sendPushNotification(
   driverId: string,

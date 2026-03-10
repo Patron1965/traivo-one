@@ -10,6 +10,7 @@ import { ReportDeviationScreen } from '../screens/ReportDeviationScreen';
 import { MaterialLogScreen } from '../screens/MaterialLogScreen';
 import { CameraCaptureScreen } from '../screens/CameraCaptureScreen';
 import { SignatureScreen } from '../screens/SignatureScreen';
+import { CustomerSignOffScreen } from '../screens/CustomerSignOffScreen';
 import { InspectionScreen } from '../screens/InspectionScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
@@ -94,6 +95,11 @@ export function RootNavigator() {
             name="Signature"
             component={SignatureScreen}
             options={{ headerTitle: 'Signatur' }}
+          />
+          <Stack.Screen
+            name="CustomerSignOff"
+            component={CustomerSignOffScreen}
+            options={{ headerTitle: 'Kundkvittering' }}
           />
           <Stack.Screen
             name="Inspection"

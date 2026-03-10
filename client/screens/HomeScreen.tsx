@@ -14,6 +14,21 @@ import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
 
+interface TimeSummary {
+  totalSeconds: number;
+  travelSeconds: number;
+  onSiteSeconds: number;
+  workingSeconds: number;
+  entries: number;
+}
+
+function formatWorkTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
 interface BreakSuggestion {
   hoursWorked: number;
   nextJobTime: string | null;
@@ -109,6 +124,11 @@ export function HomeScreen({ navigation }: any) {
   const { data: weather } = useQuery<WeatherData>({
     queryKey: ['/api/mobile/weather'],
     staleTime: 600000,
+  });
+
+  const { data: timeSummary } = useQuery<TimeSummary>({
+    queryKey: ['/api/mobile/time-summary'],
+    refetchInterval: 60000,
   });
 
   const { currentPosition } = useGpsTracking();
@@ -412,6 +432,41 @@ export function HomeScreen({ navigation }: any) {
           ) : null}
         </View>
       </Card>
+
+      {timeSummary && timeSummary.totalSeconds > 0 ? (
+        <Card style={styles.workTimeCard}>
+          <View style={styles.workTimeHeader}>
+            <Feather name="clock" size={16} color={Colors.primary} />
+            <ThemedText variant="subheading">Arbetstid idag</ThemedText>
+            <ThemedText variant="heading" color={Colors.primary} style={styles.workTimeTotal} testID="text-work-time-total">
+              {formatWorkTime(timeSummary.totalSeconds)}
+            </ThemedText>
+          </View>
+          <View style={styles.workTimeBreakdown}>
+            {timeSummary.travelSeconds > 0 ? (
+              <View style={styles.workTimeItem}>
+                <View style={[styles.workTimeDot, { backgroundColor: Colors.info }]} />
+                <ThemedText variant="caption" color={Colors.textSecondary}>Körning</ThemedText>
+                <ThemedText variant="body" color={Colors.info}>{formatWorkTime(timeSummary.travelSeconds)}</ThemedText>
+              </View>
+            ) : null}
+            {timeSummary.onSiteSeconds > 0 ? (
+              <View style={styles.workTimeItem}>
+                <View style={[styles.workTimeDot, { backgroundColor: Colors.primaryLight }]} />
+                <ThemedText variant="caption" color={Colors.textSecondary}>På plats</ThemedText>
+                <ThemedText variant="body" color={Colors.primaryLight}>{formatWorkTime(timeSummary.onSiteSeconds)}</ThemedText>
+              </View>
+            ) : null}
+            {timeSummary.workingSeconds > 0 ? (
+              <View style={styles.workTimeItem}>
+                <View style={[styles.workTimeDot, { backgroundColor: Colors.secondary }]} />
+                <ThemedText variant="caption" color={Colors.textSecondary}>Arbete</ThemedText>
+                <ThemedText variant="body" color={Colors.secondary}>{formatWorkTime(timeSummary.workingSeconds)}</ThemedText>
+              </View>
+            ) : null}
+          </View>
+        </Card>
+      ) : null}
 
       {breakSuggestion && !breakDismissed ? (
         <Card style={styles.breakBanner}>
@@ -979,5 +1034,33 @@ const styles = StyleSheet.create({
   },
   voiceFeedbackText: {
     flex: 1,
+  },
+  workTimeCard: {
+    backgroundColor: Colors.surface,
+  },
+  workTimeHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  workTimeTotal: {
+    marginLeft: 'auto',
+  },
+  workTimeBreakdown: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginTop: Spacing.md,
+    paddingTop: Spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+  },
+  workTimeItem: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  workTimeDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
 });

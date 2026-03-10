@@ -14,10 +14,13 @@ The application is built using React Native with Expo SDK 54 and TypeScript for 
 
 **Key Features:**
 - **Order Management:** Daily order lists with status badges, filtering, swipe gestures for status updates and deviation reporting, and detailed order views with sub-steps, notes, and task dependencies.
-- **Routing & Navigation:** Integration with Geoapify Routing API for optimized routes, traffic-aware travel time estimation, and a map view displaying custom markers, driver start positions, and route polylines.
-- **Offline Capabilities:** Offline map data caching, offline sync for outbox operations, and robust handling of network disconnections.
+- **Time Tracking:** Automatic time entries created on status changes (travel/on_site/working phases). Live timer on OrderDetailScreen during active work. Time breakdown per phase on completed orders. Daily work time summary on HomeScreen. Database table `time_entries`.
+- **Customer Sign-Off:** CustomerSignOffScreen with order summary, materials used, deviations, signature pad, and customer name input. POST endpoint for sign-off data. Accessible from OrderDetailScreen when order is in_progress or completed.
+- **Routing & Navigation:** Integration with Geoapify Routing API for optimized routes, traffic-aware travel time estimation (`traffic=approximated`), and a map view displaying custom markers, driver start positions, and route polylines.
+- **Offline Capabilities:** Offline map data caching (route polylines + order data in AsyncStorage, 24h TTL), offline sync for outbox operations, and robust handling of network disconnections.
 - **GPS Tracking:** Foreground location tracking with regular reporting to the backend, and an online/offline toggle that affects driver visibility on the planner map.
 - **AI Integration:** "Unicorn Assist" chat (GPT-5.2), voice commands for hands-free operation, AI image analysis for deviation reporting, and context-aware AI tips.
+- **Push Notifications:** Infrastructure ready for standalone builds (APNs/FCM). Database table `push_tokens`, Expo Push API integration, token registration on login, notifications on order status changes.
 - **Checklists & Inspections:** Template-based inspection checklists, including requirements for photo uploads (before/after).
 - **Communication:** Real-time updates via WebSocket (Socket.io) for order changes and notifications.
 - **Branding & UI:** Rebranded to "Nordfield" with a "Midnight Sun" color scheme, custom icons, and a focus on intuitive UI/UX across screens like Profile, AI Assistant, and Orders.

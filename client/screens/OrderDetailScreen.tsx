@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, ScrollView, Pressable, StyleSheet, Linking, Platform,
   TextInput, ActivityIndicator, Modal
@@ -17,6 +17,49 @@ import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote, ImpossibleReason } from '../types';
 import { TIME_RESTRICTION_LABELS, ORDER_STATUS_SEQUENCE, IMPOSSIBLE_REASONS } from '../types';
+
+interface TimeEntry {
+  id: number;
+  orderId: string;
+  driverId: string;
+  status: 'travel' | 'on_site' | 'working';
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  createdAt: string;
+}
+
+function formatDuration(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = seconds % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
+function formatDurationShort(seconds: number): string {
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  if (h > 0) return `${h}h ${m}min`;
+  return `${m}min`;
+}
+
+const TIME_STATUS_LABELS: Record<string, string> = {
+  travel: 'Körning',
+  on_site: 'På plats',
+  working: 'Arbete',
+};
+
+const TIME_STATUS_ICONS: Record<string, string> = {
+  travel: 'navigation',
+  on_site: 'map-pin',
+  working: 'tool',
+};
+
+const TIME_STATUS_COLORS: Record<string, string> = {
+  travel: Colors.info,
+  on_site: Colors.primaryLight,
+  working: Colors.secondary,
+};
 
 const KINAB_STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
 
@@ -122,20 +165,24 @@ const ContactInfo = React.memo(function ContactInfo({
 const ActionButtons = React.memo(function ActionButtons({
   orderId,
   articles,
+  showCustomerSignOff,
   onDeviation,
   onMaterial,
   onInspection,
   onCamera,
   onSignature,
+  onCustomerSignOff,
   onAiTip,
 }: {
   orderId: number | string;
   articles: Order['articles'];
+  showCustomerSignOff: boolean;
   onDeviation: () => void;
   onMaterial: () => void;
   onInspection: () => void;
   onCamera: () => void;
   onSignature: () => void;
+  onCustomerSignOff: () => void;
   onAiTip: () => void;
 }) {
   return (
@@ -192,6 +239,18 @@ const ActionButtons = React.memo(function ActionButtons({
           </View>
           <ThemedText variant="caption" style={styles.actionLabel}>Signatur</ThemedText>
         </Pressable>
+        {showCustomerSignOff ? (
+          <Pressable
+            style={styles.actionGridItem}
+            onPress={onCustomerSignOff}
+            testID="button-customer-signoff"
+          >
+            <View style={[styles.actionIconBox, { backgroundColor: Colors.successLight }]}>
+              <Feather name="file-text" size={24} color={Colors.success} />
+            </View>
+            <ThemedText variant="caption" style={styles.actionLabel}>Kundkvittering</ThemedText>
+          </Pressable>
+        ) : null}
         <Pressable
           style={styles.actionGridItem}
           onPress={onAiTip}
@@ -221,10 +280,36 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const [selectedReason, setSelectedReason] = useState<ImpossibleReason | null>(null);
   const [impossibleText, setImpossibleText] = useState('');
   const { currentPosition } = useGpsTracking();
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const { data: order, isLoading } = useQuery<Order>({
     queryKey: [`/api/mobile/orders/${orderId}`],
   });
+
+  const { data: timeEntries } = useQuery<TimeEntry[]>({
+    queryKey: [`/api/mobile/orders/${orderId}/time-entries`],
+    refetchInterval: 30000,
+  });
+
+  const activeEntry = timeEntries?.find(e => e.endedAt === null) || null;
+
+  useEffect(() => {
+    if (activeEntry) {
+      const startMs = new Date(activeEntry.startedAt).getTime();
+      const update = () => {
+        setElapsedSeconds(Math.floor((Date.now() - startMs) / 1000));
+      };
+      update();
+      timerRef.current = setInterval(update, 1000);
+      return () => {
+        if (timerRef.current) clearInterval(timerRef.current);
+      };
+    } else {
+      setElapsedSeconds(0);
+      if (timerRef.current) clearInterval(timerRef.current);
+    }
+  }, [activeEntry?.id, activeEntry?.startedAt]);
 
   const statusMutation = useMutation({
     mutationFn: (params: { status: OrderStatus; impossibleReason?: string }) =>
@@ -233,6 +318,8 @@ export function OrderDetailScreen({ route, navigation }: any) {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
+      queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}/time-entries`] });
+      queryClient.invalidateQueries({ queryKey: ['/api/mobile/time-summary'] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       const finishStatuses: OrderStatus[] = ['completed', 'utford', 'fakturerad', 'impossible'];
       if (finishStatuses.includes(variables.status)) {
@@ -411,6 +498,10 @@ export function OrderDetailScreen({ route, navigation }: any) {
     navigation.navigate('Signature', { orderId });
   }, [navigation, orderId]);
 
+  const handleNavigateCustomerSignOff = useCallback(() => {
+    navigation.navigate('CustomerSignOff', { orderId });
+  }, [navigation, orderId]);
+
   function formatNoteDate(dateStr: string): string {
     const d = new Date(dateStr);
     return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
@@ -462,6 +553,23 @@ export function OrderDetailScreen({ route, navigation }: any) {
           <ThemedText variant="heading">{order.customerName}</ThemedText>
           <StatusBadge status={order.status} />
         </View>
+
+        {activeEntry ? (
+          <Card style={styles.timerCard}>
+            <View style={styles.timerContent}>
+              <View style={[styles.timerDot, { backgroundColor: TIME_STATUS_COLORS[activeEntry.status] || Colors.primary }]} />
+              <View style={styles.timerInfo}>
+                <ThemedText variant="caption" color={Colors.textSecondary}>
+                  {TIME_STATUS_LABELS[activeEntry.status] || activeEntry.status}
+                </ThemedText>
+                <ThemedText variant="heading" color={TIME_STATUS_COLORS[activeEntry.status] || Colors.primary} testID="text-active-timer">
+                  {formatDuration(elapsedSeconds)}
+                </ThemedText>
+              </View>
+              <Feather name={TIME_STATUS_ICONS[activeEntry.status] as any || 'clock'} size={24} color={TIME_STATUS_COLORS[activeEntry.status] || Colors.primary} />
+            </View>
+          </Card>
+        ) : null}
 
         {order.isLocked ? (
           <Card style={styles.lockedCard}>
@@ -672,13 +780,81 @@ export function OrderDetailScreen({ route, navigation }: any) {
         <ActionButtons
           orderId={order.id}
           articles={order.articles}
+          showCustomerSignOff={order.status === 'in_progress' || order.status === 'completed'}
           onDeviation={handleNavigateDeviation}
           onMaterial={handleNavigateMaterial}
           onInspection={handleNavigateInspection}
           onCamera={handleNavigateCamera}
           onSignature={handleNavigateSignature}
+          onCustomerSignOff={handleNavigateCustomerSignOff}
           onAiTip={handleAiTip}
         />
+
+        {timeEntries && timeEntries.length > 0 ? (
+          <Card>
+            <ThemedText variant="label" style={styles.sectionLabel}>Tidrapport</ThemedText>
+
+            {isFinished ? (
+              <View style={styles.timeBreakdownRow}>
+                {(['travel', 'on_site', 'working'] as const).map(status => {
+                  const total = timeEntries
+                    .filter(e => e.status === status)
+                    .reduce((sum, e) => sum + (e.durationSeconds || 0), 0);
+                  return total > 0 ? (
+                    <View key={status} style={styles.timeBreakdownItem}>
+                      <View style={[styles.timeBreakdownDot, { backgroundColor: TIME_STATUS_COLORS[status] }]} />
+                      <ThemedText variant="caption" color={Colors.textSecondary}>
+                        {TIME_STATUS_LABELS[status]}
+                      </ThemedText>
+                      <ThemedText variant="subheading" color={TIME_STATUS_COLORS[status]}>
+                        {formatDurationShort(total)}
+                      </ThemedText>
+                    </View>
+                  ) : null;
+                })}
+              </View>
+            ) : null}
+
+            <View style={styles.timelineContainer}>
+              {timeEntries.map((entry, index) => {
+                const duration = entry.durationSeconds != null
+                  ? entry.durationSeconds
+                  : (entry.endedAt === null ? elapsedSeconds : 0);
+                const startTime = new Date(entry.startedAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' });
+                const endTime = entry.endedAt
+                  ? new Date(entry.endedAt).toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+                  : null;
+                const color = TIME_STATUS_COLORS[entry.status] || Colors.primary;
+                const isActive = entry.endedAt === null;
+
+                return (
+                  <View key={entry.id} style={styles.timelineRow}>
+                    <View style={styles.timelineLeft}>
+                      <View style={[styles.timelineDot, { backgroundColor: color }, isActive ? styles.timelineDotActive : null]} />
+                      {index < timeEntries.length - 1 ? (
+                        <View style={[styles.timelineLine, { backgroundColor: color }]} />
+                      ) : null}
+                    </View>
+                    <View style={styles.timelineContent}>
+                      <View style={styles.timelineHeader}>
+                        <ThemedText variant="body" style={{ fontFamily: 'Inter_600SemiBold' }}>
+                          {TIME_STATUS_LABELS[entry.status] || entry.status}
+                        </ThemedText>
+                        <ThemedText variant="caption" color={Colors.textMuted}>
+                          {startTime}{endTime ? ` - ${endTime}` : ''}
+                        </ThemedText>
+                      </View>
+                      <ThemedText variant="caption" color={isActive ? color : Colors.textSecondary}>
+                        {isActive ? formatDuration(duration) : formatDurationShort(duration)}
+                        {isActive ? ' (pågår)' : ''}
+                      </ThemedText>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          </Card>
+        ) : null}
       </ScrollView>
 
       {!isFinished && !order.isLocked ? (
@@ -1375,5 +1551,80 @@ const styles = StyleSheet.create({
     fontSize: FontSize.md,
     color: Colors.text,
     marginBottom: Spacing.md,
+  },
+  timerCard: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  timerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  timerDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  timerInfo: {
+    flex: 1,
+  },
+  timeBreakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: Spacing.lg,
+    paddingVertical: Spacing.sm,
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+  },
+  timeBreakdownItem: {
+    alignItems: 'center',
+    gap: Spacing.xs,
+  },
+  timeBreakdownDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  timelineContainer: {
+    gap: 0,
+  },
+  timelineRow: {
+    flexDirection: 'row',
+    minHeight: 48,
+  },
+  timelineLeft: {
+    width: 24,
+    alignItems: 'center',
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
+  },
+  timelineDotActive: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: Colors.surface,
+  },
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    opacity: 0.3,
+    marginVertical: 2,
+  },
+  timelineContent: {
+    flex: 1,
+    paddingLeft: Spacing.sm,
+    paddingBottom: Spacing.md,
+  },
+  timelineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 });

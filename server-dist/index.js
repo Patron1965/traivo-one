@@ -62,7 +62,27 @@ async function initPushTokensTable() {
     console.error("Failed to create push_tokens table:", err.message);
   }
 }
+async function initTimeEntriesTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS time_entries (
+        id SERIAL PRIMARY KEY,
+        order_id VARCHAR(255) NOT NULL,
+        driver_id VARCHAR(255) NOT NULL,
+        status VARCHAR(50) NOT NULL,
+        started_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        ended_at TIMESTAMP,
+        duration_seconds INTEGER,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log("time_entries table ready");
+  } catch (err) {
+    console.error("Failed to create time_entries table:", err.message);
+  }
+}
 initPushTokensTable();
+initTimeEntriesTable();
 async function sendPushNotification(driverId, title, body, data) {
   try {
     const result = await pool.query(
@@ -737,6 +757,47 @@ router.get("/orders/:id/checklist", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta checklista. F\xF6rs\xF6k igen." });
   }
 });
+async function handleTimeEntries(orderId, driverId, newStatus) {
+  const now = /* @__PURE__ */ new Date();
+  try {
+    if (newStatus === "dispatched") {
+      await pool.query(
+        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'travel', $3)`,
+        [orderId, driverId, now]
+      );
+    } else if (newStatus === "on_site") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'travel' AND ended_at IS NULL`,
+        [now, orderId, driverId]
+      );
+      await pool.query(
+        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'on_site', $3)`,
+        [orderId, driverId, now]
+      );
+    } else if (newStatus === "in_progress") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'on_site' AND ended_at IS NULL`,
+        [now, orderId, driverId]
+      );
+      await pool.query(
+        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'working', $3)`,
+        [orderId, driverId, now]
+      );
+    } else if (newStatus === "completed" || newStatus === "utford") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
+        [now, orderId, driverId]
+      );
+    } else if (newStatus === "failed" || newStatus === "impossible" || newStatus === "cancelled") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
+        [now, orderId, driverId]
+      );
+    }
+  } catch (err) {
+    console.error("Error managing time entries:", err.message);
+  }
+}
 router.patch("/orders/:id/status", async (req, res) => {
   const { status: newStatus } = req.body;
   const allowedStatuses = ["planned", "dispatched", "on_site", "in_progress", "completed", "failed", "cancelled", "planerad_pre", "planerad_resurs", "planerad_las", "utford", "fakturerad", "impossible"];
@@ -772,6 +833,10 @@ router.patch("/orders/:id/status", async (req, res) => {
       if (newStatus === "fakturerad") {
         order.completedAt = order.completedAt || (/* @__PURE__ */ new Date()).toISOString();
       }
+      const driverId = String(order.resourceId || MOCK_RESOURCE.id);
+      handleTimeEntries(String(order.id), driverId, newStatus).catch((err) => {
+        console.error("[time-entries] Error in mock handleTimeEntries:", err.message);
+      });
       if (io2) {
         io2.emit("order:updated", { orderId: order.id, status: order.status, updatedAt: (/* @__PURE__ */ new Date()).toISOString() });
       }
@@ -806,9 +871,70 @@ router.patch("/orders/:id/status", async (req, res) => {
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
     });
+    if (status === 200) {
+      const driverId = String(MOCK_RESOURCE.id);
+      handleTimeEntries(req.params.id, driverId, newStatus).catch((err) => {
+        console.error("[time-entries] Error in non-mock handleTimeEntries:", err.message);
+      });
+    }
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte uppdatera status. F\xF6rs\xF6k igen." });
+  }
+});
+router.get("/orders/:id/time-entries", async (req, res) => {
+  const orderId = req.params.id;
+  try {
+    const result = await pool.query(
+      `SELECT id, order_id, driver_id, status, started_at, ended_at, duration_seconds, created_at FROM time_entries WHERE order_id = $1 ORDER BY started_at ASC`,
+      [orderId]
+    );
+    res.json(result.rows.map((row) => ({
+      id: row.id,
+      orderId: row.order_id,
+      driverId: row.driver_id,
+      status: row.status,
+      startedAt: row.started_at,
+      endedAt: row.ended_at,
+      durationSeconds: row.duration_seconds,
+      createdAt: row.created_at
+    })));
+  } catch (err) {
+    console.error("Error fetching time entries:", err.message);
+    res.status(500).json({ error: "Kunde inte h\xE4mta tidrapport" });
+  }
+});
+router.get("/time-summary", async (req, res) => {
+  const driverId = String(MOCK_RESOURCE.id);
+  const today = /* @__PURE__ */ new Date();
+  const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const endOfDay = new Date(startOfDay.getTime() + 864e5);
+  try {
+    const result = await pool.query(
+      `SELECT status, started_at, ended_at, duration_seconds FROM time_entries WHERE driver_id = $1 AND started_at >= $2 AND started_at < $3 ORDER BY started_at ASC`,
+      [driverId, startOfDay, endOfDay]
+    );
+    let travelSeconds = 0;
+    let onSiteSeconds = 0;
+    let workingSeconds = 0;
+    const now = /* @__PURE__ */ new Date();
+    for (const row of result.rows) {
+      const duration = row.duration_seconds != null ? row.duration_seconds : Math.floor((now.getTime() - new Date(row.started_at).getTime()) / 1e3);
+      if (row.status === "travel") travelSeconds += duration;
+      else if (row.status === "on_site") onSiteSeconds += duration;
+      else if (row.status === "working") workingSeconds += duration;
+    }
+    const totalSeconds = travelSeconds + onSiteSeconds + workingSeconds;
+    res.json({
+      totalSeconds,
+      travelSeconds,
+      onSiteSeconds,
+      workingSeconds,
+      entries: result.rows.length
+    });
+  } catch (err) {
+    console.error("Error fetching time summary:", err.message);
+    res.status(500).json({ error: "Kunde inte h\xE4mta tidssammanfattning" });
   }
 });
 router.post("/orders/:id/deviations", async (req, res) => {
@@ -1601,6 +1727,38 @@ router.get("/route-optimized", async (req, res) => {
     clearTimeout(timeout);
     console.error("Geoapify planner fetch error:", error.message);
     res.json(buildFallbackResponse(parsed));
+  }
+});
+router.post("/orders/:id/customer-signoff", async (req, res) => {
+  const { id } = req.params;
+  const { customerName, signatureData, signedAt } = req.body;
+  if (!customerName || !signatureData) {
+    return res.status(400).json({ error: "customerName och signatureData kr\xE4vs" });
+  }
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find((o) => String(o.id) === String(id));
+    if (!order) {
+      return res.status(404).json({ error: "Order hittades inte" });
+    }
+    order.customerSignOff = {
+      customerName,
+      signatureData,
+      signedAt: signedAt || (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return res.json({ success: true, signOff: order.customerSignOff });
+  }
+  try {
+    const { status, data } = await kinabFetch(`/api/mobile/orders/${id}/customer-signoff`, {
+      method: "POST",
+      headers: getAuthHeader(req),
+      body: JSON.stringify({ customerName, signatureData, signedAt })
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("[customer-signoff] Upstream error:", error.message);
+    return res.status(503).json({
+      error: "Kunde inte spara kundkvittering. F\xF6rs\xF6k igen."
+    });
   }
 });
 router.post("/push-token", async (req, res) => {
