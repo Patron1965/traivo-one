@@ -10,6 +10,7 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useAuth } from '../context/AuthContext';
+import { useOfflineSync } from '../hooks/useOfflineSync';
 import type { Order } from '../types';
 
 let MapView: any = null;
@@ -34,12 +35,13 @@ interface RouteStep {
 interface RouteLeg {
   distance: number;
   duration: number;
+  durationWithoutTraffic?: number;
   steps?: RouteStep[];
 }
 
 interface RouteData {
   waypoints: { location: [number, number]; waypointIndex: number }[];
-  trips: { geometry: { type: string; coordinates: number[][] }; distance: number; duration: number; legs?: RouteLeg[] }[];
+  trips: { geometry: { type: string; coordinates: number[][] }; distance: number; duration: number; durationWithoutTraffic?: number; legs?: RouteLeg[] }[];
   fallback?: boolean;
   optimized?: boolean;
 }
@@ -126,8 +128,12 @@ export function MapScreen({ navigation }: any) {
   const [legendExpanded, setLegendExpanded] = useState(false);
   const [mapReady, setMapReady] = useState(false);
   const [displayPolyline, setDisplayPolyline] = useState<{latitude: number; longitude: number}[] | null>(null);
+  const [usingCachedData, setUsingCachedData] = useState(false);
+  const [cachedRouteData, setCachedRouteData] = useState<RouteData | null>(null);
+  const [cachedOrders, setCachedOrders] = useState<Order[] | null>(null);
   const { currentPosition } = useGpsTracking();
   const { startPosition } = useAuth();
+  const { cacheRouteData, getCachedRouteData, cacheOrderData, getCachedOrderData } = useOfflineSync();
 
   const routeOrigin = useMemo(() => {
     if (startPosition) {
@@ -143,18 +149,18 @@ export function MapScreen({ navigation }: any) {
     queryKey: ['/api/mobile/my-orders'],
   });
 
-  const activeOrders = useMemo(
+  const liveActiveOrders = useMemo(
     () => (orders?.filter(o => o.status !== 'cancelled') || []).sort((a, b) => a.sortOrder - b.sortOrder),
     [orders]
   );
 
   const coordsParam = useMemo(() => {
-    if (activeOrders.length === 0) return null;
+    if (liveActiveOrders.length === 0) return null;
     const parts: string[] = [];
     if (routeOrigin && routeOrigin.latitude && routeOrigin.longitude) {
       parts.push(`${routeOrigin.longitude},${routeOrigin.latitude}`);
     }
-    activeOrders.forEach(o => {
+    liveActiveOrders.forEach(o => {
       if (o.latitude && o.longitude && o.latitude !== 0 && o.longitude !== 0) {
         parts.push(`${o.longitude},${o.latitude}`);
       }
@@ -162,7 +168,7 @@ export function MapScreen({ navigation }: any) {
     if (parts.length < 2) return null;
     const result = parts.join(';');
     return result.length > 0 ? result : null;
-  }, [activeOrders, routeOrigin]);
+  }, [liveActiveOrders, routeOrigin]);
 
   const hasDriverStart = !!routeOrigin;
 
@@ -178,9 +184,52 @@ export function MapScreen({ navigation }: any) {
     retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 10000),
   });
 
+  useEffect(() => {
+    if (orders && orders.length > 0) {
+      cacheOrderData(orders);
+    }
+  }, [orders, cacheOrderData]);
+
+  useEffect(() => {
+    if (routeData && !routeData.fallback) {
+      cacheRouteData(routeData);
+      if (usingCachedData) {
+        setUsingCachedData(false);
+        setCachedRouteData(null);
+        setCachedOrders(null);
+      }
+    }
+  }, [routeData, cacheRouteData]);
+
+  useEffect(() => {
+    const needsFallback = (routeError && !routeData) || (!orders && !routeData);
+    if (needsFallback) {
+      (async () => {
+        const cached = await getCachedRouteData();
+        const cachedOrd = await getCachedOrderData();
+        if (cached || cachedOrd) {
+          setUsingCachedData(true);
+          if (cached) setCachedRouteData(cached);
+          if (cachedOrd) setCachedOrders(cachedOrd);
+        }
+      })();
+    }
+  }, [routeError, routeData, orders, getCachedRouteData, getCachedOrderData]);
+
+  const effectiveRouteData = routeData || (usingCachedData ? cachedRouteData : null);
+  const effectiveOrders = orders || (usingCachedData ? cachedOrders : null);
+
+  const activeOrders = useMemo(
+    () => {
+      const source = effectiveOrders || [];
+      return source.filter((o: Order) => o.status !== 'cancelled').sort((a: Order, b: Order) => a.sortOrder - b.sortOrder);
+    },
+    [effectiveOrders]
+  );
+
   const roadPolyline = useMemo(() => {
-    if (!routeData?.trips?.[0]) return null;
-    const trip = routeData.trips[0];
+    if (!effectiveRouteData?.trips?.[0]) return null;
+    const trip = effectiveRouteData.trips[0];
     if (trip.geometry?.coordinates && trip.geometry.coordinates.length > 1) {
       return trip.geometry.coordinates.map((c: number[]) => ({
         latitude: c[1],
@@ -188,7 +237,7 @@ export function MapScreen({ navigation }: any) {
       }));
     }
     return null;
-  }, [routeData]);
+  }, [effectiveRouteData]);
 
   useEffect(() => {
     if (mapReady && roadPolyline && roadPolyline.length > 1) {
@@ -202,9 +251,9 @@ export function MapScreen({ navigation }: any) {
   }, [mapReady, roadPolyline]);
 
   const optimizedOrders = useMemo(() => {
-    if (!routeData?.waypoints || routeData.waypoints.length < 1) return activeOrders;
+    if (!effectiveRouteData?.waypoints || effectiveRouteData.waypoints.length < 1) return activeOrders;
     const driverOffset = hasDriverStart ? 1 : 0;
-    const orderWaypoints = routeData.waypoints.slice(driverOffset);
+    const orderWaypoints = effectiveRouteData.waypoints.slice(driverOffset);
     if (orderWaypoints.length !== activeOrders.length) return activeOrders;
     const result = new Array<Order>(activeOrders.length);
     orderWaypoints.forEach((wp, inputIdx) => {
@@ -215,23 +264,35 @@ export function MapScreen({ navigation }: any) {
     });
     if (result.some(o => !o)) return activeOrders;
     return result;
-  }, [activeOrders, routeData, hasDriverStart]);
+  }, [activeOrders, effectiveRouteData, hasDriverStart]);
 
   const legTimes = useMemo(() => {
-    if (!routeData?.trips?.[0]?.legs) return null;
-    return routeData.trips[0].legs.map(leg => ({
+    if (!effectiveRouteData?.trips?.[0]?.legs) return null;
+    return effectiveRouteData.trips[0].legs.map(leg => ({
       distance: leg.distance,
       duration: leg.duration,
     }));
-  }, [routeData]);
+  }, [effectiveRouteData]);
 
   const fallbackCoordinates = useMemo(
     () => activeOrders.map(o => ({ latitude: o.latitude, longitude: o.longitude })),
     [activeOrders]
   );
 
-  const totalDistance = routeData?.trips?.[0]?.distance;
-  const totalDuration = routeData?.trips?.[0]?.duration;
+  const totalDistance = effectiveRouteData?.trips?.[0]?.distance;
+  const totalDuration = effectiveRouteData?.trips?.[0]?.duration;
+  const totalDurationWithoutTraffic = effectiveRouteData?.trips?.[0]?.durationWithoutTraffic;
+
+  const trafficDelayMinutes = useMemo(() => {
+    if (totalDuration == null || totalDurationWithoutTraffic == null || totalDurationWithoutTraffic === 0) return 0;
+    const delaySeconds = totalDuration - totalDurationWithoutTraffic;
+    return Math.round(delaySeconds / 60);
+  }, [totalDuration, totalDurationWithoutTraffic]);
+
+  const hasSignificantTraffic = useMemo(() => {
+    if (totalDuration == null || totalDurationWithoutTraffic == null || totalDurationWithoutTraffic === 0) return false;
+    return totalDuration > totalDurationWithoutTraffic * 1.15;
+  }, [totalDuration, totalDurationWithoutTraffic]);
 
   useEffect(() => {
     if (mapRef.current && activeOrders.length > 0) {
@@ -268,7 +329,7 @@ export function MapScreen({ navigation }: any) {
             Kartan visas i Expo Go på din telefon.
             {'\n'}Här är dagens rutt:
           </ThemedText>
-          {(routeData ? optimizedOrders : activeOrders).map((order, idx) => (
+          {(effectiveRouteData ? optimizedOrders : activeOrders).map((order, idx) => (
             <Pressable
               key={order.id}
               style={styles.webOrderItem}
@@ -289,6 +350,15 @@ export function MapScreen({ navigation }: any) {
               <Feather name="navigation" size={16} color={Colors.secondary} />
               <ThemedText variant="caption" color={Colors.textSecondary}>
                 {formatRouteDistance(totalDistance)} - {formatRouteDuration(totalDuration)}
+                {trafficDelayMinutes > 0 ? ` (ber. trafik: +${trafficDelayMinutes} min)` : ''}
+              </ThemedText>
+            </View>
+          ) : null}
+          {hasSignificantTraffic ? (
+            <View style={styles.webTrafficWarning}>
+              <Feather name="alert-triangle" size={14} color="#92400E" />
+              <ThemedText variant="caption" color="#92400E">
+                Trafikstörningar längs rutten, +{trafficDelayMinutes} min
               </ThemedText>
             </View>
           ) : null}
@@ -297,7 +367,7 @@ export function MapScreen({ navigation }: any) {
     );
   }
 
-  const displayOrders = routeData ? optimizedOrders : activeOrders;
+  const displayOrders = effectiveRouteData ? optimizedOrders : activeOrders;
 
   return (
     <View style={styles.container}>
@@ -305,6 +375,7 @@ export function MapScreen({ navigation }: any) {
         ref={mapRef}
         style={styles.map}
         onMapReady={() => setMapReady(true)}
+        cacheEnabled={true}
         initialRegion={{
           latitude: 57.7089,
           longitude: 11.9746,
@@ -362,6 +433,13 @@ export function MapScreen({ navigation }: any) {
         ))}
       </MapView>
 
+      {usingCachedData ? (
+        <View style={[styles.offlineBadge, { top: headerHeight + Spacing.md }]}>
+          <Feather name="wifi-off" size={12} color={Colors.textInverse} />
+          <Text style={styles.offlineBadgeText}>Offline - visar cachad data</Text>
+        </View>
+      ) : null}
+
       <View style={[styles.legend, { bottom: tabBarHeight + Spacing.lg }]}>
         {routeLoading ? (
           <View style={styles.legendRow}>
@@ -370,14 +448,14 @@ export function MapScreen({ navigation }: any) {
               Beräknar rutt...
             </ThemedText>
           </View>
-        ) : routeError && coordsParam ? (
+        ) : routeError && coordsParam && !usingCachedData ? (
           <View style={styles.legendRow}>
             <Feather name="alert-circle" size={16} color={Colors.warning} />
             <ThemedText variant="caption" color={Colors.textSecondary}>
               Rutten kunde inte beräknas just nu
             </ThemedText>
           </View>
-        ) : routeData?.fallback ? (
+        ) : effectiveRouteData?.fallback ? (
           <View style={styles.legendRow}>
             <Feather name="map-pin" size={16} color={Colors.primary} />
             <ThemedText variant="caption" color={Colors.textSecondary}>
@@ -401,6 +479,7 @@ export function MapScreen({ navigation }: any) {
               </View>
               <ThemedText variant="caption" color={Colors.textSecondary}>
                 {displayOrders.length} stopp - optimerad rutt
+                {trafficDelayMinutes > 0 ? ` (ber. trafik: +${trafficDelayMinutes} min)` : ''}
               </ThemedText>
 
               {legendExpanded && legTimes ? (
@@ -730,5 +809,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     marginTop: Spacing.sm,
+  },
+  webTrafficWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    width: '100%',
+    marginTop: Spacing.sm,
+  },
+  trafficBanner: {
+    position: 'absolute',
+    left: Spacing.lg,
+    right: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    zIndex: 10,
+  },
+  trafficBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#92400E',
+  },
+  offlineBadge: {
+    position: 'absolute',
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.danger,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+    zIndex: 10,
+  },
+  offlineBadgeText: {
+    color: Colors.textInverse,
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter_600SemiBold',
   },
 });

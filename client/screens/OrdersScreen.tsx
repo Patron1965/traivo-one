@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Animated as RNAnimated } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -25,6 +25,7 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
+import { useAuth } from '../context/AuthContext';
 import type { Order, OrderStatus } from '../types';
 
 function getStatusProgress(status: OrderStatus): number {
@@ -451,6 +452,18 @@ function OrderCardContent({
   );
 }
 
+interface RouteLeg {
+  distance: number;
+  duration: number;
+  durationWithoutTraffic?: number;
+}
+
+interface RouteData {
+  waypoints: { location: [number, number]; waypointIndex: number }[];
+  trips: { distance: number; duration: number; durationWithoutTraffic?: number; legs?: RouteLeg[] }[];
+  fallback?: boolean;
+}
+
 export function OrdersScreen({ navigation }: any) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
@@ -458,10 +471,62 @@ export function OrdersScreen({ navigation }: any) {
   const [filter, setFilter] = useState<OrderStatus | 'all'>('all');
   const [refreshing, setRefreshing] = useState(false);
   const { currentPosition } = useGpsTracking();
+  const { startPosition } = useAuth();
 
   const { data: orders, isLoading, refetch } = useQuery<Order[]>({
     queryKey: ['/api/mobile/my-orders'],
   });
+
+  const routeOrigin = useMemo(() => {
+    if (startPosition) return startPosition;
+    if (currentPosition?.latitude && currentPosition?.longitude) return currentPosition;
+    return null;
+  }, [startPosition, currentPosition?.latitude, currentPosition?.longitude]);
+
+  const activeOrders = useMemo(
+    () => (orders?.filter(o => o.status !== 'cancelled') || []).sort((a, b) => a.sortOrder - b.sortOrder),
+    [orders]
+  );
+
+  const coordsParam = useMemo(() => {
+    if (activeOrders.length === 0) return null;
+    const parts: string[] = [];
+    if (routeOrigin?.latitude && routeOrigin?.longitude) {
+      parts.push(`${routeOrigin.longitude},${routeOrigin.latitude}`);
+    }
+    activeOrders.forEach(o => {
+      if (o.latitude && o.longitude && o.latitude !== 0 && o.longitude !== 0) {
+        parts.push(`${o.longitude},${o.latitude}`);
+      }
+    });
+    if (parts.length < 2) return null;
+    return parts.join(';');
+  }, [activeOrders, routeOrigin]);
+
+  const { data: routeData } = useQuery<RouteData>({
+    queryKey: ['/api/mobile/route', coordsParam],
+    queryFn: async () => {
+      if (!coordsParam) throw new Error('No coords');
+      return apiRequest('GET', `/api/mobile/route?coords=${encodeURIComponent(coordsParam)}`);
+    },
+    enabled: !!coordsParam,
+    staleTime: 300000,
+  });
+
+  const trafficLegMap = useMemo(() => {
+    const map = new Map<number | string, { duration: number; durationWithoutTraffic?: number }>();
+    if (!routeData?.trips?.[0]?.legs || activeOrders.length === 0) return map;
+    const hasDriverStart = !!routeOrigin;
+    const legs = routeData.trips[0].legs;
+    activeOrders.forEach((order, idx) => {
+      const legIdx = hasDriverStart ? idx : (idx > 0 ? idx - 1 : -1);
+      if (legIdx >= 0 && legIdx < (legs?.length || 0)) {
+        const leg = legs![legIdx];
+        map.set(order.id, { duration: leg.duration, durationWithoutTraffic: leg.durationWithoutTraffic });
+      }
+    });
+    return map;
+  }, [routeData, activeOrders, routeOrigin]);
 
   const statusMutation = useMutation({
     mutationFn: ({ orderId, status }: { orderId: number | string; status: OrderStatus }) =>
@@ -497,21 +562,29 @@ export function OrdersScreen({ navigation }: any) {
   const firstSwipeableId = filteredOrders.find(o => canSwipe(o))?.id;
 
   const renderOrder = useCallback(({ item: order }: { item: Order }) => {
-    const travelMin = estimateTravelMinutes(
-      currentPosition?.latitude, currentPosition?.longitude,
-      order.latitude, order.longitude
-    );
+    const trafficLeg = trafficLegMap.get(order.id);
+    let travelTime: string | null = null;
+    if (trafficLeg) {
+      const trafficMin = Math.round(trafficLeg.duration / 60);
+      travelTime = formatTravelTime(trafficMin);
+    } else {
+      const travelMin = estimateTravelMinutes(
+        currentPosition?.latitude, currentPosition?.longitude,
+        order.latitude, order.longitude
+      );
+      travelTime = formatTravelTime(travelMin);
+    }
     return (
       <SwipeableOrderCard
         order={order}
         onPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}
         onAdvance={handleAdvance}
         onDeviation={handleDeviation}
-        travelTime={formatTravelTime(travelMin)}
+        travelTime={travelTime}
         isFirstSwipeable={order.id === firstSwipeableId}
       />
     );
-  }, [currentPosition, navigation, handleAdvance, handleDeviation, firstSwipeableId]);
+  }, [currentPosition, navigation, handleAdvance, handleDeviation, firstSwipeableId, trafficLegMap]);
 
   return (
     <View style={styles.container}>

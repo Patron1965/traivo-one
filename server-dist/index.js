@@ -46,6 +46,63 @@ var pool = new import_pg.Pool({
 pool.on("error", (err) => {
   console.error("Unexpected PostgreSQL pool error:", err.message);
 });
+async function initPushTokensTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS push_tokens (
+        id SERIAL PRIMARY KEY,
+        driver_id VARCHAR(255) UNIQUE NOT NULL,
+        expo_push_token VARCHAR(255) NOT NULL,
+        platform VARCHAR(50) NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log("push_tokens table ready");
+  } catch (err) {
+    console.error("Failed to create push_tokens table:", err.message);
+  }
+}
+initPushTokensTable();
+async function sendPushNotification(driverId, title, body, data) {
+  try {
+    const result = await pool.query(
+      "SELECT expo_push_token FROM push_tokens WHERE driver_id = $1",
+      [driverId]
+    );
+    if (result.rows.length === 0) {
+      return false;
+    }
+    const token = result.rows[0].expo_push_token;
+    const response = await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Accept": "application/json",
+        "Accept-Encoding": "gzip, deflate",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        to: token,
+        sound: "default",
+        title,
+        body,
+        data: data || {}
+      })
+    });
+    const responseData = await response.json();
+    if (responseData?.data?.status === "error") {
+      const details = responseData.data.details;
+      if (details?.error === "DeviceNotRegistered" || details?.error === "InvalidCredentials") {
+        await pool.query("DELETE FROM push_tokens WHERE driver_id = $1", [driverId]);
+        console.log(`Removed invalid push token for driver ${driverId}`);
+      }
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`Push notification error for driver ${driverId}:`, err.message);
+    return false;
+  }
+}
 
 // server/routes/mobile.ts
 var router = (0, import_express.Router)();
@@ -718,6 +775,25 @@ router.patch("/orders/:id/status", async (req, res) => {
       if (io2) {
         io2.emit("order:updated", { orderId: order.id, status: order.status, updatedAt: (/* @__PURE__ */ new Date()).toISOString() });
       }
+      const statusLabels = {
+        planned: "Planerad",
+        dispatched: "Skickad",
+        on_site: "P\xE5 plats",
+        in_progress: "P\xE5g\xE5r",
+        completed: "Slutf\xF6rd",
+        failed: "Misslyckad",
+        cancelled: "Avbruten"
+      };
+      const label = statusLabels[newStatus] || newStatus;
+      if (order.resourceId) {
+        sendPushNotification(
+          String(order.resourceId),
+          `Order ${order.orderNumber}`,
+          `Status \xE4ndrad till: ${label}`,
+          { orderId: String(order.id), orderNumber: order.orderNumber, status: newStatus }
+        ).catch(() => {
+        });
+      }
       res.json(order);
     } else {
       res.status(404).json({ error: "Order hittades inte" });
@@ -1293,7 +1369,7 @@ router.get("/route", async (req, res) => {
     return res.json(buildFallbackResponse(parsed));
   }
   const waypoints = parsed.map((p) => `${p.lat},${p.lon}`).join("|");
-  const url = `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&details=route_details&apiKey=${apiKey}`;
+  const url = `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&details=route_details&traffic=approximated&apiKey=${apiKey}`;
   const ctrl = new AbortController();
   const timeout = setTimeout(() => ctrl.abort(), 15e3);
   try {
@@ -1322,13 +1398,22 @@ router.get("/route", async (req, res) => {
     } else if (geometry.type === "LineString") {
       allCoordinates = geometry.coordinates;
     }
-    const legs = (props.legs || []).map((leg) => ({
-      distance: leg.distance || 0,
-      duration: leg.time || 0,
-      steps: []
-    }));
+    const trafficDuration = props.time || 0;
+    const totalDistanceMeters = props.distance || 0;
+    const normalDuration = totalDistanceMeters > 0 ? Math.round(totalDistanceMeters / 12.5) : trafficDuration;
+    const legs = (props.legs || []).map((leg) => {
+      const legTrafficDuration = leg.time || 0;
+      const legDist = leg.distance || 0;
+      const legNormalDuration = legDist > 0 ? Math.round(legDist / 12.5) : legTrafficDuration;
+      return {
+        distance: legDist,
+        duration: legTrafficDuration,
+        durationWithoutTraffic: legNormalDuration,
+        steps: []
+      };
+    });
     const simplified = simplifyCoordinates(allCoordinates, 500);
-    console.log("[route] Success: rawCoords=", allCoordinates.length, "simplified=", simplified.length, "dist=", props.distance, "dur=", props.time);
+    console.log("[route] Success: rawCoords=", allCoordinates.length, "simplified=", simplified.length, "dist=", totalDistanceMeters, "dur=", trafficDuration, "normalDur=", normalDuration);
     res.json({
       waypoints: parsed.map((p, i) => ({
         location: [p.lon, p.lat],
@@ -1337,8 +1422,9 @@ router.get("/route", async (req, res) => {
       })),
       trips: [{
         geometry: { type: "LineString", coordinates: simplified },
-        distance: props.distance || 0,
-        duration: props.time || 0,
+        distance: totalDistanceMeters,
+        duration: trafficDuration,
+        durationWithoutTraffic: normalDuration,
         legs
       }]
     });
@@ -1432,7 +1518,7 @@ router.get("/route-optimized", async (req, res) => {
     }));
     const reorderedPoints = allIndices.map((i) => parsed[i]);
     const routeWaypoints = reorderedPoints.map((p) => `${p.lat},${p.lon}`).join("|");
-    const routeUrl = `https://api.geoapify.com/v1/routing?waypoints=${routeWaypoints}&mode=drive&details=route_details&apiKey=${apiKey}`;
+    const routeUrl = `https://api.geoapify.com/v1/routing?waypoints=${routeWaypoints}&mode=drive&details=route_details&traffic=approximated&apiKey=${apiKey}`;
     const ctrl2 = new AbortController();
     const timeout2 = setTimeout(() => ctrl2.abort(), 15e3);
     try {
@@ -1452,21 +1538,31 @@ router.get("/route-optimized", async (req, res) => {
             routeCoords = routeGeom.coordinates;
           }
           const routeProps = routeFeature.properties;
-          const routeLegs = (routeProps.legs || []).map((leg) => ({
-            distance: leg.distance || 0,
-            duration: leg.time || 0,
-            steps: (leg.steps || []).map((step) => ({
-              geometry: step.geometry || null,
-              distance: step.distance || 0,
-              duration: step.time || 0
-            }))
-          }));
+          const routeTrafficDuration = routeProps.time || props.time || 0;
+          const routeTotalDist = routeProps.distance || props.distance || 0;
+          const routeNormalDuration = routeTotalDist > 0 ? Math.round(routeTotalDist / 12.5) : routeTrafficDuration;
+          const routeLegs = (routeProps.legs || []).map((leg) => {
+            const legTrafficDur = leg.time || 0;
+            const legDist = leg.distance || 0;
+            const legNormalDur = legDist > 0 ? Math.round(legDist / 12.5) : legTrafficDur;
+            return {
+              distance: legDist,
+              duration: legTrafficDur,
+              durationWithoutTraffic: legNormalDur,
+              steps: (leg.steps || []).map((step) => ({
+                geometry: step.geometry || null,
+                distance: step.distance || 0,
+                duration: step.time || 0
+              }))
+            };
+          });
           return res.json({
             waypoints: reorderedWaypoints,
             trips: [{
               geometry: { type: "LineString", coordinates: simplifyCoordinates(routeCoords, 500) },
-              distance: routeProps.distance || props.distance || 0,
-              duration: routeProps.time || props.time || 0,
+              distance: routeTotalDist,
+              duration: routeTrafficDuration,
+              durationWithoutTraffic: routeNormalDuration,
               legs: routeLegs
             }],
             optimized: true
@@ -1477,17 +1573,26 @@ router.get("/route-optimized", async (req, res) => {
       clearTimeout(timeout2);
       console.warn("Geoapify routing for optimized order failed:", routeErr.message);
     }
-    const legs = (props.legs || []).map((leg) => ({
-      distance: leg.distance || 0,
-      duration: leg.time || 0,
-      steps: []
-    }));
+    const fallbackTrafficDur = props.time || 0;
+    const fallbackDist = props.distance || 0;
+    const fallbackNormalDur = fallbackDist > 0 ? Math.round(fallbackDist / 12.5) : fallbackTrafficDur;
+    const legs = (props.legs || []).map((leg) => {
+      const ld = leg.distance || 0;
+      const lt = leg.time || 0;
+      return {
+        distance: ld,
+        duration: lt,
+        durationWithoutTraffic: ld > 0 ? Math.round(ld / 12.5) : lt,
+        steps: []
+      };
+    });
     res.json({
       waypoints: reorderedWaypoints,
       trips: [{
         geometry: { type: "LineString", coordinates: simplifyCoordinates(allCoordinates, 500) },
-        distance: props.distance || 0,
-        duration: props.time || 0,
+        distance: fallbackDist,
+        duration: fallbackTrafficDur,
+        durationWithoutTraffic: fallbackNormalDur,
         legs
       }],
       optimized: true
@@ -1496,6 +1601,37 @@ router.get("/route-optimized", async (req, res) => {
     clearTimeout(timeout);
     console.error("Geoapify planner fetch error:", error.message);
     res.json(buildFallbackResponse(parsed));
+  }
+});
+router.post("/push-token", async (req, res) => {
+  const { expoPushToken, platform } = req.body;
+  const token = expoPushToken || req.body.token;
+  if (!token) {
+    return res.status(400).json({ error: "expoPushToken kr\xE4vs" });
+  }
+  const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : String(req.body.driverId || MOCK_RESOURCE.id);
+  try {
+    await pool.query(
+      `INSERT INTO push_tokens (driver_id, expo_push_token, platform, updated_at)
+       VALUES ($1, $2, $3, NOW())
+       ON CONFLICT (driver_id)
+       DO UPDATE SET expo_push_token = $2, platform = $3, updated_at = NOW()`,
+      [String(driverId), token, platform]
+    );
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Push token registration error:", err.message);
+    res.status(500).json({ error: "Kunde inte registrera push-token" });
+  }
+});
+router.delete("/push-token", async (req, res) => {
+  const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : String(req.body.driverId || req.query.driverId || MOCK_RESOURCE.id);
+  try {
+    await pool.query("DELETE FROM push_tokens WHERE driver_id = $1", [driverId]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Push token removal error:", err.message);
+    res.status(500).json({ error: "Kunde inte ta bort push-token" });
   }
 });
 

@@ -7,9 +7,12 @@ import type { SyncAction } from '../types';
 
 const OUTBOX_KEY = '@offline_outbox';
 const CACHE_PREFIX = '@offline_cache_';
+const ROUTE_CACHE_PREFIX = '@route_cache_';
+const ORDER_CACHE_KEY = '@order_cache';
 const SYNC_INTERVAL = 30000;
 const MAX_OUTBOX_ITEMS = 500;
 const MAX_OUTBOX_BYTES = 5 * 1024 * 1024;
+const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 let globalPendingCount = 0;
 let globalListeners: Array<(count: number) => void> = [];
@@ -204,12 +207,81 @@ export function useOfflineSync() {
     };
   }, [processOutbox]);
 
+  const cacheRouteData = useCallback(async (routeData: any) => {
+    try {
+      const dateKey = new Date().toISOString().split('T')[0];
+      await AsyncStorage.setItem(`${ROUTE_CACHE_PREFIX}${dateKey}`, JSON.stringify({
+        data: routeData,
+        cachedAt: Date.now(),
+      }));
+      await cleanOldRouteCaches();
+    } catch {}
+  }, []);
+
+  const getCachedRouteData = useCallback(async (): Promise<any | null> => {
+    try {
+      const dateKey = new Date().toISOString().split('T')[0];
+      const raw = await AsyncStorage.getItem(`${ROUTE_CACHE_PREFIX}${dateKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Date.now() - parsed.cachedAt < CACHE_MAX_AGE_MS) {
+          return parsed.data;
+        }
+        await AsyncStorage.removeItem(`${ROUTE_CACHE_PREFIX}${dateKey}`);
+      }
+    } catch {}
+    return null;
+  }, []);
+
+  const cacheOrderData = useCallback(async (orders: any[]) => {
+    try {
+      await AsyncStorage.setItem(ORDER_CACHE_KEY, JSON.stringify({
+        data: orders,
+        cachedAt: Date.now(),
+      }));
+    } catch {}
+  }, []);
+
+  const getCachedOrderData = useCallback(async (): Promise<any[] | null> => {
+    try {
+      const raw = await AsyncStorage.getItem(ORDER_CACHE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Date.now() - parsed.cachedAt < CACHE_MAX_AGE_MS) {
+          return parsed.data;
+        }
+        await AsyncStorage.removeItem(ORDER_CACHE_KEY);
+      }
+    } catch {}
+    return null;
+  }, []);
+
   return {
     enqueueAction,
     processOutbox,
     cacheData,
     getCachedData,
+    cacheRouteData,
+    getCachedRouteData,
+    cacheOrderData,
+    getCachedOrderData,
     isSyncing,
     lastSyncTime,
   };
+}
+
+async function cleanOldRouteCaches(): Promise<void> {
+  try {
+    const keys = await AsyncStorage.getAllKeys();
+    const routeKeys = keys.filter(k => k.startsWith(ROUTE_CACHE_PREFIX));
+    for (const key of routeKeys) {
+      const raw = await AsyncStorage.getItem(key);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Date.now() - parsed.cachedAt >= CACHE_MAX_AGE_MS) {
+          await AsyncStorage.removeItem(key);
+        }
+      }
+    }
+  } catch {}
 }

@@ -4,6 +4,37 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import type { Resource, GpsPosition } from '../types';
 
+async function registerPushToken(authToken: string): Promise<void> {
+  try {
+    const Notifications = await import('expo-notifications');
+    const { status: existingStatus } = await Notifications.getPermissionsAsync();
+    let finalStatus = existingStatus;
+    if (existingStatus !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+    if (finalStatus !== 'granted') return;
+
+    const tokenData = await Notifications.getExpoPushTokenAsync();
+    const expoPushToken = tokenData.data;
+
+    await apiRequest('POST', '/api/mobile/push-token', {
+      expoPushToken,
+      platform: Platform.OS,
+    }, authToken);
+  } catch (e) {
+    console.log('Push token registration skipped (expected in Expo Go):', e);
+  }
+}
+
+async function unregisterPushToken(authToken: string | null): Promise<void> {
+  try {
+    await apiRequest('DELETE', '/api/mobile/push-token', {}, authToken);
+  } catch (e) {
+    console.log('Push token unregistration failed:', e);
+  }
+}
+
 interface StartPosition {
   latitude: number;
   longitude: number;
@@ -177,9 +208,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(resource);
     setToken(data.token);
     await AsyncStorage.setItem('auth', JSON.stringify({ resource, token: data.token }));
+    registerPushToken(data.token);
   }
 
   async function logout() {
+    await unregisterPushToken(token);
     try {
       await apiRequest('POST', '/api/mobile/logout', {}, token);
     } catch (err) {
