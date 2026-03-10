@@ -4,6 +4,8 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
@@ -259,7 +261,6 @@ export function HomeScreen({ navigation }: any) {
       }
     } else {
       try {
-        const { Audio } = require('expo-av');
         const permission = await Audio.requestPermissionsAsync();
         if (!permission.granted) {
           showVoiceFeedback('Mikrofontillst\u00e5nd kr\u00e4vs.');
@@ -295,8 +296,7 @@ export function HomeScreen({ navigation }: any) {
           const uri = recording.getURI();
           voiceRecorderRef.current = null;
           if (uri) {
-            const { readAsStringAsync, EncodingType } = require('expo-file-system');
-            const base64 = await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
+            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
             processVoiceAudio(base64);
           }
         }

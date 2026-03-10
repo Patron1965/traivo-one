@@ -6,6 +6,8 @@ import {
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
+import { Audio } from 'expo-av';
+import * as FileSystem from 'expo-file-system';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
@@ -259,7 +261,6 @@ export function AIAssistantScreen() {
       }
     } else {
       try {
-        const { Audio } = require('expo-av');
         const permission = await Audio.requestPermissionsAsync();
         if (!permission.granted) {
           const errorMsg: Message = {
@@ -308,8 +309,7 @@ export function AIAssistantScreen() {
           const uri = recording.getURI();
           mediaRecorderRef.current = null;
           if (uri) {
-            const { readAsStringAsync, EncodingType } = require('expo-file-system');
-            const base64 = await readAsStringAsync(uri, { encoding: EncodingType.Base64 });
+            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
             try {
               const result = await apiRequest('POST', '/api/mobile/ai/transcribe', {
                 audio: base64,
