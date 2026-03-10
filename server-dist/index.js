@@ -937,6 +937,141 @@ router.get("/time-summary", async (req, res) => {
     res.status(500).json({ error: "Kunde inte h\xE4mta tidssammanfattning" });
   }
 });
+router.get("/statistics", async (req, res) => {
+  const driverId = String(MOCK_RESOURCE.id);
+  const period = req.query.period || "week";
+  const offset = parseInt(req.query.offset) || 0;
+  const now = /* @__PURE__ */ new Date();
+  let periodStart;
+  let periodEnd;
+  let prevStart;
+  let prevEnd;
+  let days;
+  if (period === "month") {
+    const y = now.getFullYear();
+    const m = now.getMonth() - offset;
+    periodStart = new Date(y, m, 1);
+    periodEnd = new Date(y, m + 1, 1);
+    prevStart = new Date(y, m - 1, 1);
+    prevEnd = new Date(y, m, 1);
+    days = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / 864e5);
+  } else {
+    const dayOfWeek = now.getDay() || 7;
+    const mondayThis = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1);
+    periodStart = new Date(mondayThis.getTime() - offset * 7 * 864e5);
+    periodEnd = new Date(periodStart.getTime() + 7 * 864e5);
+    prevStart = new Date(periodStart.getTime() - 7 * 864e5);
+    prevEnd = new Date(periodStart.getTime());
+    days = 7;
+  }
+  try {
+    let aggregateEntries2 = function(rows) {
+      let travel = 0, onSite = 0, working = 0;
+      const orderIds = /* @__PURE__ */ new Set();
+      const n = /* @__PURE__ */ new Date();
+      for (const r of rows) {
+        const dur = r.duration_seconds != null ? r.duration_seconds : Math.floor((n.getTime() - new Date(r.started_at).getTime()) / 1e3);
+        if (r.status === "travel") travel += dur;
+        else if (r.status === "on_site") onSite += dur;
+        else if (r.status === "working") working += dur;
+        orderIds.add(r.order_id);
+      }
+      return { travel, onSite, working, total: travel + onSite + working, orderIds };
+    }, trendPercent2 = function(curr, prev) {
+      if (prev === 0) return curr > 0 ? 100 : 0;
+      return Math.round((curr - prev) / prev * 100);
+    };
+    var aggregateEntries = aggregateEntries2, trendPercent = trendPercent2;
+    const [currentEntries, prevEntries] = await Promise.all([
+      pool.query(
+        `SELECT order_id, status, started_at, ended_at, duration_seconds FROM time_entries WHERE driver_id = $1 AND started_at >= $2 AND started_at < $3 ORDER BY started_at ASC`,
+        [driverId, periodStart, periodEnd]
+      ),
+      pool.query(
+        `SELECT order_id, status, started_at, ended_at, duration_seconds FROM time_entries WHERE driver_id = $1 AND started_at >= $2 AND started_at < $3 ORDER BY started_at ASC`,
+        [driverId, prevStart, prevEnd]
+      )
+    ]);
+    const current = aggregateEntries2(currentEntries.rows);
+    const previous = aggregateEntries2(prevEntries.rows);
+    const dailyBreakdown = [];
+    for (let d = 0; d < days; d++) {
+      const dayStart = new Date(periodStart.getTime() + d * 864e5);
+      const dayEnd = new Date(dayStart.getTime() + 864e5);
+      let travel = 0, onSite = 0, working = 0;
+      for (const r of currentEntries.rows) {
+        const start = new Date(r.started_at);
+        if (start >= dayStart && start < dayEnd) {
+          const dur = r.duration_seconds != null ? r.duration_seconds : Math.floor(((/* @__PURE__ */ new Date()).getTime() - start.getTime()) / 1e3);
+          if (r.status === "travel") travel += dur;
+          else if (r.status === "on_site") onSite += dur;
+          else if (r.status === "working") working += dur;
+        }
+      }
+      dailyBreakdown.push({
+        date: dayStart.toISOString().split("T")[0],
+        dayLabel: ["S\xF6n", "M\xE5n", "Tis", "Ons", "Tor", "Fre", "L\xF6r"][dayStart.getDay()],
+        travel: Math.round(travel / 60),
+        onSite: Math.round(onSite / 60),
+        working: Math.round(working / 60)
+      });
+    }
+    const periodOrders = MOCK_ORDERS;
+    const completedOrders = periodOrders.filter((o) => o.completedAt && new Date(o.completedAt) >= periodStart && new Date(o.completedAt) < periodEnd);
+    const prevCompletedOrders = MOCK_ORDERS.filter((o) => o.completedAt && new Date(o.completedAt) >= prevStart && new Date(o.completedAt) < prevEnd);
+    const ordersWithDeviations = periodOrders.filter((o) => o.deviations && o.deviations.length > 0);
+    const prevOrdersWithDeviations = MOCK_ORDERS.filter((o) => o.deviations && o.deviations.length > 0);
+    const ordersWithSignoff = periodOrders.filter((o) => o.customerSignOff);
+    const prevOrdersWithSignoff = MOCK_ORDERS.filter((o) => o.customerSignOff);
+    const totalOrders = periodOrders.length;
+    const uniqueOrdersCurrent = current.orderIds.size || completedOrders.length;
+    const avgTimePerOrder = uniqueOrdersCurrent > 0 ? Math.round(current.total / uniqueOrdersCurrent / 60) : 0;
+    const avgTravelTime = uniqueOrdersCurrent > 0 ? Math.round(current.travel / uniqueOrdersCurrent / 60) : 0;
+    const avgOnSiteTime = uniqueOrdersCurrent > 0 ? Math.round(current.onSite / uniqueOrdersCurrent / 60) : 0;
+    const uniqueOrdersPrev = previous.orderIds.size || prevCompletedOrders.length || 1;
+    const prevAvgTimePerOrder = uniqueOrdersPrev > 0 ? Math.round(previous.total / uniqueOrdersPrev / 60) : 0;
+    const prevAvgTravelTime = uniqueOrdersPrev > 0 ? Math.round(previous.travel / uniqueOrdersPrev / 60) : 0;
+    const monthNames = ["januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti", "september", "oktober", "november", "december"];
+    let periodLabel;
+    if (period === "month") {
+      periodLabel = `${monthNames[periodStart.getMonth()]} ${periodStart.getFullYear()}`;
+    } else {
+      const weekNum = Math.ceil(((periodStart.getTime() - new Date(periodStart.getFullYear(), 0, 1).getTime()) / 864e5 + 1) / 7);
+      periodLabel = offset === 0 ? "Denna vecka" : `Vecka ${weekNum}`;
+    }
+    res.json({
+      period,
+      periodStart: periodStart.toISOString(),
+      periodEnd: periodEnd.toISOString(),
+      periodLabel,
+      dailyBreakdown,
+      currentPeriod: {
+        completedOrders: completedOrders.length,
+        totalOrders,
+        ordersWithDeviations: ordersWithDeviations.length,
+        ordersWithSignoff: ordersWithSignoff.length,
+        avgTimePerOrder,
+        avgTravelTime,
+        avgOnSiteTime
+      },
+      previousPeriod: {
+        completedOrders: prevCompletedOrders.length,
+        avgTimePerOrder: prevAvgTimePerOrder,
+        avgTravelTime: prevAvgTravelTime
+      },
+      trends: {
+        orders: trendPercent2(completedOrders.length, prevCompletedOrders.length),
+        avgTimePerOrder: trendPercent2(avgTimePerOrder, prevAvgTimePerOrder),
+        avgTravelTime: trendPercent2(avgTravelTime, prevAvgTravelTime),
+        deviations: trendPercent2(ordersWithDeviations.length, prevOrdersWithDeviations.length),
+        signoffs: trendPercent2(ordersWithSignoff.length, prevOrdersWithSignoff.length)
+      }
+    });
+  } catch (err) {
+    console.error("Error fetching statistics:", err.message);
+    res.status(500).json({ error: "Kunde inte h\xE4mta statistik" });
+  }
+});
 router.post("/orders/:id/deviations", async (req, res) => {
   if (IS_MOCK_MODE) {
     const orderId = parseInt(req.params.id);

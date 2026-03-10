@@ -21,6 +21,7 @@ The application is built using React Native with Expo SDK 54 and TypeScript for 
 - **GPS Tracking:** Foreground location tracking with regular reporting to the backend, and an online/offline toggle that affects driver visibility on the planner map.
 - **AI Integration:** "Unicorn Assist" chat (GPT-5.2), voice commands for hands-free operation, AI image analysis for deviation reporting, and context-aware AI tips.
 - **Push Notifications:** Infrastructure ready for standalone builds (APNs/FCM). Database table `push_tokens`, Expo Push API integration, token registration on login, notifications on order status changes.
+- **Statistics Dashboard:** StatisticsScreen with week/month toggle, stacked bar chart (travel/on-site/working per day), summary cards (orders, efficiency, deviations, sign-offs), trend indicators vs previous period. Accessible from HomeScreen and ProfileScreen. GET `/api/mobile/statistics` endpoint.
 - **Checklists & Inspections:** Template-based inspection checklists, including requirements for photo uploads (before/after).
 - **Communication:** Real-time updates via WebSocket (Socket.io) for order changes and notifications.
 - **Branding & UI:** Rebranded to "Nordfield" with a "Midnight Sun" color scheme, custom icons, and a focus on intuitive UI/UX across screens like Profile, AI Assistant, and Orders.

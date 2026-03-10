@@ -13,6 +13,7 @@ import { SignatureScreen } from '../screens/SignatureScreen';
 import { CustomerSignOffScreen } from '../screens/CustomerSignOffScreen';
 import { InspectionScreen } from '../screens/InspectionScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import StatisticsScreen from '../screens/StatisticsScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 
@@ -110,6 +111,11 @@ export function RootNavigator() {
             name="Settings"
             component={SettingsScreen}
             options={{ headerTitle: 'Inställningar' }}
+          />
+          <Stack.Screen
+            name="Statistics"
+            component={StatisticsScreen}
+            options={{ headerTitle: 'Statistik' }}
           />
         </>
       ) : (

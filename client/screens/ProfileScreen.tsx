@@ -170,6 +170,16 @@ export function ProfileScreen() {
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
         <View style={styles.divider} />
+        <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Statistics')} testID="button-statistics">
+          <View style={styles.menuLeft}>
+            <View style={[styles.menuIcon, { backgroundColor: Colors.primaryLight + '20' }]}>
+              <Feather name="bar-chart-2" size={16} color={Colors.primary} />
+            </View>
+            <ThemedText variant="body">Statistik</ThemedText>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
+        <View style={styles.divider} />
         <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Settings')} testID="button-about">
           <View style={styles.menuLeft}>
             <View style={[styles.menuIcon, { backgroundColor: Colors.infoLight }]}>

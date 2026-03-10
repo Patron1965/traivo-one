@@ -541,6 +541,25 @@ export function HomeScreen({ navigation }: any) {
         </Pressable>
       </Animated.View>
 
+      <Pressable
+        style={styles.statisticsButton}
+        onPress={() => navigation.navigate('Statistics')}
+        testID="button-statistics"
+      >
+        <View style={styles.statisticsLeft}>
+          <View style={styles.statisticsIconCircle}>
+            <Feather name="bar-chart-2" size={20} color={Colors.primary} />
+          </View>
+          <View>
+            <ThemedText variant="subheading">Statistik</ThemedText>
+            <ThemedText variant="caption" color={Colors.textSecondary}>
+              Se statistik
+            </ThemedText>
+          </View>
+        </View>
+        <Feather name="chevron-right" size={20} color={Colors.textMuted} />
+      </Pressable>
+
       <View style={styles.sectionHeader}>
         <ThemedText variant="subheading">
           Kommande uppdrag
@@ -1062,5 +1081,28 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
+  },
+  statisticsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.lg,
+    padding: Spacing.lg,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  statisticsLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+  },
+  statisticsIconCircle: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: Colors.primaryLight + '20',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
