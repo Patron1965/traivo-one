@@ -298,23 +298,26 @@ export function MapScreen({ navigation }: any) {
           longitudeDelta: 0.1,
         }}
       >
-        {roadPolyline ? (
+        {roadPolyline && Polyline ? (
           <>
             <Polyline
+              key={`glow-${roadPolyline.length}-${roadPolyline[0]?.latitude}`}
               coordinates={roadPolyline}
               strokeColor="rgba(234, 88, 12, 0.2)"
               strokeWidth={10}
               geodesic
             />
             <Polyline
+              key={`route-${roadPolyline.length}-${roadPolyline[0]?.latitude}`}
               coordinates={roadPolyline}
               strokeColor={Colors.primary}
               strokeWidth={4}
               geodesic
             />
           </>
-        ) : fallbackCoordinates.length > 1 ? (
+        ) : fallbackCoordinates.length > 1 && Polyline ? (
           <Polyline
+            key={`fallback-${fallbackCoordinates.length}`}
             coordinates={fallbackCoordinates}
             strokeColor={Colors.primaryLight}
             strokeWidth={3}
