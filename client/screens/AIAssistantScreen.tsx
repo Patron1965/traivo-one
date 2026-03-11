@@ -8,9 +8,11 @@ import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
+import { fetch as expoFetch } from 'expo/fetch';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
-import { apiRequest } from '../lib/query-client';
+import { apiRequest, getApiUrl } from '../lib/query-client';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Order } from '../types';
 
 interface Message {
@@ -139,6 +141,8 @@ export function AIAssistantScreen() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
+  const [streamingContent, setStreamingContent] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<any>(null);
   const chunksRef = useRef<any[]>([]);
@@ -167,42 +171,104 @@ export function AIAssistantScreen() {
     setMessages(prev => [...prev, userMsg]);
     setInputText('');
     setIsLoading(true);
+    setIsStreaming(false);
+    setStreamingContent('');
+
+    const context = orders
+      ? orders.map(o => ({
+          id: o.id,
+          orderNumber: o.orderNumber,
+          customerName: o.customerName,
+          status: o.status,
+          address: o.address,
+          city: o.city,
+          description: o.description,
+        }))
+      : [];
+
+    const aiMsgId = (Date.now() + 1).toString();
+    let accumulated = '';
 
     try {
-      const context = orders
-        ? orders.map(o => ({
-            id: o.id,
-            orderNumber: o.orderNumber,
-            customerName: o.customerName,
-            status: o.status,
-            address: o.address,
-            city: o.city,
-            description: o.description,
-          }))
-        : [];
+      let authToken: string | null = null;
+      try {
+        const stored = await AsyncStorage.getItem('auth');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          authToken = parsed.token || null;
+        }
+      } catch {}
 
-      const result = await apiRequest('POST', '/api/mobile/ai/chat', {
-        message: trimmed,
-        context,
+      const url = new URL('/api/mobile/ai/chat/stream', getApiUrl()).toString();
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (authToken) headers['Authorization'] = `Bearer ${authToken}`;
+
+      const response = await expoFetch(url, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ message: trimmed, context }),
       });
 
+      if (!response.ok) {
+        throw new Error(`${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('No reader');
+
+      const decoder = new TextDecoder();
+      setIsLoading(false);
+      setIsStreaming(true);
+
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') break;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.error) {
+              throw new Error(parsed.error);
+            }
+            if (parsed.content) {
+              accumulated += parsed.content;
+              setStreamingContent(accumulated);
+            }
+          } catch (parseErr: any) {
+            if (parseErr.message === 'Streaming avbröts.') throw parseErr;
+          }
+        }
+      }
+
+      const finalContent = accumulated || 'Jag kunde inte bearbeta din förfrågan just nu.';
       const aiMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: aiMsgId,
         role: 'assistant',
-        content: result.response || 'Jag kunde inte bearbeta din förfrågan just nu.',
+        content: finalContent,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, aiMsg]);
     } catch {
+      const errorContent = accumulated || 'Något gick fel. Försök igen senare.';
       const errorMsg: Message = {
-        id: (Date.now() + 1).toString(),
+        id: aiMsgId,
         role: 'assistant',
-        content: 'Något gick fel. Försök igen senare.',
+        content: errorContent,
         timestamp: new Date(),
       };
       setMessages(prev => [...prev, errorMsg]);
     } finally {
       setIsLoading(false);
+      setIsStreaming(false);
+      setStreamingContent('');
     }
   }
 
@@ -352,18 +418,29 @@ export function AIAssistantScreen() {
   const keyExtractor = useCallback((item: Message) => item.id, []);
 
   const ListHeaderComponent = useCallback(() => {
-    if (!isLoading) return null;
+    if (!isLoading && !isStreaming) return null;
     return (
       <View style={[styles.messageBubbleRow, styles.assistantRow]}>
         <View style={styles.avatarContainer}>
           <Feather name="zap" size={14} color="#fff" />
         </View>
         <View style={[styles.messageBubble, styles.assistantBubble]}>
-          <TypingIndicator />
+          {isLoading && !isStreaming ? (
+            <TypingIndicator />
+          ) : (
+            <ThemedText
+              variant="body"
+              color={Colors.text}
+              style={styles.messageText}
+            >
+              {streamingContent}
+              <ThemedText variant="body" color={Colors.textMuted}>▊</ThemedText>
+            </ThemedText>
+          )}
         </View>
       </View>
     );
-  }, [isLoading]);
+  }, [isLoading, isStreaming, streamingContent]);
 
   const EmptyState = useCallback(() => {
     return isOnlyWelcome ? (
@@ -437,7 +514,7 @@ export function AIAssistantScreen() {
           <Pressable
             style={[styles.sendButton, !hasText ? styles.sendButtonDisabled : null]}
             onPress={() => sendMessage(inputText)}
-            disabled={isLoading || !hasText}
+            disabled={isLoading || isStreaming || !hasText}
             testID="button-send-ai"
           >
             <Feather name="arrow-up" size={20} color={hasText ? Colors.textInverse : Colors.textMuted} />

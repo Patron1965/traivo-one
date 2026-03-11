@@ -56,6 +56,72 @@ ${contextInfo ? `Aktuell kontext:\n${contextInfo}` : ''}`;
   }
 });
 
+router.post('/chat/stream', async (req, res) => {
+  try {
+    const { message, context } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: 'Meddelande krävs' });
+    }
+
+    let contextInfo = '';
+    if (context) {
+      if (Array.isArray(context)) {
+        contextInfo = `Alla dagens ordrar: ${JSON.stringify(context)}\n`;
+      } else {
+        const { currentOrder, allOrders, driverName } = context;
+        if (driverName) contextInfo += `Förarens namn: ${driverName}\n`;
+        if (currentOrder) contextInfo += `Aktuell order: ${JSON.stringify(currentOrder)}\n`;
+        if (allOrders && allOrders.length > 0) contextInfo += `Alla dagens ordrar: ${JSON.stringify(allOrders)}\n`;
+      }
+    }
+
+    const systemPrompt = `Du är "Nordfield Assist", en AI-assistent för fältservicetekniker inom avfallshantering och logistik.
+
+Du har tillgång till kontext om aktuella ordrar, adresser, artiklar, kontaktpersoner och annat relevant för dagens arbete.
+
+Regler:
+- Svara alltid koncist och tydligt på svenska
+- Hjälp med frågor om arbetsuppgifter, navigering, procedurer och rapportering
+- Om du får frågor om en order, använd den medföljande kontexten
+- Formatera svar tydligt med punktlistor eller numrerade listor vid behov
+- Var professionell men vänlig
+
+${contextInfo ? `Aktuell kontext:\n${contextInfo}` : ''}`;
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const stream = await openai.chat.completions.create({
+      model: 'gpt-5.2',
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: message },
+      ],
+      stream: true,
+    });
+
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        res.write(`data: ${JSON.stringify({ content })}\n\n`);
+      }
+    }
+
+    res.write('data: [DONE]\n\n');
+    res.end();
+  } catch (error: any) {
+    console.error('AI chat stream error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Kunde inte generera svar från AI' });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: 'Streaming avbröts.' })}\n\n`);
+      res.end();
+    }
+  }
+});
+
 const MAX_BASE64_SIZE = 10 * 1024 * 1024;
 
 router.post('/transcribe', async (req, res) => {

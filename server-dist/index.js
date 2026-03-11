@@ -1984,6 +1984,74 @@ ${contextInfo}` : ""}`;
     res.status(500).json({ error: "Kunde inte generera svar fr\xE5n AI" });
   }
 });
+router2.post("/chat/stream", async (req, res) => {
+  try {
+    const { message, context } = req.body;
+    if (!message) {
+      return res.status(400).json({ error: "Meddelande kr\xE4vs" });
+    }
+    let contextInfo = "";
+    if (context) {
+      if (Array.isArray(context)) {
+        contextInfo = `Alla dagens ordrar: ${JSON.stringify(context)}
+`;
+      } else {
+        const { currentOrder, allOrders, driverName } = context;
+        if (driverName) contextInfo += `F\xF6rarens namn: ${driverName}
+`;
+        if (currentOrder) contextInfo += `Aktuell order: ${JSON.stringify(currentOrder)}
+`;
+        if (allOrders && allOrders.length > 0) contextInfo += `Alla dagens ordrar: ${JSON.stringify(allOrders)}
+`;
+      }
+    }
+    const systemPrompt = `Du \xE4r "Nordfield Assist", en AI-assistent f\xF6r f\xE4ltservicetekniker inom avfallshantering och logistik.
+
+Du har tillg\xE5ng till kontext om aktuella ordrar, adresser, artiklar, kontaktpersoner och annat relevant f\xF6r dagens arbete.
+
+Regler:
+- Svara alltid koncist och tydligt p\xE5 svenska
+- Hj\xE4lp med fr\xE5gor om arbetsuppgifter, navigering, procedurer och rapportering
+- Om du f\xE5r fr\xE5gor om en order, anv\xE4nd den medf\xF6ljande kontexten
+- Formatera svar tydligt med punktlistor eller numrerade listor vid behov
+- Var professionell men v\xE4nlig
+
+${contextInfo ? `Aktuell kontext:
+${contextInfo}` : ""}`;
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+    const stream = await openai.chat.completions.create({
+      model: "gpt-5.2",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: message }
+      ],
+      stream: true
+    });
+    for await (const chunk of stream) {
+      const content = chunk.choices[0]?.delta?.content;
+      if (content) {
+        res.write(`data: ${JSON.stringify({ content })}
+
+`);
+      }
+    }
+    res.write("data: [DONE]\n\n");
+    res.end();
+  } catch (error) {
+    console.error("AI chat stream error:", error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Kunde inte generera svar fr\xE5n AI" });
+    } else {
+      res.write(`data: ${JSON.stringify({ error: "Streaming avbr\xF6ts." })}
+
+`);
+      res.end();
+    }
+  }
+});
 var MAX_BASE64_SIZE = 10 * 1024 * 1024;
 router2.post("/transcribe", async (req, res) => {
   try {
