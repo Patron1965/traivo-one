@@ -573,9 +573,12 @@ export function HomeScreen({ navigation }: any) {
           startPulseAnimation();
 
           let nativeSilenceStart: number | null = null;
-          const NATIVE_SILENCE_DB = -45;
+          const NATIVE_SILENCE_DB = -60;
+          const recordingStartedAt = Date.now();
+          const MIN_RECORDING_MS = 2000;
           silenceCheckRef.current = setInterval(async () => {
             try {
+              if (Date.now() - recordingStartedAt < MIN_RECORDING_MS) return;
               const status = await recording.getStatusAsync();
               if (status.isRecording && status.metering !== undefined) {
                 if (status.metering < NATIVE_SILENCE_DB) {
@@ -624,16 +627,26 @@ export function HomeScreen({ navigation }: any) {
           const recording = voiceRecorderRef.current;
           voiceRecorderRef.current = null;
           if (recording) {
-            await recording.stopAndUnloadAsync();
+            try {
+              await recording.stopAndUnloadAsync();
+            } catch {
+              setVoiceOverlayVisible(false);
+              return;
+            }
             const uri = recording.getURI();
             if (uri) {
-              const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-              processVoiceAudio(base64);
+              try {
+                const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+                processVoiceAudio(base64);
+              } catch {
+                setVoiceOverlayVisible(false);
+              }
+            } else {
+              setVoiceOverlayVisible(false);
             }
           }
         }
       } catch {
-        showVoiceFeedback('Kunde inte stoppa inspelningen.');
         setVoiceOverlayVisible(false);
       } finally {
         isStoppingVoiceRef.current = false;
