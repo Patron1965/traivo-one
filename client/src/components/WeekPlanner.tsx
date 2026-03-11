@@ -47,9 +47,6 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     onSelectJob?.(jobId);
   }, [d.handleJobClick, onSelectJob]);
 
-  const isLoading = d.resourcesLoading || d.workOrdersLoading;
-  if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
-
   const jobCardProps = useMemo(() => ({
     selectedJob: d.selectedJob,
     jobConflicts: d.jobConflicts,
@@ -61,6 +58,9 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     onToggleSubStep: d.handleToggleSubStep,
     onOpenDepChain: d.handleOpenDepChain,
   }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain]);
+
+  const isLoading = d.resourcesLoading || d.workOrdersLoading;
+  if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 
   return (
     <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragEnd={dnd.handleDragEnd}>
