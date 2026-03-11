@@ -355,8 +355,12 @@ export default function OrderConceptWizardPage() {
     }
 
     if (currentStep < 9) {
+      const newStep = currentStep + 1;
       setShowResumeBanner(false);
-      setCurrentStep(currentStep + 1);
+      setCurrentStep(newStep);
+      if (conceptId) {
+        try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: newStep }); } catch {}
+      }
     }
   }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep]);
 
@@ -500,11 +504,17 @@ export default function OrderConceptWizardPage() {
               <div key={step.num} className="flex items-center">
                 <button
                   onClick={async () => {
-                    if (conceptId && step.num <= (currentStep + 1)) {
-                      setCurrentStep(step.num);
-                      setShowResumeBanner(false);
-                      try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: step.num }); } catch {}
+                    if (!conceptId || step.num > currentStep + 1) return;
+                    if (step.num > currentStep) {
+                      const validationError = validateCurrentStep();
+                      if (validationError) {
+                        toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
+                        return;
+                      }
                     }
+                    setCurrentStep(step.num);
+                    setShowResumeBanner(false);
+                    try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: step.num }); } catch {}
                   }}
                   className={cn(
                     "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
