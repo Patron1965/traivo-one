@@ -78,21 +78,58 @@ export function InspectionScreen({ route, navigation }: any) {
 
       if (photoPayloads.length > 0) {
         setUploadProgress(`Laddar upp ${photoPayloads.length} foto...`);
-        const uploadRes = await apiRequest('POST', `/api/mobile/inspections/${orderId}/photos`, {
-          photos: photoPayloads,
-        });
+        let uploadRes: any;
+        try {
+          uploadRes = await apiRequest('POST', `/api/mobile/inspections/${orderId}/photos`, {
+            photos: photoPayloads,
+          });
+        } catch (uploadErr: any) {
+          let parsedMsg = 'Kunde inte ladda upp foton';
+          try {
+            const errBody = JSON.parse(uploadErr.message.replace(/^\d+:\s*/, ''));
+            if (errBody.errors && Array.isArray(errBody.errors)) {
+              parsedMsg = errBody.errors.map((e: any) => e.error).join('\n');
+            } else if (errBody.error) {
+              parsedMsg = errBody.error;
+            }
+          } catch {}
 
-        if (uploadRes.errors && uploadRes.errors.length > 0) {
-          const failedAll = !uploadRes.uploaded || uploadRes.uploaded.length === 0;
-          const errorMsg = uploadRes.errors.map((e: any) => e.error).join('\n');
-          if (failedAll) {
-            throw new Error(errorMsg);
+          const userChoice = await new Promise<'retry' | 'skip' | 'cancel'>((resolve) => {
+            Alert.alert(
+              'Fotouppladdning misslyckades',
+              parsedMsg,
+              [
+                { text: 'Försök igen', onPress: () => resolve('retry') },
+                { text: 'Hoppa över foton', style: 'destructive', onPress: () => resolve('skip') },
+                { text: 'Avbryt', style: 'cancel', onPress: () => resolve('cancel') },
+              ]
+            );
+          });
+
+          if (userChoice === 'cancel') {
+            throw new Error('Uppladdning avbruten');
           }
-          Alert.alert(
-            'Vissa foton kunde inte laddas upp',
-            errorMsg,
-            [{ text: 'OK' }]
-          );
+          if (userChoice === 'retry') {
+            throw new Error('__RETRY__');
+          }
+          uploadRes = null;
+        }
+
+        if (uploadRes?.errors && uploadRes.errors.length > 0) {
+          const errorMsg = uploadRes.errors.map((e: any) => e.error).join('\n');
+          const userChoice = await new Promise<'continue' | 'cancel'>((resolve) => {
+            Alert.alert(
+              'Vissa foton kunde inte laddas upp',
+              `${errorMsg}\n\nVill du spara inspektionen ändå?`,
+              [
+                { text: 'Spara ändå', onPress: () => resolve('continue') },
+                { text: 'Avbryt', style: 'cancel', onPress: () => resolve('cancel') },
+              ]
+            );
+          });
+          if (userChoice === 'cancel') {
+            throw new Error('Uppladdning avbruten');
+          }
         }
       }
 
@@ -107,6 +144,13 @@ export function InspectionScreen({ route, navigation }: any) {
     },
     onError: (err: any) => {
       setUploadProgress(null);
+      if (err.message === '__RETRY__') {
+        handleSave();
+        return;
+      }
+      if (err.message === 'Uppladdning avbruten') {
+        return;
+      }
       Alert.alert(
         'Kunde inte spara',
         err.message || 'Ett fel uppstod vid uppladdning av foton. Försök igen.',
