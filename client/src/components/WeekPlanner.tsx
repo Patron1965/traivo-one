@@ -481,8 +481,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
 
   const getWeatherMultiplierLabel = useCallback((multiplier: number) => {
     if (multiplier >= 1.0) return null;
-    const pctReduction = Math.round((1 - multiplier) * 100);
-    return `+${pctReduction}% tid`;
+    const pctIncrease = Math.round((1 / multiplier - 1) * 100);
+    return `+${pctIncrease}% tid`;
   }, []);
 
   const visibleResources = useMemo(() => {
