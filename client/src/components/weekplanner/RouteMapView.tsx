@@ -51,9 +51,11 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
 
   const orderedJobs = useMemo(() => {
     if (routeJobOrder.length === 0) return routeJobs;
+    const jobIds = new Set(routeJobs.map(j => j.id));
+    const orderCoversAll = routeJobOrder.length === routeJobs.length && routeJobOrder.every(id => jobIds.has(id));
+    if (!orderCoversAll) return routeJobs;
     const jobMap = new Map(routeJobs.map(j => [j.id, j]));
-    const ordered = routeJobOrder.map(id => jobMap.get(id)).filter((j): j is WorkOrderWithObject => !!j);
-    return ordered.length > 0 ? ordered : routeJobs;
+    return routeJobOrder.map(id => jobMap.get(id)).filter((j): j is WorkOrderWithObject => !!j);
   }, [routeJobs, routeJobOrder]);
 
   const mapBounds = useMemo(() => {
