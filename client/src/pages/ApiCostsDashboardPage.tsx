@@ -25,8 +25,12 @@ const SERVICE_CONFIG: Record<string, { label: string; icon: any; color: string }
   openai: { label: "OpenAI", icon: Brain, color: "hsl(var(--chart-1))" },
   resend: { label: "Resend (E-post)", icon: Mail, color: "hsl(var(--chart-2))" },
   twilio: { label: "Twilio (SMS)", icon: MessageSquare, color: "hsl(var(--chart-3))" },
-  geoapify: { label: "Geoapify", icon: MapPin, color: "hsl(var(--chart-4))" },
+  geoapify: { label: "Geoapify (Routing)", icon: MapPin, color: "hsl(var(--chart-4))" },
+  "geoapify-geocoding": { label: "Geoapify (Geocoding)", icon: MapPin, color: "hsl(25, 95%, 53%)" },
   "open-meteo": { label: "Open-Meteo", icon: Cloud, color: "hsl(var(--chart-5))" },
+  "google-geocoding": { label: "Google Geocoding (avvecklad)", icon: MapPin, color: "hsl(142, 71%, 35%)" },
+  nominatim: { label: "Nominatim", icon: MapPin, color: "hsl(280, 60%, 55%)" },
+  openrouteservice: { label: "OpenRouteService", icon: MapPin, color: "hsl(340, 65%, 47%)" },
 };
 
 const PERIOD_LABELS: Record<string, string> = {
@@ -333,17 +337,20 @@ export default function ApiCostsDashboardPage() {
                         formatter={(value: number, name: string) => [formatCostUSD(value), SERVICE_CONFIG[name]?.label || name]}
                       />
                       <Legend formatter={(value) => SERVICE_CONFIG[value]?.label || value} />
-                      {uniqueServices.map((service, i) => (
-                        <Area
-                          key={service}
-                          type="monotone"
-                          dataKey={service}
-                          stackId="1"
-                          stroke={PIE_COLORS[i % PIE_COLORS.length]}
-                          fill={PIE_COLORS[i % PIE_COLORS.length]}
-                          fillOpacity={0.4}
-                        />
-                      ))}
+                      {uniqueServices.map((service, i) => {
+                        const svcColor = SERVICE_CONFIG[service]?.color || PIE_COLORS[i % PIE_COLORS.length];
+                        return (
+                          <Area
+                            key={service}
+                            type="monotone"
+                            dataKey={service}
+                            stackId="1"
+                            stroke={svcColor}
+                            fill={svcColor}
+                            fillOpacity={0.4}
+                          />
+                        );
+                      })}
                     </AreaChart>
                   </ResponsiveContainer>
                 )}
@@ -459,7 +466,7 @@ export default function ApiCostsDashboardPage() {
                       />
                       <Legend formatter={(value) => SERVICE_CONFIG[value]?.label || value} />
                       {uniqueServices.map((service, i) => (
-                        <Bar key={service} dataKey={service} stackId="a" fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        <Bar key={service} dataKey={service} stackId="a" fill={SERVICE_CONFIG[service]?.color || PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
@@ -488,7 +495,7 @@ export default function ApiCostsDashboardPage() {
                       />
                       <Legend formatter={(value) => SERVICE_CONFIG[value]?.label || value} />
                       {uniqueServices.map((service, i) => (
-                        <Bar key={service} dataKey={service} stackId="a" fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                        <Bar key={service} dataKey={service} stackId="a" fill={SERVICE_CONFIG[service]?.color || PIE_COLORS[i % PIE_COLORS.length]} />
                       ))}
                     </BarChart>
                   </ResponsiveContainer>
