@@ -130,7 +130,17 @@ export default function OrderStockPage() {
   const [, setLocation] = useLocation();
   const [includeSimulated, setIncludeSimulated] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
-  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">("all");
+
+  const initialStatus = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    const s = params.get("status");
+    if (s && ["skapad", "planerad_pre", "planerad_resurs", "planerad_las", "utford", "fakturerad", "omojlig"].includes(s)) {
+      return s as OrderStatus;
+    }
+    return "all" as const;
+  }, []);
+
+  const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">(initialStatus);
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);

@@ -31,11 +31,15 @@ import type { Resource, ServiceObject, SetupTimeLog, Customer, WorkOrderWithObje
 export function Dashboard() {
   const [, navigate] = useLocation();
 
-  const handlePieClick = useCallback((_data: unknown, _index: number) => {
-    navigate("/order-stock");
+  const handlePieClick = useCallback((entry: { status?: string } | null) => {
+    if (entry?.status) {
+      navigate(`/order-stock?status=${encodeURIComponent(entry.status)}`);
+    } else {
+      navigate("/order-stock");
+    }
   }, [navigate]);
 
-  const handleBarClick = useCallback((_data: unknown) => {
+  const handleBarClick = useCallback(() => {
     navigate("/order-stock");
   }, [navigate]);
 

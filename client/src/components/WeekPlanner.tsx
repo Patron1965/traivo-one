@@ -892,11 +892,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
         hoursMap[resourceId][dayKey] = 0;
       }
       map[resourceId][dayKey].push(job);
-      hoursMap[resourceId][dayKey] += (job.estimatedDuration || 0) / 60;
+      const baseDuration = (job.estimatedDuration || 0) / 60;
+      const dayWeather = weatherByDate.get(dayKey);
+      const multiplier = dayWeather?.impact.capacityMultiplier ?? 1;
+      const adjustedDuration = multiplier > 0 && multiplier < 1 ? baseDuration / multiplier : baseDuration;
+      hoursMap[resourceId][dayKey] += adjustedDuration;
     }
     
     return { jobs: map, hours: hoursMap };
-  }, [filteredScheduledJobs]);
+  }, [filteredScheduledJobs, weatherByDate]);
 
   const routeJobsForView = useMemo(() => {
     if (viewMode !== "route" || !routeViewResourceId) return [];
