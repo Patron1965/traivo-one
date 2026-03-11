@@ -271,9 +271,10 @@ export default function OrderConceptWizardPage() {
   });
 
   const saveStepMutation = useMutation({
-    mutationFn: async (step: number) => {
-      if (!conceptId) return;
-      await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, {
+    mutationFn: async ({ step, overrideConceptId }: { step: number; overrideConceptId?: string }) => {
+      const cId = overrideConceptId || conceptId;
+      if (!cId) return;
+      await apiRequest("PATCH", `/api/order-concepts/${cId}`, {
         currentStep: step,
         name: conceptName,
         customerId: selectedCustomerId,
@@ -291,13 +292,13 @@ export default function OrderConceptWizardPage() {
       });
 
       if (step >= 1 && selectedObjectIds.size > 0) {
-        await apiRequest("POST", `/api/order-concepts/${conceptId}/objects`, {
+        await apiRequest("POST", `/api/order-concepts/${cId}/objects`, {
           objectIds: Array.from(selectedObjectIds),
         });
       }
 
       if (step >= 4) {
-        await apiRequest("PUT", `/api/order-concepts/${conceptId}/invoice-config`, {
+        await apiRequest("PUT", `/api/order-concepts/${cId}/invoice-config`, {
           headerMetadata,
           lineMetadata,
           showPrices,
@@ -307,7 +308,7 @@ export default function OrderConceptWizardPage() {
       }
 
       if (step >= 5) {
-        await apiRequest("PUT", `/api/order-concepts/${conceptId}/documents`, {
+        await apiRequest("PUT", `/api/order-concepts/${cId}/documents`, {
           documents: documents.map(d => ({
             documentType: d.documentType,
             enabled: d.enabled,
@@ -328,7 +329,7 @@ export default function OrderConceptWizardPage() {
           rollingMonths,
           active: true,
         }));
-        await apiRequest("PUT", `/api/order-concepts/${conceptId}/delivery`, {
+        await apiRequest("PUT", `/api/order-concepts/${cId}/delivery`, {
           deliveryModel,
           schedules: enabledSchedules,
         });
@@ -346,20 +347,23 @@ export default function OrderConceptWizardPage() {
       return;
     }
 
-    if (!conceptId && currentStep === 1) {
-      await createConceptMutation.mutateAsync();
+    let activeConceptId = conceptId;
+
+    if (!activeConceptId && currentStep === 1) {
+      const created = await createConceptMutation.mutateAsync();
+      activeConceptId = created.id;
     }
 
-    if (conceptId) {
-      await saveStepMutation.mutateAsync(currentStep);
+    if (activeConceptId) {
+      await saveStepMutation.mutateAsync({ step: currentStep, overrideConceptId: activeConceptId });
     }
 
     if (currentStep < 9) {
       const newStep = currentStep + 1;
       setShowResumeBanner(false);
       setCurrentStep(newStep);
-      if (conceptId) {
-        try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: newStep }); } catch {}
+      if (activeConceptId) {
+        try { await apiRequest("PATCH", `/api/order-concepts/${activeConceptId}`, { currentStep: newStep }); } catch {}
       }
     }
   }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep]);
@@ -376,18 +380,20 @@ export default function OrderConceptWizardPage() {
   }, [currentStep, conceptId]);
 
   const handleSaveDraft = useCallback(async () => {
-    if (!conceptId && conceptName) {
-      await createConceptMutation.mutateAsync();
+    let activeId = conceptId;
+    if (!activeId && conceptName) {
+      const created = await createConceptMutation.mutateAsync();
+      activeId = created.id;
     }
-    if (conceptId) {
-      await saveStepMutation.mutateAsync(currentStep);
+    if (activeId) {
+      await saveStepMutation.mutateAsync({ step: currentStep, overrideConceptId: activeId });
       toast({ title: "Utkast sparat" });
     }
   }, [conceptId, currentStep, conceptName]);
 
   const handleActivate = useCallback(async () => {
     if (!conceptId) return;
-    await saveStepMutation.mutateAsync(9);
+    await saveStepMutation.mutateAsync({ step: 9 });
     await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { status: "active" });
     queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
     toast({ title: "Orderkoncept aktiverat!" });
