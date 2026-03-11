@@ -1,16 +1,18 @@
-import React, { useCallback, useMemo, useState, useRef } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Platform, Animated } from 'react-native';
+import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Platform, Animated, Linking, Modal } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
+import * as Haptics from 'expo-haptics';
+import * as Speech from 'expo-speech';
 import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
-import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../constants/theme';
 import { getApiUrl, apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
@@ -153,177 +155,553 @@ export function HomeScreen({ navigation }: any) {
   const [breakDismissed, setBreakDismissed] = React.useState(false);
 
   const queryClient = useQueryClient();
-  const [voiceRecording, setVoiceRecording] = useState(false);
-  const [voiceProcessing, setVoiceProcessing] = useState(false);
-  const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
-  const voiceRecorderRef = useRef<any>(null);
-  const voiceChunksRef = useRef<any[]>([]);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+    const [voiceRecording, setVoiceRecording] = useState(false);
+    const [voiceProcessing, setVoiceProcessing] = useState(false);
+    const [voiceFeedback, setVoiceFeedback] = useState<string | null>(null);
+    const [voiceOverlayVisible, setVoiceOverlayVisible] = useState(false);
+    const [voiceTranscript, setVoiceTranscript] = useState<string>('');
+    const [voiceError, setVoiceError] = useState(false);
+    const [offlineQuickActions, setOfflineQuickActions] = useState(false);
+    const voiceRecorderRef = useRef<any>(null);
+    const voiceChunksRef = useRef<any[]>([]);
+    const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const audioContextRef = useRef<any>(null);
+    const analyserRef = useRef<any>(null);
+    const silenceCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const pulseAnim = useRef(new Animated.Value(1)).current;
+    const overlayPulseAnim = useRef(new Animated.Value(1)).current;
+  const localTranscriptRef = useRef<string>('');
+    const speechRecognitionRef = useRef<any>(null);
+  
+    useEffect(() => {
+      return () => {
+        if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+        if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+        if (silenceCheckRef.current) clearInterval(silenceCheckRef.current);
+        if (audioContextRef.current) {
+          try { audioContextRef.current.close(); } catch {}
+        }
+        overlayPulseAnim.stopAnimation();
+        pulseAnim.stopAnimation();
+      };
+    }, []);
 
-  function showVoiceFeedback(msg: string) {
-    setVoiceFeedback(msg);
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => setVoiceFeedback(null), 3500);
-  }
+  
+    const SILENCE_THRESHOLD = 0.01;
+    const SILENCE_DURATION_MS = 1500;
 
-  function executeVoiceAction(action: string, displayMessage: string) {
-    showVoiceFeedback(displayMessage);
-    switch (action) {
-      case 'navigate_orders':
-        navigation.navigate('OrdersTab');
-        break;
-      case 'start_next': {
-        const next = activeOrders.find(o => !o.isLocked) || activeOrders[0];
-        if (next) {
-          navigation.navigate('OrderDetail', { orderId: next.id });
-        } else {
-          showVoiceFeedback('Inga aktiva uppdrag att starta.');
-        }
-        break;
+    const HELP_TEXT = 'Tillgängliga kommandon: Visa jobb, Starta nästa, På plats, Markera klar, Navigera dit, Ring kunden, Ta rast, Visa statistik, Rapportera avvikelse, Hjälp.';
+
+    const OFFLINE_KEYWORDS: Record<string, { action: string; displayMessage: string }> = {
+      'klar': { action: 'complete_order', displayMessage: 'Markerar uppdraget som klart.' },
+      'färdig': { action: 'complete_order', displayMessage: 'Markerar uppdraget som klart.' },
+      'nästa': { action: 'start_next', displayMessage: 'Öppnar nästa uppdrag.' },
+      'på plats': { action: 'on_site', displayMessage: 'Markerar som på plats.' },
+      'framme': { action: 'on_site', displayMessage: 'Markerar som på plats.' },
+      'avvikelse': { action: 'report_deviation', displayMessage: 'Öppnar avvikelserapportering.' },
+      'rast': { action: 'start_break', displayMessage: 'Tar rast.' },
+      'paus': { action: 'start_break', displayMessage: 'Tar rast.' },
+      'hjälp': { action: 'help', displayMessage: HELP_TEXT },
+      'statistik': { action: 'navigate_statistics', displayMessage: 'Öppnar statistik.' },
+      'jobb': { action: 'navigate_orders', displayMessage: 'Visar dina uppdrag.' },
+      'ordrar': { action: 'navigate_orders', displayMessage: 'Visar dina uppdrag.' },
+      'ring': { action: 'call_customer', displayMessage: 'Ringer kunden.' },
+      'navigera': { action: 'navigate_to', displayMessage: 'Öppnar navigation.' },
+    };
+
+    function matchOfflineKeyword(text: string): { action: string; displayMessage: string } | null {
+      const lower = text.toLowerCase().trim();
+      for (const [keyword, result] of Object.entries(OFFLINE_KEYWORDS)) {
+        if (lower.includes(keyword)) return result;
       }
-      case 'report_deviation': {
-        const current = activeOrders.find(o => o.status === 'in_progress' || o.status === 'on_site') || activeOrders[0];
-        if (current) {
-          navigation.navigate('ReportDeviation', { orderId: current.id });
-        } else {
-          showVoiceFeedback('Inget aktivt uppdrag för avvikelse.');
-        }
-        break;
-      }
-      case 'on_site': {
-        const onSiteOrder = activeOrders.find(o => o.status === 'dispatched' || o.status === 'planerad_resurs') || activeOrders[0];
-        if (onSiteOrder) {
-          apiRequest('POST', `/api/mobile/orders/${onSiteOrder.id}/status`, { status: 'on_site' })
-            .then(() => {
-              queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
-              showVoiceFeedback(`Markerad som "P\u00e5 plats" f\u00f6r ${onSiteOrder.customerName}`);
-            })
-            .catch(() => showVoiceFeedback('Kunde inte uppdatera status.'));
-        } else {
-          showVoiceFeedback('Inget uppdrag att markera som p\u00e5 plats.');
-        }
-        break;
-      }
-      default:
-        showVoiceFeedback('Kommandot k\u00e4ndes inte igen. F\u00f6rs\u00f6k igen.');
-        break;
+      return null;
     }
-  }
 
-  async function handleVoiceCommand() {
-    if (voiceRecording) {
-      stopVoiceRecording();
-      return;
+    function speakConfirmation(message: string) {
+      if (Platform.OS === 'web') return;
+      Speech.speak(message, { language: 'sv-SE', rate: 1.0 });
     }
-    startVoiceRecording();
-  }
 
-  function startPulseAnimation() {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
-      ])
-    ).start();
-  }
-
-  function stopPulseAnimation() {
-    pulseAnim.stopAnimation();
-    pulseAnim.setValue(1);
-  }
-
-  async function startVoiceRecording() {
-    if (Platform.OS === 'web') {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
-        voiceChunksRef.current = [];
-        mediaRecorder.ondataavailable = (e: any) => {
-          if (e.data.size > 0) voiceChunksRef.current.push(e.data);
-        };
-        mediaRecorder.onstop = async () => {
-          stream.getTracks().forEach(track => track.stop());
-          const blob = new Blob(voiceChunksRef.current, { type: 'audio/webm;codecs=opus' });
-          const reader = new FileReader();
-          reader.onloadend = async () => {
-            const base64 = (reader.result as string).split(',')[1];
-            processVoiceAudio(base64);
-          };
-          reader.readAsDataURL(blob);
-        };
-        mediaRecorder.start();
-        voiceRecorderRef.current = mediaRecorder;
-        setVoiceRecording(true);
-        startPulseAnimation();
-      } catch {
-        showVoiceFeedback('Kunde inte starta mikrofonen.');
-      }
-    } else {
-      try {
-        const permission = await Audio.requestPermissionsAsync();
-        if (!permission.granted) {
-          showVoiceFeedback('Mikrofontillst\u00e5nd kr\u00e4vs.');
-          return;
-        }
-        await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
-        const { recording } = await Audio.Recording.createAsync(
-          Audio.RecordingOptionsPresets.HIGH_QUALITY
-        );
-        voiceRecorderRef.current = recording;
-        setVoiceRecording(true);
-        startPulseAnimation();
-      } catch (err: any) {
-        console.error('Voice recording error:', err);
-        showVoiceFeedback('Kunde inte starta inspelning.');
+    function triggerHaptic(type: 'start' | 'stop' | 'error') {
+      if (Platform.OS === 'web') return;
+      switch (type) {
+        case 'start':
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          break;
+        case 'stop':
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          break;
+        case 'error':
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          break;
       }
     }
-  }
 
-  async function stopVoiceRecording() {
-    setVoiceRecording(false);
-    stopPulseAnimation();
-    if (Platform.OS === 'web') {
-      if (voiceRecorderRef.current) {
-        voiceRecorderRef.current.stop();
-        voiceRecorderRef.current = null;
+    function showVoiceFeedback(msg: string) {
+      setVoiceFeedback(msg);
+      if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+      feedbackTimer.current = setTimeout(() => setVoiceFeedback(null), 3500);
+    }
+
+    function executeVoiceAction(action: string, displayMessage: string) {
+      if (action !== 'help') {
+        showVoiceFeedback(displayMessage);
+        speakConfirmation(displayMessage);
       }
-    } else {
-      try {
-        const recording = voiceRecorderRef.current;
-        if (recording) {
-          await recording.stopAndUnloadAsync();
-          const uri = recording.getURI();
-          voiceRecorderRef.current = null;
-          if (uri) {
-            const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-            processVoiceAudio(base64);
+      switch (action) {
+        case 'navigate_orders':
+          navigation.navigate('OrdersTab');
+          break;
+        case 'start_next': {
+          const next = activeOrders.find(o => !o.isLocked) || activeOrders[0];
+          if (next) {
+            navigation.navigate('OrderDetail', { orderId: next.id });
+          } else {
+            const msg = 'Inga aktiva uppdrag att starta.';
+            showVoiceFeedback(msg);
+            speakConfirmation(msg);
           }
+          break;
         }
-      } catch {
-        showVoiceFeedback('Kunde inte stoppa inspelningen.');
+        case 'report_deviation': {
+          const current = activeOrders.find(o => o.status === 'in_progress' || o.status === 'on_site') || activeOrders[0];
+          if (current) {
+            navigation.navigate('ReportDeviation', { orderId: current.id });
+          } else {
+            const msg = 'Inget aktivt uppdrag för avvikelse.';
+            showVoiceFeedback(msg);
+            speakConfirmation(msg);
+          }
+          break;
+        }
+        case 'on_site': {
+          const onSiteOrder = activeOrders.find(o => o.status === 'dispatched' || o.status === 'planerad_resurs') || activeOrders[0];
+          if (onSiteOrder) {
+            apiRequest('POST', `/api/mobile/orders/${onSiteOrder.id}/status`, { status: 'on_site' })
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+                const msg = `På plats markerat för ${onSiteOrder.customerName}`;
+                showVoiceFeedback(msg);
+                speakConfirmation(msg);
+              })
+              .catch(() => {
+                const msg = 'Kunde inte uppdatera status.';
+                showVoiceFeedback(msg);
+                speakConfirmation(msg);
+              });
+          } else {
+            const msg = 'Inget uppdrag att markera som på plats.';
+            showVoiceFeedback(msg);
+            speakConfirmation(msg);
+          }
+          break;
+        }
+        case 'complete_order': {
+          const currentOrder = activeOrders.find(o => o.status === 'in_progress' || o.status === 'on_site') || activeOrders[0];
+          if (currentOrder) {
+            apiRequest('POST', `/api/mobile/orders/${currentOrder.id}/status`, { status: 'completed' })
+              .then(() => {
+                queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+                queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
+                const msg = `Uppdrag ${currentOrder.orderNumber} markerat som klart.`;
+                showVoiceFeedback(msg);
+                speakConfirmation(msg);
+              })
+              .catch(() => {
+                const msg = 'Kunde inte markera uppdraget som klart.';
+                showVoiceFeedback(msg);
+                speakConfirmation(msg);
+              });
+          } else {
+            const msg = 'Inget aktivt uppdrag att markera som klart.';
+            showVoiceFeedback(msg);
+            speakConfirmation(msg);
+          }
+          break;
+        }
+        case 'navigate_to': {
+          const navOrder = activeOrders.find(o => o.status === 'dispatched' || o.status === 'planerad_resurs' || o.status === 'on_site') || activeOrders[0];
+          if (navOrder && navOrder.latitude && navOrder.longitude) {
+            const url = Platform.select({
+              ios: `maps:0,0?q=${navOrder.latitude},${navOrder.longitude}`,
+              android: `geo:0,0?q=${navOrder.latitude},${navOrder.longitude}(${encodeURIComponent(navOrder.address)})`,
+              default: `https://www.google.com/maps/dir/?api=1&destination=${navOrder.latitude},${navOrder.longitude}`,
+            }) as string;
+            Linking.openURL(url).catch(() => {});
+            const msg = `Navigerar till ${navOrder.address}.`;
+            showVoiceFeedback(msg);
+            speakConfirmation(msg);
+          } else {
+            const msg = 'Inget uppdrag att navigera till.';
+            showVoiceFeedback(msg);
+            speakConfirmation(msg);
+          }
+          break;
+        }
+        case 'call_customer': {
+          const callOrder = activeOrders.find(o => o.status === 'in_progress' || o.status === 'on_site' || o.status === 'dispatched') || activeOrders[0];
+          if (callOrder && callOrder.contacts && callOrder.contacts.length > 0) {
+            const phone = callOrder.contacts[0].phone;
+            if (phone) {
+              Linking.openURL(`tel:${phone}`).catch(() => {});
+              const msg = `Ringer ${callOrder.contacts[0].name || 'kunden'}.`;
+              showVoiceFeedback(msg);
+              speakConfirmation(msg);
+            } else {
+              const msg = 'Inget telefonnummer tillgängligt.';
+              showVoiceFeedback(msg);
+              speakConfirmation(msg);
+            }
+          } else {
+            const msg = 'Ingen kontakt att ringa.';
+            showVoiceFeedback(msg);
+            speakConfirmation(msg);
+          }
+          break;
+        }
+        case 'start_break': {
+          const msg = 'Rast startad. Vila dig!';
+          showVoiceFeedback(msg);
+          speakConfirmation(msg);
+          break;
+        }
+        case 'navigate_statistics':
+          navigation.navigate('Statistics');
+          break;
+        case 'help':
+          speakConfirmation(HELP_TEXT);
+          showVoiceFeedback(HELP_TEXT);
+          break;
+        default:
+          handleUnknownCommand();
+          break;
       }
     }
+
+    function retryVoiceCommand() {
+      if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+      setVoiceError(false);
+      setVoiceOverlayVisible(false);
+      setTimeout(() => {
+        startVoiceRecording();
+      }, 300);
+    }
+
+    async function handleVoiceCommand() {
+      if (voiceRecording) {
+        stopVoiceRecording();
+        return;
+      }
+      startVoiceRecording();
+    }
+
+    function startPulseAnimation() {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, { toValue: 1.15, duration: 600, useNativeDriver: true }),
+          Animated.timing(pulseAnim, { toValue: 1, duration: 600, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+
+    function startOverlayPulseAnimation() {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(overlayPulseAnim, { toValue: 1.2, duration: 800, useNativeDriver: true }),
+          Animated.timing(overlayPulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        ])
+      ).start();
+    }
+
+    function stopPulseAnimation() {
+      pulseAnim.stopAnimation();
+      pulseAnim.setValue(1);
+      overlayPulseAnim.stopAnimation();
+      overlayPulseAnim.setValue(1);
+    }
+
+    function startLocalSpeechRecognition() {
+      if (Platform.OS !== 'web') return;
+      try {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+        if (!SpeechRecognition) return;
+        const recognition = new SpeechRecognition();
+        recognition.lang = 'sv-SE';
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        recognition.onresult = (event: any) => {
+          let transcript = '';
+          for (let i = 0; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          localTranscriptRef.current = transcript;
+          setVoiceTranscript(transcript);
+        };
+        recognition.onerror = () => {};
+        recognition.onend = () => {};
+        recognition.start();
+        speechRecognitionRef.current = recognition;
+      } catch {}
+    }
+
+    function stopLocalSpeechRecognition() {
+      if (speechRecognitionRef.current) {
+        try { speechRecognitionRef.current.stop(); } catch {}
+        speechRecognitionRef.current = null;
+      }
+    }
+
+      function startSilenceDetectionWeb(stream: MediaStream) {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const source = audioContext.createMediaStreamSource(stream);
+        const analyser = audioContext.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+        audioContextRef.current = audioContext;
+        analyserRef.current = analyser;
+
+        let silenceStart: number | null = null;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        silenceCheckRef.current = setInterval(() => {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const avg = sum / dataArray.length / 255;
+
+          if (avg < SILENCE_THRESHOLD) {
+            if (!silenceStart) silenceStart = Date.now();
+            if (Date.now() - silenceStart >= SILENCE_DURATION_MS) {
+              stopVoiceRecording();
+            }
+          } else {
+            silenceStart = null;
+          }
+        }, 100);
+      } catch {
+      }
+    }
+
+    function stopSilenceDetection() {
+      if (silenceCheckRef.current) {
+        clearInterval(silenceCheckRef.current);
+        silenceCheckRef.current = null;
+      }
+      if (audioContextRef.current) {
+        try { audioContextRef.current.close(); } catch {}
+        audioContextRef.current = null;
+      }
+      analyserRef.current = null;
+      if (silenceTimerRef.current) {
+        clearTimeout(silenceTimerRef.current);
+        silenceTimerRef.current = null;
+      }
+    }
+
+    async function startVoiceRecording() {
+      setVoiceError(false);
+      setVoiceTranscript('');
+      localTranscriptRef.current = '';
+
+      setVoiceOverlayVisible(true);
+      triggerHaptic('start');
+      startOverlayPulseAnimation();
+
+      if (Platform.OS === 'web') {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
+          voiceChunksRef.current = [];
+          mediaRecorder.ondataavailable = (e: any) => {
+            if (e.data.size > 0) voiceChunksRef.current.push(e.data);
+          };
+          mediaRecorder.onstop = async () => {
+            stream.getTracks().forEach(track => track.stop());
+            stopSilenceDetection();
+            const blob = new Blob(voiceChunksRef.current, { type: 'audio/webm;codecs=opus' });
+            const reader = new FileReader();
+            reader.onloadend = async () => {
+              const base64 = (reader.result as string).split(',')[1];
+              processVoiceAudio(base64);
+            };
+            reader.readAsDataURL(blob);
+          };
+          mediaRecorder.start();
+          voiceRecorderRef.current = mediaRecorder;
+          setVoiceRecording(true);
+          startPulseAnimation();
+          startSilenceDetectionWeb(stream);
+        startLocalSpeechRecognition();
+        } catch {
+          stopPulseAnimation();
+          showVoiceFeedback('Kunde inte starta mikrofonen.');
+          setVoiceOverlayVisible(false);
+        }
+      } else {
+        try {
+          const permission = await Audio.requestPermissionsAsync();
+          if (!permission.granted) {
+            stopPulseAnimation();
+            showVoiceFeedback('Mikrofontillstånd krävs.');
+            setVoiceOverlayVisible(false);
+            return;
+          }
+          await Audio.setAudioModeAsync({ allowsRecordingIOS: true, playsInSilentModeIOS: true });
+          const { recording } = await Audio.Recording.createAsync({
+            ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+            isMeteringEnabled: true,
+          });
+          voiceRecorderRef.current = recording;
+          setVoiceRecording(true);
+          startPulseAnimation();
+
+          let nativeSilenceStart: number | null = null;
+          const NATIVE_SILENCE_DB = -45;
+          silenceCheckRef.current = setInterval(async () => {
+            try {
+              const status = await recording.getStatusAsync();
+              if (status.isRecording && status.metering !== undefined) {
+                if (status.metering < NATIVE_SILENCE_DB) {
+                  if (!nativeSilenceStart) nativeSilenceStart = Date.now();
+                  if (Date.now() - nativeSilenceStart >= SILENCE_DURATION_MS) {
+                    stopVoiceRecording();
+                  }
+                } else {
+                  nativeSilenceStart = null;
+                }
+              }
+            } catch {}
+          }, 200);
+
+          silenceTimerRef.current = setTimeout(() => {
+            if (voiceRecorderRef.current) {
+              stopVoiceRecording();
+            }
+          }, 15000);
+        } catch (err: any) {
+          console.error('Voice recording error:', err);
+          showVoiceFeedback('Kunde inte starta inspelning.');
+          setVoiceOverlayVisible(false);
+        }
+      }
+    }
+
+    async function stopVoiceRecording() {
+      setVoiceRecording(false);
+      stopPulseAnimation();
+      stopSilenceDetection();
+      stopLocalSpeechRecognition();
+      triggerHaptic('stop');
+      if (Platform.OS === 'web') {
+        if (voiceRecorderRef.current) {
+          voiceRecorderRef.current.stop();
+          voiceRecorderRef.current = null;
+        }
+      } else {
+        try {
+          const recording = voiceRecorderRef.current;
+          if (recording) {
+            await recording.stopAndUnloadAsync();
+            const uri = recording.getURI();
+            voiceRecorderRef.current = null;
+            if (uri) {
+              const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+              processVoiceAudio(base64);
+            }
+          }
+        } catch {
+          showVoiceFeedback('Kunde inte stoppa inspelningen.');
+          setVoiceOverlayVisible(false);
+        }
+      }
+    }
+
+    function handleUnknownCommand() {
+      setVoiceOverlayVisible(true);
+      setVoiceError(true);
+      triggerHaptic('error');
+      const msg = 'Kommandot kändes inte igen.';
+      showVoiceFeedback(msg);
+      speakConfirmation(msg + ' Försök igen.');
+      silenceTimerRef.current = setTimeout(() => {
+        setVoiceError(false);
+        setVoiceOverlayVisible(false);
+        startVoiceRecording();
+      }, 1500);
+    }
+
+  function tryLocalKeywordMatch(spokenText: string): boolean {
+    const match = matchOfflineKeyword(spokenText);
+    if (match) {
+      setVoiceOverlayVisible(false);
+      executeVoiceAction(match.action, match.displayMessage);
+      return true;
+    }
+    return false;
   }
 
   async function processVoiceAudio(base64: string) {
     setVoiceProcessing(true);
+    setVoiceTranscript('Bearbetar...');
+
+    const localText = localTranscriptRef.current;
+    localTranscriptRef.current = '';
+
+    if (localText) {
+      setVoiceTranscript(localText);
+      const quickMatch = matchOfflineKeyword(localText);
+      if (quickMatch) {
+        setVoiceOverlayVisible(false);
+        executeVoiceAction(quickMatch.action, quickMatch.displayMessage);
+        setVoiceProcessing(false);
+        return;
+      }
+    }
+
+    const networkAvailable = Platform.OS === 'web'
+      ? navigator.onLine !== false
+      : isOnline;
+
+    if (!networkAvailable) {
+      setOfflineQuickActions(true);
+      setVoiceOverlayVisible(true);
+      setVoiceTranscript('Offline \u2013 v\u00e4lj kommando:');
+      triggerHaptic('error');
+      speakConfirmation('Ingen n\u00e4tanslutning. V\u00e4lj ett snabbkommando.');
+      setVoiceProcessing(false);
+      return;
+    }
+
     try {
       const result = await apiRequest('POST', '/api/mobile/ai/voice-command', { audio: base64 });
-      executeVoiceAction(result.action, result.displayMessage);
+      const transcript = result.transcript || '';
+      setVoiceTranscript(transcript);
+      setVoiceOverlayVisible(false);
+      if (result.action === 'unknown') {
+        if (!tryLocalKeywordMatch(transcript)) {
+          handleUnknownCommand();
+        }
+      } else {
+        executeVoiceAction(result.action, result.displayMessage);
+      }
     } catch {
-      showVoiceFeedback('R\u00f6stkommandot kunde inte bearbetas.');
+      try {
+        const transcribeResult = await apiRequest('POST', '/api/mobile/ai/transcribe', { audio: base64 });
+        const transcript = transcribeResult.text || '';
+        setVoiceTranscript(transcript);
+        if (transcript && tryLocalKeywordMatch(transcript)) {
+          return;
+        }
+        handleUnknownCommand();
+      } catch {
+        handleUnknownCommand();
+      }
     } finally {
       setVoiceProcessing(false);
     }
   }
-
-  const today = new Date();
-  const dateStr = today.toLocaleDateString('sv-SE', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  });
 
   return (
     <View style={styles.outerContainer}>
@@ -517,29 +895,7 @@ export function HomeScreen({ navigation }: any) {
         </Pressable>
       ) : null}
 
-      <Animated.View style={[
-        styles.voiceCommandRow,
-        voiceRecording ? styles.voiceCommandRowActive : null,
-        { transform: [{ scale: pulseAnim }] },
-      ]}>
-        <Pressable
-          style={styles.voiceCommandPressable}
-          onPress={handleVoiceCommand}
-          disabled={voiceProcessing}
-          testID="button-voice-command"
-        >
-          <View style={[styles.voiceIconCircle, voiceRecording ? styles.voiceIconCircleActive : null]}>
-            {voiceProcessing ? (
-              <ActivityIndicator size="small" color={Colors.textInverse} />
-            ) : (
-              <Feather name={voiceRecording ? 'square' : 'mic'} size={16} color={Colors.textInverse} />
-            )}
-          </View>
-          <ThemedText variant="caption" color={voiceRecording ? Colors.danger : Colors.textSecondary}>
-            {voiceRecording ? 'Lyssnar... tryck för att stoppa' : 'Röstkommando'}
-          </ThemedText>
-        </Pressable>
-      </Animated.View>
+
 
       <Pressable
         style={styles.statisticsButton}
@@ -696,18 +1052,148 @@ export function HomeScreen({ navigation }: any) {
       )}
     </ScrollView>
 
-      {voiceFeedback ? (
-        <View style={[styles.voiceFeedbackToast, { bottom: tabBarHeight + 80 }]}>
-          <Feather name="info" size={16} color={Colors.textInverse} />
-          <ThemedText variant="body" color={Colors.textInverse} style={styles.voiceFeedbackText}>
-            {voiceFeedback}
-          </ThemedText>
-        </View>
-      ) : null}
+      <Animated.View style={[
+          styles.voiceFab,
+          { bottom: tabBarHeight + 20 },
+          { transform: [{ scale: voiceRecording ? pulseAnim : 1 }] },
+        ]}>
+          <Pressable
+            style={[styles.voiceFabButton, voiceRecording ? styles.voiceFabButtonActive : null]}
+            onPress={handleVoiceCommand}
+            disabled={voiceProcessing}
+            testID="button-voice-command"
+          >
+            {voiceProcessing ? (
+              <ActivityIndicator size="small" color={Colors.textInverse} />
+            ) : (
+              <Feather name={voiceRecording ? 'square' : 'mic'} size={28} color={Colors.textInverse} />
+            )}
+          </Pressable>
+        </Animated.View>
 
-    </View>
-  );
-}
+        <Modal
+          visible={voiceOverlayVisible}
+          transparent
+          animationType="fade"
+          onRequestClose={() => {
+            if (voiceRecording) stopVoiceRecording();
+            if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+            setVoiceOverlayVisible(false);
+            setVoiceError(false);
+            setOfflineQuickActions(false);
+          }}
+        >
+          <View style={styles.voiceOverlay}>
+            <View style={styles.voiceOverlayContent}>
+              {offlineQuickActions ? (
+                <>
+                  <View style={styles.voiceOverlayErrorIcon}>
+                    <Feather name="wifi-off" size={48} color={Colors.warning} />
+                  </View>
+                  <ThemedText variant="subheading" color={Colors.textInverse} style={styles.voiceOverlayTitle}>
+                    Offline – snabbkommandon
+                  </ThemedText>
+                  <View style={styles.offlineGrid}>
+                    {[
+                      { label: 'Klar', action: 'complete_order', msg: 'Order markerad som klar' },
+                      { label: 'N\u00e4sta', action: 'start_next', msg: 'Visar n\u00e4sta order' },
+                      { label: 'P\u00e5 plats', action: 'on_site', msg: 'Ankomst registrerad' },
+                      { label: 'Avvikelse', action: 'report_deviation', msg: 'Rapportera avvikelse' },
+                      { label: 'Rast', action: 'start_break', msg: 'Rast startad' },
+                      { label: 'Hj\u00e4lp', action: 'help', msg: HELP_TEXT },
+                    ].map((item) => (
+                      <Pressable
+                        key={item.action}
+                        style={styles.offlineBtn}
+                        onPress={() => {
+                          setOfflineQuickActions(false);
+                          setVoiceOverlayVisible(false);
+                          executeVoiceAction(item.action, item.msg);
+                        }}
+                      >
+                        <ThemedText variant="label" color={Colors.textInverse}>{item.label}</ThemedText>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Pressable
+                    style={styles.voiceOverlayCloseBtn}
+                    onPress={() => {
+                      setOfflineQuickActions(false);
+                      setVoiceOverlayVisible(false);
+                    }}
+                    testID="button-offline-close"
+                  >
+                    <ThemedText variant="label" color="rgba(255,255,255,0.7)">St\u00e4ng</ThemedText>
+                  </Pressable>
+                </>
+              ) : voiceError ? (
+                <>
+                  <View style={styles.voiceOverlayErrorIcon}>
+                    <Feather name="alert-circle" size={48} color={Colors.danger} />
+                  </View>
+                  <ThemedText variant="subheading" color={Colors.textInverse} style={styles.voiceOverlayTitle}>
+                    Kommandot kändes inte igen
+                  </ThemedText>
+                  <ThemedText variant="body" color="rgba(255,255,255,0.7)" style={styles.voiceOverlaySubtitle}>
+                    Försök igen eller säg "hjälp" för att höra tillgängliga kommandon
+                  </ThemedText>
+                  <View style={styles.voiceOverlayActions}>
+                    <Pressable style={styles.voiceOverlayRetryBtn} onPress={retryVoiceCommand} testID="button-voice-retry">
+                      <Feather name="mic" size={20} color={Colors.textInverse} />
+                      <ThemedText variant="label" color={Colors.textInverse}>Försök igen</ThemedText>
+                    </Pressable>
+                    <Pressable
+                      style={styles.voiceOverlayCloseBtn}
+                      onPress={() => {
+                        if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
+                        setVoiceOverlayVisible(false); setVoiceError(false);
+                      }}
+                      testID="button-voice-close"
+                    >
+                      <ThemedText variant="label" color="rgba(255,255,255,0.7)">Stäng</ThemedText>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <>
+                  <Animated.View style={[styles.voiceOverlayMicCircle, { transform: [{ scale: overlayPulseAnim }] }]}>
+                    <Feather name="mic" size={48} color={Colors.textInverse} />
+                  </Animated.View>
+                  <ThemedText variant="subheading" color={Colors.textInverse} style={styles.voiceOverlayTitle}>
+                    {voiceRecording ? 'Lyssnar...' : voiceProcessing ? 'Bearbetar...' : 'Röstkommando'}
+                  </ThemedText>
+                  {voiceTranscript ? (
+                    <ThemedText variant="body" color="rgba(255,255,255,0.8)" style={styles.voiceOverlayTranscript}>
+                      {voiceTranscript}
+                    </ThemedText>
+                  ) : null}
+                  {voiceRecording ? (
+                    <Pressable
+                      style={styles.voiceOverlayStopBtn}
+                      onPress={stopVoiceRecording}
+                    >
+                      <Feather name="square" size={16} color={Colors.textInverse} />
+                      <ThemedText variant="caption" color={Colors.textInverse}>Stoppa</ThemedText>
+                    </Pressable>
+                  ) : null}
+                </>
+              )}
+            </View>
+          </View>
+        </Modal>
+
+        {voiceFeedback ? (
+          <View style={[styles.voiceFeedbackToast, { bottom: tabBarHeight + 90 }]}>
+            <Feather name="info" size={16} color={Colors.textInverse} />
+            <ThemedText variant="body" color={Colors.textInverse} style={styles.voiceFeedbackText}>
+              {voiceFeedback}
+            </ThemedText>
+          </View>
+        ) : null}
+
+      </View>
+    );
+  }
 
 const styles = StyleSheet.create({
   container: {
@@ -1009,51 +1495,125 @@ const styles = StyleSheet.create({
   outerContainer: {
     flex: 1,
   },
-  voiceCommandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: Spacing.xs,
-    borderRadius: BorderRadius.lg,
-    backgroundColor: Colors.surface,
-    overflow: 'hidden',
-  },
-  voiceCommandRowActive: {
-    backgroundColor: '#FDF2F2',
-  },
-  voiceCommandPressable: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    paddingVertical: Spacing.sm,
-    paddingHorizontal: Spacing.md,
-    flex: 1,
-  },
-  voiceIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voiceIconCircleActive: {
-    backgroundColor: Colors.danger,
-  },
-  voiceFeedbackToast: {
-    position: 'absolute',
-    left: Spacing.lg,
-    right: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: 'rgba(0,0,0,0.85)',
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.md,
-    borderRadius: BorderRadius.lg,
-  },
-  voiceFeedbackText: {
-    flex: 1,
-  },
+  voiceFab: {
+      position: 'absolute',
+      right: Spacing.lg,
+      zIndex: 100,
+    },
+    voiceFabButton: {
+      width: 64,
+      height: 64,
+      borderRadius: 32,
+      backgroundColor: Colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      ...Shadows.lg,
+    },
+    voiceFabButtonActive: {
+      backgroundColor: Colors.danger,
+    },
+    voiceOverlay: {
+      flex: 1,
+      backgroundColor: 'rgba(0,0,0,0.85)',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    voiceOverlayContent: {
+      alignItems: 'center',
+      paddingHorizontal: Spacing.xxl,
+      width: '100%',
+    },
+    voiceOverlayMicCircle: {
+      width: 100,
+      height: 100,
+      borderRadius: 50,
+      backgroundColor: Colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: Spacing.xl,
+    },
+    voiceOverlayTitle: {
+      textAlign: 'center' as const,
+      marginBottom: Spacing.md,
+    },
+    voiceOverlayTranscript: {
+      textAlign: 'center' as const,
+      marginBottom: Spacing.lg,
+      fontStyle: 'italic' as const,
+    },
+    voiceOverlaySubtitle: {
+      textAlign: 'center' as const,
+      marginBottom: Spacing.xl,
+      lineHeight: 22,
+    },
+    voiceOverlayStopBtn: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: Spacing.sm,
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.round,
+      marginTop: Spacing.md,
+    },
+    voiceOverlayErrorIcon: {
+      marginBottom: Spacing.lg,
+    },
+    voiceOverlayActions: {
+      flexDirection: 'row' as const,
+      gap: Spacing.md,
+      marginTop: Spacing.md,
+    },
+    voiceOverlayRetryBtn: {
+      flexDirection: 'row' as const,
+      alignItems: 'center' as const,
+      gap: Spacing.sm,
+      backgroundColor: Colors.primary,
+      paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.round,
+    },
+    voiceOverlayCloseBtn: {
+      paddingHorizontal: Spacing.xl,
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.round,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.3)',
+    },
+    offlineGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      gap: Spacing.sm,
+      marginTop: Spacing.md,
+      marginBottom: Spacing.lg,
+    },
+    offlineBtn: {
+      backgroundColor: 'rgba(255,255,255,0.15)',
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.lg,
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.25)',
+      minWidth: 100,
+      alignItems: 'center',
+    },
+    voiceFeedbackToast: {
+      position: 'absolute',
+      left: Spacing.lg,
+      right: Spacing.lg,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: Spacing.sm,
+      backgroundColor: 'rgba(0,0,0,0.85)',
+      paddingHorizontal: Spacing.lg,
+      paddingVertical: Spacing.md,
+      borderRadius: BorderRadius.lg,
+      zIndex: 99,
+    },
+    voiceFeedbackText: {
+      flex: 1,
+    },
   workTimeCard: {
     backgroundColor: Colors.surface,
   },

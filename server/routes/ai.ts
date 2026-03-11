@@ -110,7 +110,13 @@ Möjliga kommandon:
 2. "start_next" - Användaren vill starta nästa jobb (t.ex. "Starta nästa jobb", "Börja nästa uppdrag", "Starta")
 3. "report_deviation" - Användaren vill rapportera en avvikelse (t.ex. "Rapportera avvikelse", "Anmäl problem", "Rapportera fel")
 4. "on_site" - Användaren har anlänt till platsen (t.ex. "Jag är på plats", "Framme", "Ankommit")
-5. "unknown" - Kommandot kunde inte tolkas
+5. "complete_order" - Användaren vill markera aktuellt uppdrag som klart (t.ex. "Markera klar", "Klar", "Uppdrag klart", "Färdig")
+6. "navigate_to" - Användaren vill navigera till nästa uppdragsadress (t.ex. "Navigera dit", "Kör dit", "Visa vägen", "Navigation")
+7. "call_customer" - Användaren vill ringa kunden (t.ex. "Ring kunden", "Ring kontakten", "Samtal")
+8. "start_break" - Användaren vill ta rast (t.ex. "Ta rast", "Paus", "Rast", "Fikapaus")
+9. "navigate_statistics" - Användaren vill se statistik (t.ex. "Visa statistik", "Statistik", "Hur går det")
+10. "help" - Användaren vill höra vilka kommandon som finns (t.ex. "Hjälp", "Vad kan jag säga", "Kommandon")
+11. "unknown" - Kommandot kunde inte tolkas
 
 Svara ENBART i JSON-format:
 {
