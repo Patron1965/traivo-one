@@ -53,6 +53,7 @@ export function InspectionScreen({ route, navigation }: any) {
   const saveMutation = useMutation({
     mutationFn: async (inspections: InspectionItem[]) => {
       const photoPayloads: { category: string; photoSlot: string; base64Data: string }[] = [];
+      const readErrors: string[] = [];
 
       for (const cat of INSPECTION_CATEGORIES) {
         const state = categories[cat.key];
@@ -72,7 +73,24 @@ export function InspectionScreen({ route, navigation }: any) {
             photoPayloads.push({ category: cat.key, photoSlot: slot, base64Data: base64 });
           } catch (err: any) {
             console.warn(`Failed to read photo ${slot} for ${cat.key}:`, err.message);
+            readErrors.push(`${cat.label}: Kunde inte läsa foto`);
           }
+        }
+      }
+
+      if (readErrors.length > 0) {
+        const userChoice = await new Promise<'continue' | 'cancel'>((resolve) => {
+          Alert.alert(
+            'Vissa foton kunde inte läsas',
+            `${readErrors.join('\n')}\n\nVill du fortsätta utan dessa foton?`,
+            [
+              { text: 'Fortsätt', onPress: () => resolve('continue') },
+              { text: 'Avbryt', style: 'cancel', onPress: () => resolve('cancel') },
+            ]
+          );
+        });
+        if (userChoice === 'cancel') {
+          throw new Error('Uppladdning avbruten');
         }
       }
 
