@@ -14,7 +14,7 @@ import {
   TrendingDown, Equal, AreaChart as AreaChartIcon
 } from "lucide-react";
 import { AICard } from "@/components/AICard";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
   BarChart, Bar, Tooltip as RechartsTooltip, Legend, PieChart, Pie, Cell,
@@ -29,6 +29,20 @@ import autoTable from "jspdf-autotable";
 import type { Resource, ServiceObject, SetupTimeLog, Customer, WorkOrderWithObject } from "@shared/schema";
 
 export function Dashboard() {
+  const [, navigate] = useLocation();
+
+  const handlePieClick = useCallback((_data: unknown, _index: number) => {
+    navigate("/order-stock");
+  }, [navigate]);
+
+  const handleBarClick = useCallback((_data: unknown) => {
+    navigate("/order-stock");
+  }, [navigate]);
+
+  const handleCustomerClick = useCallback((_customerId: string) => {
+    navigate("/order-stock");
+  }, [navigate]);
+
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
     queryKey: ["/api/work-orders"],
   });
@@ -1099,9 +1113,9 @@ export function Dashboard() {
                     }}
                   />
                   <Legend />
-                  <Bar dataKey="planned" name="Planerat" fill="hsl(var(--muted-foreground))" />
-                  <Bar dataKey="actual" name="Faktiskt" fill="hsl(var(--primary))" />
-                  <Bar dataKey="setupTime" name="Ställtid" fill="hsl(var(--destructive))" />
+                  <Bar dataKey="planned" name="Planerat" fill="hsl(var(--muted-foreground))" className="cursor-pointer" onClick={(data) => handleBarClick(data)} />
+                  <Bar dataKey="actual" name="Faktiskt" fill="hsl(var(--primary))" className="cursor-pointer" onClick={(data) => handleBarClick(data)} />
+                  <Bar dataKey="setupTime" name="Ställtid" fill="hsl(var(--destructive))" className="cursor-pointer" onClick={(data) => handleBarClick(data)} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1191,9 +1205,11 @@ export function Dashboard() {
                       dataKey="value"
                       label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                       labelLine={false}
+                      className="cursor-pointer"
+                      onClick={(data) => handlePieClick(data)}
                     >
                       {orderStatusDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={STATUS_COLORS_CHART[index % STATUS_COLORS_CHART.length]} />
+                        <Cell key={`cell-${index}`} fill={STATUS_COLORS_CHART[index % STATUS_COLORS_CHART.length]} className="cursor-pointer hover:opacity-80 transition-opacity" />
                       ))}
                     </Pie>
                     <RechartsTooltip 
@@ -1226,7 +1242,12 @@ export function Dashboard() {
               ) : (
                 <div className="space-y-3">
                   {topCustomersByValue.map((item, index) => (
-                    <div key={item.customerId} className="flex items-center gap-3">
+                    <div 
+                      key={item.customerId} 
+                      className="flex items-center gap-3 cursor-pointer rounded-md p-1 -m-1 hover:bg-muted/50 transition-colors"
+                      onClick={() => handleCustomerClick(item.customerId)}
+                      data-testid={`customer-row-${item.customerId}`}
+                    >
                       <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">
                         {index + 1}
                       </div>
@@ -1234,8 +1255,9 @@ export function Dashboard() {
                         <div className="font-medium text-sm truncate">{item.name}</div>
                         <div className="text-xs text-muted-foreground">{item.count} ordrar</div>
                       </div>
-                      <div className="text-right shrink-0">
+                      <div className="text-right shrink-0 flex items-center gap-1">
                         <div className="text-sm font-medium">{(item.value / 1000).toFixed(0)}k kr</div>
+                        <ChevronRight className="h-3 w-3 text-muted-foreground" />
                       </div>
                     </div>
                   ))}

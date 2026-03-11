@@ -1,5 +1,17 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+
+interface WeatherImpactDay {
+  date: string;
+  impactLevel: "none" | "low" | "medium" | "high" | "severe";
+  capacityMultiplier: number;
+  reason: string;
+}
+
+interface WeatherForecastData {
+  forecasts: Array<{ date: string; temperature: number; precipitation: number; windSpeed: number; weatherCode: number; weatherDescription: string }>;
+  impacts: WeatherImpactDay[];
+}
 import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, KeyboardSensor, closestCenter, useDraggable, useDroppable, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -16,7 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle, ZoomIn, ZoomOut, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Loader2, CalendarDays, Calendar, CalendarRange, Clock, Inbox, ChevronDown, ChevronUp, X, User, Sparkles, Undo2, Redo2, Link2, ArrowRight, MapPin, Navigation, GripVertical, Wand2, ExternalLink, FileText, Send, UserPlus, Key, DoorOpen, TrendingUp, Activity, Mail, Copy, Check, UsersRound, Filter, XCircle, ZoomIn, ZoomOut, Trash2, CloudRain, Cloud, Sun, Snowflake } from "lucide-react";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -441,6 +453,37 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
   });
+
+  const { data: weatherData } = useQuery<WeatherForecastData>({
+    queryKey: ["/api/weather/forecast"],
+    staleTime: 30 * 60 * 1000,
+  });
+
+  const weatherByDate = useMemo(() => {
+    const map = new Map<string, { forecast: WeatherForecastData["forecasts"][0]; impact: WeatherImpactDay }>();
+    if (!weatherData?.forecasts || !weatherData?.impacts) return map;
+    weatherData.forecasts.forEach((f, i) => {
+      const impact = weatherData.impacts[i];
+      if (impact) {
+        map.set(f.date, { forecast: f, impact });
+      }
+    });
+    return map;
+  }, [weatherData]);
+
+  const getWeatherIcon = useCallback((code: number) => {
+    if ([0, 1].includes(code)) return <Sun className="h-3 w-3 text-yellow-500" />;
+    if ([2, 3].includes(code)) return <Cloud className="h-3 w-3 text-gray-400" />;
+    if ([51, 53, 55, 61, 63, 65, 80, 81, 82].includes(code)) return <CloudRain className="h-3 w-3 text-blue-500" />;
+    if ([71, 73, 75, 77, 85, 86].includes(code)) return <Snowflake className="h-3 w-3 text-blue-300" />;
+    return <Cloud className="h-3 w-3 text-gray-400" />;
+  }, []);
+
+  const getWeatherMultiplierLabel = useCallback((multiplier: number) => {
+    if (multiplier >= 1.0) return null;
+    const pctReduction = Math.round((1 - multiplier) * 100);
+    return `+${pctReduction}% tid`;
+  }, []);
 
   const visibleResources = useMemo(() => {
     if (hiddenResourceIds.size === 0) return resources;
@@ -2366,10 +2409,41 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           <div className="p-2 font-medium text-sm text-muted-foreground border-r">Resurser</div>
           {visibleDates.map((day, i) => {
             const isToday = isSameDay(day, new Date());
+            const dayStr = format(day, "yyyy-MM-dd");
+            const weather = weatherByDate.get(dayStr);
+            const multiplierLabel = weather ? getWeatherMultiplierLabel(weather.impact.capacityMultiplier) : null;
             return (
               <div key={i} className={`p-3 text-center border-r last:border-r-0 ${isToday ? "bg-primary/5" : ""}`}>
                 <div className="text-xs text-muted-foreground uppercase">{format(day, "EEE", { locale: sv })}</div>
                 <div className={`text-lg font-semibold ${isToday ? "text-primary" : ""}`}>{format(day, "d")}</div>
+                {weather && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex items-center justify-center gap-1 mt-0.5" data-testid={`weather-${dayStr}`}>
+                        {getWeatherIcon(weather.forecast.weatherCode)}
+                        <span className="text-[10px] text-muted-foreground">{Math.round(weather.forecast.temperature)}°</span>
+                        {multiplierLabel && (
+                          <span className={`text-[9px] font-medium px-1 rounded ${
+                            weather.impact.impactLevel === "severe" || weather.impact.impactLevel === "high" 
+                              ? "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400" 
+                              : weather.impact.impactLevel === "medium"
+                              ? "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400"
+                              : "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                          }`}>
+                            {multiplierLabel}
+                          </span>
+                        )}
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="font-medium">{weather.forecast.weatherDescription}</p>
+                      <p className="text-xs">{Math.round(weather.forecast.temperature)}°C • {weather.forecast.precipitation}mm • {Math.round(weather.forecast.windSpeed)} m/s</p>
+                      {weather.impact.impactLevel !== "none" && (
+                        <p className="text-xs mt-1">{weather.impact.reason} — Kapacitet: {Math.round(weather.impact.capacityMultiplier * 100)}%</p>
+                      )}
+                    </TooltipContent>
+                  </Tooltip>
+                )}
               </div>
             );
           })}
