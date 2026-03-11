@@ -1091,6 +1091,77 @@ router.post('/orders/:id/inspections', async (req, res) => {
   } catch { res.status(503).json({ error: 'Kunde inte spara inspektion.' }); }
 });
 
+router.post('/inspections/:orderId/photos', async (req, res) => {
+  const { orderId } = req.params;
+  const { photos } = req.body;
+
+  if (!photos || !Array.isArray(photos) || photos.length === 0) {
+    res.status(400).json({ error: 'Inga foton att ladda upp' });
+    return;
+  }
+
+  const MAX_PHOTO_SIZE = 5 * 1024 * 1024;
+  const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : String((req as any).driverId || MOCK_RESOURCE.id);
+
+  try {
+    const results: { category: string; photoSlot: string; id: number }[] = [];
+    const errors: { category: string; photoSlot: string; error: string }[] = [];
+
+    for (const photo of photos) {
+      const { category, photoSlot, base64Data } = photo;
+      if (!category || !photoSlot || !base64Data) {
+        errors.push({ category: category || 'okänd', photoSlot: photoSlot || 'okänd', error: 'Saknar obligatoriska fält' });
+        continue;
+      }
+
+      const dataSize = Buffer.byteLength(base64Data, 'utf8');
+      if (dataSize > MAX_PHOTO_SIZE) {
+        errors.push({ category, photoSlot, error: `Bilden är för stor (${(dataSize / 1024 / 1024).toFixed(1)} MB, max 5 MB)` });
+        continue;
+      }
+
+      const result = await pool.query(
+        `INSERT INTO inspection_photos (order_id, driver_id, category, photo_slot, base64_data)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
+        [orderId, driverId, category, photoSlot, base64Data]
+      );
+      results.push({ category, photoSlot, id: result.rows[0].id });
+    }
+
+    if (errors.length > 0 && results.length === 0) {
+      res.status(400).json({ success: false, errors });
+      return;
+    }
+
+    res.json({ success: true, uploaded: results, errors });
+  } catch (err: any) {
+    console.error('Inspection photo upload error:', err.message);
+    res.status(500).json({ error: 'Kunde inte spara inspektionsfoton' });
+  }
+});
+
+router.get('/inspections/:orderId/photos', async (req, res) => {
+  const { orderId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT id, category, photo_slot, base64_data, created_at
+       FROM inspection_photos WHERE order_id = $1 ORDER BY created_at`,
+      [orderId]
+    );
+    res.json({ success: true, photos: result.rows.map(r => ({
+      id: r.id,
+      category: r.category,
+      photoSlot: r.photo_slot,
+      base64Data: r.base64_data,
+      createdAt: r.created_at,
+    }))});
+  } catch (err: any) {
+    console.error('Fetch inspection photos error:', err.message);
+    res.status(500).json({ error: 'Kunde inte hämta inspektionsfoton' });
+  }
+});
+
 router.post('/orders/:id/upload-photo', async (req, res) => {
   if (IS_MOCK_MODE) {
     const orderId = parseInt(req.params.id);

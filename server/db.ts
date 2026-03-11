@@ -48,8 +48,32 @@ async function initTimeEntriesTable() {
   }
 }
 
+async function initInspectionPhotosTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inspection_photos (
+        id SERIAL PRIMARY KEY,
+        order_id VARCHAR(255) NOT NULL,
+        driver_id VARCHAR(255) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        photo_slot VARCHAR(50) NOT NULL,
+        base64_data TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_inspection_photos_order
+      ON inspection_photos (order_id)
+    `);
+    console.log('inspection_photos table ready');
+  } catch (err: any) {
+    console.error('Failed to create inspection_photos table:', err.message);
+  }
+}
+
 initPushTokensTable();
 initTimeEntriesTable();
+initInspectionPhotosTable();
 
 async function sendPushNotification(
   driverId: string,

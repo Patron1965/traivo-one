@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, ScrollView, Pressable, StyleSheet, TextInput, ActivityIndicator, Image, Platform } from 'react-native';
+import { View, ScrollView, Pressable, StyleSheet, TextInput, ActivityIndicator, Image, Platform, Alert } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as ImagePicker from 'expo-image-picker';
+import * as FileSystem from 'expo-file-system';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
@@ -47,13 +48,70 @@ export function InspectionScreen({ route, navigation }: any) {
     return init;
   });
 
+  const [uploadProgress, setUploadProgress] = useState<string | null>(null);
+
   const saveMutation = useMutation({
-    mutationFn: (inspections: InspectionItem[]) =>
-      apiRequest('POST', `/api/mobile/orders/${orderId}/inspections`, { inspections }),
+    mutationFn: async (inspections: InspectionItem[]) => {
+      const photoPayloads: { category: string; photoSlot: string; base64Data: string }[] = [];
+
+      for (const cat of INSPECTION_CATEGORIES) {
+        const state = categories[cat.key];
+        const slots: { slot: 'photo' | 'beforePhoto' | 'afterPhoto'; uri?: string }[] = [
+          { slot: 'photo', uri: state.photos.photo },
+          { slot: 'beforePhoto', uri: state.photos.beforePhoto },
+          { slot: 'afterPhoto', uri: state.photos.afterPhoto },
+        ];
+
+        for (const { slot, uri } of slots) {
+          if (!uri) continue;
+          try {
+            setUploadProgress(`Läser ${cat.label}...`);
+            const base64 = await FileSystem.readAsStringAsync(uri, {
+              encoding: FileSystem.EncodingType.Base64,
+            });
+            photoPayloads.push({ category: cat.key, photoSlot: slot, base64Data: base64 });
+          } catch (err: any) {
+            console.warn(`Failed to read photo ${slot} for ${cat.key}:`, err.message);
+          }
+        }
+      }
+
+      if (photoPayloads.length > 0) {
+        setUploadProgress(`Laddar upp ${photoPayloads.length} foto...`);
+        const uploadRes = await apiRequest('POST', `/api/mobile/inspections/${orderId}/photos`, {
+          photos: photoPayloads,
+        });
+
+        if (uploadRes.errors && uploadRes.errors.length > 0) {
+          const failedAll = !uploadRes.uploaded || uploadRes.uploaded.length === 0;
+          const errorMsg = uploadRes.errors.map((e: any) => e.error).join('\n');
+          if (failedAll) {
+            throw new Error(errorMsg);
+          }
+          Alert.alert(
+            'Vissa foton kunde inte laddas upp',
+            errorMsg,
+            [{ text: 'OK' }]
+          );
+        }
+      }
+
+      setUploadProgress('Sparar inspektion...');
+      return apiRequest('POST', `/api/mobile/orders/${orderId}/inspections`, { inspections });
+    },
     onSuccess: () => {
+      setUploadProgress(null);
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       navigation.goBack();
+    },
+    onError: (err: any) => {
+      setUploadProgress(null);
+      Alert.alert(
+        'Kunde inte spara',
+        err.message || 'Ett fel uppstod vid uppladdning av foton. Försök igen.',
+        [{ text: 'OK' }]
+      );
     },
   });
 
@@ -463,7 +521,14 @@ export function InspectionScreen({ route, navigation }: any) {
           testID="button-save-inspection"
         >
           {saveMutation.isPending ? (
-            <ActivityIndicator color={Colors.textInverse} />
+            <View style={styles.saveButtonLoading}>
+              <ActivityIndicator color={Colors.textInverse} />
+              {uploadProgress ? (
+                <ThemedText variant="caption" color={Colors.textInverse}>
+                  {uploadProgress}
+                </ThemedText>
+              ) : null}
+            </View>
           ) : (
             <>
               <Feather name="save" size={18} color={Colors.textInverse} />
@@ -705,5 +770,10 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: {
     opacity: 0.7,
+  },
+  saveButtonLoading: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
   },
 });

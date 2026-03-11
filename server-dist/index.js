@@ -81,8 +81,31 @@ async function initTimeEntriesTable() {
     console.error("Failed to create time_entries table:", err.message);
   }
 }
+async function initInspectionPhotosTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS inspection_photos (
+        id SERIAL PRIMARY KEY,
+        order_id VARCHAR(255) NOT NULL,
+        driver_id VARCHAR(255) NOT NULL,
+        category VARCHAR(100) NOT NULL,
+        photo_slot VARCHAR(50) NOT NULL,
+        base64_data TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_inspection_photos_order
+      ON inspection_photos (order_id)
+    `);
+    console.log("inspection_photos table ready");
+  } catch (err) {
+    console.error("Failed to create inspection_photos table:", err.message);
+  }
+}
 initPushTokensTable();
 initTimeEntriesTable();
+initInspectionPhotosTable();
 async function sendPushNotification(driverId, title, body, data) {
   try {
     const result = await pool.query(
@@ -1195,6 +1218,67 @@ router.post("/orders/:id/inspections", async (req, res) => {
     res.status(status).json(data);
   } catch {
     res.status(503).json({ error: "Kunde inte spara inspektion." });
+  }
+});
+router.post("/inspections/:orderId/photos", async (req, res) => {
+  const { orderId } = req.params;
+  const { photos } = req.body;
+  if (!photos || !Array.isArray(photos) || photos.length === 0) {
+    res.status(400).json({ error: "Inga foton att ladda upp" });
+    return;
+  }
+  const MAX_PHOTO_SIZE = 5 * 1024 * 1024;
+  const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : String(req.driverId || MOCK_RESOURCE.id);
+  try {
+    const results = [];
+    const errors = [];
+    for (const photo of photos) {
+      const { category, photoSlot, base64Data } = photo;
+      if (!category || !photoSlot || !base64Data) {
+        errors.push({ category: category || "ok\xE4nd", photoSlot: photoSlot || "ok\xE4nd", error: "Saknar obligatoriska f\xE4lt" });
+        continue;
+      }
+      const dataSize = Buffer.byteLength(base64Data, "utf8");
+      if (dataSize > MAX_PHOTO_SIZE) {
+        errors.push({ category, photoSlot, error: `Bilden \xE4r f\xF6r stor (${(dataSize / 1024 / 1024).toFixed(1)} MB, max 5 MB)` });
+        continue;
+      }
+      const result = await pool.query(
+        `INSERT INTO inspection_photos (order_id, driver_id, category, photo_slot, base64_data)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id`,
+        [orderId, driverId, category, photoSlot, base64Data]
+      );
+      results.push({ category, photoSlot, id: result.rows[0].id });
+    }
+    if (errors.length > 0 && results.length === 0) {
+      res.status(400).json({ success: false, errors });
+      return;
+    }
+    res.json({ success: true, uploaded: results, errors });
+  } catch (err) {
+    console.error("Inspection photo upload error:", err.message);
+    res.status(500).json({ error: "Kunde inte spara inspektionsfoton" });
+  }
+});
+router.get("/inspections/:orderId/photos", async (req, res) => {
+  const { orderId } = req.params;
+  try {
+    const result = await pool.query(
+      `SELECT id, category, photo_slot, base64_data, created_at
+       FROM inspection_photos WHERE order_id = $1 ORDER BY created_at`,
+      [orderId]
+    );
+    res.json({ success: true, photos: result.rows.map((r) => ({
+      id: r.id,
+      category: r.category,
+      photoSlot: r.photo_slot,
+      base64Data: r.base64_data,
+      createdAt: r.created_at
+    })) });
+  } catch (err) {
+    console.error("Fetch inspection photos error:", err.message);
+    res.status(500).json({ error: "Kunde inte h\xE4mta inspektionsfoton" });
   }
 });
 router.post("/orders/:id/upload-photo", async (req, res) => {
