@@ -16,6 +16,7 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../constants/t
 import { getApiUrl, apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
+import { useOfflinePendingCount } from '../hooks/useOfflineSync';
 import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
 
 interface TimeSummary {
@@ -136,6 +137,16 @@ export function HomeScreen({ navigation }: any) {
   });
 
   const { currentPosition } = useGpsTracking();
+  const pendingCount = useOfflinePendingCount();
+  const syncBadgeOpacity = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(syncBadgeOpacity, {
+      toValue: pendingCount > 0 ? 1 : 0,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [pendingCount > 0]);
 
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -768,6 +779,15 @@ export function HomeScreen({ navigation }: any) {
             </View>
           ))}
         </View>
+      ) : null}
+
+      {pendingCount > 0 ? (
+        <Animated.View style={[styles.syncBadge, { opacity: syncBadgeOpacity }]}>
+          <Feather name="upload-cloud" size={14} color={Colors.warning} />
+          <ThemedText variant="caption" color={Colors.warning} style={styles.syncBadgeText}>
+            {pendingCount} väntande {pendingCount === 1 ? 'åtgärd' : 'åtgärder'}
+          </ThemedText>
+        </Animated.View>
       ) : null}
 
       <Card style={styles.progressCard}>
@@ -1473,6 +1493,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
+  },
+  syncBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#FFF8E1',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1,
+    borderColor: '#FFE082',
+  },
+  syncBadgeText: {
+    fontFamily: 'Inter_500Medium',
   },
   breakBanner: {
     backgroundColor: '#E8F8F5',
