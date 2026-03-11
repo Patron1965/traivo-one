@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,6 +59,8 @@ import {
   Users,
   TrendingUp,
   CircleCheck,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
@@ -249,6 +251,8 @@ export default function ResourcesPage() {
   const [selectedResource, setSelectedResource] = useState<Resource | null>(null);
   const [formData, setFormData] = useState<ResourceFormData>(emptyFormData);
   const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 12;
   const [kompetensDialogOpen, setKompetensDialogOpen] = useState(false);
   const [kompetensResource, setKompetensResource] = useState<Resource | null>(null);
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
@@ -527,6 +531,21 @@ export default function ResourcesPage() {
     });
   }, [resources, searchQuery, competencyFilter, availabilityFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filteredResources.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedResources = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredResources.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredResources, safePage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, competencyFilter, availabilityFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages]);
+
   const isPending = createMutation.isPending || updateMutation.isPending;
 
   const weekDays = Array.from({ length: 7 }, (_, i) => addDays(weekStart, i));
@@ -652,7 +671,7 @@ export default function ResourcesPage() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredResources.map((resource) => {
+        {paginatedResources.map((resource) => {
           const workloadMinutes = resourceWorkloads.get(resource.id) || 0;
           const workloadHours = Math.round(workloadMinutes / 60 * 10) / 10;
           const weeklyHours = resource.weeklyHours || 40;
@@ -809,6 +828,39 @@ export default function ResourcesPage() {
       {filteredResources.length === 0 && !isLoading && (
         <div className="text-center py-12">
           <p className="text-muted-foreground">Inga resurser hittades</p>
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between border-t pt-4" data-testid="pagination-resources">
+          <span className="text-sm text-muted-foreground">
+            Visar {(safePage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(safePage * ITEMS_PER_PAGE, filteredResources.length)} av {filteredResources.length}
+          </span>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              data-testid="button-prev-page"
+            >
+              <ChevronLeft className="h-4 w-4 mr-1" />
+              Föregående
+            </Button>
+            <span className="text-sm px-2">
+              Sida {safePage} av {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              data-testid="button-next-page"
+            >
+              Nästa
+              <ChevronRight className="h-4 w-4 ml-1" />
+            </Button>
+          </div>
         </div>
       )}
 

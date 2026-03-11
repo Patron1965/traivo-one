@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,8 @@ import {
   XCircle,
   CircleCheck,
   CircleX,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -187,6 +189,8 @@ export default function ArticlesPage() {
   const [articleToDelete, setArticleToDelete] = useState<Article | null>(null);
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
   const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 25;
 
   const { data: articles = [], isLoading } = useQuery<Article[]>({
     queryKey: ["/api/articles"],
@@ -315,6 +319,21 @@ export default function ArticlesPage() {
       return matchesSearch && matchesType && matchesObjectType && matchesHookLevel;
     });
   }, [articles, searchQuery, typeFilter, objectTypeFilter, hookLevelFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredArticles.length / ITEMS_PER_PAGE));
+  const safePage = Math.min(currentPage, totalPages);
+  const paginatedArticles = useMemo(() => {
+    const start = (safePage - 1) * ITEMS_PER_PAGE;
+    return filteredArticles.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredArticles, safePage]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, typeFilter, objectTypeFilter, hookLevelFilter]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [totalPages]);
 
   const activeFilterCount = [
     typeFilter !== "all" ? 1 : 0,
@@ -693,7 +712,7 @@ export default function ArticlesPage() {
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredArticles.map((article) => (
+                paginatedArticles.map((article) => (
                   <TableRow key={article.id} data-testid={`row-article-${article.id}`}>
                     <TableCell className="font-mono text-sm">
                       {article.articleNumber}
@@ -791,6 +810,38 @@ export default function ArticlesPage() {
             </TableBody>
           </Table>
           </CardContent>
+          {totalPages > 1 && viewMode === "list" && (
+            <div className="flex items-center justify-between border-t px-6 py-3" data-testid="pagination-articles">
+              <span className="text-sm text-muted-foreground">
+                Visar {(safePage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(safePage * ITEMS_PER_PAGE, filteredArticles.length)} av {filteredArticles.length}
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={safePage <= 1}
+                  data-testid="button-prev-page-articles"
+                >
+                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  Föregående
+                </Button>
+                <span className="text-sm px-2">
+                  Sida {safePage} av {totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={safePage >= totalPages}
+                  data-testid="button-next-page-articles"
+                >
+                  Nästa
+                  <ChevronRight className="h-4 w-4 ml-1" />
+                </Button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 

@@ -146,6 +146,7 @@ export interface IStorage {
   updateTenantSmsSettings(id: string, data: { smsEnabled?: boolean; smsProvider?: string; smsFromName?: string }): Promise<Tenant | undefined>;
   
   getCustomers(tenantId: string): Promise<Customer[]>;
+  getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ customers: Customer[]; total: number }>;
   getCustomer(id: string): Promise<Customer | undefined>;
   createCustomer(customer: InsertCustomer): Promise<Customer>;
   updateCustomer(id: string, customer: Partial<InsertCustomer>): Promise<Customer | undefined>;
@@ -162,6 +163,7 @@ export interface IStorage {
   deleteObject(id: string): Promise<void>;
   
   getResources(tenantId: string): Promise<Resource[]>;
+  getResourcesPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ resources: Resource[]; total: number }>;
   getResource(id: string): Promise<Resource | undefined>;
   createResource(resource: InsertResource): Promise<Resource>;
   updateResource(id: string, resource: Partial<InsertResource>): Promise<Resource | undefined>;
@@ -193,6 +195,7 @@ export interface IStorage {
   
   // Articles
   getArticles(tenantId: string): Promise<Article[]>;
+  getArticlesPaginated(tenantId: string, limit: number, offset: number, search?: string, filters?: { articleType?: string; hookLevel?: string }): Promise<{ articles: Article[]; total: number }>;
   getArticle(id: string): Promise<Article | undefined>;
   getApplicableArticlesForObject(tenantId: string, objectId: string): Promise<Article[]>;
   createArticle(article: InsertArticle): Promise<Article>;
@@ -210,6 +213,7 @@ export interface IStorage {
   
   // Price Lists
   getPriceLists(tenantId: string): Promise<PriceList[]>;
+  getPriceListsPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ priceLists: PriceList[]; total: number }>;
   getPriceList(id: string): Promise<PriceList | undefined>;
   createPriceList(priceList: InsertPriceList): Promise<PriceList>;
   updatePriceList(id: string, priceList: Partial<InsertPriceList>): Promise<PriceList | undefined>;
@@ -785,6 +789,27 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(customers).where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt)));
   }
 
+  async getCustomersPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ customers: Customer[]; total: number }> {
+    const { count } = await import("drizzle-orm");
+    let whereConditions = and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt));
+    if (search && search.trim()) {
+      const searchTerm = `%${search.toLowerCase()}%`;
+      whereConditions = and(
+        whereConditions,
+        or(
+          sql`LOWER(${customers.name}) LIKE ${searchTerm}`,
+          sql`LOWER(${customers.customerNumber}) LIKE ${searchTerm}`,
+          sql`LOWER(${customers.email}) LIKE ${searchTerm}`,
+          sql`LOWER(${customers.city}) LIKE ${searchTerm}`
+        )
+      );
+    }
+    const [countResult] = await db.select({ count: count() }).from(customers).where(whereConditions);
+    const total = countResult?.count || 0;
+    const customersList = await db.select().from(customers).where(whereConditions).orderBy(customers.name).limit(limit).offset(offset);
+    return { customers: customersList, total };
+  }
+
   async getCustomer(id: string): Promise<Customer | undefined> {
     const [customer] = await db.select().from(customers).where(and(eq(customers.id, id), isNull(customers.deletedAt)));
     return customer || undefined;
@@ -902,6 +927,27 @@ export class DatabaseStorage implements IStorage {
 
   async getResources(tenantId: string): Promise<Resource[]> {
     return db.select().from(resources).where(and(eq(resources.tenantId, tenantId), isNull(resources.deletedAt)));
+  }
+
+  async getResourcesPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ resources: Resource[]; total: number }> {
+    const { count } = await import("drizzle-orm");
+    let whereConditions = and(eq(resources.tenantId, tenantId), isNull(resources.deletedAt));
+    if (search && search.trim()) {
+      const searchTerm = `%${search.toLowerCase()}%`;
+      whereConditions = and(
+        whereConditions,
+        or(
+          sql`LOWER(${resources.name}) LIKE ${searchTerm}`,
+          sql`LOWER(${resources.email}) LIKE ${searchTerm}`,
+          sql`LOWER(${resources.phone}) LIKE ${searchTerm}`,
+          sql`LOWER(${resources.initials}) LIKE ${searchTerm}`
+        )
+      );
+    }
+    const [countResult] = await db.select({ count: count() }).from(resources).where(whereConditions);
+    const total = countResult?.count || 0;
+    const resourcesList = await db.select().from(resources).where(whereConditions).orderBy(resources.name).limit(limit).offset(offset);
+    return { resources: resourcesList, total };
   }
 
   async getResource(id: string): Promise<Resource | undefined> {
@@ -1457,6 +1503,32 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(articles).where(and(eq(articles.tenantId, tenantId), isNull(articles.deletedAt))).orderBy(articles.articleNumber);
   }
 
+  async getArticlesPaginated(tenantId: string, limit: number, offset: number, search?: string, filters?: { articleType?: string; hookLevel?: string }): Promise<{ articles: Article[]; total: number }> {
+    const { count } = await import("drizzle-orm");
+    let whereConditions = and(eq(articles.tenantId, tenantId), isNull(articles.deletedAt));
+    if (search && search.trim()) {
+      const searchTerm = `%${search.toLowerCase()}%`;
+      whereConditions = and(
+        whereConditions,
+        or(
+          sql`LOWER(${articles.name}) LIKE ${searchTerm}`,
+          sql`LOWER(${articles.articleNumber}) LIKE ${searchTerm}`,
+          sql`LOWER(${articles.description}) LIKE ${searchTerm}`
+        )
+      );
+    }
+    if (filters?.articleType) {
+      whereConditions = and(whereConditions, eq(articles.articleType, filters.articleType));
+    }
+    if (filters?.hookLevel) {
+      whereConditions = and(whereConditions, eq(articles.hookLevel, filters.hookLevel));
+    }
+    const [countResult] = await db.select({ count: count() }).from(articles).where(whereConditions);
+    const total = countResult?.count || 0;
+    const articlesList = await db.select().from(articles).where(whereConditions).orderBy(articles.articleNumber).limit(limit).offset(offset);
+    return { articles: articlesList, total };
+  }
+
   async getArticle(id: string): Promise<Article | undefined> {
     const [article] = await db.select().from(articles).where(and(eq(articles.id, id), isNull(articles.deletedAt)));
     return article || undefined;
@@ -1724,6 +1796,22 @@ export class DatabaseStorage implements IStorage {
   // Price Lists
   async getPriceLists(tenantId: string): Promise<PriceList[]> {
     return db.select().from(priceLists).where(and(eq(priceLists.tenantId, tenantId), isNull(priceLists.deletedAt))).orderBy(desc(priceLists.priority));
+  }
+
+  async getPriceListsPaginated(tenantId: string, limit: number, offset: number, search?: string): Promise<{ priceLists: PriceList[]; total: number }> {
+    const { count } = await import("drizzle-orm");
+    let whereConditions = and(eq(priceLists.tenantId, tenantId), isNull(priceLists.deletedAt));
+    if (search && search.trim()) {
+      const searchTerm = `%${search.toLowerCase()}%`;
+      whereConditions = and(
+        whereConditions,
+        sql`LOWER(${priceLists.name}) LIKE ${searchTerm}`
+      );
+    }
+    const [countResult] = await db.select({ count: count() }).from(priceLists).where(whereConditions);
+    const total = countResult?.count || 0;
+    const priceListsList = await db.select().from(priceLists).where(whereConditions).orderBy(desc(priceLists.priority)).limit(limit).offset(offset);
+    return { priceLists: priceListsList, total };
   }
 
   async getPriceList(id: string): Promise<PriceList | undefined> {

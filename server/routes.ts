@@ -197,11 +197,19 @@ export async function registerRoutes(
   app.get("/api/customers", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
+      const page = parseInt(req.query.page as string);
+      const limit = Math.min(parseInt(req.query.limit as string) || 0, 200);
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      if (page > 0 && limit > 0) {
+        const offset = (page - 1) * limit;
+        const result = await storage.getCustomersPaginated(tenantId, limit, offset, search);
+        return res.json({ data: result.customers, total: result.total, page, limit });
+      }
       const customers = await storage.getCustomers(tenantId);
       res.json(customers);
     } catch (error) {
       console.error("Failed to fetch customers:", error);
-      res.status(500).json({ error: "Failed to fetch customers" });
+      res.status(500).json({ error: "Kunde inte hämta kunder" });
     }
   });
 
@@ -1041,10 +1049,19 @@ export async function registerRoutes(
   app.get("/api/resources", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
+      const page = parseInt(req.query.page as string);
+      const limit = Math.min(parseInt(req.query.limit as string) || 0, 200);
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      if (page > 0 && limit > 0) {
+        const offset = (page - 1) * limit;
+        const result = await storage.getResourcesPaginated(tenantId, limit, offset, search);
+        return res.json({ data: result.resources, total: result.total, page, limit });
+      }
       const resources = await storage.getResources(tenantId);
       res.json(resources);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch resources" });
+      console.error("Failed to fetch resources:", error);
+      res.status(500).json({ error: "Kunde inte hämta resurser" });
     }
   });
 
@@ -3301,10 +3318,22 @@ export async function registerRoutes(
   app.get("/api/articles", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
+      const page = parseInt(req.query.page as string);
+      const limit = Math.min(parseInt(req.query.limit as string) || 0, 200);
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      const articleType = typeof req.query.articleType === "string" ? req.query.articleType : undefined;
+      const hookLevel = typeof req.query.hookLevel === "string" ? req.query.hookLevel : undefined;
+      if (page > 0 && limit > 0) {
+        const offset = (page - 1) * limit;
+        const filters = (articleType || hookLevel) ? { articleType, hookLevel } : undefined;
+        const result = await storage.getArticlesPaginated(tenantId, limit, offset, search, filters);
+        return res.json({ data: result.articles, total: result.total, page, limit });
+      }
       const articles = await storage.getArticles(tenantId);
       res.json(articles);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch articles" });
+      console.error("Failed to fetch articles:", error);
+      res.status(500).json({ error: "Kunde inte hämta artiklar" });
     }
   });
 
@@ -3484,10 +3513,19 @@ export async function registerRoutes(
   app.get("/api/price-lists", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
+      const page = parseInt(req.query.page as string);
+      const limit = Math.min(parseInt(req.query.limit as string) || 0, 200);
+      const search = typeof req.query.search === "string" ? req.query.search : undefined;
+      if (page > 0 && limit > 0) {
+        const offset = (page - 1) * limit;
+        const result = await storage.getPriceListsPaginated(tenantId, limit, offset, search);
+        return res.json({ data: result.priceLists, total: result.total, page, limit });
+      }
       const priceLists = await storage.getPriceLists(tenantId);
       res.json(priceLists);
     } catch (error) {
-      res.status(500).json({ error: "Failed to fetch price lists" });
+      console.error("Failed to fetch price lists:", error);
+      res.status(500).json({ error: "Kunde inte hämta prislistor" });
     }
   });
 
