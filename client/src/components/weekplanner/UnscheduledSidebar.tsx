@@ -347,9 +347,9 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           <Badge variant="secondary" className="text-[10px]">
                             {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
                           </Badge>
-                          {(job as any).executionCode && (
+                          {job.executionCode && (
                             <Badge variant="outline" className="text-[10px]" data-testid={`unscheduled-exec-code-${job.id}`}>
-                              {EXECUTION_CODE_ICONS[(job as any).executionCode] || "KOD"} {EXECUTION_CODE_LABELS[(job as any).executionCode] || (job as any).executionCode}
+                              {EXECUTION_CODE_ICONS[job.executionCode] || "KOD"} {EXECUTION_CODE_LABELS[job.executionCode] || job.executionCode}
                             </Badge>
                           )}
                         </div>

@@ -1,6 +1,5 @@
 import { useCallback } from "react";
-import { DndContext, DragOverlay, useSensor, useSensors, PointerSensor, KeyboardSensor, closestCenter, type DragStartEvent, type DragEndEvent } from "@dnd-kit/core";
-import { arrayMove } from "@dnd-kit/sortable";
+import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -9,7 +8,7 @@ import { Loader2, User } from "lucide-react";
 import { format, isSameDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WeekPlannerProps } from "./weekplanner/types";
-import { zoomLevels, DAY_START_HOUR, DAY_END_HOUR } from "./weekplanner/types";
+import { zoomLevels } from "./weekplanner/types";
 import { DroppableCell } from "./weekplanner/DndComponents";
 import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
 import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
@@ -20,77 +19,33 @@ import { WeekGridView } from "./weekplanner/WeekGridView";
 import { MonthView } from "./weekplanner/MonthView";
 import { RouteMapView } from "./weekplanner/RouteMapView";
 import { usePlannerData } from "./weekplanner/usePlannerData";
+import { usePlannerDnd } from "./weekplanner/usePlannerDnd";
 
 export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
   const d = usePlannerData();
   const zoom = zoomLevels[d.zoomLevel];
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(KeyboardSensor)
-  );
+  const dnd = usePlannerDnd({
+    workOrders: d.workOrders,
+    viewMode: d.viewMode,
+    currentDate: d.currentDate,
+    routeJobsForView: d.routeJobsForView,
+    routeJobOrder: d.routeJobOrder,
+    resourceDayJobMap: d.resourceDayJobMap,
+    setActiveDragJob: d.setActiveDragJob,
+    setRouteJobOrder: d.setRouteJobOrder,
+    updateWorkOrderMutation: d.updateWorkOrderMutation,
+    detectConflictsForJob: d.detectConflictsForJob,
+    setPendingSchedule: d.setPendingSchedule,
+    setConflictDialogOpen: d.setConflictDialogOpen,
+    executeSchedule: d.executeSchedule,
+    toast: d.toast,
+  });
 
   const handleJobClickWithCallback = useCallback((jobId: string) => {
     d.handleJobClick(jobId);
     onSelectJob?.(jobId);
   }, [d.handleJobClick, onSelectJob]);
-
-  const handleDndDragStart = useCallback((event: DragStartEvent) => {
-    d.setActiveDragJob(d.workOrders.find(j => j.id === event.active.id) || null);
-  }, [d.workOrders, d.setActiveDragJob]);
-
-  const handleDndDragEnd = useCallback((event: DragEndEvent) => {
-    d.setActiveDragJob(null);
-    const { active, over } = event;
-    if (!over) return;
-    const jobId = active.id as string;
-    const dropId = over.id as string;
-
-    if (d.viewMode === "route" && d.routeJobsForView.length > 0) {
-      const isRouteJob = d.routeJobsForView.some(j => j.id === jobId);
-      const isDropOnRouteJob = d.routeJobsForView.some(j => j.id === dropId);
-      if (isRouteJob && isDropOnRouteJob && jobId !== dropId) {
-        const oldIdx = d.routeJobsForView.findIndex(j => j.id === jobId);
-        const newIdx = d.routeJobsForView.findIndex(j => j.id === dropId);
-        if (oldIdx !== -1 && newIdx !== -1) {
-          const newOrder = arrayMove(d.routeJobsForView, oldIdx, newIdx);
-          d.setRouteJobOrder(newOrder.map(j => j.id));
-          let mins = 8 * 60;
-          const ds = format(d.currentDate, "yyyy-MM-dd");
-          newOrder.forEach((job, idx) => {
-            d.updateWorkOrderMutation.mutate({ id: job.id, resourceId: job.resourceId!, scheduledDate: ds, scheduledStartTime: `${String(Math.floor(mins / 60)).padStart(2, "0")}:${String(mins % 60).padStart(2, "0")}` });
-            mins += (job.estimatedDuration || 30) + (idx < newOrder.length - 1 ? 5 : 0);
-          });
-          d.toast({ title: "Körordning uppdaterad", description: `${newOrder.length} stopp har fått ny ordning` });
-        }
-        return;
-      }
-    }
-
-    const job = d.workOrders.find(j => j.id === jobId);
-    if (!job) return;
-    const parts = dropId.split("|");
-    if (parts.length < 2) return;
-    const resourceId = parts[0];
-    const dateStr = parts[1];
-    const hour = parts[2] ? parseInt(parts[2], 10) : undefined;
-    const day = new Date(dateStr + "T12:00:00Z");
-    if (job.resourceId === resourceId && job.scheduledDate && isSameDay(new Date(job.scheduledDate), day) && hour === undefined) return;
-
-    let scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
-    if (!scheduledStartTime && d.viewMode === "week") {
-      const existing = (d.resourceDayJobMap.jobs[resourceId]?.[dateStr] || []).filter(j => j.scheduledStartTime).sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
-      let nextSlot = DAY_START_HOUR * 60;
-      for (const e of existing) { const [eH, eM] = (e.scheduledStartTime || "07:00").split(":").map(Number); const end = eH * 60 + eM + (e.estimatedDuration || 60); if (end > nextSlot) nextSlot = end; }
-      const h = Math.floor(nextSlot / 60);
-      if (h < DAY_END_HOUR) scheduledStartTime = `${h.toString().padStart(2, "0")}:${(nextSlot % 60).toString().padStart(2, "0")}`;
-    }
-
-    const conflicts = d.detectConflictsForJob(job, resourceId, dateStr, scheduledStartTime);
-    if (conflicts.length > 0) { d.setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime, conflicts }); d.setConflictDialogOpen(true); return; }
-    d.executeSchedule(jobId, resourceId, dateStr, scheduledStartTime);
-    if (scheduledStartTime) d.toast({ title: "Schemalagt", description: `Starttid ${scheduledStartTime} tilldelad automatiskt` });
-  }, [d]);
 
   const isLoading = d.resourcesLoading || d.workOrdersLoading;
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
@@ -108,7 +63,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   };
 
   return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDndDragStart} onDragEnd={handleDndDragEnd}>
+    <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragEnd={dnd.handleDragEnd}>
       <div className="flex h-full">
         <UnscheduledSidebar
           showUnscheduled={d.showUnscheduled} setShowUnscheduled={d.setShowUnscheduled}

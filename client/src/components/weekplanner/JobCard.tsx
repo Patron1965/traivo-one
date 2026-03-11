@@ -70,14 +70,14 @@ export const JobCard = memo(function JobCard({
                 </TooltipContent>
               </Tooltip>
               <span className="text-xs font-medium truncate">{job.title}</span>
-              {(job as any).executionCode && (
+              {job.executionCode && (
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <span className="text-[10px] shrink-0 bg-slate-100 dark:bg-slate-800 px-1 rounded" data-testid={`exec-code-${job.id}`}>
-                      {EXECUTION_CODE_ICONS[(job as any).executionCode] || "KOD"}
+                      {EXECUTION_CODE_ICONS[job.executionCode] || "KOD"}
                     </span>
                   </TooltipTrigger>
-                  <TooltipContent>{EXECUTION_CODE_LABELS[(job as any).executionCode] || (job as any).executionCode}</TooltipContent>
+                  <TooltipContent>{EXECUTION_CODE_LABELS[job.executionCode] || job.executionCode}</TooltipContent>
                 </Tooltip>
               )}
               {(hasDependencies || hasDependents) && (
@@ -116,13 +116,13 @@ export const JobCard = memo(function JobCard({
               )}
             </div>
             <div className="text-xs text-muted-foreground truncate">{job.objectName || "Okänt objekt"}</div>
-            {(job as any).metadata?.teamName && (
+            {(job.metadata as Record<string, string> | null)?.teamName && (
               <Badge variant="outline" className="text-[9px] h-4 gap-0.5 mt-0.5" style={{ borderColor: "#3B82F6" }} data-testid={`team-badge-${job.id}`}>
                 <UsersRound className="h-2.5 w-2.5" />
-                {(job as any).metadata.teamName}
+                {(job.metadata as Record<string, string>).teamName}
               </Badge>
             )}
-            {(job as any).creationMethod === "automatic" && (
+            {job.creationMethod === "automatic" && (
               <Badge className="text-[9px] h-4 bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 border-amber-300" data-testid={`pickup-badge-${job.id}`}>
                 Plockuppgift
               </Badge>

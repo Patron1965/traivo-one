@@ -9,4 +9,6 @@ export { WeekGridView } from "./WeekGridView";
 export { MonthView } from "./MonthView";
 export { RouteMapView } from "./RouteMapView";
 export { ResourceDetailSheet } from "./ResourceDetailSheet";
+export { ResourceColumn } from "./ResourceColumn";
 export { usePlannerData } from "./usePlannerData";
+export { usePlannerDnd } from "./usePlannerDnd";
