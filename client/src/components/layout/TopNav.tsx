@@ -99,7 +99,7 @@ const adminItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tider" },
   { title: "Användarhantering", url: "/user-management", icon: Users, description: "Hantera användare och roller" },
   { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2, description: "Företag, artiklar, koder" },
-  { title: "Nytt företagskonto", url: "/onboarding", icon: Building2, description: "Skapa ny kund/företag" },
+  { title: "Ny kund", url: "/onboarding", icon: Building2, description: "Skapa ny kund/företag" },
   { title: "SMS-inställningar", url: "/sms-settings", icon: MessageSquare, description: "SMS-notifikationer" },
   { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
   { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
