@@ -1,6 +1,7 @@
 import { memo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useDraggable, useDroppable, useSortable } from "@dnd-kit/core";
+import { useDraggable, useDroppable } from "@dnd-kit/core";
+import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
