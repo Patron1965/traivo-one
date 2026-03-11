@@ -6180,6 +6180,26 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         });
       }
       
+      const currentRoutes: Array<{ resourceId: string; resourceName: string; orders: Array<{ title: string; address: string; orderId: string }> }> = [];
+      const resourceOrdersMap = new Map<string, typeof todaysOrders>();
+      todaysOrders.forEach(o => {
+        if (!o.resourceId) return;
+        if (!resourceOrdersMap.has(o.resourceId)) resourceOrdersMap.set(o.resourceId, []);
+        resourceOrdersMap.get(o.resourceId)!.push(o);
+      });
+      for (const [resId, orders] of resourceOrdersMap) {
+        const res2 = resources.find(r => r.id === resId);
+        currentRoutes.push({
+          resourceId: resId,
+          resourceName: res2?.name || resId,
+          orders: orders.map(o => ({
+            title: o.title || o.orderNumber || "Order",
+            address: o.address || "",
+            orderId: o.id,
+          })),
+        });
+      }
+
       res.json({
         date,
         weather: todayWeather ? {
@@ -6196,6 +6216,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
           activeResources: Object.keys(ordersPerResource).length,
           avgDurationMinutes: Math.round(avgDuration),
         },
+        currentRoutes,
         recommendations,
         summary: recommendations.length > 0 
           ? `${recommendations.filter(r => r.priority === "high").length} höga, ${recommendations.filter(r => r.priority === "medium").length} medel prioriterade förslag`

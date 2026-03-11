@@ -43,8 +43,8 @@ export function Dashboard() {
     navigate("/order-stock");
   }, [navigate]);
 
-  const handleCustomerClick = useCallback((_customerId: string) => {
-    navigate("/order-stock");
+  const handleCustomerClick = useCallback((customerName: string) => {
+    navigate(`/order-stock?search=${encodeURIComponent(customerName)}`);
   }, [navigate]);
 
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
@@ -1249,7 +1249,7 @@ export function Dashboard() {
                     <div 
                       key={item.customerId} 
                       className="flex items-center gap-3 cursor-pointer rounded-md p-1 -m-1 hover:bg-muted/50 transition-colors"
-                      onClick={() => handleCustomerClick(item.customerId)}
+                      onClick={() => handleCustomerClick(item.name)}
                       data-testid={`customer-row-${item.customerId}`}
                     >
                       <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center text-xs font-medium">

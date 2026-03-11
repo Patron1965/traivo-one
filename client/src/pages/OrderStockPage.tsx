@@ -131,17 +131,18 @@ export default function OrderStockPage() {
   const [includeSimulated, setIncludeSimulated] = useState(false);
   const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
 
-  const initialStatus = useMemo(() => {
+  const { initialStatus, initialSearch } = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     const s = params.get("status");
-    if (s && ["skapad", "planerad_pre", "planerad_resurs", "planerad_las", "utford", "fakturerad", "omojlig"].includes(s)) {
-      return s as OrderStatus;
-    }
-    return "all" as const;
+    const q = params.get("search") || "";
+    const status = (s && ["skapad", "planerad_pre", "planerad_resurs", "planerad_las", "utford", "fakturerad", "omojlig"].includes(s))
+      ? s as OrderStatus
+      : "all" as const;
+    return { initialStatus: status, initialSearch: q };
   }, []);
 
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">(initialStatus);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearch);
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   

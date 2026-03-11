@@ -84,11 +84,18 @@ interface CurrentRouteStats {
   resourceCount: number;
 }
 
+interface CurrentRouteJob {
+  resourceName: string;
+  resourceId: string;
+  orders: Array<{ title: string; address: string }>;
+}
+
 export default function RoutesPage() {
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), "yyyy-MM-dd"));
   const [selectedCluster, setSelectedCluster] = useState<string>("all");
   const [vrpResult, setVrpResult] = useState<VRPResult | null>(null);
   const [currentStats, setCurrentStats] = useState<CurrentRouteStats | null>(null);
+  const [currentRoutes, setCurrentRoutes] = useState<CurrentRouteJob[]>([]);
   const [selectedRouteForMap, setSelectedRouteForMap] = useState<VRPRoute | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
   const { toast } = useToast();
@@ -124,8 +131,16 @@ export default function RoutesPage() {
             resourceCount: statsData.statistics.activeResources || 0,
           });
         }
+        if (statsData?.currentRoutes && Array.isArray(statsData.currentRoutes)) {
+          setCurrentRoutes(statsData.currentRoutes.map((cr: { resourceId: string; resourceName: string; orders: Array<{ title: string; address: string }> }) => ({
+            resourceId: cr.resourceId,
+            resourceName: cr.resourceName,
+            orders: cr.orders || [],
+          })));
+        }
       } catch {
         setCurrentStats(null);
+        setCurrentRoutes([]);
       }
       
       const response = await apiRequest("POST", "/api/ai/optimize-vrp", body);
@@ -323,7 +338,7 @@ export default function RoutesPage() {
                 </div>
               ) : (
                 <>
-                  {currentStats && (
+                  {(currentStats || currentRoutes.length > 0) && (
                     <Card className="border-dashed" data-testid="route-comparison">
                       <CardHeader className="pb-2">
                         <CardTitle className="text-sm flex items-center gap-2">
@@ -331,72 +346,125 @@ export default function RoutesPage() {
                           Före / Efter jämförelse
                         </CardTitle>
                       </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="space-y-2">
-                            <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nuvarande</p>
-                            <div className="space-y-1.5 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Ordrar</span>
-                                <span>{currentStats.totalOrders}</span>
+                      <CardContent className="space-y-4">
+                        {currentStats && (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nuvarande</p>
+                              <div className="space-y-1.5 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Ordrar</span>
+                                  <span>{currentStats.totalOrders}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Tid</span>
+                                  <span>{currentStats.totalDurationMinutes} min</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Distans</span>
+                                  <span>~{currentStats.totalDistanceKm} km</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Effektivitet</span>
+                                  <span>~{currentStats.avgEfficiency}%</span>
+                                </div>
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Tid</span>
-                                <span>{currentStats.totalDurationMinutes} min</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Distans</span>
-                                <span>{currentStats.totalDistanceKm} km</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Effektivitet</span>
-                                <span>{currentStats.avgEfficiency}%</span>
+                            </div>
+                            <div className="space-y-2 border-l pl-4">
+                              <p className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wide">Optimerad</p>
+                              <div className="space-y-1.5 text-sm">
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Ordrar</span>
+                                  <span>{vrpResult.summary.assignedOrders}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Tid</span>
+                                  <span className="font-medium">
+                                    {vrpResult.summary.totalDurationMinutes} min
+                                    {currentStats.totalDurationMinutes > vrpResult.summary.totalDurationMinutes && (
+                                      <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
+                                        -{currentStats.totalDurationMinutes - vrpResult.summary.totalDurationMinutes} min
+                                      </Badge>
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Distans</span>
+                                  <span className="font-medium">
+                                    {vrpResult.summary.totalDistanceKm} km
+                                    {currentStats.totalDistanceKm > vrpResult.summary.totalDistanceKm && (
+                                      <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
+                                        -{currentStats.totalDistanceKm - vrpResult.summary.totalDistanceKm} km
+                                      </Badge>
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-muted-foreground">Effektivitet</span>
+                                  <span className="font-medium">
+                                    {vrpResult.summary.avgEfficiency}%
+                                    {vrpResult.summary.avgEfficiency > currentStats.avgEfficiency && (
+                                      <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
+                                        +{vrpResult.summary.avgEfficiency - currentStats.avgEfficiency}%
+                                      </Badge>
+                                    )}
+                                  </span>
+                                </div>
                               </div>
                             </div>
                           </div>
-                          <div className="space-y-2 border-l pl-4">
-                            <p className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wide">Optimerad</p>
-                            <div className="space-y-1.5 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Ordrar</span>
-                                <span>{vrpResult.summary.assignedOrders}</span>
+                        )}
+
+                        {currentRoutes.length > 0 && (
+                          <div className="grid grid-cols-2 gap-4 border-t pt-3">
+                            <div className="space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Nuvarande ordning</p>
+                              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                {currentRoutes.map(cr => (
+                                  <div key={cr.resourceId} className="text-xs">
+                                    <div className="font-medium flex items-center gap-1 mb-0.5">
+                                      <Truck className="h-3 w-3 text-muted-foreground" />
+                                      {cr.resourceName}
+                                      <Badge variant="outline" className="text-[10px] ml-auto">{cr.orders.length} stopp</Badge>
+                                    </div>
+                                    <div className="flex flex-wrap gap-0.5">
+                                      {cr.orders.map((o, i) => (
+                                        <span key={i} className="text-muted-foreground">
+                                          <span className="bg-muted px-1 py-0.5 rounded text-[10px]">{i + 1}</span>
+                                          <span className="truncate max-w-[80px] inline-block align-middle ml-0.5">{o.title}</span>
+                                          {i < cr.orders.length - 1 && <span className="mx-0.5">→</span>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Tid</span>
-                                <span className="font-medium">
-                                  {vrpResult.summary.totalDurationMinutes} min
-                                  {currentStats.totalDurationMinutes > vrpResult.summary.totalDurationMinutes && (
-                                    <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
-                                      -{currentStats.totalDurationMinutes - vrpResult.summary.totalDurationMinutes} min
-                                    </Badge>
-                                  )}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Distans</span>
-                                <span className="font-medium">
-                                  {vrpResult.summary.totalDistanceKm} km
-                                  {currentStats.totalDistanceKm > vrpResult.summary.totalDistanceKm && (
-                                    <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
-                                      -{currentStats.totalDistanceKm - vrpResult.summary.totalDistanceKm} km
-                                    </Badge>
-                                  )}
-                                </span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-muted-foreground">Effektivitet</span>
-                                <span className="font-medium">
-                                  {vrpResult.summary.avgEfficiency}%
-                                  {vrpResult.summary.avgEfficiency > currentStats.avgEfficiency && (
-                                    <Badge variant="secondary" className="ml-1 text-[10px] text-green-600">
-                                      +{vrpResult.summary.avgEfficiency - currentStats.avgEfficiency}%
-                                    </Badge>
-                                  )}
-                                </span>
+                            </div>
+                            <div className="space-y-2 border-l pl-4">
+                              <p className="text-xs font-medium text-green-600 dark:text-green-400 uppercase tracking-wide">Optimerad ordning</p>
+                              <div className="space-y-2 max-h-[200px] overflow-y-auto">
+                                {vrpResult.routes.map((route, idx) => (
+                                  <div key={route.resourceId || idx} className="text-xs">
+                                    <div className="font-medium flex items-center gap-1 mb-0.5">
+                                      <Truck className="h-3 w-3 text-green-600" />
+                                      {route.resourceName}
+                                      <Badge variant="outline" className="text-[10px] ml-auto">{route.stops.length} stopp</Badge>
+                                    </div>
+                                    <div className="flex flex-wrap gap-0.5">
+                                      {route.stops.map((stop, i) => (
+                                        <span key={stop.orderId} className="text-muted-foreground">
+                                          <span className="bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 px-1 py-0.5 rounded text-[10px]">{i + 1}</span>
+                                          <span className="truncate max-w-[80px] inline-block align-middle ml-0.5">{stop.orderTitle}</span>
+                                          {i < route.stops.length - 1 && <span className="mx-0.5">→</span>}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
                           </div>
-                        </div>
+                        )}
                       </CardContent>
                     </Card>
                   )}
