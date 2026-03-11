@@ -162,6 +162,9 @@ export function HomeScreen({ navigation }: any) {
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const lockedCount = orders?.filter(o => o.isLocked).length || 0;
 
+  const today = new Date();
+  const dateStr = today.toLocaleDateString('sv-SE', { weekday: 'long', day: 'numeric', month: 'long' });
+
   const breakSuggestion = useMemo(() => computeBreakSuggestion(orders), [orders]);
   const [breakDismissed, setBreakDismissed] = React.useState(false);
 
