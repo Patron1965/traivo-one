@@ -10,6 +10,7 @@ const PRICING = {
   resend: { perEmail: 0.001 },
   twilio: { perSms: 0.0079 },
   geoapify: { perRequest: 0 },
+  "geoapify-geocoding": { perRequest: 0 },
   "open-meteo": { perRequest: 0 },
   nominatim: { perRequest: 0 },
   "google-geocoding": { perRequest: 0.005 },
@@ -51,6 +52,8 @@ export async function trackApiUsage(params: {
       estimatedCostUsd = (params.units || 1) * PRICING.twilio.perSms;
     } else if (params.service === "google-geocoding") {
       estimatedCostUsd = (params.units || 1) * PRICING["google-geocoding"].perRequest;
+    } else if (params.service === "geoapify-geocoding") {
+      estimatedCostUsd = 0;
     }
 
     await db.insert(apiUsageLogs).values({

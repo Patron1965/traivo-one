@@ -1315,7 +1315,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
               {batchGeoPreview && !batchGeoPreview.googleAvailable && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-destructive/10 text-destructive text-sm">
                   <AlertTriangle className="h-4 w-4 shrink-0" />
-                  Google Geocoding API-nyckel saknas. Kontrollera att GOOGLE_GEOCODING_API_KEY är konfigurerad.
+                  Geoapify API-nyckel saknas. Kontrollera att GEOAPIFY_API_KEY är konfigurerad.
                 </div>
               )}
 

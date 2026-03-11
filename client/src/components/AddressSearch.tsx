@@ -173,7 +173,7 @@ export function AddressSearch({ onSelect, placeholder = "Sök adress...", defaul
           <CommandList>
             <CommandEmpty>Inga adresser hittades</CommandEmpty>
             {hasGoogleResults && (
-              <CommandGroup heading="Google Geocoding">
+              <CommandGroup heading="Geoapify Geocoding">
                 {googleResults.map((result, index) => (
                   <CommandItem
                     key={`google-${index}`}

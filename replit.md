@@ -24,8 +24,8 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **AI Integration:** AI-first approach with OpenAI (gpt-4o-mini, gpt-4o) for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner.
 - **MCP Server:** Enables external AI assistants to interact with Nordfield data via SSE.
 - **Modus 2.0 Import System:** Dedicated `/import` page for step-by-step data migration from Modus 2.0 via CSV, supporting objects, tasks, invoice lines, and events. Features include upsert logic, pre-import validation, batch tracking, and SSE-based real-time progress feedback.
-- **Google Geocoding v4 Integration:** Enhanced address resolution for entrance coordinates and contextual descriptors, with fallback to Nominatim. Used for precise distance calculations in route optimization.
-- **Performance:** Database indexes, server-side pagination, optimized WeekPlanner loading, lazy object loading, and Address Search/Autocomplete with Google Geocoding v4 and OpenStreetMap Nominatim fallback.
+- **Geoapify Geocoding Integration:** Address resolution via Geoapify Geocoding API (replaced Google Geocoding to eliminate costs), with fallback to Nominatim. Used for precise distance calculations in route optimization.
+- **Performance:** Database indexes, server-side pagination, optimized WeekPlanner loading, lazy object loading, and Address Search/Autocomplete with Geoapify Geocoding and OpenStreetMap Nominatim fallback.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.
 - **Offline Architecture:** Complete offline-first architecture for mobile field workers using IndexedDB.
 - **Automatic Anomaly Monitoring:** Background job for detecting operational anomalies and broadcasting alerts.
