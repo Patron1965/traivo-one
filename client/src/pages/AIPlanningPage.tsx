@@ -151,9 +151,7 @@ export default function AIPlanningPage() {
     queryKey: ["/api/ai/planning-analysis", selectedWeek],
     queryFn: async () => {
       const res = await fetch(`/api/ai/planning-analysis?week=${selectedWeek}`);
-      if (!res.ok) {
-        return generateMockAnalysis();
-      }
+      if (!res.ok) throw new Error("Kunde inte hämta analys");
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
@@ -162,15 +160,18 @@ export default function AIPlanningPage() {
   const runAnalysisMutation = useMutation({
     mutationFn: async () => {
       setIsAnalyzing(true);
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      return generateMockAnalysis();
+      const res = await fetch(`/api/ai/planning-analysis?week=${selectedWeek}&refresh=true`);
+      if (!res.ok) throw new Error("Kunde inte generera analys");
+      return res.json();
     },
     onSuccess: () => {
       setIsAnalyzing(false);
+      analysisQuery.refetch();
       toast({ title: "Analys klar", description: "AI-analysen har uppdaterats med nya rekommendationer." });
     },
     onError: () => {
       setIsAnalyzing(false);
+      toast({ title: "Analysfel", description: "Kunde inte köra analysen. Försök igen.", variant: "destructive" });
     },
   });
 
@@ -181,76 +182,56 @@ export default function AIPlanningPage() {
     });
   };
 
-  const analysis = analysisQuery.data || generateMockAnalysis();
+  const analysis = analysisQuery.data;
 
-  function generateMockAnalysis(): AIAnalysis {
-    return {
-      summary: {
-        totalOrders: 342,
-        plannedOrders: 298,
-        unplannedOrders: 44,
-        estimatedDriveTime: 47,
-        resourceUtilization: 78,
-      },
-      recommendations: [
-        {
-          id: "1",
-          type: "optimization",
-          priority: "high",
-          title: "Optimera rutt för resurs R-003",
-          description: "Genom att ändra ordningen på 4 stopp kan körtiden minskas med ~25 minuter.",
-          impact: "Påverkar 12 ordrar",
-          savings: "Spara 25 min körtid",
-          action: { label: "Tillämpa optimering" },
-        },
-        {
-          id: "2",
-          type: "warning",
-          priority: "high",
-          title: "Överbelastad dag: Torsdag",
-          description: "127% kapacitetsutnyttjande planerat. Överväg att flytta 8 ordrar till onsdag.",
-          impact: "Risk för förseningar",
-          action: { label: "Omfördela ordrar" },
-        },
-        {
-          id: "3",
-          type: "suggestion",
-          priority: "medium",
-          title: "Gruppera ordrar i Sundsvall centrum",
-          description: "15 ordrar i samma område kan utföras effektivare om de grupperas till samma resurs.",
-          savings: "Spara 40 min körtid",
-          action: { label: "Visa på karta" },
-        },
-        {
-          id: "4",
-          type: "insight",
-          priority: "low",
-          title: "Låg aktivitet på fredagar",
-          description: "Fredagar har genomsnittligt 23% lägre beläggning. Överväg att flytta återkommande ordrar.",
-          impact: "Förbättrad resursbalans",
-        },
-        {
-          id: "5",
-          type: "warning",
-          priority: "medium",
-          title: "Vädervarning: Regn på onsdag",
-          description: "Prognos visar regn och blåst. Tömningar av öppna kärl kan behöva anpassas.",
-          impact: "5 kärltyper påverkas",
-        },
-      ],
-      weeklyForecast: [
-        { day: "Måndag", orders: 58, capacity: 70, weather: { temp: 12, condition: "sunny" } },
-        { day: "Tisdag", orders: 64, capacity: 70, weather: { temp: 10, condition: "cloudy" } },
-        { day: "Onsdag", orders: 52, capacity: 70, weather: { temp: 8, condition: "rainy" } },
-        { day: "Torsdag", orders: 89, capacity: 70, weather: { temp: 9, condition: "cloudy" } },
-        { day: "Fredag", orders: 45, capacity: 70, weather: { temp: 11, condition: "sunny" } },
-      ],
-      routeOptimization: {
-        currentDistance: 487,
-        optimizedDistance: 398,
-        savingsPercent: 18,
-      },
-    };
+  if (analysisQuery.isLoading) {
+    return (
+      <div className="container py-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-8 w-8 text-purple-500" />
+          <h1 className="text-3xl font-bold tracking-tight">AI Planeringsassistent</h1>
+        </div>
+        <div className="flex items-center justify-center py-16">
+          <div className="text-center space-y-3">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto text-purple-500" />
+            <p className="text-muted-foreground">Analyserar planering...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (analysisQuery.isError || !analysis) {
+    return (
+      <div className="container py-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-8 w-8 text-purple-500" />
+          <h1 className="text-3xl font-bold tracking-tight">AI Planeringsassistent</h1>
+        </div>
+        <Card>
+          <CardContent className="p-8">
+            <div className="flex items-center gap-3">
+              <AlertTriangle className="h-6 w-6 text-yellow-500 flex-shrink-0" />
+              <div>
+                <p className="font-medium">Kunde inte hämta analysdata</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Det uppstod ett fel vid hämtning av planeringsanalysen. Försök igen.
+                </p>
+              </div>
+            </div>
+            <Button
+              className="mt-4"
+              variant="outline"
+              onClick={() => analysisQuery.refetch()}
+              data-testid="button-retry-analysis"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Försök igen
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
   }
 
   return (
@@ -327,9 +308,8 @@ export default function AIPlanningPage() {
               <Truck className="h-4 w-4 text-muted-foreground" />
             </div>
             <div className="text-2xl font-bold mt-1">{analysis.summary.estimatedDriveTime}</div>
-            <div className="text-xs text-green-600 flex items-center gap-1">
-              <ArrowDownRight className="h-3 w-3" />
-              8% mindre än förra veckan
+            <div className="text-xs text-muted-foreground">
+              Beräknad körtid
             </div>
           </CardContent>
         </Card>
@@ -382,9 +362,19 @@ export default function AIPlanningPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {analysis.recommendations.map((rec) => (
-                <RecommendationCard key={rec.id} recommendation={rec} onApply={() => applyRecommendation(rec.id)} />
-              ))}
+              {analysis.recommendations.length === 0 ? (
+                <div className="flex items-center gap-3 p-4 rounded-md bg-green-500/10 border border-green-500/20">
+                  <CheckCircle2 className="h-5 w-5 text-green-600 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-green-700 dark:text-green-400">Allt ser bra ut</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Inga rekommendationer just nu. Planeringen verkar vara i balans.</p>
+                  </div>
+                </div>
+              ) : (
+                analysis.recommendations.map((rec) => (
+                  <RecommendationCard key={rec.id} recommendation={rec} onApply={() => applyRecommendation(rec.id)} />
+                ))
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -400,7 +390,7 @@ export default function AIPlanningPage() {
             <CardContent>
               <div className="space-y-4">
                 {analysis.weeklyForecast.map((day, i) => {
-                  const utilizationPercent = Math.round((day.orders / day.capacity) * 100);
+                  const utilizationPercent = day.capacity > 0 ? Math.round((day.orders / day.capacity) * 100) : 0;
                   const isOverloaded = utilizationPercent > 100;
                   const isLow = utilizationPercent < 60;
 

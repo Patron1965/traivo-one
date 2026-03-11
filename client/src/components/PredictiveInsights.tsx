@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Clock, AlertTriangle, TrendingUp, Calendar } from "lucide-react";
+import { Clock, AlertTriangle, TrendingUp, Calendar, CheckCircle } from "lucide-react";
 import { Link } from "wouter";
 import { format, parseISO } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -48,14 +48,66 @@ export function PredictiveInsights() {
     );
   }
 
-  if (error || !data) {
+  if (error) {
+    return (
+      <Card data-testid="card-predictive-insights-error">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Prediktiva insikter
+          </CardTitle>
+          <CardDescription className="mt-1">
+            Kunde inte hämta prediktiva insikter
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 p-4 rounded-md bg-yellow-500/10 border border-yellow-500/20" data-testid="status-prediction-error">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-yellow-700 dark:text-yellow-400">Analysen är inte tillgänglig</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Det gick inte att hämta prediktiv data just nu. Försök igen senare.
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!data) {
     return null;
   }
 
   const hasData = data.overdue.length > 0 || data.upcoming.length > 0;
 
   if (!hasData) {
-    return null;
+    return (
+      <Card data-testid="card-predictive-insights-ok">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-2">
+            <TrendingUp className="h-5 w-5 text-primary" />
+            Prediktiva insikter
+          </CardTitle>
+          <CardDescription className="mt-1">
+            {data.summary || "AI-analys av servicemönster"}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center gap-3 p-4 rounded-md bg-green-500/10 border border-green-500/20" data-testid="status-all-ok">
+            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-green-700 dark:text-green-400">Allt ser bra ut</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {data.totalPredicted > 0
+                  ? `${data.totalPredicted} objekt analyserade — inga behöver åtgärd just nu.`
+                  : "Inga servicebehov identifierade. Systemet övervakar kontinuerligt."}
+              </p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
   }
 
   return (
