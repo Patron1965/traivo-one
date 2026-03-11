@@ -163,6 +163,7 @@ export function HomeScreen({ navigation }: any) {
     const [voiceError, setVoiceError] = useState(false);
     const [offlineQuickActions, setOfflineQuickActions] = useState(false);
     const voiceRecorderRef = useRef<any>(null);
+    const isStoppingVoiceRef = useRef(false);
     const voiceChunksRef = useRef<any[]>([]);
     const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
     const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -589,32 +590,39 @@ export function HomeScreen({ navigation }: any) {
     }
 
     async function stopVoiceRecording() {
+      if (isStoppingVoiceRef.current) return;
+      isStoppingVoiceRef.current = true;
+
       setVoiceRecording(false);
       stopPulseAnimation();
       stopSilenceDetection();
       stopLocalSpeechRecognition();
       triggerHaptic('stop');
-      if (Platform.OS === 'web') {
-        if (voiceRecorderRef.current) {
-          voiceRecorderRef.current.stop();
+
+      try {
+        if (Platform.OS === 'web') {
+          const recorder = voiceRecorderRef.current;
           voiceRecorderRef.current = null;
-        }
-      } else {
-        try {
+          if (recorder && recorder.state === 'recording') {
+            recorder.stop();
+          }
+        } else {
           const recording = voiceRecorderRef.current;
+          voiceRecorderRef.current = null;
           if (recording) {
             await recording.stopAndUnloadAsync();
             const uri = recording.getURI();
-            voiceRecorderRef.current = null;
             if (uri) {
               const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
               processVoiceAudio(base64);
             }
           }
-        } catch {
-          showVoiceFeedback('Kunde inte stoppa inspelningen.');
-          setVoiceOverlayVisible(false);
         }
+      } catch {
+        showVoiceFeedback('Kunde inte stoppa inspelningen.');
+        setVoiceOverlayVisible(false);
+      } finally {
+        isStoppingVoiceRef.current = false;
       }
     }
 
