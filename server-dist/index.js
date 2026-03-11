@@ -2029,7 +2029,13 @@ M\xF6jliga kommandon:
 2. "start_next" - Anv\xE4ndaren vill starta n\xE4sta jobb (t.ex. "Starta n\xE4sta jobb", "B\xF6rja n\xE4sta uppdrag", "Starta")
 3. "report_deviation" - Anv\xE4ndaren vill rapportera en avvikelse (t.ex. "Rapportera avvikelse", "Anm\xE4l problem", "Rapportera fel")
 4. "on_site" - Anv\xE4ndaren har anl\xE4nt till platsen (t.ex. "Jag \xE4r p\xE5 plats", "Framme", "Ankommit")
-5. "unknown" - Kommandot kunde inte tolkas
+5. "complete_order" - Anv\xE4ndaren vill markera aktuellt uppdrag som klart (t.ex. "Markera klar", "Klar", "Uppdrag klart", "F\xE4rdig")
+6. "navigate_to" - Anv\xE4ndaren vill navigera till n\xE4sta uppdragsadress (t.ex. "Navigera dit", "K\xF6r dit", "Visa v\xE4gen", "Navigation")
+7. "call_customer" - Anv\xE4ndaren vill ringa kunden (t.ex. "Ring kunden", "Ring kontakten", "Samtal")
+8. "start_break" - Anv\xE4ndaren vill ta rast (t.ex. "Ta rast", "Paus", "Rast", "Fikapaus")
+9. "navigate_statistics" - Anv\xE4ndaren vill se statistik (t.ex. "Visa statistik", "Statistik", "Hur g\xE5r det")
+10. "help" - Anv\xE4ndaren vill h\xF6ra vilka kommandon som finns (t.ex. "Hj\xE4lp", "Vad kan jag s\xE4ga", "Kommandon")
+11. "unknown" - Kommandot kunde inte tolkas
 
 Svara ENBART i JSON-format:
 {
