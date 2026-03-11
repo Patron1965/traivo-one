@@ -96,7 +96,10 @@ function SuggestionCards({ onSend }: { onSend: (text: string) => void }) {
   );
 }
 
-const MessageBubble = React.memo(function MessageBubble({ msg, index, formatTime }: { msg: Message; index: number; formatTime: (date: Date) => string }) {
+const MessageBubble = React.memo(function MessageBubble({ msg, index, formatTime, isStreamingMsg }: { msg: Message; index: number; formatTime: (date: Date) => string; isStreamingMsg?: boolean }) {
+  const showTypingDots = isStreamingMsg && msg.content.length === 0;
+  const showCursor = isStreamingMsg && msg.content.length > 0;
+
   return (
     <View
       style={[
@@ -115,21 +118,28 @@ const MessageBubble = React.memo(function MessageBubble({ msg, index, formatTime
           msg.role === 'user' ? styles.userBubble : styles.assistantBubble,
         ]}
       >
-        <ThemedText
-          variant="body"
-          color={msg.role === 'user' ? Colors.textInverse : Colors.text}
-          testID={`text-ai-message-${index}`}
-          style={styles.messageText}
-        >
-          {msg.content}
-        </ThemedText>
-        <ThemedText
-          variant="caption"
-          color={msg.role === 'user' ? 'rgba(255,255,255,0.7)' : Colors.textMuted}
-          style={styles.timestamp}
-        >
-          {formatTime(msg.timestamp)}
-        </ThemedText>
+        {showTypingDots ? (
+          <TypingIndicator />
+        ) : (
+          <ThemedText
+            variant="body"
+            color={msg.role === 'user' ? Colors.textInverse : Colors.text}
+            testID={`text-ai-message-${index}`}
+            style={styles.messageText}
+          >
+            {msg.content}
+            {showCursor ? <ThemedText variant="body" color={Colors.textMuted}>▊</ThemedText> : null}
+          </ThemedText>
+        )}
+        {!showTypingDots ? (
+          <ThemedText
+            variant="caption"
+            color={msg.role === 'user' ? 'rgba(255,255,255,0.7)' : Colors.textMuted}
+            style={styles.timestamp}
+          >
+            {formatTime(msg.timestamp)}
+          </ThemedText>
+        ) : null}
       </View>
     </View>
   );
@@ -141,8 +151,7 @@ export function AIAssistantScreen() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isStreaming, setIsStreaming] = useState(false);
-  const [streamingContent, setStreamingContent] = useState('');
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<any>(null);
   const chunksRef = useRef<any[]>([]);
@@ -168,11 +177,18 @@ export function AIAssistantScreen() {
       timestamp: new Date(),
     };
 
-    setMessages(prev => [...prev, userMsg]);
+    const aiMsgId = (Date.now() + 1).toString();
+    const placeholderMsg: Message = {
+      id: aiMsgId,
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMsg, placeholderMsg]);
     setInputText('');
     setIsLoading(true);
-    setIsStreaming(false);
-    setStreamingContent('');
+    setStreamingMsgId(aiMsgId);
 
     const context = orders
       ? orders.map(o => ({
@@ -186,7 +202,6 @@ export function AIAssistantScreen() {
         }))
       : [];
 
-    const aiMsgId = (Date.now() + 1).toString();
     let accumulated = '';
 
     try {
@@ -217,8 +232,7 @@ export function AIAssistantScreen() {
       if (!reader) throw new Error('No reader');
 
       const decoder = new TextDecoder();
-      setIsLoading(false);
-      setIsStreaming(true);
+      let firstChunkReceived = false;
 
       let buffer = '';
       while (true) {
@@ -240,7 +254,14 @@ export function AIAssistantScreen() {
             }
             if (parsed.content) {
               accumulated += parsed.content;
-              setStreamingContent(accumulated);
+              const updatedContent = accumulated;
+              if (!firstChunkReceived) {
+                firstChunkReceived = true;
+                setIsLoading(false);
+              }
+              setMessages(prev =>
+                prev.map(m => m.id === aiMsgId ? { ...m, content: updatedContent } : m)
+              );
             }
           } catch (parseErr: any) {
             if (parseErr.message === 'Streaming avbröts.') throw parseErr;
@@ -249,26 +270,17 @@ export function AIAssistantScreen() {
       }
 
       const finalContent = accumulated || 'Jag kunde inte bearbeta din förfrågan just nu.';
-      const aiMsg: Message = {
-        id: aiMsgId,
-        role: 'assistant',
-        content: finalContent,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, aiMsg]);
+      setMessages(prev =>
+        prev.map(m => m.id === aiMsgId ? { ...m, content: finalContent } : m)
+      );
     } catch {
       const errorContent = accumulated || 'Något gick fel. Försök igen senare.';
-      const errorMsg: Message = {
-        id: aiMsgId,
-        role: 'assistant',
-        content: errorContent,
-        timestamp: new Date(),
-      };
-      setMessages(prev => [...prev, errorMsg]);
+      setMessages(prev =>
+        prev.map(m => m.id === aiMsgId ? { ...m, content: errorContent } : m)
+      );
     } finally {
       setIsLoading(false);
-      setIsStreaming(false);
-      setStreamingContent('');
+      setStreamingMsgId(null);
     }
   }
 
@@ -412,35 +424,10 @@ export function AIAssistantScreen() {
 
   const renderMessage = useCallback(({ item, index }: { item: Message; index: number }) => {
     const originalIndex = messages.length - 1 - index;
-    return <MessageBubble msg={item} index={originalIndex} formatTime={formatTime} />;
-  }, [messages.length, formatTime]);
+    return <MessageBubble msg={item} index={originalIndex} formatTime={formatTime} isStreamingMsg={item.id === streamingMsgId} />;
+  }, [messages.length, formatTime, streamingMsgId]);
 
   const keyExtractor = useCallback((item: Message) => item.id, []);
-
-  const ListHeaderComponent = useCallback(() => {
-    if (!isLoading && !isStreaming) return null;
-    return (
-      <View style={[styles.messageBubbleRow, styles.assistantRow]}>
-        <View style={styles.avatarContainer}>
-          <Feather name="zap" size={14} color="#fff" />
-        </View>
-        <View style={[styles.messageBubble, styles.assistantBubble]}>
-          {isLoading && !isStreaming ? (
-            <TypingIndicator />
-          ) : (
-            <ThemedText
-              variant="body"
-              color={Colors.text}
-              style={styles.messageText}
-            >
-              {streamingContent}
-              <ThemedText variant="body" color={Colors.textMuted}>▊</ThemedText>
-            </ThemedText>
-          )}
-        </View>
-      </View>
-    );
-  }, [isLoading, isStreaming, streamingContent]);
 
   const EmptyState = useCallback(() => {
     return isOnlyWelcome ? (
@@ -461,7 +448,6 @@ export function AIAssistantScreen() {
           { paddingTop: Spacing.md, paddingBottom: Spacing.lg },
         ]}
         keyboardShouldPersistTaps="handled"
-        ListHeaderComponent={ListHeaderComponent}
         ListEmptyComponent={EmptyState}
       />
 
@@ -514,7 +500,7 @@ export function AIAssistantScreen() {
           <Pressable
             style={[styles.sendButton, !hasText ? styles.sendButtonDisabled : null]}
             onPress={() => sendMessage(inputText)}
-            disabled={isLoading || isStreaming || !hasText}
+            disabled={isLoading || !!streamingMsgId || !hasText}
             testID="button-send-ai"
           >
             <Feather name="arrow-up" size={20} color={hasText ? Colors.textInverse : Colors.textMuted} />
