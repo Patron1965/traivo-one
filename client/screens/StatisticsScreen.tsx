@@ -109,7 +109,7 @@ export default function StatisticsScreen() {
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: Colors.accent }]} />
-            <ThemedText variant="caption">P\u00e5 plats</ThemedText>
+            <ThemedText variant="caption">På plats</ThemedText>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendDot, { backgroundColor: Colors.success }]} />
@@ -219,7 +219,7 @@ export default function StatisticsScreen() {
             <ThemedText
               style={period === 'month' ? { ...styles.toggleText, ...styles.toggleTextActive } : styles.toggleText}
             >
-              M\u00e5nad
+              Månad
             </ThemedText>
           </Pressable>
         </View>
@@ -233,7 +233,7 @@ export default function StatisticsScreen() {
             <Feather name="chevron-left" size={22} color={Colors.text} />
           </Pressable>
           <ThemedText variant="subheading" testID="text-period-label">
-            {data?.periodLabel || (period === 'week' ? 'Denna vecka' : 'Denna m\u00e5nad')}
+            {data?.periodLabel || (period === 'week' ? 'Denna vecka' : 'Denna månad')}
           </ThemedText>
           <Pressable
             onPress={() => setOffset((o) => Math.max(0, o - 1))}
@@ -291,7 +291,7 @@ export default function StatisticsScreen() {
                 </View>
                 <ThemedText variant="caption">
                   {cp.totalOrders > 0
-                    ? `${Math.round((cp.completedOrders / cp.totalOrders) * 100)}% slutf\u00f6rda`
+                    ? `${Math.round((cp.completedOrders / cp.totalOrders) * 100)}% slutförda`
                     : 'Inga ordrar'}
                 </ThemedText>
               </Card>
