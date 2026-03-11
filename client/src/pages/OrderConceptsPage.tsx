@@ -41,6 +41,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Plus,
   Search,
@@ -688,99 +689,141 @@ export default function OrderConceptsPage() {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handlePreview(concept)}
-                          title="Förhandsgranska"
-                          data-testid={`button-preview-${concept.id}`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handlePreview(concept)}
+                              data-testid={`button-preview-${concept.id}`}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Förhandsgranska</TooltipContent>
+                        </Tooltip>
                         {scenario === "schema" ? (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => runRollingMutation.mutate(concept.id)}
-                            title="Kör rullande schema"
-                            disabled={runRollingMutation.isPending}
-                            data-testid={`button-run-rolling-${concept.id}`}
-                          >
-                            <RefreshCw className={`h-4 w-4 ${runRollingMutation.isPending ? "animate-spin" : ""}`} />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => runRollingMutation.mutate(concept.id)}
+                                disabled={runRollingMutation.isPending}
+                                data-testid={`button-run-rolling-${concept.id}`}
+                              >
+                                <RefreshCw className={`h-4 w-4 ${runRollingMutation.isPending ? "animate-spin" : ""}`} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Kör rullande schema</TooltipContent>
+                          </Tooltip>
                         ) : (
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            onClick={() => { setConceptToExecute(concept); setScheduledDate(""); setExecuteDialogOpen(true); }}
-                            title="Kör koncept"
-                            data-testid={`button-execute-${concept.id}`}
-                          >
-                            <Play className="h-4 w-4" />
-                          </Button>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                onClick={() => { setConceptToExecute(concept); setScheduledDate(""); setExecuteDialogOpen(true); }}
+                                data-testid={`button-execute-${concept.id}`}
+                              >
+                                <Play className="h-4 w-4" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Kör koncept</TooltipContent>
+                          </Tooltip>
                         )}
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => { setSelectedConceptForPhase2(concept.id); rerunMutation.mutate(concept.id); }}
-                          title="Kör om (detektera ändringar)"
-                          disabled={rerunMutation.isPending}
-                          data-testid={`button-rerun-${concept.id}`}
-                        >
-                          <RefreshCw className={`h-4 w-4 text-orange-500 ${rerunMutation.isPending ? "animate-spin" : ""}`} />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => handleManageFilters(concept.id)}
-                          title="Hantera filter"
-                          data-testid={`button-filters-${concept.id}`}
-                        >
-                          <Filter className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => { setSelectedConceptForPhase2(concept.id); setDepTemplateDialogOpen(true); }}
-                          title="Beroendemallar"
-                          data-testid={`button-dep-templates-${concept.id}`}
-                        >
-                          <Link2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => { setSelectedConceptForPhase2(concept.id); setInvoiceRuleDialogOpen(true); }}
-                          title="Fakturaregler"
-                          data-testid={`button-invoice-rules-${concept.id}`}
-                        >
-                          <FileText className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => { setSelectedConceptForPhase2(concept.id); setRunLogsDialogOpen(true); }}
-                          title="Körhistorik"
-                          data-testid={`button-run-logs-${concept.id}`}
-                        >
-                          <History className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => navigate(`/order-concepts/${concept.id}/edit`)}
-                          data-testid={`button-edit-${concept.id}`}
-                        >
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => { setConceptToDelete(concept.id); setDeleteConfirmOpen(true); }}
-                          data-testid={`button-delete-${concept.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => { setSelectedConceptForPhase2(concept.id); rerunMutation.mutate(concept.id); }}
+                              disabled={rerunMutation.isPending}
+                              data-testid={`button-rerun-${concept.id}`}
+                            >
+                              <RefreshCw className={`h-4 w-4 text-orange-500 ${rerunMutation.isPending ? "animate-spin" : ""}`} />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Kör om (detektera ändringar)</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => handleManageFilters(concept.id)}
+                              data-testid={`button-filters-${concept.id}`}
+                            >
+                              <Filter className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Hantera filter</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => { setSelectedConceptForPhase2(concept.id); setDepTemplateDialogOpen(true); }}
+                              data-testid={`button-dep-templates-${concept.id}`}
+                            >
+                              <Link2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Beroendemallar</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => { setSelectedConceptForPhase2(concept.id); setInvoiceRuleDialogOpen(true); }}
+                              data-testid={`button-invoice-rules-${concept.id}`}
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Fakturaregler</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => { setSelectedConceptForPhase2(concept.id); setRunLogsDialogOpen(true); }}
+                              data-testid={`button-run-logs-${concept.id}`}
+                            >
+                              <History className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Körhistorik</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => navigate(`/order-concepts/${concept.id}/edit`)}
+                              data-testid={`button-edit-${concept.id}`}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Redigera</TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => { setConceptToDelete(concept.id); setDeleteConfirmOpen(true); }}
+                              data-testid={`button-delete-${concept.id}`}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Ta bort</TooltipContent>
+                        </Tooltip>
                       </div>
                     </TableCell>
                   </TableRow>
