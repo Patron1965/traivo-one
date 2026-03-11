@@ -2,16 +2,16 @@ import { memo, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Clock, GripVertical, Loader2, MapPin, Navigation, LocateFixed, Send, Truck, AlertTriangle, ChevronDown } from "lucide-react";
+import { Loader2, LocateFixed, Send, Truck } from "lucide-react";
+import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
-import { format, isSameDay } from "date-fns";
+import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
-import { priorityDotColors, priorityLabels, calculateTravelTime, haversineDistance } from "./types";
+import { calculateTravelTime, haversineDistance } from "./types";
 import { SortableRouteItem } from "./DndComponents";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -159,40 +159,42 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
           )}
         </div>
         <ScrollArea className="flex-1 p-2">
-          <div className="space-y-1" data-testid="route-stop-list">
-            {orderedJobs.map((job, index) => {
-              const customer = customerMap.get(job.customerId);
-              let travelToNext: number | undefined;
-              if (index < orderedJobs.length - 1) {
-                const next = orderedJobs[index + 1];
-                if (job.taskLatitude && job.taskLongitude && next.taskLatitude && next.taskLongitude) {
-                  travelToNext = calculateTravelTime(job.taskLatitude, job.taskLongitude, next.taskLatitude, next.taskLongitude);
+          <SortableContext items={orderedJobs.map(j => j.id)} strategy={verticalListSortingStrategy}>
+            <div className="space-y-1" data-testid="route-stop-list">
+              {orderedJobs.map((job, index) => {
+                const customer = customerMap.get(job.customerId);
+                let travelToNext: number | undefined;
+                if (index < orderedJobs.length - 1) {
+                  const next = orderedJobs[index + 1];
+                  if (job.taskLatitude && job.taskLongitude && next.taskLatitude && next.taskLongitude) {
+                    travelToNext = calculateTravelTime(job.taskLatitude, job.taskLongitude, next.taskLatitude, next.taskLongitude);
+                  }
                 }
-              }
-              return (
-                <SortableRouteItem
-                  key={job.id}
-                  job={job}
-                  index={index}
-                  totalCount={orderedJobs.length}
-                  customer={customer}
-                  travelToNext={travelToNext}
-                  isSelected={selectedJob === job.id}
-                  onSelect={onJobClick}
-                />
-              );
-            })}
-            {orderedJobs.length === 0 && routeViewResourceId && (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                Inga schemalagda jobb för denna resurs idag
-              </div>
-            )}
-            {!routeViewResourceId && (
-              <div className="text-center py-8 text-sm text-muted-foreground">
-                Välj en resurs för att visa rutten
-              </div>
-            )}
-          </div>
+                return (
+                  <SortableRouteItem
+                    key={job.id}
+                    job={job}
+                    index={index}
+                    totalCount={orderedJobs.length}
+                    customer={customer}
+                    travelToNext={travelToNext}
+                    isSelected={selectedJob === job.id}
+                    onSelect={onJobClick}
+                  />
+                );
+              })}
+              {orderedJobs.length === 0 && routeViewResourceId && (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  Inga schemalagda jobb för denna resurs idag
+                </div>
+              )}
+              {!routeViewResourceId && (
+                <div className="text-center py-8 text-sm text-muted-foreground">
+                  Välj en resurs för att visa rutten
+                </div>
+              )}
+            </div>
+          </SortableContext>
         </ScrollArea>
       </div>
       <div className="flex-1 relative">
