@@ -1,4 +1,4 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -50,7 +50,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
   const isLoading = d.resourcesLoading || d.workOrdersLoading;
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 
-  const jobCardProps = {
+  const jobCardProps = useMemo(() => ({
     selectedJob: d.selectedJob,
     jobConflicts: d.jobConflicts,
     dependenciesData: d.dependenciesData,
@@ -60,7 +60,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     onUnschedule: d.handleUnschedule,
     onToggleSubStep: d.handleToggleSubStep,
     onOpenDepChain: d.handleOpenDepChain,
-  };
+  }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain]);
 
   return (
     <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragEnd={dnd.handleDragEnd}>
