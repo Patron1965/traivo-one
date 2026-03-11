@@ -31,9 +31,10 @@ import type { Resource, ServiceObject, SetupTimeLog, Customer, WorkOrderWithObje
 export function Dashboard() {
   const [, navigate] = useLocation();
 
-  const handlePieClick = useCallback((entry: { status?: string } | null) => {
-    if (entry?.status) {
-      navigate(`/order-stock?status=${encodeURIComponent(entry.status)}`);
+  const handlePieClick = useCallback((entry: { payload?: { status?: string }; status?: string } | null) => {
+    const status = entry?.payload?.status || entry?.status;
+    if (status) {
+      navigate(`/order-stock?status=${encodeURIComponent(status)}`);
     } else {
       navigate("/order-stock");
     }
