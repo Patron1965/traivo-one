@@ -44,6 +44,7 @@ import {
   BarChart3,
   Fuel,
   MessageSquare,
+  Activity,
 } from "lucide-react";
 
 const navigationGroups = [
@@ -112,6 +113,7 @@ const navigationGroups = [
       { title: "Användarhantering", url: "/user-management", icon: Users },
       { title: "Importera data", url: "/import", icon: Upload },
       { title: "Metadatainställningar", url: "/metadata-settings", icon: Database },
+      { title: "API-kostnader", url: "/api-costs", icon: Activity },
       { title: "Systemöversikt", url: "/system-overview", icon: FileText },
       { title: "Inställningar", url: "/settings", icon: Settings },
     ],

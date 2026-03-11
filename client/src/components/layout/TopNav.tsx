@@ -52,6 +52,7 @@ import {
   Fuel,
   UserCheck,
   ListChecks,
+  Activity,
 } from "lucide-react";
 
 const grunddataItems = [
@@ -104,6 +105,7 @@ const adminItems = [
   { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
   { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
   { title: "Metadatainställningar", url: "/metadata-settings", icon: Database, description: "Metadatakatalog" },
+  { title: "API-kostnader", url: "/api-costs", icon: Activity, description: "Övervaka API-användning" },
   { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
   { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
 ];
