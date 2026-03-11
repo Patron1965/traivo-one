@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, ArrowRight, Save, Check, Loader2 } from "lucide-react";
+import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import type {
   OrderConcept, Customer, Article, ServiceObject,
   InvoiceLevel, InvoiceModel, InvoicePeriod,
@@ -59,6 +60,8 @@ export default function OrderConceptWizardPage() {
 
   const isEditing = !!params.id;
   const [currentStep, setCurrentStep] = useState(1);
+  const [resumeStep, setResumeStep] = useState<number | null>(null);
+  const [showResumeBanner, setShowResumeBanner] = useState(false);
   const [conceptId, setConceptId] = useState<string | null>(params.id || null);
   const [conceptName, setConceptName] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
@@ -105,7 +108,12 @@ export default function OrderConceptWizardPage() {
     if (wizardData && isEditing) {
       setConceptName(wizardData.name || "");
       setSelectedCustomerId(wizardData.customerId || null);
-      setCurrentStep(wizardData.currentStep || 1);
+      const savedStep = wizardData.currentStep || 1;
+      setCurrentStep(savedStep);
+      if (savedStep > 1) {
+        setResumeStep(savedStep);
+        setShowResumeBanner(true);
+      }
       setInvoiceLevel(wizardData.invoiceLevel || null);
       setInvoiceModel(wizardData.invoiceModel || null);
       setInvoicePeriod(wizardData.invoicePeriod || null);
@@ -172,6 +180,65 @@ export default function OrderConceptWizardPage() {
       return sum + ((art?.productionTime || 0) * (ca.quantity || 1)) / 60;
     }, 0);
   }, [conceptArticles, articles]);
+
+  const getStepStatus = useCallback((stepNum: number): "complete" | "warning" | "future" => {
+    if (stepNum >= currentStep) return "future";
+    switch (stepNum) {
+      case 1:
+        if (!conceptName || selectedObjectIds.size === 0) return "warning";
+        return "complete";
+      case 2:
+        if (selectedObjectIds.size === 0) return "warning";
+        return "complete";
+      case 3:
+        if (!invoiceLevel || !invoiceModel) return "warning";
+        return "complete";
+      case 4:
+        return "complete";
+      case 5:
+        return "complete";
+      case 6:
+        if (conceptArticles.length === 0) return "warning";
+        return "complete";
+      case 7:
+        if (conceptArticles.length > 0 && mappings.length === 0) return "warning";
+        return "complete";
+      case 8:
+        return "complete";
+      case 9:
+        if (!deliveryModel) return "warning";
+        return "complete";
+      default:
+        return "future";
+    }
+  }, [currentStep, conceptName, selectedObjectIds, invoiceLevel, invoiceModel, conceptArticles, mappings, deliveryModel]);
+
+  const validateCurrentStep = useCallback((): string | null => {
+    switch (currentStep) {
+      case 1:
+        if (!conceptName) return "Ange ett namn för orderkonceptet.";
+        if (selectedObjectIds.size === 0) return "Välj minst ett objekt.";
+        return null;
+      case 2:
+        if (selectedObjectIds.size === 0) return "Inga objekt valda. Gå tillbaka och välj objekt.";
+        return null;
+      case 3:
+        if (!invoiceLevel) return "Välj en faktureringsnivå.";
+        if (!invoiceModel) return "Välj en faktureringsmodell.";
+        return null;
+      case 6:
+        if (conceptArticles.length === 0) return "Lägg till minst en artikel.";
+        return null;
+      case 7:
+        if (conceptArticles.length > 0 && mappings.length === 0) return "Koppla artiklar till objekt innan du fortsätter.";
+        return null;
+      case 9:
+        if (!deliveryModel) return "Välj en leveransmodell.";
+        return null;
+      default:
+        return null;
+    }
+  }, [currentStep, conceptName, selectedObjectIds, invoiceLevel, invoiceModel, conceptArticles, mappings, deliveryModel]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -261,11 +328,13 @@ export default function OrderConceptWizardPage() {
   });
 
   const handleNext = useCallback(async () => {
+    const validationError = validateCurrentStep();
+    if (validationError) {
+      toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
+      return;
+    }
+
     if (!conceptId && currentStep === 1) {
-      if (!conceptName) {
-        toast({ title: "Namn krävs", description: "Ange ett namn för orderkonceptet.", variant: "destructive" });
-        return;
-      }
       await createConceptMutation.mutateAsync();
     }
 
@@ -274,9 +343,10 @@ export default function OrderConceptWizardPage() {
     }
 
     if (currentStep < 9) {
+      setShowResumeBanner(false);
       setCurrentStep(currentStep + 1);
     }
-  }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation]);
+  }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep]);
 
   const handleBack = useCallback(() => {
     if (currentStep > 1) setCurrentStep(currentStep - 1);
@@ -405,37 +475,81 @@ export default function OrderConceptWizardPage() {
         </div>
 
         <div className="flex items-center justify-center gap-1">
-          {STEPS.map((step, i) => (
-            <div key={step.num} className="flex items-center">
-              <button
-                onClick={() => conceptId && step.num <= (currentStep + 1) ? setCurrentStep(step.num) : null}
-                className={cn(
-                  "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
-                  currentStep === step.num
-                    ? "bg-primary text-primary-foreground font-medium"
-                    : step.num < currentStep
-                      ? "bg-primary/20 text-primary hover:bg-primary/30 cursor-pointer"
-                      : "bg-muted text-muted-foreground",
-                  !conceptId && step.num > 1 && "opacity-50 cursor-not-allowed"
+          {STEPS.map((step, i) => {
+            const status = getStepStatus(step.num);
+            return (
+              <div key={step.num} className="flex items-center">
+                <button
+                  onClick={() => conceptId && step.num <= (currentStep + 1) ? setCurrentStep(step.num) : null}
+                  className={cn(
+                    "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
+                    currentStep === step.num
+                      ? "bg-primary text-primary-foreground font-medium"
+                      : status === "complete"
+                        ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900/50 cursor-pointer"
+                        : status === "warning"
+                          ? "bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 hover:bg-orange-200 dark:hover:bg-orange-900/50 cursor-pointer"
+                          : "bg-muted text-muted-foreground",
+                    !conceptId && step.num > 1 && "opacity-50 cursor-not-allowed"
+                  )}
+                  data-testid={`step-button-${step.num}`}
+                >
+                  <span className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] border border-current">
+                    {currentStep === step.num
+                      ? step.num
+                      : status === "complete"
+                        ? <Check className="h-2.5 w-2.5" />
+                        : status === "warning"
+                          ? <AlertTriangle className="h-2.5 w-2.5" />
+                          : step.num}
+                  </span>
+                  <span className="hidden md:inline">{step.label}</span>
+                </button>
+                {i < STEPS.length - 1 && (
+                  <div className={cn(
+                    "w-4 h-px mx-0.5",
+                    step.num < currentStep
+                      ? status === "warning" ? "bg-orange-400" : "bg-green-500"
+                      : "bg-muted-foreground/30"
+                  )} />
                 )}
-                data-testid={`step-button-${step.num}`}
-              >
-                <span className="w-4 h-4 rounded-full flex items-center justify-center text-[10px] border border-current">
-                  {step.num < currentStep ? <Check className="h-2.5 w-2.5" /> : step.num}
-                </span>
-                <span className="hidden md:inline">{step.label}</span>
-              </button>
-              {i < STEPS.length - 1 && (
-                <div className={cn("w-4 h-px mx-0.5", step.num < currentStep ? "bg-primary" : "bg-muted-foreground/30")} />
-              )}
-            </div>
-          ))}
+              </div>
+            );
+          })}
         </div>
       </div>
 
       <div className="flex flex-1 overflow-hidden">
         <div className="flex-1 overflow-y-auto p-6">
           <div className="max-w-4xl mx-auto">
+            {showResumeBanner && resumeStep && (
+              <Alert className="mb-4 border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30" data-testid="resume-banner">
+                <PlayCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                <AlertDescription className="flex items-center justify-between">
+                  <span className="text-blue-800 dark:text-blue-300">
+                    Du fortsätter från steg {resumeStep} — <strong>{STEPS[resumeStep - 1]?.label}</strong>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-600 hover:text-blue-800 h-7"
+                    onClick={async () => {
+                      setCurrentStep(1);
+                      setShowResumeBanner(false);
+                      if (conceptId) {
+                        try {
+                          await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: 1 });
+                        } catch {}
+                      }
+                    }}
+                    data-testid="button-restart-wizard"
+                  >
+                    Börja om
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
+
             <h2 className="text-base font-medium mb-4">
               Steg {currentStep} av 9 — {STEPS[currentStep - 1].label}
             </h2>

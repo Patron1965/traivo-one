@@ -15258,21 +15258,109 @@ setInterval(loadRoutes, 60000);
   const VALID_TIME_SLOTS = ["morning", "afternoon", "all_day"] as const;
   const VALID_REQUEST_TYPES = ["new", "reschedule", "cancel", "extra_service"] as const;
 
-  // Endpoint to get available time slots and request types for booking
+  const DEFAULT_BOOKING_SERVICE_TYPES = [
+    { value: "extra_tomning", label: "Extratömning", enabled: true },
+    { value: "container_byte", label: "Containerbyte", enabled: true },
+    { value: "storstadning", label: "Storstädning", enabled: true },
+    { value: "besiktning", label: "Besiktning", enabled: true },
+    { value: "reparation", label: "Reparation", enabled: true },
+    { value: "ovrig", label: "Övrig tjänst", enabled: true },
+  ];
+
+  const DEFAULT_BOOKING_TIME_SLOTS = [
+    { value: "morning", label: "Förmiddag (08:00-12:00)", enabled: true },
+    { value: "afternoon", label: "Eftermiddag (12:00-17:00)", enabled: true },
+    { value: "all_day", label: "Heldag (08:00-17:00)", enabled: true },
+  ];
+
+  const DEFAULT_BOOKING_REQUEST_TYPES = [
+    { value: "new", label: "Ny bokning", enabled: true },
+    { value: "reschedule", label: "Ombokning", enabled: true },
+    { value: "cancel", label: "Avbokning", enabled: true },
+    { value: "extra_service", label: "Tilläggstjänst", enabled: true },
+  ];
+
+  async function getPortalBookingConfig(tenantId: string) {
+    const tenant = await storage.getTenant(tenantId);
+    const settings = (tenant?.settings || {}) as any;
+    return {
+      serviceTypes: settings.portalBookingServiceTypes || DEFAULT_BOOKING_SERVICE_TYPES,
+      timeSlots: settings.portalBookingTimeSlots || DEFAULT_BOOKING_TIME_SLOTS,
+      requestTypes: settings.portalBookingRequestTypes || DEFAULT_BOOKING_REQUEST_TYPES,
+      selfBookingEnabled: settings.portalSelfBookingEnabled ?? true,
+    };
+  }
+
   app.get("/api/portal/booking-options", async (req, res) => {
-    res.json({
-      timeSlots: [
-        { value: "morning", label: "Förmiddag (08:00-12:00)" },
-        { value: "afternoon", label: "Eftermiddag (12:00-17:00)" },
-        { value: "all_day", label: "Heldag (08:00-17:00)" },
-      ],
-      requestTypes: [
-        { value: "new", label: "Ny bokning" },
-        { value: "reschedule", label: "Ombokning" },
-        { value: "cancel", label: "Avbokning" },
-        { value: "extra_service", label: "Tilläggstjänst" },
-      ],
-    });
+    try {
+      const session = await requirePortalAuth(req, res);
+      if (!session) return;
+
+      const config = await getPortalBookingConfig(session.tenantId!);
+      res.json({
+        timeSlots: config.timeSlots.filter((t: any) => t.enabled),
+        requestTypes: config.requestTypes.filter((t: any) => t.enabled),
+        serviceTypes: config.serviceTypes.filter((t: any) => t.enabled),
+        selfBookingEnabled: config.selfBookingEnabled,
+      });
+    } catch (error) {
+      console.error("Failed to get booking options:", error);
+      res.status(500).json({ error: "Kunde inte hämta bokningsalternativ" });
+    }
+  });
+
+  app.get("/api/portal-booking-config", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const config = await getPortalBookingConfig(tenantId);
+      res.json(config);
+    } catch (error) {
+      console.error("Failed to get portal booking config:", error);
+      res.status(500).json({ error: "Kunde inte hämta portalkonfiguration" });
+    }
+  });
+
+  const bookingOptionItemSchema = z.object({
+    value: z.string().min(1),
+    label: z.string().min(1),
+    enabled: z.boolean(),
+  });
+
+  const portalBookingConfigSchema = z.object({
+    serviceTypes: z.array(bookingOptionItemSchema).optional(),
+    timeSlots: z.array(bookingOptionItemSchema).optional(),
+    requestTypes: z.array(bookingOptionItemSchema).optional(),
+    selfBookingEnabled: z.boolean().optional(),
+  });
+
+  app.put("/api/portal-booking-config", requireAdmin, async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const parseResult = portalBookingConfigSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json(formatZodError(parseResult.error));
+      }
+      const { serviceTypes, timeSlots, requestTypes, selfBookingEnabled } = parseResult.data;
+
+      const tenant = await storage.getTenant(tenantId);
+      if (!tenant) return res.status(404).json({ error: "Tenant ej hittad" });
+
+      const currentSettings = (tenant.settings || {}) as any;
+      const updatedSettings = {
+        ...currentSettings,
+        ...(serviceTypes !== undefined && { portalBookingServiceTypes: serviceTypes }),
+        ...(timeSlots !== undefined && { portalBookingTimeSlots: timeSlots }),
+        ...(requestTypes !== undefined && { portalBookingRequestTypes: requestTypes }),
+        ...(selfBookingEnabled !== undefined && { portalSelfBookingEnabled: selfBookingEnabled }),
+      };
+
+      await storage.updateTenant(tenantId, { settings: updatedSettings });
+      const updated = await getPortalBookingConfig(tenantId);
+      res.json(updated);
+    } catch (error) {
+      console.error("Failed to update portal booking config:", error);
+      res.status(500).json({ error: "Kunde inte uppdatera portalkonfiguration" });
+    }
   });
 
   // Flexible date validation that accepts ISO date strings (YYYY-MM-DD) or datetime strings
@@ -16097,6 +16185,11 @@ setInterval(loadRoutes, 60000);
     try {
       const session = await requirePortalAuth(req, res);
       if (!session) return;
+
+      const bookingConfig = await getPortalBookingConfig(session.tenantId!);
+      if (!bookingConfig.selfBookingEnabled) {
+        return res.status(403).json({ error: "Självbokning är inte aktiverat för denna organisation." });
+      }
       
       const parseResult = selfBookingRequestSchema.safeParse(req.body);
       if (!parseResult.success) {
@@ -16104,6 +16197,13 @@ setInterval(loadRoutes, 60000);
       }
       
       const { slotId, objectId, serviceType, customerNotes } = parseResult.data;
+
+      const enabledServiceTypes = bookingConfig.serviceTypes
+        .filter((t: any) => t.enabled)
+        .map((t: any) => t.value);
+      if (!enabledServiceTypes.includes(serviceType)) {
+        return res.status(400).json({ error: "Vald tjänsttyp är inte tillgänglig." });
+      }
       
       // Verify slot exists and is available
       const slot = await storage.getSelfBookingSlot(slotId);

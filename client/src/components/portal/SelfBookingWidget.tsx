@@ -16,7 +16,7 @@ interface SelfBookingWidgetProps {
   objects?: Array<{ id: string; name: string; address?: string }>;
 }
 
-const SERVICE_TYPES = [
+const DEFAULT_SERVICE_TYPES = [
   { value: "extra_tomning", label: "Extratömning" },
   { value: "container_byte", label: "Containerbyte" },
   { value: "storstadning", label: "Storstädning" },
@@ -34,6 +34,14 @@ export function SelfBookingWidget({ portalFetch, objects = [] }: SelfBookingWidg
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const bookingOptionsQuery = useQuery({
+    queryKey: ["/api/portal/booking-options"],
+    queryFn: () => portalFetch("/api/portal/booking-options"),
+  });
+
+  const serviceTypes = bookingOptionsQuery.data?.serviceTypes || DEFAULT_SERVICE_TYPES;
+  const selfBookingEnabled = bookingOptionsQuery.data?.selfBookingEnabled ?? true;
 
   const slotsQuery = useQuery({
     queryKey: ["/api/portal/booking-slots"],
@@ -133,9 +141,9 @@ export function SelfBookingWidget({ portalFetch, objects = [] }: SelfBookingWidg
         <CardTitle className="text-lg">Mina bokningar</CardTitle>
         <Dialog open={showBookingDialog} onOpenChange={setShowBookingDialog}>
           <DialogTrigger asChild>
-            <Button size="sm" data-testid="button-new-self-booking">
+            <Button size="sm" disabled={!selfBookingEnabled} data-testid="button-new-self-booking">
               <CalendarPlus className="h-4 w-4 mr-2" />
-              Boka tid
+              {selfBookingEnabled ? "Boka tid" : "Bokning avstängd"}
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-lg">
@@ -154,7 +162,7 @@ export function SelfBookingWidget({ portalFetch, objects = [] }: SelfBookingWidg
                     <SelectValue placeholder="Välj tjänst..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {SERVICE_TYPES.map((type) => (
+                    {serviceTypes.map((type: any) => (
                       <SelectItem key={type.value} value={type.value}>
                         {type.label}
                       </SelectItem>
@@ -267,7 +275,7 @@ export function SelfBookingWidget({ portalFetch, objects = [] }: SelfBookingWidg
                   <div className="flex items-center gap-2">
                     <Package className="h-4 w-4 text-muted-foreground" />
                     <span className="font-medium">
-                      {SERVICE_TYPES.find((t) => t.value === booking.serviceType)?.label || booking.serviceType}
+                      {serviceTypes.find((t: any) => t.value === booking.serviceType)?.label || booking.serviceType}
                     </span>
                     {getStatusBadge(booking.status)}
                   </div>
