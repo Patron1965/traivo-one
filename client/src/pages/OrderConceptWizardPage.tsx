@@ -200,9 +200,15 @@ export default function OrderConceptWizardPage() {
       case 6:
         if (conceptArticles.length === 0) return "warning";
         return "complete";
-      case 7:
+      case 7: {
         if (conceptArticles.length > 0 && mappings.length === 0) return "warning";
+        if (mappings.length > 0 && selectedObjectIds.size > 0) {
+          const mappedObjectIds = new Set(mappings.map((m: any) => m.objectId));
+          const hasUnmapped = Array.from(selectedObjectIds).some(id => !mappedObjectIds.has(id));
+          if (hasUnmapped) return "warning";
+        }
         return "complete";
+      }
       case 8:
         return "complete";
       case 9:
@@ -229,9 +235,15 @@ export default function OrderConceptWizardPage() {
       case 6:
         if (conceptArticles.length === 0) return "Lägg till minst en artikel.";
         return null;
-      case 7:
+      case 7: {
         if (conceptArticles.length > 0 && mappings.length === 0) return "Koppla artiklar till objekt innan du fortsätter.";
+        if (mappings.length > 0 && selectedObjectIds.size > 0) {
+          const mappedObjectIds = new Set(mappings.map((m: any) => m.objectId));
+          const unmappedCount = Array.from(selectedObjectIds).filter(id => !mappedObjectIds.has(id)).length;
+          if (unmappedCount > 0) return `${unmappedCount} objekt saknar artikelkoppling. Alla valda objekt måste ha minst en artikel.`;
+        }
         return null;
+      }
       case 9:
         if (!deliveryModel) return "Välj en leveransmodell.";
         return null;
@@ -348,9 +360,16 @@ export default function OrderConceptWizardPage() {
     }
   }, [conceptId, currentStep, conceptName, createConceptMutation, saveStepMutation, validateCurrentStep]);
 
-  const handleBack = useCallback(() => {
-    if (currentStep > 1) setCurrentStep(currentStep - 1);
-  }, [currentStep]);
+  const handleBack = useCallback(async () => {
+    if (currentStep > 1) {
+      const newStep = currentStep - 1;
+      setCurrentStep(newStep);
+      setShowResumeBanner(false);
+      if (conceptId) {
+        try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: newStep }); } catch {}
+      }
+    }
+  }, [currentStep, conceptId]);
 
   const handleSaveDraft = useCallback(async () => {
     if (!conceptId && conceptName) {
@@ -480,7 +499,13 @@ export default function OrderConceptWizardPage() {
             return (
               <div key={step.num} className="flex items-center">
                 <button
-                  onClick={() => conceptId && step.num <= (currentStep + 1) ? setCurrentStep(step.num) : null}
+                  onClick={async () => {
+                    if (conceptId && step.num <= (currentStep + 1)) {
+                      setCurrentStep(step.num);
+                      setShowResumeBanner(false);
+                      try { await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: step.num }); } catch {}
+                    }
+                  }}
                   className={cn(
                     "flex items-center gap-1 px-2 py-1 rounded text-xs transition-colors",
                     currentStep === step.num
@@ -529,23 +554,34 @@ export default function OrderConceptWizardPage() {
                   <span className="text-blue-800 dark:text-blue-300">
                     Du fortsätter från steg {resumeStep} — <strong>{STEPS[resumeStep - 1]?.label}</strong>
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-blue-600 hover:text-blue-800 h-7"
-                    onClick={async () => {
-                      setCurrentStep(1);
-                      setShowResumeBanner(false);
-                      if (conceptId) {
-                        try {
-                          await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: 1 });
-                        } catch {}
-                      }
-                    }}
-                    data-testid="button-restart-wizard"
-                  >
-                    Börja om
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-600 hover:text-blue-800 h-7"
+                      onClick={() => setShowResumeBanner(false)}
+                      data-testid="button-continue-wizard"
+                    >
+                      Fortsätt här
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-blue-600 hover:text-blue-800 h-7"
+                      onClick={async () => {
+                        setCurrentStep(1);
+                        setShowResumeBanner(false);
+                        if (conceptId) {
+                          try {
+                            await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { currentStep: 1 });
+                          } catch {}
+                        }
+                      }}
+                      data-testid="button-restart-wizard"
+                    >
+                      Börja om
+                    </Button>
+                  </div>
                 </AlertDescription>
               </Alert>
             )}
