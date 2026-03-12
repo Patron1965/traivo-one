@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
@@ -239,18 +240,56 @@ function UserMenu() {
   );
 }
 
+function TransparentLogo({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [transparentSrc, setTransparentSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i], g = data[i + 1], b = data[i + 2];
+        if (r > 220 && g > 220 && b > 220) {
+          data[i + 3] = 0;
+        } else if (r > 200 && g > 200 && b > 200) {
+          data[i + 3] = Math.round(255 * (1 - (r + g + b - 600) / (255 * 3 - 600)));
+        }
+      }
+      ctx.putImageData(imageData, 0, 0);
+      setTransparentSrc(canvas.toDataURL("image/png"));
+    };
+    img.src = src;
+  }, [src]);
+
+  return (
+    <img
+      src={transparentSrc || src}
+      alt={alt}
+      className={className}
+      data-testid="img-tenant-logo"
+    />
+  );
+}
+
 function TenantLogo() {
-  const { logoIconUrl, companyName, primaryColor } = useTenantBranding();
+  const { logoIconUrl, companyName } = useTenantBranding();
 
   return (
     <Link href="/">
       <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5">
-        <img 
-          src={logoIconUrl || nordfieldLogo} 
-          alt={companyName} 
-          className="h-[71px] object-contain mix-blend-multiply dark:mix-blend-normal dark:invert dark:hue-rotate-[180deg]"
-          style={{ imageRendering: "auto", WebkitFontSmoothing: "antialiased" }}
-          data-testid="img-tenant-logo"
+        <TransparentLogo
+          src={logoIconUrl || nordfieldLogo}
+          alt={companyName}
+          className="h-[71px] object-contain dark:invert dark:hue-rotate-[180deg]"
         />
       </div>
     </Link>
