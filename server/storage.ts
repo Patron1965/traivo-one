@@ -88,8 +88,11 @@ import {
   type MaintenanceLog, type InsertMaintenanceLog,
   type ObjectParent, type InsertObjectParent,
   type ObjectArticle, type InsertObjectArticle,
+  type ResourceProfile, type InsertResourceProfile,
+  type ResourceProfileAssignment, type InsertResourceProfileAssignment,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
+  resourceProfiles, resourceProfileAssignments,
   fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
@@ -667,6 +670,17 @@ export interface IStorage {
   addObjectParent(data: InsertObjectParent): Promise<ObjectParent>;
   removeObjectParent(id: string, objectId?: string): Promise<void>;
   setPrimaryParent(objectId: string, parentId: string, tenantId: string): Promise<ObjectParent | undefined>;
+
+  // Resource Profiles (Utföranderoller)
+  getResourceProfiles(tenantId: string): Promise<ResourceProfile[]>;
+  getResourceProfile(id: string): Promise<ResourceProfile | undefined>;
+  createResourceProfile(profile: InsertResourceProfile): Promise<ResourceProfile>;
+  updateResourceProfile(id: string, data: Partial<InsertResourceProfile>): Promise<ResourceProfile | undefined>;
+  deleteResourceProfile(id: string, tenantId?: string): Promise<void>;
+  getResourceProfileAssignments(tenantId: string, profileId?: string, resourceId?: string): Promise<ResourceProfileAssignment[]>;
+  assignResourceProfile(data: InsertResourceProfileAssignment): Promise<ResourceProfileAssignment>;
+  removeResourceProfileAssignment(id: string): Promise<void>;
+  removeResourceProfileAssignmentByPair(profileId: string, resourceId: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4852,6 +4866,55 @@ export class DatabaseStorage implements IStorage {
     }
 
     return updated || undefined;
+  }
+
+  async getResourceProfiles(tenantId: string): Promise<ResourceProfile[]> {
+    return db.select().from(resourceProfiles).where(eq(resourceProfiles.tenantId, tenantId)).orderBy(resourceProfiles.name);
+  }
+
+  async getResourceProfile(id: string): Promise<ResourceProfile | undefined> {
+    const [profile] = await db.select().from(resourceProfiles).where(eq(resourceProfiles.id, id));
+    return profile || undefined;
+  }
+
+  async createResourceProfile(profile: InsertResourceProfile): Promise<ResourceProfile> {
+    const [result] = await db.insert(resourceProfiles).values(profile).returning();
+    return result;
+  }
+
+  async updateResourceProfile(id: string, data: Partial<InsertResourceProfile>): Promise<ResourceProfile | undefined> {
+    const { tenantId: _, ...safeData } = data as any;
+    const [result] = await db.update(resourceProfiles).set({ ...safeData, updatedAt: new Date() }).where(eq(resourceProfiles.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteResourceProfile(id: string, tenantId?: string): Promise<void> {
+    const conditions = [eq(resourceProfileAssignments.profileId, id)];
+    if (tenantId) conditions.push(eq(resourceProfileAssignments.tenantId, tenantId));
+    await db.delete(resourceProfileAssignments).where(and(...conditions));
+    const delConditions = [eq(resourceProfiles.id, id)];
+    if (tenantId) delConditions.push(eq(resourceProfiles.tenantId, tenantId));
+    await db.delete(resourceProfiles).where(and(...delConditions));
+  }
+
+  async getResourceProfileAssignments(tenantId: string, profileId?: string, resourceId?: string): Promise<ResourceProfileAssignment[]> {
+    const conditions = [eq(resourceProfileAssignments.tenantId, tenantId)];
+    if (profileId) conditions.push(eq(resourceProfileAssignments.profileId, profileId));
+    if (resourceId) conditions.push(eq(resourceProfileAssignments.resourceId, resourceId));
+    return db.select().from(resourceProfileAssignments).where(and(...conditions));
+  }
+
+  async assignResourceProfile(data: InsertResourceProfileAssignment): Promise<ResourceProfileAssignment> {
+    const [result] = await db.insert(resourceProfileAssignments).values(data).returning();
+    return result;
+  }
+
+  async removeResourceProfileAssignment(id: string): Promise<void> {
+    await db.delete(resourceProfileAssignments).where(eq(resourceProfileAssignments.id, id));
+  }
+
+  async removeResourceProfileAssignmentByPair(profileId: string, resourceId: string): Promise<void> {
+    await db.delete(resourceProfileAssignments).where(and(eq(resourceProfileAssignments.profileId, profileId), eq(resourceProfileAssignments.resourceId, resourceId)));
   }
 }
 

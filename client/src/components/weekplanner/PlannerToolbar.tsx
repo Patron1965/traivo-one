@@ -1,14 +1,16 @@
 import { memo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2 } from "lucide-react";
-import type { Resource } from "@shared/schema";
+import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode } from "./types";
 import { zoomLevels } from "./types";
 
@@ -70,6 +72,24 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     visibleDates, getResourceDayHours,
     jobConflictCount, filteredScheduledCount, unscheduledCount,
   } = props;
+
+  const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
+  const { data: profileAssignments = [] } = useQuery<ResourceProfileAssignment[]>({
+    queryKey: ["/api/resource-profiles", "all-assignments"],
+    queryFn: async () => {
+      if (!profiles.length) return [];
+      const results = await Promise.all(profiles.map(p => fetch(`/api/resource-profiles/${p.id}/resources`).then(r => r.json())));
+      return results.flat();
+    },
+    enabled: profiles.length > 0,
+  });
+
+  const filterByProfile = (profileId: string) => {
+    const assignedResourceIds = profileAssignments.filter(a => a.profileId === profileId).map(a => a.resourceId);
+    const newHidden = new Set<string>();
+    resources.forEach(r => { if (!assignedResourceIds.includes(r.id)) newHidden.add(r.id); });
+    setHiddenResourceIds(newHidden);
+  };
 
   const zoom = zoomLevels[zoomLevel];
 
@@ -154,6 +174,20 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
                   </Button>
                 )}
               </div>
+              {profiles.length > 0 && (
+                <>
+                  <div className="text-xs text-muted-foreground mb-1">Filtrera per profil</div>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {profiles.map(p => (
+                      <Badge key={p.id} variant="outline" className="cursor-pointer text-[10px] px-1.5 py-0.5 hover:bg-accent" style={{ borderColor: p.color || undefined }} onClick={() => filterByProfile(p.id)} data-testid={`button-filter-profile-${p.id}`}>
+                        <span className="w-2 h-2 rounded-full mr-1 inline-block" style={{ backgroundColor: p.color || "#3B82F6" }} />
+                        {p.name}
+                      </Badge>
+                    ))}
+                  </div>
+                  <Separator className="mb-2" />
+                </>
+              )}
               <ScrollArea className="max-h-64">
                 <div className="space-y-1">
                   {resources.map((resource) => (

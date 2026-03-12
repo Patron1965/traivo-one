@@ -42,6 +42,7 @@ import {
   insertTaskDependencySchema, insertTaskInformationSchema, insertStructuralArticleSchema,
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   insertFuelLogSchema, insertMaintenanceLogSchema, insertObjectParentSchema,
+  insertResourceProfileSchema, insertResourceProfileAssignmentSchema,
   type ServiceObject,
   apiUsageLogs, apiBudgets, articles, taskDependencyInstances,
   objects, workOrders
@@ -3909,6 +3910,99 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to delete maintenance log" });
+    }
+  });
+
+  // ============== RESOURCE PROFILES (Utföranderoller) ==============
+  app.get("/api/resource-profiles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const profiles = await storage.getResourceProfiles(tenantId);
+      res.json(profiles);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch resource profiles" });
+    }
+  });
+
+  app.get("/api/resource-profiles/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const profile = await storage.getResourceProfile(req.params.id);
+      if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+      res.json(profile);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch resource profile" });
+    }
+  });
+
+  app.post("/api/resource-profiles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertResourceProfileSchema.parse({ ...req.body, tenantId });
+      const profile = await storage.createResourceProfile(data);
+      res.status(201).json(profile);
+    } catch (error: any) {
+      if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to create resource profile" });
+    }
+  });
+
+  app.put("/api/resource-profiles/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getResourceProfile(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+      const { tenantId: _, id: __, ...updateData } = req.body;
+      const profile = await storage.updateResourceProfile(req.params.id, updateData);
+      if (!profile) return res.status(404).json({ error: "Profile not found" });
+      res.json(profile);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update resource profile" });
+    }
+  });
+
+  app.delete("/api/resource-profiles/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      await storage.deleteResourceProfile(req.params.id, tenantId);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete resource profile" });
+    }
+  });
+
+  app.get("/api/resource-profiles/:id/resources", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const assignments = await storage.getResourceProfileAssignments(tenantId, req.params.id);
+      res.json(assignments);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch profile resources" });
+    }
+  });
+
+  app.post("/api/resources/:id/profiles", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const data = insertResourceProfileAssignmentSchema.parse({
+        tenantId,
+        resourceId: req.params.id,
+        profileId: req.body.profileId,
+      });
+      const assignment = await storage.assignResourceProfile(data);
+      res.status(201).json(assignment);
+    } catch (error: any) {
+      if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
+      res.status(500).json({ error: "Failed to assign profile" });
+    }
+  });
+
+  app.delete("/api/resources/:id/profiles/:profileId", async (req, res) => {
+    try {
+      await storage.removeResourceProfileAssignmentByPair(req.params.profileId, req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to remove profile assignment" });
     }
   });
 
@@ -11788,6 +11882,20 @@ setInterval(loadRoutes, 60000);
 
       const allTeams = await storage.getTeams(tenantId);
       const allTeamMembers = await storage.getAllTeamMembers(tenantId);
+      const allProfileAssignments = await storage.getResourceProfileAssignments(tenantId);
+      const allProfiles = await storage.getResourceProfiles(tenantId);
+      const resourceProfileCodes = new Map<string, Set<string>>();
+      for (const assignment of allProfileAssignments) {
+        const profile = allProfiles.find(p => p.id === assignment.profileId && p.status === "active");
+        if (profile?.executionCodes && profile.executionCodes.length > 0) {
+          if (!resourceProfileCodes.has(assignment.resourceId)) {
+            resourceProfileCodes.set(assignment.resourceId, new Set());
+          }
+          for (const code of profile.executionCodes) {
+            resourceProfileCodes.get(assignment.resourceId)!.add(code);
+          }
+        }
+      }
       const resourceClusterIds = new Map<string, Set<string>>();
       for (const tm of allTeamMembers) {
         const team = allTeams.find(t => t.id === tm.teamId);
@@ -11904,8 +12012,15 @@ setInterval(loadRoutes, 60000);
               if (!resClusters.has(order.clusterId)) continue;
             }
 
-            if (order.executionCode && resource.executionCodes && resource.executionCodes.length > 0) {
-              if (!resource.executionCodes.includes(order.executionCode)) continue;
+            if (order.executionCode) {
+              const hasDirectCodes = resource.executionCodes && resource.executionCodes.length > 0;
+              const directMatch = hasDirectCodes && resource.executionCodes.includes(order.executionCode);
+              const profileCodes = resourceProfileCodes.get(resource.id);
+              const hasProfileCodes = profileCodes && profileCodes.size > 0;
+              const profileMatch = hasProfileCodes && profileCodes.has(order.executionCode);
+              if (hasDirectCodes || hasProfileCodes) {
+                if (!directMatch && !profileMatch) continue;
+              }
             }
 
             const currentLoad = resourceDayMinutes[resource.id][dayStr] || 0;

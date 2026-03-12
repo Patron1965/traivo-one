@@ -3996,3 +3996,42 @@ export const MAINTENANCE_TYPE_LABELS: Record<string, string> = {
 export const insertMaintenanceLogSchema = createInsertSchema(maintenanceLogs).omit({ id: true, createdAt: true });
 export type MaintenanceLog = typeof maintenanceLogs.$inferSelect;
 export type InsertMaintenanceLog = z.infer<typeof insertMaintenanceLogSchema>;
+
+export const resourceProfiles = pgTable("resource_profiles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  executionCodes: text("execution_codes").array().default([]),
+  equipmentTypes: text("equipment_types").array().default([]),
+  defaultCostCenter: text("default_cost_center"),
+  projectCode: text("project_code"),
+  serviceArea: text("service_area").array().default([]),
+  color: text("color").default("#3B82F6"),
+  icon: text("icon").default("wrench"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_resource_profiles_tenant").on(table.tenantId),
+]);
+
+export const insertResourceProfileSchema = createInsertSchema(resourceProfiles).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertResourceProfile = z.infer<typeof insertResourceProfileSchema>;
+export type ResourceProfile = typeof resourceProfiles.$inferSelect;
+
+export const resourceProfileAssignments = pgTable("resource_profile_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  profileId: varchar("profile_id").references(() => resourceProfiles.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_rpa_tenant").on(table.tenantId),
+  index("idx_rpa_profile").on(table.profileId),
+  index("idx_rpa_resource").on(table.resourceId),
+]);
+
+export const insertResourceProfileAssignmentSchema = createInsertSchema(resourceProfileAssignments).omit({ id: true, createdAt: true });
+export type InsertResourceProfileAssignment = z.infer<typeof insertResourceProfileAssignmentSchema>;
+export type ResourceProfileAssignment = typeof resourceProfileAssignments.$inferSelect;
