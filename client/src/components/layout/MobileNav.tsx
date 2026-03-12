@@ -153,10 +153,10 @@ export function MobileNav() {
             <img
               src={nordfieldLogo}
               alt="Nordnav One"
-              className="h-8 w-auto"
+              className="h-10 w-auto mix-blend-multiply dark:mix-blend-normal dark:invert dark:hue-rotate-[180deg]"
               data-testid="img-mobile-nav-logo"
             />
-            <SheetTitle className="text-lg">Nordnav One</SheetTitle>
+            <SheetTitle className="sr-only">Nordnav One</SheetTitle>
           </div>
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-80px)]">
