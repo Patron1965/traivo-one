@@ -29,7 +29,7 @@ export default function LandingPage() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src={nordfieldLogo} alt="Nordnav One" className="h-[92px] w-auto object-contain mix-blend-multiply dark:invert dark:mix-blend-normal dark:hue-rotate-[180deg]" data-testid="img-landing-logo" />
+            <img src={nordfieldLogo} alt="Nordnav One" className="h-[92px] w-auto object-contain mix-blend-multiply dark:mix-blend-screen" data-testid="img-landing-logo" />
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
@@ -330,7 +330,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img src={nordfieldLogo} alt="Nordnav One" className="h-10 w-auto object-contain mix-blend-multiply dark:invert dark:mix-blend-normal dark:hue-rotate-[180deg]" data-testid="img-landing-footer-logo" />
+              <img src={nordfieldLogo} alt="Nordnav One" className="h-10 w-auto object-contain mix-blend-multiply dark:mix-blend-screen" data-testid="img-landing-footer-logo" />
               <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">

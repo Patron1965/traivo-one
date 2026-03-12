@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
@@ -241,8 +241,8 @@ function UserMenu() {
 }
 
 function TransparentLogo({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [transparentSrc, setTransparentSrc] = useState<string | null>(null);
+  const [lightSrc, setLightSrc] = useState<string | null>(null);
+  const [darkSrc, setDarkSrc] = useState<string | null>(null);
 
   useEffect(() => {
     const img = new Image();
@@ -251,32 +251,58 @@ function TransparentLogo({ src, alt, className }: { src: string; alt: string; cl
       const canvas = document.createElement("canvas");
       canvas.width = img.width;
       canvas.height = img.height;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
+      const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i], g = data[i + 1], b = data[i + 2];
+      const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
+
+      const lightData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
+      const ld = lightData.data;
+      for (let i = 0; i < ld.length; i += 4) {
+        const r = ld[i], g = ld[i + 1], b = ld[i + 2];
         if (r > 220 && g > 220 && b > 220) {
-          data[i + 3] = 0;
+          ld[i + 3] = 0;
         } else if (r > 200 && g > 200 && b > 200) {
-          data[i + 3] = Math.round(255 * (1 - (r + g + b - 600) / (255 * 3 - 600)));
+          ld[i + 3] = Math.round(255 * (1 - (r + g + b - 600) / (765 - 600)));
         }
       }
-      ctx.putImageData(imageData, 0, 0);
-      setTransparentSrc(canvas.toDataURL("image/png"));
+      ctx.putImageData(lightData, 0, 0);
+      setLightSrc(canvas.toDataURL("image/png"));
+
+      const darkData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
+      const dd = darkData.data;
+      for (let i = 0; i < dd.length; i += 4) {
+        const r = dd[i], g = dd[i + 1], b = dd[i + 2];
+        if (r > 220 && g > 220 && b > 220) {
+          dd[i + 3] = 0;
+        } else if (r > 200 && g > 200 && b > 200) {
+          dd[i + 3] = Math.round(255 * (1 - (r + g + b - 600) / (765 - 600)));
+        } else {
+          dd[i] = Math.min(255, r + 140);
+          dd[i + 1] = Math.min(255, g + 140);
+          dd[i + 2] = Math.min(255, b + 140);
+        }
+      }
+      ctx.putImageData(darkData, 0, 0);
+      setDarkSrc(canvas.toDataURL("image/png"));
     };
     img.src = src;
   }, [src]);
 
   return (
-    <img
-      src={transparentSrc || src}
-      alt={alt}
-      className={className}
-      data-testid="img-tenant-logo"
-    />
+    <>
+      <img
+        src={lightSrc || src}
+        alt={alt}
+        className={`${className} dark:hidden`}
+        data-testid="img-tenant-logo"
+      />
+      <img
+        src={darkSrc || src}
+        alt={alt}
+        className={`${className} hidden dark:block`}
+        data-testid="img-tenant-logo-dark"
+      />
+    </>
   );
 }
 
@@ -289,7 +315,7 @@ function TenantLogo() {
         <TransparentLogo
           src={logoIconUrl || nordfieldLogo}
           alt={companyName}
-          className="h-[71px] object-contain dark:invert dark:hue-rotate-[180deg]"
+          className="h-[52px] object-contain"
         />
       </div>
     </Link>
