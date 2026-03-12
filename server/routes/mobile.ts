@@ -644,7 +644,7 @@ router.get('/my-profiles', async (req, res) => {
       return;
     }
 
-    const { status, data } = await kinabFetch(`/api/resource_profile_assignments?resourceId=${resourceId}`, {
+    const { status, data } = await kinabFetch(`/resource_profile_assignments?resourceId=${resourceId}`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });
