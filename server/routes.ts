@@ -4016,6 +4016,11 @@ export async function registerRoutes(
 
   app.delete("/api/resources/:id/profiles/:profileId", async (req, res) => {
     try {
+      const tenantId = getTenantIdWithFallback(req);
+      const profile = await storage.getResourceProfile(req.params.profileId);
+      if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+      const resource = await storage.getResource(req.params.id);
+      if (!resource || resource.tenantId !== tenantId) return res.status(404).json({ error: "Resource not found" });
       await storage.removeResourceProfileAssignmentByPair(req.params.profileId, req.params.id);
       res.status(204).send();
     } catch (error) {

@@ -675,7 +675,7 @@ export interface IStorage {
   getResourceProfiles(tenantId: string): Promise<ResourceProfile[]>;
   getResourceProfile(id: string): Promise<ResourceProfile | undefined>;
   createResourceProfile(profile: InsertResourceProfile): Promise<ResourceProfile>;
-  updateResourceProfile(id: string, data: Partial<InsertResourceProfile>): Promise<ResourceProfile | undefined>;
+  updateResourceProfile(id: string, data: Partial<Omit<InsertResourceProfile, 'tenantId'>>): Promise<ResourceProfile | undefined>;
   deleteResourceProfile(id: string, tenantId?: string): Promise<void>;
   getResourceProfileAssignments(tenantId: string, profileId?: string, resourceId?: string): Promise<ResourceProfileAssignment[]>;
   assignResourceProfile(data: InsertResourceProfileAssignment): Promise<ResourceProfileAssignment>;
@@ -4882,9 +4882,8 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async updateResourceProfile(id: string, data: Partial<InsertResourceProfile>): Promise<ResourceProfile | undefined> {
-    const { tenantId: _, ...safeData } = data as any;
-    const [result] = await db.update(resourceProfiles).set({ ...safeData, updatedAt: new Date() }).where(eq(resourceProfiles.id, id)).returning();
+  async updateResourceProfile(id: string, data: Partial<Omit<InsertResourceProfile, 'tenantId'>>): Promise<ResourceProfile | undefined> {
+    const [result] = await db.update(resourceProfiles).set({ ...data, updatedAt: new Date() }).where(eq(resourceProfiles.id, id)).returning();
     return result || undefined;
   }
 
