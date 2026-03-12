@@ -9,6 +9,7 @@ import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest, getApiUrl } from '../lib/query-client';
+import { useResourceProfiles } from '../hooks/useResourceProfiles';
 import type { Article } from '../types';
 
 export function MaterialLogScreen({ route, navigation }: any) {
@@ -16,13 +17,25 @@ export function MaterialLogScreen({ route, navigation }: any) {
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
 
+  const { primaryProfile } = useResourceProfiles();
   const [search, setSearch] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
   const [quantity, setQuantity] = useState('1');
   const [note, setNote] = useState('');
+  const [costCenter, setCostCenter] = useState('');
+  const [projectCode, setProjectCode] = useState('');
   const [loggedItems, setLoggedItems] = useState<any[]>([]);
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const profileDefaultsApplied = useRef(false);
+
+  useEffect(() => {
+    if (primaryProfile && !profileDefaultsApplied.current) {
+      profileDefaultsApplied.current = true;
+      if (primaryProfile.defaultCostCenter) setCostCenter(primaryProfile.defaultCostCenter);
+      if (primaryProfile.projectCode) setProjectCode(primaryProfile.projectCode);
+    }
+  }, [primaryProfile]);
 
   useEffect(() => {
     if (debounceTimerRef.current) {
@@ -64,13 +77,16 @@ export function MaterialLogScreen({ route, navigation }: any) {
 
   function handleLog() {
     if (!selectedArticle) return;
-    mutation.mutate({
+    const body: any = {
       articleId: selectedArticle.id,
       articleName: selectedArticle.name,
       quantity: parseInt(quantity) || 1,
       unit: selectedArticle.unit,
       note,
-    });
+    };
+    if (costCenter) body.costCenter = costCenter;
+    if (projectCode) body.projectCode = projectCode;
+    mutation.mutate(body);
   }
 
   const orderArticles = articles || [];
@@ -201,6 +217,30 @@ export function MaterialLogScreen({ route, navigation }: any) {
             onChangeText={setNote}
             testID="input-material-note"
           />
+          <View style={styles.profileFieldsRow}>
+            <View style={styles.profileField}>
+              <ThemedText variant="caption" color={Colors.textSecondary}>Kostnadsställe</ThemedText>
+              <TextInput
+                style={styles.profileFieldInput}
+                placeholder="KS-..."
+                placeholderTextColor={Colors.textMuted}
+                value={costCenter}
+                onChangeText={setCostCenter}
+                testID="input-cost-center"
+              />
+            </View>
+            <View style={styles.profileField}>
+              <ThemedText variant="caption" color={Colors.textSecondary}>Projektkod</ThemedText>
+              <TextInput
+                style={styles.profileFieldInput}
+                placeholder="PROJ-..."
+                placeholderTextColor={Colors.textMuted}
+                value={projectCode}
+                onChangeText={setProjectCode}
+                testID="input-project-code"
+              />
+            </View>
+          </View>
           <Pressable style={styles.logButton} onPress={handleLog} testID="button-log-material">
             <Feather name="check" size={18} color={Colors.textInverse} />
             <ThemedText variant="body" color={Colors.textInverse}>
@@ -327,6 +367,22 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.background,
     borderRadius: BorderRadius.md,
     padding: Spacing.md,
+    fontSize: FontSize.md,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text,
+  },
+  profileFieldsRow: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+  },
+  profileField: {
+    flex: 1,
+    gap: 4,
+  },
+  profileFieldInput: {
+    backgroundColor: Colors.background,
+    borderRadius: BorderRadius.md,
+    padding: Spacing.sm,
     fontSize: FontSize.md,
     fontFamily: 'Inter_400Regular',
     color: Colors.text,

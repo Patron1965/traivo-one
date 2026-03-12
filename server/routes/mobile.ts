@@ -56,6 +56,43 @@ const MOCK_RESOURCE = {
 
 const MOCK_TOKEN = 'mock-driver-token-001';
 
+const MOCK_PROFILES = [
+  {
+    id: 'rpa-1',
+    resourceId: MOCK_RESOURCE.id,
+    profileId: 'rp-1',
+    profile: {
+      id: 'rp-1',
+      name: 'Körprofil Lastbil',
+      color: '#1B4B6B',
+      icon: 'truck',
+      executionCodes: ['TÖM', 'HÄMT'],
+      equipmentTypes: ['Lastbil', 'Kranbil'],
+      defaultCostCenter: 'KS-4010',
+      projectCode: 'PROJ-2026-A',
+    },
+    assignedAt: '2026-01-15T08:00:00Z',
+    isPrimary: true,
+  },
+  {
+    id: 'rpa-2',
+    resourceId: MOCK_RESOURCE.id,
+    profileId: 'rp-2',
+    profile: {
+      id: 'rp-2',
+      name: 'Handplock',
+      color: '#4A9B9B',
+      icon: 'package',
+      executionCodes: ['FARL', 'SPEC'],
+      equipmentTypes: ['Handkärra'],
+      defaultCostCenter: 'KS-5020',
+      projectCode: 'PROJ-2026-B',
+    },
+    assignedAt: '2026-02-01T08:00:00Z',
+    isPrimary: false,
+  },
+];
+
 const MOCK_NOTIFICATIONS: any[] = [
   { id: 'n1', type: 'schedule_change', title: 'Ruttändring', message: 'Order WO-2026-0453 har flyttats till kl 10:00', isRead: false, createdAt: new Date(Date.now() - 3600000).toISOString(), orderId: '3' },
   { id: 'n2', type: 'urgent', title: 'Brådskande uppdrag', message: 'Nytt hämtuppdrag tillagt: Göteborgs Hamn AB', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString(), orderId: '5' },
@@ -581,6 +618,41 @@ router.get('/me', async (req, res) => {
     res.status(503).json({
       success: false,
       error: 'Kunde inte verifiera sessionen. Försök igen.',
+    });
+  }
+});
+
+router.get('/my-profiles', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.includes(MOCK_TOKEN)) {
+      res.json({ success: true, assignments: MOCK_PROFILES });
+    } else {
+      res.status(401).json({ success: false, error: 'Ej autentiserad' });
+    }
+    return;
+  }
+
+  try {
+    const { status, data } = await kinabFetch('/api/resource_profile_assignments', {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+
+    if (status === 200) {
+      const assignments = Array.isArray(data) ? data : (data.assignments || data.data || []);
+      res.json({ success: true, assignments });
+    } else {
+      res.status(status).json({
+        success: false,
+        error: data.error || data.message || 'Kunde inte hämta profiler',
+      });
+    }
+  } catch (error: any) {
+    console.error('Profiles proxy error:', error.message);
+    res.status(503).json({
+      success: false,
+      error: 'Kunde inte hämta profiler. Försök igen.',
     });
   }
 });

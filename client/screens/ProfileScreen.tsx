@@ -6,10 +6,11 @@ import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
+import { useResourceProfiles } from '../hooks/useResourceProfiles';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
-import type { Order } from '../types';
+import type { Order, ResourceProfile } from '../types';
 
 function getInitials(name?: string): string {
   if (!name) return '?';
@@ -23,6 +24,7 @@ export function ProfileScreen() {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { user, logout, isOnline, setIsOnline } = useAuth();
+  const { profiles, isLoading: profilesLoading } = useResourceProfiles();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const { data: orders } = useQuery<Order[]>({
@@ -158,6 +160,42 @@ export function ProfileScreen() {
           {user?.email ? <Feather name="external-link" size={14} color={Colors.textMuted} /> : null}
         </Pressable>
       </Card>
+
+      {profiles.length > 0 ? (
+        <Card style={styles.profilesCard}>
+          <View style={styles.profilesHeader}>
+            <Feather name="briefcase" size={16} color={Colors.primary} />
+            <ThemedText variant="label" style={styles.profilesTitle}>Mina profiler</ThemedText>
+          </View>
+          {profiles.map((profile: ResourceProfile, idx: number) => (
+            <View key={String(profile.id)} style={[styles.profileItem, idx > 0 ? styles.profileItemBorder : null]}>
+              <View style={styles.profileTop}>
+                <View style={[styles.profileColorDot, { backgroundColor: profile.color }]} />
+                <Feather name={(profile.icon as any) || 'user'} size={16} color={Colors.text} />
+                <ThemedText variant="body" style={styles.profileName}>{profile.name}</ThemedText>
+              </View>
+              {profile.executionCodes.length > 0 ? (
+                <View style={styles.profileTags}>
+                  {profile.executionCodes.map((code: string) => (
+                    <View key={code} style={styles.execCodeTag}>
+                      <ThemedText variant="caption" color={Colors.primary} style={styles.tagText}>{code}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+              {profile.equipmentTypes.length > 0 ? (
+                <View style={styles.profileTags}>
+                  {profile.equipmentTypes.map((et: string) => (
+                    <View key={et} style={styles.equipTag}>
+                      <ThemedText variant="caption" color={Colors.textSecondary} style={styles.tagText}>{et}</ThemedText>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ))}
+        </Card>
+      ) : null}
 
       <Card style={styles.menuCard}>
         <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Settings')} testID="button-settings">
@@ -363,6 +401,64 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: Colors.divider,
     marginVertical: Spacing.xs,
+  },
+  profilesCard: {
+    width: '100%',
+    marginBottom: Spacing.md,
+  },
+  profilesHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.md,
+  },
+  profilesTitle: {
+    fontFamily: 'Inter_600SemiBold',
+  },
+  profileItem: {
+    paddingVertical: Spacing.sm,
+    gap: Spacing.xs,
+  },
+  profileItemBorder: {
+    borderTopWidth: 1,
+    borderTopColor: Colors.divider,
+  },
+  profileTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  profileColorDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  profileName: {
+    fontFamily: 'Inter_600SemiBold',
+  },
+  profileTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 4,
+    paddingLeft: 26,
+  },
+  execCodeTag: {
+    backgroundColor: Colors.primaryLight + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  equipTag: {
+    backgroundColor: Colors.background,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Colors.borderLight,
+  },
+  tagText: {
+    fontSize: 11,
   },
   menuCard: {
     width: '100%',
