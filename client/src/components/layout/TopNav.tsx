@@ -348,15 +348,12 @@ function TenantLogo() {
 
   return (
     <Link href="/">
-      <div className="flex items-center gap-2 cursor-pointer hover-elevate rounded-md px-1 py-0.5">
+      <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5">
         <TransparentLogo
           src={logoIconUrl || nordfieldLogo}
           alt={companyName}
-          className="h-10 w-auto object-contain"
+          className="h-12 w-auto object-contain"
         />
-        <span className="text-lg font-bold tracking-tight text-foreground hidden sm:inline whitespace-nowrap">
-          Nordnav One
-        </span>
       </div>
     </Link>
   );
