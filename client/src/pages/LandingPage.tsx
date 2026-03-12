@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import nordfieldLogo from "@assets/nordnav_one_logo_final_upward_1773311964126.png";
+import logoDark from "@assets/nordnav_one_replit_dark_1773327277605.png";
+import logoLight from "@assets/nordnav_one_replit_light_1773327277606.png";
 import { 
   Truck, 
   Clock, 
@@ -29,7 +30,8 @@ export default function LandingPage() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src={nordfieldLogo} alt="Nordnav One" className="h-[92px] w-auto object-contain mix-blend-multiply dark:mix-blend-screen" data-testid="img-landing-logo" />
+            <img src={logoDark} alt="Nordnav One" className="h-16 w-auto object-contain block dark:hidden" data-testid="img-landing-logo" />
+            <img src={logoLight} alt="Nordnav One" className="h-16 w-auto object-contain hidden dark:block" data-testid="img-landing-logo-dark" />
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
@@ -330,7 +332,8 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img src={nordfieldLogo} alt="Nordnav One" className="h-10 w-auto object-contain mix-blend-multiply dark:mix-blend-screen" data-testid="img-landing-footer-logo" />
+              <img src={logoDark} alt="Nordnav One" className="h-8 w-auto object-contain block dark:hidden" data-testid="img-landing-footer-logo" />
+              <img src={logoLight} alt="Nordnav One" className="h-8 w-auto object-contain hidden dark:block" data-testid="img-landing-footer-logo-dark" />
               <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">

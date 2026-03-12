@@ -11,7 +11,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import nordfieldLogo from "@assets/nordnav_one_logo_final_upward_1773311964126.png";
+import logoDark from "@assets/nordnav_one_replit_dark_1773327277605.png";
+import logoLight from "@assets/nordnav_one_replit_light_1773327277606.png";
 import {
   Menu,
   Calendar,
@@ -150,12 +151,8 @@ export function MobileNav() {
       <SheetContent side="left" className="w-80 p-0" data-testid="mobile-nav-sheet">
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center gap-3">
-            <img
-              src={nordfieldLogo}
-              alt="Nordnav One"
-              className="h-10 w-auto mix-blend-multiply dark:mix-blend-screen"
-              data-testid="img-mobile-nav-logo"
-            />
+            <img src={logoDark} alt="Nordnav One" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-mobile-nav-logo" />
+            <img src={logoLight} alt="Nordnav One" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-mobile-nav-logo-dark" />
             <SheetTitle className="sr-only">Nordnav One</SheetTitle>
           </div>
         </SheetHeader>

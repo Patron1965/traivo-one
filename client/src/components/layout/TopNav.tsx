@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
+import logoDark from "@assets/nordnav_one_replit_dark_1773327277605.png";
+import logoLight from "@assets/nordnav_one_replit_light_1773327277606.png";
 import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
@@ -242,20 +244,9 @@ function UserMenu() {
 function TenantLogo() {
   return (
     <Link href="/">
-      <div className="flex items-center gap-2 cursor-pointer hover-elevate rounded-md px-2 py-1" data-testid="link-home-logo">
-        <svg viewBox="0 0 32 32" className="h-8 w-8 flex-shrink-0" aria-hidden="true">
-          <defs>
-            <linearGradient id="logo-grad" x1="0%" y1="100%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#1B4B6B" />
-              <stop offset="100%" stopColor="#4A9B9B" />
-            </linearGradient>
-          </defs>
-          <path d="M16 2 L28 26 H20 L16 18 L12 26 H4 Z" fill="url(#logo-grad)" />
-          <path d="M16 8 L22 22 H18 L16 18 L14 22 H10 Z" fill="#7DBFB0" opacity="0.5" />
-        </svg>
-        <span className="text-lg font-bold tracking-tight text-foreground whitespace-nowrap hidden sm:inline">
-          Nordnav One
-        </span>
+      <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5" data-testid="link-home-logo">
+        <img src={logoDark} alt="Nordnav One" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-tenant-logo" />
+        <img src={logoLight} alt="Nordnav One" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-tenant-logo-dark" />
       </div>
     </Link>
   );
