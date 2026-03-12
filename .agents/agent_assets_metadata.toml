@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "HpuNKdWSW1OtP2dr86zCA"
+uri = "file://.local/nordnav-one-integration-prompt.md"
+type = "text"
+title = "Nordnav Go ↔ Nordnav One — API-krav och integrationsbeskrivning"
