@@ -970,7 +970,7 @@ export async function aiEnhancedSchedule(
       .join("\n");
     
     const prompt = `
-Du är en expert på fältserviceoptimering för ett avfallshanteringsföretag i Umeå (Nordfield).
+Du är en expert på fältserviceoptimering för ett avfallshanteringsföretag i Umeå (Nordnav One).
 Analysera denna automatiska schemaläggning och ge förbättringsförslag.
 
 RESURSER (${context.resources.length} st):
@@ -2705,7 +2705,7 @@ ${clusters.slice(0, 10).map(c => `- ${c.name}`).join("\n")}
 ${clusters.length > 10 ? `...och ${clusters.length - 10} fler` : ""}
 `;
 
-  const systemPrompt = `Du är en AI-planeringsassistent för Nordfield fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
+  const systemPrompt = `Du är en AI-planeringsassistent för Nordnav One fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
 
 ${contextSummary}
 

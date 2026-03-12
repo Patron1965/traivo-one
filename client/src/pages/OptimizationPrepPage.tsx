@@ -504,7 +504,7 @@ export default function OptimizationPrepPage() {
             Skicka till optimering
           </CardTitle>
           <CardDescription>
-            Skicka veckodata till Nordfield optimeringstjänst
+            Skicka veckodata till Nordnav One optimeringstjänst
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

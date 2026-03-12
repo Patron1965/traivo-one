@@ -100,7 +100,7 @@ export default function FortnoxSettingsPage() {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [selectedEntityType, setSelectedEntityType] = useState("customer");
-  const [selectedNordfieldId, setSelectedNordfieldId] = useState("");
+  const [selectedNordnavOneId, setSelectedNordnavOneId] = useState("");
   const [fortnoxIdInput, setFortnoxIdInput] = useState("");
 
   const { data: config, isLoading: configLoading } = useQuery<FortnoxConfig>({
@@ -158,7 +158,7 @@ export default function FortnoxSettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
       setMappingDialogOpen(false);
-      setSelectedNordfieldId("");
+      setSelectedNordnavOneId("");
       setFortnoxIdInput("");
       toast({ title: "Koppling skapad" });
     },
@@ -311,7 +311,7 @@ export default function FortnoxSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              Fortnox-integrationen synkroniserar kunder, artiklar och fakturor mellan Nordfield och Fortnox.
+              Fortnox-integrationen synkroniserar kunder, artiklar och fakturor mellan Nordnav One och Fortnox.
             </p>
             <div className="space-y-2">
               <h4 className="font-medium text-foreground">Mappningar:</h4>
@@ -372,7 +372,7 @@ export default function FortnoxSettingsPage() {
                 </div>
               </div>
               <CardDescription>
-                Koppla Nordfield-entiteter till motsvarande Fortnox-ID:n
+                Koppla Nordnav One-entiteter till motsvarande Fortnox-ID:n
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -542,7 +542,7 @@ export default function FortnoxSettingsPage() {
           <DialogHeader>
             <DialogTitle>Lägg till koppling</DialogTitle>
             <DialogDescription>
-              Koppla en Nordfield-entitet till ett Fortnox-ID
+              Koppla en Nordnav One-entitet till ett Fortnox-ID
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -565,8 +565,8 @@ export default function FortnoxSettingsPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Nordfield-entitet</Label>
-              <Select value={selectedNordfieldId} onValueChange={setSelectedNordfieldId}>
+              <Label>Nordnav One-entitet</Label>
+              <Select value={selectedNordnavOneId} onValueChange={setSelectedNordnavOneId}>
                 <SelectTrigger data-testid="dialog-select-nordfield-entity">
                   <SelectValue placeholder="Välj entitet" />
                 </SelectTrigger>
@@ -597,10 +597,10 @@ export default function FortnoxSettingsPage() {
             <Button
               onClick={() => createMappingMutation.mutate({
                 entityType: selectedEntityType,
-                nordfieldId: selectedNordfieldId,
+                nordfieldId: selectedNordnavOneId,
                 fortnoxId: fortnoxIdInput,
               })}
-              disabled={!selectedNordfieldId || !fortnoxIdInput || createMappingMutation.isPending}
+              disabled={!selectedNordnavOneId || !fortnoxIdInput || createMappingMutation.isPending}
               data-testid="button-create-mapping"
             >
               {createMappingMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

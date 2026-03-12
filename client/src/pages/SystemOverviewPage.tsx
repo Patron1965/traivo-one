@@ -263,7 +263,7 @@ export default function SystemOverviewPage() {
 
       doc.setFontSize(24);
       doc.setFont("helvetica", "bold");
-      doc.text("Nordfield", pageWidth / 2, yPos, { align: "center" });
+      doc.text("Nordnav One", pageWidth / 2, yPos, { align: "center" });
       yPos += 10;
       
       doc.setFontSize(14);
@@ -273,7 +273,7 @@ export default function SystemOverviewPage() {
       
       doc.setFontSize(10);
       doc.setTextColor(100);
-      doc.text(`Systemöversikt för Nordfield AB - ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, yPos, { align: "center" });
+      doc.text(`Systemöversikt för Nordnav One AB - ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, yPos, { align: "center" });
       doc.setTextColor(0);
       yPos += 15;
 
@@ -285,12 +285,12 @@ export default function SystemOverviewPage() {
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       const summary = [
-        "Nordfield är en AI-driven planeringsplattform som utvecklas i samarbete",
-        "med Nordfield AB. Målet är att skapa ett unikt system som optimerar hela fält-",
+        "Nordnav One är en AI-driven planeringsplattform som utvecklas i samarbete",
+        "med Nordnav One AB. Målet är att skapa ett unikt system som optimerar hela fält-",
         "serviceverksamheten - och som sedan kan erbjudas till alla företag inom",
         "serviceverksamhet i Norden.",
         "",
-        "Genom att först bevisa värde med Nordfield som design partner bygger vi grunden",
+        "Genom att först bevisa värde med Nordnav One som design partner bygger vi grunden",
         "för en kommersiell flerföretagsstöd SaaS-plattform.",
         "",
         "AI-driven optimering omfattar:",
@@ -362,7 +362,7 @@ export default function SystemOverviewPage() {
 
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text("Nordfield-specifika anpassningar", 14, yPos);
+      doc.text("Nordnav One-specifika anpassningar", 14, yPos);
       yPos += 6;
 
       doc.setFontSize(10);
@@ -383,9 +383,9 @@ export default function SystemOverviewPage() {
       doc.setFontSize(8);
       doc.setTextColor(100);
       doc.text(`Genererad: ${new Date().toLocaleString("sv-SE")}`, 14, yPos);
-      doc.text("Nordfield - Utvecklad i samarbete med Nordfield AB", pageWidth - 14, yPos, { align: "right" });
+      doc.text("Nordnav One - Utvecklad i samarbete med Nordnav One AB", pageWidth - 14, yPos, { align: "right" });
 
-      doc.save("Nordfield_Systemoversikt_Nordfield.pdf");
+      doc.save("Nordnav One_Systemoversikt_Nordnav One.pdf");
     } finally {
       setGenerating(false);
     }
@@ -396,7 +396,7 @@ export default function SystemOverviewPage() {
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold" data-testid="text-page-title">Systemöversikt</h1>
-          <p className="text-muted-foreground">Komplett funktionslista för Nordfield</p>
+          <p className="text-muted-foreground">Komplett funktionslista för Nordnav One</p>
           <div className="flex items-center gap-2 mt-2">
             <Badge variant="outline" className="text-xs">
               Uppdaterad: {format(new Date(), "d MMM yyyy", { locale: sv })}
@@ -412,7 +412,7 @@ export default function SystemOverviewPage() {
           ) : (
             <Download className="h-4 w-4 mr-2" />
           )}
-          Ladda ner PDF för Nordfield
+          Ladda ner PDF för Nordnav One
         </Button>
       </div>
 
@@ -420,18 +420,18 @@ export default function SystemOverviewPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Nordfield - AI-driven fältserviceplanering
+            Nordnav One - AI-driven fältserviceplanering
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-muted-foreground">
-            Nordfield är en AI-driven planeringsplattform som utvecklas i samarbete med Nordfield AB. 
+            Nordnav One är en AI-driven planeringsplattform som utvecklas i samarbete med Nordnav One AB. 
             Målet är att skapa ett unikt system som optimerar hela fältserviceverksamheten - och som 
             sedan kan erbjudas till alla företag inom serviceverksamhet i Norden.
           </p>
           <p className="text-muted-foreground">
-            Genom att först bevisa värde med Nordfield som design partner bygger vi grunden för en 
-            kommersiell flerföretagsstöd SaaS-plattform. Nordfield har flerföretagsstöd — varje kund får sin egen separata miljö med egna data, inställningar och utseende, men alla kör på samma plattform.
+            Genom att först bevisa värde med Nordnav One som design partner bygger vi grunden för en 
+            kommersiell flerföretagsstöd SaaS-plattform. Nordnav One har flerföretagsstöd — varje kund får sin egen separata miljö med egna data, inställningar och utseende, men alla kör på samma plattform.
           </p>
           <div className="space-y-2">
             <p className="text-sm font-medium">AI-driven optimering omfattar:</p>
@@ -445,7 +445,7 @@ export default function SystemOverviewPage() {
             </ul>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">Design Partner: Nordfield AB</Badge>
+            <Badge variant="secondary">Design Partner: Nordnav One AB</Badge>
             <Badge variant="secondary">Flerföretagsstöd</Badge>
             <Badge variant="secondary">AI-optimering</Badge>
             <Badge variant="secondary">Nordic Market</Badge>
@@ -499,7 +499,7 @@ export default function SystemOverviewPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Shield className="h-5 w-5" />
-            Nordfield-specifika anpassningar
+            Nordnav One-specifika anpassningar
           </CardTitle>
         </CardHeader>
         <CardContent>

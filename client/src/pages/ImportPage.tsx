@@ -671,7 +671,7 @@ export default function ImportPage() {
                 <div className="space-y-2">
                   <p className="text-sm font-medium">Importera riktig data från Modus 2.0</p>
                   <p className="text-sm text-muted-foreground">
-                    Följ stegen nedan för att migrera er data från Modus 2.0 till Nordfield. 
+                    Följ stegen nedan för att migrera er data från Modus 2.0 till Nordnav One. 
                     Modus exporterar CSV-filer med semikolon (;) som separator — detta hanteras automatiskt.
                   </p>
                 </div>

@@ -53,7 +53,7 @@ async function getTenantSmsConfig(tenantId: string): Promise<TenantSmsConfig> {
     return {
       smsEnabled: tenant.smsEnabled ?? false,
       smsProvider: provider ?? "none",
-      smsFromName: tenant.smsFromName ?? tenant.name ?? "Nordfield",
+      smsFromName: tenant.smsFromName ?? tenant.name ?? "Nordnav One",
     };
   } catch {
     return { smsEnabled: false };
@@ -268,7 +268,7 @@ export async function sendNotification(options: NotificationOptions): Promise<No
   
   const tenantSmsConfig = await getTenantSmsConfig(tenantId);
   const tenant = await storage.getTenant(tenantId);
-  const companyName = tenant?.name || "Nordfield";
+  const companyName = tenant?.name || "Nordnav One";
   
   const shouldSendEmail = channel === "email" || channel === "both";
   const shouldSendSms = (channel === "sms" || channel === "both") && tenantSmsConfig.smsEnabled;

@@ -92,8 +92,8 @@ function ShareFieldAppButton() {
   
   const handleShare = async () => {
     const shareData = {
-      title: "Nordfield Fältapp",
-      text: "Öppna Nordfield Fältapp",
+      title: "Nordnav One Fältapp",
+      text: "Öppna Nordnav One Fältapp",
       url: fieldAppUrl,
     };
     

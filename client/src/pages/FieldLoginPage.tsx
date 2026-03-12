@@ -16,7 +16,7 @@ export default function FieldLoginPage() {
             <Truck className="h-8 w-8 text-primary-foreground" />
           </div>
           <div>
-            <CardTitle className="text-2xl">Nordfield Fältapp</CardTitle>
+            <CardTitle className="text-2xl">Nordnav One Fältapp</CardTitle>
             <CardDescription>Logga in för att se dagens jobb</CardDescription>
           </div>
         </CardHeader>

@@ -185,7 +185,7 @@ export async function sendPortalMagicLinkEmail(
     <hr style="border: none; border-top: 1px solid #e5e5e5; margin: 24px 0;">
     
     <p style="color: #9a9a9a; font-size: 12px; margin-bottom: 0;">
-      Detta meddelande skickades från ${companyName} via Nordfield-plattformen.
+      Detta meddelande skickades från ${companyName} via Nordnav One-plattformen.
     </p>
   </div>
 </body>

@@ -529,7 +529,7 @@ export function Dashboard() {
       };
 
       // SIDA 1 - Sammanfattning
-      yPos = addHeader("Nordfield - Månadsrapport");
+      yPos = addHeader("Nordnav One - Månadsrapport");
       
       yPos = addSectionTitle("Nyckeltal", yPos);
       
@@ -764,7 +764,7 @@ export function Dashboard() {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(128, 128, 128);
-        doc.text(`Nordfield - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+        doc.text(`Nordnav One - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
       }
 
       doc.save(`nordfield-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
@@ -791,7 +791,7 @@ export function Dashboard() {
   const handleExportExcel = useCallback(() => {
     try {
       const today = format(new Date(), "yyyy-MM-dd");
-      let csv = "Nordfield Dashboard Export - " + today + "\n\n";
+      let csv = "Nordnav One Dashboard Export - " + today + "\n\n";
       
       csv += "NYCKELTAL\n";
       csv += "Mått;Värde;Detaljer\n";

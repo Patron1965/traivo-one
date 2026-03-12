@@ -4,7 +4,7 @@ export default function PlannerMapPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
-    document.title = "Nordfield - Planerarvy Karta";
+    document.title = "Nordnav One - Planerarvy Karta";
   }, []);
 
   return (

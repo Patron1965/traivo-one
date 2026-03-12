@@ -1,5 +1,5 @@
 import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, Brain, Database, ClipboardCheck, MapPin, History } from "lucide-react";
-import nordfieldLogo from "@assets/nordfield-logo-final_1772981791099.png";
+import nordfieldLogo from "@assets/nordnav_one_logo_final_upward_1773310011433.png";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -119,13 +119,13 @@ export function AppSidebar() {
         <div className="flex items-center gap-3">
           <img 
             src={nordfieldLogo} 
-            alt="Nordfield" 
+            alt="Nordnav One" 
             className="h-10 w-auto"
             data-testid="img-nordfield-logo"
           />
           <div>
-            <h1 className="text-base font-semibold">Nordfield</h1>
-            <p className="text-xs text-muted-foreground">Nordfield AB</p>
+            <h1 className="text-base font-semibold">Nordnav One</h1>
+            <p className="text-xs text-muted-foreground">Nordnav One</p>
           </div>
         </div>
       </SidebarHeader>

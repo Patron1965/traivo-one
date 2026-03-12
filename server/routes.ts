@@ -88,7 +88,7 @@ function formatZodError(error: z.ZodError): { error: string; details: Array<{ fi
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
-    name: "Nordfield AB",
+    name: "Nordnav One",
     orgNumber: "556789-1234",
     contactEmail: "info@nordfield.se",
     contactPhone: "+46701234567",
@@ -10964,7 +10964,7 @@ setInterval(loadRoutes, 60000);
         subject: "Nordfield Projektrapport - Kodstatistik och Kostnadsjämförelse",
         html: `
           <h1>Nordfield Projektrapport</h1>
-          <p>Bifogat finner du projektrapporten med kodstatistik och kostnadsjämförelse för Nordfield-plattformen.</p>
+          <p>Bifogat finner du projektrapporten med kodstatistik och kostnadsjämförelse för Nordnav One-plattformen.</p>
           <h2>Sammanfattning</h2>
           <ul>
             <li><strong>Totalt antal kodrader:</strong> ~43 600</li>

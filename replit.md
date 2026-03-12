@@ -1,17 +1,18 @@
-# Nordfield - AI-Driven Field Service Planning Platform
+# Nordnav One - AI-Driven Field Service Planning Platform
 
 ## Overview
-Nordfield is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
+Nordnav One is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
-- **Design:** Clean, professional Nordic aesthetic
+- **Design:** Clean, professional Nordic aesthetic — Nordnav One Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
+- **Logo:** `@assets/nordnav_one_logo_final_upward_1773310011433.png`
 - **Theme:** Dark/light mode support
 - **Font:** Inter for UI
 - **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet
 
 ## System Architecture
-The Nordfield platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
+The Nordnav One platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
 
 ### UI/UX Decisions
 The user interface includes a sticky TopNav, global search, user utilities, a mobile-friendly hamburger menu, Floating Action Button, QuickStats, a drag-and-drop WeekPlanner, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Mobile interfaces for field technicians feature a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help, progressive loading, white-label multi-tenancy, and an AI Command Center. An interactive Tour Guide system provides step-by-step onboarding, and role-based navigation filtering ensures relevant options are displayed.

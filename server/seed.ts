@@ -15,7 +15,7 @@ export async function seedDatabase() {
 
   const [tenant] = await db.insert(tenants).values({
     id: DEFAULT_TENANT_ID,
-    name: "Nordfield AB",
+    name: "Nordnav One",
     orgNumber: "556789-1234",
     contactEmail: "info@nordfield.se",
     contactPhone: "+46701234567",
@@ -635,8 +635,8 @@ export async function seedDatabase() {
       primaryColor: "#3B82F6",
       secondaryColor: "#6366F1",
       accentColor: "#F59E0B",
-      companyName: "Nordfield AB",
-      headingText: "Nordfield Field Service",
+      companyName: "Nordnav One",
+      headingText: "Nordnav One Field Service",
       subheadingText: "Planering som funkar",
       isPublished: true,
     });

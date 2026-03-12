@@ -119,7 +119,7 @@ export default function PitchPage() {
     // Footer page 1
     pdf.setTextColor(148, 163, 184);
     pdf.setFontSize(8);
-    pdf.text("Sida 1/2 | © 2026 Nordfield", margin, pageHeight - 10);
+    pdf.text("Sida 1/2 | © 2026 Nordnav One", margin, pageHeight - 10);
 
     // PAGE 2: Solutions and Benefits
     pdf.addPage();
@@ -131,14 +131,14 @@ export default function PitchPage() {
     pdf.setTextColor(255, 255, 255);
     pdf.setFontSize(20);
     pdf.setFont("helvetica", "bold");
-    pdf.text("Nordfield - En komplett lösning", margin, 22);
+    pdf.text("Nordnav One - En komplett lösning", margin, 22);
 
     y = 48;
     pdf.setTextColor(15, 23, 42);
     pdf.setFontSize(10);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(71, 85, 105);
-    pdf.text("Nordfield löser alla dessa problem i en enda plattform - byggd specifikt för nordiska fältserviceföretag.", margin, y);
+    pdf.text("Nordnav One löser alla dessa problem i en enda plattform - byggd specifikt för nordiska fältserviceföretag.", margin, y);
 
     y += 12;
 
@@ -237,7 +237,7 @@ export default function PitchPage() {
 
     pdf.setTextColor(148, 163, 184);
     pdf.setFontSize(8);
-    pdf.text("Sida 2/2 | © 2026 Nordfield | www.nordfield.se | info@nordfield.se", margin, pageHeight - 10);
+    pdf.text("Sida 2/2 | © 2026 Nordnav One | www.nordnavone.se | info@nordnavone.se", margin, pageHeight - 10);
 
     pdf.save("nordfield-pitch.pdf");
     setIsGenerating(false);
@@ -247,7 +247,7 @@ export default function PitchPage() {
     <div className="p-6 space-y-8 max-w-5xl mx-auto">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Nordfield Pitch</h1>
+          <h1 className="text-3xl font-bold">Nordnav One Pitch</h1>
           <p className="text-muted-foreground">AI-driven fältserviceplanering för Norden</p>
         </div>
         <Button 
@@ -387,12 +387,12 @@ export default function PitchPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-xl text-green-700 dark:text-green-400">
             <CheckCircle2 className="h-6 w-6" />
-            Nordfield - En komplett lösning
+            Nordnav One - En komplett lösning
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
           <p className="text-muted-foreground">
-            Nordfield löser alla dessa problem i en enda plattform - byggd specifikt för nordiska fältserviceföretag.
+            Nordnav One löser alla dessa problem i en enda plattform - byggd specifikt för nordiska fältserviceföretag.
           </p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
