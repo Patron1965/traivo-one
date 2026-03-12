@@ -7,7 +7,11 @@ import type { Notification } from '../types';
 type WSEvent =
   | { type: 'order:updated'; data: { orderId: string | number; status: string; updatedAt: string } }
   | { type: 'order:assigned'; data: { orderId: string | number } }
-  | { type: 'notification'; data: Notification };
+  | { type: 'notification'; data: Notification }
+  | { type: 'team:order_updated'; data: { orderId: string | number; status: string; updatedBy: string; updatedAt: string } }
+  | { type: 'team:material_logged'; data: { orderId: string | number; entry: any } }
+  | { type: 'team:member_left'; data: { resourceId: string | number; name: string } }
+  | { type: 'team:invite'; data: { invite: any; teamName: string } };
 
 type EventHandler = (event: WSEvent) => void;
 
@@ -15,7 +19,7 @@ const INITIAL_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30000;
 const BACKOFF_MULTIPLIER = 2;
 
-export function useWebSocket(resourceId?: string | number, tenantId?: string) {
+export function useWebSocket(resourceId?: string | number, tenantId?: string, teamId?: string | number) {
   const queryClient = useQueryClient();
   const socketRef = useRef<any>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -82,7 +86,7 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string) {
         setIsConnected(true);
         backoffRef.current = INITIAL_BACKOFF_MS;
         if (resourceId) {
-          socket.emit('join', { resourceId: String(resourceId), tenantId });
+          socket.emit('join', { resourceId: String(resourceId), tenantId, teamId: teamId ? String(teamId) : undefined });
         }
       });
 
@@ -132,6 +136,39 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string) {
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] });
       });
 
+      socket.on('team:order_updated', (data: any) => {
+        if (connectionIdRef.current !== connId) return;
+        const event: WSEvent = { type: 'team:order_updated', data };
+        setLastEvent(event);
+        handlersRef.current.forEach(h => h(event));
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${data.orderId}`] });
+      });
+
+      socket.on('team:material_logged', (data: any) => {
+        if (connectionIdRef.current !== connId) return;
+        const event: WSEvent = { type: 'team:material_logged', data };
+        setLastEvent(event);
+        handlersRef.current.forEach(h => h(event));
+        queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${data.orderId}/materials`] });
+      });
+
+      socket.on('team:member_left', (data: any) => {
+        if (connectionIdRef.current !== connId) return;
+        const event: WSEvent = { type: 'team:member_left', data };
+        setLastEvent(event);
+        handlersRef.current.forEach(h => h(event));
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-team'] });
+      });
+
+      socket.on('team:invite', (data: any) => {
+        if (connectionIdRef.current !== connId) return;
+        const event: WSEvent = { type: 'team:invite', data };
+        setLastEvent(event);
+        handlersRef.current.forEach(h => h(event));
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/team-invites'] });
+      });
+
       if (connectionIdRef.current !== connId) {
         socket.disconnect();
         return;
@@ -144,7 +181,7 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string) {
         scheduleReconnect(connId);
       }
     }
-  }, [resourceId, tenantId, queryClient, scheduleReconnect]);
+  }, [resourceId, tenantId, teamId, queryClient, scheduleReconnect]);
 
   const connect = useCallback(() => {
     const connId = ++connectionIdRef.current;

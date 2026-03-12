@@ -21,12 +21,15 @@ const io = new SocketIOServer(server, {
 io.on('connection', (socket) => {
   console.log(`WebSocket client connected: ${socket.id}`);
 
-  socket.on('join', (data: { resourceId?: string; tenantId?: string }) => {
+  socket.on('join', (data: { resourceId?: string; tenantId?: string; teamId?: string }) => {
     if (data.resourceId) {
       socket.join(`resource:${data.resourceId}`);
     }
     if (data.tenantId) {
       socket.join(`tenant:${data.tenantId}`);
+    }
+    if (data.teamId) {
+      socket.join(`team:${data.teamId}`);
     }
   });
 

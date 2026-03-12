@@ -210,6 +210,8 @@ export interface Order {
   impossibleReason?: string;
   impossibleAt?: string;
   impossibleBy?: string;
+  isTeamOrder?: boolean;
+  teamName?: string;
 }
 
 export interface Article {
