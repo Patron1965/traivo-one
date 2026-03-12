@@ -248,7 +248,8 @@ function TenantLogo() {
         <img 
           src={logoIconUrl || nordfieldLogo} 
           alt={companyName} 
-          className="h-[56px] object-contain mix-blend-multiply dark:mix-blend-normal dark:invert dark:hue-rotate-[180deg]"
+          className="h-[62px] object-contain mix-blend-multiply dark:mix-blend-normal dark:invert dark:hue-rotate-[180deg]"
+          style={{ imageRendering: "auto", WebkitFontSmoothing: "antialiased" }}
           data-testid="img-tenant-logo"
         />
       </div>

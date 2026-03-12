@@ -29,7 +29,7 @@ export default function LandingPage() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src={nordfieldLogo} alt="Nordnav One" className="h-[84px] w-auto object-contain mix-blend-multiply dark:mix-blend-normal dark:invert dark:hue-rotate-[180deg]" data-testid="img-landing-logo" />
+            <img src={nordfieldLogo} alt="Nordnav One" className="h-[92px] w-auto object-contain mix-blend-multiply dark:mix-blend-normal dark:invert dark:hue-rotate-[180deg]" data-testid="img-landing-logo" />
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
