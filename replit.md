@@ -6,7 +6,7 @@ Nordnav One is an AI-driven platform designed to optimize field service operatio
 ## User Preferences
 - **Language:** Swedish (sv) for UI
 - **Design:** Clean, professional Nordic aesthetic — Nordnav One Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
-- **Logo:** `@assets/nordnav_one_logo_final_upward_1773310011433.png`
+- **Logo:** `@assets/nordnav_one_logo_final_upward_1773311964126.png`
 - **Theme:** Dark/light mode support
 - **Font:** Inter for UI
 - **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet

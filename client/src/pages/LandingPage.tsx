@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import nordfieldLogo from "@assets/nordnav_one_logo_final_upward_1773310011433.png";
+import nordfieldLogo from "@assets/nordnav_one_logo_final_upward_1773311964126.png";
 import { 
   Truck, 
   Clock, 
