@@ -10,7 +10,27 @@ import { useResourceProfiles } from '../hooks/useResourceProfiles';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
+import type { ComponentProps } from 'react';
 import type { Order, ResourceProfile } from '../types';
+
+type FeatherIconName = ComponentProps<typeof Feather>['name'];
+
+const PROFILE_ICON_MAP: Record<string, FeatherIconName> = {
+  truck: 'truck',
+  package: 'package',
+  tool: 'tool',
+  settings: 'settings',
+  briefcase: 'briefcase',
+  box: 'box',
+  anchor: 'anchor',
+  compass: 'compass',
+  zap: 'zap',
+  shield: 'shield',
+};
+
+function getProfileIcon(icon: string): FeatherIconName {
+  return PROFILE_ICON_MAP[icon] || 'user';
+}
 
 function getInitials(name?: string): string {
   if (!name) return '?';
@@ -171,7 +191,7 @@ export function ProfileScreen() {
             <View key={String(profile.id)} style={[styles.profileItem, idx > 0 ? styles.profileItemBorder : null]}>
               <View style={styles.profileTop}>
                 <View style={[styles.profileColorDot, { backgroundColor: profile.color }]} />
-                <Feather name={(profile.icon as any) || 'user'} size={16} color={Colors.text} />
+                <Feather name={getProfileIcon(profile.icon)} size={16} color={Colors.text} />
                 <ThemedText variant="body" style={styles.profileName}>{profile.name}</ThemedText>
               </View>
               {profile.executionCodes.length > 0 ? (

@@ -4,6 +4,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import type { Resource, GpsPosition } from '../types';
 
+const PROFILES_CACHE_KEY = '@resource_profiles';
+
+async function fetchAndCacheProfiles(authToken: string): Promise<void> {
+  try {
+    const data = await apiRequest('GET', '/api/mobile/my-profiles', undefined, authToken);
+    if (data.success && Array.isArray(data.assignments)) {
+      await AsyncStorage.setItem(PROFILES_CACHE_KEY, JSON.stringify(data.assignments));
+    }
+  } catch {
+  }
+}
+
 async function registerPushToken(authToken: string): Promise<void> {
   try {
     const Notifications = await import('expo-notifications');
@@ -176,6 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           } else if (meData.resource) {
             setUser(meData.resource);
           }
+          fetchAndCacheProfiles(storedToken);
         } catch {
           setUser(null);
           setToken(null);
@@ -209,6 +222,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(data.token);
     await AsyncStorage.setItem('auth', JSON.stringify({ resource, token: data.token }));
     registerPushToken(data.token);
+    fetchAndCacheProfiles(data.token);
   }
 
   async function logout() {

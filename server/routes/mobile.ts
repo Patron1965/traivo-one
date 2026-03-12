@@ -634,7 +634,17 @@ router.get('/my-profiles', async (req, res) => {
   }
 
   try {
-    const { status, data } = await kinabFetch('/api/resource_profile_assignments', {
+    const meResponse = await kinabFetch('/api/mobile/me', {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+    const resourceId = meResponse.data?.resource?.id || meResponse.data?.id;
+    if (!resourceId) {
+      res.status(401).json({ success: false, error: 'Kunde inte identifiera resursen' });
+      return;
+    }
+
+    const { status, data } = await kinabFetch(`/api/resource_profile_assignments?resourceId=${resourceId}`, {
       method: 'GET',
       headers: getAuthHeader(req),
     });
