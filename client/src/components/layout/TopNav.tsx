@@ -283,20 +283,25 @@ function TransparentLogo({ src, alt, className }: { src: string; alt: string; cl
       ctx.drawImage(img, 0, 0);
       const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+      function removeWhiteBg(data: Uint8ClampedArray) {
+        for (let i = 0; i < data.length; i += 4) {
+          const r = data[i], g = data[i + 1], b = data[i + 2];
+          const brightness = (r + g + b) / 3;
+          const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+          if (brightness > 180 && saturation < 30) {
+            data[i + 3] = 0;
+          } else if (brightness > 150 && saturation < 40) {
+            data[i + 3] = Math.round(255 * (1 - (brightness - 150) / 50));
+          }
+        }
+      }
+
       const lightCanvas = document.createElement("canvas");
       lightCanvas.width = img.width;
       lightCanvas.height = img.height;
       const lctx = lightCanvas.getContext("2d")!;
       const lightData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
-      const ld = lightData.data;
-      for (let i = 0; i < ld.length; i += 4) {
-        const r = ld[i], g = ld[i + 1], b = ld[i + 2];
-        if (r > 220 && g > 220 && b > 220) {
-          ld[i + 3] = 0;
-        } else if (r > 200 && g > 200 && b > 200) {
-          ld[i + 3] = Math.round(255 * (1 - (r + g + b - 600) / (765 - 600)));
-        }
-      }
+      removeWhiteBg(lightData.data);
       lctx.putImageData(lightData, 0, 0);
       setLightSrc(trimCanvas(lightCanvas).toDataURL("image/png"));
 
@@ -306,16 +311,12 @@ function TransparentLogo({ src, alt, className }: { src: string; alt: string; cl
       const dctx = darkCanvas.getContext("2d")!;
       const darkData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
       const dd = darkData.data;
+      removeWhiteBg(dd);
       for (let i = 0; i < dd.length; i += 4) {
-        const r = dd[i], g = dd[i + 1], b = dd[i + 2];
-        if (r > 220 && g > 220 && b > 220) {
-          dd[i + 3] = 0;
-        } else if (r > 200 && g > 200 && b > 200) {
-          dd[i + 3] = Math.round(255 * (1 - (r + g + b - 600) / (765 - 600)));
-        } else {
-          dd[i] = Math.min(255, r + 140);
-          dd[i + 1] = Math.min(255, g + 140);
-          dd[i + 2] = Math.min(255, b + 140);
+        if (dd[i + 3] > 0) {
+          dd[i] = Math.min(255, 255 - (255 - dd[i]) * 0.3);
+          dd[i + 1] = Math.min(255, 255 - (255 - dd[i + 1]) * 0.3);
+          dd[i + 2] = Math.min(255, 255 - (255 - dd[i + 2]) * 0.3);
         }
       }
       dctx.putImageData(darkData, 0, 0);
