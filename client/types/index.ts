@@ -260,6 +260,26 @@ export interface Resource {
   trackingStatus?: 'idle' | 'traveling' | 'on_site' | 'offline';
 }
 
+export interface ResourceProfile {
+  id: number | string;
+  name: string;
+  color: string;
+  icon: string;
+  executionCodes: string[];
+  equipmentTypes: string[];
+  defaultCostCenter?: string;
+  projectCode?: string;
+}
+
+export interface ResourceProfileAssignment {
+  id: number | string;
+  resourceId: number | string;
+  profileId: number | string;
+  profile: ResourceProfile;
+  assignedAt: string;
+  isPrimary?: boolean;
+}
+
 export interface WeatherData {
   temperature: number;
   feelsLike: number;

@@ -481,6 +481,7 @@ export function HomeScreen({ navigation }: any) {
         const dataArray = new Uint8Array(analyser.frequencyBinCount);
 
         silenceCheckRef.current = setInterval(() => {
+          if (isStoppingVoiceRef.current || !voiceRecorderRef.current) return;
           analyser.getByteFrequencyData(dataArray);
           let sum = 0;
           for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
@@ -578,8 +579,10 @@ export function HomeScreen({ navigation }: any) {
           const MIN_RECORDING_MS = 2000;
           silenceCheckRef.current = setInterval(async () => {
             try {
+              if (isStoppingVoiceRef.current || !voiceRecorderRef.current) return;
               if (Date.now() - recordingStartedAt < MIN_RECORDING_MS) return;
               const status = await recording.getStatusAsync();
+              if (isStoppingVoiceRef.current) return;
               if (status.isRecording && status.metering !== undefined) {
                 if (status.metering < NATIVE_SILENCE_DB) {
                   if (!nativeSilenceStart) nativeSilenceStart = Date.now();
@@ -594,7 +597,7 @@ export function HomeScreen({ navigation }: any) {
           }, 200);
 
           silenceTimerRef.current = setTimeout(() => {
-            if (voiceRecorderRef.current) {
+            if (voiceRecorderRef.current && !isStoppingVoiceRef.current) {
               stopVoiceRecording();
             }
           }, 15000);
