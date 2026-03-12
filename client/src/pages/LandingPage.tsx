@@ -1,8 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import logoDark from "@assets/nordnav_one_replit_dark_1773327277605.png";
-import logoLight from "@assets/nordnav_one_replit_light_1773327277606.png";
+import logoDark from "@assets/nordnav_one_dark_clean.png";
+import logoLight from "@assets/nordnav_one_light_clean.png";
 import { 
   Truck, 
   Clock, 

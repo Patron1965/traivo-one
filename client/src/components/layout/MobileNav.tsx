@@ -11,8 +11,8 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import logoDark from "@assets/nordnav_one_replit_dark_1773327277605.png";
-import logoLight from "@assets/nordnav_one_replit_light_1773327277606.png";
+import logoDark from "@assets/nordnav_one_dark_clean.png";
+import logoLight from "@assets/nordnav_one_light_clean.png";
 import {
   Menu,
   Calendar,
