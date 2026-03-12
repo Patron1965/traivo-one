@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
@@ -240,106 +240,14 @@ function UserMenu() {
   );
 }
 
-function trimCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement {
-  const ctx = canvas.getContext("2d")!;
-  const { width, height } = canvas;
-  const imageData = ctx.getImageData(0, 0, width, height);
-  const d = imageData.data;
-  let top = height, left = width, right = 0, bottom = 0;
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      if (d[(y * width + x) * 4 + 3] > 10) {
-        if (y < top) top = y;
-        if (y > bottom) bottom = y;
-        if (x < left) left = x;
-        if (x > right) right = x;
-      }
-    }
-  }
-  if (top > bottom || left > right) return canvas;
-  const pad = 4;
-  const tl = Math.max(0, left - pad);
-  const tt = Math.max(0, top - pad);
-  const tw = Math.min(width - tl, right - left + 1 + pad * 2);
-  const th = Math.min(height - tt, bottom - top + 1 + pad * 2);
-  const trimmed = document.createElement("canvas");
-  trimmed.width = tw;
-  trimmed.height = th;
-  trimmed.getContext("2d")!.drawImage(canvas, tl, tt, tw, th, 0, 0, tw, th);
-  return trimmed;
-}
-
-function TransparentLogo({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  const [lightSrc, setLightSrc] = useState<string | null>(null);
-  const [darkSrc, setDarkSrc] = useState<string | null>(null);
-
-  useEffect(() => {
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(img, 0, 0);
-      const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
-
-      function removeWhiteBg(data: Uint8ClampedArray) {
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i], g = data[i + 1], b = data[i + 2];
-          const brightness = (r + g + b) / 3;
-          const saturation = Math.max(r, g, b) - Math.min(r, g, b);
-          if (brightness > 180 && saturation < 30) {
-            data[i + 3] = 0;
-          } else if (brightness > 150 && saturation < 40) {
-            data[i + 3] = Math.round(255 * (1 - (brightness - 150) / 50));
-          }
-        }
-      }
-
-      const lightCanvas = document.createElement("canvas");
-      lightCanvas.width = img.width;
-      lightCanvas.height = img.height;
-      const lctx = lightCanvas.getContext("2d")!;
-      const lightData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
-      removeWhiteBg(lightData.data);
-      lctx.putImageData(lightData, 0, 0);
-      setLightSrc(trimCanvas(lightCanvas).toDataURL("image/png"));
-
-      const darkCanvas = document.createElement("canvas");
-      darkCanvas.width = img.width;
-      darkCanvas.height = img.height;
-      const dctx = darkCanvas.getContext("2d")!;
-      const darkData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
-      const dd = darkData.data;
-      removeWhiteBg(dd);
-      for (let i = 0; i < dd.length; i += 4) {
-        if (dd[i + 3] > 0) {
-          dd[i] = Math.min(255, 255 - (255 - dd[i]) * 0.3);
-          dd[i + 1] = Math.min(255, 255 - (255 - dd[i + 1]) * 0.3);
-          dd[i + 2] = Math.min(255, 255 - (255 - dd[i + 2]) * 0.3);
-        }
-      }
-      dctx.putImageData(darkData, 0, 0);
-      setDarkSrc(trimCanvas(darkCanvas).toDataURL("image/png"));
-    };
-    img.src = src;
-  }, [src]);
-
+function LogoImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
   return (
-    <>
-      <img
-        src={lightSrc || src}
-        alt={alt}
-        className={`${className} dark:hidden`}
-        data-testid="img-tenant-logo"
-      />
-      <img
-        src={darkSrc || src}
-        alt={alt}
-        className={`${className} hidden dark:block`}
-        data-testid="img-tenant-logo-dark"
-      />
-    </>
+    <img
+      src={src}
+      alt={alt}
+      className={`${className} dark:invert dark:hue-rotate-180`}
+      data-testid="img-tenant-logo"
+    />
   );
 }
 
@@ -349,7 +257,7 @@ function TenantLogo() {
   return (
     <Link href="/">
       <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5">
-        <TransparentLogo
+        <LogoImage
           src={logoIconUrl || nordfieldLogo}
           alt={companyName}
           className="h-14 w-auto object-contain"
