@@ -3988,23 +3988,22 @@ export async function registerRoutes(
       const { profileId, applyProfile } = req.body;
       const profile = await storage.getResourceProfile(profileId);
       if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+      const resource = await storage.getResource(resourceId);
+      if (!resource || resource.tenantId !== tenantId) return res.status(404).json({ error: "Resource not found" });
       const data = insertResourceProfileAssignmentSchema.parse({ tenantId, resourceId, profileId });
       const assignment = await storage.assignResourceProfile(data);
-      if (applyProfile !== false && profile) {
-        const resource = await storage.getResource(resourceId);
-        if (resource && resource.tenantId === tenantId) {
-          const updates: Record<string, any> = {};
-          if (profile.executionCodes && profile.executionCodes.length > 0) {
-            const existingCodes = resource.executionCodes || [];
-            const merged = [...new Set([...existingCodes, ...profile.executionCodes])];
-            updates.executionCodes = merged;
-          }
-          if (profile.defaultCostCenter) updates.costCenter = profile.defaultCostCenter;
-          if (profile.projectCode) updates.projectCode = profile.projectCode;
-          if (profile.serviceArea && profile.serviceArea.length > 0) updates.serviceArea = profile.serviceArea;
-          if (Object.keys(updates).length > 0) {
-            await storage.updateResource(resourceId, updates);
-          }
+      if (applyProfile !== false && profile && resource) {
+        const updates: Record<string, any> = {};
+        if (profile.executionCodes && profile.executionCodes.length > 0) {
+          const existingCodes = resource.executionCodes || [];
+          const merged = [...new Set([...existingCodes, ...profile.executionCodes])];
+          updates.executionCodes = merged;
+        }
+        if (profile.defaultCostCenter) updates.costCenter = profile.defaultCostCenter;
+        if (profile.projectCode) updates.projectCode = profile.projectCode;
+        if (profile.serviceArea && profile.serviceArea.length > 0) updates.serviceArea = profile.serviceArea;
+        if (Object.keys(updates).length > 0) {
+          await storage.updateResource(resourceId, updates);
         }
       }
       res.status(201).json(assignment);
