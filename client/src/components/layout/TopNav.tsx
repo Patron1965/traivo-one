@@ -315,7 +315,7 @@ function TenantLogo() {
         <TransparentLogo
           src={logoIconUrl || nordfieldLogo}
           alt={companyName}
-          className="h-[52px] object-contain"
+          className="h-[78px] object-contain"
         />
       </div>
     </Link>
