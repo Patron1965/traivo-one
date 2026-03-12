@@ -240,6 +240,35 @@ function UserMenu() {
   );
 }
 
+function trimCanvas(canvas: HTMLCanvasElement): HTMLCanvasElement {
+  const ctx = canvas.getContext("2d")!;
+  const { width, height } = canvas;
+  const imageData = ctx.getImageData(0, 0, width, height);
+  const d = imageData.data;
+  let top = height, left = width, right = 0, bottom = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (d[(y * width + x) * 4 + 3] > 10) {
+        if (y < top) top = y;
+        if (y > bottom) bottom = y;
+        if (x < left) left = x;
+        if (x > right) right = x;
+      }
+    }
+  }
+  if (top > bottom || left > right) return canvas;
+  const pad = 4;
+  const tl = Math.max(0, left - pad);
+  const tt = Math.max(0, top - pad);
+  const tw = Math.min(width - tl, right - left + 1 + pad * 2);
+  const th = Math.min(height - tt, bottom - top + 1 + pad * 2);
+  const trimmed = document.createElement("canvas");
+  trimmed.width = tw;
+  trimmed.height = th;
+  trimmed.getContext("2d")!.drawImage(canvas, tl, tt, tw, th, 0, 0, tw, th);
+  return trimmed;
+}
+
 function TransparentLogo({ src, alt, className }: { src: string; alt: string; className?: string }) {
   const [lightSrc, setLightSrc] = useState<string | null>(null);
   const [darkSrc, setDarkSrc] = useState<string | null>(null);
@@ -255,6 +284,10 @@ function TransparentLogo({ src, alt, className }: { src: string; alt: string; cl
       ctx.drawImage(img, 0, 0);
       const original = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
+      const lightCanvas = document.createElement("canvas");
+      lightCanvas.width = img.width;
+      lightCanvas.height = img.height;
+      const lctx = lightCanvas.getContext("2d")!;
       const lightData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
       const ld = lightData.data;
       for (let i = 0; i < ld.length; i += 4) {
@@ -265,9 +298,13 @@ function TransparentLogo({ src, alt, className }: { src: string; alt: string; cl
           ld[i + 3] = Math.round(255 * (1 - (r + g + b - 600) / (765 - 600)));
         }
       }
-      ctx.putImageData(lightData, 0, 0);
-      setLightSrc(canvas.toDataURL("image/png"));
+      lctx.putImageData(lightData, 0, 0);
+      setLightSrc(trimCanvas(lightCanvas).toDataURL("image/png"));
 
+      const darkCanvas = document.createElement("canvas");
+      darkCanvas.width = img.width;
+      darkCanvas.height = img.height;
+      const dctx = darkCanvas.getContext("2d")!;
       const darkData = new ImageData(new Uint8ClampedArray(original.data), canvas.width, canvas.height);
       const dd = darkData.data;
       for (let i = 0; i < dd.length; i += 4) {
@@ -282,8 +319,8 @@ function TransparentLogo({ src, alt, className }: { src: string; alt: string; cl
           dd[i + 2] = Math.min(255, b + 140);
         }
       }
-      ctx.putImageData(darkData, 0, 0);
-      setDarkSrc(canvas.toDataURL("image/png"));
+      dctx.putImageData(darkData, 0, 0);
+      setDarkSrc(trimCanvas(darkCanvas).toDataURL("image/png"));
     };
     img.src = src;
   }, [src]);
