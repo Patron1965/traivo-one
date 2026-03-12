@@ -35,6 +35,15 @@ import {
   UserPlus,
   Wrench,
   Palette,
+  Truck,
+  HardHat,
+  Hammer,
+  Cog,
+  MapPin,
+  Recycle,
+  Snowflake,
+  Droplets,
+  type LucideIcon,
 } from "lucide-react";
 
 const EXECUTION_CODE_OPTIONS = [
@@ -487,6 +496,17 @@ function ResourcesExecutionTab() {
     queryKey: ["/api/resources"],
   });
 
+  const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
+  const { data: rpAssignments = [] } = useQuery<ResourceProfileAssignment[]>({
+    queryKey: ["/api/resource-profiles", "all-assignments-res"],
+    queryFn: async () => {
+      if (!profiles.length) return [];
+      const results = await Promise.all(profiles.map(p => fetch(`/api/resource-profiles/${p.id}/resources`).then(r => r.json())));
+      return results.flat();
+    },
+    enabled: profiles.length > 0,
+  });
+
   const [editingCodes, setEditingCodes] = useState<Record<string, string[]>>({});
 
   const updateResourceMutation = useMutation({
@@ -603,7 +623,15 @@ function ResourcesExecutionTab() {
                       </div>
                       <div>
                         <p className="font-medium">{resource.name}</p>
-                        <p className="text-sm text-muted-foreground">{resource.phone || resource.email || resource.resourceType}</p>
+                        <div className="flex items-center gap-1">
+                          <p className="text-sm text-muted-foreground">{resource.phone || resource.email || resource.resourceType}</p>
+                          {rpAssignments.filter(a => a.resourceId === resource.id).map(a => {
+                            const prof = profiles.find(p => p.id === a.profileId);
+                            if (!prof) return null;
+                            const PIcon = getProfileIcon(prof.icon || "wrench");
+                            return <Badge key={a.id} variant="outline" className="text-[10px] px-1 py-0 h-4 gap-0.5" style={{ borderColor: prof.color || undefined }} data-testid={`badge-resource-profile-${resource.id}-${prof.id}`}><PIcon className="h-2.5 w-2.5" style={{ color: prof.color || "#3B82F6" }} />{prof.name}</Badge>;
+                          })}
+                        </div>
                       </div>
                     </div>
                     {changed && (
@@ -671,6 +699,23 @@ const PROFILE_COLORS = [
   { value: "#6B7C8C", label: "Grå" },
 ];
 
+const PROFILE_ICON_OPTIONS: { value: string; label: string; Icon: LucideIcon }[] = [
+  { value: "wrench", label: "Verktyg", Icon: Wrench },
+  { value: "truck", label: "Lastbil", Icon: Truck },
+  { value: "hard-hat", label: "Hjälm", Icon: HardHat },
+  { value: "hammer", label: "Hammare", Icon: Hammer },
+  { value: "cog", label: "Kugghjul", Icon: Cog },
+  { value: "map-pin", label: "Plats", Icon: MapPin },
+  { value: "recycle", label: "Återvinning", Icon: Recycle },
+  { value: "snowflake", label: "Snö", Icon: Snowflake },
+  { value: "droplets", label: "Vatten", Icon: Droplets },
+  { value: "zap", label: "Blixt", Icon: Zap },
+];
+
+const getProfileIcon = (iconName: string): LucideIcon => {
+  return PROFILE_ICON_OPTIONS.find(o => o.value === iconName)?.Icon || Wrench;
+};
+
 const EQUIPMENT_TYPE_OPTIONS = [
   { value: "baklastarebil", label: "Baklastare" },
   { value: "frontlastarebil", label: "Frontlastare" },
@@ -696,6 +741,7 @@ function ResourceProfilesTab() {
     projectCode: "",
     serviceArea: [] as string[],
     color: "#3B82F6",
+    icon: "wrench",
   });
   const [serviceAreaInput, setServiceAreaInput] = useState("");
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
@@ -784,7 +830,7 @@ function ResourceProfilesTab() {
   function closeDialog() {
     setDialogOpen(false);
     setEditingProfile(null);
-    setFormData({ name: "", description: "", executionCodes: [], equipmentTypes: [], defaultCostCenter: "", projectCode: "", serviceArea: [], color: "#3B82F6" });
+    setFormData({ name: "", description: "", executionCodes: [], equipmentTypes: [], defaultCostCenter: "", projectCode: "", serviceArea: [], color: "#3B82F6", icon: "wrench" });
     setServiceAreaInput("");
   }
 
@@ -799,6 +845,7 @@ function ResourceProfilesTab() {
       projectCode: profile.projectCode || "",
       serviceArea: profile.serviceArea || [],
       color: profile.color || "#3B82F6",
+      icon: profile.icon || "wrench",
     });
     setDialogOpen(true);
   }
@@ -896,6 +943,19 @@ function ResourceProfilesTab() {
                   </div>
                 </div>
                 <div className="space-y-2">
+                  <Label>Ikon</Label>
+                  <div className="flex gap-2 flex-wrap">
+                    {PROFILE_ICON_OPTIONS.map(opt => {
+                      const IconComp = opt.Icon;
+                      return (
+                        <button key={opt.value} data-testid={`button-icon-${opt.value}`} className={`w-9 h-9 rounded-md border-2 flex items-center justify-center transition-all ${formData.icon === opt.value ? "border-foreground bg-accent" : "border-muted hover:border-muted-foreground"}`} onClick={() => setFormData(p => ({ ...p, icon: opt.value }))} title={opt.label}>
+                          <IconComp className="h-4 w-4" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+                <div className="space-y-2">
                   <Label>Beskrivning</Label>
                   <Textarea data-testid="input-profile-description" value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} placeholder="Beskriv profilens syfte..." rows={2} />
                 </div>
@@ -982,7 +1042,7 @@ function ResourceProfilesTab() {
                     <CardContent className="pt-4">
                       <div className="flex items-start justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-4 h-4 rounded-full" style={{ backgroundColor: profile.color || "#3B82F6" }} />
+                          {(() => { const ProfileIcon = getProfileIcon(profile.icon || "wrench"); return <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: (profile.color || "#3B82F6") + "20" }}><ProfileIcon className="h-4 w-4" style={{ color: profile.color || "#3B82F6" }} /></div>; })()}
                           <div>
                             <h3 className="font-semibold text-base" data-testid={`text-profile-name-${profile.id}`}>{profile.name}</h3>
                             {profile.description && <p className="text-sm text-muted-foreground">{profile.description}</p>}

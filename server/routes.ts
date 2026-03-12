@@ -3984,12 +3984,27 @@ export async function registerRoutes(
   app.post("/api/resources/:id/profiles", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const data = insertResourceProfileAssignmentSchema.parse({
-        tenantId,
-        resourceId: req.params.id,
-        profileId: req.body.profileId,
-      });
+      const resourceId = req.params.id;
+      const { profileId, applyProfile } = req.body;
+      const profile = await storage.getResourceProfile(profileId);
+      if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+      const data = insertResourceProfileAssignmentSchema.parse({ tenantId, resourceId, profileId });
       const assignment = await storage.assignResourceProfile(data);
+      if (applyProfile !== false && profile) {
+        const resource = await storage.getResource(resourceId);
+        if (resource && resource.tenantId === tenantId) {
+          const updates: Record<string, any> = {};
+          if (profile.executionCodes && profile.executionCodes.length > 0) {
+            const existingCodes = resource.executionCodes || [];
+            const merged = [...new Set([...existingCodes, ...profile.executionCodes])];
+            updates.executionCodes = merged;
+          }
+          if (profile.defaultCostCenter) updates.costCenter = profile.defaultCostCenter;
+          if (Object.keys(updates).length > 0) {
+            await storage.updateResource(resourceId, updates);
+          }
+        }
+      }
       res.status(201).json(assignment);
     } catch (error: any) {
       if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
