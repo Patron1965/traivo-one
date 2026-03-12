@@ -275,7 +275,6 @@ function TransparentLogo({ src, alt, className }: { src: string; alt: string; cl
 
   useEffect(() => {
     const img = new Image();
-    img.crossOrigin = "anonymous";
     img.onload = () => {
       const canvas = document.createElement("canvas");
       canvas.width = img.width;
@@ -352,7 +351,7 @@ function TenantLogo() {
         <TransparentLogo
           src={logoIconUrl || nordfieldLogo}
           alt={companyName}
-          className="h-12 w-auto object-contain"
+          className="h-14 w-auto object-contain"
         />
       </div>
     </Link>
