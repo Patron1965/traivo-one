@@ -9,6 +9,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { useGpsTracking } from '../hooks/useGpsTracking';
+import { useTeam } from '../hooks/useTeam';
 import { useAuth } from '../context/AuthContext';
 import { useOfflineSync } from '../hooks/useOfflineSync';
 import type { Order } from '../types';
@@ -132,6 +133,7 @@ export function MapScreen({ navigation }: any) {
   const [cachedRouteData, setCachedRouteData] = useState<RouteData | null>(null);
   const [cachedOrders, setCachedOrders] = useState<Order[] | null>(null);
   const { currentPosition } = useGpsTracking();
+  const { partner } = useTeam();
   const { startPosition } = useAuth();
   const { cacheRouteData, getCachedRouteData, cacheOrderData, getCachedOrderData } = useOfflineSync();
 
@@ -439,6 +441,20 @@ export function MapScreen({ navigation }: any) {
             onDetailPress={() => navigation.navigate('OrderDetail', { orderId: order.id })}
           />
         ))}
+
+        {partner && partner.latitude && partner.longitude && Marker ? (
+          <Marker
+            coordinate={{ latitude: partner.latitude, longitude: partner.longitude }}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <View style={styles.partnerMarkerContainer}>
+              <View style={styles.partnerMarkerCircle}>
+                <Feather name="user" size={14} color="#fff" />
+              </View>
+              <Text style={styles.partnerMarkerLabel}>{partner.name.split(' ')[0]}</Text>
+            </View>
+          </Marker>
+        ) : null}
       </MapView>
 
       {usingCachedData ? (
@@ -613,6 +629,35 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontFamily: 'Inter_700Bold',
     color: '#27AE60',
+    marginTop: 2,
+    backgroundColor: 'rgba(255,255,255,0.92)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 3,
+    overflow: 'hidden',
+  },
+  partnerMarkerContainer: {
+    alignItems: 'center',
+  },
+  partnerMarkerCircle: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: Colors.secondary,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  partnerMarkerLabel: {
+    fontSize: 9,
+    fontFamily: 'Inter_700Bold',
+    color: Colors.secondary,
     marginTop: 2,
     backgroundColor: 'rgba(255,255,255,0.92)',
     paddingHorizontal: 4,

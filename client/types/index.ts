@@ -280,6 +280,35 @@ export interface ResourceProfileAssignment {
   isPrimary?: boolean;
 }
 
+export type TeamMemberRole = 'member' | 'leader' | 'substitute';
+
+export interface TeamMember {
+  id: number | string;
+  resourceId: number | string;
+  name: string;
+  role: TeamMemberRole;
+  phone?: string;
+  email?: string;
+  validFrom?: string;
+  validTo?: string;
+  latitude?: number;
+  longitude?: number;
+  isOnline?: boolean;
+}
+
+export interface Team {
+  id: number | string;
+  name: string;
+  description?: string;
+  color: string;
+  leaderId: number | string;
+  clusterId?: number | string;
+  serviceArea?: string[];
+  projectCode?: string;
+  status: 'active' | 'inactive';
+  members: TeamMember[];
+}
+
 export interface WeatherData {
   temperature: number;
   feelsLike: number;

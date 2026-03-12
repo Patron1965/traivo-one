@@ -16,6 +16,7 @@ import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../constants/t
 import { getApiUrl, apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
+import { useTeam } from '../hooks/useTeam';
 import { useOfflinePendingCount } from '../hooks/useOfflineSync';
 import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
 
@@ -137,6 +138,7 @@ export function HomeScreen({ navigation }: any) {
   });
 
   const { currentPosition } = useGpsTracking();
+  const { partner } = useTeam();
   const pendingCount = useOfflinePendingCount();
   const syncBadgeOpacity = useRef(new Animated.Value(0)).current;
 
@@ -893,6 +895,27 @@ export function HomeScreen({ navigation }: any) {
         </Card>
       ) : null}
 
+      {partner ? (
+        <Pressable
+          style={styles.teamBanner}
+          onPress={() => partner.phone ? Linking.openURL(`tel:${partner.phone}`) : undefined}
+          testID="banner-team-partner"
+        >
+          <View style={styles.teamBannerLeft}>
+            <View style={[styles.teamBannerDot, { backgroundColor: partner.isOnline ? Colors.success : Colors.textMuted }]} />
+            <View>
+              <ThemedText variant="label" color={Colors.secondary}>Teampartner</ThemedText>
+              <ThemedText variant="body" color={Colors.text}>{partner.name}</ThemedText>
+            </View>
+          </View>
+          {partner.phone ? (
+            <View style={styles.teamBannerCall}>
+              <Feather name="phone" size={16} color={Colors.primary} />
+            </View>
+          ) : null}
+        </Pressable>
+      ) : null}
+
       {breakSuggestion && !breakDismissed ? (
         <Card style={styles.breakBanner}>
           <View style={styles.breakBannerContent} testID="banner-break-suggestion">
@@ -1526,6 +1549,36 @@ const styles = StyleSheet.create({
   },
   syncBadgeText: {
     fontFamily: 'Inter_500Medium',
+  },
+  teamBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: Colors.secondary + '12',
+    borderRadius: BorderRadius.lg,
+    paddingVertical: Spacing.md,
+    paddingHorizontal: Spacing.lg,
+    marginBottom: Spacing.md,
+    borderWidth: 1,
+    borderColor: Colors.secondary + '30',
+  },
+  teamBannerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  teamBannerDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  teamBannerCall: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primaryLight + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   breakBanner: {
     backgroundColor: '#E8F8F5',

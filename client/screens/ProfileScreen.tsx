@@ -7,11 +7,12 @@ import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useResourceProfiles } from '../hooks/useResourceProfiles';
+import { useTeam } from '../hooks/useTeam';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import type { ComponentProps } from 'react';
-import type { Order, ResourceProfile } from '../types';
+import type { Order, ResourceProfile, TeamMember } from '../types';
 
 type FeatherIconName = ComponentProps<typeof Feather>['name'];
 
@@ -45,6 +46,7 @@ export function ProfileScreen() {
   const tabBarHeight = useBottomTabBarHeight();
   const { user, logout, isOnline, setIsOnline } = useAuth();
   const { profiles, isLoading: profilesLoading } = useResourceProfiles();
+  const { team, partner, isLeader } = useTeam();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const { data: orders } = useQuery<Order[]>({
@@ -214,6 +216,66 @@ export function ProfileScreen() {
               ) : null}
             </View>
           ))}
+        </Card>
+      ) : null}
+
+      {team ? (
+        <Card style={styles.profilesCard}>
+          <View style={styles.profilesHeader}>
+            <Feather name="users" size={16} color={Colors.secondary} />
+            <ThemedText variant="label" style={styles.profilesTitle}>Mitt team</ThemedText>
+          </View>
+          <View style={styles.teamHeaderRow}>
+            <View style={[styles.teamColorDot, { backgroundColor: team.color }]} />
+            <View style={styles.teamHeaderInfo}>
+              <ThemedText variant="body" style={styles.profileName}>{team.name}</ThemedText>
+              {team.description ? (
+                <ThemedText variant="caption" color={Colors.textSecondary}>{team.description}</ThemedText>
+              ) : null}
+            </View>
+            {isLeader ? (
+              <View style={styles.teamLeaderBadge}>
+                <Feather name="star" size={10} color={Colors.warning} />
+                <ThemedText variant="caption" color={Colors.warning}>Ledare</ThemedText>
+              </View>
+            ) : null}
+          </View>
+          {team.members.map((member: TeamMember, idx: number) => (
+            <View key={String(member.id)} style={[styles.teamMemberRow, idx > 0 ? styles.profileItemBorder : null]}>
+              <View style={styles.teamMemberInfo}>
+                <View style={styles.teamMemberNameRow}>
+                  <View style={[styles.teamOnlineDot, { backgroundColor: member.isOnline ? Colors.success : Colors.textMuted }]} />
+                  <ThemedText variant="body">{member.name}</ThemedText>
+                  {member.role === 'leader' ? (
+                    <Feather name="star" size={12} color={Colors.warning} style={styles.teamStarIcon} />
+                  ) : member.role === 'substitute' ? (
+                    <View style={styles.teamSubBadge}>
+                      <ThemedText variant="caption" color={Colors.info}>Vikarie</ThemedText>
+                    </View>
+                  ) : null}
+                </View>
+                {member.phone ? (
+                  <ThemedText variant="caption" color={Colors.textSecondary}>{member.phone}</ThemedText>
+                ) : null}
+              </View>
+              {member.phone ? (
+                <Pressable
+                  onPress={() => Linking.openURL(`tel:${member.phone}`)}
+                  hitSlop={8}
+                  style={styles.teamCallButton}
+                >
+                  <Feather name="phone" size={16} color={Colors.primary} />
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+          {team.projectCode ? (
+            <View style={styles.teamFooter}>
+              <ThemedText variant="caption" color={Colors.textSecondary}>
+                Projektkod: {team.projectCode}
+              </ThemedText>
+            </View>
+          ) : null}
         </Card>
       ) : null}
 
@@ -479,6 +541,73 @@ const styles = StyleSheet.create({
   },
   tagText: {
     fontSize: 11,
+  },
+  teamHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    marginBottom: Spacing.sm,
+  },
+  teamColorDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+  },
+  teamHeaderInfo: {
+    flex: 1,
+  },
+  teamLeaderBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: Colors.warning + '20',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  teamMemberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.sm,
+  },
+  teamMemberInfo: {
+    flex: 1,
+    gap: 2,
+  },
+  teamMemberNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  teamOnlineDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+  },
+  teamStarIcon: {
+    marginLeft: 2,
+  },
+  teamSubBadge: {
+    backgroundColor: Colors.infoLight,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    marginLeft: 4,
+  },
+  teamCallButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.primaryLight + '15',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  teamFooter: {
+    marginTop: Spacing.sm,
+    paddingTop: Spacing.sm,
+    borderTopWidth: 1,
+    borderTopColor: Colors.borderLight,
   },
   menuCard: {
     width: '100%',

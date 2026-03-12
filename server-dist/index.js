@@ -233,6 +233,41 @@ var MOCK_PROFILES = [
     isPrimary: false
   }
 ];
+var MOCK_TEAM = {
+  id: "team-1",
+  name: "Team G\xF6teborg V\xE4st",
+  description: "Kranbilsteam f\xF6r v\xE4stra G\xF6teborg",
+  color: "#4A9B9B",
+  leaderId: MOCK_RESOURCE.id,
+  clusterId: "cluster-gw",
+  serviceArea: ["41101", "41102", "41103"],
+  projectCode: "PROJ-2026-A",
+  status: "active",
+  members: [
+    {
+      id: "tm-1",
+      resourceId: MOCK_RESOURCE.id,
+      name: MOCK_RESOURCE.name,
+      role: "leader",
+      phone: MOCK_RESOURCE.phone,
+      email: MOCK_RESOURCE.email,
+      isOnline: true,
+      latitude: 57.7089,
+      longitude: 11.9746
+    },
+    {
+      id: "tm-2",
+      resourceId: 202,
+      name: "Anna Johansson",
+      role: "member",
+      phone: "070-222 33 44",
+      email: "anna.johansson@kinab.se",
+      isOnline: true,
+      latitude: 57.7055,
+      longitude: 11.969
+    }
+  ]
+};
 var MOCK_NOTIFICATIONS = [
   { id: "n1", type: "schedule_change", title: "Rutt\xE4ndring", message: "Order WO-2026-0453 har flyttats till kl 10:00", isRead: false, createdAt: new Date(Date.now() - 36e5).toISOString(), orderId: "3" },
   { id: "n2", type: "urgent", title: "Br\xE5dskande uppdrag", message: "Nytt h\xE4mtuppdrag tillagt: G\xF6teborgs Hamn AB", isRead: false, createdAt: new Date(Date.now() - 72e5).toISOString(), orderId: "5" },
@@ -782,6 +817,45 @@ router.get("/my-profiles", async (req, res) => {
     res.status(503).json({
       success: false,
       error: "Kunde inte h\xE4mta profiler. F\xF6rs\xF6k igen."
+    });
+  }
+});
+router.get("/my-team", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.includes(MOCK_TOKEN)) {
+      res.json({ success: true, team: MOCK_TEAM });
+    } else {
+      res.status(401).json({ success: false, error: "Ej autentiserad" });
+    }
+    return;
+  }
+  try {
+    const meResponse = await kinabFetch("/api/mobile/me", {
+      method: "GET",
+      headers: getAuthHeader(req)
+    });
+    const resourceId = meResponse.data?.resource?.id || meResponse.data?.id;
+    if (!resourceId) {
+      res.status(401).json({ success: false, error: "Kunde inte identifiera resursen" });
+      return;
+    }
+    const { status, data } = await kinabFetch(`/api/teams?memberId=${resourceId}&status=active`, {
+      method: "GET",
+      headers: getAuthHeader(req)
+    });
+    if (status === 200) {
+      const teams = Array.isArray(data) ? data : data.teams || data.data || [];
+      const activeTeam = teams.find((t) => t.status === "active") || teams[0] || null;
+      res.json({ success: true, team: activeTeam });
+    } else {
+      res.json({ success: true, team: null });
+    }
+  } catch (error) {
+    console.error("Team proxy error:", error.message);
+    res.status(503).json({
+      success: false,
+      error: "Kunde inte h\xE4mta teaminfo. F\xF6rs\xF6k igen."
     });
   }
 });

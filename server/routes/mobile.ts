@@ -93,6 +93,42 @@ const MOCK_PROFILES = [
   },
 ];
 
+const MOCK_TEAM = {
+  id: 'team-1',
+  name: 'Team Göteborg Väst',
+  description: 'Kranbilsteam för västra Göteborg',
+  color: '#4A9B9B',
+  leaderId: MOCK_RESOURCE.id,
+  clusterId: 'cluster-gw',
+  serviceArea: ['41101', '41102', '41103'],
+  projectCode: 'PROJ-2026-A',
+  status: 'active' as const,
+  members: [
+    {
+      id: 'tm-1',
+      resourceId: MOCK_RESOURCE.id,
+      name: MOCK_RESOURCE.name,
+      role: 'leader' as const,
+      phone: MOCK_RESOURCE.phone,
+      email: MOCK_RESOURCE.email,
+      isOnline: true,
+      latitude: 57.7089,
+      longitude: 11.9746,
+    },
+    {
+      id: 'tm-2',
+      resourceId: 202,
+      name: 'Anna Johansson',
+      role: 'member' as const,
+      phone: '070-222 33 44',
+      email: 'anna.johansson@kinab.se',
+      isOnline: true,
+      latitude: 57.7055,
+      longitude: 11.9690,
+    },
+  ],
+};
+
 const MOCK_NOTIFICATIONS: any[] = [
   { id: 'n1', type: 'schedule_change', title: 'Ruttändring', message: 'Order WO-2026-0453 har flyttats till kl 10:00', isRead: false, createdAt: new Date(Date.now() - 3600000).toISOString(), orderId: '3' },
   { id: 'n2', type: 'urgent', title: 'Brådskande uppdrag', message: 'Nytt hämtuppdrag tillagt: Göteborgs Hamn AB', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString(), orderId: '5' },
@@ -663,6 +699,49 @@ router.get('/my-profiles', async (req, res) => {
     res.status(503).json({
       success: false,
       error: 'Kunde inte hämta profiler. Försök igen.',
+    });
+  }
+});
+
+router.get('/my-team', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.includes(MOCK_TOKEN)) {
+      res.json({ success: true, team: MOCK_TEAM });
+    } else {
+      res.status(401).json({ success: false, error: 'Ej autentiserad' });
+    }
+    return;
+  }
+
+  try {
+    const meResponse = await kinabFetch('/api/mobile/me', {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+    const resourceId = meResponse.data?.resource?.id || meResponse.data?.id;
+    if (!resourceId) {
+      res.status(401).json({ success: false, error: 'Kunde inte identifiera resursen' });
+      return;
+    }
+
+    const { status, data } = await kinabFetch(`/api/teams?memberId=${resourceId}&status=active`, {
+      method: 'GET',
+      headers: getAuthHeader(req),
+    });
+
+    if (status === 200) {
+      const teams = Array.isArray(data) ? data : (data.teams || data.data || []);
+      const activeTeam = teams.find((t: any) => t.status === 'active') || teams[0] || null;
+      res.json({ success: true, team: activeTeam });
+    } else {
+      res.json({ success: true, team: null });
+    }
+  } catch (error: any) {
+    console.error('Team proxy error:', error.message);
+    res.status(503).json({
+      success: false,
+      error: 'Kunde inte hämta teaminfo. Försök igen.',
     });
   }
 });
