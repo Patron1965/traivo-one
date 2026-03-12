@@ -1,9 +1,10 @@
 import { memo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Send } from "lucide-react";
-import type { Resource } from "@shared/schema";
+import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 
 interface ResourceColumnProps {
   resource: Resource;
@@ -13,6 +14,22 @@ interface ResourceColumnProps {
 }
 
 export const ResourceColumn = memo(function ResourceColumn({ resource, summary, onResourceClick, onSendSchedule }: ResourceColumnProps) {
+  const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
+  const { data: assignments = [] } = useQuery<ResourceProfileAssignment[]>({
+    queryKey: ["/api/resource-profiles", "all-assignments"],
+    queryFn: async () => {
+      if (!profiles.length) return [];
+      const results = await Promise.all(profiles.map(p => fetch(`/api/resource-profiles/${p.id}/resources`).then(r => r.json())));
+      return results.flat();
+    },
+    enabled: profiles.length > 0,
+  });
+
+  const resourceProfiles = assignments
+    .filter(a => a.resourceId === resource.id)
+    .map(a => profiles.find(p => p.id === a.profileId))
+    .filter(Boolean) as ResourceProfile[];
+
   return (
     <div
       className="p-2 border-r bg-muted/30 cursor-pointer hover:bg-muted/60 transition-colors group flex flex-col justify-between"
@@ -23,7 +40,21 @@ export const ResourceColumn = memo(function ResourceColumn({ resource, summary, 
         <Avatar className="h-6 w-6 shrink-0">
           <AvatarFallback className="text-[10px]">{resource.initials || resource.name.split(" ").map(n => n[0]).join("")}</AvatarFallback>
         </Avatar>
-        <span className="text-xs font-medium truncate">{resource.name}</span>
+        <div className="min-w-0">
+          <span className="text-xs font-medium truncate block">{resource.name}</span>
+          {resourceProfiles.length > 0 && (
+            <div className="flex gap-0.5 mt-0.5">
+              {resourceProfiles.map(p => (
+                <Tooltip key={p.id}>
+                  <TooltipTrigger asChild>
+                    <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.color || "#3B82F6" }} data-testid={`profile-dot-${resource.id}-${p.id}`} />
+                  </TooltipTrigger>
+                  <TooltipContent>{p.name}</TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
       {summary && (
         <div className="mt-1">

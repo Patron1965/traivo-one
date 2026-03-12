@@ -4000,6 +4000,8 @@ export async function registerRoutes(
             updates.executionCodes = merged;
           }
           if (profile.defaultCostCenter) updates.costCenter = profile.defaultCostCenter;
+          if (profile.projectCode) updates.projectCode = profile.projectCode;
+          if (profile.serviceArea && profile.serviceArea.length > 0) updates.serviceArea = profile.serviceArea;
           if (Object.keys(updates).length > 0) {
             await storage.updateResource(resourceId, updates);
           }
