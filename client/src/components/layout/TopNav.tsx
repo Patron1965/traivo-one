@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
-import nordfieldLogo from "@assets/nordnav_one_logo_final_upward_1773311964126.png";
 import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
@@ -240,28 +239,23 @@ function UserMenu() {
   );
 }
 
-function LogoImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
-  return (
-    <img
-      src={src}
-      alt={alt}
-      className={`${className} dark:invert dark:hue-rotate-180`}
-      data-testid="img-tenant-logo"
-    />
-  );
-}
-
 function TenantLogo() {
-  const { logoIconUrl, companyName } = useTenantBranding();
-
   return (
     <Link href="/">
-      <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5">
-        <LogoImage
-          src={logoIconUrl || nordfieldLogo}
-          alt={companyName}
-          className="h-14 w-auto object-contain"
-        />
+      <div className="flex items-center gap-2 cursor-pointer hover-elevate rounded-md px-2 py-1" data-testid="link-home-logo">
+        <svg viewBox="0 0 32 32" className="h-8 w-8 flex-shrink-0" aria-hidden="true">
+          <defs>
+            <linearGradient id="logo-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#1B4B6B" />
+              <stop offset="100%" stopColor="#4A9B9B" />
+            </linearGradient>
+          </defs>
+          <path d="M16 2 L28 26 H20 L16 18 L12 26 H4 Z" fill="url(#logo-grad)" />
+          <path d="M16 8 L22 22 H18 L16 18 L14 22 H10 Z" fill="#7DBFB0" opacity="0.5" />
+        </svg>
+        <span className="text-lg font-bold tracking-tight text-foreground whitespace-nowrap hidden sm:inline">
+          Nordnav One
+        </span>
       </div>
     </Link>
   );
