@@ -4499,6 +4499,15 @@ export async function registerRoutes(
   app.post("/api/teams", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
+      if (req.body.profileIds && Array.isArray(req.body.profileIds) && req.body.profileIds.length > 0) {
+        const tenantProfiles = await storage.getResourceProfiles(tenantId);
+        const tenantProfileIds = new Set(tenantProfiles.map(p => p.id));
+        for (const pid of req.body.profileIds) {
+          if (!tenantProfileIds.has(pid)) {
+            return res.status(400).json({ error: `Profile ${pid} does not belong to this tenant` });
+          }
+        }
+      }
       const data = insertTeamSchema.parse({ ...req.body, tenantId });
       const team = await storage.createTeam(data);
       res.status(201).json(team);
@@ -4516,6 +4525,15 @@ export async function registerRoutes(
       const existing = await storage.getTeam(req.params.id);
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Team not found" });
+      }
+      if (req.body.profileIds && Array.isArray(req.body.profileIds) && req.body.profileIds.length > 0) {
+        const tenantProfiles = await storage.getResourceProfiles(tenantId);
+        const tenantProfileIds = new Set(tenantProfiles.map(p => p.id));
+        for (const pid of req.body.profileIds) {
+          if (!tenantProfileIds.has(pid)) {
+            return res.status(400).json({ error: `Profile ${pid} does not belong to this tenant` });
+          }
+        }
       }
       const updateSchema = insertTeamSchema.partial().omit({ tenantId: true });
       const parseResult = updateSchema.safeParse(req.body);
@@ -11914,6 +11932,22 @@ setInterval(loadRoutes, 60000);
           }
           for (const code of profile.executionCodes) {
             resourceProfileCodes.get(assignment.resourceId)!.add(code);
+          }
+        }
+      }
+      for (const tm of allTeamMembers) {
+        const team = allTeams.find(t => t.id === tm.teamId);
+        if (team?.profileIds && team.profileIds.length > 0) {
+          for (const profileId of team.profileIds) {
+            const profile = allProfiles.find(p => p.id === profileId && p.status === "active");
+            if (profile?.executionCodes && profile.executionCodes.length > 0) {
+              if (!resourceProfileCodes.has(tm.resourceId)) {
+                resourceProfileCodes.set(tm.resourceId, new Set());
+              }
+              for (const code of profile.executionCodes) {
+                resourceProfileCodes.get(tm.resourceId)!.add(code);
+              }
+            }
           }
         }
       }

@@ -745,6 +745,7 @@ export const teams = pgTable("teams", {
   projectCode: text("project_code"),
   color: text("color").default("#3B82F6"),
   status: text("status").default("active").notNull(),
+  profileIds: text("profile_ids").array().default([]),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 });

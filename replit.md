@@ -46,7 +46,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **API Cost Monitoring Dashboard:** Admin-only dashboard for real-time monitoring of external API costs.
 - **Reporting & KPI Dashboard:** Enhanced `/reporting` page with tabs for overview, productivity, completion, deviations, resources, areas, and customers, featuring Recharts diagrams.
 - **Execution Codes:** Many-to-many system mapping resource capabilities to task requirements.
-- **Resource Profiles (Utföranderoller):** Profile templates defining execution codes, equipment types, cost center, project code, and service areas. Profiles are assigned to resources and used in auto-planning capability matching. Admin UI in TenantConfigPage "Utföranderoller" tab. WeekPlanner resource filter includes profile-based quick filtering.
+- **Resource Profiles (Utföranderoller):** Profile templates defining execution codes, equipment types, cost center, project code, and service areas. Profiles are assigned to resources and used in auto-planning capability matching. Admin UI in TenantConfigPage "Utföranderoller" tab. WeekPlanner resource filter includes profile-based quick filtering. Teams can be linked to profiles via `teams.profileIds` — team members automatically inherit profile execution codes for auto-planning capability matching. Team profile assignment UI in UserManagementPage team dialog.
 - **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner.
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.

@@ -64,7 +64,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Resource, Team, TeamMember } from "@shared/schema";
+import type { Resource, Team, TeamMember, ResourceProfile } from "@shared/schema";
 
 interface UserData {
   id: string;
@@ -128,7 +128,7 @@ export default function UserManagementPage() {
   const [teamDialogOpen, setTeamDialogOpen] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [deleteTeamTarget, setDeleteTeamTarget] = useState<Team | null>(null);
-  const [teamForm, setTeamForm] = useState({ name: "", description: "", color: "#3B82F6" });
+  const [teamForm, setTeamForm] = useState({ name: "", description: "", color: "#3B82F6", profileIds: [] as string[] });
   const [addMemberTeamId, setAddMemberTeamId] = useState<string | null>(null);
   const [addMemberResourceId, setAddMemberResourceId] = useState("");
   const [addMemberRole, setAddMemberRole] = useState("medlem");
@@ -164,6 +164,10 @@ export default function UserManagementPage() {
 
   const { data: allTeamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["/api/team-members"],
+  });
+
+  const { data: profiles = [] } = useQuery<ResourceProfile[]>({
+    queryKey: ["/api/resource-profiles"],
   });
 
   const createMutation = useMutation({
@@ -307,7 +311,7 @@ export default function UserManagementPage() {
   const closeTeamDialog = () => {
     setTeamDialogOpen(false);
     setEditingTeam(null);
-    setTeamForm({ name: "", description: "", color: "#3B82F6" });
+    setTeamForm({ name: "", description: "", color: "#3B82F6", profileIds: [] });
   };
 
   const openCreate = () => {
@@ -331,13 +335,13 @@ export default function UserManagementPage() {
 
   const openCreateTeam = () => {
     setEditingTeam(null);
-    setTeamForm({ name: "", description: "", color: "#3B82F6" });
+    setTeamForm({ name: "", description: "", color: "#3B82F6", profileIds: [] });
     setTeamDialogOpen(true);
   };
 
   const openEditTeam = (team: Team) => {
     setEditingTeam(team);
-    setTeamForm({ name: team.name, description: team.description || "", color: team.color || "#3B82F6" });
+    setTeamForm({ name: team.name, description: team.description || "", color: team.color || "#3B82F6", profileIds: team.profileIds || [] });
     setTeamDialogOpen(true);
   };
 
@@ -844,6 +848,15 @@ export default function UserManagementPage() {
                               <div>
                                 <h3 className="font-semibold text-base">{team.name}</h3>
                                 {team.description && <p className="text-sm text-muted-foreground">{team.description}</p>}
+                                {(team.profileIds?.length ?? 0) > 0 && (
+                                  <div className="flex gap-1 mt-1">
+                                    {team.profileIds!.map(pid => {
+                                      const prof = profiles.find(p => p.id === pid);
+                                      if (!prof) return null;
+                                      return <Badge key={pid} variant="secondary" className="text-[10px] px-1.5 py-0 h-4 gap-0.5" data-testid={`badge-team-assigned-profile-${team.id}-${pid}`}><span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: prof.color || "#3B82F6" }} />{prof.name}</Badge>;
+                                    })}
+                                  </div>
+                                )}
                               </div>
                               <Badge variant="outline" className="text-xs">
                                 {members.length} {members.length === 1 ? "medlem" : "medlemmar"}
@@ -1048,6 +1061,32 @@ export default function UserManagementPage() {
                 <span className="text-sm text-muted-foreground">{teamForm.color}</span>
               </div>
             </div>
+            {profiles.length > 0 && (
+              <div className="space-y-2">
+                <Label>Utföranderoller</Label>
+                <p className="text-xs text-muted-foreground">Alla teammedlemmar ärver valda profilers kapacitet i autoplanering</p>
+                <div className="flex flex-wrap gap-2">
+                  {profiles.map(p => {
+                    const isActive = teamForm.profileIds.includes(p.id);
+                    return (
+                      <Badge
+                        key={p.id}
+                        variant={isActive ? "default" : "outline"}
+                        className={`cursor-pointer transition-colors gap-1 ${isActive ? "" : "opacity-50 hover:opacity-80"}`}
+                        onClick={() => setTeamForm(prev => ({
+                          ...prev,
+                          profileIds: isActive ? prev.profileIds.filter(id => id !== p.id) : [...prev.profileIds, p.id],
+                        }))}
+                        data-testid={`badge-team-profile-${p.id}`}
+                      >
+                        <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: p.color || "#3B82F6" }} />
+                        {p.name}
+                      </Badge>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={closeTeamDialog} data-testid="button-cancel-team">Avbryt</Button>
