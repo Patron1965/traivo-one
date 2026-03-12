@@ -185,7 +185,7 @@ export function ProfileScreen() {
             <View style={[styles.menuIcon, { backgroundColor: Colors.infoLight }]}>
               <Feather name="info" size={16} color={Colors.info} />
             </View>
-            <ThemedText variant="body">Om Nordfield</ThemedText>
+            <ThemedText variant="body">Om Nordnav Go</ThemedText>
           </View>
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
@@ -203,7 +203,7 @@ export function ProfileScreen() {
       </Pressable>
 
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-        Nordfield v1.0.0
+        Nordnav Go v1.0.0
       </ThemedText>
 
       <Modal

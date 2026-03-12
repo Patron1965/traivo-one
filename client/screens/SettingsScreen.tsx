@@ -196,7 +196,7 @@ export function SettingsScreen({ navigation }: any) {
       </Card>
 
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-        Nordfield v2.0 | Field Service
+        Nordnav Go v2.0 | Field Service
       </ThemedText>
     </ScrollView>
   );

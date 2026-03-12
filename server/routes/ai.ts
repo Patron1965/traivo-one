@@ -27,7 +27,7 @@ router.post('/chat', async (req, res) => {
       }
     }
 
-    const systemPrompt = `Du är "Nordfield Assist", en AI-assistent för fältservicetekniker inom avfallshantering och logistik.
+    const systemPrompt = `Du är "Nordnav Assist", en AI-assistent för fältservicetekniker inom avfallshantering och logistik.
 
 Du har tillgång till kontext om aktuella ordrar, adresser, artiklar, kontaktpersoner och annat relevant för dagens arbete.
 
@@ -75,7 +75,7 @@ router.post('/chat/stream', async (req, res) => {
       }
     }
 
-    const systemPrompt = `Du är "Nordfield Assist", en AI-assistent för fältservicetekniker inom avfallshantering och logistik.
+    const systemPrompt = `Du är "Nordnav Assist", en AI-assistent för fältservicetekniker inom avfallshantering och logistik.
 
 Du har tillgång till kontext om aktuella ordrar, adresser, artiklar, kontaktpersoner och annat relevant för dagens arbete.
 

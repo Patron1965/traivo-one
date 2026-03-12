@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -73,12 +74,11 @@ export function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.header}>
-          <View style={styles.logoContainer}>
-            <Feather name="compass" size={40} color={Colors.textInverse} />
-          </View>
-          <ThemedText variant="title" color={Colors.textInverse}>
-            Nordfield
-          </ThemedText>
+          <Image
+            source={require('../../assets/nordnav-logo.png')}
+            style={styles.logoImage}
+            resizeMode="contain"
+          />
           <ThemedText variant="body" color="rgba(255,255,255,0.7)">
             Field Service
           </ThemedText>
@@ -216,7 +216,7 @@ export function LoginScreen() {
           color="rgba(255,255,255,0.5)"
           style={styles.version}
         >
-          Nordfield v2.0
+          Nordnav Go v2.0
         </ThemedText>
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -236,13 +236,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: Spacing.xxl,
   },
-  logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    justifyContent: 'center',
-    alignItems: 'center',
+  logoImage: {
+    width: 200,
+    height: 56,
     marginBottom: Spacing.lg,
   },
   modeToggle: {

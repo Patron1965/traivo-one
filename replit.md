@@ -1,13 +1,13 @@
-# Nordfield - Field Service Mobile App
+# Nordnav Go - Field Service Mobile App
 
 ## Overview
-Nordfield is a native mobile application built with React Native/Expo, designed for field service drivers. It integrates with the Kinab Core Concept backend to provide a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, and inspections. The application aims to streamline field operations, improve driver efficiency, and enhance communication with the central system. Key capabilities include optimized routing, real-time updates, offline functionality, and AI-powered assistance for tasks like deviation analysis and voice commands.
+Nordnav Go is a native mobile application built with React Native/Expo, designed for field service drivers. It integrates with the Kinab Core Concept backend to provide a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, and inspections. The application aims to streamline field operations, improve driver efficiency, and enhance communication with the central system. Key capabilities include optimized routing, real-time updates, offline functionality, and AI-powered assistance for tasks like deviation analysis and voice commands.
 
 ## User Preferences
 - **Language:** Swedish (sv) for all UI
-- **Design:** Clean Nordic minimalism with Inter font, warm accents sparingly
-- **Colors:** Primary #EA580C (burnt orange), Secondary #991B1B (burgundy), Accent #F59E0B (amber)
-- **Brand:** Nordfield with compass rose logo, "Midnight Sun" color scheme
+- **Design:** Clean Nordic minimalism with Inter font
+- **Colors:** Primary #1B4B6B (Deep Ocean Blue), Secondary #4A9B9B (Northern Teal), Accent #7DBFB0 (Aurora Green), Background #E8F4F8 (Arctic Ice), Text #2C3E50 (Midnight Navy), Muted #6B7C8C (Mountain Gray)
+- **Brand:** Nordnav Go with mountain/navigation logo, "Nordnav One" color scheme
 
 ## System Architecture
 The application is built using React Native with Expo SDK 54 and TypeScript for the frontend, and an Express.js backend. Navigation is handled by React Navigation 7, and state management is powered by `@tanstack/react-query`. The system supports both PIN-based and username/password authentication.

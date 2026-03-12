@@ -3,54 +3,54 @@ import { Dimensions, Platform } from 'react-native';
 const { width, height } = Dimensions.get('window');
 
 export const Colors = {
-  primary: '#EA580C',
-  primaryLight: '#F97316',
-  primaryDark: '#C2410C',
-  secondary: '#991B1B',
-  secondaryLight: '#B91C1C',
-  accent: '#F59E0B',
-  accentLight: '#FDE68A',
+  primary: '#1B4B6B',
+  primaryLight: '#2A6496',
+  primaryDark: '#0E2F4A',
+  secondary: '#4A9B9B',
+  secondaryLight: '#5AABAB',
+  accent: '#7DBFB0',
+  accentLight: '#B0D9D2',
 
-  success: '#27AE60',
-  successLight: '#EAFAF1',
-  warning: '#F59E0B',
-  warningLight: '#FEF9E7',
-  danger: '#991B1B',
-  dangerLight: '#FEE2E2',
-  info: '#0E7490',
-  infoLight: '#E0F2FE',
+  success: '#4A9B9B',
+  successLight: '#E0F5F5',
+  warning: '#E6A817',
+  warningLight: '#FEF3CD',
+  danger: '#C0392B',
+  dangerLight: '#FDECEA',
+  info: '#2A6496',
+  infoLight: '#D6E8F5',
 
-  background: '#F8F9FA',
+  background: '#E8F4F8',
   surface: '#FFFFFF',
   surfaceElevated: '#FFFFFF',
   card: '#FFFFFF',
-  cardElevated: '#F0F3F5',
+  cardElevated: '#F0F7FA',
 
-  text: '#1C2833',
-  textSecondary: '#5D6D7E',
-  textMuted: '#AEB6BF',
+  text: '#2C3E50',
+  textSecondary: '#6B7C8C',
+  textMuted: '#A0B0BC',
   textInverse: '#FFFFFF',
 
-  border: '#D5D8DC',
-  borderLight: '#EAECEE',
-  divider: '#F2F3F4',
+  border: '#C5D5DC',
+  borderLight: '#DDE8EE',
+  divider: '#EEF4F7',
 
   overlay: 'rgba(0,0,0,0.5)',
 
   statusSkapad: '#95A5A6',
-  statusPlaneradPre: '#9B59B6',
-  statusPlaneradResurs: '#0E7490',
-  statusPlaneradLas: '#EA580C',
-  statusUtford: '#27AE60',
-  statusFakturerad: '#1ABC9C',
-  statusImpossible: '#991B1B',
+  statusPlaneradPre: '#7DBFB0',
+  statusPlaneradResurs: '#4A9B9B',
+  statusPlaneradLas: '#1B4B6B',
+  statusUtford: '#4A9B9B',
+  statusFakturerad: '#7DBFB0',
+  statusImpossible: '#C0392B',
 
-  statusPlanned: '#9B59B6',
-  statusDispatched: '#0E7490',
-  statusOnSite: '#EA580C',
-  statusInProgress: '#2ECC71',
-  statusCompleted: '#27AE60',
-  statusFailed: '#991B1B',
+  statusPlanned: '#6B7C8C',
+  statusDispatched: '#2A6496',
+  statusOnSite: '#4A9B9B',
+  statusInProgress: '#7DBFB0',
+  statusCompleted: '#4A9B9B',
+  statusFailed: '#C0392B',
   statusCancelled: '#95A5A6',
 };
 
@@ -99,7 +99,7 @@ export const Screen = {
 export const Shadows = {
   sm: Platform.select({
     ios: {
-      shadowColor: '#000',
+      shadowColor: '#1B4B6B',
       shadowOffset: { width: 0, height: 1 },
       shadowOpacity: 0.08,
       shadowRadius: 2,
@@ -111,7 +111,7 @@ export const Shadows = {
   }),
   md: Platform.select({
     ios: {
-      shadowColor: '#000',
+      shadowColor: '#1B4B6B',
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.12,
       shadowRadius: 6,
@@ -123,7 +123,7 @@ export const Shadows = {
   }),
   lg: Platform.select({
     ios: {
-      shadowColor: '#000',
+      shadowColor: '#1B4B6B',
       shadowOffset: { width: 0, height: 4 },
       shadowOpacity: 0.15,
       shadowRadius: 12,

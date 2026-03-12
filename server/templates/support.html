@@ -3,27 +3,31 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Support — Nordfield Go</title>
+  <title>Support — Nordnav Go</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #FFF7ED;
-      color: #1C1917;
+      background: #E8F4F8;
+      color: #2C3E50;
       line-height: 1.6;
     }
     header {
-      background: linear-gradient(135deg, #EA580C, #991B1B);
+      background: linear-gradient(135deg, #0E2F4A, #1B4B6B, #4A9B9B);
       color: white;
       padding: 48px 24px 40px;
       text-align: center;
     }
-    header svg {
-      width: 56px;
-      height: 56px;
-      margin-bottom: 16px;
+    header img {
+      width: 180px;
+      height: 48px;
+      object-fit: contain;
+      margin-bottom: 12px;
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
     }
     header h1 {
       font-size: 28px;
@@ -45,10 +49,10 @@
     .section h2 {
       font-size: 20px;
       font-weight: 700;
-      color: #991B1B;
+      color: #1B4B6B;
       margin-bottom: 16px;
       padding-bottom: 8px;
-      border-bottom: 2px solid #FDBA74;
+      border-bottom: 2px solid #7DBFB0;
     }
     .faq-item {
       background: white;
@@ -60,12 +64,12 @@
     .faq-item h3 {
       font-size: 16px;
       font-weight: 600;
-      color: #EA580C;
+      color: #4A9B9B;
       margin-bottom: 8px;
     }
     .faq-item p {
       font-size: 15px;
-      color: #44403C;
+      color: #6B7C8C;
     }
     .contact-card {
       background: white;
@@ -78,26 +82,26 @@
       align-items: center;
       gap: 12px;
       padding: 12px 0;
-      border-bottom: 1px solid #F5F5F4;
+      border-bottom: 1px solid #EEF4F7;
       text-decoration: none;
-      color: #1C1917;
+      color: #2C3E50;
     }
     .contact-row:last-child { border-bottom: none; }
-    .contact-row:hover { color: #EA580C; }
+    .contact-row:hover { color: #1B4B6B; }
     .contact-icon {
       width: 40px;
       height: 40px;
-      background: #FFF7ED;
+      background: #E8F4F8;
       border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
       flex-shrink: 0;
     }
-    .contact-icon svg { width: 20px; height: 20px; color: #EA580C; }
+    .contact-icon svg { width: 20px; height: 20px; color: #4A9B9B; }
     .contact-label {
       font-size: 13px;
-      color: #78716C;
+      color: #6B7C8C;
     }
     .contact-value {
       font-size: 15px;
@@ -107,21 +111,13 @@
       text-align: center;
       padding: 24px;
       font-size: 13px;
-      color: #A8A29E;
+      color: #A0B0BC;
     }
   </style>
 </head>
 <body>
   <header>
-    <svg viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <circle cx="50" cy="50" r="45" stroke="white" stroke-width="2" opacity="0.3"/>
-      <polygon points="50,8 54,42 50,38 46,42" fill="white"/>
-      <polygon points="50,92 46,58 50,62 54,58" fill="white" opacity="0.7"/>
-      <polygon points="8,50 42,46 38,50 42,54" fill="white" opacity="0.7"/>
-      <polygon points="92,50 58,54 62,50 58,46" fill="white" opacity="0.7"/>
-      <circle cx="50" cy="50" r="6" fill="white"/>
-    </svg>
-    <h1>Nordfield Go</h1>
+    <img src="/assets/nordnav-logo.png" alt="Nordnav Go" onerror="this.style.display='none'" />
     <p>Support och vanliga frågor</p>
   </header>
 
@@ -150,8 +146,8 @@
       </div>
 
       <div class="faq-item">
-        <h3>Vad är Nordfield Assist?</h3>
-        <p>Nordfield Assist är appens inbyggda AI-assistent som kan svara på frågor om dina ordrar, ge tips och hjälpa med problemlösning. Du når den via chattfliken. Röstkommandon stöds också.</p>
+        <h3>Vad är Nordnav Assist?</h3>
+        <p>Nordnav Assist är appens inbyggda AI-assistent som kan svara på frågor om dina ordrar, ge tips och hjälpa med problemlösning. Du når den via chattfliken. Röstkommandon stöds också.</p>
       </div>
 
       <div class="faq-item">
@@ -168,7 +164,7 @@
     <div class="section">
       <h2>Kontakta oss</h2>
       <div class="contact-card">
-        <a href="mailto:support@nordfield.se" class="contact-row">
+        <a href="mailto:support@nordnav.se" class="contact-row">
           <div class="contact-icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
@@ -177,7 +173,7 @@
           </div>
           <div>
             <div class="contact-label">E-post</div>
-            <div class="contact-value">support@nordfield.se</div>
+            <div class="contact-value">support@nordnav.se</div>
           </div>
         </a>
         <a href="tel:+46100000000" class="contact-row">
@@ -195,6 +191,6 @@
     </div>
   </div>
 
-  <footer>Nordfield Go v1.0</footer>
+  <footer>Nordnav Go v1.0</footer>
 </body>
 </html>

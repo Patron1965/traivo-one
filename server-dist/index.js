@@ -2041,7 +2041,7 @@ router2.post("/chat", async (req, res) => {
 `;
       }
     }
-    const systemPrompt = `Du \xE4r "Nordfield Assist", en AI-assistent f\xF6r f\xE4ltservicetekniker inom avfallshantering och logistik.
+    const systemPrompt = `Du \xE4r "Nordnav Assist", en AI-assistent f\xF6r f\xE4ltservicetekniker inom avfallshantering och logistik.
 
 Du har tillg\xE5ng till kontext om aktuella ordrar, adresser, artiklar, kontaktpersoner och annat relevant f\xF6r dagens arbete.
 
@@ -2089,7 +2089,7 @@ router2.post("/chat/stream", async (req, res) => {
 `;
       }
     }
-    const systemPrompt = `Du \xE4r "Nordfield Assist", en AI-assistent f\xF6r f\xE4ltservicetekniker inom avfallshantering och logistik.
+    const systemPrompt = `Du \xE4r "Nordnav Assist", en AI-assistent f\xF6r f\xE4ltservicetekniker inom avfallshantering och logistik.
 
 Du har tillg\xE5ng till kontext om aktuella ordrar, adresser, artiklar, kontaktpersoner och annat relevant f\xF6r dagens arbete.
 
@@ -2522,7 +2522,7 @@ app.use("/api/mobile", router);
 app.use("/api/mobile/ai", router2);
 app.use("/api/planner", router3);
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", service: "nordfield-api" });
+  res.json({ status: "ok", service: "nordnav-api" });
 });
 var projectRoot = import_fs.default.existsSync(import_path.default.resolve(__dirname, "..", "app.json")) ? import_path.default.resolve(__dirname, "..") : process.cwd();
 var metroDir = import_path.default.join(projectRoot, "dist-metro");
@@ -2535,7 +2535,7 @@ function loadAppJson() {
     cachedAppJson = JSON.parse(import_fs.default.readFileSync(import_path.default.join(projectRoot, "app.json"), "utf-8"));
   } catch (e) {
     console.error("Failed to load app.json:", e);
-    cachedAppJson = { expo: { name: "Nordfield", slug: "nordfield", splash: {} } };
+    cachedAppJson = { expo: { name: "Nordnav Go", slug: "fltapp", splash: {} } };
   }
 }
 function loadSdkVersion() {
@@ -2746,12 +2746,12 @@ app.get("/", (req, res) => {
     const landingPath = import_path.default.join(templatesDir, "landing-page.html");
     res.sendFile(landingPath, (err) => {
       if (err && !res.headersSent) {
-        res.status(200).send(`<!DOCTYPE html><html><head><title>Nordfield</title></head><body><h1>Nordfield API</h1><p>Server is running.</p></body></html>`);
+        res.status(200).send(`<!DOCTYPE html><html><head><title>Nordnav Go</title></head><body><h1>Nordnav Go API</h1><p>Server is running.</p></body></html>`);
       }
     });
   } catch (e) {
     if (!res.headersSent) {
-      res.status(200).send(`<!DOCTYPE html><html><head><title>Nordfield</title></head><body><h1>Nordfield API</h1><p>Server is running.</p></body></html>`);
+      res.status(200).send(`<!DOCTYPE html><html><head><title>Nordnav Go</title></head><body><h1>Nordnav Go API</h1><p>Server is running.</p></body></html>`);
     }
   }
 });
@@ -2777,7 +2777,7 @@ var PORT = 5e3;
 server.listen(PORT, "0.0.0.0", () => {
   const kinabUrl = process.env.KINAB_API_URL;
   const mockMode = !kinabUrl || process.env.KINAB_MOCK_MODE === "true";
-  console.log(`Nordfield API running on port ${PORT}`);
+  console.log(`Nordnav Go API running on port ${PORT}`);
   console.log(`Kinab Core Concept: ${mockMode ? "MOCK MODE (no KINAB_API_URL set)" : `LIVE \u2192 ${kinabUrl}`}`);
   const iosBundle = import_path.default.join(metroDir, "ios", "index.bundle");
   const androidBundle = import_path.default.join(metroDir, "android", "index.bundle");

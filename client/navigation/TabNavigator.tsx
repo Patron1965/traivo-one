@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet, View, Platform } from 'react-native';
+import { StyleSheet, View, Platform, Image } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
 import { HomeScreen } from '../screens/HomeScreen';
@@ -9,18 +9,16 @@ import { AIAssistantScreen } from '../screens/AIAssistantScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { useScreenOptions } from '../hooks/useScreenOptions';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
-import { ThemedText } from '../components/ThemedText';
 
 const Tab = createBottomTabNavigator();
 
 function HeaderTitle() {
   return (
-    <View style={styles.headerTitle}>
-      <Feather name="compass" size={20} color={Colors.primary} />
-      <ThemedText variant="subheading" color={Colors.primary}>
-        Nordfield
-      </ThemedText>
-    </View>
+    <Image
+      source={require('../../assets/nordnav-logo.png')}
+      style={{ width: 120, height: 32 }}
+      resizeMode="contain"
+    />
   );
 }
 
@@ -83,7 +81,7 @@ export function TabNavigator() {
         name="AIAssistantTab"
         component={AIAssistantScreen}
         options={{
-          headerTitle: 'Nordfield Assist',
+          headerTitle: 'Nordnav Assist',
           headerStyle: { backgroundColor: Colors.surface },
           headerShadowVisible: true,
           headerTransparent: false,

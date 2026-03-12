@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Nordfield",
+    "name": "Nordnav Go",
     "slug": "fltapp",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,21 +11,21 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#FFF7ED"
+      "backgroundColor": "#1B4B6B"
     },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fltapp.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Nordfield behöver kameran för att ta bilder av objekt och avvikelser",
-        "NSLocationWhenInUseUsageDescription": "Nordfield behöver din position för GPS-tracking och navigering",
-        "NSPhotoLibraryUsageDescription": "Nordfield behöver åtkomst till dina foton för att bifoga bilder"
+        "NSCameraUsageDescription": "Nordnav Go behöver kameran för att ta bilder av objekt och avvikelser",
+        "NSLocationWhenInUseUsageDescription": "Nordnav Go behöver din position för GPS-tracking och navigering",
+        "NSPhotoLibraryUsageDescription": "Nordnav Go behöver åtkomst till dina foton för att bifoga bilder"
       }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#FFF7ED"
+        "backgroundColor": "#1B4B6B"
       },
       "edgeToEdgeEnabled": true,
       "package": "com.fltapp.app",

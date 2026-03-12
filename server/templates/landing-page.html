@@ -3,34 +3,35 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Nordfield - F&auml;ltapp</title>
+  <title>Nordnav Go - F&auml;ltapp</title>
   
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: #F8F9FA; color: #1C2833; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
-    .card { background: white; border-radius: 16px; padding: 40px; max-width: 480px; width: 100%; text-align: center; border: 1px solid #EAECEE; }
-    h1 { font-size: 28px; margin-bottom: 8px; color: #EA580C; }
-    p { font-size: 16px; color: #5D6D7E; margin-bottom: 20px; line-height: 1.5; }
-    .status { display: inline-flex; align-items: center; gap: 8px; background: #EAFAF1; color: #27AE60; padding: 8px 16px; border-radius: 100px; font-weight: 600; font-size: 14px; margin-bottom: 28px; }
-    .dot { width: 8px; height: 8px; border-radius: 50%; background: #27AE60; }
-    .expo-section { border-top: 1px solid #EAECEE; padding-top: 24px; }
-    .expo-section h2 { font-size: 20px; color: #EA580C; margin-bottom: 16px; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: #E8F4F8; color: #2C3E50; display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+    .card { background: white; border-radius: 16px; padding: 40px; max-width: 480px; width: 100%; text-align: center; border: 1px solid #C5D5DC; }
+    .logo { width: 180px; height: 48px; object-fit: contain; margin: 0 auto 8px; display: block; }
+    p { font-size: 16px; color: #6B7C8C; margin-bottom: 20px; line-height: 1.5; }
+    .status { display: inline-flex; align-items: center; gap: 8px; background: #E0F5F5; color: #4A9B9B; padding: 8px 16px; border-radius: 100px; font-weight: 600; font-size: 14px; margin-bottom: 28px; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; background: #4A9B9B; }
+    .expo-section { border-top: 1px solid #DDE8EE; padding-top: 24px; }
+    .expo-section h2 { font-size: 20px; color: #1B4B6B; margin-bottom: 16px; }
     #qr-canvas { margin: 0 auto 16px; display: block; border-radius: 8px; }
     #qr-img { margin: 0 auto 16px; display: block; border-radius: 8px; max-width: 220px; }
-    .expo-link { display: inline-block; background: #EA580C; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin-top: 8px; transition: background 0.2s; width: 100%; }
-    .expo-link:hover { background: #C2410C; }
-    .url-display { background: #F0F3F4; border-radius: 8px; padding: 12px; margin-top: 16px; font-family: monospace; font-size: 12px; color: #5D6D7E; word-break: break-all; }
-    .instructions { font-size: 14px; color: #7F8C8D; margin-top: 20px; line-height: 1.8; text-align: left; }
+    .expo-link { display: inline-block; background: #1B4B6B; color: white; padding: 14px 28px; border-radius: 12px; text-decoration: none; font-weight: 600; font-size: 16px; margin-top: 8px; transition: background 0.2s; width: 100%; }
+    .expo-link:hover { background: #0E2F4A; }
+    .url-display { background: #EEF4F7; border-radius: 8px; padding: 12px; margin-top: 16px; font-family: monospace; font-size: 12px; color: #6B7C8C; word-break: break-all; }
+    .instructions { font-size: 14px; color: #6B7C8C; margin-top: 20px; line-height: 1.8; text-align: left; }
     .instructions li { margin-bottom: 4px; }
-    .warn { background: #FEF9E7; border: 1px solid #F9E79F; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; color: #7D6608; line-height: 1.5; }
+    .warn { background: #FEF3CD; border: 1px solid #E6A817; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 13px; color: #7D5A00; line-height: 1.5; }
     .platform-tabs { display: flex; gap: 8px; margin-bottom: 16px; justify-content: center; }
-    .platform-tab { padding: 8px 20px; border-radius: 8px; border: 1px solid #D5D8DC; background: white; cursor: pointer; font-size: 14px; font-weight: 500; }
-    .platform-tab.active { background: #EA580C; color: white; border-color: #EA580C; }
+    .platform-tab { padding: 8px 20px; border-radius: 8px; border: 1px solid #C5D5DC; background: white; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .platform-tab.active { background: #1B4B6B; color: white; border-color: #1B4B6B; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Nordfield</h1>
+    <img class="logo" src="/assets/nordnav-logo.png" alt="Nordnav Go" onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='block'" />
+    <h1 id="logo-fallback" style="display:none;font-size:24px;color:#1B4B6B;margin-bottom:8px;">Nordnav Go</h1>
     <p>Field Service</p>
     <div class="status"><span class="dot"></span> API Active</div>
 
@@ -54,10 +55,10 @@
       </ol>
     </div>
 
-    <div class="planner-section" style="border-top: 1px solid #EAECEE; padding-top: 24px; margin-top: 24px;">
-      <h2 style="font-size: 20px; color: #EA580C; margin-bottom: 12px;">Planerare</h2>
-      <p style="font-size: 14px; color: #7F8C8D; margin-bottom: 16px;">Se alla chauff&ouml;rers positioner i realtid p&aring; kartan.</p>
-      <a href="/planner/map" style="display:inline-block;background:#991B1B;color:white;padding:14px 28px;border-radius:12px;text-decoration:none;font-weight:600;font-size:16px;width:100%;transition:background 0.2s;">&Ouml;ppna chauff&ouml;rskarta</a>
+    <div class="planner-section" style="border-top: 1px solid #DDE8EE; padding-top: 24px; margin-top: 24px;">
+      <h2 style="font-size: 20px; color: #1B4B6B; margin-bottom: 12px;">Planerare</h2>
+      <p style="font-size: 14px; color: #6B7C8C; margin-bottom: 16px;">Se alla chauff&ouml;rers positioner i realtid p&aring; kartan.</p>
+      <a href="/planner/map" style="display:inline-block;background:#4A9B9B;color:white;padding:14px 28px;border-radius:12px;text-decoration:none;font-weight:600;font-size:16px;width:100%;transition:background 0.2s;">&Ouml;ppna chauff&ouml;rskarta</a>
     </div>
   </div>
 
