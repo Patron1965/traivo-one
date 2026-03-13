@@ -209,12 +209,28 @@ export async function registerRoutes(
     "/anomaly", "/dashboard-stats", "/deviation-reports",
   ]);
 
+  const CUSTOMER_ALLOWED_PATHS = new Set([
+    "/customers", "/objects", "/orders", "/subscriptions",
+    "/my-objects", "/my-reports", "/portal-booking-config",
+    "/slot-preferences", "/tenant-info",
+  ]);
+
+  const REPORTER_ALLOWED_PATHS = new Set([
+    "/my-reports", "/tenant-info",
+  ]);
+
   app.use("/api", (req, res, next) => {
     const role = req.tenantRole;
     if (!role || role === "owner" || role === "admin" || role === "planner" || role === "technician" || role === "user" || role === "viewer") {
       return next();
     }
     const pathSegment = "/" + req.path.split("/").filter(Boolean)[0];
+    if (role === "customer" && CUSTOMER_ALLOWED_PATHS.has(pathSegment)) {
+      return next();
+    }
+    if (role === "reporter" && REPORTER_ALLOWED_PATHS.has(pathSegment)) {
+      return next();
+    }
     if (RESTRICTED_ROLE_PATHS.has(pathSegment)) {
       return res.status(403).json({
         error: "Behörighet saknas",
@@ -17604,8 +17620,16 @@ setInterval(loadRoutes, 60000);
       if (!userId) {
         return res.status(401).json({ error: "Ej autentiserad" });
       }
+      const dbUser = await storage.getUser(userId);
+      if (!dbUser) {
+        return res.status(401).json({ error: "Användaren hittades inte" });
+      }
+      const userEmail = dbUser.email?.toLowerCase();
       const reports = await storage.getPublicIssueReports(tenantId, {});
-      const myReports = reports.filter((r: any) => r.reporterEmail === userId || r.reporterPhone === userId);
+      const myReports = reports.filter((r: any) => {
+        if (userEmail && r.reporterEmail && r.reporterEmail.toLowerCase() === userEmail) return true;
+        return false;
+      });
       res.json(myReports);
     } catch (error) {
       console.error("Failed to get user reports:", error);
@@ -17620,16 +17644,16 @@ setInterval(loadRoutes, 60000);
       if (!userId) {
         return res.status(401).json({ error: "Ej autentiserad" });
       }
-      const dbUser = await storage.getUser(userId);
-      if (!dbUser) {
-        return res.status(401).json({ error: "Användaren hittades inte" });
-      }
-      const role = dbUser.role || "user";
+      const role = req.tenantRole || "user";
       if (role === "reporter") {
         return res.json([]);
       }
       if (role !== "customer") {
         return res.status(403).json({ error: "Denna endpoint är avsedd för kundanvändare. Använd /api/objects istället." });
+      }
+      const dbUser = await storage.getUser(userId);
+      if (!dbUser) {
+        return res.status(401).json({ error: "Användaren hittades inte" });
       }
       const customers = await storage.getCustomers(tenantId);
       const userEmail = dbUser.email;
