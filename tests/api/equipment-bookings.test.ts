@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { storage } from "../../server/storage";
+import { apiGet, apiPost, apiDelete } from "./helpers";
 
 const TEST_TENANT = "default-tenant";
+const AUTH_HEADERS = { "x-tenant-id": TEST_TENANT, "x-user-id": "test-user-eb" };
 let testResourceId: string;
 let testResource2Id: string;
 let testVehicleId: string;
 let testTeam1Id: string;
 let testTeam2Id: string;
-let testSessionId: string;
 
-describe("Equipment Bookings - Storage Tests", () => {
+describe("Equipment Bookings", () => {
   beforeAll(async () => {
     const r1 = await storage.createResource({
       tenantId: TEST_TENANT,
@@ -48,7 +49,7 @@ describe("Equipment Bookings - Storage Tests", () => {
     testTeam2Id = t2.id;
   });
 
-  describe("CRUD Operations", () => {
+  describe("Storage CRUD Operations", () => {
     let bookingId: string;
 
     it("skapar en utrustningsbokning", async () => {
@@ -132,7 +133,7 @@ describe("Equipment Bookings - Storage Tests", () => {
       expect(conflicts.length).toBeGreaterThanOrEqual(1);
     });
 
-    it("skapar andra bokning trots kollision (med varning)", async () => {
+    it("skapar andra bokning trots kollision", async () => {
       const b2 = await storage.createEquipmentBooking({
         tenantId: TEST_TENANT,
         vehicleId: testVehicleId,
@@ -163,7 +164,8 @@ describe("Equipment Bookings - Storage Tests", () => {
     });
   });
 
-  describe("Auto-Release on Work Session End", () => {
+  describe("Auto-Release with workSessionId", () => {
+    let testSessionId: string;
     let sessionBooking1Id: string;
     let sessionBooking2Id: string;
 
@@ -202,7 +204,7 @@ describe("Equipment Bookings - Storage Tests", () => {
       sessionBooking2Id = b2.id;
     });
 
-    it("frigör utrustning vid arbetspass-avslut", async () => {
+    it("frigör utrustning via workSessionId", async () => {
       const released = await storage.releaseEquipmentByWorkSession(testSessionId);
       expect(released).toBe(2);
 
@@ -213,7 +215,7 @@ describe("Equipment Bookings - Storage Tests", () => {
       expect(b2!.status).toBe("released");
     });
 
-    it("frigör inte redan frigjorda bokningar", async () => {
+    it("idempotent — frigör inte redan frigjorda", async () => {
       const released = await storage.releaseEquipmentByWorkSession(testSessionId);
       expect(released).toBe(0);
     });
@@ -225,56 +227,130 @@ describe("Equipment Bookings - Storage Tests", () => {
     });
   });
 
-  describe("Auto-Release via PUT /api/work-sessions/:id (session completion)", () => {
-    let putSessionId: string;
-    let putBookingId: string;
+  describe("Auto-Release fallback — booking without workSessionId", () => {
+    let fallbackSessionId: string;
+    let fallbackBookingId: string;
 
     beforeAll(async () => {
       const session = await storage.createWorkSession({
         tenantId: TEST_TENANT,
         resourceId: testResourceId,
-        date: new Date("2026-04-20"),
-        startTime: new Date("2026-04-20T07:00:00"),
+        date: new Date("2026-04-22"),
+        startTime: new Date("2026-04-22T07:00:00"),
         status: "active",
       });
-      putSessionId = session.id;
+      fallbackSessionId = session.id;
 
       const b = await storage.createEquipmentBooking({
         tenantId: TEST_TENANT,
         vehicleId: testVehicleId,
         resourceId: testResourceId,
-        workSessionId: putSessionId,
-        date: new Date("2026-04-20"),
+        date: new Date("2026-04-22"),
         serviceArea: ["zon-A"],
         status: "active",
       });
-      putBookingId = b.id;
+      fallbackBookingId = b.id;
     });
 
-    it("frigör utrustning när session uppdateras till completed via updateWorkSession", async () => {
-      const before = await storage.getEquipmentBooking(putBookingId);
+    it("frigör bokning utan workSessionId via resource+date fallback", async () => {
+      const before = await storage.getEquipmentBooking(fallbackBookingId);
       expect(before!.status).toBe("active");
+      expect(before!.workSessionId).toBeNull();
 
-      await storage.updateWorkSession(putSessionId, {
-        status: "completed",
-        endTime: new Date("2026-04-20T16:00:00"),
-      });
-
-      const released = await storage.releaseEquipmentByWorkSession(putSessionId);
+      const released = await storage.releaseEquipmentByWorkSession(fallbackSessionId);
       expect(released).toBe(1);
 
-      const after = await storage.getEquipmentBooking(putBookingId);
+      const after = await storage.getEquipmentBooking(fallbackBookingId);
       expect(after!.status).toBe("released");
     });
 
-    it("idempotent — frigör inte redan frigjorda bokningar vid upprepat anrop", async () => {
-      const released = await storage.releaseEquipmentByWorkSession(putSessionId);
-      expect(released).toBe(0);
+    afterAll(async () => {
+      if (fallbackBookingId) await storage.deleteEquipmentBooking(fallbackBookingId).catch(() => {});
+      if (fallbackSessionId) await storage.deleteWorkSession(fallbackSessionId).catch(() => {});
+    });
+  });
+
+  describe("Auto-Release combined — both workSessionId and fallback", () => {
+    let comboSessionId: string;
+    let linkedBookingId: string;
+    let unlinkedBookingId: string;
+
+    beforeAll(async () => {
+      const session = await storage.createWorkSession({
+        tenantId: TEST_TENANT,
+        resourceId: testResourceId,
+        date: new Date("2026-04-25"),
+        startTime: new Date("2026-04-25T07:00:00"),
+        status: "active",
+      });
+      comboSessionId = session.id;
+
+      const b1 = await storage.createEquipmentBooking({
+        tenantId: TEST_TENANT,
+        vehicleId: testVehicleId,
+        resourceId: testResourceId,
+        workSessionId: comboSessionId,
+        date: new Date("2026-04-25"),
+        serviceArea: ["zon-A"],
+        status: "active",
+      });
+      linkedBookingId = b1.id;
+
+      const b2 = await storage.createEquipmentBooking({
+        tenantId: TEST_TENANT,
+        vehicleId: testVehicleId,
+        resourceId: testResourceId,
+        date: new Date("2026-04-25"),
+        serviceArea: ["zon-B"],
+        status: "active",
+      });
+      unlinkedBookingId = b2.id;
+    });
+
+    it("frigör både workSessionId-länkade och olänkade bokningar", async () => {
+      const released = await storage.releaseEquipmentByWorkSession(comboSessionId);
+      expect(released).toBe(2);
+
+      const b1 = await storage.getEquipmentBooking(linkedBookingId);
+      expect(b1!.status).toBe("released");
+      const b2 = await storage.getEquipmentBooking(unlinkedBookingId);
+      expect(b2!.status).toBe("released");
     });
 
     afterAll(async () => {
-      if (putBookingId) await storage.deleteEquipmentBooking(putBookingId).catch(() => {});
-      if (putSessionId) await storage.deleteWorkSession(putSessionId).catch(() => {});
+      if (linkedBookingId) await storage.deleteEquipmentBooking(linkedBookingId).catch(() => {});
+      if (unlinkedBookingId) await storage.deleteEquipmentBooking(unlinkedBookingId).catch(() => {});
+      if (comboSessionId) await storage.deleteWorkSession(comboSessionId).catch(() => {});
+    });
+  });
+
+  describe("HTTP API — Auth-protected endpoints return 401", () => {
+    it("GET /api/equipment-bookings returnerar 401 utan auth", async () => {
+      const res = await apiGet("/api/equipment-bookings");
+      expect(res.status).toBe(401);
+    });
+
+    it("POST /api/equipment-bookings returnerar 401 utan auth", async () => {
+      const res = await apiPost("/api/equipment-bookings", {
+        vehicleId: testVehicleId,
+        date: "2026-07-01",
+        serviceArea: ["zon-A"],
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("POST /api/equipment-bookings/check-collision returnerar 401 utan auth", async () => {
+      const res = await apiPost("/api/equipment-bookings/check-collision", {
+        vehicleId: testVehicleId,
+        date: "2026-07-01",
+        serviceArea: ["zon-A"],
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it("DELETE /api/equipment-bookings/:id returnerar 401 utan auth", async () => {
+      const res = await apiDelete("/api/equipment-bookings/some-id");
+      expect(res.status).toBe(401);
     });
   });
 

@@ -5040,11 +5040,26 @@ export class DatabaseStorage implements IStorage {
   }
 
   async releaseEquipmentByWorkSession(workSessionId: string): Promise<number> {
-    const result = await db.update(equipmentBookings)
+    const bySession = await db.update(equipmentBookings)
       .set({ status: "released" })
       .where(and(eq(equipmentBookings.workSessionId, workSessionId), eq(equipmentBookings.status, "active")))
       .returning();
-    return result.length;
+
+    const session = await this.getWorkSession(workSessionId);
+    let byResource = 0;
+    if (session && session.resourceId && session.date) {
+      const fallback = await db.update(equipmentBookings)
+        .set({ status: "released" })
+        .where(and(
+          eq(equipmentBookings.resourceId, session.resourceId),
+          eq(equipmentBookings.date, session.date),
+          eq(equipmentBookings.status, "active"),
+          isNull(equipmentBookings.workSessionId),
+        ))
+        .returning();
+      byResource = fallback.length;
+    }
+    return bySession.length + byResource;
   }
 }
 
