@@ -1246,14 +1246,14 @@ export default function OrderConceptsPage() {
                 </Card>
               )}
 
-              {previewData.schedulePreview.length > 0 && (
+              {(previewData.schedulePreview?.length ?? 0) > 0 && (
                 <Card className="border-green-200 dark:border-green-800">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">Leveranstidslinje</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-1">
-                      {previewData.schedulePreview.slice(0, 10).map((entry, idx) => (
+                      {previewData.schedulePreview!.slice(0, 10).map((entry, idx) => (
                         <div key={idx} className="flex items-center justify-between text-sm py-1 border-b last:border-b-0">
                           <span className="font-mono">
                             {new Date(entry.date).toLocaleDateString("sv-SE", { weekday: "short", day: "numeric", month: "short" })}
@@ -1261,9 +1261,9 @@ export default function OrderConceptsPage() {
                           <Badge variant="outline">{entry.objectCount} objekt</Badge>
                         </div>
                       ))}
-                      {previewData.schedulePreview.length > 10 && (
+                      {(previewData.schedulePreview?.length ?? 0) > 10 && (
                         <p className="text-xs text-muted-foreground text-center pt-2">
-                          ... och {previewData.schedulePreview.length - 10} fler leveranser
+                          ... och {previewData.schedulePreview!.length - 10} fler leveranser
                         </p>
                       )}
                     </div>
@@ -1271,7 +1271,7 @@ export default function OrderConceptsPage() {
                 </Card>
               )}
 
-              {previewData.items.length > 0 && (
+              {(previewData.items?.length ?? 0) > 0 && (
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1284,7 +1284,7 @@ export default function OrderConceptsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {previewData.items.slice(0, 20).map((item, idx) => (
+                    {(previewData.items || []).slice(0, 20).map((item, idx) => (
                       <TableRow key={idx}>
                         <TableCell className="font-medium">{item.objectName}</TableCell>
                         <TableCell className="text-sm text-muted-foreground truncate max-w-[200px]">{item.address || "-"}</TableCell>
