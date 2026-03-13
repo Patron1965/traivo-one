@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type {
-  OrderConcept, Customer, Article, ServiceObject,
+  OrderConcept, Customer, Article,
   InvoiceLevel, InvoiceModel, InvoicePeriod,
   DeliveryModel, DeliverySeason, DistributionChannel, DocumentType
 } from "@shared/schema";
@@ -91,7 +91,7 @@ export default function OrderConceptWizardPage() {
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
-  const { data: allObjects = [] } = useQuery<ServiceObject[]>({ queryKey: ["/api/objects"] });
+  
 
   const { data: wizardData } = useQuery({
     queryKey: ["/api/order-concepts", conceptId, "wizard"],
@@ -421,9 +421,8 @@ export default function OrderConceptWizardPage() {
   }, []);
 
   const selectAllObjects = useCallback(() => {
-    const allIds = allObjects.filter(o => selectedObjectIds.has(o.id)).map(o => o.id);
-    setSelectedObjectIds(new Set(allIds));
-  }, [allObjects, selectedObjectIds]);
+    setSelectedObjectIds(prev => new Set(prev));
+  }, []);
 
   const deselectAllObjects = useCallback(() => {
     setSelectedObjectIds(new Set());
