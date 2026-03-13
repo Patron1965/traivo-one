@@ -9562,8 +9562,17 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const resourceId = req.mobileResourceId;
       const session = await storage.getWorkSession(req.params.id);
       if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+      const now = new Date();
+      const breakEntry = await storage.createWorkEntry({
+        tenantId: session.tenantId,
+        workSessionId: session.id,
+        resourceId,
+        entryType: "break",
+        startTime: now,
+        notes: "Auto-skapad vid paus",
+      });
       const updated = await storage.updateWorkSession(req.params.id, { status: "paused" });
-      res.json(updated);
+      res.json({ session: updated, breakEntry });
     } catch (error) {
       res.status(500).json({ error: "Kunde inte pausa arbetspass" });
     }
@@ -9574,8 +9583,15 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const resourceId = req.mobileResourceId;
       const session = await storage.getWorkSession(req.params.id);
       if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+      const now = new Date();
+      const entries = await storage.getWorkEntries(session.id);
+      const openBreak = entries.find(e => e.entryType === "break" && !e.endTime);
+      if (openBreak) {
+        const durationMinutes = Math.round((now.getTime() - new Date(openBreak.startTime).getTime()) / 60000);
+        await storage.updateWorkEntry(openBreak.id, { endTime: now, durationMinutes });
+      }
       const updated = await storage.updateWorkSession(req.params.id, { status: "active" });
-      res.json(updated);
+      res.json({ session: updated, closedBreakEntry: openBreak?.id || null });
     } catch (error) {
       res.status(500).json({ error: "Kunde inte återuppta arbetspass" });
     }
