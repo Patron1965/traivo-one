@@ -4114,6 +4114,29 @@ export const insertTimeLogSchema = createInsertSchema(timeLogs).omit({ id: true,
 export type InsertTimeLog = z.infer<typeof insertTimeLogSchema>;
 export type TimeLog = typeof timeLogs.$inferSelect;
 
+export const equipmentBookings = pgTable("equipment_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  vehicleId: varchar("vehicle_id").references(() => vehicles.id),
+  equipmentId: varchar("equipment_id").references(() => equipment.id),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  teamId: varchar("team_id").references(() => teams.id),
+  workSessionId: varchar("work_session_id").references(() => workSessions.id),
+  date: timestamp("date").notNull(),
+  serviceArea: text("service_area").array().default([]),
+  status: text("status").default("active").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_equipment_bookings_tenant_date").on(table.tenantId, table.date),
+  index("idx_equipment_bookings_vehicle").on(table.vehicleId, table.date),
+  index("idx_equipment_bookings_equipment").on(table.equipmentId, table.date),
+]);
+
+export const insertEquipmentBookingSchema = createInsertSchema(equipmentBookings).omit({ id: true, createdAt: true });
+export type InsertEquipmentBooking = z.infer<typeof insertEquipmentBookingSchema>;
+export type EquipmentBooking = typeof equipmentBookings.$inferSelect;
+
 export type TimeSummaryResponse = {
   week: number;
   year: number;

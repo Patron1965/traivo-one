@@ -43,7 +43,7 @@ import {
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   insertFuelLogSchema, insertMaintenanceLogSchema, insertObjectParentSchema,
   insertResourceProfileSchema, insertResourceProfileAssignmentSchema,
-  insertWorkSessionSchema, insertWorkEntrySchema, workSessions, workEntries, timeLogs,
+  insertWorkSessionSchema, insertWorkEntrySchema, workSessions, workEntries, timeLogs, equipmentBookings,
   type ServiceObject,
   apiUsageLogs, apiBudgets, articles, taskDependencyInstances,
   objects, workOrders
@@ -3889,6 +3889,159 @@ export async function registerRoutes(
     }
   });
 
+  // ============== EQUIPMENT BOOKINGS ==============
+  app.get("/api/equipment-bookings", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { vehicleId, equipmentId, resourceId, teamId, date, startDate, endDate, status } = req.query;
+      const options: any = {};
+      if (vehicleId) options.vehicleId = vehicleId;
+      if (equipmentId) options.equipmentId = equipmentId;
+      if (resourceId) options.resourceId = resourceId;
+      if (teamId) options.teamId = teamId;
+      if (date) options.date = new Date(date as string);
+      if (startDate) options.startDate = new Date(startDate as string);
+      if (endDate) options.endDate = new Date(endDate as string);
+      if (status) options.status = status;
+      const bookings = await storage.getEquipmentBookings(tenantId, options);
+      res.json(bookings);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta utrustningsbokningar" });
+    }
+  });
+
+  app.get("/api/equipment-bookings/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const booking = await storage.getEquipmentBooking(req.params.id);
+      if (!booking || booking.tenantId !== tenantId) return res.status(404).json({ error: "Bokning hittades inte" });
+      res.json(booking);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta bokning" });
+    }
+  });
+
+  app.post("/api/equipment-bookings", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { vehicleId, equipmentId, resourceId, teamId, date, serviceArea, notes, workSessionId } = req.body;
+      if (!vehicleId && !equipmentId) return res.status(400).json({ error: "Ange fordon eller utrustning" });
+      if (!date) return res.status(400).json({ error: "Datum krävs" });
+
+      const bookingDate = new Date(date);
+      const targetId = vehicleId || equipmentId;
+      const targetType = vehicleId ? "vehicle" : "equipment";
+
+      if (vehicleId) {
+        const vehicle = await storage.getVehicle(vehicleId);
+        if (!vehicle || vehicle.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltigt fordon" });
+      }
+      if (equipmentId) {
+        const allEquipment = await storage.getEquipment(tenantId);
+        const eq = allEquipment.find(e => e.id === equipmentId);
+        if (!eq) return res.status(400).json({ error: "Ogiltig utrustning" });
+      }
+      if (resourceId) {
+        const resource = await storage.getResource(resourceId);
+        if (!resource || resource.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig resurs" });
+      }
+      if (teamId) {
+        const team = await storage.getTeam(teamId);
+        if (!team || team.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltigt team" });
+      }
+
+      const existingBookings = await storage.getEquipmentBookings(tenantId, {
+        ...(vehicleId ? { vehicleId } : { equipmentId }),
+        date: bookingDate,
+        status: "active",
+      });
+
+      const requestAreas = Array.isArray(serviceArea) ? serviceArea : [];
+      const conflicts = existingBookings.filter(b => {
+        if (b.resourceId === resourceId && b.teamId === teamId) return false;
+        if (requestAreas.length === 0) return true;
+        const bookingAreas = b.serviceArea || [];
+        if (bookingAreas.length === 0) return true;
+        const overlap = requestAreas.some((a: string) => bookingAreas.includes(a));
+        return !overlap;
+      });
+
+      let warning: string | null = null;
+      if (conflicts.length > 0) {
+        const conflictAreas = conflicts.flatMap(c => c.serviceArea || []);
+        warning = `Varning: ${targetType === "vehicle" ? "Fordonet" : "Utrustningen"} är redan bokat ${bookingDate.toISOString().split("T")[0]} i ${conflictAreas.length > 0 ? `annan zon (${conflictAreas.join(", ")})` : "annan tilldelning"}. Dubbelbokning skapad med varning.`;
+      }
+
+      const booking = await storage.createEquipmentBooking({
+        tenantId,
+        vehicleId: vehicleId || null,
+        equipmentId: equipmentId || null,
+        resourceId: resourceId || null,
+        teamId: teamId || null,
+        workSessionId: workSessionId || null,
+        date: bookingDate,
+        serviceArea: requestAreas,
+        status: "active",
+        notes: notes || null,
+      });
+
+      res.status(201).json({ booking, warning });
+    } catch (error) {
+      console.error("Failed to create equipment booking:", error);
+      res.status(500).json({ error: "Kunde inte skapa bokning" });
+    }
+  });
+
+  app.delete("/api/equipment-bookings/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const booking = await storage.getEquipmentBooking(req.params.id);
+      if (!booking || booking.tenantId !== tenantId) return res.status(404).json({ error: "Bokning hittades inte" });
+      await storage.deleteEquipmentBooking(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte ta bort bokning" });
+    }
+  });
+
+  app.post("/api/equipment-bookings/check-collision", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { vehicleId, equipmentId, date, serviceArea } = req.body;
+      if (!vehicleId && !equipmentId) return res.status(400).json({ error: "Ange fordon eller utrustning" });
+      if (!date) return res.status(400).json({ error: "Datum krävs" });
+
+      const bookingDate = new Date(date);
+      const existingBookings = await storage.getEquipmentBookings(tenantId, {
+        ...(vehicleId ? { vehicleId } : { equipmentId }),
+        date: bookingDate,
+        status: "active",
+      });
+
+      const requestAreas = Array.isArray(serviceArea) ? serviceArea : [];
+      const conflicts = existingBookings.filter(b => {
+        if (requestAreas.length === 0) return existingBookings.length > 0;
+        const bookingAreas = b.serviceArea || [];
+        if (bookingAreas.length === 0) return true;
+        return !requestAreas.some((a: string) => bookingAreas.includes(a));
+      });
+
+      res.json({
+        hasConflict: conflicts.length > 0,
+        conflicts: conflicts.map(c => ({
+          id: c.id,
+          resourceId: c.resourceId,
+          teamId: c.teamId,
+          serviceArea: c.serviceArea,
+          date: c.date,
+        })),
+        existingBookings: existingBookings.length,
+      });
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte kontrollera kollision" });
+    }
+  });
+
   // ============== FUEL LOGS ==============
   app.get("/api/fuel-logs", async (req, res) => {
     try {
@@ -4193,7 +4346,8 @@ export async function registerRoutes(
       const existing = await storage.getWorkSession(req.params.id);
       if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
       const session = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
-      res.json(session);
+      const released = await storage.releaseEquipmentByWorkSession(req.params.id);
+      res.json({ ...session, releasedBookings: released });
     } catch (error) {
       res.status(500).json({ error: "Failed to check out" });
     }
@@ -9551,6 +9705,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const session = await storage.getWorkSession(req.params.id);
       if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
       const updated = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
+      await storage.releaseEquipmentByWorkSession(req.params.id);
       res.json(updated);
     } catch (error) {
       res.status(500).json({ error: "Kunde inte avsluta arbetspass" });

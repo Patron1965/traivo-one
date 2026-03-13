@@ -92,7 +92,8 @@ import {
   type ResourceProfileAssignment, type InsertResourceProfileAssignment,
   type WorkSession, type InsertWorkSession,
   type WorkEntry, type InsertWorkEntry,
-  workSessions, workEntries,
+  type EquipmentBooking, type InsertEquipmentBooking,
+  workSessions, workEntries, equipmentBookings,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
   resourceProfiles, resourceProfileAssignments,
@@ -697,6 +698,13 @@ export interface IStorage {
   createWorkEntry(entry: InsertWorkEntry): Promise<WorkEntry>;
   updateWorkEntry(id: string, data: Partial<InsertWorkEntry>): Promise<WorkEntry | undefined>;
   deleteWorkEntry(id: string): Promise<void>;
+
+  getEquipmentBookings(tenantId: string, options?: { vehicleId?: string; equipmentId?: string; resourceId?: string; teamId?: string; date?: Date; startDate?: Date; endDate?: Date; status?: string }): Promise<EquipmentBooking[]>;
+  getEquipmentBooking(id: string): Promise<EquipmentBooking | undefined>;
+  createEquipmentBooking(booking: InsertEquipmentBooking): Promise<EquipmentBooking>;
+  updateEquipmentBooking(id: string, data: Partial<InsertEquipmentBooking>): Promise<EquipmentBooking | undefined>;
+  deleteEquipmentBooking(id: string): Promise<void>;
+  releaseEquipmentByWorkSession(workSessionId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4990,6 +4998,53 @@ export class DatabaseStorage implements IStorage {
 
   async deleteWorkEntry(id: string): Promise<void> {
     await db.delete(workEntries).where(eq(workEntries.id, id));
+  }
+
+  async getEquipmentBookings(tenantId: string, options?: { vehicleId?: string; equipmentId?: string; resourceId?: string; teamId?: string; date?: Date; startDate?: Date; endDate?: Date; status?: string }): Promise<EquipmentBooking[]> {
+    const conditions = [eq(equipmentBookings.tenantId, tenantId)];
+    if (options?.vehicleId) conditions.push(eq(equipmentBookings.vehicleId, options.vehicleId));
+    if (options?.equipmentId) conditions.push(eq(equipmentBookings.equipmentId, options.equipmentId));
+    if (options?.resourceId) conditions.push(eq(equipmentBookings.resourceId, options.resourceId));
+    if (options?.teamId) conditions.push(eq(equipmentBookings.teamId, options.teamId));
+    if (options?.status) conditions.push(eq(equipmentBookings.status, options.status));
+    if (options?.date) {
+      const dayStart = new Date(options.date);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(options.date);
+      dayEnd.setHours(23, 59, 59, 999);
+      conditions.push(gte(equipmentBookings.date, dayStart));
+      conditions.push(lte(equipmentBookings.date, dayEnd));
+    }
+    if (options?.startDate) conditions.push(gte(equipmentBookings.date, options.startDate));
+    if (options?.endDate) conditions.push(lte(equipmentBookings.date, options.endDate));
+    return db.select().from(equipmentBookings).where(and(...conditions)).orderBy(desc(equipmentBookings.date));
+  }
+
+  async getEquipmentBooking(id: string): Promise<EquipmentBooking | undefined> {
+    const [result] = await db.select().from(equipmentBookings).where(eq(equipmentBookings.id, id));
+    return result || undefined;
+  }
+
+  async createEquipmentBooking(booking: InsertEquipmentBooking): Promise<EquipmentBooking> {
+    const [result] = await db.insert(equipmentBookings).values(booking).returning();
+    return result;
+  }
+
+  async updateEquipmentBooking(id: string, data: Partial<InsertEquipmentBooking>): Promise<EquipmentBooking | undefined> {
+    const [result] = await db.update(equipmentBookings).set(data).where(eq(equipmentBookings.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteEquipmentBooking(id: string): Promise<void> {
+    await db.delete(equipmentBookings).where(eq(equipmentBookings.id, id));
+  }
+
+  async releaseEquipmentByWorkSession(workSessionId: string): Promise<number> {
+    const result = await db.update(equipmentBookings)
+      .set({ status: "released" })
+      .where(and(eq(equipmentBookings.workSessionId, workSessionId), eq(equipmentBookings.status, "active")))
+      .returning();
+    return result.length;
   }
 }
 

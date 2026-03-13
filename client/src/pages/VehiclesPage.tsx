@@ -61,6 +61,9 @@ import {
   Gauge,
   CircleCheck,
   CircleAlert,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -69,7 +72,9 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format, differenceInDays } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Vehicle, Equipment } from "@shared/schema";
+import type { Vehicle, Equipment, EquipmentBooking, Resource, Team } from "@shared/schema";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { addDays, startOfWeek } from "date-fns";
 
 const vehicleTypeOptions = [
   { value: "bil", label: "Personbil", icon: Car },
@@ -131,6 +136,10 @@ export default function VehiclesPage() {
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [editingEquipment, setEditingEquipment] = useState<Equipment | null>(null);
   const [itemToDelete, setItemToDelete] = useState<{ type: "vehicle" | "equipment"; id: string; name: string } | null>(null);
+  const [availabilityWeekStart, setAvailabilityWeekStart] = useState(() => {
+    const now = new Date();
+    return startOfWeek(now, { weekStartsOn: 1 });
+  });
 
   const vehicleForm = useForm<VehicleFormValues>({
     resolver: zodResolver(vehicleFormSchema),
@@ -169,6 +178,14 @@ export default function VehiclesPage() {
   const { data: equipment = [], isLoading: loadingEquipment } = useQuery<Equipment[]>({
     queryKey: ["/api/equipment"],
   });
+
+  const weekEnd = addDays(availabilityWeekStart, 6);
+  const { data: bookings = [] } = useQuery<EquipmentBooking[]>({
+    queryKey: ["/api/equipment-bookings", availabilityWeekStart.toISOString(), weekEnd.toISOString()],
+    queryFn: () => fetch(`/api/equipment-bookings?startDate=${availabilityWeekStart.toISOString()}&endDate=${weekEnd.toISOString()}`).then(r => r.json()),
+  });
+  const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
+  const { data: teams = [] } = useQuery<Team[]>({ queryKey: ["/api/teams"] });
 
   const createVehicleMutation = useMutation({
     mutationFn: (data: VehicleFormValues) => {
@@ -434,6 +451,10 @@ export default function VehiclesPage() {
             <Wrench className="h-4 w-4 mr-2" />
             Utrustning ({equipment.length})
           </TabsTrigger>
+          <TabsTrigger value="availability" data-testid="tab-availability">
+            <Calendar className="h-4 w-4 mr-2" />
+            Tillgänglighet
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="vehicles" className="mt-4">
@@ -676,6 +697,125 @@ export default function VehiclesPage() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="availability" className="mt-4">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="icon" onClick={() => setAvailabilityWeekStart(prev => addDays(prev, -7))} data-testid="button-prev-week">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm font-medium" data-testid="text-week-range">
+                  {format(availabilityWeekStart, "d MMM", { locale: sv })} – {format(weekEnd, "d MMM yyyy", { locale: sv })}
+                </span>
+                <Button variant="outline" size="icon" onClick={() => setAvailabilityWeekStart(prev => addDays(prev, 7))} data-testid="button-next-week">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-100 border border-green-300" /> Ledig</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-100 border border-blue-300" /> Bokad</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 border border-red-300" /> Kollision</span>
+              </div>
+            </div>
+
+            {vehicles.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>Inga fordon registrerade</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent className="p-0">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[200px]">Fordon</TableHead>
+                        {Array.from({ length: 7 }, (_, i) => {
+                          const day = addDays(availabilityWeekStart, i);
+                          return (
+                            <TableHead key={i} className="text-center min-w-[100px]" data-testid={`th-day-${i}`}>
+                              <div className="text-xs">{format(day, "EEE", { locale: sv })}</div>
+                              <div className="text-xs font-normal">{format(day, "d/M")}</div>
+                            </TableHead>
+                          );
+                        })}
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {vehicles.filter(v => v.status === "active").map(vehicle => {
+                        return (
+                          <TableRow key={vehicle.id} data-testid={`row-availability-${vehicle.id}`}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                <Truck className="h-4 w-4 text-muted-foreground" />
+                                <div>
+                                  <div className="text-sm">{vehicle.name}</div>
+                                  <div className="text-xs text-muted-foreground">{vehicle.registrationNumber}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            {Array.from({ length: 7 }, (_, i) => {
+                              const day = addDays(availabilityWeekStart, i);
+                              const dayStr = format(day, "yyyy-MM-dd");
+                              const dayBookings = bookings.filter(b => b.vehicleId === vehicle.id && format(new Date(b.date), "yyyy-MM-dd") === dayStr && b.status === "active");
+                              const uniqueTeams = new Set(dayBookings.map(b => b.teamId || b.resourceId).filter(Boolean));
+                              const hasCollision = uniqueTeams.size > 1;
+
+                              return (
+                                <TableCell key={i} className="text-center p-1" data-testid={`cell-${vehicle.id}-${i}`}>
+                                  {dayBookings.length === 0 ? (
+                                    <div className="h-8 rounded bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 flex items-center justify-center">
+                                      <span className="text-[10px] text-green-600 dark:text-green-400">Ledig</span>
+                                    </div>
+                                  ) : hasCollision ? (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="h-8 rounded bg-red-50 dark:bg-red-950/20 border border-red-300 dark:border-red-800 flex items-center justify-center cursor-help">
+                                          <AlertTriangle className="h-3 w-3 text-red-500 mr-0.5" />
+                                          <span className="text-[10px] text-red-600 dark:text-red-400 font-medium">{dayBookings.length}x</span>
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="font-medium text-red-600">Kollision!</p>
+                                        {dayBookings.map(b => {
+                                          const r = resources.find(res => res.id === b.resourceId);
+                                          const t = teams.find(tm => tm.id === b.teamId);
+                                          return <p key={b.id} className="text-xs">{t?.name || r?.name || "Okänd"} — {(b.serviceArea || []).join(", ") || "Ingen zon"}</p>;
+                                        })}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ) : (
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <div className="h-8 rounded bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 flex items-center justify-center cursor-help">
+                                          <span className="text-[10px] text-blue-600 dark:text-blue-400">{(() => { const r = resources.find(res => res.id === dayBookings[0]?.resourceId); const t = teams.find(tm => tm.id === dayBookings[0]?.teamId); return t?.name || r?.name || "Bokad"; })()}</span>
+                                        </div>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        {dayBookings.map(b => {
+                                          const r = resources.find(res => res.id === b.resourceId);
+                                          const t = teams.find(tm => tm.id === b.teamId);
+                                          return <p key={b.id} className="text-xs">{t?.name || r?.name || "Bokad"} — {(b.serviceArea || []).join(", ") || "Ingen zon"}</p>;
+                                        })}
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </TableCell>
+                              );
+                            })}
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </CardContent>
+              </Card>
+            )}
+          </div>
         </TabsContent>
       </Tabs>
 
