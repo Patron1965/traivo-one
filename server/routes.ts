@@ -51,7 +51,7 @@ import {
 } from "@shared/schema";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
-import { requireTenantWithFallback, getTenantIdWithFallback, requireAdmin, getUserTenants } from "./tenant-middleware";
+import { requireTenantWithFallback, getTenantIdWithFallback, requireAdmin, getUserTenants, assignUserToTenant } from "./tenant-middleware";
 import multer from "multer";
 import Papa from "papaparse";
 import { notificationService } from "./notifications";
@@ -19335,6 +19335,11 @@ setInterval(loadRoutes, 60000);
       if (role !== "admin" && role !== "owner") {
         return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter krävs." });
       }
+      req.userId = userId;
+      const tenantId = await getTenantIdWithFallback(req);
+      if (tenantId) {
+        req.tenantId = tenantId;
+      }
       return next();
     } catch {
       return res.status(500).json({ error: "Kunde inte verifiera behörighet" });
@@ -19381,6 +19386,11 @@ setInterval(loadRoutes, 60000);
         isActive: true,
       });
 
+      const tenantId = (req as any).tenantId;
+      if (tenantId) {
+        await assignUserToTenant(user.id, tenantId, (role || "user") as UserRole, (req as any).userId);
+      }
+
       const { passwordHash: _, ...safeUser } = user;
       console.log(`[user-mgmt] User "${email}" created with role "${role || 'user'}"`);
       res.status(201).json(safeUser);
@@ -19409,9 +19419,15 @@ setInterval(loadRoutes, 60000);
         return res.status(400).json({ error: "Inga uppdateringar angivna" });
       }
       let updatedCount = 0;
+      const tenantId = (req as any).tenantId;
       for (const id of ids) {
         const result = await storage.updateUser(id, validUpdates);
-        if (result) updatedCount++;
+        if (result) {
+          updatedCount++;
+          if (validUpdates.role && tenantId) {
+            await assignUserToTenant(id, tenantId, validUpdates.role as UserRole, (req as any).userId);
+          }
+        }
       }
       console.log(`[user-mgmt] Bulk update: ${updatedCount} users updated with`, validUpdates);
       res.json({ success: true, updatedCount });
@@ -19444,6 +19460,13 @@ setInterval(loadRoutes, 60000);
 
       const user = await storage.updateUser(req.params.id, updateData);
       if (!user) return res.status(404).json({ error: "Användaren hittades inte" });
+
+      if (role !== undefined) {
+        const tenantId = (req as any).tenantId;
+        if (tenantId) {
+          await assignUserToTenant(req.params.id, tenantId, role as UserRole, (req as any).userId);
+        }
+      }
 
       const { passwordHash: _, ...safeUser } = user;
       res.json(safeUser);
