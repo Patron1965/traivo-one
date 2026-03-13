@@ -25,9 +25,11 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, Team, WorkSession, WorkEntry } from "@shared/schema";
+import type { Resource, Team, WorkSession, WorkEntry, TimeSummaryResponse, TimeLog } from "@shared/schema";
 
-const ENTRY_TYPE_CONFIG: Record<string, { label: string; color: string; icon: any }> = {
+import type { LucideIcon } from "lucide-react";
+
+const ENTRY_TYPE_CONFIG: Record<string, { label: string; color: string; icon: LucideIcon }> = {
   work: { label: "Arbete", color: "bg-green-500", icon: CheckCircle },
   travel: { label: "Resa", color: "bg-blue-500", icon: Truck },
   setup: { label: "Ställtid", color: "bg-yellow-500", icon: Wrench },
@@ -72,7 +74,7 @@ export default function WorkSessionsPage() {
   const { data: resources = [] } = useQuery<Resource[]>({ queryKey: ["/api/resources"] });
   const { data: teams = [] } = useQuery<Team[]>({ queryKey: ["/api/teams"] });
   const { data: sessions = [], isLoading: sessionsLoading } = useQuery<WorkSession[]>({ queryKey: ["/api/work-sessions"] });
-  const { data: timeSummary } = useQuery<any>({
+  const { data: timeSummary } = useQuery<TimeSummaryResponse>({
     queryKey: ["/api/time-summary", selectedWeek, selectedYear, filterResourceId],
     queryFn: async () => {
       const params = new URLSearchParams({ weekNumber: String(selectedWeek), year: String(selectedYear) });
@@ -344,7 +346,7 @@ export default function WorkSessionsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-1">
-                  {timeSummary.nightRestViolations.map((v: any, i: number) => (
+                  {timeSummary.nightRestViolations.map((v, i) => (
                     <div key={i} className="text-sm text-red-700 dark:text-red-400" data-testid={`text-night-violation-${i}`}>
                       {v.resourceName}: {v.restHours}h vila ({v.date})
                     </div>
@@ -363,7 +365,7 @@ export default function WorkSessionsPage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-1">
-                  {timeSummary.weeklyRestViolations.map((v: any, i: number) => (
+                  {timeSummary.weeklyRestViolations.map((v, i) => (
                     <div key={i} className="text-sm text-orange-700 dark:text-orange-400" data-testid={`text-weekly-violation-${i}`}>
                       {v.resourceName}: {v.totalRestHours}h total vila denna vecka
                     </div>
@@ -374,7 +376,7 @@ export default function WorkSessionsPage() {
           )}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {timeSummary?.summaries?.map((s: any) => (
+            {timeSummary?.summaries?.map((s: TimeLog) => (
               <Card key={s.resourceId} data-testid={`card-summary-${s.resourceId}`}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{s.resourceName}</CardTitle>

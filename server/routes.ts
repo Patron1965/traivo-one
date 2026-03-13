@@ -4211,6 +4211,17 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/work-entries/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const entry = await storage.getWorkEntry(req.params.id);
+      if (!entry || entry.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
+      res.json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch work entry" });
+    }
+  });
+
   app.post("/api/work-entries", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
@@ -9480,6 +9491,110 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       res.json({ unreadCount });
     } catch (error) {
       res.status(500).json({ error: "Failed to get notification count" });
+    }
+  });
+
+  // ============================================
+  // MOBILE WORK SESSION ENDPOINTS (Snöret)
+  // ============================================
+
+  app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+      const now = new Date();
+      const session = await storage.createWorkSession({
+        tenantId: resource.tenantId,
+        resourceId,
+        teamId: req.body.teamId || null,
+        date: now,
+        startTime: now,
+        status: "active",
+        notes: req.body.notes || null,
+      });
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Failed to start mobile work session:", error);
+      res.status(500).json({ error: "Kunde inte starta arbetspass" });
+    }
+  });
+
+  app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const session = await storage.getWorkSession(req.params.id);
+      if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+      const updated = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte avsluta arbetspass" });
+    }
+  });
+
+  app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const session = await storage.getWorkSession(req.params.id);
+      if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+      const updated = await storage.updateWorkSession(req.params.id, { status: "paused" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte pausa arbetspass" });
+    }
+  });
+
+  app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const session = await storage.getWorkSession(req.params.id);
+      if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+      const updated = await storage.updateWorkSession(req.params.id, { status: "active" });
+      res.json(updated);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte återuppta arbetspass" });
+    }
+  });
+
+  app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const resource = await storage.getResource(resourceId);
+      if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+      const sessions = await storage.getWorkSessions(resource.tenantId, { resourceId, status: "active" });
+      res.json(sessions[0] || null);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta aktivt arbetspass" });
+    }
+  });
+
+  app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, async (req: any, res) => {
+    try {
+      const resourceId = req.mobileResourceId;
+      const session = await storage.getWorkSession(req.params.id);
+      if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+      const validTypes = ["work", "travel", "setup", "break", "rest"];
+      if (!validTypes.includes(req.body.entryType)) return res.status(400).json({ error: "Ogiltig posttyp" });
+      const startTime = new Date(req.body.startTime || new Date());
+      const endTime = req.body.endTime ? new Date(req.body.endTime) : undefined;
+      if (endTime && endTime <= startTime) return res.status(400).json({ error: "Sluttid måste vara efter starttid" });
+      const entry = await storage.createWorkEntry({
+        tenantId: session.tenantId,
+        workSessionId: session.id,
+        resourceId,
+        entryType: req.body.entryType,
+        startTime,
+        endTime,
+        durationMinutes: req.body.durationMinutes || (endTime ? Math.round((endTime.getTime() - startTime.getTime()) / 60000) : undefined),
+        workOrderId: req.body.workOrderId || null,
+        latitude: req.body.latitude || null,
+        longitude: req.body.longitude || null,
+        notes: req.body.notes || null,
+      });
+      res.status(201).json(entry);
+    } catch (error) {
+      console.error("Failed to create mobile work entry:", error);
+      res.status(500).json({ error: "Kunde inte skapa tidspost" });
     }
   });
 

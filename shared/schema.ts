@@ -4089,3 +4089,25 @@ export const workEntries = pgTable("work_entries", {
 export const insertWorkEntrySchema = createInsertSchema(workEntries).omit({ id: true, createdAt: true });
 export type InsertWorkEntry = z.infer<typeof insertWorkEntrySchema>;
 export type WorkEntry = typeof workEntries.$inferSelect;
+
+export type TimeLog = {
+  resourceId: string;
+  resourceName: string;
+  week: number;
+  year: number;
+  work: number;
+  travel: number;
+  setup: number;
+  break_time: number;
+  rest: number;
+  total: number;
+  budgetHours: number;
+};
+
+export type TimeSummaryResponse = {
+  week: number;
+  year: number;
+  summaries: TimeLog[];
+  nightRestViolations: Array<{ resourceId: string; resourceName: string; date: string; restHours: number }>;
+  weeklyRestViolations: Array<{ resourceId: string; resourceName: string; totalRestHours: number }>;
+};
