@@ -193,8 +193,9 @@ export async function registerRoutes(
   });
 
   const RESTRICTED_ROLE_PATHS = new Set([
-    "/work-orders", "/resources", "/clusters", "/routes", "/optimization",
-    "/articles", "/price-lists", "/vehicles", "/subscriptions", "/planning-parameters",
+    "/objects", "/customers", "/work-orders", "/resources", "/clusters",
+    "/routes", "/optimization", "/articles", "/price-lists", "/vehicles",
+    "/subscriptions", "/planning-parameters",
     "/invoices", "/invoice-preview", "/invoice-export", "/fortnox",
     "/order-concepts", "/assignments", "/auto-cluster", "/auto-plan",
     "/work-sessions", "/work-entries", "/time-summary", "/payroll-export",
@@ -203,6 +204,9 @@ export async function registerRoutes(
     "/sms", "/notifications", "/driver-notifications",
     "/ai-planning", "/ai-suggest", "/ai-auto-schedule",
     "/metadata-definitions", "/metadata-triggers",
+    "/teams", "/team-members", "/resource-profiles",
+    "/import", "/system", "/public-issue-reports",
+    "/anomaly", "/dashboard-stats", "/deviation-reports",
   ]);
 
   app.use("/api", (req, res, next) => {
@@ -17617,9 +17621,15 @@ setInterval(loadRoutes, 60000);
         return res.status(401).json({ error: "Ej autentiserad" });
       }
       const dbUser = await storage.getUser(userId);
-      if (!dbUser || (dbUser.role !== "customer" && dbUser.role !== "owner" && dbUser.role !== "admin")) {
-        const allObjects = await storage.getObjects(tenantId);
-        return res.json(allObjects);
+      if (!dbUser) {
+        return res.status(401).json({ error: "Användaren hittades inte" });
+      }
+      const role = dbUser.role || "user";
+      if (role === "reporter") {
+        return res.json([]);
+      }
+      if (role !== "customer") {
+        return res.status(403).json({ error: "Denna endpoint är avsedd för kundanvändare. Använd /api/objects istället." });
       }
       const customers = await storage.getCustomers(tenantId);
       const userEmail = dbUser.email;
