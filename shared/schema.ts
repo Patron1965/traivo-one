@@ -1877,6 +1877,7 @@ export const orderConcepts = pgTable("order_concepts", {
 
   // === WIZARD 9-STEG (Orderkoncept-Process) ===
   currentStep: integer("current_step").default(1),
+  customerMode: text("customer_mode").default("HARDCODED").notNull(),
   customerId: varchar("customer_id"),
   invoiceLevel: text("invoice_level"),
   invoiceModel: text("invoice_model"),
@@ -2390,6 +2391,9 @@ export type AssignmentArticle = typeof assignmentArticles.$inferSelect;
 export type InsertAssignmentArticle = z.infer<typeof insertAssignmentArticleSchema>;
 export type SubscriptionChange = typeof subscriptionChanges.$inferSelect;
 export type InsertSubscriptionChange = z.infer<typeof insertSubscriptionChangeSchema>;
+
+export const CUSTOMER_MODES = ["HARDCODED", "FROM_METADATA"] as const;
+export type CustomerMode = typeof CUSTOMER_MODES[number];
 
 // Scenario types for order concepts
 export const ORDER_CONCEPT_SCENARIOS = [

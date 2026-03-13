@@ -6,14 +6,31 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Search, AlertTriangle } from "lucide-react";
-import type { ServiceObject } from "@shared/schema";
+import { apiRequest } from "@/lib/queryClient";
+import type { ServiceObject, CustomerMode } from "@shared/schema";
+
+interface MissingCustomerObj {
+  id: string;
+  name: string;
+  objectNumber: string | null;
+  customerId: string | null;
+}
+
+interface WithCustomerObj {
+  id: string;
+  name: string;
+  customerId: string;
+  customerName: string | null;
+}
 
 interface Step2Props {
   selectedObjectIds: Set<string>;
   onToggleObject: (id: string) => void;
   onSelectAll: () => void;
   onDeselectAll: () => void;
+  customerMode: CustomerMode;
 }
 
 export default function Step2ObjectConfirmation({
@@ -21,6 +38,7 @@ export default function Step2ObjectConfirmation({
   onToggleObject,
   onSelectAll,
   onDeselectAll,
+  customerMode,
 }: Step2Props) {
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -29,6 +47,23 @@ export default function Step2ObjectConfirmation({
   const { data: allObjects = [] } = useQuery<ServiceObject[]>({
     queryKey: ["/api/objects"],
   });
+
+  const selectedIdsArray = useMemo(() => Array.from(selectedObjectIds), [selectedObjectIds]);
+
+  const { data: customerMetadataCheck } = useQuery<{ missingCustomer: MissingCustomerObj[]; withCustomer: WithCustomerObj[]; total: number }>({
+    queryKey: ["/api/order-concepts/check-customer-metadata", selectedIdsArray.join(",")],
+    queryFn: async () => {
+      if (selectedIdsArray.length === 0) return { missingCustomer: [], withCustomer: [], total: 0 };
+      const res = await apiRequest("POST", "/api/order-concepts/check-customer-metadata", { objectIds: selectedIdsArray });
+      return res.json();
+    },
+    enabled: customerMode === "FROM_METADATA" && selectedIdsArray.length > 0,
+  });
+
+  const missingCustomerIds = useMemo(() => {
+    if (!customerMetadataCheck) return new Set<string>();
+    return new Set(customerMetadataCheck.missingCustomer.map(o => o.id));
+  }, [customerMetadataCheck]);
 
   const selectedObjects = useMemo(() => {
     return allObjects.filter(obj => selectedObjectIds.has(obj.id));
@@ -91,6 +126,16 @@ export default function Step2ObjectConfirmation({
         </Select>
       </div>
 
+      {customerMode === "FROM_METADATA" && customerMetadataCheck && customerMetadataCheck.missingCustomer.length > 0 && (
+        <Alert variant="destructive" data-testid="alert-missing-customer">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>{customerMetadataCheck.missingCustomer.length} objekt</strong> saknar kundkoppling.
+            Dessa objekt kan inte faktureras automatiskt vid FROM_METADATA-läge.
+          </AlertDescription>
+        </Alert>
+      )}
+
       <ScrollArea className="h-[420px] border rounded-md">
         <table className="w-full text-sm">
           <thead className="bg-muted/50 sticky top-0">
@@ -106,11 +151,14 @@ export default function Step2ObjectConfirmation({
               <th className="p-2 text-left font-medium">Typ</th>
               <th className="p-2 text-left font-medium">Adress</th>
               <th className="p-2 text-left font-medium">Status</th>
+              {customerMode === "FROM_METADATA" && (
+                <th className="p-2 text-left font-medium">Kund</th>
+              )}
             </tr>
           </thead>
           <tbody>
             {filteredObjects.map(obj => (
-              <tr key={obj.id} className="border-t hover:bg-accent/30" data-testid={`row-object-${obj.id}`}>
+              <tr key={obj.id} className={`border-t hover:bg-accent/30 ${customerMode === "FROM_METADATA" && missingCustomerIds.has(obj.id) ? "bg-red-50 dark:bg-red-900/10" : ""}`} data-testid={`row-object-${obj.id}`}>
                 <td className="p-2">
                   <Checkbox
                     checked={selectedObjectIds.has(obj.id)}
@@ -138,6 +186,20 @@ export default function Step2ObjectConfirmation({
                     </Badge>
                   )}
                 </td>
+                {customerMode === "FROM_METADATA" && (
+                  <td className="p-2">
+                    {missingCustomerIds.has(obj.id) ? (
+                      <Badge variant="destructive" className="text-xs" data-testid={`badge-missing-customer-${obj.id}`}>
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Saknar kund
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs text-green-700 dark:text-green-400" data-testid={`badge-has-customer-${obj.id}`}>
+                        OK
+                      </Badge>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

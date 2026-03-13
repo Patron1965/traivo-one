@@ -12,7 +12,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import type {
   OrderConcept, Customer, Article,
   InvoiceLevel, InvoiceModel, InvoicePeriod,
-  DeliveryModel, DeliverySeason, DistributionChannel, DocumentType
+  DeliveryModel, DeliverySeason, DistributionChannel, DocumentType,
+  CustomerMode
 } from "@shared/schema";
 
 import Step1ObjectSelection from "@/components/orderkoncept/Step1ObjectSelection";
@@ -65,6 +66,7 @@ export default function OrderConceptWizardPage() {
   const [conceptId, setConceptId] = useState<string | null>(params.id || null);
   const [conceptName, setConceptName] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [customerMode, setCustomerMode] = useState<CustomerMode>("HARDCODED");
   const [selectedObjectIds, setSelectedObjectIds] = useState<Set<string>>(new Set());
   const [invoiceLevel, setInvoiceLevel] = useState<InvoiceLevel | null>(null);
   const [invoiceModel, setInvoiceModel] = useState<InvoiceModel | null>(null);
@@ -107,6 +109,7 @@ export default function OrderConceptWizardPage() {
   useEffect(() => {
     if (wizardData && isEditing) {
       setConceptName(wizardData.name || "");
+      setCustomerMode(wizardData.customerMode || "HARDCODED");
       setSelectedCustomerId(wizardData.customerId || null);
       const savedStep = wizardData.currentStep || 1;
       setCurrentStep(savedStep);
@@ -259,7 +262,8 @@ export default function OrderConceptWizardPage() {
         status: "draft",
         scenario: "avrop",
         scheduleType: "once",
-        customerId: selectedCustomerId,
+        customerMode,
+        customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
         currentStep: 1,
       });
       return res.json();
@@ -277,7 +281,8 @@ export default function OrderConceptWizardPage() {
       await apiRequest("PATCH", `/api/order-concepts/${cId}`, {
         currentStep: step,
         name: conceptName,
-        customerId: selectedCustomerId,
+        customerMode,
+        customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
         invoiceLevel,
         invoiceModel,
         invoicePeriod,
@@ -612,6 +617,13 @@ export default function OrderConceptWizardPage() {
                 onToggleAll={toggleAllObjects}
                 selectedCustomerId={selectedCustomerId}
                 onSelectCustomer={setSelectedCustomerId}
+                customerMode={customerMode}
+                onCustomerModeChange={(mode) => {
+                  setCustomerMode(mode);
+                  if (mode === "FROM_METADATA") {
+                    setSelectedCustomerId(null);
+                  }
+                }}
               />
             )}
 
@@ -621,6 +633,7 @@ export default function OrderConceptWizardPage() {
                 onToggleObject={toggleObject}
                 onSelectAll={selectAllObjects}
                 onDeselectAll={deselectAllObjects}
+                customerMode={customerMode}
               />
             )}
 

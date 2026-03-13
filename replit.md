@@ -53,7 +53,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner.
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.
 - **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.
-- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard for building delivery schedules and subscription calculations.
+- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard for building delivery schedules and subscription calculations. Includes `customerMode` field (HARDCODED/FROM_METADATA) for customer identification — HARDCODED uses a single customer for all objects, FROM_METADATA reads each object's own customer reference. Customer metadata check endpoint `POST /api/order-concepts/check-customer-metadata` validates object customer references. Wizard Step 1 has customerMode selector; Step 2 shows warnings for objects with invalid customer references when in FROM_METADATA mode.
 - **Field Worker Task Dependency View:** Mobile app displays task dependencies.
 - **Field Worker Photo Upload:** Two-step presigned URL flow for photo capture.
 - **Inspection & Metadata System:** Structured inspection checklist integrated into the mobile app.

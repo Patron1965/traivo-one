@@ -1,0 +1,1 @@
+ALTER TABLE "order_concepts" ADD COLUMN "customer_mode" text DEFAULT 'HARDCODED' NOT NULL;

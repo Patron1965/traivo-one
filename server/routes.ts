@@ -13828,6 +13828,10 @@ setInterval(loadRoutes, 60000);
       const tenantId = getTenantIdWithFallback(req);
       const userId = req.session?.user?.id;
       
+      if (req.body.customerMode && !["HARDCODED", "FROM_METADATA"].includes(req.body.customerMode)) {
+        return res.status(400).json({ error: "customerMode måste vara HARDCODED eller FROM_METADATA" });
+      }
+      
       const concept = await storage.createOrderConcept({
         ...req.body,
         tenantId,
@@ -13846,6 +13850,10 @@ setInterval(loadRoutes, 60000);
       const existing = await storage.getOrderConcept(req.params.id);
       if (!verifyTenantOwnership(existing, tenantId)) {
         return res.status(404).json({ error: "Orderkoncept hittades inte" });
+      }
+      
+      if (req.body.customerMode && !["HARDCODED", "FROM_METADATA"].includes(req.body.customerMode)) {
+        return res.status(400).json({ error: "customerMode måste vara HARDCODED eller FROM_METADATA" });
       }
       
       const concept = await storage.updateOrderConcept(req.params.id, tenantId, req.body);
@@ -13869,6 +13877,34 @@ setInterval(loadRoutes, 60000);
     } catch (error) {
       console.error("Failed to delete order concept:", error);
       res.status(500).json({ error: "Kunde inte radera orderkoncept" });
+    }
+  });
+
+  app.post("/api/order-concepts/check-customer-metadata", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { objectIds } = req.body;
+      if (!Array.isArray(objectIds) || objectIds.length === 0) {
+        return res.status(400).json({ error: "objectIds krävs" });
+      }
+      const objectsList = await storage.getObjectsByIds(tenantId, objectIds);
+      const customers = await storage.getCustomers(tenantId);
+      const validCustomerIds = new Set(customers.map(c => c.id));
+
+      const missingCustomer: Array<{ id: string; name: string; objectNumber: string | null; customerId: string | null }> = [];
+      const withCustomer: Array<{ id: string; name: string; customerId: string; customerName: string | null }> = [];
+      for (const obj of objectsList) {
+        if (!obj.customerId || !validCustomerIds.has(obj.customerId)) {
+          missingCustomer.push({ id: obj.id, name: obj.name, objectNumber: obj.objectNumber, customerId: obj.customerId });
+        } else {
+          const cust = customers.find(c => c.id === obj.customerId);
+          withCustomer.push({ id: obj.id, name: obj.name, customerId: obj.customerId, customerName: cust?.name || null });
+        }
+      }
+      res.json({ missingCustomer, withCustomer, total: objectsList.length });
+    } catch (error) {
+      console.error("Failed to check customer metadata:", error);
+      res.status(500).json({ error: "Kunde inte kontrollera kundmetadata" });
     }
   });
 

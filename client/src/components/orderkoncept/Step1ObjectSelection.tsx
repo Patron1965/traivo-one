@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { Search, ChevronRight, ChevronDown, Building2, Clock } from "lucide-react";
-import type { Customer, ObjectTimeRestriction } from "@shared/schema";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { Search, ChevronRight, ChevronDown, Building2, Clock, Users } from "lucide-react";
+import type { Customer, ObjectTimeRestriction, CustomerMode } from "@shared/schema";
 
 interface AggregatedSlotPreference extends ObjectTimeRestriction {
   objectName: string;
@@ -29,6 +31,8 @@ interface Step1Props {
   onToggleAll: (ids: string[], selected: boolean) => void;
   selectedCustomerId: string | null;
   onSelectCustomer: (id: string | null) => void;
+  customerMode: CustomerMode;
+  onCustomerModeChange: (mode: CustomerMode) => void;
 }
 
 function ObjectTreeNode({
@@ -152,6 +156,8 @@ export default function Step1ObjectSelection({
   onToggleAll,
   selectedCustomerId,
   onSelectCustomer,
+  customerMode,
+  onCustomerModeChange,
 }: Step1Props) {
   const [customerSearch, setCustomerSearch] = useState("");
   const [objectSearch, setObjectSearch] = useState("");
@@ -168,10 +174,12 @@ export default function Step1ObjectSelection({
 
   const isSearching = debouncedSearch.trim().length > 0;
 
+  const effectiveCustomerId = customerMode === "FROM_METADATA" ? null : selectedCustomerId;
+
   const { data: treeData = [], isLoading: treeLoading } = useQuery<TreeNode[]>({
-    queryKey: ["/api/objects/tree", selectedCustomerId, isSearching ? null : "tree"],
+    queryKey: ["/api/objects/tree", effectiveCustomerId, isSearching ? null : "tree"],
     queryFn: async () => {
-      const params = selectedCustomerId ? `?customerId=${selectedCustomerId}` : "";
+      const params = effectiveCustomerId ? `?customerId=${effectiveCustomerId}` : "";
       const res = await fetch(`/api/objects/tree${params}`);
       if (!res.ok) throw new Error("Failed to fetch tree");
       return res.json();
@@ -232,6 +240,28 @@ export default function Step1ObjectSelection({
 
   return (
     <div className="space-y-4" data-testid="step1-object-selection">
+      <div className="border rounded-md p-3 space-y-2" data-testid="customer-mode-section">
+        <div className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">Kundidentifiering</Label>
+        </div>
+        <Select value={customerMode} onValueChange={(v) => onCustomerModeChange(v as CustomerMode)}>
+          <SelectTrigger className="w-full" data-testid="select-customer-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="HARDCODED">Hårdkodad kund — samma kund för alla objekt</SelectItem>
+            <SelectItem value="FROM_METADATA">Från metadata — hämta kund från varje objekts data</SelectItem>
+          </SelectContent>
+        </Select>
+        {customerMode === "FROM_METADATA" && (
+          <p className="text-xs text-muted-foreground">
+            Systemet hämtar kundkoppling direkt från varje objekt. Objekt som saknar kundkoppling markeras med varning i steg 2.
+          </p>
+        )}
+      </div>
+
+      {customerMode === "HARDCODED" && (
       <div>
         <label className="text-sm font-medium mb-1 block">Sök kund</label>
         <div className="relative">
@@ -281,6 +311,7 @@ export default function Step1ObjectSelection({
           </div>
         )}
       </div>
+      )}
 
       <div>
         <div className="flex items-center justify-between mb-1">
