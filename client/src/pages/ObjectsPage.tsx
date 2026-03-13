@@ -570,7 +570,7 @@ export default function ObjectsPage() {
               <Badge variant="secondary" className="text-xs">
                 {objectTypeLabels[obj.objectType] || obj.objectType}
               </Badge>
-              {(obj as any).isInterimObject && (
+              {obj.isInterimObject && (
                 <Badge variant="destructive" className="text-xs gap-1">
                   <ShieldAlert className="h-3 w-3" />
                   Interim
@@ -761,7 +761,7 @@ export default function ObjectsPage() {
                       <Link2 className="h-4 w-4 mr-2" />
                       Artiklar & Priser
                     </DropdownMenuItem>
-                    {(obj as any).isInterimObject && (
+                    {obj.isInterimObject && (
                       <>
                         <DropdownMenuItem
                           onClick={(e) => { e.stopPropagation(); verifyObjectMutation.mutate(obj.id); }}
