@@ -19322,10 +19322,11 @@ setInterval(loadRoutes, 60000);
       const auth = await authenticateIotApiKey(req, res);
       if (!auth) return;
 
+      const VALID_SIGNAL_TYPES = ["full", "damaged", "low_battery", "overflow", "tilt", "fire", "heartbeat", "temperature", "weight", "gps"] as const;
       const schema = z.object({
         deviceId: z.string().optional(),
         externalDeviceId: z.string().optional(),
-        signalType: z.string(),
+        signalType: z.enum(VALID_SIGNAL_TYPES),
         payload: z.string().optional(),
         batteryLevel: z.number().optional(),
       });
