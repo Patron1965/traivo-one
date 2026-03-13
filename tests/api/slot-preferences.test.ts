@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { storage } from "../../server/storage";
 import { apiGet, apiPost, apiDelete, randomId } from "./helpers";
+import type { InsertObject } from "@shared/schema";
 
 const TENANT_ID = "default-tenant";
 
@@ -21,16 +22,20 @@ describe("SlotPreference — favorable/unfavorable slots", () => {
       tenantId: TENANT_ID,
       customerId,
       name: `SlotObj1 ${randomId()}`,
+      objectNumber: randomId(),
       objectType: "container",
-    } as any);
+      objectLevel: 2,
+    } as InsertObject);
     objectId1 = obj1.id;
 
     const obj2 = await storage.createObject({
       tenantId: TENANT_ID,
       customerId,
       name: `SlotObj2 ${randomId()}`,
+      objectNumber: randomId(),
       objectType: "container",
-    } as any);
+      objectLevel: 2,
+    } as InsertObject);
     objectId2 = obj2.id;
   });
 

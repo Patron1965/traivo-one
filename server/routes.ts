@@ -13327,8 +13327,19 @@ setInterval(loadRoutes, 60000);
   app.post("/api/objects/:objectId/time-restrictions", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const { restrictionType, description, weekdays, startTime, endTime, isBlockingAllDay, preference, reason } = req.body;
-      if (!restrictionType) return res.status(400).json({ error: "restrictionType is required" });
+      const restrictionSchema = z.object({
+        restrictionType: z.string(),
+        description: z.string().nullable().optional(),
+        weekdays: z.array(z.number()).optional(),
+        startTime: z.string().nullable().optional(),
+        endTime: z.string().nullable().optional(),
+        isBlockingAllDay: z.boolean().optional(),
+        preference: z.enum(["favorable", "unfavorable"]).optional(),
+        reason: z.string().nullable().optional(),
+      });
+      const parsed = restrictionSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+      const { restrictionType, description, weekdays, startTime, endTime, isBlockingAllDay, preference, reason } = parsed.data;
 
       const obj = await storage.getObject(req.params.objectId);
       if (!obj || obj.tenantId !== tenantId) return res.status(404).json({ error: "Object not found" });
@@ -13356,7 +13367,20 @@ setInterval(loadRoutes, 60000);
   app.patch("/api/time-restrictions/:id", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const restriction = await storage.updateObjectTimeRestriction(req.params.id, tenantId, req.body);
+      const updateSchema = z.object({
+        restrictionType: z.string().optional(),
+        description: z.string().nullable().optional(),
+        weekdays: z.array(z.number()).optional(),
+        startTime: z.string().nullable().optional(),
+        endTime: z.string().nullable().optional(),
+        isBlockingAllDay: z.boolean().optional(),
+        preference: z.enum(["favorable", "unfavorable"]).optional(),
+        reason: z.string().nullable().optional(),
+        isActive: z.boolean().optional(),
+      });
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+      const restriction = await storage.updateObjectTimeRestriction(req.params.id, tenantId, parsed.data);
       if (!restriction) return res.status(404).json({ error: "Not found" });
       res.json(restriction);
     } catch (error) {
