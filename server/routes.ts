@@ -192,6 +192,34 @@ export async function registerRoutes(
     return requireTenantWithFallback(req, res, next);
   });
 
+  const RESTRICTED_ROLE_PATHS = new Set([
+    "/work-orders", "/resources", "/clusters", "/routes", "/optimization",
+    "/articles", "/price-lists", "/vehicles", "/subscriptions", "/planning-parameters",
+    "/invoices", "/invoice-preview", "/invoice-export", "/fortnox",
+    "/order-concepts", "/assignments", "/auto-cluster", "/auto-plan",
+    "/work-sessions", "/work-entries", "/time-summary", "/payroll-export",
+    "/equipment-bookings", "/fleet", "/checklist-templates",
+    "/environmental-stats", "/environmental-certificates",
+    "/sms", "/notifications", "/driver-notifications",
+    "/ai-planning", "/ai-suggest", "/ai-auto-schedule",
+    "/metadata-definitions", "/metadata-triggers",
+  ]);
+
+  app.use("/api", (req, res, next) => {
+    const role = req.tenantRole;
+    if (!role || role === "owner" || role === "admin" || role === "planner" || role === "technician" || role === "user" || role === "viewer") {
+      return next();
+    }
+    const pathSegment = "/" + req.path.split("/").filter(Boolean)[0];
+    if (RESTRICTED_ROLE_PATHS.has(pathSegment)) {
+      return res.status(403).json({
+        error: "Behörighet saknas",
+        message: `Rollen "${role}" har inte tillgång till denna resurs.`,
+      });
+    }
+    return next();
+  });
+
   // Helper function to verify tenant ownership of a resource
   function verifyTenantOwnership<T extends { tenantId: string }>(
     resource: T | undefined,
@@ -17558,6 +17586,56 @@ setInterval(loadRoutes, 60000);
     } catch (error) {
       console.error("Failed to delete QR code link:", error);
       res.status(500).json({ error: "Kunde inte ta bort QR-kod" });
+    }
+  });
+
+  // ============================================
+  // ROLE-SCOPED ENDPOINTS (customer & reporter)
+  // ============================================
+
+  app.get("/api/my-reports", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = (req.user as any)?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "Ej autentiserad" });
+      }
+      const reports = await storage.getPublicIssueReports(tenantId, {});
+      const myReports = reports.filter((r: any) => r.reporterEmail === userId || r.reporterPhone === userId);
+      res.json(myReports);
+    } catch (error) {
+      console.error("Failed to get user reports:", error);
+      res.status(500).json({ error: "Kunde inte hämta dina felanmälningar" });
+    }
+  });
+
+  app.get("/api/my-objects", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const userId = (req.user as any)?.claims?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: "Ej autentiserad" });
+      }
+      const dbUser = await storage.getUser(userId);
+      if (!dbUser || (dbUser.role !== "customer" && dbUser.role !== "owner" && dbUser.role !== "admin")) {
+        const allObjects = await storage.getObjects(tenantId);
+        return res.json(allObjects);
+      }
+      const customers = await storage.getCustomers(tenantId);
+      const userEmail = dbUser.email;
+      const matchedCustomers = customers.filter((c: any) =>
+        c.email && userEmail && c.email.toLowerCase() === userEmail.toLowerCase()
+      );
+      if (matchedCustomers.length === 0) {
+        return res.json([]);
+      }
+      const customerIds = new Set(matchedCustomers.map((c: any) => c.id));
+      const allObjects = await storage.getObjects(tenantId);
+      const myObjects = allObjects.filter((o: any) => customerIds.has(o.customerId));
+      res.json(myObjects);
+    } catch (error) {
+      console.error("Failed to get customer objects:", error);
+      res.status(500).json({ error: "Kunde inte hämta dina objekt" });
     }
   });
 

@@ -100,12 +100,24 @@ describe("Role Configuration", () => {
     });
   });
 
-  describe("Server-side role validation", () => {
+  describe("Server-side authentication", () => {
     it("should reject unauthenticated access to admin user API", async () => {
       const res = await apiGet("/api/admin/users");
       expect(res.status).toBe(401);
     });
 
+    it("should reject unauthenticated access to my-reports API", async () => {
+      const res = await apiGet("/api/my-reports");
+      expect(res.status).toBe(401);
+    });
+
+    it("should reject unauthenticated access to my-objects API", async () => {
+      const res = await apiGet("/api/my-objects");
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe("Server-side role validation", () => {
     it("should reject invalid role in user creation", async () => {
       const res = await apiPost("/api/admin/users", {
         email: "test-invalid-role@example.com",
@@ -150,6 +162,15 @@ describe("Role Configuration", () => {
         const homeAccess = canAccessRoute(role, "/");
         expect(typeof homeAccess).toBe("boolean");
         expect(homeAccess).toBe(true);
+      }
+    });
+
+    it("should have admin/owner access to all routes", async () => {
+      const { canAccessRoute } = await import("../../client/src/lib/role-config");
+      const testRoutes = ["/planner", "/objects", "/invoicing", "/user-management", "/tenant-config", "/customer-portal"];
+      for (const route of testRoutes) {
+        expect(canAccessRoute("admin", route)).toBe(true);
+        expect(canAccessRoute("owner", route)).toBe(true);
       }
     });
   });

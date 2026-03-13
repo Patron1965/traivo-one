@@ -12,7 +12,12 @@ export function ProtectedRoute({ component: Component, path }: ProtectedRoutePro
   const userRole = user?.role || "user";
 
   if (path && !canAccessRoute(userRole, path)) {
-    const redirectTo = isTechnicianRole(userRole) ? "/mobile" : "/";
+    let redirectTo = "/";
+    if (isTechnicianRole(userRole)) {
+      redirectTo = "/mobile";
+    } else if (userRole === "customer") {
+      redirectTo = "/customer-portal";
+    }
     return <Redirect to={redirectTo} />;
   }
 
