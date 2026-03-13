@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import type { Resource, GpsPosition } from '../types';
+import { FIELD_APP_ALLOWED_ROLES } from '../types';
 
 const PROFILES_CACHE_KEY = '@resource_profiles';
 
@@ -179,16 +180,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (stored) {
         const parsed = JSON.parse(stored);
         const storedToken = parsed.token;
-        setUser(parsed.resource || parsed.user);
+        const storedResource = parsed.resource || parsed.user;
+        setUser(storedResource);
         setToken(storedToken);
         try {
           const meData = await apiRequest('GET', '/api/mobile/me', undefined, storedToken);
+          const freshResource = meData.resource || storedResource;
           if (meData.success && meData.resource) {
             setUser(meData.resource);
           } else if (meData.resource) {
             setUser(meData.resource);
           }
-          fetchAndCacheProfiles(storedToken);
+          if (isRoleAllowed(freshResource?.role)) {
+            fetchAndCacheProfiles(storedToken);
+          }
         } catch {
           setUser(null);
           setToken(null);
@@ -201,6 +206,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       initialLoadCompleteRef.current = true;
       setIsLoading(false);
     }
+  }
+
+  function isRoleAllowed(role?: string): boolean {
+    if (!role) return true;
+    const normalized = role.toLowerCase().trim();
+    return (FIELD_APP_ALLOWED_ROLES as readonly string[]).includes(normalized);
   }
 
   async function login(username: string, password: string, pin?: string) {
@@ -218,6 +229,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const body: any = pin ? { pin } : { username, password };
     const data = await apiRequest('POST', '/api/mobile/login', body);
     const resource = data.resource || data.user;
+    if (resource?.role && !isRoleAllowed(resource.role)) {
+      setUser(resource);
+      setToken(data.token);
+      await AsyncStorage.setItem('auth', JSON.stringify({ resource, token: data.token }));
+      return;
+    }
     setUser(resource);
     setToken(data.token);
     await AsyncStorage.setItem('auth', JSON.stringify({ resource, token: data.token }));

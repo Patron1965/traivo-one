@@ -45,6 +45,7 @@ const MOCK_RESOURCE = {
   tenantId: 'kinab-demo',
   name: 'Erik Lindqvist',
   type: 'driver',
+  role: 'technician',
   phone: '070-111 22 33',
   email: 'erik.lindqvist@kinab.se',
   vehicleRegNo: 'ABC 123',

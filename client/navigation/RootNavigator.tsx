@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { useScreenOptions } from '../hooks/useScreenOptions';
 import { TabNavigator } from './TabNavigator';
 import { LoginScreen } from '../screens/LoginScreen';
+import { UnauthorizedScreen } from '../screens/UnauthorizedScreen';
 import { OrderDetailScreen } from '../screens/OrderDetailScreen';
 import { ReportDeviationScreen } from '../screens/ReportDeviationScreen';
 import { MaterialLogScreen } from '../screens/MaterialLogScreen';
@@ -16,6 +17,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import StatisticsScreen from '../screens/StatisticsScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
+import { FIELD_APP_ALLOWED_ROLES } from '../types';
 
 const Stack = createNativeStackNavigator();
 
@@ -51,6 +53,12 @@ function AuthenticatedTabNavigator() {
   return <TabNavigator />;
 }
 
+function isUserRoleAllowed(role?: string): boolean {
+  if (!role) return true;
+  const normalized = role.toLowerCase().trim();
+  return (FIELD_APP_ALLOWED_ROLES as readonly string[]).includes(normalized);
+}
+
 export function RootNavigator() {
   const { user, isLoading } = useAuth();
   const screenOptions = useScreenOptions();
@@ -63,61 +71,71 @@ export function RootNavigator() {
     );
   }
 
+  const hasAccess = user ? isUserRoleAllowed(user.role) : false;
+
   return (
     <Stack.Navigator screenOptions={screenOptions}>
       {user ? (
-        <>
+        hasAccess ? (
+          <>
+            <Stack.Screen
+              name="MainTabs"
+              component={AuthenticatedTabNavigator}
+              options={{ headerShown: false }}
+            />
+            <Stack.Screen
+              name="OrderDetail"
+              component={OrderDetailScreen}
+              options={{ headerTitle: 'Uppdrag' }}
+            />
+            <Stack.Screen
+              name="ReportDeviation"
+              component={ReportDeviationScreen}
+              options={{ headerTitle: 'Avvikelse' }}
+            />
+            <Stack.Screen
+              name="MaterialLog"
+              component={MaterialLogScreen}
+              options={{ headerTitle: 'Material' }}
+            />
+            <Stack.Screen
+              name="CameraCapture"
+              component={CameraCaptureScreen}
+              options={{ headerTitle: 'Foto' }}
+            />
+            <Stack.Screen
+              name="Signature"
+              component={SignatureScreen}
+              options={{ headerTitle: 'Signatur' }}
+            />
+            <Stack.Screen
+              name="CustomerSignOff"
+              component={CustomerSignOffScreen}
+              options={{ headerTitle: 'Kundkvittering' }}
+            />
+            <Stack.Screen
+              name="Inspection"
+              component={InspectionScreen}
+              options={{ headerTitle: 'Inspektion' }}
+            />
+            <Stack.Screen
+              name="Settings"
+              component={SettingsScreen}
+              options={{ headerTitle: 'Inställningar' }}
+            />
+            <Stack.Screen
+              name="Statistics"
+              component={StatisticsScreen}
+              options={{ headerTitle: 'Statistik' }}
+            />
+          </>
+        ) : (
           <Stack.Screen
-            name="MainTabs"
-            component={AuthenticatedTabNavigator}
+            name="Unauthorized"
+            component={UnauthorizedScreen}
             options={{ headerShown: false }}
           />
-          <Stack.Screen
-            name="OrderDetail"
-            component={OrderDetailScreen}
-            options={{ headerTitle: 'Uppdrag' }}
-          />
-          <Stack.Screen
-            name="ReportDeviation"
-            component={ReportDeviationScreen}
-            options={{ headerTitle: 'Avvikelse' }}
-          />
-          <Stack.Screen
-            name="MaterialLog"
-            component={MaterialLogScreen}
-            options={{ headerTitle: 'Material' }}
-          />
-          <Stack.Screen
-            name="CameraCapture"
-            component={CameraCaptureScreen}
-            options={{ headerTitle: 'Foto' }}
-          />
-          <Stack.Screen
-            name="Signature"
-            component={SignatureScreen}
-            options={{ headerTitle: 'Signatur' }}
-          />
-          <Stack.Screen
-            name="CustomerSignOff"
-            component={CustomerSignOffScreen}
-            options={{ headerTitle: 'Kundkvittering' }}
-          />
-          <Stack.Screen
-            name="Inspection"
-            component={InspectionScreen}
-            options={{ headerTitle: 'Inspektion' }}
-          />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
-            options={{ headerTitle: 'Inställningar' }}
-          />
-          <Stack.Screen
-            name="Statistics"
-            component={StatisticsScreen}
-            options={{ headerTitle: 'Statistik' }}
-          />
-        </>
+        )
       ) : (
         <Stack.Screen
           name="Login"

@@ -12,6 +12,14 @@ Nordnav Go is a native mobile application built with React Native/Expo, designed
 ## System Architecture
 The application is built using React Native with Expo SDK 54 and TypeScript for the frontend, and an Express.js backend. Navigation is handled by React Navigation 7, and state management is powered by `@tanstack/react-query`. The system supports both PIN-based and username/password authentication.
 
+**Role-Based Access Control:**
+- 8 roles: `owner`, `admin`, `planner`, `technician`, `user`, `viewer`, `customer`, `reporter`
+- Field app access allowed for: `technician`, `planner`, `admin`, `owner`, `user`
+- Blocked roles (`customer`, `reporter`, `viewer`) see `UnauthorizedScreen` with logout option
+- Role constants defined in `client/types/index.ts` (`FIELD_APP_ALLOWED_ROLES`, `FIELD_APP_BLOCKED_ROLES`)
+- Role check in `RootNavigator.tsx` gates access to main app vs unauthorized screen
+- Login stores user with role; blocked roles skip push token registration and profile fetching
+
 **Key Features:**
 - **Order Management:** Daily order lists with status badges, filtering, swipe gestures for status updates and deviation reporting, and detailed order views with sub-steps, notes, and task dependencies.
 - **Time Tracking:** Automatic time entries created on status changes (travel/on_site/working phases). Live timer on OrderDetailScreen during active work. Time breakdown per phase on completed orders. Daily work time summary on HomeScreen. Database table `time_entries`.

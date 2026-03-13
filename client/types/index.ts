@@ -245,12 +245,16 @@ export interface Deviation {
   photos?: string[];
 }
 
+export const FIELD_APP_ALLOWED_ROLES = ['technician', 'planner', 'admin', 'owner', 'user'] as const;
+export const FIELD_APP_BLOCKED_ROLES = ['customer', 'reporter', 'viewer'] as const;
+export type UserRole = 'owner' | 'admin' | 'planner' | 'technician' | 'user' | 'viewer' | 'customer' | 'reporter';
+
 export interface Resource {
   id: number | string;
   tenantId?: string;
   name: string;
   type?: string;
-  role?: string;
+  role?: UserRole | string;
   phone?: string;
   email?: string;
   vehicleRegNo?: string;
