@@ -1,4 +1,4 @@
-export type UserRole = "owner" | "admin" | "planner" | "technician" | "user" | "viewer";
+export type UserRole = "owner" | "admin" | "planner" | "technician" | "user" | "viewer" | "customer" | "reporter";
 
 const ROLE_LABELS: Record<UserRole, string> = {
   owner: "Ägare",
@@ -7,6 +7,8 @@ const ROLE_LABELS: Record<UserRole, string> = {
   technician: "Tekniker",
   user: "Användare",
   viewer: "Betraktare",
+  customer: "Kund",
+  reporter: "Anmälare",
 };
 
 const ADMIN_ONLY_ROUTES = new Set([
@@ -81,6 +83,19 @@ const TECHNICIAN_ROUTES = new Set([
   "/settings",
 ]);
 
+const CUSTOMER_ROUTES = new Set([
+  "/",
+  "/home",
+  "/customer-portal",
+  "/settings",
+]);
+
+const REPORTER_ROUTES = new Set([
+  "/",
+  "/home",
+  "/settings",
+]);
+
 export function getRoleLabel(role: string): string {
   return ROLE_LABELS[role as UserRole] || "Användare";
 }
@@ -115,6 +130,14 @@ export function canAccessRoute(role: string | undefined | null, route: string): 
     return TECHNICIAN_ROUTES.has(basePath);
   }
 
+  if (normalizedRole === "customer") {
+    return CUSTOMER_ROUTES.has(basePath);
+  }
+
+  if (normalizedRole === "reporter") {
+    return REPORTER_ROUTES.has(basePath);
+  }
+
   if (normalizedRole === "planner") {
     return PLANNER_ROUTES.has(basePath);
   }
@@ -125,7 +148,7 @@ export function canAccessRoute(role: string | undefined | null, route: string): 
 export type NavMenuGroup = "grunddata" | "ordrar" | "planering" | "falt" | "analys" | "admin";
 
 const MENU_ACCESS: Record<NavMenuGroup, UserRole[]> = {
-  grunddata: ["owner", "admin", "planner", "user", "viewer"],
+  grunddata: ["owner", "admin", "planner", "user", "viewer", "customer"],
   ordrar: ["owner", "admin", "planner"],
   planering: ["owner", "admin", "planner"],
   falt: ["owner", "admin", "planner", "user"],

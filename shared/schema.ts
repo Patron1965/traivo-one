@@ -1290,7 +1290,7 @@ export type AuditLog = typeof auditLogs.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 
 // Role constants
-export const USER_ROLES = ["owner", "admin", "user"] as const;
+export const USER_ROLES = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"] as const;
 export type UserRole = typeof USER_ROLES[number];
 
 // ============================================

@@ -61,6 +61,8 @@ import {
   ArrowUp,
   ArrowDown,
   Clock,
+  Building2,
+  MessageSquare,
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -83,6 +85,8 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; icon: typeof S
   planner: { label: "Planerare", color: "bg-blue-500/10 text-blue-500 border-blue-500/20", icon: UserCog, avatarBg: "bg-blue-500" },
   user: { label: "Användare", color: "bg-gray-500/10 text-gray-400 border-gray-500/20", icon: Users, avatarBg: "bg-gray-500" },
   technician: { label: "Tekniker", color: "bg-green-500/10 text-green-500 border-green-500/20", icon: Shield, avatarBg: "bg-green-500" },
+  customer: { label: "Kund", color: "bg-teal-500/10 text-teal-500 border-teal-500/20", icon: Building2, avatarBg: "bg-teal-500" },
+  reporter: { label: "Anmälare", color: "bg-amber-500/10 text-amber-500 border-amber-500/20", icon: MessageSquare, avatarBg: "bg-amber-500" },
 };
 
 function formatRelativeTime(dateStr: string | null): string {
@@ -602,6 +606,8 @@ export default function UserManagementPage() {
                       <SelectItem value="planner">Planerare</SelectItem>
                       <SelectItem value="technician">Tekniker</SelectItem>
                       <SelectItem value="user">Användare</SelectItem>
+                      <SelectItem value="customer">Kund</SelectItem>
+                      <SelectItem value="reporter">Anmälare</SelectItem>
                     </SelectContent>
                   </Select>
                   <Button
@@ -709,6 +715,8 @@ export default function UserManagementPage() {
                                   <SelectItem value="planner">Planerare</SelectItem>
                                   <SelectItem value="technician">Tekniker</SelectItem>
                                   <SelectItem value="user">Användare</SelectItem>
+                                  <SelectItem value="customer">Kund</SelectItem>
+                                  <SelectItem value="reporter">Anmälare</SelectItem>
                                 </SelectContent>
                               </Select>
                             ) : (
@@ -988,6 +996,8 @@ export default function UserManagementPage() {
                     <SelectItem value="planner">Planerare</SelectItem>
                     <SelectItem value="technician">Tekniker</SelectItem>
                     <SelectItem value="user">Användare</SelectItem>
+                    <SelectItem value="customer">Kund</SelectItem>
+                    <SelectItem value="reporter">Anmälare</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
