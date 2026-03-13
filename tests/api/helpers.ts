@@ -37,6 +37,25 @@ export async function apiPatch(path: string, data?: any, headers: Record<string,
   return { status: res.status, body, ok: res.ok };
 }
 
+export async function apiPut(path: string, data?: any, headers: Record<string, string> = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...headers,
+    },
+    body: data ? JSON.stringify(data) : undefined,
+  });
+  const body = await res.json().catch(() => null);
+  return { status: res.status, body, ok: res.ok };
+}
+
+export async function apiRaw(path: string, headers: Record<string, string> = {}) {
+  const res = await fetch(`${BASE_URL}${path}`, { headers });
+  const text = await res.text();
+  return { status: res.status, text, ok: res.ok, contentType: res.headers.get("content-type") };
+}
+
 export async function apiDelete(path: string, headers: Record<string, string> = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "DELETE",

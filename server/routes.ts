@@ -4148,6 +4148,10 @@ export async function registerRoutes(
         const resource = await storage.getResource(updateData.resourceId);
         if (!resource || resource.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig resurs" });
       }
+      if (updateData.teamId) {
+        const team = await storage.getTeam(updateData.teamId);
+        if (!team || team.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltigt team" });
+      }
       if (updateData.endTime) updateData.endTime = new Date(updateData.endTime);
       if (updateData.startTime) updateData.startTime = new Date(updateData.startTime);
       if (updateData.date) updateData.date = new Date(updateData.date);
