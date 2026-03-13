@@ -4252,6 +4252,14 @@ export async function registerRoutes(
       const { tenantId: _, id: __, workSessionId: ___, ...updateData } = req.body;
       const validTypes = ["work", "travel", "setup", "break", "rest"];
       if (updateData.entryType && !validTypes.includes(updateData.entryType)) return res.status(400).json({ error: "Ogiltig posttyp" });
+      if (updateData.resourceId) {
+        const resource = await storage.getResource(updateData.resourceId);
+        if (!resource || resource.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig resurs" });
+      }
+      if (updateData.workOrderId) {
+        const wo = await storage.getWorkOrder(updateData.workOrderId);
+        if (!wo || wo.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig arbetsorder" });
+      }
       if (updateData.startTime) updateData.startTime = new Date(updateData.startTime);
       if (updateData.endTime) updateData.endTime = new Date(updateData.endTime);
       const start = updateData.startTime || existing.startTime;
