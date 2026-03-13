@@ -63,6 +63,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Fleet Management:** Comprehensive fleet management page at `/fleet` with vehicle dashboard, maintenance planning, and fuel tracking.
 - **Tenant Onboarding Wizard:** Admin wizard at `/onboarding` for creating new company accounts with industry package selection.
 - **Multi-Strategy Auto-Clustering:** Enhanced `/auto-cluster` page with 5 strategies for automatic cluster generation, including smart auto-assignment and manual cluster movement.
+- **Interim Objects & Object Verification:** `isInterimObject` boolean flag on objects table. Interim objects can be created from public issue reports via `POST /api/public-issue-reports/:id/create-interim-object`. Admin UI in ObjectsPage shows interim object count badge, filter toggle, and per-object verify/reject actions. Verify (`PUT /api/objects/:id/verify`) sets `isInterimObject=false`. Reject (`PUT /api/objects/:id/reject`) soft-deletes with `status="rejected"`.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

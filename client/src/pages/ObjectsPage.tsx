@@ -18,7 +18,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
@@ -90,6 +90,7 @@ export default function ObjectsPage() {
   const addCustomerFilter = (id: string) => { if (!customerFilter.includes(id)) { setCustomerFilter([...customerFilter, id]); } };
   const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
   const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
+  const [interimFilter, setInterimFilter] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
@@ -145,7 +146,7 @@ export default function ObjectsPage() {
   }, [searchQuery]);
 
   const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, interimFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -166,12 +167,26 @@ export default function ObjectsPage() {
       if (hierarchyFilter !== "all") {
         params.append("hierarchyLevel", hierarchyFilter);
       }
+      if (interimFilter) {
+        params.append("interim", "true");
+      }
       const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch objects");
       return res.json();
     },
     staleTime: 60000,
   });
+
+  const { data: interimCountData } = useQuery<{ total: number }>({
+    queryKey: ["/api/objects", "interim-count"],
+    queryFn: async () => {
+      const res = await fetch("/api/objects?limit=0&offset=0&interim=true", { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+  const interimCount = interimCountData?.total || 0;
 
   const objects = objectsData?.objects || [];
   const totalObjects = objectsData?.total || 0;
@@ -226,6 +241,32 @@ export default function ObjectsPage() {
     },
     onError: () => {
       toast({ title: "Fel vid uppdatering", variant: "destructive" });
+    },
+  });
+
+  const verifyObjectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("PUT", `/api/objects/${id}/verify`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      toast({ title: "Objekt verifierat", description: "Interimobjektet har verifierats och är nu ett vanligt objekt." });
+    },
+    onError: () => {
+      toast({ title: "Fel vid verifiering", variant: "destructive" });
+    },
+  });
+
+  const rejectObjectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      return apiRequest("PUT", `/api/objects/${id}/reject`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
+      toast({ title: "Objekt avvisat", description: "Interimobjektet har avvisats." });
+    },
+    onError: () => {
+      toast({ title: "Fel vid avvisning", variant: "destructive" });
     },
   });
 
@@ -529,6 +570,12 @@ export default function ObjectsPage() {
               <Badge variant="secondary" className="text-xs">
                 {objectTypeLabels[obj.objectType] || obj.objectType}
               </Badge>
+              {(obj as any).isInterimObject && (
+                <Badge variant="destructive" className="text-xs gap-1">
+                  <ShieldAlert className="h-3 w-3" />
+                  Interim
+                </Badge>
+              )}
               {obj.accessType && obj.accessType !== "open" && (
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -714,6 +761,26 @@ export default function ObjectsPage() {
                       <Link2 className="h-4 w-4 mr-2" />
                       Artiklar & Priser
                     </DropdownMenuItem>
+                    {(obj as any).isInterimObject && (
+                      <>
+                        <DropdownMenuItem
+                          onClick={(e) => { e.stopPropagation(); verifyObjectMutation.mutate(obj.id); }}
+                          className="text-green-600"
+                          data-testid={`menu-verify-${obj.id}`}
+                        >
+                          <ShieldCheck className="h-4 w-4 mr-2" />
+                          Verifiera objekt
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(e) => { e.stopPropagation(); rejectObjectMutation.mutate(obj.id); }}
+                          className="text-red-600"
+                          data-testid={`menu-reject-${obj.id}`}
+                        >
+                          <ShieldX className="h-4 w-4 mr-2" />
+                          Avvisa objekt
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               </>
@@ -856,8 +923,23 @@ export default function ObjectsPage() {
                 )}
                 {filtersOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </Button>
-              {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
+              <Button
+                variant={interimFilter ? "default" : "outline"}
+                size="sm"
+                onClick={() => { setInterimFilter(!interimFilter); setCurrentPage(0); }}
+                className="gap-2"
+                data-testid="button-interim-filter"
+              >
+                <ShieldAlert className="h-4 w-4" />
+                Interimobjekt
+                {interimCount > 0 && (
+                  <Badge variant={interimFilter ? "outline" : "destructive"} className="h-5 min-w-[20px] p-0 flex items-center justify-center text-xs rounded-full">
+                    {interimCount}
+                  </Badge>
+                )}
+              </Button>
+              {(activeFilterCount > 0 || interimFilter) && (
+                <Button variant="ghost" size="sm" onClick={() => { clearAllFilters(); setInterimFilter(false); }} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
                   <XCircle className="h-4 w-4" />
                   Rensa filter
                 </Button>

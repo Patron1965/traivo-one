@@ -366,11 +366,13 @@ export async function registerRoutes(
         }
       }
       
-      const hasFilters = objectType || hierarchyLevel || accessType;
+      const interim = req.query.interim as string || undefined;
+      
+      const hasFilters = objectType || hierarchyLevel || accessType || interim;
       const paginated = req.query.paginated === "true";
       
       if (paginated || req.query.limit || req.query.offset || req.query.search || req.query.customerId || noCluster || hasFilters) {
-        const filters = hasFilters ? { objectType, hierarchyLevel, accessType } : undefined;
+        const filters = hasFilters ? { objectType, hierarchyLevel, accessType, isInterimObject: interim === "true" ? true : interim === "false" ? false : undefined } : undefined;
         const result = await storage.getObjectsPaginated(tenantId, limit, offset, search, customerIds, filters);
         
         if (noCluster) {
@@ -644,6 +646,42 @@ export async function registerRoutes(
       }
       console.error("Failed to update object:", error);
       res.status(500).json({ error: "Failed to update object" });
+    }
+  });
+
+  app.put("/api/objects/:id/verify", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      if (!existing!.isInterimObject) {
+        return res.status(400).json({ error: "Objektet är inte ett interimobjekt" });
+      }
+      const object = await storage.updateObject(req.params.id, { isInterimObject: false });
+      res.json(object);
+    } catch (error) {
+      console.error("Failed to verify object:", error);
+      res.status(500).json({ error: "Kunde inte verifiera objekt" });
+    }
+  });
+
+  app.put("/api/objects/:id/reject", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getObject(req.params.id);
+      if (!verifyTenantOwnership(existing, tenantId)) {
+        return res.status(404).json({ error: "Objekt hittades inte" });
+      }
+      if (!existing!.isInterimObject) {
+        return res.status(400).json({ error: "Objektet är inte ett interimobjekt" });
+      }
+      const object = await storage.updateObject(req.params.id, { deletedAt: new Date(), status: "rejected" });
+      res.json(object);
+    } catch (error) {
+      console.error("Failed to reject object:", error);
+      res.status(500).json({ error: "Kunde inte avvisa objekt" });
     }
   });
 
@@ -17532,6 +17570,54 @@ setInterval(loadRoutes, 60000);
     } catch (error) {
       console.error("Failed to convert public issue to deviation:", error);
       res.status(500).json({ error: "Kunde inte konvertera felanmälan" });
+    }
+  });
+
+  app.post("/api/public-issue-reports/:id/create-interim-object", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const report = await storage.getPublicIssueReport(req.params.id);
+      if (!report || !verifyTenantOwnership(report, tenantId)) {
+        return res.status(404).json({ error: "Felanmälan hittades inte" });
+      }
+      if (report.status === "converted" || report.status === "resolved") {
+        return res.status(400).json({ error: "Felanmälan är redan hanterad" });
+      }
+      const { customerId, parentId, objectType, name } = req.body;
+      if (!customerId) return res.status(400).json({ error: "customerId krävs" });
+      const customer = await storage.getCustomer(customerId);
+      if (!verifyTenantOwnership(customer, tenantId)) {
+        return res.status(404).json({ error: "Kund hittades inte" });
+      }
+      if (parentId) {
+        const parentObj = await storage.getObject(parentId);
+        if (!verifyTenantOwnership(parentObj, tenantId)) {
+          return res.status(404).json({ error: "Förälderobjekt hittades inte" });
+        }
+      }
+      const objectName = name || report.title || "Interimobjekt från felanmälan";
+      const interimObject = await storage.createObject({
+        tenantId,
+        customerId,
+        parentId: parentId || null,
+        name: objectName,
+        objectType: objectType || "fastighet",
+        objectLevel: 1,
+        address: report.locationDescription || null,
+        latitude: report.latitude || null,
+        longitude: report.longitude || null,
+        isInterimObject: true,
+        status: "active",
+        notes: `Skapat från felanmälan: ${report.title}`,
+      } as any);
+      await storage.updatePublicIssueReport(report.id, tenantId, {
+        objectId: interimObject.id,
+        status: "converted",
+      });
+      res.status(201).json(interimObject);
+    } catch (error) {
+      console.error("Failed to create interim object from issue:", error);
+      res.status(500).json({ error: "Kunde inte skapa interimobjekt" });
     }
   });
 

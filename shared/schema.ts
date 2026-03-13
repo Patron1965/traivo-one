@@ -147,6 +147,8 @@ export const objects = pgTable("objects", {
   // Fullständig sökväg i hierarkin (array av object IDs från rot)
   hierarchyPath: text("hierarchy_path").array().default([]),
   
+  isInterimObject: boolean("is_interim_object").default(false).notNull(),
+  
   status: text("status").default("active").notNull(),
   notes: text("notes"),
   lastServiceDate: timestamp("last_service_date"),
@@ -160,6 +162,7 @@ export const objects = pgTable("objects", {
   index("idx_objects_parent").on(table.parentId),
   index("idx_objects_object_number").on(table.objectNumber),
   index("idx_objects_tenant_customer").on(table.tenantId, table.customerId),
+  index("idx_objects_interim").on(table.tenantId, table.isInterimObject),
 ]);
 
 export const resources = pgTable("resources", {
