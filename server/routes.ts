@@ -195,6 +195,46 @@ export async function registerRoutes(
   // Metadata EAV routes (Mats vision)
   app.use("/api/metadata", metadataRouter);
 
+  app.get("/api/dashboard/stats", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const [orderStats] = await db.execute(sql`
+        SELECT
+          COUNT(*) FILTER (WHERE order_status IN ('utford', 'fakturerad')) AS completed,
+          COUNT(*) FILTER (WHERE order_status NOT IN ('utford', 'fakturerad', 'omojlig')) AS pending,
+          COUNT(*) FILTER (WHERE order_status = 'omojlig') AS impossible,
+          COUNT(*) FILTER (WHERE scheduled_date IS NOT NULL) AS scheduled,
+          COALESCE(SUM(cached_value), 0) AS total_value,
+          COUNT(*) AS total
+        FROM work_orders WHERE tenant_id = ${tenantId}
+      `);
+      const [customerStats] = await db.execute(sql`
+        SELECT COUNT(*) AS total FROM customers WHERE tenant_id = ${tenantId}
+      `);
+      const [resourceStats] = await db.execute(sql`
+        SELECT COUNT(*) FILTER (WHERE status = 'active') AS active FROM resources WHERE tenant_id = ${tenantId}
+      `);
+      const [clusterStats] = await db.execute(sql`
+        SELECT COUNT(*) FILTER (WHERE status = 'active') AS active FROM clusters WHERE tenant_id = ${tenantId}
+      `);
+      const stats = orderStats as Record<string, any>;
+      res.json({
+        completedOrders: Number(stats.completed || 0),
+        pendingOrders: Number(stats.pending || 0),
+        impossibleOrders: Number(stats.impossible || 0),
+        scheduledOrders: Number(stats.scheduled || 0),
+        totalOrderValue: Number(stats.total_value || 0),
+        totalOrders: Number(stats.total || 0),
+        activeCustomers: Number((customerStats as any).total || 0),
+        activeResources: Number((resourceStats as any).active || 0),
+        activeClusters: Number((clusterStats as any).active || 0),
+      });
+    } catch (error) {
+      console.error("Failed to fetch dashboard stats:", error);
+      res.status(500).json({ error: "Failed to fetch stats" });
+    }
+  });
+
   app.get("/api/customers", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

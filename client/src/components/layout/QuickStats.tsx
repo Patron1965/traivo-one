@@ -2,7 +2,18 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Users, ClipboardList, Target, DollarSign, TrendingUp, TrendingDown, AlertTriangle, CheckCircle } from "lucide-react";
-import type { Customer, WorkOrder, Resource, Cluster } from "@shared/schema";
+
+interface DashboardStats {
+  completedOrders: number;
+  pendingOrders: number;
+  impossibleOrders: number;
+  scheduledOrders: number;
+  totalOrderValue: number;
+  totalOrders: number;
+  activeCustomers: number;
+  activeResources: number;
+  activeClusters: number;
+}
 
 interface StatCardProps {
   title: string;
@@ -68,50 +79,29 @@ function StatCard({ title, value, icon: Icon, iconColor, iconBg, trend, isLoadin
 }
 
 export function QuickStats() {
-  const { data: customers, isLoading: loadingCustomers } = useQuery<Customer[]>({
-    queryKey: ["/api/customers"],
+  const { data: stats, isLoading } = useQuery<DashboardStats>({
+    queryKey: ["/api/dashboard/stats"],
   });
 
-  const { data: workOrders, isLoading: loadingOrders } = useQuery<WorkOrder[]>({
-    queryKey: ["/api/work-orders"],
-  });
+  const completedOrders = stats?.completedOrders ?? 0;
+  const pendingOrders = stats?.pendingOrders ?? 0;
+  const impossibleOrders = stats?.impossibleOrders ?? 0;
+  const scheduledOrders = stats?.scheduledOrders ?? 0;
+  const totalOrderValue = stats?.totalOrderValue ?? 0;
+  const totalOrders = stats?.totalOrders ?? 0;
+  const activeCustomers = stats?.activeCustomers ?? 0;
+  const activeResources = stats?.activeResources ?? 0;
+  const activeClusters = stats?.activeClusters ?? 0;
 
-  const { data: resources, isLoading: loadingResources } = useQuery<Resource[]>({
-    queryKey: ["/api/resources"],
-  });
-
-  const { data: clusters, isLoading: loadingClusters } = useQuery<Cluster[]>({
-    queryKey: ["/api/clusters"],
-  });
-
-  const isLoading = loadingCustomers || loadingOrders || loadingResources || loadingClusters;
-
-  const activeCustomers = customers?.length ?? 0;
-  const pendingOrders = workOrders?.filter((o) => 
-    o.orderStatus !== "utford" && o.orderStatus !== "fakturerad" && o.orderStatus !== "omojlig"
-  )?.length ?? 0;
-  const completedOrders = workOrders?.filter((o) => o.orderStatus === "utford" || o.orderStatus === "fakturerad")?.length ?? 0;
-  const impossibleOrders = workOrders?.filter((o) => o.orderStatus === "omojlig")?.length ?? 0;
-  const scheduledOrders = workOrders?.filter((o) => o.scheduledDate)?.length ?? 0;
-  const activeResources = resources?.filter((r) => r.status === "active")?.length ?? 0;
-  const activeClusters = clusters?.filter((c) => c.status === "active")?.length ?? 0;
-
-  const totalOrderValue = workOrders?.reduce((sum, o) => sum + (o.cachedValue || 0), 0) ?? 0;
   const formattedValue = totalOrderValue >= 1000000
     ? `${(totalOrderValue / 1000000).toFixed(1)}M kr`
     : totalOrderValue >= 1000
     ? `${(totalOrderValue / 1000).toFixed(0)}K kr`
     : `${totalOrderValue} kr`;
 
-  const hasOrderData = workOrders && workOrders.length > 0;
-  const hasResourceData = resources && resources.length > 0;
-
-  const completionRate = hasOrderData && workOrders.length > 0 
-    ? Math.round((completedOrders / workOrders.length) * 100) 
-    : 0;
-  const impossibleRate = hasOrderData && workOrders.length > 0 
-    ? Math.round((impossibleOrders / workOrders.length) * 100) 
-    : 0;
+  const hasData = !!stats;
+  const completionRate = totalOrders > 0 ? Math.round((completedOrders / totalOrders) * 100) : 0;
+  const impossibleRate = totalOrders > 0 ? Math.round((impossibleOrders / totalOrders) * 100) : 0;
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
@@ -121,7 +111,7 @@ export function QuickStats() {
         icon={CheckCircle}
         iconColor="text-green-600 dark:text-green-400"
         iconBg="bg-green-500/10"
-        trend={hasOrderData ? { value: `${completionRate}% av alla`, up: true } : undefined}
+        trend={hasData ? { value: `${completionRate}% av alla`, up: true } : undefined}
         isLoading={isLoading}
       />
       <StatCard
@@ -130,7 +120,7 @@ export function QuickStats() {
         icon={ClipboardList}
         iconColor="text-blue-600 dark:text-blue-400"
         iconBg="bg-blue-500/10"
-        trend={hasOrderData && scheduledOrders > 0 ? { value: `${scheduledOrders} schemalagda`, up: true } : undefined}
+        trend={hasData && scheduledOrders > 0 ? { value: `${scheduledOrders} schemalagda`, up: true } : undefined}
         isLoading={isLoading}
       />
       <StatCard
@@ -139,7 +129,7 @@ export function QuickStats() {
         icon={AlertTriangle}
         iconColor="text-orange-600 dark:text-orange-400"
         iconBg="bg-orange-500/10"
-        trend={hasOrderData && impossibleOrders > 0 ? { value: `${impossibleRate}% av alla`, up: false } : undefined}
+        trend={hasData && impossibleOrders > 0 ? { value: `${impossibleRate}% av alla`, up: false } : undefined}
         isLoading={isLoading}
       />
       <StatCard
@@ -148,7 +138,7 @@ export function QuickStats() {
         icon={Users}
         iconColor="text-cyan-600 dark:text-cyan-400"
         iconBg="bg-cyan-500/10"
-        trend={hasResourceData ? { value: `${activeClusters} kluster`, up: true } : undefined}
+        trend={hasData ? { value: `${activeClusters} kluster`, up: true } : undefined}
         isLoading={isLoading}
       />
       <StatCard
@@ -165,7 +155,7 @@ export function QuickStats() {
         icon={DollarSign}
         iconColor="text-purple-600 dark:text-purple-400"
         iconBg="bg-purple-500/10"
-        trend={hasOrderData && totalOrderValue > 0 ? { value: `${workOrders.length} ordrar`, up: true } : undefined}
+        trend={hasData && totalOrderValue > 0 ? { value: `${totalOrders} ordrar`, up: true } : undefined}
         isLoading={isLoading}
       />
     </div>
