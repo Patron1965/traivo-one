@@ -15,6 +15,13 @@
       "when": 1773418423016,
       "tag": "0001_fuzzy_stick",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773419023228,
+      "tag": "0002_grey_sir_ram",
+      "breakpoints": true
     }
   ]
 }

@@ -43,7 +43,7 @@ import {
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   insertFuelLogSchema, insertMaintenanceLogSchema, insertObjectParentSchema,
   insertResourceProfileSchema, insertResourceProfileAssignmentSchema,
-  insertWorkSessionSchema, insertWorkEntrySchema, workSessions, workEntries,
+  insertWorkSessionSchema, insertWorkEntrySchema, workSessions, workEntries, timeLogs,
   type ServiceObject,
   apiUsageLogs, apiBudgets, articles, taskDependencyInstances,
   objects, workOrders
@@ -4375,10 +4375,23 @@ export async function registerRoutes(
         }
       }
 
+      const summariesArr = Array.from(summaryByResource.values());
+      for (const s of summariesArr) {
+        const existing = await db.select().from(timeLogs).where(
+          and(eq(timeLogs.tenantId, tenantId), eq(timeLogs.resourceId, s.resourceId), eq(timeLogs.year, y), eq(timeLogs.week, w))
+        );
+        const logData = { tenantId, resourceId: s.resourceId, week: w, year: y, work: s.work, travel: s.travel, setup: s.setup, breakTime: s.break_time, rest: s.rest, total: s.total, budgetHours: s.budgetHours, resourceName: s.resourceName };
+        if (existing.length > 0) {
+          await db.update(timeLogs).set({ ...logData, updatedAt: new Date() }).where(eq(timeLogs.id, existing[0].id));
+        } else {
+          await db.insert(timeLogs).values(logData);
+        }
+      }
+
       res.json({
         week: w,
         year: y,
-        summaries: Array.from(summaryByResource.values()),
+        summaries: summariesArr,
         nightRestViolations,
         weeklyRestViolations,
       });
@@ -9503,6 +9516,10 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       const resourceId = req.mobileResourceId;
       const resource = await storage.getResource(resourceId);
       if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+      if (req.body.teamId) {
+        const team = await storage.getTeam(req.body.teamId);
+        if (!team || team.tenantId !== resource.tenantId) return res.status(400).json({ error: "Ogiltigt team" });
+      }
       const now = new Date();
       const session = await storage.createWorkSession({
         tenantId: resource.tenantId,

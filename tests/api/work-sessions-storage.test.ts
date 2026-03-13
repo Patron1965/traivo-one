@@ -17,7 +17,7 @@ describe("Snöret - Storage Layer Functional Tests", () => {
     const [resource] = await db.insert(resources).values({
       tenantId: TEST_TENANT,
       name: "Test Förare Snöret",
-      type: "driver",
+      resourceType: "person",
       status: "active",
       weeklyHours: 40,
     }).returning();

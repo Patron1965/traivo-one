@@ -4090,24 +4090,44 @@ export const insertWorkEntrySchema = createInsertSchema(workEntries).omit({ id: 
 export type InsertWorkEntry = z.infer<typeof insertWorkEntrySchema>;
 export type WorkEntry = typeof workEntries.$inferSelect;
 
-export type TimeLog = {
-  resourceId: string;
-  resourceName: string;
-  week: number;
-  year: number;
-  work: number;
-  travel: number;
-  setup: number;
-  break_time: number;
-  rest: number;
-  total: number;
-  budgetHours: number;
-};
+export const timeLogs = pgTable("time_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  week: integer("week").notNull(),
+  year: integer("year").notNull(),
+  work: integer("work").default(0).notNull(),
+  travel: integer("travel").default(0).notNull(),
+  setup: integer("setup").default(0).notNull(),
+  breakTime: integer("break_time").default(0).notNull(),
+  rest: integer("rest").default(0).notNull(),
+  total: integer("total").default(0).notNull(),
+  budgetHours: integer("budget_hours").default(40).notNull(),
+  resourceName: varchar("resource_name", { length: 255 }).default("").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_time_logs_tenant").on(table.tenantId),
+  index("idx_time_logs_resource_week").on(table.resourceId, table.year, table.week),
+]);
+
+export const insertTimeLogSchema = createInsertSchema(timeLogs).omit({ id: true, updatedAt: true });
+export type InsertTimeLog = z.infer<typeof insertTimeLogSchema>;
+export type TimeLog = typeof timeLogs.$inferSelect;
 
 export type TimeSummaryResponse = {
   week: number;
   year: number;
-  summaries: TimeLog[];
+  summaries: Array<{
+    resourceId: string;
+    resourceName: string;
+    work: number;
+    travel: number;
+    setup: number;
+    break_time: number;
+    rest: number;
+    total: number;
+    budgetHours: number;
+  }>;
   nightRestViolations: Array<{ resourceId: string; resourceName: string; date: string; restHours: number }>;
   weeklyRestViolations: Array<{ resourceId: string; resourceName: string; totalRestHours: number }>;
 };

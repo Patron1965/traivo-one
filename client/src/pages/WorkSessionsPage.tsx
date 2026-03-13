@@ -25,7 +25,7 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Resource, Team, WorkSession, WorkEntry, TimeSummaryResponse, TimeLog } from "@shared/schema";
+import type { Resource, Team, WorkSession, WorkEntry, TimeSummaryResponse } from "@shared/schema";
 
 import type { LucideIcon } from "lucide-react";
 
@@ -376,7 +376,7 @@ export default function WorkSessionsPage() {
           )}
 
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {timeSummary?.summaries?.map((s: TimeLog) => (
+            {timeSummary?.summaries?.map((s) => (
               <Card key={s.resourceId} data-testid={`card-summary-${s.resourceId}`}>
                 <CardHeader className="pb-2">
                   <CardTitle className="text-base">{s.resourceName}</CardTitle>
