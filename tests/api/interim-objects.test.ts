@@ -1,11 +1,21 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { storage } from "../../server/storage";
 import { apiGet, apiPut, apiPost, randomId } from "./helpers";
+import type { InsertObject } from "../../shared/schema";
 
 const TEST_TENANT = "default-tenant";
 
 let testCustomerId: string;
 let testObjectId: string;
+
+function makeInsertObject(overrides: Partial<InsertObject> & Pick<InsertObject, "name" | "customerId">): InsertObject {
+  return {
+    tenantId: TEST_TENANT,
+    objectType: "karl",
+    objectLevel: 2,
+    ...overrides,
+  };
+}
 
 describe("Interim Objects & Object Verification", () => {
   beforeAll(async () => {
@@ -16,39 +26,32 @@ describe("Interim Objects & Object Verification", () => {
     });
     testCustomerId = customer.id;
 
-    const obj = await storage.createObject({
-      tenantId: TEST_TENANT,
+    const obj = await storage.createObject(makeInsertObject({
       customerId: testCustomerId,
       name: "Befintligt objekt",
       objectType: "fastighet",
       objectLevel: 1,
       status: "active",
-    } as any);
+    }));
     testObjectId = obj.id;
   });
 
   describe("Storage: isInterimObject default value", () => {
     it("skapar objekt med isInterimObject=false som standard", async () => {
-      const obj = await storage.createObject({
-        tenantId: TEST_TENANT,
+      const obj = await storage.createObject(makeInsertObject({
         customerId: testCustomerId,
         name: "Vanligt objekt",
-        objectType: "karl",
-        objectLevel: 2,
-      } as any);
+      }));
       expect(obj.isInterimObject).toBe(false);
     });
 
     it("skapar objekt med isInterimObject=true", async () => {
-      const obj = await storage.createObject({
-        tenantId: TEST_TENANT,
+      const obj = await storage.createObject(makeInsertObject({
         customerId: testCustomerId,
         name: "Interim test-objekt",
-        objectType: "karl",
-        objectLevel: 2,
         isInterimObject: true,
         status: "active",
-      } as any);
+      }));
       expect(obj.isInterimObject).toBe(true);
     });
   });
@@ -79,15 +82,12 @@ describe("Interim Objects & Object Verification", () => {
     let verifyTargetId: string;
 
     beforeAll(async () => {
-      const obj = await storage.createObject({
-        tenantId: TEST_TENANT,
+      const obj = await storage.createObject(makeInsertObject({
         customerId: testCustomerId,
         name: "Verify-target interim",
-        objectType: "karl",
-        objectLevel: 2,
         isInterimObject: true,
         status: "active",
-      } as any);
+      }));
       verifyTargetId = obj.id;
     });
 
@@ -107,15 +107,12 @@ describe("Interim Objects & Object Verification", () => {
     let rejectTargetId: string;
 
     beforeAll(async () => {
-      const obj = await storage.createObject({
-        tenantId: TEST_TENANT,
+      const obj = await storage.createObject(makeInsertObject({
         customerId: testCustomerId,
         name: "Reject-target interim",
-        objectType: "karl",
-        objectLevel: 2,
         isInterimObject: true,
         status: "active",
-      } as any);
+      }));
       rejectTargetId = obj.id;
     });
 
@@ -126,7 +123,7 @@ describe("Interim Objects & Object Verification", () => {
     });
   });
 
-  describe("Storage: create interim object from issue report", () => {
+  describe("Storage: create interim object from issue report data", () => {
     let issueReportId: string;
 
     beforeAll(async () => {
@@ -143,18 +140,16 @@ describe("Interim Objects & Object Verification", () => {
     });
 
     it("skapar interimobjekt med data från felanmälan", async () => {
-      const interimObj = await storage.createObject({
-        tenantId: TEST_TENANT,
+      const interimObj = await storage.createObject(makeInsertObject({
         customerId: testCustomerId,
         name: "Interimobjekt från felanmälan",
-        objectType: "karl",
         objectLevel: 1,
         isInterimObject: true,
         status: "active",
         latitude: 59.3293,
         longitude: 18.0686,
         notes: "Skapat från felanmälan: Skadad container",
-      } as any);
+      }));
       expect(interimObj.isInterimObject).toBe(true);
       expect(interimObj.name).toBe("Interimobjekt från felanmälan");
       expect(interimObj.latitude).toBeCloseTo(59.3293, 2);
@@ -163,6 +158,49 @@ describe("Interim Objects & Object Verification", () => {
         objectId: interimObj.id,
       });
       expect(updatedReport!.objectId).toBe(interimObj.id);
+    });
+  });
+
+  describe("Storage: full verify lifecycle", () => {
+    let lifecycleObjId: string;
+
+    it("skapar interim → verifierar → bekräftar ej interim", async () => {
+      const created = await storage.createObject(makeInsertObject({
+        customerId: testCustomerId,
+        name: "Lifecycle interim-objekt",
+        isInterimObject: true,
+        status: "active",
+      }));
+      lifecycleObjId = created.id;
+      expect(created.isInterimObject).toBe(true);
+
+      const beforeVerify = await storage.getObjectsPaginated(TEST_TENANT, 100, 0, undefined, undefined, { isInterimObject: true });
+      expect(beforeVerify.objects.some(o => o.id === lifecycleObjId)).toBe(true);
+
+      await storage.updateObject(lifecycleObjId, { isInterimObject: false });
+
+      const afterVerify = await storage.getObjectsPaginated(TEST_TENANT, 100, 0, undefined, undefined, { isInterimObject: true });
+      expect(afterVerify.objects.some(o => o.id === lifecycleObjId)).toBe(false);
+
+      const obj = await storage.getObject(lifecycleObjId);
+      expect(obj!.isInterimObject).toBe(false);
+    });
+  });
+
+  describe("Storage: full reject lifecycle", () => {
+    it("skapar interim → avvisar → bekräftar soft-delete", async () => {
+      const created = await storage.createObject(makeInsertObject({
+        customerId: testCustomerId,
+        name: "Reject lifecycle objekt",
+        isInterimObject: true,
+        status: "active",
+      }));
+      expect(created.isInterimObject).toBe(true);
+
+      await storage.updateObject(created.id, { deletedAt: new Date(), status: "rejected" });
+
+      const interimList = await storage.getObjectsPaginated(TEST_TENANT, 100, 0, undefined, undefined, { isInterimObject: true });
+      expect(interimList.objects.some(o => o.id === created.id)).toBe(false);
     });
   });
 

@@ -1,0 +1,2 @@
+ALTER TABLE "objects" ADD COLUMN "is_interim_object" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_objects_interim" ON "objects" USING btree ("tenant_id","is_interim_object");

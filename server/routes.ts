@@ -44,7 +44,7 @@ import {
   insertFuelLogSchema, insertMaintenanceLogSchema, insertObjectParentSchema,
   insertResourceProfileSchema, insertResourceProfileAssignmentSchema,
   insertWorkSessionSchema, insertWorkEntrySchema, workSessions, workEntries, timeLogs, equipmentBookings,
-  type ServiceObject,
+  type ServiceObject, type InsertObject,
   apiUsageLogs, apiBudgets, articles, taskDependencyInstances,
   objects, workOrders
 } from "@shared/schema";
@@ -17596,7 +17596,7 @@ setInterval(loadRoutes, 60000);
         }
       }
       const objectName = name || report.title || "Interimobjekt från felanmälan";
-      const interimObject = await storage.createObject({
+      const insertData: InsertObject = {
         tenantId,
         customerId,
         parentId: parentId || null,
@@ -17609,7 +17609,8 @@ setInterval(loadRoutes, 60000);
         isInterimObject: true,
         status: "active",
         notes: `Skapat från felanmälan: ${report.title}`,
-      } as any);
+      };
+      const interimObject = await storage.createObject(insertData);
       await storage.updatePublicIssueReport(report.id, tenantId, {
         objectId: interimObject.id,
         status: "converted",
