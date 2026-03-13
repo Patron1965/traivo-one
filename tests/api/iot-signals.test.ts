@@ -150,7 +150,7 @@ describe("IoT API", () => {
       expect(body.workOrderId).toBeDefined();
     });
 
-    it("should process 'low_battery' signal without creating work order", async () => {
+    it("should process 'low_battery' signal and auto-create work order", async () => {
       const res = await fetch(`${BASE_URL}/api/iot/signals`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Api-Key": apiKeyValue },
@@ -159,7 +159,8 @@ describe("IoT API", () => {
       expect(res.status).toBe(201);
       const body = await res.json();
       expect(body.processed).toBe(true);
-      expect(body.workOrderCreated).toBe(false);
+      expect(body.workOrderCreated).toBe(true);
+      expect(body.workOrderId).toBeDefined();
     });
 
     it("should process signal by externalDeviceId", async () => {
@@ -204,6 +205,51 @@ describe("IoT API", () => {
       expect(fullSignal).toBeDefined();
       expect(fullSignal!.workOrderId).toBeDefined();
       expect(fullSignal!.processed).toBe(true);
+    });
+  });
+
+  describe("Configurable IoT rules", () => {
+    it("should skip auto-order when rules are disabled via tenant settings", async () => {
+      await storage.updateTenantSettings(TEST_TENANT, {
+        iotRules: { enabled: false },
+      });
+
+      const res = await fetch(`${BASE_URL}/api/iot/signals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Api-Key": apiKeyValue },
+        body: JSON.stringify({ deviceId, signalType: "full" }),
+      });
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.workOrderCreated).toBe(false);
+
+      await storage.updateTenantSettings(TEST_TENANT, {});
+    });
+
+    it("should respect custom autoOrderTypes list", async () => {
+      await storage.updateTenantSettings(TEST_TENANT, {
+        iotRules: { enabled: true, autoOrderTypes: ["full"] },
+      });
+
+      const resLowBat = await fetch(`${BASE_URL}/api/iot/signals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Api-Key": apiKeyValue },
+        body: JSON.stringify({ deviceId, signalType: "low_battery", batteryLevel: 5 }),
+      });
+      expect(resLowBat.status).toBe(201);
+      const bodyLowBat = await (resLowBat).json();
+      expect(bodyLowBat.workOrderCreated).toBe(false);
+
+      const resFull = await fetch(`${BASE_URL}/api/iot/signals`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Api-Key": apiKeyValue },
+        body: JSON.stringify({ deviceId, signalType: "full" }),
+      });
+      expect(resFull.status).toBe(201);
+      const bodyFull = await (resFull).json();
+      expect(bodyFull.workOrderCreated).toBe(true);
+
+      await storage.updateTenantSettings(TEST_TENANT, {});
     });
   });
 

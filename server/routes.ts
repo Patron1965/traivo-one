@@ -19358,11 +19358,24 @@ setInterval(loadRoutes, 60000);
       });
 
       let createdWorkOrder = null;
-      const autoOrderTypes = ["full", "damaged", "overflow", "tilt", "fire"];
-      if (autoOrderTypes.includes(signalType)) {
+      const DEFAULT_AUTO_ORDER_TYPES = ["full", "damaged", "low_battery", "overflow", "tilt", "fire"];
+      const DEFAULT_PRIORITY_MAP: Record<string, string> = {
+        fire: "urgent", overflow: "urgent", tilt: "high", damaged: "high", full: "normal", low_battery: "low",
+      };
+
+      const tenant = await storage.getTenant(auth.tenantId);
+      const tenantSettings = (tenant?.settings || {}) as Record<string, unknown>;
+      const iotRules = tenantSettings.iotRules as { autoOrderTypes?: string[]; priorityOverrides?: Record<string, string>; enabled?: boolean } | undefined;
+
+      const rulesEnabled = iotRules?.enabled !== false;
+      const autoOrderTypes = iotRules?.autoOrderTypes || DEFAULT_AUTO_ORDER_TYPES;
+      const priorityOverrides = iotRules?.priorityOverrides || {};
+
+      if (rulesEnabled && autoOrderTypes.includes(signalType)) {
         const obj = await storage.getObject(device.objectId);
         if (obj) {
           const description = SIGNAL_TYPE_TO_ORDER_DESCRIPTION[signalType] || `IoT-signal: ${signalType}`;
+          const priority = priorityOverrides[signalType] || DEFAULT_PRIORITY_MAP[signalType] || "normal";
           const wo = await storage.createWorkOrder({
             tenantId: auth.tenantId,
             objectId: device.objectId,
@@ -19371,7 +19384,7 @@ setInterval(loadRoutes, 60000);
             orderType: "iot_auto",
             orderStatus: "ny",
             description,
-            priority: signalType === "fire" ? "urgent" : signalType === "overflow" ? "high" : "normal",
+            priority,
             source: "iot",
           });
           createdWorkOrder = wo;
@@ -19390,6 +19403,43 @@ setInterval(loadRoutes, 60000);
     } catch (error) {
       console.error("IoT signal error:", error);
       res.status(500).json({ error: "Kunde inte bearbeta IoT-signal." });
+    }
+  });
+
+  app.get("/api/iot/rules", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const tenant = await storage.getTenant(tenantId);
+      const settings = (tenant?.settings || {}) as Record<string, unknown>;
+      const iotRules = settings.iotRules || {
+        enabled: true,
+        autoOrderTypes: ["full", "damaged", "low_battery", "overflow", "tilt", "fire"],
+        priorityOverrides: {},
+      };
+      res.json(iotRules);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte hämta IoT-regler." });
+    }
+  });
+
+  app.put("/api/iot/rules", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const rulesSchema = z.object({
+        enabled: z.boolean().optional(),
+        autoOrderTypes: z.array(z.string()).optional(),
+        priorityOverrides: z.record(z.string()).optional(),
+      });
+      const parsed = rulesSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+
+      const tenant = await storage.getTenant(tenantId);
+      const existingSettings = (tenant?.settings || {}) as Record<string, unknown>;
+      const updatedSettings = { ...existingSettings, iotRules: parsed.data };
+      await storage.updateTenantSettings(tenantId, updatedSettings);
+      res.json(parsed.data);
+    } catch (error) {
+      res.status(500).json({ error: "Kunde inte uppdatera IoT-regler." });
     }
   });
 
