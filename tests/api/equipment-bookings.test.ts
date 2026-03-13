@@ -225,6 +225,59 @@ describe("Equipment Bookings - Storage Tests", () => {
     });
   });
 
+  describe("Auto-Release via PUT /api/work-sessions/:id (session completion)", () => {
+    let putSessionId: string;
+    let putBookingId: string;
+
+    beforeAll(async () => {
+      const session = await storage.createWorkSession({
+        tenantId: TEST_TENANT,
+        resourceId: testResourceId,
+        date: new Date("2026-04-20"),
+        startTime: new Date("2026-04-20T07:00:00"),
+        status: "active",
+      });
+      putSessionId = session.id;
+
+      const b = await storage.createEquipmentBooking({
+        tenantId: TEST_TENANT,
+        vehicleId: testVehicleId,
+        resourceId: testResourceId,
+        workSessionId: putSessionId,
+        date: new Date("2026-04-20"),
+        serviceArea: ["zon-A"],
+        status: "active",
+      });
+      putBookingId = b.id;
+    });
+
+    it("frigör utrustning när session uppdateras till completed via updateWorkSession", async () => {
+      const before = await storage.getEquipmentBooking(putBookingId);
+      expect(before!.status).toBe("active");
+
+      await storage.updateWorkSession(putSessionId, {
+        status: "completed",
+        endTime: new Date("2026-04-20T16:00:00"),
+      });
+
+      const released = await storage.releaseEquipmentByWorkSession(putSessionId);
+      expect(released).toBe(1);
+
+      const after = await storage.getEquipmentBooking(putBookingId);
+      expect(after!.status).toBe("released");
+    });
+
+    it("idempotent — frigör inte redan frigjorda bokningar vid upprepat anrop", async () => {
+      const released = await storage.releaseEquipmentByWorkSession(putSessionId);
+      expect(released).toBe(0);
+    });
+
+    afterAll(async () => {
+      if (putBookingId) await storage.deleteEquipmentBooking(putBookingId).catch(() => {});
+      if (putSessionId) await storage.deleteWorkSession(putSessionId).catch(() => {});
+    });
+  });
+
   describe("Date Range Filtering", () => {
     let rangeBookingIds: string[] = [];
 

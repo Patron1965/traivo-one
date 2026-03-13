@@ -4309,6 +4309,13 @@ export async function registerRoutes(
       if (updateData.startTime) updateData.startTime = new Date(updateData.startTime);
       if (updateData.date) updateData.date = new Date(updateData.date);
       const session = await storage.updateWorkSession(req.params.id, updateData);
+      if (session && session.status === "completed" && existing.status !== "completed") {
+        try {
+          await storage.releaseEquipmentByWorkSession(req.params.id);
+        } catch (releaseErr) {
+          console.error("Failed to auto-release equipment on session completion:", releaseErr);
+        }
+      }
       res.json(session);
     } catch (error) {
       console.error("Failed to update work session:", error);
