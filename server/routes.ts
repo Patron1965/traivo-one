@@ -4007,7 +4007,7 @@ export async function registerRoutes(
   app.post("/api/equipment-bookings/check-collision", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const { vehicleId, equipmentId, date, serviceArea } = req.body;
+      const { vehicleId, equipmentId, resourceId, teamId, date, serviceArea } = req.body;
       if (!vehicleId && !equipmentId) return res.status(400).json({ error: "Ange fordon eller utrustning" });
       if (!date) return res.status(400).json({ error: "Datum krävs" });
 
@@ -4020,6 +4020,7 @@ export async function registerRoutes(
 
       const requestAreas = Array.isArray(serviceArea) ? serviceArea : [];
       const conflicts = existingBookings.filter(b => {
+        if (resourceId && teamId && b.resourceId === resourceId && b.teamId === teamId) return false;
         if (requestAreas.length === 0) return existingBookings.length > 0;
         const bookingAreas = b.serviceArea || [];
         if (bookingAreas.length === 0) return true;
