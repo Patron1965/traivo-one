@@ -17,6 +17,8 @@ export function ProtectedRoute({ component: Component, path }: ProtectedRoutePro
       redirectTo = "/mobile";
     } else if (userRole === "customer") {
       redirectTo = "/customer-portal";
+    } else if (userRole === "reporter") {
+      redirectTo = "/my-reports";
     }
     return <Redirect to={redirectTo} />;
   }
