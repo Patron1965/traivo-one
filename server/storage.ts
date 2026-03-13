@@ -5048,11 +5048,16 @@ export class DatabaseStorage implements IStorage {
     const session = await this.getWorkSession(workSessionId);
     let byResource = 0;
     if (session && session.resourceId && session.date) {
+      const sessionDate = new Date(session.date);
+      const dayStart = new Date(sessionDate.getFullYear(), sessionDate.getMonth(), sessionDate.getDate());
+      const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
       const fallback = await db.update(equipmentBookings)
         .set({ status: "released" })
         .where(and(
+          eq(equipmentBookings.tenantId, session.tenantId),
           eq(equipmentBookings.resourceId, session.resourceId),
-          eq(equipmentBookings.date, session.date),
+          gte(equipmentBookings.date, dayStart),
+          lt(equipmentBookings.date, dayEnd),
           eq(equipmentBookings.status, "active"),
           isNull(equipmentBookings.workSessionId),
         ))
