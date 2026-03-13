@@ -43,6 +43,13 @@
       "when": 1773425110632,
       "tag": "0005_fearless_daredevil",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1773425877070,
+      "tag": "0006_smiling_arachne",
+      "breakpoints": true
     }
   ]
 }

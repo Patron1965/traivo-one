@@ -1761,6 +1761,8 @@ export const objectTimeRestrictions = pgTable("object_time_restrictions", {
   validToDate: timestamp("valid_to_date"),
   recurrenceInterval: integer("recurrence_interval"),
   recurrenceUnit: text("recurrence_unit"),
+  preference: text("preference").default("unfavorable").notNull(),
+  reason: text("reason"),
   isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [

@@ -4,7 +4,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Search, ChevronRight, ChevronDown, Building2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Search, ChevronRight, ChevronDown, Building2, Clock } from "lucide-react";
 import type { Customer } from "@shared/schema";
 
 interface TreeNode {
@@ -202,6 +203,29 @@ export default function Step1ObjectSelection({
   const loading = isSearching ? searchLoading : treeLoading;
   const displayData = isSearching ? searchResults : filteredTree;
 
+  const selectedIdsArray = useMemo(() => Array.from(selectedObjectIds), [selectedObjectIds]);
+
+  const { data: slotPreferences = [] } = useQuery<any[]>({
+    queryKey: ["/api/slot-preferences/aggregate", selectedIdsArray.join(",")],
+    queryFn: async () => {
+      if (selectedIdsArray.length === 0) return [];
+      const res = await fetch(`/api/slot-preferences/aggregate?objectIds=${selectedIdsArray.join(",")}`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: selectedIdsArray.length > 0,
+  });
+
+  const WEEKDAY_SHORT = [
+    { value: 1, label: "Mån" },
+    { value: 2, label: "Tis" },
+    { value: 3, label: "Ons" },
+    { value: 4, label: "Tor" },
+    { value: 5, label: "Fre" },
+    { value: 6, label: "Lör" },
+    { value: 0, label: "Sön" },
+  ];
+
   return (
     <div className="space-y-4" data-testid="step1-object-selection">
       <div>
@@ -307,6 +331,65 @@ export default function Step1ObjectSelection({
           )}
         </ScrollArea>
       </div>
+
+      {selectedObjectIds.size > 0 && slotPreferences.length > 0 && (
+        <div className="border rounded-md p-3" data-testid="aggregated-slot-preferences">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-medium">Samlade tidsregler för valda objekt</span>
+            <Badge variant="secondary" className="text-xs">{slotPreferences.length}</Badge>
+          </div>
+          <div className="grid grid-cols-7 gap-1 mb-2">
+            {WEEKDAY_SHORT.map(day => (
+              <div key={day.value} className="text-center">
+                <div className="text-[10px] font-medium mb-0.5">{day.label}</div>
+                {(() => {
+                  const daySlots = slotPreferences.filter((s: any) =>
+                    s.weekdays && Array.isArray(s.weekdays) && s.weekdays.includes(day.value)
+                  );
+                  const favorable = daySlots.filter((s: any) => s.preference === "favorable");
+                  const unfavorable = daySlots.filter((s: any) => s.preference !== "favorable");
+                  if (daySlots.length === 0) {
+                    return <div className="h-8 rounded border border-dashed border-muted-foreground/20 flex items-center justify-center text-[9px] text-muted-foreground">—</div>;
+                  }
+                  return (
+                    <div className="space-y-0.5">
+                      {favorable.length > 0 && (
+                        <div className="bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700 rounded px-0.5 py-0.5">
+                          <div className="text-[9px] font-medium text-green-800 dark:text-green-300">{favorable.length}</div>
+                        </div>
+                      )}
+                      {unfavorable.length > 0 && (
+                        <div className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 rounded px-0.5 py-0.5">
+                          <div className="text-[9px] font-medium text-red-800 dark:text-red-300">{unfavorable.length}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+            ))}
+          </div>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {slotPreferences.map((sp: any) => (
+              <div key={sp.id} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${sp.preference === "favorable" ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"}`} data-testid={`agg-slot-${sp.id}`}>
+                <span className={`w-2 h-2 rounded-full shrink-0 ${sp.preference === "favorable" ? "bg-green-500" : "bg-red-500"}`} />
+                <span className="font-medium truncate">{sp.objectName}</span>
+                {sp.reason && <span className="text-muted-foreground truncate italic">{sp.reason}</span>}
+                {sp.startTime && <span className="text-muted-foreground">{sp.startTime}{sp.endTime ? `–${sp.endTime}` : ""}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3 mt-2">
+            <div className="flex items-center gap-1 text-[10px]">
+              <span className="w-2 h-2 rounded-full bg-green-500" /> Fördelaktig
+            </div>
+            <div className="flex items-center gap-1 text-[10px]">
+              <span className="w-2 h-2 rounded-full bg-red-500" /> Ofördelaktig
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

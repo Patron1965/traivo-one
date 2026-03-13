@@ -179,6 +179,8 @@ export default function ObjectDetailPage() {
     endTime: "",
     weekdays: [] as number[],
     isBlockingAllDay: false,
+    preference: "unfavorable" as "favorable" | "unfavorable",
+    reason: "",
   });
   const [workOrderForm, setWorkOrderForm] = useState({ title: "", description: "", scheduledDate: "" });
 
@@ -366,7 +368,7 @@ export default function ObjectDetailPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/objects", objectId, "time-restrictions"] });
       toast({ title: "Tidsrestriktion tillagd" });
       setRestrictionDialogOpen(false);
-      setRestrictionForm({ restrictionType: "time_window", description: "", startTime: "", endTime: "", weekdays: [], isBlockingAllDay: false });
+      setRestrictionForm({ restrictionType: "time_window", description: "", startTime: "", endTime: "", weekdays: [], isBlockingAllDay: false, preference: "unfavorable", reason: "" });
     },
     onError: () => {
       toast({ title: "Fel", description: "Kunde inte lägga till tidsrestriktion.", variant: "destructive" });
@@ -576,7 +578,7 @@ export default function ObjectDetailPage() {
             Arbetsordrar {workOrders.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{workOrders.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="restrictions" data-testid="tab-restrictions">
-            Tidsrestriktioner {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
+            SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
           </TabsTrigger>
         </TabsList>
 
@@ -1168,13 +1170,13 @@ export default function ObjectDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* ==================== TIDSRESTRIKTIONER ==================== */}
+        {/* ==================== SLOTPREFERENCE ==================== */}
         <TabsContent value="restrictions">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Clock className="h-4 w-4" /> Tidsrestriktioner
+                  <Clock className="h-4 w-4" /> SlotPreference — Tidsregler
                 </CardTitle>
                 <Button
                   variant="outline"
@@ -1188,42 +1190,102 @@ export default function ObjectDetailPage() {
             </CardHeader>
             <CardContent>
               {timeRestrictions.length > 0 ? (
-                <div className="divide-y">
-                  {timeRestrictions.map((tr: any) => (
-                    <div key={tr.id} className="py-3" data-testid={`restriction-row-${tr.id}`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{tr.name || RESTRICTION_TYPES.find(t => t.value === tr.restrictionType)?.label || tr.restrictionType || "Restriktion"}</span>
-                          <Badge variant={tr.isActive !== false ? "default" : "secondary"}>
-                            {tr.isActive !== false ? "Aktiv" : "Inaktiv"}
-                          </Badge>
+                <>
+                  {/* Week calendar view */}
+                  <div className="mb-4">
+                    <h4 className="text-xs font-medium text-muted-foreground mb-2">Veckokalender</h4>
+                    <div className="grid grid-cols-7 gap-1" data-testid="slot-week-calendar">
+                      {WEEKDAY_LABELS.map(day => (
+                        <div key={day.value} className="text-center">
+                          <div className="text-xs font-medium mb-1">{day.label}</div>
+                          {(() => {
+                            const daySlots = timeRestrictions.filter((tr: any) =>
+                              tr.weekdays && Array.isArray(tr.weekdays) && tr.weekdays.includes(day.value)
+                            );
+                            const favorable = daySlots.filter((tr: any) => tr.preference === "favorable");
+                            const unfavorable = daySlots.filter((tr: any) => tr.preference !== "favorable");
+                            if (daySlots.length === 0) {
+                              return <div className="h-12 rounded border border-dashed border-muted-foreground/20 flex items-center justify-center text-[10px] text-muted-foreground">—</div>;
+                            }
+                            return (
+                              <div className="space-y-0.5">
+                                {favorable.map((s: any) => (
+                                  <div key={s.id} className="bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700 rounded px-1 py-0.5" data-testid={`slot-favorable-${s.id}`}>
+                                    <div className="text-[10px] font-medium text-green-800 dark:text-green-300 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
+                                  </div>
+                                ))}
+                                {unfavorable.map((s: any) => (
+                                  <div key={s.id} className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 rounded px-1 py-0.5" data-testid={`slot-unfavorable-${s.id}`}>
+                                    <div className="text-[10px] font-medium text-red-800 dark:text-red-300 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
-                          onClick={() => deleteRestrictionMutation.mutate(tr.id)}
-                          disabled={deleteRestrictionMutation.isPending}
-                          data-testid={`button-delete-restriction-${tr.id}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                      ))}
+                    </div>
+                    <div className="flex gap-4 mt-2">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <div className="w-3 h-3 rounded bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700" />
+                        Fördelaktig tid
                       </div>
-                      {tr.description && (
-                        <p className="text-xs text-muted-foreground mt-1">{tr.description}</p>
-                      )}
-                      <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
-                        {tr.startTime && <span>Start: {tr.startTime}</span>}
-                        {tr.endTime && <span>Slut: {tr.endTime}</span>}
-                        {tr.weekdays && Array.isArray(tr.weekdays) && tr.weekdays.length > 0 && (
-                          <span>Dagar: {tr.weekdays.map((d: number) => WEEKDAY_LABELS.find(w => w.value === d)?.label || d).join(", ")}</span>
-                        )}
+                      <div className="flex items-center gap-1.5 text-xs">
+                        <div className="w-3 h-3 rounded bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700" />
+                        Ofördelaktig tid
                       </div>
                     </div>
-                  ))}
-                </div>
+                  </div>
+
+                  <Separator className="my-3" />
+
+                  {/* List view */}
+                  <div className="divide-y">
+                    {timeRestrictions.map((tr: any) => {
+                      const isFavorable = tr.preference === "favorable";
+                      return (
+                        <div key={tr.id} className={`py-3 border-l-2 pl-3 ${isFavorable ? "border-l-green-500" : "border-l-red-500"}`} data-testid={`restriction-row-${tr.id}`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{tr.name || RESTRICTION_TYPES.find((t: any) => t.value === tr.restrictionType)?.label || tr.restrictionType || "Restriktion"}</span>
+                              <Badge variant="outline" className={isFavorable ? "border-green-500 text-green-700 dark:text-green-400" : "border-red-500 text-red-700 dark:text-red-400"}>
+                                {isFavorable ? "Fördelaktig" : "Ofördelaktig"}
+                              </Badge>
+                              <Badge variant={tr.isActive !== false ? "default" : "secondary"}>
+                                {tr.isActive !== false ? "Aktiv" : "Inaktiv"}
+                              </Badge>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                              onClick={() => deleteRestrictionMutation.mutate(tr.id)}
+                              disabled={deleteRestrictionMutation.isPending}
+                              data-testid={`button-delete-restriction-${tr.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                          {tr.reason && (
+                            <p className="text-xs mt-1 italic">{tr.reason}</p>
+                          )}
+                          {tr.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5">{tr.description}</p>
+                          )}
+                          <div className="flex gap-4 mt-1 text-xs text-muted-foreground">
+                            {tr.startTime && <span>Start: {tr.startTime}</span>}
+                            {tr.endTime && <span>Slut: {tr.endTime}</span>}
+                            {tr.weekdays && Array.isArray(tr.weekdays) && tr.weekdays.length > 0 && (
+                              <span>Dagar: {tr.weekdays.map((d: number) => WEEKDAY_LABELS.find(w => w.value === d)?.label || d).join(", ")}</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
               ) : (
-                <p className="text-sm text-muted-foreground">Inga tidsrestriktioner konfigurerade.</p>
+                <p className="text-sm text-muted-foreground">Inga tidsregler konfigurerade. Lägg till fördelaktiga eller ofördelaktiga tider.</p>
               )}
             </CardContent>
           </Card>
@@ -1588,10 +1650,22 @@ export default function ObjectDetailPage() {
       <Dialog open={restrictionDialogOpen} onOpenChange={setRestrictionDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Lägg till tidsrestriktion</DialogTitle>
-            <DialogDescription>Konfigurera när servicen får eller inte får utföras.</DialogDescription>
+            <DialogTitle>Lägg till tidsregel</DialogTitle>
+            <DialogDescription>Konfigurera fördelaktiga eller ofördelaktiga tider för detta objekt.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label>Preferens *</Label>
+              <Select value={restrictionForm.preference} onValueChange={(v) => setRestrictionForm({ ...restrictionForm, preference: v as "favorable" | "unfavorable" })}>
+                <SelectTrigger data-testid="select-preference">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="favorable">Fördelaktig tid</SelectItem>
+                  <SelectItem value="unfavorable">Ofördelaktig tid</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Typ *</Label>
               <Select value={restrictionForm.restrictionType} onValueChange={(v) => setRestrictionForm({ ...restrictionForm, restrictionType: v })}>
@@ -1606,11 +1680,20 @@ export default function ObjectDetailPage() {
               </Select>
             </div>
             <div className="space-y-2">
+              <Label>Anledning</Label>
+              <Input
+                value={restrictionForm.reason}
+                onChange={(e) => setRestrictionForm({ ...restrictionForm, reason: e.target.value })}
+                placeholder={restrictionForm.preference === "favorable" ? "T.ex. 'Bästa tömningsdag'" : "T.ex. 'P-förbud gäller'"}
+                data-testid="input-restriction-reason"
+              />
+            </div>
+            <div className="space-y-2">
               <Label>Beskrivning</Label>
               <Input
                 value={restrictionForm.description}
                 onChange={(e) => setRestrictionForm({ ...restrictionForm, description: e.target.value })}
-                placeholder="T.ex. 'Bara vardagar'"
+                placeholder="Valfri ytterligare detalj"
                 data-testid="input-restriction-description"
               />
             </div>

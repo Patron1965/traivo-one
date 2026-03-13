@@ -13327,7 +13327,7 @@ setInterval(loadRoutes, 60000);
   app.post("/api/objects/:objectId/time-restrictions", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);
-      const { restrictionType, description, weekdays, startTime, endTime, isBlockingAllDay } = req.body;
+      const { restrictionType, description, weekdays, startTime, endTime, isBlockingAllDay, preference, reason } = req.body;
       if (!restrictionType) return res.status(400).json({ error: "restrictionType is required" });
 
       const obj = await storage.getObject(req.params.objectId);
@@ -13342,6 +13342,8 @@ setInterval(loadRoutes, 60000);
         startTime: startTime || null,
         endTime: endTime || null,
         isBlockingAllDay: isBlockingAllDay ?? true,
+        preference: preference || "unfavorable",
+        reason: reason || null,
         isActive: true,
       });
       res.json(restriction);
@@ -13360,6 +13362,28 @@ setInterval(loadRoutes, 60000);
     } catch (error) {
       console.error("Failed to update time restriction:", error);
       res.status(500).json({ error: "Failed to update time restriction" });
+    }
+  });
+
+  app.get("/api/slot-preferences/aggregate", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const objectIds = req.query.objectIds ? (req.query.objectIds as string).split(",") : [];
+      if (objectIds.length === 0) return res.json([]);
+      const restrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, objectIds);
+      const objectNames = new Map<string, string>();
+      for (const oid of objectIds) {
+        const obj = await storage.getObject(oid);
+        if (obj && obj.tenantId === tenantId) objectNames.set(oid, obj.name);
+      }
+      const aggregated = restrictions.map(r => ({
+        ...r,
+        objectName: objectNames.get(r.objectId) || r.objectId,
+      }));
+      res.json(aggregated);
+    } catch (error) {
+      console.error("Failed to aggregate slot preferences:", error);
+      res.status(500).json({ error: "Failed to aggregate slot preferences" });
     }
   });
 
