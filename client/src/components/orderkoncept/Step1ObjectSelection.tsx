@@ -6,7 +6,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Search, ChevronRight, ChevronDown, Building2, Clock } from "lucide-react";
-import type { Customer } from "@shared/schema";
+import type { Customer, ObjectTimeRestriction } from "@shared/schema";
+
+interface AggregatedSlotPreference extends ObjectTimeRestriction {
+  objectName: string;
+}
 
 interface TreeNode {
   id: string;
@@ -205,7 +209,7 @@ export default function Step1ObjectSelection({
 
   const selectedIdsArray = useMemo(() => Array.from(selectedObjectIds), [selectedObjectIds]);
 
-  const { data: slotPreferences = [] } = useQuery<any[]>({
+  const { data: slotPreferences = [] } = useQuery<AggregatedSlotPreference[]>({
     queryKey: ["/api/slot-preferences/aggregate", selectedIdsArray.join(",")],
     queryFn: async () => {
       if (selectedIdsArray.length === 0) return [];
@@ -344,11 +348,11 @@ export default function Step1ObjectSelection({
               <div key={day.value} className="text-center">
                 <div className="text-[10px] font-medium mb-0.5">{day.label}</div>
                 {(() => {
-                  const daySlots = slotPreferences.filter((s: any) =>
+                  const daySlots = slotPreferences.filter((s) =>
                     s.weekdays && Array.isArray(s.weekdays) && s.weekdays.includes(day.value)
                   );
-                  const favorable = daySlots.filter((s: any) => s.preference === "favorable");
-                  const unfavorable = daySlots.filter((s: any) => s.preference !== "favorable");
+                  const favorable = daySlots.filter((s) => s.preference === "favorable");
+                  const unfavorable = daySlots.filter((s) => s.preference !== "favorable");
                   if (daySlots.length === 0) {
                     return <div className="h-8 rounded border border-dashed border-muted-foreground/20 flex items-center justify-center text-[9px] text-muted-foreground">—</div>;
                   }
@@ -371,7 +375,7 @@ export default function Step1ObjectSelection({
             ))}
           </div>
           <div className="space-y-1 max-h-32 overflow-y-auto">
-            {slotPreferences.map((sp: any) => (
+            {slotPreferences.map((sp) => (
               <div key={sp.id} className={`flex items-center gap-2 text-xs px-2 py-1 rounded ${sp.preference === "favorable" ? "bg-green-50 dark:bg-green-900/20" : "bg-red-50 dark:bg-red-900/20"}`} data-testid={`agg-slot-${sp.id}`}>
                 <span className={`w-2 h-2 rounded-full shrink-0 ${sp.preference === "favorable" ? "bg-green-500" : "bg-red-500"}`} />
                 <span className="font-medium truncate">{sp.objectName}</span>

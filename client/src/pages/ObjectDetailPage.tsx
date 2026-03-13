@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import type { ObjectTimeRestriction } from "@shared/schema";
 import {
   ArrowLeft, Building2, MapPin, Key, Keyboard, Users, DoorOpen,
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
@@ -260,7 +261,7 @@ export default function ObjectDetailPage() {
     enabled: !!objectId,
   });
 
-  const { data: timeRestrictions = [] } = useQuery<any[]>({
+  const { data: timeRestrictions = [] } = useQuery<ObjectTimeRestriction[]>({
     queryKey: ["/api/objects", objectId, "time-restrictions"],
     queryFn: async () => {
       const res = await fetch(`/api/objects/${objectId}/time-restrictions`);
@@ -1199,22 +1200,22 @@ export default function ObjectDetailPage() {
                         <div key={day.value} className="text-center">
                           <div className="text-xs font-medium mb-1">{day.label}</div>
                           {(() => {
-                            const daySlots = timeRestrictions.filter((tr: any) =>
+                            const daySlots = timeRestrictions.filter((tr) =>
                               tr.weekdays && Array.isArray(tr.weekdays) && tr.weekdays.includes(day.value)
                             );
-                            const favorable = daySlots.filter((tr: any) => tr.preference === "favorable");
-                            const unfavorable = daySlots.filter((tr: any) => tr.preference !== "favorable");
+                            const favorable = daySlots.filter((tr) => tr.preference === "favorable");
+                            const unfavorable = daySlots.filter((tr) => tr.preference !== "favorable");
                             if (daySlots.length === 0) {
                               return <div className="h-12 rounded border border-dashed border-muted-foreground/20 flex items-center justify-center text-[10px] text-muted-foreground">—</div>;
                             }
                             return (
                               <div className="space-y-0.5">
-                                {favorable.map((s: any) => (
+                                {favorable.map((s) => (
                                   <div key={s.id} className="bg-green-100 dark:bg-green-900/40 border border-green-300 dark:border-green-700 rounded px-1 py-0.5" data-testid={`slot-favorable-${s.id}`}>
                                     <div className="text-[10px] font-medium text-green-800 dark:text-green-300 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
                                   </div>
                                 ))}
-                                {unfavorable.map((s: any) => (
+                                {unfavorable.map((s) => (
                                   <div key={s.id} className="bg-red-100 dark:bg-red-900/40 border border-red-300 dark:border-red-700 rounded px-1 py-0.5" data-testid={`slot-unfavorable-${s.id}`}>
                                     <div className="text-[10px] font-medium text-red-800 dark:text-red-300 truncate">{s.startTime || "Hela"}{s.endTime ? `–${s.endTime}` : ""}</div>
                                   </div>
@@ -1241,13 +1242,13 @@ export default function ObjectDetailPage() {
 
                   {/* List view */}
                   <div className="divide-y">
-                    {timeRestrictions.map((tr: any) => {
+                    {timeRestrictions.map((tr) => {
                       const isFavorable = tr.preference === "favorable";
                       return (
                         <div key={tr.id} className={`py-3 border-l-2 pl-3 ${isFavorable ? "border-l-green-500" : "border-l-red-500"}`} data-testid={`restriction-row-${tr.id}`}>
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{tr.name || RESTRICTION_TYPES.find((t: any) => t.value === tr.restrictionType)?.label || tr.restrictionType || "Restriktion"}</span>
+                              <span className="text-sm font-medium">{RESTRICTION_TYPES.find((t) => t.value === tr.restrictionType)?.label || tr.restrictionType || "Restriktion"}</span>
                               <Badge variant="outline" className={isFavorable ? "border-green-500 text-green-700 dark:text-green-400" : "border-red-500 text-red-700 dark:text-red-400"}>
                                 {isFavorable ? "Fördelaktig" : "Ofördelaktig"}
                               </Badge>
