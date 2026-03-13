@@ -93,7 +93,11 @@ import {
   type WorkSession, type InsertWorkSession,
   type WorkEntry, type InsertWorkEntry,
   type EquipmentBooking, type InsertEquipmentBooking,
+  type IotDevice, type InsertIotDevice,
+  type IotApiKey, type InsertIotApiKey,
+  type IotSignal, type InsertIotSignal,
   workSessions, workEntries, equipmentBookings,
+  iotDevices, iotApiKeys, iotSignals,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
   resourceProfiles, resourceProfileAssignments,
@@ -705,6 +709,22 @@ export interface IStorage {
   updateEquipmentBooking(id: string, data: Partial<InsertEquipmentBooking>): Promise<EquipmentBooking | undefined>;
   deleteEquipmentBooking(id: string): Promise<void>;
   releaseEquipmentByWorkSession(workSessionId: string): Promise<number>;
+
+  getIotDevices(tenantId: string): Promise<IotDevice[]>;
+  getIotDevice(id: string): Promise<IotDevice | undefined>;
+  getIotDeviceByExternalId(tenantId: string, externalDeviceId: string): Promise<IotDevice | undefined>;
+  createIotDevice(device: InsertIotDevice): Promise<IotDevice>;
+  updateIotDevice(id: string, data: Partial<InsertIotDevice>): Promise<IotDevice | undefined>;
+  deleteIotDevice(id: string): Promise<void>;
+
+  getIotApiKeys(tenantId: string): Promise<IotApiKey[]>;
+  getIotApiKeyByKey(apiKey: string): Promise<IotApiKey | undefined>;
+  createIotApiKey(key: InsertIotApiKey): Promise<IotApiKey>;
+  deleteIotApiKey(id: string): Promise<void>;
+
+  getIotSignals(tenantId: string, options?: { deviceId?: string; limit?: number }): Promise<IotSignal[]>;
+  createIotSignal(signal: InsertIotSignal): Promise<IotSignal>;
+  updateIotSignal(id: string, data: Partial<InsertIotSignal>): Promise<IotSignal | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5069,6 +5089,71 @@ export class DatabaseStorage implements IStorage {
       byResource = fallback.length;
     }
     return bySession.length + byResource;
+  }
+
+  async getIotDevices(tenantId: string): Promise<IotDevice[]> {
+    return db.select().from(iotDevices).where(eq(iotDevices.tenantId, tenantId)).orderBy(desc(iotDevices.createdAt));
+  }
+
+  async getIotDevice(id: string): Promise<IotDevice | undefined> {
+    const [result] = await db.select().from(iotDevices).where(eq(iotDevices.id, id));
+    return result || undefined;
+  }
+
+  async getIotDeviceByExternalId(tenantId: string, externalDeviceId: string): Promise<IotDevice | undefined> {
+    const [result] = await db.select().from(iotDevices).where(and(eq(iotDevices.tenantId, tenantId), eq(iotDevices.externalDeviceId, externalDeviceId)));
+    return result || undefined;
+  }
+
+  async createIotDevice(device: InsertIotDevice): Promise<IotDevice> {
+    const [result] = await db.insert(iotDevices).values(device).returning();
+    return result;
+  }
+
+  async updateIotDevice(id: string, data: Partial<InsertIotDevice>): Promise<IotDevice | undefined> {
+    const [result] = await db.update(iotDevices).set(data).where(eq(iotDevices.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteIotDevice(id: string): Promise<void> {
+    await db.delete(iotSignals).where(eq(iotSignals.deviceId, id));
+    await db.delete(iotDevices).where(eq(iotDevices.id, id));
+  }
+
+  async getIotApiKeys(tenantId: string): Promise<IotApiKey[]> {
+    return db.select().from(iotApiKeys).where(eq(iotApiKeys.tenantId, tenantId)).orderBy(desc(iotApiKeys.createdAt));
+  }
+
+  async getIotApiKeyByKey(apiKey: string): Promise<IotApiKey | undefined> {
+    const [result] = await db.select().from(iotApiKeys).where(and(eq(iotApiKeys.apiKey, apiKey), eq(iotApiKeys.status, "active")));
+    return result || undefined;
+  }
+
+  async createIotApiKey(key: InsertIotApiKey): Promise<IotApiKey> {
+    const [result] = await db.insert(iotApiKeys).values(key).returning();
+    return result;
+  }
+
+  async deleteIotApiKey(id: string): Promise<void> {
+    await db.delete(iotApiKeys).where(eq(iotApiKeys.id, id));
+  }
+
+  async getIotSignals(tenantId: string, options?: { deviceId?: string; limit?: number }): Promise<IotSignal[]> {
+    const conditions = [eq(iotSignals.tenantId, tenantId)];
+    if (options?.deviceId) conditions.push(eq(iotSignals.deviceId, options.deviceId));
+    const query = db.select().from(iotSignals).where(and(...conditions)).orderBy(desc(iotSignals.createdAt));
+    if (options?.limit) return query.limit(options.limit);
+    return query.limit(100);
+  }
+
+  async createIotSignal(signal: InsertIotSignal): Promise<IotSignal> {
+    const [result] = await db.insert(iotSignals).values(signal).returning();
+    return result;
+  }
+
+  async updateIotSignal(id: string, data: Partial<InsertIotSignal>): Promise<IotSignal | undefined> {
+    const [result] = await db.update(iotSignals).set(data).where(eq(iotSignals.id, id)).returning();
+    return result || undefined;
   }
 }
 

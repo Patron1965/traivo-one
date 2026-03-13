@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, index, unique } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -4139,6 +4139,62 @@ export const equipmentBookings = pgTable("equipment_bookings", {
 export const insertEquipmentBookingSchema = createInsertSchema(equipmentBookings).omit({ id: true, createdAt: true });
 export type InsertEquipmentBooking = z.infer<typeof insertEquipmentBookingSchema>;
 export type EquipmentBooking = typeof equipmentBookings.$inferSelect;
+
+export const iotDevices = pgTable("iot_devices", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  deviceType: text("device_type").notNull(),
+  externalDeviceId: varchar("external_device_id", { length: 255 }),
+  lastSignal: text("last_signal"),
+  lastSignalAt: timestamp("last_signal_at"),
+  batteryLevel: integer("battery_level"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_iot_devices_tenant").on(table.tenantId),
+  index("idx_iot_devices_object").on(table.objectId),
+  uniqueIndex("idx_iot_devices_external").on(table.tenantId, table.externalDeviceId),
+]);
+
+export const insertIotDeviceSchema = createInsertSchema(iotDevices).omit({ id: true, createdAt: true });
+export type InsertIotDevice = z.infer<typeof insertIotDeviceSchema>;
+export type IotDevice = typeof iotDevices.$inferSelect;
+
+export const iotApiKeys = pgTable("iot_api_keys", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  apiKey: varchar("api_key", { length: 255 }).notNull().unique(),
+  name: varchar("name", { length: 255 }).notNull(),
+  status: text("status").default("active").notNull(),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_iot_api_keys_tenant").on(table.tenantId),
+  index("idx_iot_api_keys_key").on(table.apiKey),
+]);
+
+export const insertIotApiKeySchema = createInsertSchema(iotApiKeys).omit({ id: true, createdAt: true, lastUsedAt: true });
+export type InsertIotApiKey = z.infer<typeof insertIotApiKeySchema>;
+export type IotApiKey = typeof iotApiKeys.$inferSelect;
+
+export const iotSignals = pgTable("iot_signals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  deviceId: varchar("device_id").references(() => iotDevices.id).notNull(),
+  signalType: text("signal_type").notNull(),
+  payload: text("payload"),
+  processed: boolean("processed").default(false).notNull(),
+  workOrderId: varchar("work_order_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_iot_signals_device").on(table.deviceId),
+  index("idx_iot_signals_tenant").on(table.tenantId, table.createdAt),
+]);
+
+export const insertIotSignalSchema = createInsertSchema(iotSignals).omit({ id: true, createdAt: true });
+export type InsertIotSignal = z.infer<typeof insertIotSignalSchema>;
+export type IotSignal = typeof iotSignals.$inferSelect;
 
 export type TimeSummaryResponse = {
   week: number;
