@@ -3,15 +3,14 @@ import { apiGet, apiPost, apiPut, apiDelete, apiRaw, randomId } from "./helpers"
 
 describe("Work Sessions & Entries API (Snöret)", () => {
 
-  describe("Autentiseringskontroll", () => {
-    const protectedEndpoints = [
+  describe("Autentiseringskontroll – alla Snöret-endpoints kräver autentisering", () => {
+    const protectedGetEndpoints = [
       "/api/work-sessions",
-      "/api/work-entries",
       "/api/time-summary?weekNumber=1&year=2026",
       "/api/payroll-export?weekNumber=1&year=2026",
     ];
 
-    for (const path of protectedEndpoints) {
+    for (const path of protectedGetEndpoints) {
       it(`GET ${path} returnerar 401 utan autentisering`, async () => {
         const res = await apiGet(path);
         expect(res.status).toBe(401);
@@ -75,16 +74,28 @@ describe("Work Sessions & Entries API (Snöret)", () => {
       expect(res.status).toBe(401);
       expect(res.body.error).toBe("Ej autentiserad");
     });
+
+    it("GET /api/work-sessions/:id returnerar 401 utan autentisering", async () => {
+      const res = await apiGet(`/api/work-sessions/${randomId()}`);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe("Ej autentiserad");
+    });
+
+    it("GET /api/work-sessions/:id/entries returnerar 401 utan autentisering", async () => {
+      const res = await apiGet(`/api/work-sessions/${randomId()}/entries`);
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe("Ej autentiserad");
+    });
   });
 
-  describe("Payroll export format", () => {
+  describe("Payroll export autentisering", () => {
     it("GET /api/payroll-export returnerar 401 utan autentisering", async () => {
       const res = await apiRaw("/api/payroll-export?weekNumber=1&year=2026");
       expect(res.status).toBe(401);
     });
   });
 
-  describe("Time summary query parameters", () => {
+  describe("Time summary autentisering med query-parametrar", () => {
     it("GET /api/time-summary returnerar 401 utan autentisering med giltiga params", async () => {
       const res = await apiGet("/api/time-summary?weekNumber=11&year=2026");
       expect(res.status).toBe(401);

@@ -4331,13 +4331,35 @@ export async function registerRoutes(
           }
         }
 
-        const totalWorkHours = summary.total / 60;
-        const totalRestHours = (7 * 24) - totalWorkHours;
-        if (totalRestHours < 36) {
+        let maxContinuousRestHours = 0;
+        if (rSessions.length === 0) {
+          maxContinuousRestHours = 168;
+        } else {
+          const firstStart = rSessions[0].startTime ? new Date(rSessions[0].startTime).getTime() : weekStart.getTime();
+          const restBeforeFirst = (firstStart - weekStart.getTime()) / 3600000;
+          maxContinuousRestHours = Math.max(maxContinuousRestHours, restBeforeFirst);
+
+          for (let i = 1; i < rSessions.length; i++) {
+            const prevEnd = rSessions[i - 1].endTime;
+            const currStart = rSessions[i].startTime;
+            if (prevEnd && currStart) {
+              const gap = (new Date(currStart).getTime() - new Date(prevEnd).getTime()) / 3600000;
+              maxContinuousRestHours = Math.max(maxContinuousRestHours, gap);
+            }
+          }
+
+          const lastEnd = rSessions[rSessions.length - 1].endTime;
+          if (lastEnd) {
+            const restAfterLast = (weekEnd.getTime() - new Date(lastEnd).getTime()) / 3600000;
+            maxContinuousRestHours = Math.max(maxContinuousRestHours, restAfterLast);
+          }
+        }
+
+        if (maxContinuousRestHours < 36) {
           weeklyRestViolations.push({
             resourceId: rId,
             resourceName: summary.resourceName,
-            totalRestHours: Math.round(totalRestHours * 10) / 10,
+            totalRestHours: Math.round(maxContinuousRestHours * 10) / 10,
           });
         }
       }
