@@ -94,6 +94,7 @@ const REPORTER_ROUTES = new Set([
   "/",
   "/home",
   "/settings",
+  "/my-reports",
 ]);
 
 export function getRoleLabel(role: string): string {

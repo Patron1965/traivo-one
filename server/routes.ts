@@ -210,9 +210,9 @@ export async function registerRoutes(
   ]);
 
   const CUSTOMER_ALLOWED_PATHS = new Set([
-    "/customers", "/objects", "/orders", "/subscriptions",
     "/my-objects", "/my-reports", "/portal-booking-config",
-    "/slot-preferences", "/tenant-info",
+    "/slot-preferences", "/tenant-info", "/booking-options",
+    "/portal",
   ]);
 
   const REPORTER_ALLOWED_PATHS = new Set([
@@ -225,16 +225,22 @@ export async function registerRoutes(
       return next();
     }
     const pathSegment = "/" + req.path.split("/").filter(Boolean)[0];
-    if (role === "customer" && CUSTOMER_ALLOWED_PATHS.has(pathSegment)) {
-      return next();
-    }
-    if (role === "reporter" && REPORTER_ALLOWED_PATHS.has(pathSegment)) {
-      return next();
-    }
-    if (RESTRICTED_ROLE_PATHS.has(pathSegment)) {
+    if (role === "customer") {
+      if (CUSTOMER_ALLOWED_PATHS.has(pathSegment)) {
+        return next();
+      }
       return res.status(403).json({
         error: "Behörighet saknas",
-        message: `Rollen "${role}" har inte tillgång till denna resurs.`,
+        message: "Kundanvändare har inte tillgång till denna resurs.",
+      });
+    }
+    if (role === "reporter") {
+      if (REPORTER_ALLOWED_PATHS.has(pathSegment)) {
+        return next();
+      }
+      return res.status(403).json({
+        error: "Behörighet saknas",
+        message: "Anmälaranvändare har inte tillgång till denna resurs.",
       });
     }
     return next();

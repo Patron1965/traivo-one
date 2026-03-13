@@ -13,6 +13,7 @@ import { format, addDays, isAfter, startOfDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
 import type { WorkOrder, Customer, ServiceObject, Subscription } from "@shared/schema";
 
 const orderStatusLabels: Record<string, string> = {
@@ -37,6 +38,8 @@ const orderStatusColors: Record<string, string> = {
 
 export default function CustomerPortalPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isCustomerRole = user?.role === "customer";
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [showExtraBookingDialog, setShowExtraBookingDialog] = useState(false);
@@ -49,18 +52,21 @@ export default function CustomerPortalPage() {
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+    enabled: !isCustomerRole,
   });
 
   const { data: orders = [] } = useQuery<WorkOrder[]>({
     queryKey: ["/api/orders"],
+    enabled: !isCustomerRole,
   });
 
   const { data: objects = [] } = useQuery<ServiceObject[]>({
-    queryKey: ["/api/objects"],
+    queryKey: isCustomerRole ? ["/api/my-objects"] : ["/api/objects"],
   });
 
   const { data: subscriptions = [] } = useQuery<Subscription[]>({
     queryKey: ["/api/subscriptions"],
+    enabled: !isCustomerRole,
   });
 
   const filteredCustomers = customers.filter(c => 

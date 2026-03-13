@@ -32,7 +32,7 @@ describe("Role Configuration", () => {
   });
 
   describe("Role-config route access - customer", () => {
-    it("should grant customer access to allowed routes", async () => {
+    it("should grant customer access to allowed routes only", async () => {
       const { canAccessRoute } = await import("../../client/src/lib/role-config");
       expect(canAccessRoute("customer", "/customer-portal")).toBe(true);
       expect(canAccessRoute("customer", "/")).toBe(true);
@@ -47,7 +47,7 @@ describe("Role Configuration", () => {
       expect(canAccessRoute("customer", "/onboarding")).toBe(false);
     });
 
-    it("should deny customer access to planner/operational routes", async () => {
+    it("should deny customer access to all operational routes", async () => {
       const { canAccessRoute } = await import("../../client/src/lib/role-config");
       expect(canAccessRoute("customer", "/planner")).toBe(false);
       expect(canAccessRoute("customer", "/invoicing")).toBe(false);
@@ -55,15 +55,18 @@ describe("Role Configuration", () => {
       expect(canAccessRoute("customer", "/resources")).toBe(false);
       expect(canAccessRoute("customer", "/work-sessions")).toBe(false);
       expect(canAccessRoute("customer", "/fleet")).toBe(false);
+      expect(canAccessRoute("customer", "/reporting")).toBe(false);
+      expect(canAccessRoute("customer", "/articles")).toBe(false);
     });
   });
 
   describe("Role-config route access - reporter", () => {
-    it("should grant reporter access to home and settings", async () => {
+    it("should grant reporter access to home, settings, and my-reports", async () => {
       const { canAccessRoute } = await import("../../client/src/lib/role-config");
       expect(canAccessRoute("reporter", "/")).toBe(true);
       expect(canAccessRoute("reporter", "/home")).toBe(true);
       expect(canAccessRoute("reporter", "/settings")).toBe(true);
+      expect(canAccessRoute("reporter", "/my-reports")).toBe(true);
     });
 
     it("should deny reporter access to all other routes", async () => {
@@ -75,6 +78,7 @@ describe("Role Configuration", () => {
       expect(canAccessRoute("reporter", "/objects")).toBe(false);
       expect(canAccessRoute("reporter", "/invoicing")).toBe(false);
       expect(canAccessRoute("reporter", "/mobile")).toBe(false);
+      expect(canAccessRoute("reporter", "/resources")).toBe(false);
     });
   });
 
@@ -113,6 +117,11 @@ describe("Role Configuration", () => {
 
     it("should reject unauthenticated access to my-objects API", async () => {
       const res = await apiGet("/api/my-objects");
+      expect(res.status).toBe(401);
+    });
+
+    it("should reject unauthenticated access to work-orders API", async () => {
+      const res = await apiGet("/api/work-orders");
       expect(res.status).toBe(401);
     });
   });
@@ -155,22 +164,30 @@ describe("Role Configuration", () => {
       }
     });
 
-    it("should have canAccessRoute defined for all roles", async () => {
+    it("should have canAccessRoute defined for all roles with home access", async () => {
       const { USER_ROLES } = await import("../../shared/schema");
       const { canAccessRoute } = await import("../../client/src/lib/role-config");
       for (const role of USER_ROLES) {
-        const homeAccess = canAccessRoute(role, "/");
-        expect(typeof homeAccess).toBe("boolean");
-        expect(homeAccess).toBe(true);
+        expect(canAccessRoute(role, "/")).toBe(true);
       }
     });
 
     it("should have admin/owner access to all routes", async () => {
       const { canAccessRoute } = await import("../../client/src/lib/role-config");
-      const testRoutes = ["/planner", "/objects", "/invoicing", "/user-management", "/tenant-config", "/customer-portal"];
+      const testRoutes = ["/planner", "/objects", "/invoicing", "/user-management", "/tenant-config", "/customer-portal", "/my-reports"];
       for (const route of testRoutes) {
         expect(canAccessRoute("admin", route)).toBe(true);
         expect(canAccessRoute("owner", route)).toBe(true);
+      }
+    });
+
+    it("should restrict customer and reporter more than other roles", async () => {
+      const { canAccessRoute } = await import("../../client/src/lib/role-config");
+      const operationalRoutes = ["/planner", "/objects", "/invoicing", "/resources"];
+      for (const route of operationalRoutes) {
+        expect(canAccessRoute("customer", route)).toBe(false);
+        expect(canAccessRoute("reporter", route)).toBe(false);
+        expect(canAccessRoute("planner", route)).toBe(true);
       }
     });
   });

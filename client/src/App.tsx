@@ -48,6 +48,7 @@ import MetadataPage from "@/pages/MetadataPage";
 import MetadataSettingsPage from "@/pages/MetadataSettingsPage";
 import FortnoxSettingsPage from "@/pages/FortnoxSettingsPage";
 import MyTasksPage from "@/pages/MyTasksPage";
+import MyReportsPage from "@/pages/MyReportsPage";
 import ArchitecturePage from "@/pages/architecture";
 import OrderConceptsPage from "@/pages/OrderConceptsPage";
 import OrderConceptWizardPage from "@/pages/OrderConceptWizardPage";
@@ -157,6 +158,7 @@ function Router() {
       <Route path="/historical-map">{() => <ProtectedRoute component={HistoricalMapPage} path="/historical-map" />}</Route>
       <Route path="/checklist-templates">{() => <ProtectedRoute component={ChecklistTemplatesPage} path="/checklist-templates" />}</Route>
       <Route path="/work-sessions">{() => <ProtectedRoute component={WorkSessionsPage} path="/work-sessions" />}</Route>
+      <Route path="/my-reports">{() => <ProtectedRoute component={MyReportsPage} path="/my-reports" />}</Route>
       <Route path="/tenant-config">{() => <ProtectedRoute component={TenantConfigPage} path="/tenant-config" />}</Route>
       <Route path="/onboarding">{() => <ProtectedRoute component={OnboardingWizardPage} path="/onboarding" />}</Route>
       <Route component={NotFound} />
