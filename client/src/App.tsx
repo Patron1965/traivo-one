@@ -94,69 +94,69 @@ import { ProtectedRoute } from "@/components/ProtectedRoute";
 function Router() {
   return (
     <Switch>
-      <Route path="/" component={MyTasksPage} />
-      <Route path="/home" component={MyTasksPage} />
-      <Route path="/planner" component={WeekPlannerPage} />
-      <Route path="/week-planner" component={WeekPlannerPage} />
-      <Route path="/clusters" component={ClustersPage} />
-      <Route path="/clusters/:id" component={ClusterDetailPage} />
-      <Route path="/routes" component={RoutesPage} />
-      <Route path="/optimization" component={OptimizationPrepPage} />
-      <Route path="/objects/:id" component={ObjectDetailPage} />
-      <Route path="/objects" component={ObjectsPage} />
-      <Route path="/resources" component={ResourcesPage} />
-      <Route path="/procurements" component={ProcurementsPage} />
-      <Route path="/articles" component={ArticlesPage} />
-      <Route path="/price-lists" component={PriceListsPage} />
-      <Route path="/order-stock" component={OrderStockPage} />
-      <Route path="/vehicles" component={VehiclesPage} />
-      <Route path="/subscriptions" component={SubscriptionsPage} />
-      <Route path="/planning-parameters" component={PlanningParametersPage} />
-      <Route path="/dashboard" component={DashboardPage} />
-      <Route path="/economics" component={EconomicsDashboardPage} />
-      <Route path="/setup-analysis" component={SetupTimeAnalysisPage} />
-      <Route path="/predictive-planning" component={PredictivePlanningPage} />
-      <Route path="/auto-cluster" component={AutoClusterPage} />
-      <Route path="/weather" component={WeatherPlanningPage} />
-      <Route path="/customer-portal" component={CustomerPortalPage} />
-      <Route path="/portal-messages" component={PortalMessagesPage} />
+      <Route path="/">{() => <ProtectedRoute component={MyTasksPage} path="/" />}</Route>
+      <Route path="/home">{() => <ProtectedRoute component={MyTasksPage} path="/home" />}</Route>
+      <Route path="/planner">{() => <ProtectedRoute component={WeekPlannerPage} path="/planner" />}</Route>
+      <Route path="/week-planner">{() => <ProtectedRoute component={WeekPlannerPage} path="/week-planner" />}</Route>
+      <Route path="/clusters">{() => <ProtectedRoute component={ClustersPage} path="/clusters" />}</Route>
+      <Route path="/clusters/:id">{() => <ProtectedRoute component={ClusterDetailPage} path="/clusters" />}</Route>
+      <Route path="/routes">{() => <ProtectedRoute component={RoutesPage} path="/routes" />}</Route>
+      <Route path="/optimization">{() => <ProtectedRoute component={OptimizationPrepPage} path="/optimization" />}</Route>
+      <Route path="/objects/:id">{() => <ProtectedRoute component={ObjectDetailPage} path="/objects" />}</Route>
+      <Route path="/objects">{() => <ProtectedRoute component={ObjectsPage} path="/objects" />}</Route>
+      <Route path="/resources">{() => <ProtectedRoute component={ResourcesPage} path="/resources" />}</Route>
+      <Route path="/procurements">{() => <ProtectedRoute component={ProcurementsPage} path="/procurements" />}</Route>
+      <Route path="/articles">{() => <ProtectedRoute component={ArticlesPage} path="/articles" />}</Route>
+      <Route path="/price-lists">{() => <ProtectedRoute component={PriceListsPage} path="/price-lists" />}</Route>
+      <Route path="/order-stock">{() => <ProtectedRoute component={OrderStockPage} path="/order-stock" />}</Route>
+      <Route path="/vehicles">{() => <ProtectedRoute component={VehiclesPage} path="/vehicles" />}</Route>
+      <Route path="/subscriptions">{() => <ProtectedRoute component={SubscriptionsPage} path="/subscriptions" />}</Route>
+      <Route path="/planning-parameters">{() => <ProtectedRoute component={PlanningParametersPage} path="/planning-parameters" />}</Route>
+      <Route path="/dashboard">{() => <ProtectedRoute component={DashboardPage} path="/dashboard" />}</Route>
+      <Route path="/economics">{() => <ProtectedRoute component={EconomicsDashboardPage} path="/economics" />}</Route>
+      <Route path="/setup-analysis">{() => <ProtectedRoute component={SetupTimeAnalysisPage} path="/setup-analysis" />}</Route>
+      <Route path="/predictive-planning">{() => <ProtectedRoute component={PredictivePlanningPage} path="/predictive-planning" />}</Route>
+      <Route path="/auto-cluster">{() => <ProtectedRoute component={AutoClusterPage} path="/auto-cluster" />}</Route>
+      <Route path="/weather">{() => <ProtectedRoute component={WeatherPlanningPage} path="/weather" />}</Route>
+      <Route path="/customer-portal">{() => <ProtectedRoute component={CustomerPortalPage} path="/customer-portal" />}</Route>
+      <Route path="/portal-messages">{() => <ProtectedRoute component={PortalMessagesPage} path="/portal-messages" />}</Route>
       <Route path="/import">{() => <ProtectedRoute component={ImportPage} path="/import" />}</Route>
       <Route path="/system-overview">{() => <ProtectedRoute component={SystemOverviewPage} path="/system-overview" />}</Route>
-      <Route path="/settings" component={SettingsPage} />
+      <Route path="/settings">{() => <ProtectedRoute component={SettingsPage} path="/settings" />}</Route>
       <Route path="/system-dashboard">{() => <ProtectedRoute component={SystemDashboardPage} path="/system-dashboard" />}</Route>
       <Route path="/industry-packages">{() => <ProtectedRoute component={IndustryPackagesPage} path="/industry-packages" />}</Route>
-      <Route path="/mobile" component={MobileFieldPage} />
-      <Route path="/field" component={MobileFieldPage} />
-      <Route path="/simple" component={MobileFieldPage} />
-      <Route path="/project-report" component={ProjectReportPage} />
-      <Route path="/metadata" component={MetadataPage} />
+      <Route path="/mobile">{() => <ProtectedRoute component={MobileFieldPage} path="/mobile" />}</Route>
+      <Route path="/field">{() => <ProtectedRoute component={MobileFieldPage} path="/field" />}</Route>
+      <Route path="/simple">{() => <ProtectedRoute component={MobileFieldPage} path="/simple" />}</Route>
+      <Route path="/project-report">{() => <ProtectedRoute component={ProjectReportPage} path="/project-report" />}</Route>
+      <Route path="/metadata">{() => <ProtectedRoute component={MetadataPage} path="/metadata" />}</Route>
       <Route path="/metadata-settings">{() => <ProtectedRoute component={MetadataSettingsPage} path="/metadata-settings" />}</Route>
-      <Route path="/invoicing" component={InvoicingPage} />
-      <Route path="/fleet" component={FleetManagementPage} />
+      <Route path="/invoicing">{() => <ProtectedRoute component={InvoicingPage} path="/invoicing" />}</Route>
+      <Route path="/fleet">{() => <ProtectedRoute component={FleetManagementPage} path="/fleet" />}</Route>
       <Route path="/user-management">{() => <ProtectedRoute component={UserManagementPage} path="/user-management" />}</Route>
-      <Route path="/fortnox" component={FortnoxSettingsPage} />
+      <Route path="/fortnox">{() => <ProtectedRoute component={FortnoxSettingsPage} path="/fortnox" />}</Route>
       <Route path="/sms-settings">{() => <ProtectedRoute component={SmsSettingsPage} path="/sms-settings" />}</Route>
       <Route path="/api-costs">{() => <ProtectedRoute component={ApiCostsDashboardPage} path="/api-costs" />}</Route>
-      <Route path="/environmental-certificates" component={EnvironmentalCertificatePage} />
+      <Route path="/environmental-certificates">{() => <ProtectedRoute component={EnvironmentalCertificatePage} path="/environmental-certificates" />}</Route>
       <Route path="/architecture">{() => <ProtectedRoute component={ArchitecturePage} path="/architecture" />}</Route>
-      <Route path="/order-concepts" component={OrderConceptsPage} />
-      <Route path="/order-concepts/new" component={OrderConceptWizardPage} />
-      <Route path="/order-concepts/:id/edit" component={OrderConceptWizardPage} />
-      <Route path="/assignments" component={AssignmentsPage} />
-      <Route path="/pitch" component={PitchPage} />
-      <Route path="/ai-assistant" component={AIAssistantPage} />
-      <Route path="/reporting" component={ReportingDashboardPage} />
-      <Route path="/workflow-guide" component={WorkflowGuidePage} />
+      <Route path="/order-concepts">{() => <ProtectedRoute component={OrderConceptsPage} path="/order-concepts" />}</Route>
+      <Route path="/order-concepts/new">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
+      <Route path="/order-concepts/:id/edit">{() => <ProtectedRoute component={OrderConceptWizardPage} path="/order-concepts" />}</Route>
+      <Route path="/assignments">{() => <ProtectedRoute component={AssignmentsPage} path="/assignments" />}</Route>
+      <Route path="/pitch">{() => <ProtectedRoute component={PitchPage} path="/pitch" />}</Route>
+      <Route path="/ai-assistant">{() => <ProtectedRoute component={AIAssistantPage} path="/ai-assistant" />}</Route>
+      <Route path="/reporting">{() => <ProtectedRoute component={ReportingDashboardPage} path="/reporting" />}</Route>
+      <Route path="/workflow-guide">{() => <ProtectedRoute component={WorkflowGuidePage} path="/workflow-guide" />}</Route>
       <Route path="/data-requirements">{() => <ProtectedRoute component={DataRequirementsPage} path="/data-requirements" />}</Route>
-      <Route path="/investor-pitch" component={InvestorPitchPage} />
-      <Route path="/ai-planning" component={AIPlanningPage} />
-      <Route path="/ai-command-center" component={AICommandCenterPage} />
-      <Route path="/lundstams-roi" component={LundstamsROIPage} />
-      <Route path="/inspections" component={InspectionSearchPage} />
-      <Route path="/planner-map" component={PlannerMapPage} />
-      <Route path="/historical-map" component={HistoricalMapPage} />
-      <Route path="/checklist-templates" component={ChecklistTemplatesPage} />
-      <Route path="/work-sessions" component={WorkSessionsPage} />
+      <Route path="/investor-pitch">{() => <ProtectedRoute component={InvestorPitchPage} path="/investor-pitch" />}</Route>
+      <Route path="/ai-planning">{() => <ProtectedRoute component={AIPlanningPage} path="/ai-planning" />}</Route>
+      <Route path="/ai-command-center">{() => <ProtectedRoute component={AICommandCenterPage} path="/ai-command-center" />}</Route>
+      <Route path="/lundstams-roi">{() => <ProtectedRoute component={LundstamsROIPage} path="/lundstams-roi" />}</Route>
+      <Route path="/inspections">{() => <ProtectedRoute component={InspectionSearchPage} path="/inspections" />}</Route>
+      <Route path="/planner-map">{() => <ProtectedRoute component={PlannerMapPage} path="/planner-map" />}</Route>
+      <Route path="/historical-map">{() => <ProtectedRoute component={HistoricalMapPage} path="/historical-map" />}</Route>
+      <Route path="/checklist-templates">{() => <ProtectedRoute component={ChecklistTemplatesPage} path="/checklist-templates" />}</Route>
+      <Route path="/work-sessions">{() => <ProtectedRoute component={WorkSessionsPage} path="/work-sessions" />}</Route>
       <Route path="/tenant-config">{() => <ProtectedRoute component={TenantConfigPage} path="/tenant-config" />}</Route>
       <Route path="/onboarding">{() => <ProtectedRoute component={OnboardingWizardPage} path="/onboarding" />}</Route>
       <Route component={NotFound} />

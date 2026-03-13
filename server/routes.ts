@@ -19201,13 +19201,26 @@ setInterval(loadRoutes, 60000);
   // USER MANAGEMENT API
   // ============================================
 
-  const requireAdminAuth = (req: any, res: any, next: any) => {
+  const requireAdminAuth = async (req: any, res: any, next: any) => {
     const replitUser = req.user as any;
     const sessionUserId = (req.session as any)?.userId;
-    if ((replitUser && replitUser.claims?.sub) || sessionUserId) {
-      return next();
+    const userId = replitUser?.claims?.sub || sessionUserId;
+    if (!userId) {
+      return res.status(401).json({ error: "Ej autentiserad", message: "Du måste logga in för att komma åt denna resurs." });
     }
-    return res.status(401).json({ error: "Ej autentiserad", message: "Du måste logga in för att komma åt denna resurs." });
+    try {
+      const dbUser = await storage.getUser(userId);
+      if (!dbUser) {
+        return res.status(401).json({ error: "Ej autentiserad", message: "Användaren hittades inte." });
+      }
+      const role = dbUser.role || "user";
+      if (role !== "admin" && role !== "owner") {
+        return res.status(403).json({ error: "Ej behörig", message: "Administratörsrättigheter krävs." });
+      }
+      return next();
+    } catch {
+      return res.status(500).json({ error: "Kunde inte verifiera behörighet" });
+    }
   };
 
   app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
@@ -19227,6 +19240,11 @@ setInterval(loadRoutes, 60000);
 
       if (!email || !password) {
         return res.status(400).json({ error: "E-post och lösenord krävs" });
+      }
+
+      const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
+      if (role && !validRoles.includes(role)) {
+        return res.status(400).json({ error: `Ogiltig roll: ${role}` });
       }
 
       const existing = await storage.getUserByUsername(email);
@@ -19261,7 +19279,13 @@ setInterval(loadRoutes, 60000);
         return res.status(400).json({ error: "Inga användare valda" });
       }
       const validUpdates: Record<string, any> = {};
-      if (updates.role !== undefined) validUpdates.role = updates.role;
+      if (updates.role !== undefined) {
+        const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
+        if (!validRoles.includes(updates.role)) {
+          return res.status(400).json({ error: `Ogiltig roll: ${updates.role}` });
+        }
+        validUpdates.role = updates.role;
+      }
       if (updates.isActive !== undefined) validUpdates.isActive = updates.isActive;
       if (Object.keys(validUpdates).length === 0) {
         return res.status(400).json({ error: "Inga uppdateringar angivna" });
@@ -19287,7 +19311,13 @@ setInterval(loadRoutes, 60000);
       if (email !== undefined) updateData.email = email;
       if (firstName !== undefined) updateData.firstName = firstName;
       if (lastName !== undefined) updateData.lastName = lastName;
-      if (role !== undefined) updateData.role = role;
+      if (role !== undefined) {
+        const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
+        if (!validRoles.includes(role)) {
+          return res.status(400).json({ error: `Ogiltig roll: ${role}` });
+        }
+        updateData.role = role;
+      }
       if (resourceId !== undefined) updateData.resourceId = resourceId;
       if (isActive !== undefined) updateData.isActive = isActive;
       if (password) {
