@@ -55,6 +55,7 @@ import {
   UserCheck,
   ListChecks,
   Activity,
+  Clock,
 } from "lucide-react";
 
 const grunddataItems = [
@@ -62,6 +63,7 @@ const grunddataItems = [
   { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
   { title: "Objekt", url: "/objects", icon: Building2, description: "Fastigheter och platser" },
   { title: "Resurser", url: "/resources", icon: Users, description: "Personal" },
+  { title: "Arbetspass", url: "/work-sessions", icon: Clock, description: "Tidloggning och löneunderlag" },
   { title: "Fordon", url: "/vehicles", icon: Truck, description: "Fordon" },
   { title: "Artiklar", url: "/articles", icon: Package, description: "Produkter och tjänster" },
   { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },

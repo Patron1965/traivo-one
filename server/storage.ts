@@ -90,6 +90,9 @@ import {
   type ObjectArticle, type InsertObjectArticle,
   type ResourceProfile, type InsertResourceProfile,
   type ResourceProfileAssignment, type InsertResourceProfileAssignment,
+  type WorkSession, type InsertWorkSession,
+  type WorkEntry, type InsertWorkEntry,
+  workSessions, workEntries,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
   resourceProfiles, resourceProfileAssignments,
@@ -681,6 +684,19 @@ export interface IStorage {
   assignResourceProfile(data: InsertResourceProfileAssignment): Promise<ResourceProfileAssignment>;
   removeResourceProfileAssignment(id: string): Promise<void>;
   removeResourceProfileAssignmentByPair(profileId: string, resourceId: string): Promise<void>;
+
+  getWorkSessions(tenantId: string, options?: { resourceId?: string; teamId?: string; startDate?: Date; endDate?: Date; status?: string }): Promise<WorkSession[]>;
+  getWorkSession(id: string): Promise<WorkSession | undefined>;
+  createWorkSession(session: InsertWorkSession): Promise<WorkSession>;
+  updateWorkSession(id: string, data: Partial<InsertWorkSession>): Promise<WorkSession | undefined>;
+  deleteWorkSession(id: string): Promise<void>;
+
+  getWorkEntries(workSessionId: string): Promise<WorkEntry[]>;
+  getWorkEntriesByResource(tenantId: string, resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkEntry[]>;
+  getWorkEntry(id: string): Promise<WorkEntry | undefined>;
+  createWorkEntry(entry: InsertWorkEntry): Promise<WorkEntry>;
+  updateWorkEntry(id: string, data: Partial<InsertWorkEntry>): Promise<WorkEntry | undefined>;
+  deleteWorkEntry(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -4914,6 +4930,66 @@ export class DatabaseStorage implements IStorage {
 
   async removeResourceProfileAssignmentByPair(profileId: string, resourceId: string): Promise<void> {
     await db.delete(resourceProfileAssignments).where(and(eq(resourceProfileAssignments.profileId, profileId), eq(resourceProfileAssignments.resourceId, resourceId)));
+  }
+
+  async getWorkSessions(tenantId: string, options?: { resourceId?: string; teamId?: string; startDate?: Date; endDate?: Date; status?: string }): Promise<WorkSession[]> {
+    const conditions = [eq(workSessions.tenantId, tenantId)];
+    if (options?.resourceId) conditions.push(eq(workSessions.resourceId, options.resourceId));
+    if (options?.teamId) conditions.push(eq(workSessions.teamId, options.teamId));
+    if (options?.status) conditions.push(eq(workSessions.status, options.status));
+    if (options?.startDate) conditions.push(gte(workSessions.date, options.startDate));
+    if (options?.endDate) conditions.push(lte(workSessions.date, options.endDate));
+    return db.select().from(workSessions).where(and(...conditions)).orderBy(desc(workSessions.date));
+  }
+
+  async getWorkSession(id: string): Promise<WorkSession | undefined> {
+    const [session] = await db.select().from(workSessions).where(eq(workSessions.id, id));
+    return session || undefined;
+  }
+
+  async createWorkSession(session: InsertWorkSession): Promise<WorkSession> {
+    const [result] = await db.insert(workSessions).values(session).returning();
+    return result;
+  }
+
+  async updateWorkSession(id: string, data: Partial<InsertWorkSession>): Promise<WorkSession | undefined> {
+    const [result] = await db.update(workSessions).set({ ...data, updatedAt: new Date() }).where(eq(workSessions.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteWorkSession(id: string): Promise<void> {
+    await db.delete(workEntries).where(eq(workEntries.workSessionId, id));
+    await db.delete(workSessions).where(eq(workSessions.id, id));
+  }
+
+  async getWorkEntries(workSessionId: string): Promise<WorkEntry[]> {
+    return db.select().from(workEntries).where(eq(workEntries.workSessionId, workSessionId)).orderBy(workEntries.startTime);
+  }
+
+  async getWorkEntriesByResource(tenantId: string, resourceId: string, startDate?: Date, endDate?: Date): Promise<WorkEntry[]> {
+    const conditions = [eq(workEntries.tenantId, tenantId), eq(workEntries.resourceId, resourceId)];
+    if (startDate) conditions.push(gte(workEntries.startTime, startDate));
+    if (endDate) conditions.push(lte(workEntries.startTime, endDate));
+    return db.select().from(workEntries).where(and(...conditions)).orderBy(workEntries.startTime);
+  }
+
+  async getWorkEntry(id: string): Promise<WorkEntry | undefined> {
+    const [entry] = await db.select().from(workEntries).where(eq(workEntries.id, id));
+    return entry || undefined;
+  }
+
+  async createWorkEntry(entry: InsertWorkEntry): Promise<WorkEntry> {
+    const [result] = await db.insert(workEntries).values(entry).returning();
+    return result;
+  }
+
+  async updateWorkEntry(id: string, data: Partial<InsertWorkEntry>): Promise<WorkEntry | undefined> {
+    const [result] = await db.update(workEntries).set(data).where(eq(workEntries.id, id)).returning();
+    return result || undefined;
+  }
+
+  async deleteWorkEntry(id: string): Promise<void> {
+    await db.delete(workEntries).where(eq(workEntries.id, id));
   }
 }
 

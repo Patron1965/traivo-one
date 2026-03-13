@@ -4036,3 +4036,56 @@ export const resourceProfileAssignments = pgTable("resource_profile_assignments"
 export const insertResourceProfileAssignmentSchema = createInsertSchema(resourceProfileAssignments).omit({ id: true, createdAt: true });
 export type InsertResourceProfileAssignment = z.infer<typeof insertResourceProfileAssignmentSchema>;
 export type ResourceProfileAssignment = typeof resourceProfileAssignments.$inferSelect;
+
+export const WORK_SESSION_STATUSES = ["active", "paused", "completed"] as const;
+export type WorkSessionStatus = typeof WORK_SESSION_STATUSES[number];
+
+export const WORK_ENTRY_TYPES = ["work", "travel", "setup", "break", "rest"] as const;
+export type WorkEntryType = typeof WORK_ENTRY_TYPES[number];
+
+export const workSessions = pgTable("work_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  teamId: varchar("team_id").references(() => teams.id),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  date: timestamp("date").notNull(),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  status: text("status").default("active").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_work_sessions_tenant").on(table.tenantId),
+  index("idx_work_sessions_resource").on(table.resourceId),
+  index("idx_work_sessions_date").on(table.date),
+  index("idx_work_sessions_team").on(table.teamId),
+]);
+
+export const insertWorkSessionSchema = createInsertSchema(workSessions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWorkSession = z.infer<typeof insertWorkSessionSchema>;
+export type WorkSession = typeof workSessions.$inferSelect;
+
+export const workEntries = pgTable("work_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workSessionId: varchar("work_session_id").references(() => workSessions.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  entryType: text("entry_type").default("work").notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id),
+  startTime: timestamp("start_time").notNull(),
+  endTime: timestamp("end_time"),
+  durationMinutes: integer("duration_minutes"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_work_entries_session").on(table.workSessionId),
+  index("idx_work_entries_resource").on(table.resourceId),
+  index("idx_work_entries_type").on(table.entryType),
+]);
+
+export const insertWorkEntrySchema = createInsertSchema(workEntries).omit({ id: true, createdAt: true });
+export type InsertWorkEntry = z.infer<typeof insertWorkEntrySchema>;
+export type WorkEntry = typeof workEntries.$inferSelect;

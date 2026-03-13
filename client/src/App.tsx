@@ -83,6 +83,7 @@ import HistoricalMapPage from "@/pages/HistoricalMapPage";
 import ChecklistTemplatesPage from "@/pages/ChecklistTemplatesPage";
 import UserManagementPage from "@/pages/UserManagementPage";
 import TenantConfigPage from "@/pages/TenantConfigPage";
+import WorkSessionsPage from "@/pages/WorkSessionsPage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
 import { TourProvider } from "@/hooks/use-tour";
 import { TourGuide } from "@/components/TourGuide";
@@ -155,6 +156,7 @@ function Router() {
       <Route path="/planner-map" component={PlannerMapPage} />
       <Route path="/historical-map" component={HistoricalMapPage} />
       <Route path="/checklist-templates" component={ChecklistTemplatesPage} />
+      <Route path="/work-sessions" component={WorkSessionsPage} />
       <Route path="/tenant-config">{() => <ProtectedRoute component={TenantConfigPage} path="/tenant-config" />}</Route>
       <Route path="/onboarding">{() => <ProtectedRoute component={OnboardingWizardPage} path="/onboarding" />}</Route>
       <Route component={NotFound} />

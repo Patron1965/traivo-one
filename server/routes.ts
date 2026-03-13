@@ -43,6 +43,7 @@ import {
   insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertPortalMessageSchema, insertSelfBookingSchema,
   insertFuelLogSchema, insertMaintenanceLogSchema, insertObjectParentSchema,
   insertResourceProfileSchema, insertResourceProfileAssignmentSchema,
+  insertWorkSessionSchema, insertWorkEntrySchema, workSessions, workEntries,
   type ServiceObject,
   apiUsageLogs, apiBudgets, articles, taskDependencyInstances,
   objects, workOrders
@@ -95,6 +96,23 @@ async function ensureDefaultTenant() {
     contactPhone: "+46701234567",
     settings: {},
   });
+}
+
+function getISOWeek(date: Date): number {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));
+  const week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+}
+
+function getStartOfISOWeek(year: number, week: number): Date {
+  const jan4 = new Date(year, 0, 4);
+  const dayOfWeek = jan4.getDay() || 7;
+  const start = new Date(jan4);
+  start.setDate(jan4.getDate() - dayOfWeek + 1 + (week - 1) * 7);
+  start.setHours(0, 0, 0, 0);
+  return start;
 }
 
 function getDateFromWeekdayInMonth(year: number, month: number, weekNumber: number, weekday: number): Date | null {
@@ -4064,6 +4082,325 @@ export async function registerRoutes(
       res.status(204).send();
     } catch (error) {
       res.status(500).json({ error: "Failed to remove profile assignment" });
+    }
+  });
+
+  // ============== WORK SESSIONS & ENTRIES (Snöret) ==============
+  app.get("/api/work-sessions", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { resourceId, teamId, startDate, endDate, status } = req.query;
+      const options: any = {};
+      if (resourceId) options.resourceId = resourceId as string;
+      if (teamId) options.teamId = teamId as string;
+      if (startDate) options.startDate = new Date(startDate as string);
+      if (endDate) options.endDate = new Date(endDate as string);
+      if (status) options.status = status as string;
+      const sessions = await storage.getWorkSessions(tenantId, options);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Failed to fetch work sessions:", error);
+      res.status(500).json({ error: "Failed to fetch work sessions" });
+    }
+  });
+
+  app.get("/api/work-sessions/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await storage.getWorkSession(req.params.id);
+      if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+      res.json(session);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch work session" });
+    }
+  });
+
+  app.post("/api/work-sessions", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const resource = await storage.getResource(req.body.resourceId);
+      if (!resource || resource.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig resurs" });
+      if (req.body.teamId) {
+        const team = await storage.getTeam(req.body.teamId);
+        if (!team || team.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltigt team" });
+      }
+      const startTime = new Date(req.body.startTime);
+      const endTime = req.body.endTime ? new Date(req.body.endTime) : undefined;
+      if (endTime && endTime <= startTime) return res.status(400).json({ error: "Sluttid måste vara efter starttid" });
+      const data = insertWorkSessionSchema.parse({ ...req.body, tenantId, date: new Date(req.body.date), startTime, endTime });
+      const session = await storage.createWorkSession(data);
+      res.status(201).json(session);
+    } catch (error: any) {
+      if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
+      console.error("Failed to create work session:", error);
+      res.status(500).json({ error: "Failed to create work session" });
+    }
+  });
+
+  app.put("/api/work-sessions/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getWorkSession(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+      const { tenantId: _, id: __, ...updateData } = req.body;
+      if (updateData.status && !["active", "paused", "completed"].includes(updateData.status)) return res.status(400).json({ error: "Ogiltig status" });
+      if (updateData.resourceId) {
+        const resource = await storage.getResource(updateData.resourceId);
+        if (!resource || resource.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig resurs" });
+      }
+      if (updateData.endTime) updateData.endTime = new Date(updateData.endTime);
+      if (updateData.startTime) updateData.startTime = new Date(updateData.startTime);
+      if (updateData.date) updateData.date = new Date(updateData.date);
+      const session = await storage.updateWorkSession(req.params.id, updateData);
+      res.json(session);
+    } catch (error) {
+      console.error("Failed to update work session:", error);
+      res.status(500).json({ error: "Failed to update work session" });
+    }
+  });
+
+  app.delete("/api/work-sessions/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getWorkSession(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+      await storage.deleteWorkSession(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete work session" });
+    }
+  });
+
+  app.post("/api/work-sessions/:id/check-in", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getWorkSession(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+      const session = await storage.updateWorkSession(req.params.id, { status: "active", startTime: new Date() });
+      res.json(session);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check in" });
+    }
+  });
+
+  app.post("/api/work-sessions/:id/check-out", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getWorkSession(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+      const session = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
+      res.json(session);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to check out" });
+    }
+  });
+
+  app.get("/api/work-sessions/:id/entries", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await storage.getWorkSession(req.params.id);
+      if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+      const entries = await storage.getWorkEntries(req.params.id);
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch work entries" });
+    }
+  });
+
+  app.post("/api/work-entries", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const session = await storage.getWorkSession(req.body.workSessionId);
+      if (!session || session.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltigt arbetspass" });
+      const resource = await storage.getResource(req.body.resourceId || session.resourceId);
+      if (!resource || resource.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig resurs" });
+      const validTypes = ["work", "travel", "setup", "break", "rest"];
+      if (!validTypes.includes(req.body.entryType)) return res.status(400).json({ error: "Ogiltig posttyp" });
+      const startTime = new Date(req.body.startTime);
+      const endTime = req.body.endTime ? new Date(req.body.endTime) : undefined;
+      if (endTime && endTime <= startTime) return res.status(400).json({ error: "Sluttid måste vara efter starttid" });
+      const data = insertWorkEntrySchema.parse({ ...req.body, tenantId, resourceId: resource.id, startTime, endTime });
+      const entry = await storage.createWorkEntry(data);
+      res.status(201).json(entry);
+    } catch (error: any) {
+      if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
+      console.error("Failed to create work entry:", error);
+      res.status(500).json({ error: "Failed to create work entry" });
+    }
+  });
+
+  app.put("/api/work-entries/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getWorkEntry(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
+      const { tenantId: _, id: __, workSessionId: ___, ...updateData } = req.body;
+      const validTypes = ["work", "travel", "setup", "break", "rest"];
+      if (updateData.entryType && !validTypes.includes(updateData.entryType)) return res.status(400).json({ error: "Ogiltig posttyp" });
+      if (updateData.startTime) updateData.startTime = new Date(updateData.startTime);
+      if (updateData.endTime) updateData.endTime = new Date(updateData.endTime);
+      const start = updateData.startTime || existing.startTime;
+      const end = updateData.endTime || existing.endTime;
+      if (end && start && new Date(end) <= new Date(start)) return res.status(400).json({ error: "Sluttid måste vara efter starttid" });
+      const entry = await storage.updateWorkEntry(req.params.id, updateData);
+      res.json(entry);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update work entry" });
+    }
+  });
+
+  app.delete("/api/work-entries/:id", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const existing = await storage.getWorkEntry(req.params.id);
+      if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
+      await storage.deleteWorkEntry(req.params.id);
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete work entry" });
+    }
+  });
+
+  app.get("/api/time-summary", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { resourceId, weekNumber, year } = req.query;
+      const y = parseInt(year as string) || new Date().getFullYear();
+      const w = parseInt(weekNumber as string) || getISOWeek(new Date());
+
+      const weekStart = getStartOfISOWeek(y, w);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+
+      const options: any = { startDate: weekStart, endDate: weekEnd };
+      if (resourceId) options.resourceId = resourceId as string;
+
+      const sessions = await storage.getWorkSessions(tenantId, options);
+      const allResources = await storage.getResources(tenantId);
+      const resourceMap = new Map(allResources.map(r => [r.id, r]));
+
+      const summaryByResource = new Map<string, { work: number; travel: number; setup: number; break_time: number; rest: number; total: number; budgetHours: number; resourceName: string; resourceId: string }>();
+
+      for (const session of sessions) {
+        const entries = await storage.getWorkEntries(session.id);
+        const resource = resourceMap.get(session.resourceId);
+        if (!summaryByResource.has(session.resourceId)) {
+          summaryByResource.set(session.resourceId, {
+            work: 0, travel: 0, setup: 0, break_time: 0, rest: 0, total: 0,
+            budgetHours: resource?.weeklyHours || 40,
+            resourceName: resource?.name || "Okänd",
+            resourceId: session.resourceId,
+          });
+        }
+        const s = summaryByResource.get(session.resourceId)!;
+        for (const entry of entries) {
+          const mins = entry.durationMinutes || (entry.endTime && entry.startTime ? Math.round((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 60000) : 0);
+          switch (entry.entryType) {
+            case "work": s.work += mins; break;
+            case "travel": s.travel += mins; break;
+            case "setup": s.setup += mins; break;
+            case "break": s.break_time += mins; break;
+            case "rest": s.rest += mins; break;
+          }
+          s.total += mins;
+        }
+      }
+
+      const nightRestViolations: Array<{ resourceId: string; resourceName: string; date: string; restHours: number }> = [];
+      const weeklyRestViolations: Array<{ resourceId: string; resourceName: string; totalRestHours: number }> = [];
+
+      for (const [rId, summary] of summaryByResource) {
+        const rSessions = sessions.filter(s => s.resourceId === rId).sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
+        for (let i = 1; i < rSessions.length; i++) {
+          const prevEnd = rSessions[i - 1].endTime;
+          const currStart = rSessions[i].startTime;
+          if (prevEnd && currStart) {
+            const restHours = (new Date(currStart).getTime() - new Date(prevEnd).getTime()) / 3600000;
+            if (restHours < 11) {
+              nightRestViolations.push({
+                resourceId: rId,
+                resourceName: summary.resourceName,
+                date: new Date(currStart).toISOString().split("T")[0],
+                restHours: Math.round(restHours * 10) / 10,
+              });
+            }
+          }
+        }
+
+        const totalWorkHours = summary.total / 60;
+        const totalRestHours = (7 * 24) - totalWorkHours;
+        if (totalRestHours < 36) {
+          weeklyRestViolations.push({
+            resourceId: rId,
+            resourceName: summary.resourceName,
+            totalRestHours: Math.round(totalRestHours * 10) / 10,
+          });
+        }
+      }
+
+      res.json({
+        week: w,
+        year: y,
+        summaries: Array.from(summaryByResource.values()),
+        nightRestViolations,
+        weeklyRestViolations,
+      });
+    } catch (error) {
+      console.error("Failed to generate time summary:", error);
+      res.status(500).json({ error: "Failed to generate time summary" });
+    }
+  });
+
+  app.get("/api/payroll-export", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const { weekNumber, year } = req.query;
+      const y = parseInt(year as string) || new Date().getFullYear();
+      const w = parseInt(weekNumber as string) || getISOWeek(new Date());
+
+      const weekStart = getStartOfISOWeek(y, w);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+
+      const sessions = await storage.getWorkSessions(tenantId, { startDate: weekStart, endDate: weekEnd });
+      const allResources = await storage.getResources(tenantId);
+      const resourceMap = new Map(allResources.map(r => [r.id, r]));
+
+      const rows: string[] = ["Resurs;Vecka;År;Arbetstid (min);Restid (min);Ställtid (min);Rast (min);Vila (min);Total (min);Total (h);Budgettimmar;Anställningstyp"];
+
+      const byResource = new Map<string, { work: number; travel: number; setup: number; break_time: number; rest: number; total: number }>();
+      for (const session of sessions) {
+        if (!byResource.has(session.resourceId)) byResource.set(session.resourceId, { work: 0, travel: 0, setup: 0, break_time: 0, rest: 0, total: 0 });
+        const entries = await storage.getWorkEntries(session.id);
+        const s = byResource.get(session.resourceId)!;
+        for (const entry of entries) {
+          const mins = entry.durationMinutes || (entry.endTime && entry.startTime ? Math.round((new Date(entry.endTime).getTime() - new Date(entry.startTime).getTime()) / 60000) : 0);
+          switch (entry.entryType) {
+            case "work": s.work += mins; break;
+            case "travel": s.travel += mins; break;
+            case "setup": s.setup += mins; break;
+            case "break": s.break_time += mins; break;
+            case "rest": s.rest += mins; break;
+          }
+          s.total += mins;
+        }
+      }
+
+      for (const [rId, data] of byResource) {
+        const resource = resourceMap.get(rId);
+        const name = resource?.name || "Okänd";
+        const budget = resource?.weeklyHours || 40;
+        const employmentType = budget >= 35 ? "Månadsanställd" : "Timanställd";
+        const safeName = name.replace(/^[=+\-@\t\r]/g, "'$&").replace(/;/g, ",");
+        rows.push(`${safeName};${w};${y};${data.work};${data.travel};${data.setup};${data.break_time};${data.rest};${data.total};${(data.total / 60).toFixed(1)};${budget};${employmentType}`);
+      }
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", `attachment; filename=loneunderlag_v${w}_${y}.csv`);
+      res.send("\uFEFF" + rows.join("\n"));
+    } catch (error) {
+      console.error("Failed to generate payroll export:", error);
+      res.status(500).json({ error: "Failed to generate payroll export" });
     }
   });
 
