@@ -19382,7 +19382,7 @@ setInterval(loadRoutes, 60000);
             customerId: obj.customerId,
             title: description,
             orderType: "iot_auto",
-            orderStatus: "ny",
+            orderStatus: "skapad",
             description,
             priority,
             source: "iot",
@@ -19474,7 +19474,14 @@ setInterval(loadRoutes, 60000);
       const tenantId = getTenantIdWithFallback(req);
       const existing = await storage.getIotDevice(req.params.id);
       if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Enhet hittades inte." });
-      const device = await storage.updateIotDevice(req.params.id, req.body);
+      const updateSchema = z.object({
+        deviceType: z.string().optional(),
+        externalDeviceId: z.string().nullable().optional(),
+        status: z.string().optional(),
+      });
+      const parsed = updateSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
+      const device = await storage.updateIotDevice(req.params.id, parsed.data);
       res.json(device);
     } catch (error) {
       res.status(500).json({ error: "Kunde inte uppdatera IoT-enhet." });
