@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { storage } from "../../server/storage";
 import { apiGet, apiPut, apiPost, randomId } from "./helpers";
-import type { InsertObject } from "../../shared/schema";
+import type { InsertObject, InsertPublicIssueReport } from "../../shared/schema";
 
 const TEST_TENANT = "default-tenant";
 
@@ -127,7 +127,7 @@ describe("Interim Objects & Object Verification", () => {
     let issueReportId: string;
 
     beforeAll(async () => {
-      const report = await storage.createPublicIssueReport({
+      const reportData: InsertPublicIssueReport = {
         tenantId: TEST_TENANT,
         objectId: testObjectId,
         category: "damage",
@@ -135,7 +135,8 @@ describe("Interim Objects & Object Verification", () => {
         description: "Container vid entrén är trasig",
         latitude: 59.3293,
         longitude: 18.0686,
-      } as any);
+      };
+      const report = await storage.createPublicIssueReport(reportData);
       issueReportId = report.id;
     });
 
