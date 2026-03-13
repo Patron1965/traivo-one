@@ -19335,6 +19335,10 @@ setInterval(loadRoutes, 60000);
       if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
       const { deviceId, externalDeviceId, signalType, payload, batteryLevel } = parsed.data;
 
+      if (!deviceId && !externalDeviceId) {
+        return res.status(400).json({ error: "Ange antingen deviceId eller externalDeviceId." });
+      }
+
       let device;
       if (deviceId) {
         device = await storage.getIotDevice(deviceId);
