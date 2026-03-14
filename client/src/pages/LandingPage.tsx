@@ -1,8 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import logoDark from "@assets/traivo_dark_clean.png";
-import logoLight from "@assets/traivo_light_clean.png";
+import traivoLogo from "@assets/traivo_koncept_3_dynamic_flow_1773502018603.png";
 import { 
   Truck, 
   Clock, 
@@ -30,8 +29,7 @@ export default function LandingPage() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src={logoDark} alt="Traivo" className="h-16 w-auto object-contain block dark:hidden" data-testid="img-landing-logo" />
-            <img src={logoLight} alt="Traivo" className="h-16 w-auto object-contain hidden dark:block" data-testid="img-landing-logo-dark" />
+            <img src={traivoLogo} alt="Traivo" className="h-16 w-auto object-contain dark:bg-white/90 dark:rounded-md dark:px-2 dark:py-1" data-testid="img-landing-logo" />
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
@@ -332,8 +330,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img src={logoDark} alt="Traivo" className="h-8 w-auto object-contain block dark:hidden" data-testid="img-landing-footer-logo" />
-              <img src={logoLight} alt="Traivo" className="h-8 w-auto object-contain hidden dark:block" data-testid="img-landing-footer-logo-dark" />
+              <img src={traivoLogo} alt="Traivo" className="h-8 w-auto object-contain dark:bg-white/90 dark:rounded dark:px-1" data-testid="img-landing-footer-logo" />
               <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">

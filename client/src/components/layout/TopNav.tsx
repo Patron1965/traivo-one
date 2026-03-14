@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
-import logoDark from "@assets/traivo_dark_clean.png";
-import logoLight from "@assets/traivo_light_clean.png";
+import traivoLogo from "@assets/traivo_koncept_3_dynamic_flow_1773502018603.png";
 import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
@@ -247,8 +246,7 @@ function TenantLogo() {
   return (
     <Link href="/">
       <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5" data-testid="link-home-logo">
-        <img src={logoDark} alt="Traivo" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-tenant-logo" />
-        <img src={logoLight} alt="Traivo" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-tenant-logo-dark" />
+        <img src={traivoLogo} alt="Traivo" className="h-10 w-auto object-contain dark:bg-white/90 dark:rounded dark:px-1" data-testid="img-tenant-logo" />
       </div>
     </Link>
   );

@@ -6,7 +6,7 @@ Traivo is an AI-driven platform designed to optimize field service operations fo
 ## User Preferences
 - **Language:** Swedish (sv) for UI
 - **Design:** Clean, professional Nordic aesthetic — Traivo Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
-- **Logo:** `@assets/traivo_logo.png`
+- **Logo:** `@assets/traivo_koncept_3_dynamic_flow_1773502018603.png`
 - **Theme:** Dark/light mode support
 - **Font:** Inter for UI
 - **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet

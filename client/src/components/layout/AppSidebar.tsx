@@ -1,5 +1,5 @@
 import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, Brain, Database, ClipboardCheck, MapPin, History } from "lucide-react";
-import traivoLogo from "@assets/traivo_logo.png";
+import traivoLogo from "@assets/traivo_koncept_3_dynamic_flow_1773502018603.png";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -120,7 +120,7 @@ export function AppSidebar() {
           <img 
             src={traivoLogo} 
             alt="Traivo" 
-            className="h-10 w-auto"
+            className="h-10 w-auto dark:bg-white/90 dark:rounded dark:px-1"
             data-testid="img-traivo-logo"
           />
           <div>

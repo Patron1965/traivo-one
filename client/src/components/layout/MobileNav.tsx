@@ -11,8 +11,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import logoDark from "@assets/traivo_dark_clean.png";
-import logoLight from "@assets/traivo_light_clean.png";
+import traivoLogo from "@assets/traivo_koncept_3_dynamic_flow_1773502018603.png";
 import {
   Menu,
   Calendar,
@@ -151,8 +150,7 @@ export function MobileNav() {
       <SheetContent side="left" className="w-80 p-0" data-testid="mobile-nav-sheet">
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center gap-3">
-            <img src={logoDark} alt="Traivo" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-mobile-nav-logo" />
-            <img src={logoLight} alt="Traivo" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-mobile-nav-logo-dark" />
+            <img src={traivoLogo} alt="Traivo" className="h-10 w-auto object-contain dark:bg-white/90 dark:rounded dark:px-1" data-testid="img-mobile-nav-logo" />
             <SheetTitle className="sr-only">Traivo</SheetTitle>
           </div>
         </SheetHeader>
