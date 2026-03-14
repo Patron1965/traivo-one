@@ -1198,7 +1198,7 @@ app.post("/api/scheduling/preview-dates", asyncHandler(async (req, res) => {
       throw new ValidationError("frequency, startDate, and endDate are required");
     }
     
-    const { generateScheduleDates, formatFrequencyDescription } = await import('./scheduling-utils');
+    const { generateScheduleDates, formatFrequencyDescription } = await import('../scheduling-utils');
     
     const start = new Date(startDate);
     const end = new Date(endDate);
@@ -1224,7 +1224,7 @@ app.post("/api/subscriptions/generate-orders", asyncHandler(async (req, res) => 
     const now = new Date();
     let generatedCount = 0;
 
-    const { generateScheduleDates, convertLegacyPeriodicity } = await import('./scheduling-utils');
+    const { generateScheduleDates, convertLegacyPeriodicity } = await import('../scheduling-utils');
 
     for (const sub of subscriptions) {
       if (sub.status !== "active" || !sub.autoGenerate) continue;

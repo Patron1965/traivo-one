@@ -1211,7 +1211,7 @@ app.post("/api/structural-articles/:parentArticleId/preview-tasks", asyncHandler
       });
     }
     
-    const { generateTasksFromStructuralArticle, calculateTotalDuration } = await import('./structural-article-utils');
+    const { generateTasksFromStructuralArticle, calculateTotalDuration } = await import('../structural-article-utils');
     
     const date = executionDate ? new Date(executionDate) : new Date();
     const metadata = objectMetadata || {};

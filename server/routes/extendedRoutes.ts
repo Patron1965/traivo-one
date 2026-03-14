@@ -266,7 +266,7 @@ app.post("/api/protocols/:id/generate-pdf", asyncHandler(async (req, res) => {
       throw new NotFoundError("Protokoll hittades inte");
     }
     
-    const { generateProtocolPdf } = await import('./protocol-pdf-generator');
+    const { generateProtocolPdf } = await import('../protocol-pdf-generator');
     
     // Fetch related data
     const workOrder = await storage.getWorkOrder(protocol.workOrderId);
@@ -295,7 +295,7 @@ app.post("/api/protocols/:id/send-to-customer", asyncHandler(async (req, res) =>
       throw new NotFoundError("Protokoll hittades inte");
     }
     
-    const { sendProtocolToCustomer } = await import('./protocol-email-service');
+    const { sendProtocolToCustomer } = await import('../protocol-email-service');
     
     const workOrder = await storage.getWorkOrder(protocol.workOrderId);
     const object = protocol.objectId ? await storage.getObject(protocol.objectId) : null;
