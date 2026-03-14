@@ -1,13 +1,13 @@
 # Nordnav Go - Field Service Mobile App
 
 ## Overview
-Nordnav Go is a native mobile application built with React Native/Expo, designed for field service drivers. It integrates with the Kinab Core Concept backend to provide a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, and inspections. The application aims to streamline field operations, improve driver efficiency, and enhance communication with the central system. Key capabilities include optimized routing, real-time updates, offline functionality, and AI-powered assistance for tasks like deviation analysis and voice commands.
+Nordnav Go is a native mobile application built with React Native/Expo, designed for field service drivers. It integrates with the Traivo backend to provide a dedicated mobile experience for managing daily work orders, GPS tracking, material logging, deviation reporting, and inspections. The application aims to streamline field operations, improve driver efficiency, and enhance communication with the central system. Key capabilities include optimized routing, real-time updates, offline functionality, and AI-powered assistance for tasks like deviation analysis and voice commands.
 
 ## User Preferences
 - **Language:** Swedish (sv) for all UI
 - **Design:** Clean Nordic minimalism with Inter font
 - **Colors:** Primary #1B4B6B (Deep Ocean Blue), Secondary #4A9B9B (Northern Teal), Accent #7DBFB0 (Aurora Green), Background #E8F4F8 (Arctic Ice), Text #2C3E50 (Midnight Navy), Muted #6B7C8C (Mountain Gray)
-- **Brand:** Nordnav Go with mountain/navigation logo, "Nordnav One" color scheme
+- **Brand:** Nordnav Go with mountain/navigation logo, Traivo backend integration
 
 ## System Architecture
 The application is built using React Native with Expo SDK 54 and TypeScript for the frontend, and an Express.js backend. Navigation is handled by React Navigation 7, and state management is powered by `@tanstack/react-query`. The system supports both PIN-based and username/password authentication.
@@ -32,7 +32,8 @@ The application is built using React Native with Expo SDK 54 and TypeScript for 
 - **Statistics Dashboard:** StatisticsScreen with week/month toggle, stacked bar chart (travel/on-site/working per day), summary cards (orders, efficiency, deviations, sign-offs), trend indicators vs previous period. Accessible from HomeScreen and ProfileScreen. GET `/api/mobile/statistics` endpoint.
 - **Checklists & Inspections:** Template-based inspection checklists with photo uploads (before/after). Photos converted to base64 on device via expo-file-system and uploaded to POST `/api/mobile/inspections/:orderId/photos`. Database table `inspection_photos` stores photos with order_id, category, photo_slot. GET endpoint retrieves stored photos. Upload progress shown in save button, errors displayed in Swedish alerts. Max 5 MB per photo.
 - **Team Support:** Team info display (partner name, phone, online status, GPS position on map). `GET /api/mobile/my-team` endpoint with mock data. `useTeam` hook with AsyncStorage cache (`@my_team`). ProfileScreen "Mitt team" section with member list, role badges, and call buttons. HomeScreen team partner banner. MapScreen partner marker. Types: `Team`, `TeamMember`, `TeamMemberRole` in `client/types/index.ts`.
-- **Communication:** Real-time updates via WebSocket (Socket.io) for order changes and notifications.
+- **Work Sessions (Arbetspass):** Start/stop/pause/resume work sessions via `/api/mobile/work-sessions/*`. `useWorkSession` hook with live timer, mutation helpers. Session entries for time logging per work type.
+- **Communication:** Real-time updates via WebSocket (Socket.io) for order changes and notifications. Extended Traivo WS events: `job_assigned`, `job_updated`, `job_cancelled`, `schedule_changed`, `priority_changed`, `anomaly_alert`, `position_update`, `ping/pong` keepalive.
 - **Branding & UI:** Rebranded to "Nordfield" with a "Midnight Sun" color scheme, custom icons, and a focus on intuitive UI/UX across screens like Profile, AI Assistant, and Orders.
 
 **Deployment:**

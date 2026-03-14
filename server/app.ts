@@ -33,6 +33,16 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('ping', () => {
+    socket.emit('pong');
+  });
+
+  socket.on('position_update', (data: any) => {
+    if (data.resourceId) {
+      socket.to(`tenant:${data.tenantId || 'default'}`).emit('position_update', data);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`WebSocket client disconnected: ${socket.id}`);
   });
@@ -325,10 +335,10 @@ process.on('SIGINT', () => {
 
 const PORT = 5000;
 server.listen(PORT, '0.0.0.0', () => {
-  const kinabUrl = process.env.KINAB_API_URL;
-  const mockMode = !kinabUrl || process.env.KINAB_MOCK_MODE === 'true';
+  const traivoUrl = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL;
+  const mockMode = !traivoUrl || process.env.TRAIVO_MOCK_MODE === 'true' || process.env.KINAB_MOCK_MODE === 'true';
   console.log(`Nordnav Go API running on port ${PORT}`);
-  console.log(`Kinab Core Concept: ${mockMode ? 'MOCK MODE (no KINAB_API_URL set)' : `LIVE → ${kinabUrl}`}`);
+  console.log(`Traivo backend: ${mockMode ? 'MOCK MODE (no TRAIVO_API_URL set)' : `LIVE → ${traivoUrl}`}`);
   const iosBundle = path.join(metroDir, 'ios', 'index.bundle');
   const androidBundle = path.join(metroDir, 'android', 'index.bundle');
   const hasIos = fs.existsSync(iosBundle);

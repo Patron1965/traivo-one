@@ -61,7 +61,7 @@ const TIME_STATUS_COLORS: Record<string, string> = {
   working: Colors.secondary,
 };
 
-const KINAB_STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
+const TRAIVO_STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
 
 const DRIVER_STATUS_SEQUENCE: OrderStatus[] = [
   'planned',
@@ -356,9 +356,9 @@ export function OrderDetailScreen({ route, navigation }: any) {
       if (idx === -1 || idx >= DRIVER_STATUS_SEQUENCE.length - 1) return null;
       return DRIVER_STATUS_SEQUENCE[idx + 1];
     }
-    const idx = KINAB_STATUS_SEQUENCE.indexOf(current);
-    if (idx === -1 || idx >= KINAB_STATUS_SEQUENCE.length - 1) return null;
-    return KINAB_STATUS_SEQUENCE[idx + 1];
+    const idx = TRAIVO_STATUS_SEQUENCE.indexOf(current);
+    if (idx === -1 || idx >= TRAIVO_STATUS_SEQUENCE.length - 1) return null;
+    return TRAIVO_STATUS_SEQUENCE[idx + 1];
   }
 
   function getNextStatusLabel(status: OrderStatus): string {

@@ -11,7 +11,14 @@ type WSEvent =
   | { type: 'team:order_updated'; data: { orderId: string | number; status: string; updatedBy: string; updatedAt: string } }
   | { type: 'team:material_logged'; data: { orderId: string | number; entry: any } }
   | { type: 'team:member_left'; data: { resourceId: string | number; name: string } }
-  | { type: 'team:invite'; data: { invite: any; teamName: string } };
+  | { type: 'team:invite'; data: { invite: any; teamName: string } }
+  | { type: 'job_assigned'; data: { orderId: string | number; title: string; message: string; data?: any } }
+  | { type: 'job_updated'; data: { orderId: string | number; title: string; message: string; data?: any } }
+  | { type: 'job_cancelled'; data: { orderId: string | number; title: string; message: string } }
+  | { type: 'schedule_changed'; data: { orderId: string | number; data?: { oldDate: string; newDate: string; scheduledStartTime: string } } }
+  | { type: 'priority_changed'; data: { orderId: string | number; data?: { oldPriority: string; newPriority: string } } }
+  | { type: 'anomaly_alert'; data: { id: string | number; title: string; message: string } }
+  | { type: 'position_update'; data: { resourceId: string | number; latitude: number; longitude: number; speed: number; status: string } };
 
 type EventHandler = (event: WSEvent) => void;
 
@@ -28,6 +35,7 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
   const connectionIdRef = useRef(0);
   const backoffRef = useRef(INITIAL_BACKOFF_MS);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const addHandler = useCallback((handler: EventHandler) => {
     handlersRef.current.push(handler);
@@ -58,12 +66,23 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
     }, delay);
   }, [resourceId]);
 
+  const emitEvent = useCallback((connId: number, type: string, data: any) => {
+    if (connectionIdRef.current !== connId) return;
+    const event = { type, data } as WSEvent;
+    setLastEvent(event);
+    handlersRef.current.forEach(h => h(event));
+  }, []);
+
   const connectInternal = useCallback(async (connId: number) => {
     if (connectionIdRef.current !== connId) return;
 
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
+    }
+    if (pingIntervalRef.current) {
+      clearInterval(pingIntervalRef.current);
+      pingIntervalRef.current = null;
     }
 
     try {
@@ -88,11 +107,17 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
         if (resourceId) {
           socket.emit('join', { resourceId: String(resourceId), tenantId, teamId: teamId ? String(teamId) : undefined });
         }
+        pingIntervalRef.current = setInterval(() => {
+          if (connectionIdRef.current === connId) {
+            socket.emit('ping', { type: 'ping' });
+          }
+        }, 30000);
       });
 
       socket.on('disconnect', (reason: string) => {
         if (connectionIdRef.current !== connId) return;
         setIsConnected(false);
+        if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null; }
         console.log(`[WebSocket] Disconnected: ${reason}`);
         if (reason !== 'io client disconnect') {
           scheduleReconnect(connId);
@@ -107,67 +132,88 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
       });
 
       socket.on('order:updated', (data: any) => {
-        if (connectionIdRef.current !== connId) return;
-        const event: WSEvent = { type: 'order:updated', data };
-        setLastEvent(event);
-        handlersRef.current.forEach(h => h(event));
-
+        emitEvent(connId, 'order:updated', data);
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
         queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${data.orderId}`] });
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
       });
 
       socket.on('order:assigned', (data: any) => {
-        if (connectionIdRef.current !== connId) return;
-        const event: WSEvent = { type: 'order:assigned', data };
-        setLastEvent(event);
-        handlersRef.current.forEach(h => h(event));
-
+        emitEvent(connId, 'order:assigned', data);
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
       });
 
-      socket.on('notification', (data: any) => {
-        if (connectionIdRef.current !== connId) return;
-        const event: WSEvent = { type: 'notification', data };
-        setLastEvent(event);
-        handlersRef.current.forEach(h => h(event));
-
+      socket.on('job_assigned', (data: any) => {
+        emitEvent(connId, 'job_assigned', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications/count'] });
+      });
+
+      socket.on('job_updated', (data: any) => {
+        emitEvent(connId, 'job_updated', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${data.orderId}`] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
+      });
+
+      socket.on('job_cancelled', (data: any) => {
+        emitEvent(connId, 'job_cancelled', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
+      });
+
+      socket.on('schedule_changed', (data: any) => {
+        emitEvent(connId, 'schedule_changed', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+      });
+
+      socket.on('priority_changed', (data: any) => {
+        emitEvent(connId, 'priority_changed', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${data.orderId}`] });
+      });
+
+      socket.on('anomaly_alert', (data: any) => {
+        emitEvent(connId, 'anomaly_alert', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications/count'] });
+      });
+
+      socket.on('position_update', (data: any) => {
+        emitEvent(connId, 'position_update', data);
+      });
+
+      socket.on('notification', (data: any) => {
+        emitEvent(connId, 'notification', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications/count'] });
       });
 
       socket.on('team:order_updated', (data: any) => {
-        if (connectionIdRef.current !== connId) return;
-        const event: WSEvent = { type: 'team:order_updated', data };
-        setLastEvent(event);
-        handlersRef.current.forEach(h => h(event));
+        emitEvent(connId, 'team:order_updated', data);
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
         queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${data.orderId}`] });
       });
 
       socket.on('team:material_logged', (data: any) => {
-        if (connectionIdRef.current !== connId) return;
-        const event: WSEvent = { type: 'team:material_logged', data };
-        setLastEvent(event);
-        handlersRef.current.forEach(h => h(event));
+        emitEvent(connId, 'team:material_logged', data);
         queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${data.orderId}/materials`] });
       });
 
       socket.on('team:member_left', (data: any) => {
-        if (connectionIdRef.current !== connId) return;
-        const event: WSEvent = { type: 'team:member_left', data };
-        setLastEvent(event);
-        handlersRef.current.forEach(h => h(event));
+        emitEvent(connId, 'team:member_left', data);
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-team'] });
       });
 
       socket.on('team:invite', (data: any) => {
-        if (connectionIdRef.current !== connId) return;
-        const event: WSEvent = { type: 'team:invite', data };
-        setLastEvent(event);
-        handlersRef.current.forEach(h => h(event));
+        emitEvent(connId, 'team:invite', data);
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/team-invites'] });
       });
+
+      socket.on('pong', () => {});
 
       if (connectionIdRef.current !== connId) {
         socket.disconnect();
@@ -181,7 +227,7 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
         scheduleReconnect(connId);
       }
     }
-  }, [resourceId, tenantId, teamId, queryClient, scheduleReconnect]);
+  }, [resourceId, tenantId, teamId, queryClient, scheduleReconnect, emitEvent]);
 
   const connect = useCallback(() => {
     const connId = ++connectionIdRef.current;
@@ -193,12 +239,19 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
   const disconnect = useCallback(() => {
     connectionIdRef.current++;
     clearReconnectTimer();
+    if (pingIntervalRef.current) { clearInterval(pingIntervalRef.current); pingIntervalRef.current = null; }
     if (socketRef.current) {
       socketRef.current.disconnect();
       socketRef.current = null;
       setIsConnected(false);
     }
   }, [clearReconnectTimer]);
+
+  const sendPositionUpdate = useCallback((position: { latitude: number; longitude: number; speed?: number; heading?: number; accuracy?: number; status?: string; workOrderId?: string }) => {
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('position_update', { type: 'position_update', ...position });
+    }
+  }, []);
 
   useEffect(() => {
     if (resourceId) {
@@ -225,5 +278,6 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
     addHandler,
     connect,
     disconnect,
+    sendPositionUpdate,
   };
 }

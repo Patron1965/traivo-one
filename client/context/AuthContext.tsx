@@ -61,7 +61,7 @@ interface AuthContextType {
   isOnline: boolean;
   startPosition: StartPosition | null;
   setIsOnline: (online: boolean) => void;
-  login: (username: string, password: string, pin?: string) => Promise<void>;
+  login: (username: string, password: string, pin?: string, email?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -214,7 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return (FIELD_APP_ALLOWED_ROLES as readonly string[]).includes(normalized);
   }
 
-  async function login(username: string, password: string, pin?: string) {
+  async function login(username: string, password: string, pin?: string, email?: string) {
     if (!initialLoadCompleteRef.current) {
       console.warn('Login called before initial auth load completed, waiting...');
       await new Promise<void>((resolve) => {
@@ -226,7 +226,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }, 50);
       });
     }
-    const body: any = pin ? { pin } : { username, password };
+    const body: any = email && pin ? { email, pin } : pin ? { pin } : { username, password };
     const data = await apiRequest('POST', '/api/mobile/login', body);
     const resource = data.resource || data.user;
     if (resource?.role && !isRoleAllowed(resource.role)) {

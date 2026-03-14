@@ -212,7 +212,40 @@ export interface Order {
   impossibleBy?: string;
   isTeamOrder?: boolean;
   teamName?: string;
+  executionStatus?: ExecutionStatus;
 }
+
+export type ExecutionStatus =
+  | 'not_started'
+  | 'travel_started'
+  | 'arrived'
+  | 'work_started'
+  | 'work_paused'
+  | 'work_resumed'
+  | 'work_completed'
+  | 'signed_off';
+
+export const EXECUTION_STATUS_LABELS: Record<ExecutionStatus, string> = {
+  not_started: 'Ej startad',
+  travel_started: 'Resa startad',
+  arrived: 'Framme',
+  work_started: 'Arbete startat',
+  work_paused: 'Pausad',
+  work_resumed: 'Återupptagen',
+  work_completed: 'Arbete klart',
+  signed_off: 'Signerad',
+};
+
+export const EXECUTION_STATUS_SEQUENCE: ExecutionStatus[] = [
+  'not_started',
+  'travel_started',
+  'arrived',
+  'work_started',
+  'work_paused',
+  'work_resumed',
+  'work_completed',
+  'signed_off',
+];
 
 export interface Article {
   id: number | string;

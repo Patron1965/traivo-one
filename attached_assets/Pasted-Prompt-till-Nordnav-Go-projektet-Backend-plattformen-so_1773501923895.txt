@@ -1,0 +1,184 @@
+Prompt till Nordnav Go-projektet
+Backend-plattformen som appen pratar med har bytt namn från "Nordnav One" / "Kinab Core Concept" till Traivo. Uppdatera alla backend-referenser i kod och dokumentation till Traivo. Appens eget namn (Nordnav Go / Nordfield) behålls som det är.
+
+Nedan följer en komplett specifikation av Traivo-backenden — alla API-endpoints, WebSocket-events, datamodeller och nya funktioner som appen ska integrera med. Gå igenom appen och verifiera att allt stämmer, och implementera stöd för det som saknas.
+
+1. AUTENTISERING
+POST /api/mobile/login — Tre inloggningsmetoder:
+
+PIN-only:        { "pin": "1234" }
+Username+lösen:  { "username": "namn-eller-email", "password": "1234" }
+Email+PIN:       { "email": "x@y.se", "pin": "1234" }
+Svar innehåller token, user (id, name, role, resourceId, executionCodes), och resource (id, tenantId, name, initials, resourceType, phone, email, homeLatitude, homeLongitude, status, executionCodes).
+
+POST /api/mobile/logout — Invaliderar token.
+GET /api/mobile/me — Hämtar profil.
+
+Auth-header på alla anrop: Authorization: Bearer <token>
+
+Rollbehörighet:
+
+Tillåtna: technician, planner, admin, owner, user
+Blockerade (visa UnauthorizedScreen): customer, reporter, viewer
+2. ARBETSORDRAR
+Endpoint	Metod	Beskrivning
+/api/mobile/my-orders?date=YYYY-MM-DD	GET	Ordrar för inloggad resurs, filtrerat på datum
+/api/mobile/orders?date=YYYY-MM-DD	GET	Alla ordrar för datum
+/api/mobile/orders/:id	GET	Full orderdetalj med objekt, artiklar, substeps, beroenden
+/api/mobile/orders/:id/status	PATCH	{ "status": "in_progress" | "completed" | "cancelled" }
+/api/mobile/orders/:id/substeps/:stepId	PATCH	{ "completed": true } — markera delsteg
+/api/mobile/orders/:id/notes	POST	{ "text": "...", "type": "field_note" }
+/api/mobile/orders/:id/deviations	POST	{ "type": "blocked_access", "description": "...", "severity": "medium" }
+/api/mobile/orders/:id/materials	POST	{ "articleId": "uuid", "quantity": 2, "unit": "st" }
+/api/mobile/orders/:id/signature	POST	{ "signatureData": "base64-png", "signerName": "Kund" }
+/api/mobile/orders/:id/inspections	POST	{ "checklistId": "uuid", "results": [...], "photos": [...] }
+/api/mobile/orders/:id/checklist	GET	Inspektionschecklista baserad på artikeltyp
+/api/mobile/articles	GET	Tillgängliga artiklar för materialloggning
+Nya fält på work_orders att hantera:
+
+execution_status: 8-stegs flöde (scheduled → travel → on_site → work_started → work_done → reporting → completed / cancelled)
+execution_code: Matchar resursens kompetenser
+what3words: Precisionsplats
+impossible_reason + fotobevis
+isLocked, dependsOn, isDependentTask: Beroendekedjor (låsta ordrar kan inte påbörjas)
+creation_method: Hur ordern skapades (manuell, auto, IoT etc.)
+3. GPS & POSITION
+POST /api/mobile/gps och POST /api/mobile/position (alternativ):
+
+{
+  "latitude": 59.33,
+  "longitude": 18.07,
+  "accuracy": 10,
+  "speed": 45,
+  "heading": 180,
+  "timestamp": "ISO-string"
+}
+Skicka var 30:e sekund under aktiv körning. Positionen visas på planerarens karta i realtid.
+
+4. ARBETSPASS (Snöret)
+Endpoint	Metod	Beskrivning
+/api/mobile/work-sessions/start	POST	{ "teamId": "optional", "notes": "..." } — Starta nytt pass
+/api/mobile/work-sessions/active	GET	Hämta aktivt pass (eller null) — använd vid appstart
+/api/mobile/work-sessions/:id/stop	POST	Avsluta pass, frisläpper utrustningsbokningar
+/api/mobile/work-sessions/:id/pause	POST	Pausar pass, skapar automatisk break-entry
+/api/mobile/work-sessions/:id/resume	POST	Återupptar pass, stänger öppen break
+/api/mobile/work-sessions/:id/entries	POST	Logga tidspost (se nedan)
+Tidspost-payload:
+
+{
+  "entryType": "work" | "travel" | "setup" | "break" | "rest",
+  "startTime": "ISO",
+  "endTime": "ISO",
+  "durationMinutes": 30,
+  "workOrderId": "optional-uuid",
+  "latitude": 59.33,
+  "longitude": 18.07,
+  "notes": "Körning till nästa uppdrag"
+}
+Viktigt: Appen ska automatiskt skapa time entries vid statusändringar (travel → on_site → working) och visa live-timer under aktivt arbete.
+
+5. NOTISER
+Endpoint	Metod	Beskrivning
+/api/mobile/notifications	GET	Hämta notiser
+/api/mobile/notifications/count	GET	{ "count": N } olästa
+/api/mobile/notifications/:id/read	PATCH	Markera läst
+/api/mobile/notifications/read-all	PATCH	Markera alla lästa
+6. WEBSOCKET — Realtid
+Anslutning: ws://<host>/ws/notifications?token=<auth_token>
+
+Events appen ska lyssna på:
+
+Event	Beskrivning	Data
+connected	Bekräftelse	{ type, message, timestamp }
+job_assigned	Ny order tilldelad	{ orderId, title, message, data: { scheduledDate, scheduledStartTime, objectName, objectAddress, priority } }
+job_updated	Order ändrad	{ orderId, title, message, data: { scheduledDate, status } }
+job_cancelled	Order borttagen	{ orderId, title, message }
+schedule_changed	Tid/datum ändrat	{ orderId, data: { oldDate, newDate, scheduledStartTime } }
+priority_changed	Prioritet ändrad	{ orderId, data: { oldPriority, newPriority } }
+anomaly_alert	Avvikelselarm	{ id, title, message }
+position_update	Andra resursers position	{ resourceId, latitude, longitude, speed, status }
+pong	Svar på ping	{ type, timestamp }
+Events appen ska skicka:
+
+ping: Heartbeat — { "type": "ping" }
+position_update: GPS-broadcast — { "type": "position_update", "latitude": N, "longitude": N, "speed": N, "heading": N, "accuracy": N, "status": "traveling"|"on_site"|"idle", "workOrderId": "..." }
+Notiser persisteras i databasen, så appen kan hämta missade notiser via REST om den var offline.
+
+7. OFFLINE SYNC
+POST /api/mobile/sync — Batch-synka offline-köade åtgärder:
+
+{
+  "actions": [
+    {
+      "clientId": "unikt-client-id",
+      "actionType": "status_update" | "add_note" | "add_deviation" | "add_material" | "add_signature" | "gps_update" | "inspection",
+      "payload": { ... }
+    }
+  ]
+}
+Svar: [{ "clientId": "...", "status": "ok" | "error", "error": "..." }]
+
+GET /api/mobile/sync/status — Synkstatus.
+
+Appen ska köa alla skrivoperationer lokalt vid offline och batch-synka vid återanslutning. Visa tydligt vilka ändringar som väntar på synk.
+
+8. AI-ASSISTANS
+Endpoint	Metod	Beskrivning
+/api/mobile/ai/chat	POST	{ "message": "...", "context": {...} } → { "reply": "..." }
+/api/mobile/ai/transcribe	POST	FormData med ljudfil → transkriberad text
+/api/mobile/ai/analyze-image	POST	FormData med bild → AI-analys av avvikelse
+Streaming chat (SSE) finns på /api/mobile/ai/chat/stream om implementerat — använd expo/fetch getReader för ord-för-ord-visning.
+
+10 röstkommandon: navigate_orders, start_next, report_deviation, on_site, complete_order, navigate_to, call_customer, start_break, navigate_statistics, help.
+
+9. KARTOR & ROUTING
+GET /api/system/map-config — Returnerar kartpaneler (tile URL + attribution):
+
+Med Geoapify API-nyckel: https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=...
+Utan: Standard OpenStreetMap
+POST /api/routes/directions — Proxy till Geoapify Routing API (om appen behöver rita rutter).
+
+Navigation: Appen delegerar till enhetens kartor (Google Maps/Apple Maps) via deep links — detta är korrekt och ska behållas.
+
+GET /api/mobile/weather?lat=X&lng=Y — Väderprognos (kräver ej auth).
+GET /api/weather/today — Alternativ väder-endpoint.
+
+10. ÖVRIGT
+GET /api/mobile/summary — Daglig sammanfattning (antal ordrar, klara, kvarvarande).
+POST /api/route/send-to-mobile — Planeraren skickar optimerad rutt till chauffören.
+
+11. NYA DATAMODELLER ATT HANTERA
+Objekt (objects):
+
+hierarchy_level: koncern → brf → fastighet → rum → kärl
+Nedärvda fält: accesskoder, tidspreferenser
+what3words precision
+IoT-integration:
+
+Ordrar kan ha creation_method: "iot_auto" — skapade automatiskt av IoT-sensorer (t.ex. fulla kärl)
+Visa IoT-skapade ordrar med distinkt ikon/badge
+Utrustningsbokningar (equipment_bookings):
+
+Spårar vilka fordon/utrustning resursen har bokade
+Frisläpps automatiskt vid arbetspassets slut
+Inspection metadata:
+
+Detaljerade inspektionsresultat (dörr, lås, belysning etc.)
+Tillhörande problem och foton (max 5 MB per foto, base64 via expo-file-system)
+12. DESIGN
+Färgpalett: Deep Ocean Blue #1B4B6B, Northern Teal #4A9B9B, Aurora Green #7DBFB0, Arctic Ice #E8F4F8, Midnight Navy #2C3E50, Mountain Gray #6B7C8C
+Typsnitt: Inter
+Touch targets: Minst 48px
+Mörkt/ljust tema
+Allt UI på svenska
+SAMMANFATTNING — Vad ska verifieras/uppdateras i appen:
+Branding: Alla "Nordnav One" / "Kinab Core Concept" → Traivo i backend-kommunikation och docs
+Arbetspass: Verifiera start/stop/pause/resume + automatiska time entries
+Offline sync: POST /api/mobile/sync batch-mönster med actionType-stöd
+WebSocket: Alla event-typer hanteras (speciellt job_assigned, schedule_changed, anomaly_alert)
+Execution status: 8-stegs flöde (inte bara 3-stegs)
+Task dependencies: Hantera isLocked flaggan — visa låsikon, förhindra start
+IoT-ordrar: Visa badge/ikon för creation_method: "iot_auto"
+Kartpaneler: Hämta tile-URL från /api/system/map-config istället för hårdkodad OSM
+Notis-count: Använd /api/mobile/notifications/count för badge
+AI bildanalys: Verifiera att /api/mobile/ai/analyze-image används vid avvikelsefoto

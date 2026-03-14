@@ -16,7 +16,7 @@ import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
-type LoginMode = 'credentials' | 'pin';
+type LoginMode = 'pin' | 'email_pin' | 'credentials';
 
 export function LoginScreen() {
   const insets = useSafeAreaInsets();
@@ -24,6 +24,7 @@ export function LoginScreen() {
   const [mode, setMode] = useState<LoginMode>('pin');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,6 +32,15 @@ export function LoginScreen() {
 
   async function handleLogin() {
     if (mode === 'pin') {
+      if (!pin.trim() || pin.length < 4) {
+        setError('Ange en giltig PIN-kod (4-6 siffror)');
+        return;
+      }
+    } else if (mode === 'email_pin') {
+      if (!email.trim()) {
+        setError('Ange din e-postadress');
+        return;
+      }
       if (!pin.trim() || pin.length < 4) {
         setError('Ange en giltig PIN-kod (4-6 siffror)');
         return;
@@ -46,6 +56,8 @@ export function LoginScreen() {
     try {
       if (mode === 'pin') {
         await login('', '', pin.trim());
+      } else if (mode === 'email_pin') {
+        await login('', '', pin.trim(), email.trim());
       } else {
         await login(username.trim(), password.trim());
       }
@@ -56,12 +68,14 @@ export function LoginScreen() {
     }
   }
 
-  function switchMode() {
-    setMode(mode === 'pin' ? 'credentials' : 'pin');
+  function switchMode(newMode: LoginMode) {
+    if (mode === newMode) return;
+    setMode(newMode);
     setError('');
     setPin('');
     setUsername('');
     setPassword('');
+    setEmail('');
   }
 
   return (
@@ -87,7 +101,7 @@ export function LoginScreen() {
         <View style={styles.modeToggle}>
           <Pressable
             style={[styles.modeTab, mode === 'pin' ? styles.modeTabActive : null]}
-            onPress={() => { if (mode !== 'pin') switchMode(); }}
+            onPress={() => switchMode('pin')}
             testID="button-mode-pin"
           >
             <Feather name="hash" size={16} color={mode === 'pin' ? Colors.primary : 'rgba(255,255,255,0.6)'} />
@@ -96,12 +110,26 @@ export function LoginScreen() {
               color={mode === 'pin' ? Colors.primary : 'rgba(255,255,255,0.6)'}
               style={styles.modeTabText}
             >
-              PIN-kod
+              PIN
+            </ThemedText>
+          </Pressable>
+          <Pressable
+            style={[styles.modeTab, mode === 'email_pin' ? styles.modeTabActive : null]}
+            onPress={() => switchMode('email_pin')}
+            testID="button-mode-email-pin"
+          >
+            <Feather name="mail" size={16} color={mode === 'email_pin' ? Colors.primary : 'rgba(255,255,255,0.6)'} />
+            <ThemedText
+              variant="caption"
+              color={mode === 'email_pin' ? Colors.primary : 'rgba(255,255,255,0.6)'}
+              style={styles.modeTabText}
+            >
+              E-post
             </ThemedText>
           </Pressable>
           <Pressable
             style={[styles.modeTab, mode === 'credentials' ? styles.modeTabActive : null]}
-            onPress={() => { if (mode !== 'credentials') switchMode(); }}
+            onPress={() => switchMode('credentials')}
             testID="button-mode-credentials"
           >
             <Feather name="user" size={16} color={mode === 'credentials' ? Colors.primary : 'rgba(255,255,255,0.6)'} />
@@ -110,7 +138,7 @@ export function LoginScreen() {
               color={mode === 'credentials' ? Colors.primary : 'rgba(255,255,255,0.6)'}
               style={styles.modeTabText}
             >
-              Inloggning
+              Konto
             </ThemedText>
           </Pressable>
         </View>
@@ -134,6 +162,38 @@ export function LoginScreen() {
                   secureTextEntry
                   textAlign="center"
                   testID="input-pin"
+                />
+              </View>
+            </View>
+          ) : mode === 'email_pin' ? (
+            <View style={styles.emailPinSection}>
+              <View style={styles.inputContainer}>
+                <Feather name="mail" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="E-postadress"
+                  placeholderTextColor={Colors.textMuted}
+                  value={email}
+                  onChangeText={setEmail}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="email-address"
+                  testID="input-email"
+                />
+              </View>
+              <View style={styles.inputContainer}>
+                <Feather name="hash" size={20} color={Colors.textMuted} style={styles.inputIcon} />
+                <TextInput
+                  style={[styles.input, styles.pinInput]}
+                  placeholder="PIN-kod"
+                  placeholderTextColor={Colors.textMuted}
+                  value={pin}
+                  onChangeText={(text) => setPin(text.replace(/[^0-9]/g, '').slice(0, 6))}
+                  keyboardType="number-pad"
+                  maxLength={6}
+                  secureTextEntry
+                  textAlign="center"
+                  testID="input-email-pin"
                 />
               </View>
             </View>
@@ -268,6 +328,9 @@ const styles = StyleSheet.create({
   },
   pinSection: {
     alignItems: 'center',
+    gap: Spacing.md,
+  },
+  emailPinSection: {
     gap: Spacing.md,
   },
   pinLabel: {

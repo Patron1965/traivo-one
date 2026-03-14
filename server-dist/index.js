@@ -149,10 +149,10 @@ async function sendPushNotification(driverId, title, body, data) {
 
 // server/routes/mobile.ts
 var router = (0, import_express.Router)();
-var KINAB_API_URL = process.env.KINAB_API_URL || "";
-var IS_MOCK_MODE = !KINAB_API_URL || process.env.KINAB_MOCK_MODE === "true";
-async function kinabFetch(path2, options = {}) {
-  const url = `${KINAB_API_URL}${path2}`;
+var TRAIVO_API_URL = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL || "";
+var IS_MOCK_MODE = !TRAIVO_API_URL || process.env.TRAIVO_MOCK_MODE === "true" || process.env.KINAB_MOCK_MODE === "true";
+async function traivoFetch(path2, options = {}) {
+  const url = `${TRAIVO_API_URL}${path2}`;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 5e3);
   try {
@@ -168,15 +168,15 @@ async function kinabFetch(path2, options = {}) {
     clearTimeout(timeout);
     const contentType = response.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
-      console.error(`Kinab API returned non-JSON (${contentType}) for ${path2}`);
-      throw new Error("Kinab-servern svarade inte med JSON (kan vara nere)");
+      console.error(`Traivo API returned non-JSON (${contentType}) for ${path2}`);
+      throw new Error("Traivo-servern svarade inte med JSON (kan vara nere)");
     }
     const data = await response.json().catch(() => ({}));
     return { status: response.status, data };
   } catch (error) {
     clearTimeout(timeout);
-    console.error(`Kinab API error (${path2}):`, error.message);
-    throw new Error(`Kunde inte n\xE5 Kinab-servern: ${error.message}`);
+    console.error(`Traivo API error (${path2}):`, error.message);
+    throw new Error(`Kunde inte n\xE5 Traivo-servern: ${error.message}`);
   }
 }
 function getAuthHeader(req) {
@@ -185,12 +185,12 @@ function getAuthHeader(req) {
 }
 var MOCK_RESOURCE = {
   id: 101,
-  tenantId: "kinab-demo",
+  tenantId: "traivo-demo",
   name: "Erik Lindqvist",
   type: "driver",
   role: "technician",
   phone: "070-111 22 33",
-  email: "erik.lindqvist@kinab.se",
+  email: "erik.lindqvist@traivo.se",
   vehicleRegNo: "ABC 123",
   homeLatitude: 57.7089,
   homeLongitude: 11.9746,
@@ -263,7 +263,7 @@ var MOCK_TEAM = {
       name: "Anna Johansson",
       role: "member",
       phone: "070-222 33 44",
-      email: "anna.johansson@kinab.se",
+      email: "anna.johansson@traivo.se",
       isOnline: true,
       latitude: 57.7055,
       longitude: 11.969
@@ -272,9 +272,9 @@ var MOCK_TEAM = {
 };
 var MOCK_RESOURCES = [
   MOCK_RESOURCE,
-  { id: 202, name: "Anna Johansson", phone: "070-222 33 44", email: "anna.johansson@kinab.se", type: "driver" },
-  { id: 303, name: "Karl Eriksson", phone: "070-333 44 55", email: "karl.eriksson@kinab.se", type: "driver" },
-  { id: 404, name: "Maria Nilsson", phone: "070-444 55 66", email: "maria.nilsson@kinab.se", type: "driver" }
+  { id: 202, name: "Anna Johansson", phone: "070-222 33 44", email: "anna.johansson@traivo.se", type: "driver" },
+  { id: 303, name: "Karl Eriksson", phone: "070-333 44 55", email: "karl.eriksson@traivo.se", type: "driver" },
+  { id: 404, name: "Maria Nilsson", phone: "070-444 55 66", email: "maria.nilsson@traivo.se", type: "driver" }
 ];
 var MOCK_TEAM_INVITES = [];
 var MOCK_MATERIAL_LOGS = [];
@@ -305,6 +305,7 @@ var MOCK_ORDERS = [
     clusterId: 10,
     clusterName: "Centrum Norr",
     priority: "normal",
+    executionStatus: "not_started",
     object: { id: 501, name: "Sopstation Storgatan 12", address: "Storgatan 12", latitude: 57.7089, longitude: 11.9746, what3words: "fest.lampa.skog" },
     customer: { id: 201, name: "BRF Solsidan", customerNumber: "KN-2201" },
     articles: [
@@ -335,7 +336,7 @@ var MOCK_ORDERS = [
     inspections: [],
     creationMethod: "schema",
     resourceId: 101,
-    tenantId: "kinab-demo"
+    tenantId: "traivo-demo"
   },
   {
     id: 2,
@@ -357,6 +358,7 @@ var MOCK_ORDERS = [
     clusterId: 10,
     clusterName: "Centrum Norr",
     priority: "normal",
+    executionStatus: "not_started",
     object: { id: 502, name: "Soprum Vasagatan", address: "Vasagatan 28", latitude: 57.7045, longitude: 11.9664 },
     customer: { id: 202, name: "Fastighets AB Norden", customerNumber: "KN-2202" },
     articles: [
@@ -383,7 +385,7 @@ var MOCK_ORDERS = [
     inspections: [],
     creationMethod: "avrop",
     resourceId: 101,
-    tenantId: "kinab-demo"
+    tenantId: "traivo-demo"
   },
   {
     id: 3,
@@ -406,6 +408,7 @@ var MOCK_ORDERS = [
     clusterId: 11,
     clusterName: "Centrum S\xF6der",
     priority: "high",
+    executionStatus: "not_started",
     object: { id: 503, name: "Chalmers Leveransentr\xE9", address: "Chalmers\xE4ngen 4", latitude: 57.6896, longitude: 11.977, what3words: "b\xF6cker.glas.rikt" },
     customer: { id: 203, name: "Chalmers Tekniska H\xF6gskola", customerNumber: "KN-2203" },
     articles: [
@@ -442,7 +445,7 @@ var MOCK_ORDERS = [
     inspections: [],
     creationMethod: "manual",
     resourceId: 101,
-    tenantId: "kinab-demo"
+    tenantId: "traivo-demo"
   },
   {
     id: 4,
@@ -463,6 +466,7 @@ var MOCK_ORDERS = [
     clusterId: 12,
     clusterName: "M\xF6lndal",
     priority: "normal",
+    executionStatus: "not_started",
     object: { id: 504, name: "ICA Maxi Komprimator", address: "G\xF6teborgsv\xE4gen 88", latitude: 57.6557, longitude: 12.0134 },
     customer: { id: 204, name: "ICA Maxi M\xF6lndal", customerNumber: "KN-2204" },
     articles: [
@@ -489,7 +493,7 @@ var MOCK_ORDERS = [
     inspections: [],
     creationMethod: "schema",
     resourceId: 101,
-    tenantId: "kinab-demo"
+    tenantId: "traivo-demo"
   },
   {
     id: 5,
@@ -509,6 +513,7 @@ var MOCK_ORDERS = [
     objectType: "K\xE4rl",
     objectId: 505,
     priority: "urgent",
+    executionStatus: "not_started",
     object: { id: 505, name: "Hamn Terminal 2", address: "Terminalgatan 2", latitude: 57.7148, longitude: 11.9414 },
     customer: { id: 205, name: "G\xF6teborgs Hamn AB", customerNumber: "KN-2205" },
     articles: [
@@ -543,7 +548,7 @@ var MOCK_ORDERS = [
     inspections: [],
     creationMethod: "avrop",
     resourceId: 101,
-    tenantId: "kinab-demo"
+    tenantId: "traivo-demo"
   }
 ];
 var MOCK_ARTICLES = [
@@ -606,7 +611,7 @@ function haversineDistance(lat1, lon1, lat2, lon2) {
   const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
-function mapKinabStatus(kinabStatus, orderStatus) {
+function mapTraivoStatus(traivoStatus, orderStatus) {
   const statusMap = {
     "draft": "planned",
     "scheduled": "planned",
@@ -618,7 +623,7 @@ function mapKinabStatus(kinabStatus, orderStatus) {
     "cancelled": "cancelled",
     "impossible": "failed"
   };
-  return statusMap[kinabStatus] || statusMap[orderStatus || ""] || "planned";
+  return statusMap[traivoStatus] || statusMap[orderStatus || ""] || "planned";
 }
 function parseAddressParts(fullAddress) {
   if (!fullAddress) return { address: "", city: "", postalCode: "" };
@@ -629,12 +634,12 @@ function parseAddressParts(fullAddress) {
     postalCode: parts[2] || ""
   };
 }
-function transformKinabOrder(raw) {
+function transformTraivoOrder(raw) {
   const addrParts = parseAddressParts(raw.objectAddress || "");
   return {
     id: raw.id,
     orderNumber: raw.title || raw.externalReference || `ORD-${(raw.id || "").toString().slice(0, 8)}`,
-    status: mapKinabStatus(raw.status, raw.orderStatus),
+    status: mapTraivoStatus(raw.status, raw.orderStatus),
     customerName: raw.customerName || "Ok\xE4nd kund",
     address: addrParts.address,
     city: addrParts.city,
@@ -672,7 +677,8 @@ function transformKinabOrder(raw) {
     isLocked: raw.lockedAt ? true : false,
     orderNotes: [],
     inspections: [],
-    creationMethod: raw.creationMethod || "manual",
+    executionStatus: raw.executionStatus || raw.execution_status || "not_started",
+    creationMethod: raw.creationMethod || raw.creation_method || "manual",
     object: raw.objectName ? {
       id: raw.objectId,
       name: raw.objectName,
@@ -692,8 +698,14 @@ function transformKinabOrder(raw) {
 }
 router.post("/login", async (req, res) => {
   if (IS_MOCK_MODE) {
-    const { username, password, pin } = req.body;
-    if (pin) {
+    const { username, password, pin, email } = req.body;
+    if (email && pin) {
+      if (pin.length === 4 || pin.length === 6) {
+        res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
+      } else {
+        res.status(401).json({ success: false, error: "Ogiltig PIN-kod" });
+      }
+    } else if (pin) {
       if (pin.length === 4 || pin.length === 6) {
         res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
       } else {
@@ -707,7 +719,7 @@ router.post("/login", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/mobile/login", {
+    const { status, data } = await traivoFetch("/api/mobile/login", {
       method: "POST",
       body: JSON.stringify(req.body)
     });
@@ -726,8 +738,8 @@ router.post("/login", async (req, res) => {
     }
   } catch (error) {
     console.error("Login proxy error, falling back to mock login:", error.message);
-    const { username, password, pin } = req.body;
-    if (pin && (pin.length === 4 || pin.length === 6)) {
+    const { username, password, pin, email } = req.body;
+    if (email && pin && (pin.length === 4 || pin.length === 6) || pin && (pin.length === 4 || pin.length === 6)) {
       res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
     } else if (username && password) {
       res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
@@ -745,7 +757,7 @@ router.post("/logout", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/mobile/logout", {
+    const { status, data } = await traivoFetch("/api/mobile/logout", {
       method: "POST",
       headers: getAuthHeader(req)
     });
@@ -765,7 +777,7 @@ router.get("/me", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/mobile/me", {
+    const { status, data } = await traivoFetch("/api/mobile/me", {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -800,7 +812,7 @@ router.get("/my-profiles", async (req, res) => {
     return;
   }
   try {
-    const meResponse = await kinabFetch("/api/mobile/me", {
+    const meResponse = await traivoFetch("/api/mobile/me", {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -809,7 +821,7 @@ router.get("/my-profiles", async (req, res) => {
       res.status(401).json({ success: false, error: "Kunde inte identifiera resursen" });
       return;
     }
-    const { status, data } = await kinabFetch(`/resource_profile_assignments?resourceId=${resourceId}`, {
+    const { status, data } = await traivoFetch(`/resource_profile_assignments?resourceId=${resourceId}`, {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -841,7 +853,7 @@ router.get("/my-team", async (req, res) => {
     return;
   }
   try {
-    const meResponse = await kinabFetch("/api/mobile/me", {
+    const meResponse = await traivoFetch("/api/mobile/me", {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -850,7 +862,7 @@ router.get("/my-team", async (req, res) => {
       res.status(401).json({ success: false, error: "Kunde inte identifiera resursen" });
       return;
     }
-    const { status, data } = await kinabFetch(`/api/teams?memberId=${resourceId}&status=active`, {
+    const { status, data } = await traivoFetch(`/api/teams?memberId=${resourceId}&status=active`, {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -893,7 +905,7 @@ router.post("/teams", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/teams", { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    const { status, data } = await traivoFetch("/api/teams", { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte skapa team." });
@@ -917,7 +929,7 @@ router.post("/teams/:id/invite", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/teams/${req.params.id}/invite`, { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}/invite`, { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte skicka inbjudan." });
@@ -937,7 +949,7 @@ router.post("/teams/:id/accept", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/teams/${req.params.id}/accept`, { method: "POST", headers: getAuthHeader(req) });
+    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}/accept`, { method: "POST", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte acceptera inbjudan." });
@@ -957,7 +969,7 @@ router.post("/teams/:id/leave", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/teams/${req.params.id}/leave`, { method: "POST", headers: getAuthHeader(req) });
+    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}/leave`, { method: "POST", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte l\xE4mna teamet." });
@@ -971,7 +983,7 @@ router.delete("/teams/:id", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/teams/${req.params.id}`, { method: "DELETE", headers: getAuthHeader(req) });
+    const { status, data } = await traivoFetch(`/api/teams/${req.params.id}`, { method: "DELETE", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte ta bort teamet." });
@@ -985,7 +997,7 @@ router.get("/resources/search", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/resources/search?q=${encodeURIComponent(req.query.q || "")}`, { method: "GET", headers: getAuthHeader(req) });
+    const { status, data } = await traivoFetch(`/api/resources/search?q=${encodeURIComponent(req.query.q || "")}`, { method: "GET", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte s\xF6ka resurser." });
@@ -998,7 +1010,7 @@ router.get("/team-invites", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/mobile/team-invites", { method: "GET", headers: getAuthHeader(req) });
+    const { status, data } = await traivoFetch("/api/mobile/team-invites", { method: "GET", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error) {
     res.status(503).json({ error: "Kunde inte h\xE4mta inbjudningar." });
@@ -1019,13 +1031,13 @@ router.get("/my-orders", async (req, res) => {
   }
   try {
     const queryString = req.query.date ? `?date=${req.query.date}` : "";
-    const { status, data } = await kinabFetch(`/api/mobile/my-orders${queryString}`, {
+    const { status, data } = await traivoFetch(`/api/mobile/my-orders${queryString}`, {
       method: "GET",
       headers: getAuthHeader(req)
     });
     if (status === 200) {
       const rawOrders = Array.isArray(data) ? data : data.orders || [];
-      const transformed = rawOrders.map(transformKinabOrder);
+      const transformed = rawOrders.map(transformTraivoOrder);
       res.json(transformed);
     } else {
       res.status(status).json(data);
@@ -1046,12 +1058,12 @@ router.get("/orders/:id", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}`, {
       method: "GET",
       headers: getAuthHeader(req)
     });
     if (status === 200 && data) {
-      res.json(transformKinabOrder(data));
+      res.json(transformTraivoOrder(data));
     } else {
       res.status(status).json(data);
     }
@@ -1073,7 +1085,7 @@ router.get("/orders/:id/checklist", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/checklist`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/checklist`, {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -1194,7 +1206,7 @@ router.patch("/orders/:id/status", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/status`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/status`, {
       method: "PATCH",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1410,7 +1422,7 @@ router.post("/orders/:id/deviations", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/deviations`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/deviations`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1429,7 +1441,7 @@ router.get("/orders/:id/materials", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/materials`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/materials`, {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -1457,7 +1469,7 @@ router.post("/orders/:id/materials", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/materials`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/materials`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1478,7 +1490,7 @@ router.post("/orders/:id/signature", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/signature`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/signature`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1502,7 +1514,7 @@ router.post("/orders/:id/notes", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/notes`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/notes`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1525,7 +1537,7 @@ router.patch("/orders/:id/substeps/:stepId", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/substeps/${req.params.stepId}`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/substeps/${req.params.stepId}`, {
       method: "PATCH",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1545,7 +1557,7 @@ router.post("/orders/:id/inspections", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/inspections`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/inspections`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1629,7 +1641,7 @@ router.post("/orders/:id/upload-photo", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/upload-photo`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/upload-photo`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1650,7 +1662,7 @@ router.post("/orders/:id/confirm-photo", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${req.params.id}/confirm-photo`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${req.params.id}/confirm-photo`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1660,13 +1672,26 @@ router.post("/orders/:id/confirm-photo", async (req, res) => {
     res.status(503).json({ error: "Kunde inte bekr\xE4fta foto." });
   }
 });
+router.get("/notifications/count", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const unread = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
+    res.json({ count: unread });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/notifications/count", { method: "GET", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch {
+    res.json({ count: 0 });
+  }
+});
 router.get("/notifications", async (req, res) => {
   if (IS_MOCK_MODE) {
     res.json(MOCK_NOTIFICATIONS);
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/mobile/notifications", { method: "GET", headers: getAuthHeader(req) });
+    const { status, data } = await traivoFetch("/api/mobile/notifications", { method: "GET", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch {
     res.json(MOCK_NOTIFICATIONS);
@@ -1682,7 +1707,7 @@ router.patch("/notifications/:id/read", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/notifications/${req.params.id}/read`, {
+    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
       method: "PATCH",
       headers: getAuthHeader(req)
     });
@@ -1700,13 +1725,33 @@ router.patch("/notifications/read-all", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/mobile/notifications/read-all", {
+    const { status, data } = await traivoFetch("/api/mobile/notifications/read-all", {
       method: "PATCH",
       headers: getAuthHeader(req)
     });
     res.status(status).json(data);
   } catch {
     res.json({ success: true });
+  }
+});
+router.get("/map-config", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    res.json({
+      defaultCenter: { latitude: 57.7089, longitude: 11.9746 },
+      defaultZoom: 12,
+      clusterRadius: 50,
+      showTraffic: false,
+      mapStyle: "standard",
+      refreshIntervalMs: 3e4,
+      maxMarkersVisible: 200
+    });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/map-config", { method: "GET", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch {
+    res.json({ defaultCenter: { latitude: 57.7089, longitude: 11.9746 }, defaultZoom: 12, clusterRadius: 50, showTraffic: false, mapStyle: "standard", refreshIntervalMs: 3e4, maxMarkersVisible: 200 });
   }
 });
 router.post("/sync", async (req, res) => {
@@ -1721,7 +1766,7 @@ router.post("/sync", async (req, res) => {
     return;
   }
   try {
-    const { status, data } = await kinabFetch("/api/mobile/sync", {
+    const { status, data } = await traivoFetch("/api/mobile/sync", {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify(req.body)
@@ -1742,6 +1787,107 @@ router.get("/articles", (req, res) => {
     res.json(MOCK_ARTICLES);
   }
 });
+var MOCK_WORK_SESSION = null;
+var MOCK_WORK_SESSION_ENTRIES = [];
+router.post("/work-sessions/start", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    MOCK_WORK_SESSION = {
+      id: "ws-" + Date.now(),
+      resourceId: MOCK_RESOURCE.id,
+      teamId: req.body.teamId || null,
+      status: "active",
+      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      pausedAt: null,
+      endedAt: null,
+      notes: req.body.notes || "",
+      totalWorkMinutes: 0,
+      totalBreakMinutes: 0
+    };
+    MOCK_WORK_SESSION_ENTRIES = [];
+    res.json({ success: true, session: MOCK_WORK_SESSION });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/work-sessions/start", { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte starta arbetspass." });
+  }
+});
+router.get("/work-sessions/active", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    res.json({ session: MOCK_WORK_SESSION });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/work-sessions/active", { method: "GET", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte h\xE4mta aktivt arbetspass." });
+  }
+});
+router.post("/work-sessions/:id/stop", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    if (MOCK_WORK_SESSION && MOCK_WORK_SESSION.id === req.params.id) {
+      MOCK_WORK_SESSION.status = "completed";
+      MOCK_WORK_SESSION.endedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+    res.json({ success: true, session: MOCK_WORK_SESSION });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/stop`, { method: "POST", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte avsluta arbetspass." });
+  }
+});
+router.post("/work-sessions/:id/pause", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    if (MOCK_WORK_SESSION && MOCK_WORK_SESSION.id === req.params.id) {
+      MOCK_WORK_SESSION.status = "paused";
+      MOCK_WORK_SESSION.pausedAt = (/* @__PURE__ */ new Date()).toISOString();
+    }
+    res.json({ success: true, session: MOCK_WORK_SESSION });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/pause`, { method: "POST", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte pausa arbetspass." });
+  }
+});
+router.post("/work-sessions/:id/resume", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    if (MOCK_WORK_SESSION && MOCK_WORK_SESSION.id === req.params.id) {
+      MOCK_WORK_SESSION.status = "active";
+      MOCK_WORK_SESSION.pausedAt = null;
+    }
+    res.json({ success: true, session: MOCK_WORK_SESSION });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/resume`, { method: "POST", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte \xE5teruppta arbetspass." });
+  }
+});
+router.post("/work-sessions/:id/entries", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const entry = { id: "wse-" + Date.now(), sessionId: req.params.id, ...req.body, createdAt: (/* @__PURE__ */ new Date()).toISOString() };
+    MOCK_WORK_SESSION_ENTRIES.push(entry);
+    res.json({ success: true, entry });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/entries`, { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte logga tidspost." });
+  }
+});
 router.post("/position", async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy } = req.body;
   if (latitude == null || longitude == null || typeof latitude !== "number" || typeof longitude !== "number") {
@@ -1752,13 +1898,13 @@ router.post("/position", async (req, res) => {
   }
   if (!IS_MOCK_MODE) {
     try {
-      await kinabFetch("/api/mobile/position", {
+      await traivoFetch("/api/mobile/position", {
         method: "POST",
         headers: getAuthHeader(req),
         body: JSON.stringify(req.body)
       });
     } catch (e) {
-      console.error("Kinab position proxy error:", e.message);
+      console.error("Traivo position proxy error:", e.message);
     }
   }
   try {
@@ -1961,7 +2107,7 @@ router.get("/summary", async (req, res) => {
     return;
   }
   try {
-    const { status: summaryStatus, data: summaryData } = await kinabFetch("/api/mobile/summary", {
+    const { status: summaryStatus, data: summaryData } = await traivoFetch("/api/mobile/summary", {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -1972,7 +2118,7 @@ router.get("/summary", async (req, res) => {
   } catch {
   }
   try {
-    const { status: ordersStatus, data: ordersData } = await kinabFetch("/api/mobile/my-orders", {
+    const { status: ordersStatus, data: ordersData } = await traivoFetch("/api/mobile/my-orders", {
       method: "GET",
       headers: getAuthHeader(req)
     });
@@ -2302,7 +2448,7 @@ router.post("/orders/:id/customer-signoff", async (req, res) => {
     return res.json({ success: true, signOff: order.customerSignOff });
   }
   try {
-    const { status, data } = await kinabFetch(`/api/mobile/orders/${id}/customer-signoff`, {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${id}/customer-signoff`, {
       method: "POST",
       headers: getAuthHeader(req),
       body: JSON.stringify({ customerName, signatureData, signedAt })
@@ -2849,6 +2995,14 @@ io.on("connection", (socket) => {
       socket.join(`team:${data.teamId}`);
     }
   });
+  socket.on("ping", () => {
+    socket.emit("pong");
+  });
+  socket.on("position_update", (data) => {
+    if (data.resourceId) {
+      socket.to(`tenant:${data.tenantId || "default"}`).emit("position_update", data);
+    }
+  });
   socket.on("disconnect", () => {
     console.log(`WebSocket client disconnected: ${socket.id}`);
   });
@@ -3113,10 +3267,10 @@ process.on("SIGINT", () => {
 });
 var PORT = 5e3;
 server.listen(PORT, "0.0.0.0", () => {
-  const kinabUrl = process.env.KINAB_API_URL;
-  const mockMode = !kinabUrl || process.env.KINAB_MOCK_MODE === "true";
+  const traivoUrl = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL;
+  const mockMode = !traivoUrl || process.env.TRAIVO_MOCK_MODE === "true" || process.env.KINAB_MOCK_MODE === "true";
   console.log(`Nordnav Go API running on port ${PORT}`);
-  console.log(`Kinab Core Concept: ${mockMode ? "MOCK MODE (no KINAB_API_URL set)" : `LIVE \u2192 ${kinabUrl}`}`);
+  console.log(`Traivo backend: ${mockMode ? "MOCK MODE (no TRAIVO_API_URL set)" : `LIVE \u2192 ${traivoUrl}`}`);
   const iosBundle = import_path.default.join(metroDir, "ios", "index.bundle");
   const androidBundle = import_path.default.join(metroDir, "android", "index.bundle");
   const hasIos = import_fs.default.existsSync(iosBundle);
