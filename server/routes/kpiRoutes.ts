@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
 import { objects, workOrders, apiUsageLogs, apiBudgets, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
@@ -15,8 +17,7 @@ export async function registerKPIRoutes(app: Express) {
 // KPI / ANALYTICS ENDPOINTS
 // ============================================
 
-app.get("/api/kpis/daily", async (req, res) => {
-  try {
+app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const dateParam = req.query.date as string;
     const date = dateParam ? new Date(dateParam) : new Date();
@@ -77,14 +78,9 @@ app.get("/api/kpis/daily", async (req, res) => {
       activeResources: activeResources.length,
       resourceKpis,
     });
-  } catch (error) {
-    console.error("Failed to compute daily KPIs:", error);
-    res.status(500).json({ error: "Failed to compute KPIs" });
-  }
-});
+}));
 
-app.get("/api/kpis/weekly", async (req, res) => {
-  try {
+app.get("/api/kpis/weekly", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const weekParam = req.query.week as string;
     
@@ -137,79 +133,50 @@ app.get("/api/kpis/weekly", async (req, res) => {
         avgTimeDelta: current.avgTimeMinutes - previous.avgTimeMinutes,
       },
     });
-  } catch (error) {
-    console.error("Failed to compute weekly KPIs:", error);
-    res.status(500).json({ error: "Failed to compute weekly KPIs" });
-  }
-});
+}));
 
-app.post("/api/system/weekly-report/trigger", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/weekly-report/trigger", requireAdmin, asyncHandler(async (req, res) => {
     const result = await generateAndSendWeeklyReports();
     res.json(result);
-  } catch (error) {
-    console.error("Failed to trigger weekly report:", error);
-    res.status(500).json({ error: "Failed to send weekly reports" });
-  }
-});
+}));
 
 // ============================================
 // ANOMALY MONITORING API ENDPOINTS
 // ============================================
 
 // Manually trigger anomaly check and get results
-app.get("/api/system/anomalies/check", async (req, res) => {
-  try {
+app.get("/api/system/anomalies/check", asyncHandler(async (req, res) => {
     const alerts = await anomalyMonitor.runManualCheck();
     res.json({
       timestamp: new Date().toISOString(),
       alertCount: alerts.length,
       alerts: alerts
     });
-  } catch (error) {
-    console.error("Failed to run anomaly check:", error);
-    res.status(500).json({ error: "Failed to run anomaly check" });
-  }
-});
+}));
 
 // ============================================
 // SYSTEM DASHBOARD API ENDPOINTS
 // ============================================
 
 // Branding Templates - List all
-app.get("/api/system/branding-templates", async (req, res) => {
-  try {
+app.get("/api/system/branding-templates", asyncHandler(async (req, res) => {
     const templates = await storage.getBrandingTemplates();
     res.json(templates);
-  } catch (error) {
-    console.error("Failed to fetch branding templates:", error);
-    res.status(500).json({ error: "Failed to fetch templates" });
-  }
-});
+}));
 
 // Branding Templates - Get by ID
-app.get("/api/system/branding-templates/:id", async (req, res) => {
-  try {
+app.get("/api/system/branding-templates/:id", asyncHandler(async (req, res) => {
     const template = await storage.getBrandingTemplate(req.params.id);
     if (!template) return res.status(404).json({ error: "Template not found" });
     res.json(template);
-  } catch (error) {
-    console.error("Failed to fetch branding template:", error);
-    res.status(500).json({ error: "Failed to fetch template" });
-  }
-});
+}));
 
 // Branding Templates - Get by slug
-app.get("/api/system/branding-templates/slug/:slug", async (req, res) => {
-  try {
+app.get("/api/system/branding-templates/slug/:slug", asyncHandler(async (req, res) => {
     const template = await storage.getBrandingTemplateBySlug(req.params.slug);
     if (!template) return res.status(404).json({ error: "Template not found" });
     res.json(template);
-  } catch (error) {
-    console.error("Failed to fetch branding template:", error);
-    res.status(500).json({ error: "Failed to fetch template" });
-  }
-});
+}));
 
 // Tenant Branding - Get current tenant branding
 app.get("/api/system/map-config", (_req, res) => {
@@ -227,20 +194,14 @@ app.get("/api/system/map-config", (_req, res) => {
   }
 });
 
-app.get("/api/system/tenant-branding", async (req, res) => {
-  try {
+app.get("/api/system/tenant-branding", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const branding = await storage.getTenantBranding(tenantId);
     res.json(branding || null);
-  } catch (error) {
-    console.error("Failed to fetch tenant branding:", error);
-    res.status(500).json({ error: "Failed to fetch branding" });
-  }
-});
+}));
 
 // Tenant Branding - Update or create branding
-app.put("/api/system/tenant-branding", requireAdmin, async (req, res) => {
-  try {
+app.put("/api/system/tenant-branding", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { templateId, ...brandingData } = req.body;
     
@@ -284,15 +245,10 @@ app.put("/api/system/tenant-branding", requireAdmin, async (req, res) => {
     });
     
     res.json(result);
-  } catch (error) {
-    console.error("Failed to update tenant branding:", error);
-    res.status(500).json({ error: "Failed to update branding" });
-  }
-});
+}));
 
 // Tenant Branding - Publish branding (admin only)
-app.post("/api/system/tenant-branding/publish", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/tenant-branding/publish", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const result = await storage.publishTenantBranding(tenantId);
     
@@ -308,15 +264,10 @@ app.post("/api/system/tenant-branding/publish", requireAdmin, async (req, res) =
     });
     
     res.json(result);
-  } catch (error) {
-    console.error("Failed to publish branding:", error);
-    res.status(500).json({ error: "Failed to publish branding" });
-  }
-});
+}));
 
 // SMS Configuration - Get current SMS settings (admin only)
-app.get("/api/system/sms-config", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/sms-config", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     
@@ -329,11 +280,7 @@ app.get("/api/system/sms-config", requireAdmin, async (req, res) => {
       smsProvider: tenant.smsProvider ?? "none",
       smsFromName: tenant.smsFromName ?? tenant.name ?? "",
     });
-  } catch (error) {
-    console.error("Failed to get SMS config:", error);
-    res.status(500).json({ error: "Failed to get SMS configuration" });
-  }
-});
+}));
 
 // SMS Configuration - Update SMS settings (admin only)
 const smsConfigSchema = z.object({
@@ -342,8 +289,7 @@ const smsConfigSchema = z.object({
   smsFromName: z.string().max(100).optional(),
 });
 
-app.put("/api/system/sms-config", requireAdmin, async (req, res) => {
-  try {
+app.put("/api/system/sms-config", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const parseResult = smsConfigSchema.safeParse(req.body);
@@ -370,15 +316,10 @@ app.put("/api/system/sms-config", requireAdmin, async (req, res) => {
       smsProvider: tenant.smsProvider ?? "none",
       smsFromName: tenant.smsFromName ?? "",
     });
-  } catch (error) {
-    console.error("Failed to update SMS config:", error);
-    res.status(500).json({ error: "Failed to update SMS configuration" });
-  }
-});
+}));
 
 // SMS Configuration - Test SMS sending (admin only)
-app.post("/api/system/sms-config/test", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/sms-config/test", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { phoneNumber } = req.body;
     
@@ -409,27 +350,17 @@ app.post("/api/system/sms-config/test", requireAdmin, async (req, res) => {
     } else {
       res.status(500).json({ success: false, error: result.errors.join(", ") || "Failed to send test SMS" });
     }
-  } catch (error: any) {
-    console.error("Failed to send test SMS:", error);
-    res.status(500).json({ error: error.message || "Failed to send test SMS" });
-  }
-});
+}));
 
 // User Tenant Roles - List all users with roles for current tenant (admin only)
-app.get("/api/system/user-roles", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const roles = await storage.getUserTenantRoles(tenantId);
     res.json(roles);
-  } catch (error) {
-    console.error("Failed to fetch user roles:", error);
-    res.status(500).json({ error: "Failed to fetch user roles" });
-  }
-});
+}));
 
 // User Tenant Roles - Create new user role (admin only)
-app.post("/api/system/user-roles", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { userId, name, role, permissions, password } = req.body;
     
@@ -474,15 +405,10 @@ app.post("/api/system/user-roles", requireAdmin, async (req, res) => {
     });
     
     res.status(201).json(result);
-  } catch (error) {
-    console.error("Failed to create user role:", error);
-    res.status(500).json({ error: "Failed to create user role" });
-  }
-});
+}));
 
 // User Tenant Roles - Update role (admin only)
-app.patch("/api/system/user-roles/:id", requireAdmin, async (req, res) => {
-  try {
+app.patch("/api/system/user-roles/:id", requireAdmin, asyncHandler(async (req, res) => {
     const { role, permissions, isActive, password } = req.body;
     
     const result = await storage.updateUserTenantRole(req.params.id, {
@@ -518,15 +444,10 @@ app.patch("/api/system/user-roles/:id", requireAdmin, async (req, res) => {
     });
     
     res.json(result);
-  } catch (error) {
-    console.error("Failed to update user role:", error);
-    res.status(500).json({ error: "Failed to update user role" });
-  }
-});
+}));
 
 // User Tenant Roles - Import users from CSV data
-app.post("/api/system/user-roles/import", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/user-roles/import", requireAdmin, asyncHandler(async (req, res) => {
     const { users } = req.body;
     
     if (!Array.isArray(users) || users.length === 0) {
@@ -590,15 +511,10 @@ app.post("/api/system/user-roles/import", requireAdmin, async (req, res) => {
     });
     
     res.json({ imported, skipped, total: users.length });
-  } catch (error) {
-    console.error("Failed to import users:", error);
-    res.status(500).json({ error: "Failed to import users" });
-  }
-});
+}));
 
 // User Tenant Roles - Delete role
-app.delete("/api/system/user-roles/:id", requireAdmin, async (req, res) => {
-  try {
+app.delete("/api/system/user-roles/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.createAuditLog({
       tenantId,
@@ -609,56 +525,36 @@ app.delete("/api/system/user-roles/:id", requireAdmin, async (req, res) => {
     
     await storage.deleteUserTenantRole(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete user role:", error);
-    res.status(500).json({ error: "Failed to delete user role" });
-  }
-});
+}));
 
 // ============================================
 // INDUSTRY PACKAGES API ENDPOINTS
 // ============================================
 
 // Industry Packages - List all available packages
-app.get("/api/system/industry-packages", async (req, res) => {
-  try {
+app.get("/api/system/industry-packages", asyncHandler(async (req, res) => {
     const packages = await storage.getIndustryPackages();
     res.json(packages);
-  } catch (error) {
-    console.error("Failed to fetch industry packages:", error);
-    res.status(500).json({ error: "Failed to fetch industry packages" });
-  }
-});
+}));
 
 // Industry Packages - Get by ID with full data
-app.get("/api/system/industry-packages/:id", async (req, res) => {
-  try {
+app.get("/api/system/industry-packages/:id", asyncHandler(async (req, res) => {
     const pkg = await storage.getIndustryPackage(req.params.id);
     if (!pkg) return res.status(404).json({ error: "Package not found" });
     
     const packageData = await storage.getIndustryPackageData(req.params.id);
     res.json({ ...pkg, data: packageData });
-  } catch (error) {
-    console.error("Failed to fetch industry package:", error);
-    res.status(500).json({ error: "Failed to fetch package" });
-  }
-});
+}));
 
 // Industry Packages - Get tenant installation history
-app.get("/api/system/industry-packages/installations", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/industry-packages/installations", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const installations = await storage.getTenantPackageInstallations(tenantId);
     res.json(installations);
-  } catch (error) {
-    console.error("Failed to fetch package installations:", error);
-    res.status(500).json({ error: "Failed to fetch installations" });
-  }
-});
+}));
 
 // Industry Packages - Install package for tenant
-app.post("/api/system/industry-packages/:id/install", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/industry-packages/:id/install", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const packageId = req.params.id;
     const userId = (req.user as any)?.id;
@@ -780,15 +676,10 @@ app.post("/api/system/industry-packages/:id/install", requireAdmin, async (req, 
         structuralArticlesInstalled,
       },
     });
-  } catch (error) {
-    console.error("Failed to install industry package:", error);
-    res.status(500).json({ error: "Failed to install package" });
-  }
-});
+}));
 
 // Tenant Onboarding - Create new tenant with package and admin user
-app.post("/api/system/onboard-tenant", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, res) => {
     const { company, industryPackageId, adminUser } = req.body;
     const currentUserId = (req.user as any)?.id;
 
@@ -961,15 +852,10 @@ app.post("/api/system/onboard-tenant", requireAdmin, async (req, res) => {
       },
       packageSummary,
     });
-  } catch (error) {
-    console.error("Failed to onboard tenant:", error);
-    res.status(500).json({ error: "Kunde inte skapa företagskonto" });
-  }
-});
+}));
 
 // Industry Packages - Seed default packages (admin only, one-time setup)
-app.post("/api/system/industry-packages/seed", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/industry-packages/seed", requireAdmin, asyncHandler(async (req, res) => {
     const { allPackages, getPackageData } = await import("./data/industryPackages");
     
     const results = [];
@@ -1018,15 +904,10 @@ app.post("/api/system/industry-packages/seed", requireAdmin, async (req, res) =>
     }
     
     res.json({ success: true, results });
-  } catch (error) {
-    console.error("Failed to seed industry packages:", error);
-    res.status(500).json({ error: "Failed to seed packages" });
-  }
-});
+}));
 
 // Audit Logs - Get logs for current tenant
-app.get("/api/system/audit-logs", async (req, res) => {
-  try {
+app.get("/api/system/audit-logs", asyncHandler(async (req, res) => {
     const limit = parseInt(req.query.limit as string) || 100;
     const offset = parseInt(req.query.offset as string) || 0;
     const action = req.query.action as string;
@@ -1035,15 +916,10 @@ app.get("/api/system/audit-logs", async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const logs = await storage.getAuditLogs(tenantId, { limit, offset, action, userId });
     res.json(logs);
-  } catch (error) {
-    console.error("Failed to fetch audit logs:", error);
-    res.status(500).json({ error: "Failed to fetch audit logs" });
-  }
-});
+}));
 
 // Project Statistics API - Returns code statistics for PDF generation
-app.get("/api/system/project-stats", async (req, res) => {
-  try {
+app.get("/api/system/project-stats", asyncHandler(async (req, res) => {
     // Project code statistics (based on actual code count)
     const stats = {
       projectName: "Traivo - AI-Driven Field Service Planning Platform",
@@ -1110,15 +986,10 @@ app.get("/api/system/project-stats", async (req, res) => {
     };
     
     res.json(stats);
-  } catch (error) {
-    console.error("Failed to get project stats:", error);
-    res.status(500).json({ error: "Failed to get project stats" });
-  }
-});
+}));
 
 // Send project report via email
-app.post("/api/system/send-project-report", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/system/send-project-report", requireAdmin, asyncHandler(async (req, res) => {
     const { to, pdfBase64 } = req.body;
     
     if (!to || !pdfBase64) {
@@ -1153,54 +1024,31 @@ app.post("/api/system/send-project-report", requireAdmin, async (req, res) => {
     
     console.log("Email sent successfully:", result);
     res.json({ success: true, result });
-  } catch (error) {
-    console.error("Failed to send email:", error);
-    res.status(500).json({ error: "Failed to send email", details: String(error) });
-  }
-});
+}));
 
 // ============== METADATA DEFINITIONS ==============
-app.get("/api/metadata-definitions", async (req, res) => {
-  try {
+app.get("/api/metadata-definitions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const definitions = await storage.getMetadataDefinitions(tenantId);
     res.json(definitions);
-  } catch (error) {
-    console.error("Failed to fetch metadata definitions:", error);
-    res.status(500).json({ error: "Failed to fetch metadata definitions" });
-  }
-});
+}));
 
-app.get("/api/metadata-definitions/:id", async (req, res) => {
-  try {
+app.get("/api/metadata-definitions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const definition = await storage.getMetadataDefinition(req.params.id);
     const verified = verifyTenantOwnership(definition, tenantId);
     if (!verified) return res.status(404).json({ error: "Definition not found" });
     res.json(verified);
-  } catch (error) {
-    console.error("Failed to fetch metadata definition:", error);
-    res.status(500).json({ error: "Failed to fetch metadata definition" });
-  }
-});
+}));
 
-app.post("/api/metadata-definitions", requireAdmin, async (req, res) => {
-  try {
+app.post("/api/metadata-definitions", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertMetadataDefinitionSchema.parse({ ...req.body, tenantId });
     const definition = await storage.createMetadataDefinition(data);
     res.status(201).json(definition);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create metadata definition:", error);
-    res.status(500).json({ error: "Failed to create metadata definition" });
-  }
-});
+}));
 
-app.patch("/api/metadata-definitions/:id", requireAdmin, async (req, res) => {
-  try {
+app.patch("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getMetadataDefinition(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1219,17 +1067,9 @@ app.patch("/api/metadata-definitions/:id", requireAdmin, async (req, res) => {
     const definition = await storage.updateMetadataDefinition(req.params.id, updateData);
     if (!definition) return res.status(404).json({ error: "Definition not found" });
     res.json(definition);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update metadata definition:", error);
-    res.status(500).json({ error: "Failed to update metadata definition" });
-  }
-});
+}));
 
-app.delete("/api/metadata-definitions/:id", requireAdmin, async (req, res) => {
-  try {
+app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getMetadataDefinition(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1237,11 +1077,7 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, async (req, res) => {
     }
     await storage.deleteMetadataDefinition(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete metadata definition:", error);
-    res.status(500).json({ error: "Failed to delete metadata definition" });
-  }
-});
+}));
 
 // ============== OBJECT METADATA ==============
 // Helper to verify object belongs to current tenant
@@ -1250,22 +1086,16 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
   return obj?.tenantId === tenantId;
 }
 
-app.get("/api/objects/:objectId/metadata", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     const metadata = await storage.getObjectMetadata(req.params.objectId);
     res.json(metadata);
-  } catch (error) {
-    console.error("Failed to fetch object metadata:", error);
-    res.status(500).json({ error: "Failed to fetch object metadata" });
-  }
-});
+}));
 
-app.post("/api/objects/:objectId/metadata", async (req, res) => {
-  try {
+app.post("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -1277,17 +1107,9 @@ app.post("/api/objects/:objectId/metadata", async (req, res) => {
     });
     const metadata = await storage.createObjectMetadata(data);
     res.status(201).json(metadata);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create object metadata:", error);
-    res.status(500).json({ error: "Failed to create object metadata" });
-  }
-});
+}));
 
-app.patch("/api/objects/:objectId/metadata/:id", async (req, res) => {
-  try {
+app.patch("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -1301,17 +1123,9 @@ app.patch("/api/objects/:objectId/metadata/:id", async (req, res) => {
     const metadata = await storage.updateObjectMetadata(req.params.id, req.params.objectId, tenantId, updateData);
     if (!metadata) return res.status(404).json({ error: "Metadata not found or does not belong to this object" });
     res.json(metadata);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update object metadata:", error);
-    res.status(500).json({ error: "Failed to update object metadata" });
-  }
-});
+}));
 
-app.delete("/api/objects/:objectId/metadata/:id", async (req, res) => {
-  try {
+app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -1319,44 +1133,29 @@ app.delete("/api/objects/:objectId/metadata/:id", async (req, res) => {
     // Storage method enforces objectId and tenantId match at DB level
     await storage.deleteObjectMetadata(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete object metadata:", error);
-    res.status(500).json({ error: "Failed to delete object metadata" });
-  }
-});
+}));
 
 // Get effective metadata for an object (including inherited values)
-app.get("/api/objects/:objectId/effective-metadata", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/effective-metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     const effectiveMetadata = await storage.getEffectiveMetadata(req.params.objectId, tenantId);
     res.json(effectiveMetadata);
-  } catch (error) {
-    console.error("Failed to fetch effective metadata:", error);
-    res.status(500).json({ error: "Failed to fetch effective metadata" });
-  }
-});
+}));
 
 // ============== OBJECT PAYERS ==============
-app.get("/api/objects/:objectId/payers", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     const payers = await storage.getObjectPayers(req.params.objectId);
     res.json(payers);
-  } catch (error) {
-    console.error("Failed to fetch object payers:", error);
-    res.status(500).json({ error: "Failed to fetch object payers" });
-  }
-});
+}));
 
-app.post("/api/objects/:objectId/payers", async (req, res) => {
-  try {
+app.post("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -1368,17 +1167,9 @@ app.post("/api/objects/:objectId/payers", async (req, res) => {
     });
     const payer = await storage.createObjectPayer(data);
     res.status(201).json(payer);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create object payer:", error);
-    res.status(500).json({ error: "Failed to create object payer" });
-  }
-});
+}));
 
-app.patch("/api/objects/:objectId/payers/:id", async (req, res) => {
-  try {
+app.patch("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -1399,27 +1190,15 @@ app.patch("/api/objects/:objectId/payers/:id", async (req, res) => {
     const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, tenantId, updateData);
     if (!payer) return res.status(404).json({ error: "Payer not found or does not belong to this object" });
     res.json(payer);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update object payer:", error);
-    res.status(500).json({ error: "Failed to update object payer" });
-  }
-});
+}));
 
-app.delete("/api/objects/:objectId/payers/:id", async (req, res) => {
-  try {
+app.delete("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     await storage.deleteObjectPayer(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete object payer:", error);
-    res.status(500).json({ error: "Failed to delete object payer" });
-  }
-});
+}));
 
 }

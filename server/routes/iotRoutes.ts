@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import crypto from "crypto";
 import { insertIotDeviceSchema, insertIotApiKeySchema, iotApiKeys } from "@shared/schema";
 
@@ -35,8 +37,7 @@ async function authenticateIotApiKey(req: ExpressRequest, res: ExpressResponse):
   return { tenantId: keyRecord.tenantId };
 }
 
-app.post("/api/iot/signals", async (req, res) => {
-  try {
+app.post("/api/iot/signals", asyncHandler(async (req, res) => {
     const auth = await authenticateIotApiKey(req, res);
     if (!auth) return;
 
@@ -123,14 +124,9 @@ app.post("/api/iot/signals", async (req, res) => {
       workOrderCreated: !!createdWorkOrder,
       workOrderId: createdWorkOrder?.id || null,
     });
-  } catch (error) {
-    console.error("IoT signal error:", error);
-    res.status(500).json({ error: "Kunde inte bearbeta IoT-signal." });
-  }
-});
+}));
 
-app.get("/api/iot/rules", async (req, res) => {
-  try {
+app.get("/api/iot/rules", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     const settings = (tenant?.settings || {}) as Record<string, unknown>;
@@ -140,13 +136,9 @@ app.get("/api/iot/rules", async (req, res) => {
       priorityOverrides: {},
     };
     res.json(iotRules);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta IoT-regler." });
-  }
-});
+}));
 
-app.put("/api/iot/rules", async (req, res) => {
-  try {
+app.put("/api/iot/rules", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rulesSchema = z.object({
       enabled: z.boolean().optional(),
@@ -161,23 +153,15 @@ app.put("/api/iot/rules", async (req, res) => {
     const updatedSettings = { ...existingSettings, iotRules: parsed.data };
     await storage.updateTenantSettings(tenantId, updatedSettings);
     res.json(parsed.data);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte uppdatera IoT-regler." });
-  }
-});
+}));
 
-app.get("/api/iot/devices", async (req, res) => {
-  try {
+app.get("/api/iot/devices", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const devices = await storage.getIotDevices(tenantId);
     res.json(devices);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta IoT-enheter." });
-  }
-});
+}));
 
-app.post("/api/iot/devices", async (req, res) => {
-  try {
+app.post("/api/iot/devices", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertIotDeviceSchema.parse({ ...req.body, tenantId });
     const obj = await storage.getObject(data.objectId);
@@ -186,14 +170,9 @@ app.post("/api/iot/devices", async (req, res) => {
     }
     const device = await storage.createIotDevice(data);
     res.status(201).json(device);
-  } catch (error) {
-    if (error instanceof z.ZodError) return res.status(400).json(formatZodError(error));
-    res.status(500).json({ error: "Kunde inte skapa IoT-enhet." });
-  }
-});
+}));
 
-app.patch("/api/iot/devices/:id", async (req, res) => {
-  try {
+app.patch("/api/iot/devices/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getIotDevice(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Enhet hittades inte." });
@@ -206,36 +185,24 @@ app.patch("/api/iot/devices/:id", async (req, res) => {
     if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
     const device = await storage.updateIotDevice(req.params.id, parsed.data);
     res.json(device);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte uppdatera IoT-enhet." });
-  }
-});
+}));
 
-app.delete("/api/iot/devices/:id", async (req, res) => {
-  try {
+app.delete("/api/iot/devices/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getIotDevice(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Enhet hittades inte." });
     await storage.deleteIotDevice(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte ta bort IoT-enhet." });
-  }
-});
+}));
 
-app.get("/api/iot/api-keys", async (req, res) => {
-  try {
+app.get("/api/iot/api-keys", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const keys = await storage.getIotApiKeys(tenantId);
     const masked = keys.map(k => ({ ...k, apiKey: k.apiKey.slice(0, 8) + "..." }));
     res.json(masked);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta API-nycklar." });
-  }
-});
+}));
 
-app.post("/api/iot/api-keys", async (req, res) => {
-  try {
+app.post("/api/iot/api-keys", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const nameSchema = z.object({ name: z.string().min(1) });
     const parsed = nameSchema.safeParse(req.body);
@@ -243,34 +210,23 @@ app.post("/api/iot/api-keys", async (req, res) => {
     const apiKey = `iot_${crypto.randomBytes(32).toString("hex")}`;
     const key = await storage.createIotApiKey({ tenantId, apiKey, name: parsed.data.name, status: "active" });
     res.status(201).json(key);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte skapa API-nyckel." });
-  }
-});
+}));
 
-app.delete("/api/iot/api-keys/:id", async (req, res) => {
-  try {
+app.delete("/api/iot/api-keys/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const keys = await storage.getIotApiKeys(tenantId);
     const key = keys.find(k => k.id === req.params.id);
     if (!key) return res.status(404).json({ error: "API-nyckel hittades inte." });
     await storage.deleteIotApiKey(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte ta bort API-nyckel." });
-  }
-});
+}));
 
-app.get("/api/iot/signals", async (req, res) => {
-  try {
+app.get("/api/iot/signals", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const deviceId = req.query.deviceId as string | undefined;
     const limit = parseInt(req.query.limit as string) || 50;
     const signals = await storage.getIotSignals(tenantId, { deviceId, limit });
     res.json(signals);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta IoT-signaler." });
-  }
-});
+}));
 
 }

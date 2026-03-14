@@ -19,7 +19,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 
 ### Technical Implementations
 - **Frontend:** React, TypeScript, Vite.
-- **Backend:** Express.js with modular route architecture (`server/routes/` — 16 route modules: customerRoutes, objectRoutes, resourceRoutes, workOrderRoutes, importRoutes, configRoutes, clusterRoutes, aiRoutes, mobileRoutes, plannerRoutes, kpiRoutes, fortnoxRoutes, orderConceptRoutes, portalRoutes, extendedRoutes, iotRoutes). Shared helpers in `server/routes/helpers.ts`.
+- **Backend:** Express.js with modular route architecture (`server/routes/` — 16 route modules: customerRoutes, objectRoutes, resourceRoutes, workOrderRoutes, importRoutes, configRoutes, clusterRoutes, aiRoutes, mobileRoutes, plannerRoutes, kpiRoutes, fortnoxRoutes, orderConceptRoutes, portalRoutes, extendedRoutes, iotRoutes). Shared helpers in `server/routes/helpers.ts`. All 544 route handlers use `asyncHandler` wrapper (`server/asyncHandler.ts`) with centralized error handling via `AppError` classes (`server/errors.ts`: NotFoundError, ValidationError, ConflictError, ForbiddenError).
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI (gpt-4o-mini, gpt-4o) for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner.

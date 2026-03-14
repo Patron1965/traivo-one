@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
@@ -19,8 +21,7 @@ export async function registerExtendedRoutes(app: Express) {
 // ============================================
 
 // Get object info and report form by QR code
-app.get("/api/public/report/:code", async (req, res) => {
-  try {
+app.get("/api/public/report/:code", asyncHandler(async (req, res) => {
     const { code } = req.params;
     
     const qrLink = await storage.getQrCodeLinkByCode(code);
@@ -65,15 +66,10 @@ app.get("/api/public/report/:code", async (req, res) => {
         { id: 'other', label: 'Övrigt' },
       ],
     });
-  } catch (error) {
-    console.error("Failed to get public report info:", error);
-    res.status(500).json({ error: "Kunde inte ladda information" });
-  }
-});
+}));
 
 // Submit public issue report (no auth)
-app.post("/api/public/report/:code", async (req, res) => {
-  try {
+app.post("/api/public/report/:code", asyncHandler(async (req, res) => {
     const { code } = req.params;
     const { category, title, description, reporterName, reporterEmail, reporterPhone, photos, latitude, longitude } = req.body;
     
@@ -114,18 +110,13 @@ app.post("/api/public/report/:code", async (req, res) => {
       reportId: report.id,
       message: "Tack för din anmälan! Vi har tagit emot den och kommer att hantera ärendet.",
     });
-  } catch (error) {
-    console.error("Failed to create public issue report:", error);
-    res.status(500).json({ error: "Kunde inte skicka anmälan" });
-  }
-});
+}));
 
 // ============================================
 // PROTOCOLS API
 // ============================================
 
-app.get("/api/protocols", async (req, res) => {
-  try {
+app.get("/api/protocols", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, objectId, protocolType, status } = req.query;
     
@@ -137,15 +128,10 @@ app.get("/api/protocols", async (req, res) => {
     });
     
     res.json(protocols);
-  } catch (error) {
-    console.error("Failed to get protocols:", error);
-    res.status(500).json({ error: "Kunde inte hämta protokoll" });
-  }
-});
+}));
 
 // Get assessment statistics - MUST be before /:id
-app.get("/api/protocols/statistics/assessments", async (req, res) => {
-  try {
+app.get("/api/protocols/statistics/assessments", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId, startDate, endDate } = req.query;
     
@@ -224,14 +210,9 @@ app.get("/api/protocols/statistics/assessments", async (req, res) => {
       distribution,
       trend,
     });
-  } catch (error) {
-    console.error("Failed to get assessment statistics:", error);
-    res.status(500).json({ error: "Kunde inte hämta statistik" });
-  }
-});
+}));
 
-app.get("/api/protocols/:id", async (req, res) => {
-  try {
+app.get("/api/protocols/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const protocol = await storage.getProtocol(req.params.id);
     
@@ -240,14 +221,9 @@ app.get("/api/protocols/:id", async (req, res) => {
     }
     
     res.json(protocol);
-  } catch (error) {
-    console.error("Failed to get protocol:", error);
-    res.status(500).json({ error: "Kunde inte hämta protokoll" });
-  }
-});
+}));
 
-app.post("/api/protocols", async (req, res) => {
-  try {
+app.post("/api/protocols", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const { insertProtocolSchema } = await import("@shared/schema");
@@ -255,17 +231,9 @@ app.post("/api/protocols", async (req, res) => {
     
     const protocol = await storage.createProtocol(validated);
     res.status(201).json(protocol);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create protocol:", error);
-    res.status(500).json({ error: "Kunde inte skapa protokoll" });
-  }
-});
+}));
 
-app.patch("/api/protocols/:id", async (req, res) => {
-  try {
+app.patch("/api/protocols/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getProtocol(req.params.id);
@@ -275,14 +243,9 @@ app.patch("/api/protocols/:id", async (req, res) => {
     
     const protocol = await storage.updateProtocol(req.params.id, tenantId, req.body);
     res.json(protocol);
-  } catch (error) {
-    console.error("Failed to update protocol:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera protokoll" });
-  }
-});
+}));
 
-app.delete("/api/protocols/:id", async (req, res) => {
-  try {
+app.delete("/api/protocols/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getProtocol(req.params.id);
@@ -292,15 +255,10 @@ app.delete("/api/protocols/:id", async (req, res) => {
     
     await storage.deleteProtocol(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete protocol:", error);
-    res.status(500).json({ error: "Kunde inte ta bort protokoll" });
-  }
-});
+}));
 
 // Generate PDF for protocol
-app.post("/api/protocols/:id/generate-pdf", async (req, res) => {
-  try {
+app.post("/api/protocols/:id/generate-pdf", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const protocol = await storage.getProtocol(req.params.id);
@@ -326,15 +284,10 @@ app.post("/api/protocols/:id/generate-pdf", async (req, res) => {
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="protokoll-${protocol.protocolNumber || protocol.id}.pdf"`);
     res.send(pdfBuffer);
-  } catch (error) {
-    console.error("Failed to generate protocol PDF:", error);
-    res.status(500).json({ error: "Kunde inte generera PDF" });
-  }
-});
+}));
 
 // Send protocol to customer via email
-app.post("/api/protocols/:id/send-to-customer", async (req, res) => {
-  try {
+app.post("/api/protocols/:id/send-to-customer", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const protocol = await storage.getProtocol(req.params.id);
@@ -368,18 +321,13 @@ app.post("/api/protocols/:id/send-to-customer", async (req, res) => {
     });
     
     res.json({ success: true, message: "Protokoll skickat till kund" });
-  } catch (error) {
-    console.error("Failed to send protocol to customer:", error);
-    res.status(500).json({ error: "Kunde inte skicka protokoll" });
-  }
-});
+}));
 
 // ============================================
 // DEVIATION REPORTS API
 // ============================================
 
-app.get("/api/deviation-reports", async (req, res) => {
-  try {
+app.get("/api/deviation-reports", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId, status, category, severity } = req.query;
     
@@ -391,14 +339,9 @@ app.get("/api/deviation-reports", async (req, res) => {
     });
     
     res.json(reports);
-  } catch (error) {
-    console.error("Failed to get deviation reports:", error);
-    res.status(500).json({ error: "Kunde inte hämta avvikelserapporter" });
-  }
-});
+}));
 
-app.get("/api/deviation-reports/:id", async (req, res) => {
-  try {
+app.get("/api/deviation-reports/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const report = await storage.getDeviationReport(req.params.id);
     
@@ -407,14 +350,9 @@ app.get("/api/deviation-reports/:id", async (req, res) => {
     }
     
     res.json(report);
-  } catch (error) {
-    console.error("Failed to get deviation report:", error);
-    res.status(500).json({ error: "Kunde inte hämta avvikelserapport" });
-  }
-});
+}));
 
-app.post("/api/deviation-reports", async (req, res) => {
-  try {
+app.post("/api/deviation-reports", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const { insertDeviationReportSchema } = await import("@shared/schema");
@@ -422,17 +360,9 @@ app.post("/api/deviation-reports", async (req, res) => {
     
     const report = await storage.createDeviationReport(validated);
     res.status(201).json(report);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create deviation report:", error);
-    res.status(500).json({ error: "Kunde inte skapa avvikelserapport" });
-  }
-});
+}));
 
-app.patch("/api/deviation-reports/:id", async (req, res) => {
-  try {
+app.patch("/api/deviation-reports/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getDeviationReport(req.params.id);
@@ -442,15 +372,10 @@ app.patch("/api/deviation-reports/:id", async (req, res) => {
     
     const report = await storage.updateDeviationReport(req.params.id, tenantId, req.body);
     res.json(report);
-  } catch (error) {
-    console.error("Failed to update deviation report:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera avvikelserapport" });
-  }
-});
+}));
 
 // Create work order from deviation report
-app.post("/api/deviation-reports/:id/create-order", async (req, res) => {
-  try {
+app.post("/api/deviation-reports/:id/create-order", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const report = await storage.getDeviationReport(req.params.id);
@@ -492,15 +417,10 @@ app.post("/api/deviation-reports/:id/create-order", async (req, res) => {
       workOrder,
       message: "Arbetsorder skapad för åtgärd av avvikelse",
     });
-  } catch (error) {
-    console.error("Failed to create order from deviation:", error);
-    res.status(500).json({ error: "Kunde inte skapa arbetsorder" });
-  }
-});
+}));
 
 // Resolve deviation report
-app.post("/api/deviation-reports/:id/resolve", async (req, res) => {
-  try {
+app.post("/api/deviation-reports/:id/resolve", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const user = (req as any).user;
     const { resolutionNotes } = req.body;
@@ -518,14 +438,9 @@ app.post("/api/deviation-reports/:id/resolve", async (req, res) => {
     });
     
     res.json(updated);
-  } catch (error) {
-    console.error("Failed to resolve deviation report:", error);
-    res.status(500).json({ error: "Kunde inte markera avvikelse som åtgärdad" });
-  }
-});
+}));
 
-app.get("/api/objects/:id/issue-history", async (req, res) => {
-  try {
+app.get("/api/objects/:id/issue-history", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const objectId = req.params.id;
     
@@ -597,18 +512,13 @@ app.get("/api/objects/:id/issue-history", async (req, res) => {
         .map(([month, count]) => ({ month, count })),
       timeline: timeline.slice(0, 50),
     });
-  } catch (error) {
-    console.error("Failed to get object issue history:", error);
-    res.status(500).json({ error: "Kunde inte hämta problemhistorik" });
-  }
-});
+}));
 
 // ============================================
 // ENVIRONMENTAL DATA - Fas 3.1
 // ============================================
 
-app.get("/api/environmental-data", async (req, res) => {
-  try {
+app.get("/api/environmental-data", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, resourceId, startDate, endDate } = req.query;
     
@@ -620,14 +530,9 @@ app.get("/api/environmental-data", async (req, res) => {
     });
     
     res.json(data);
-  } catch (error) {
-    console.error("Failed to get environmental data:", error);
-    res.status(500).json({ error: "Kunde inte hämta miljödata" });
-  }
-});
+}));
 
-app.post("/api/environmental-data", async (req, res) => {
-  try {
+app.post("/api/environmental-data", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const user = (req as any).user;
     
@@ -649,14 +554,9 @@ app.post("/api/environmental-data", async (req, res) => {
     });
     
     res.json(data);
-  } catch (error) {
-    console.error("Failed to create environmental data:", error);
-    res.status(500).json({ error: "Kunde inte spara miljödata" });
-  }
-});
+}));
 
-app.get("/api/environmental-data/statistics", async (req, res) => {
-  try {
+app.get("/api/environmental-data/statistics", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { startDate, endDate, resourceId } = req.query;
     
@@ -729,15 +629,10 @@ app.get("/api/environmental-data/statistics", async (req, res) => {
       trend,
       co2PerKm: totalDistanceKm > 0 ? Math.round((totalCo2Kg / totalDistanceKm) * 1000) / 1000 : null,
     });
-  } catch (error) {
-    console.error("Failed to get environmental statistics:", error);
-    res.status(500).json({ error: "Kunde inte hämta miljöstatistik" });
-  }
-});
+}));
 
 // Environmental Certificate - annual sustainability report per customer
-app.get("/api/environmental-certificates/:customerId", async (req, res) => {
-  try {
+app.get("/api/environmental-certificates/:customerId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
     const { year } = req.query;
@@ -841,14 +736,9 @@ app.get("/api/environmental-certificates/:customerId", async (req, res) => {
         co2PerKm < 0.25 ? "Bra" : 
         co2PerKm < 0.35 ? "Medel" : "Behöver förbättras",
     });
-  } catch (error) {
-    console.error("Failed to generate environmental certificate:", error);
-    res.status(500).json({ error: "Kunde inte generera miljöcertifikat" });
-  }
-});
+}));
 
-app.get("/api/system/api-costs/summary", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/api-costs/summary", requireAdmin, asyncHandler(async (req, res) => {
     const period = (req.query.period as string) || "month";
     let startDate: Date;
     const endDate = new Date();
@@ -896,14 +786,9 @@ app.get("/api/system/api-costs/summary", requireAdmin, async (req, res) => {
         errorCount: Number(r.errorCount),
       })),
     });
-  } catch (error) {
-    console.error("Failed to fetch API cost summary:", error);
-    res.status(500).json({ error: "Kunde inte hämta API-kostnadssammanfattning" });
-  }
-});
+}));
 
-app.get("/api/system/api-costs/trends", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/api-costs/trends", requireAdmin, asyncHandler(async (req, res) => {
     const days = parseInt(req.query.days as string) || 30;
     const serviceFilter = req.query.service as string;
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
@@ -931,14 +816,9 @@ app.get("/api/system/api-costs/trends", requireAdmin, async (req, res) => {
       totalCalls: Number(r.totalCalls),
       totalTokens: Number(r.totalTokens),
     })));
-  } catch (error) {
-    console.error("Failed to fetch API cost trends:", error);
-    res.status(500).json({ error: "Kunde inte hämta kostnadstrender" });
-  }
-});
+}));
 
-app.get("/api/system/api-costs/recent", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = parseInt(req.query.offset as string) || 0;
     const serviceFilter = req.query.service as string;
@@ -968,14 +848,9 @@ app.get("/api/system/api-costs/recent", requireAdmin, async (req, res) => {
       limit,
       offset,
     });
-  } catch (error) {
-    console.error("Failed to fetch recent API logs:", error);
-    res.status(500).json({ error: "Kunde inte hämta API-loggar" });
-  }
-});
+}));
 
-app.get("/api/system/api-costs/by-tenant", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/api-costs/by-tenant", requireAdmin, asyncHandler(async (req, res) => {
     const period = (req.query.period as string) || "month";
     let startDate: Date;
     
@@ -1003,24 +878,14 @@ app.get("/api/system/api-costs/by-tenant", requireAdmin, async (req, res) => {
       totalCostUsd: Math.round(Number(r.totalCost) * 10000) / 10000,
       totalCalls: Number(r.totalCalls),
     })));
-  } catch (error) {
-    console.error("Failed to fetch tenant API costs:", error);
-    res.status(500).json({ error: "Kunde inte hämta tenant-kostnader" });
-  }
-});
+}));
 
-app.get("/api/system/api-budgets", requireAdmin, async (req, res) => {
-  try {
+app.get("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) => {
     const budgets = await db.select().from(apiBudgets).orderBy(apiBudgets.service);
     res.json(budgets);
-  } catch (error) {
-    console.error("Failed to fetch API budgets:", error);
-    res.status(500).json({ error: "Kunde inte hämta budgetar" });
-  }
-});
+}));
 
-app.put("/api/system/api-budgets", requireAdmin, async (req, res) => {
-  try {
+app.put("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) => {
     const { service, monthlyBudgetUsd, alertThresholdPercent, tenantId } = req.body;
     if (!service || monthlyBudgetUsd === undefined) {
       return res.status(400).json({ error: "Service och budget krävs" });
@@ -1051,11 +916,7 @@ app.put("/api/system/api-budgets", requireAdmin, async (req, res) => {
     
     const budgets = await db.select().from(apiBudgets).orderBy(apiBudgets.service);
     res.json(budgets);
-  } catch (error) {
-    console.error("Failed to update API budget:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera budget" });
-  }
-});
+}));
 
 app.get("/api/system/api-costs/pricing", requireAdmin, async (_req, res) => {
   const { PRICING } = await import("./api-usage-tracker");
@@ -1066,8 +927,7 @@ app.get("/api/system/api-costs/pricing", requireAdmin, async (_req, res) => {
 // FIELD WORKER TASK ENDPOINTS
 // ============================================
 
-app.get("/api/field-worker/tasks", async (req, res) => {
-  try {
+app.get("/api/field-worker/tasks", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { date, resourceId } = req.query;
     
@@ -1114,14 +974,9 @@ app.get("/api/field-worker/tasks", async (req, res) => {
     }));
     
     res.json(tasksWithDeps);
-  } catch (error) {
-    console.error("Failed to get field worker tasks:", error);
-    res.status(500).json({ error: "Kunde inte hämta uppgifter" });
-  }
-});
+}));
 
-app.post("/api/field-worker/tasks/:id/start", async (req, res) => {
-  try {
+app.post("/api/field-worker/tasks/:id/start", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
@@ -1138,13 +993,9 @@ app.post("/api/field-worker/tasks/:id/start", async (req, res) => {
       );
     }
     res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte starta uppgift" });
-  }
-});
+}));
 
-app.post("/api/field-worker/tasks/:id/complete", async (req, res) => {
-  try {
+app.post("/api/field-worker/tasks/:id/complete", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
@@ -1167,13 +1018,9 @@ app.post("/api/field-worker/tasks/:id/complete", async (req, res) => {
       .where(eq(taskDependencyInstances.parentWorkOrderId, req.params.id));
     
     res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte slutföra uppgift" });
-  }
-});
+}));
 
-app.post("/api/field-worker/tasks/:id/update-metadata", async (req, res) => {
-  try {
+app.post("/api/field-worker/tasks/:id/update-metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
@@ -1197,17 +1044,13 @@ app.post("/api/field-worker/tasks/:id/update-metadata", async (req, res) => {
     }
     
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte uppdatera metadata" });
-  }
-});
+}));
 
 // ============================================
 // FIELD WORKER PHOTO UPLOAD
 // ============================================
 
-app.post("/api/field-worker/tasks/:id/upload-photo", async (req, res) => {
-  try {
+app.post("/api/field-worker/tasks/:id/upload-photo", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
@@ -1224,14 +1067,9 @@ app.post("/api/field-worker/tasks/:id/upload-photo", async (req, res) => {
       objectPath,
       workOrderId: req.params.id,
     });
-  } catch (error) {
-    console.error("Failed to generate photo upload URL:", error);
-    res.status(500).json({ error: "Kunde inte generera uppladdnings-URL" });
-  }
-});
+}));
 
-app.post("/api/field-worker/tasks/:id/confirm-photo", async (req, res) => {
-  try {
+app.post("/api/field-worker/tasks/:id/confirm-photo", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
@@ -1256,18 +1094,13 @@ app.post("/api/field-worker/tasks/:id/confirm-photo", async (req, res) => {
     });
     
     res.json({ success: true, photoCount: photos.length });
-  } catch (error) {
-    console.error("Failed to confirm photo upload:", error);
-    res.status(500).json({ error: "Kunde inte spara fotoinformation" });
-  }
-});
+}));
 
 // ============================================
 // INVOICE PREVIEW TO FORTNOX EXPORT
 // ============================================
 
-app.post("/api/invoice-preview/export-to-fortnox", async (req, res) => {
-  try {
+app.post("/api/invoice-preview/export-to-fortnox", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { invoices } = req.body;
     
@@ -1313,40 +1146,26 @@ app.post("/api/invoice-preview/export-to-fortnox", async (req, res) => {
       failed: results.filter(r => r.status === "error").length,
       results 
     });
-  } catch (error) {
-    console.error("Failed to export invoices to Fortnox:", error);
-    res.status(500).json({ error: "Kunde inte exportera fakturor till Fortnox" });
-  }
-});
+}));
 
 // ============================================
 // INSPECTION METADATA ENDPOINTS
 // ============================================
 
-app.get("/api/inspection-metadata", async (req, res) => {
-  try {
+app.get("/api/inspection-metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId } = req.query;
     const results = await storage.getInspectionMetadata(tenantId, objectId as string | undefined);
     res.json(results);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta besiktningsdata" });
-  }
-});
+}));
 
-app.post("/api/inspection-metadata", async (req, res) => {
-  try {
+app.post("/api/inspection-metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const result = await storage.createInspectionMetadata({ ...req.body, tenantId });
     res.status(201).json(result);
-  } catch (error) {
-    console.error("Failed to create inspection metadata:", error);
-    res.status(500).json({ error: "Kunde inte skapa besiktningsdata" });
-  }
-});
+}));
 
-app.get("/api/inspection-metadata/search", async (req, res) => {
-  try {
+app.get("/api/inspection-metadata/search", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { inspectionType, status, objectId } = req.query;
     const results = await storage.searchInspectionMetadata(tenantId, {
@@ -1355,59 +1174,43 @@ app.get("/api/inspection-metadata/search", async (req, res) => {
       objectId: objectId as string | undefined,
     });
     res.json(results);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte söka besiktningsdata" });
-  }
-});
+}));
 
 // ============================================
 // AI ETA & DELAY SERVICE
 // ============================================
 
-app.get("/api/ai/eta-overview", async (req, res) => {
-  try {
+app.get("/api/ai/eta-overview", asyncHandler(async (req, res) => {
     const { calculateETAForTodaysOrders } = await import("./ai-eta-service");
     const tenantId = getTenantIdWithFallback(req);
     const overview = await calculateETAForTodaysOrders(tenantId);
     res.json(overview);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte beräkna ETA" });
-  }
-});
+}));
 
-app.post("/api/ai/eta-check-delays", async (req, res) => {
-  try {
+app.post("/api/ai/eta-check-delays", asyncHandler(async (req, res) => {
     const { checkAndNotifyDelays } = await import("./ai-eta-service");
     const tenantId = getTenantIdWithFallback(req);
     const { thresholdMinutes } = req.body;
     const result = await checkAndNotifyDelays(tenantId, thresholdMinutes || 20);
     res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte kontrollera förseningar" });
-  }
-});
+}));
 
 // ============================================
 // AI INSIGHT CARDS
 // ============================================
 
-app.get("/api/ai/insights", async (req, res) => {
-  try {
+app.get("/api/ai/insights", asyncHandler(async (req, res) => {
     const { generateInsightCards } = await import("./ai-insights");
     const tenantId = getTenantIdWithFallback(req);
     const cards = await generateInsightCards(tenantId);
     res.json(cards);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte generera insikter" });
-  }
-});
+}));
 
 // ============================================
 // AI-ASSISTED PLANNING
 // ============================================
 
-app.post("/api/ai/assisted-plan", async (req, res) => {
-  try {
+app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
     const { aiAssistedSchedule } = await import("./ai-planner");
     const { weekStart, weekEnd, instruction } = req.body;
 
@@ -1435,18 +1238,13 @@ app.post("/api/ai/assisted-plan", async (req, res) => {
     }, instruction);
 
     res.json(result);
-  } catch (error) {
-    console.error("AI Assisted Plan error:", error);
-    res.status(500).json({ error: "Kunde inte skapa AI-assisterad plan" });
-  }
-});
+}));
 
 // ============================================
 // AI CUSTOMER COMMUNICATION
 // ============================================
 
-app.get("/api/ai/communications", async (req, res) => {
-  try {
+app.get("/api/ai/communications", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, status, from, to } = req.query;
     const log = await getCommunicationLog(tenantId, {
@@ -1456,23 +1254,15 @@ app.get("/api/ai/communications", async (req, res) => {
       to: to as string,
     });
     res.json(log);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta kommunikationslogg" });
-  }
-});
+}));
 
-app.get("/api/ai/communications/settings", async (req, res) => {
-  try {
+app.get("/api/ai/communications/settings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const settings = await getAutoNotificationSettings(tenantId);
     res.json(settings);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta inställningar" });
-  }
-});
+}));
 
-app.post("/api/ai/communications/eta-update", async (req, res) => {
-  try {
+app.post("/api/ai/communications/eta-update", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, estimatedMinutes } = req.body;
     if (!workOrderId || estimatedMinutes === undefined) {
@@ -1480,13 +1270,9 @@ app.post("/api/ai/communications/eta-update", async (req, res) => {
     }
     const result = await sendETAUpdate(workOrderId, estimatedMinutes, tenantId);
     res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte skicka ETA-uppdatering" });
-  }
-});
+}));
 
-app.post("/api/ai/communications/send-manual", async (req, res) => {
-  try {
+app.post("/api/ai/communications/send-manual", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, notificationType, channel, customMessage } = req.body;
     if (!workOrderId) {
@@ -1499,10 +1285,7 @@ app.post("/api/ai/communications/send-manual", async (req, res) => {
       tenantId
     );
     res.json({ success: true, result });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte skicka meddelande" });
-  }
-});
+}));
 
 // ============================================
 // USER MANAGEMENT API
@@ -1535,19 +1318,13 @@ const requireAdminAuth = async (req: any, res: any, next: any) => {
   }
 };
 
-app.get("/api/admin/users", requireAdminAuth, async (req, res) => {
-  try {
+app.get("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => {
     const allUsers = await storage.getAllUsers();
     const safeUsers = allUsers.map(({ passwordHash, ...user }) => user);
     res.json(safeUsers);
-  } catch (error) {
-    console.error("Failed to get users:", error);
-    res.status(500).json({ error: "Kunde inte hämta användare" });
-  }
-});
+}));
 
-app.post("/api/admin/users", requireAdminAuth, async (req, res) => {
-  try {
+app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => {
     const { email, firstName, lastName, password, role, resourceId } = req.body;
 
     if (!email || !password) {
@@ -1583,14 +1360,9 @@ app.post("/api/admin/users", requireAdminAuth, async (req, res) => {
     const { passwordHash: _, ...safeUser } = user;
     console.log(`[user-mgmt] User "${email}" created with role "${role || 'user'}"`);
     res.status(201).json(safeUser);
-  } catch (error) {
-    console.error("Failed to create user:", error);
-    res.status(500).json({ error: "Kunde inte skapa användare" });
-  }
-});
+}));
 
-app.patch("/api/admin/users/bulk", requireAdminAuth, async (req, res) => {
-  try {
+app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, res) => {
     const { ids, updates } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ error: "Inga användare valda" });
@@ -1620,14 +1392,9 @@ app.patch("/api/admin/users/bulk", requireAdminAuth, async (req, res) => {
     }
     console.log(`[user-mgmt] Bulk update: ${updatedCount} users updated with`, validUpdates);
     res.json({ success: true, updatedCount });
-  } catch (error) {
-    console.error("Bulk update failed:", error);
-    res.status(500).json({ error: "Bulk-uppdatering misslyckades" });
-  }
-});
+}));
 
-app.patch("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
-  try {
+app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res) => {
     const { email, firstName, lastName, password, role, resourceId, isActive } = req.body;
     const updateData: Record<string, any> = {};
 
@@ -1659,25 +1426,15 @@ app.patch("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
 
     const { passwordHash: _, ...safeUser } = user;
     res.json(safeUser);
-  } catch (error) {
-    console.error("Failed to update user:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera användare" });
-  }
-});
+}));
 
-app.delete("/api/admin/users/:id", requireAdminAuth, async (req, res) => {
-  try {
+app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res) => {
     await storage.deleteUser(req.params.id);
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to delete user:", error);
-    res.status(500).json({ error: "Kunde inte ta bort användare" });
-  }
-});
+}));
 
 // Login with email + password (returns session)
-app.post("/api/auth/login", async (req, res) => {
-  try {
+app.post("/api/auth/login", asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
       return res.status(400).json({ error: "E-post och lösenord krävs" });
@@ -1706,14 +1463,9 @@ app.post("/api/auth/login", async (req, res) => {
     const { passwordHash: _, ...safeUser } = user;
     console.log(`[auth] User "${email}" logged in successfully`);
     res.json({ success: true, user: safeUser });
-  } catch (error) {
-    console.error("Login failed:", error);
-    res.status(500).json({ error: "Inloggning misslyckades" });
-  }
-});
+}));
 
-app.get("/api/auth/me", async (req, res) => {
-  try {
+app.get("/api/auth/me", asyncHandler(async (req, res) => {
     const userId = (req.session as any)?.userId;
     if (!userId) {
       return res.status(401).json({ error: "Inte inloggad" });
@@ -1724,10 +1476,7 @@ app.get("/api/auth/me", async (req, res) => {
     }
     const { passwordHash: _, ...safeUser } = user;
     res.json(safeUser);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta användardata" });
-  }
-});
+}));
 
 app.post("/api/auth/logout", (req, res) => {
   req.session.destroy(() => {

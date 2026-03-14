@@ -5,14 +5,15 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { insertArticleSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 
 export async function registerConfigRoutes(app: Express) {
 // ============== ARTICLES ==============
-app.get("/api/articles", async (req, res) => {
-  try {
+app.get("/api/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const page = parseInt(req.query.page as string);
     const limit = Math.min(parseInt(req.query.limit as string) || 0, 200);
@@ -27,40 +28,24 @@ app.get("/api/articles", async (req, res) => {
     }
     const articles = await storage.getArticles(tenantId);
     res.json(articles);
-  } catch (error) {
-    console.error("Failed to fetch articles:", error);
-    res.status(500).json({ error: "Kunde inte hämta artiklar" });
-  }
-});
+}));
 
-app.get("/api/articles/:id", async (req, res) => {
-  try {
+app.get("/api/articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const article = await storage.getArticle(req.params.id);
     const verified = verifyTenantOwnership(article, tenantId);
     if (!verified) return res.status(404).json({ error: "Article not found" });
     res.json(verified);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch article" });
-  }
-});
+}));
 
-app.post("/api/articles", async (req, res) => {
-  try {
+app.post("/api/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertArticleSchema.parse({ ...req.body, tenantId });
     const article = await storage.createArticle(data);
     res.status(201).json(article);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create article" });
-  }
-});
+}));
 
-app.patch("/api/articles/:id", async (req, res) => {
-  try {
+app.patch("/api/articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getArticle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -75,16 +60,9 @@ app.patch("/api/articles/:id", async (req, res) => {
     const article = await storage.updateArticle(req.params.id, updateData);
     if (!article) return res.status(404).json({ error: "Article not found" });
     res.json(article);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to update article" });
-  }
-});
+}));
 
-app.delete("/api/articles/:id", async (req, res) => {
-  try {
+app.delete("/api/articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getArticle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -92,14 +70,10 @@ app.delete("/api/articles/:id", async (req, res) => {
     }
     await storage.deleteArticle(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete article" });
-  }
-});
+}));
 
 // Fasthakning: Hämta applicerbara artiklar för ett objekt baserat på hookLevel
-app.get("/api/objects/:objectId/applicable-articles", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/applicable-articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
@@ -110,15 +84,10 @@ app.get("/api/objects/:objectId/applicable-articles", async (req, res) => {
       req.params.objectId
     );
     res.json(applicableArticles);
-  } catch (error) {
-    console.error("Failed to get applicable articles:", error);
-    res.status(500).json({ error: "Failed to fetch applicable articles" });
-  }
-});
+}));
 
 // Resolved article prices for an object (includes auto-hooked + manual + price resolution)
-app.get("/api/objects/:objectId/article-prices", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/article-prices", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
@@ -126,15 +95,10 @@ app.get("/api/objects/:objectId/article-prices", async (req, res) => {
     }
     const prices = await storage.getResolvedArticlePricesForObject(tenantId, req.params.objectId);
     res.json(prices);
-  } catch (error) {
-    console.error("Failed to get article prices:", error);
-    res.status(500).json({ error: "Failed to fetch article prices" });
-  }
-});
+}));
 
 // Manual object-article links
-app.post("/api/objects/:objectId/articles", async (req, res) => {
-  try {
+app.post("/api/objects/:objectId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
@@ -159,14 +123,9 @@ app.post("/api/objects/:objectId/articles", async (req, res) => {
       overridePrice: overridePrice ?? undefined,
     });
     res.json(result);
-  } catch (error) {
-    console.error("Failed to add object article:", error);
-    res.status(500).json({ error: "Failed to add article" });
-  }
-});
+}));
 
-app.delete("/api/objects/:objectId/articles/:linkId", async (req, res) => {
-  try {
+app.delete("/api/objects/:objectId/articles/:linkId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
@@ -177,14 +136,9 @@ app.delete("/api/objects/:objectId/articles/:linkId", async (req, res) => {
       return res.status(404).json({ error: "Article link not found" });
     }
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to remove object article:", error);
-    res.status(500).json({ error: "Failed to remove article" });
-  }
-});
+}));
 
-app.patch("/api/objects/:objectId/articles/:linkId", async (req, res) => {
-  try {
+app.patch("/api/objects/:objectId/articles/:linkId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
@@ -199,15 +153,10 @@ app.patch("/api/objects/:objectId/articles/:linkId", async (req, res) => {
       return res.status(404).json({ error: "Object article link not found" });
     }
     res.json(result);
-  } catch (error) {
-    console.error("Failed to update object article price:", error);
-    res.status(500).json({ error: "Failed to update price" });
-  }
-});
+}));
 
 // ============== PRICE LISTS ==============
-app.get("/api/price-lists", async (req, res) => {
-  try {
+app.get("/api/price-lists", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const page = parseInt(req.query.page as string);
     const limit = Math.min(parseInt(req.query.limit as string) || 0, 200);
@@ -219,40 +168,24 @@ app.get("/api/price-lists", async (req, res) => {
     }
     const priceLists = await storage.getPriceLists(tenantId);
     res.json(priceLists);
-  } catch (error) {
-    console.error("Failed to fetch price lists:", error);
-    res.status(500).json({ error: "Kunde inte hämta prislistor" });
-  }
-});
+}));
 
-app.get("/api/price-lists/:id", async (req, res) => {
-  try {
+app.get("/api/price-lists/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const priceList = await storage.getPriceList(req.params.id);
     const verified = verifyTenantOwnership(priceList, tenantId);
     if (!verified) return res.status(404).json({ error: "Price list not found" });
     res.json(verified);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch price list" });
-  }
-});
+}));
 
-app.post("/api/price-lists", async (req, res) => {
-  try {
+app.post("/api/price-lists", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertPriceListSchema.parse({ ...req.body, tenantId });
     const priceList = await storage.createPriceList(data);
     res.status(201).json(priceList);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create price list" });
-  }
-});
+}));
 
-app.patch("/api/price-lists/:id", async (req, res) => {
-  try {
+app.patch("/api/price-lists/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceList(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -267,16 +200,9 @@ app.patch("/api/price-lists/:id", async (req, res) => {
     const priceList = await storage.updatePriceList(req.params.id, updateData);
     if (!priceList) return res.status(404).json({ error: "Price list not found" });
     res.json(priceList);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to update price list" });
-  }
-});
+}));
 
-app.delete("/api/price-lists/:id", async (req, res) => {
-  try {
+app.delete("/api/price-lists/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceList(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -284,14 +210,10 @@ app.delete("/api/price-lists/:id", async (req, res) => {
     }
     await storage.deletePriceList(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete price list" });
-  }
-});
+}));
 
 // ============== PRICE LIST ARTICLES ==============
-app.get("/api/price-lists/:priceListId/articles", async (req, res) => {
-  try {
+app.get("/api/price-lists/:priceListId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const priceList = await storage.getPriceList(req.params.priceListId);
     if (!verifyTenantOwnership(priceList, tenantId)) {
@@ -299,13 +221,9 @@ app.get("/api/price-lists/:priceListId/articles", async (req, res) => {
     }
     const priceListArticles = await storage.getPriceListArticles(req.params.priceListId);
     res.json(priceListArticles);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch price list articles" });
-  }
-});
+}));
 
-app.post("/api/price-lists/:priceListId/articles", async (req, res) => {
-  try {
+app.post("/api/price-lists/:priceListId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const priceList = await storage.getPriceList(req.params.priceListId);
     if (!verifyTenantOwnership(priceList, tenantId)) {
@@ -314,16 +232,9 @@ app.post("/api/price-lists/:priceListId/articles", async (req, res) => {
     const data = insertPriceListArticleSchema.parse({ ...req.body, priceListId: req.params.priceListId });
     const priceListArticle = await storage.createPriceListArticle(data);
     res.status(201).json(priceListArticle);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create price list article" });
-  }
-});
+}));
 
-app.patch("/api/price-list-articles/:id", async (req, res) => {
-  try {
+app.patch("/api/price-list-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceListArticle(req.params.id);
     if (!existing) return res.status(404).json({ error: "Price list article not found" });
@@ -343,16 +254,9 @@ app.patch("/api/price-list-articles/:id", async (req, res) => {
     const priceListArticle = await storage.updatePriceListArticle(req.params.id, updateData);
     if (!priceListArticle) return res.status(404).json({ error: "Price list article not found" });
     res.json(priceListArticle);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to update price list article" });
-  }
-});
+}));
 
-app.delete("/api/price-list-articles/:id", async (req, res) => {
-  try {
+app.delete("/api/price-list-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceListArticle(req.params.id);
     if (!existing) return res.status(404).json({ error: "Price list article not found" });
@@ -365,14 +269,10 @@ app.delete("/api/price-list-articles/:id", async (req, res) => {
     
     await storage.deletePriceListArticle(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete price list article" });
-  }
-});
+}));
 
 // ============== RESOURCE ARTICLES (RESURSKOMPETENSER) ==============
-app.get("/api/resources/:resourceId/articles", async (req, res) => {
-  try {
+app.get("/api/resources/:resourceId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -380,13 +280,9 @@ app.get("/api/resources/:resourceId/articles", async (req, res) => {
     }
     const resourceArticles = await storage.getResourceArticles(req.params.resourceId);
     res.json(resourceArticles);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch resource articles" });
-  }
-});
+}));
 
-app.post("/api/resources/:resourceId/articles", async (req, res) => {
-  try {
+app.post("/api/resources/:resourceId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -395,16 +291,9 @@ app.post("/api/resources/:resourceId/articles", async (req, res) => {
     const data = insertResourceArticleSchema.parse({ ...req.body, resourceId: req.params.resourceId });
     const resourceArticle = await storage.createResourceArticle(data);
     res.status(201).json(resourceArticle);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create resource article" });
-  }
-});
+}));
 
-app.patch("/api/resource-articles/:id", async (req, res) => {
-  try {
+app.patch("/api/resource-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceArticle(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource article not found" });
@@ -424,16 +313,9 @@ app.patch("/api/resource-articles/:id", async (req, res) => {
     const resourceArticle = await storage.updateResourceArticle(req.params.id, updateData);
     if (!resourceArticle) return res.status(404).json({ error: "Resource article not found" });
     res.json(resourceArticle);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to update resource article" });
-  }
-});
+}));
 
-app.delete("/api/resource-articles/:id", async (req, res) => {
-  try {
+app.delete("/api/resource-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceArticle(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource article not found" });
@@ -446,50 +328,31 @@ app.delete("/api/resource-articles/:id", async (req, res) => {
     
     await storage.deleteResourceArticle(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete resource article" });
-  }
-});
+}));
 
 // ============== VEHICLES ==============
-app.get("/api/vehicles", async (req, res) => {
-  try {
+app.get("/api/vehicles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicles = await storage.getVehicles(tenantId);
     res.json(vehicles);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch vehicles" });
-  }
-});
+}));
 
-app.get("/api/vehicles/:id", async (req, res) => {
-  try {
+app.get("/api/vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.params.id);
     const verified = verifyTenantOwnership(vehicle, tenantId);
     if (!verified) return res.status(404).json({ error: "Vehicle not found" });
     res.json(verified);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch vehicle" });
-  }
-});
+}));
 
-app.post("/api/vehicles", async (req, res) => {
-  try {
+app.post("/api/vehicles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertVehicleSchema.parse({ ...req.body, tenantId });
     const vehicle = await storage.createVehicle(data);
     res.status(201).json(vehicle);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create vehicle" });
-  }
-});
+}));
 
-app.patch("/api/vehicles/:id", async (req, res) => {
-  try {
+app.patch("/api/vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -504,16 +367,9 @@ app.patch("/api/vehicles/:id", async (req, res) => {
     const vehicle = await storage.updateVehicle(req.params.id, updateData);
     if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
     res.json(vehicle);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to update vehicle" });
-  }
-});
+}));
 
-app.delete("/api/vehicles/:id", async (req, res) => {
-  try {
+app.delete("/api/vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -521,14 +377,10 @@ app.delete("/api/vehicles/:id", async (req, res) => {
     }
     await storage.deleteVehicle(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete vehicle" });
-  }
-});
+}));
 
 // ============== EQUIPMENT BOOKINGS ==============
-app.get("/api/equipment-bookings", async (req, res) => {
-  try {
+app.get("/api/equipment-bookings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { vehicleId, equipmentId, resourceId, teamId, date, startDate, endDate, status } = req.query;
     const options: any = {};
@@ -542,24 +394,16 @@ app.get("/api/equipment-bookings", async (req, res) => {
     if (status) options.status = status;
     const bookings = await storage.getEquipmentBookings(tenantId, options);
     res.json(bookings);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta utrustningsbokningar" });
-  }
-});
+}));
 
-app.get("/api/equipment-bookings/:id", async (req, res) => {
-  try {
+app.get("/api/equipment-bookings/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const booking = await storage.getEquipmentBooking(req.params.id);
     if (!booking || booking.tenantId !== tenantId) return res.status(404).json({ error: "Bokning hittades inte" });
     res.json(booking);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta bokning" });
-  }
-});
+}));
 
-app.post("/api/equipment-bookings", async (req, res) => {
-  try {
+app.post("/api/equipment-bookings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { vehicleId, equipmentId, resourceId, teamId, date, serviceArea, notes, workSessionId } = req.body;
     if (!vehicleId && !equipmentId) return res.status(400).json({ error: "Ange fordon eller utrustning" });
@@ -623,26 +467,17 @@ app.post("/api/equipment-bookings", async (req, res) => {
     });
 
     res.status(201).json({ booking, warning });
-  } catch (error) {
-    console.error("Failed to create equipment booking:", error);
-    res.status(500).json({ error: "Kunde inte skapa bokning" });
-  }
-});
+}));
 
-app.delete("/api/equipment-bookings/:id", async (req, res) => {
-  try {
+app.delete("/api/equipment-bookings/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const booking = await storage.getEquipmentBooking(req.params.id);
     if (!booking || booking.tenantId !== tenantId) return res.status(404).json({ error: "Bokning hittades inte" });
     await storage.deleteEquipmentBooking(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte ta bort bokning" });
-  }
-});
+}));
 
-app.post("/api/equipment-bookings/check-collision", async (req, res) => {
-  try {
+app.post("/api/equipment-bookings/check-collision", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { vehicleId, equipmentId, resourceId, teamId, date, serviceArea } = req.body;
     if (!vehicleId && !equipmentId) return res.status(400).json({ error: "Ange fordon eller utrustning" });
@@ -675,25 +510,17 @@ app.post("/api/equipment-bookings/check-collision", async (req, res) => {
       })),
       existingBookings: existingBookings.length,
     });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte kontrollera kollision" });
-  }
-});
+}));
 
 // ============== FUEL LOGS ==============
-app.get("/api/fuel-logs", async (req, res) => {
-  try {
+app.get("/api/fuel-logs", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicleId = req.query.vehicleId as string | undefined;
     const logs = await storage.getFuelLogs(tenantId, vehicleId);
     res.json(logs);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch fuel logs" });
-  }
-});
+}));
 
-app.post("/api/fuel-logs", async (req, res) => {
-  try {
+app.post("/api/fuel-logs", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.body.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
@@ -702,39 +529,23 @@ app.post("/api/fuel-logs", async (req, res) => {
     const data = insertFuelLogSchema.parse({ ...req.body, tenantId });
     const log = await storage.createFuelLog(data);
     res.status(201).json(log);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create fuel log:", error);
-    res.status(500).json({ error: "Failed to create fuel log" });
-  }
-});
+}));
 
-app.delete("/api/fuel-logs/:id", async (req, res) => {
-  try {
+app.delete("/api/fuel-logs/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteFuelLog(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete fuel log" });
-  }
-});
+}));
 
 // ============== MAINTENANCE LOGS ==============
-app.get("/api/maintenance-logs", async (req, res) => {
-  try {
+app.get("/api/maintenance-logs", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicleId = req.query.vehicleId as string | undefined;
     const logs = await storage.getMaintenanceLogs(tenantId, vehicleId);
     res.json(logs);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch maintenance logs" });
-  }
-});
+}));
 
-app.post("/api/maintenance-logs", async (req, res) => {
-  try {
+app.post("/api/maintenance-logs", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.body.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
@@ -743,61 +554,36 @@ app.post("/api/maintenance-logs", async (req, res) => {
     const data = insertMaintenanceLogSchema.parse({ ...req.body, tenantId });
     const log = await storage.createMaintenanceLog(data);
     res.status(201).json(log);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create maintenance log:", error);
-    res.status(500).json({ error: "Failed to create maintenance log" });
-  }
-});
+}));
 
-app.delete("/api/maintenance-logs/:id", async (req, res) => {
-  try {
+app.delete("/api/maintenance-logs/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteMaintenanceLog(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete maintenance log" });
-  }
-});
+}));
 
 // ============== RESOURCE PROFILES (Utföranderoller) ==============
-app.get("/api/resource-profiles", async (req, res) => {
-  try {
+app.get("/api/resource-profiles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const profiles = await storage.getResourceProfiles(tenantId);
     res.json(profiles);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch resource profiles" });
-  }
-});
+}));
 
-app.get("/api/resource-profiles/:id", async (req, res) => {
-  try {
+app.get("/api/resource-profiles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const profile = await storage.getResourceProfile(req.params.id);
     if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
     res.json(profile);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch resource profile" });
-  }
-});
+}));
 
-app.post("/api/resource-profiles", async (req, res) => {
-  try {
+app.post("/api/resource-profiles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertResourceProfileSchema.parse({ ...req.body, tenantId });
     const profile = await storage.createResourceProfile(data);
     res.status(201).json(profile);
-  } catch (error: any) {
-    if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
-    res.status(500).json({ error: "Failed to create resource profile" });
-  }
-});
+}));
 
-app.put("/api/resource-profiles/:id", async (req, res) => {
-  try {
+app.put("/api/resource-profiles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceProfile(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
@@ -805,33 +591,21 @@ app.put("/api/resource-profiles/:id", async (req, res) => {
     const profile = await storage.updateResourceProfile(req.params.id, updateData);
     if (!profile) return res.status(404).json({ error: "Profile not found" });
     res.json(profile);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update resource profile" });
-  }
-});
+}));
 
-app.delete("/api/resource-profiles/:id", async (req, res) => {
-  try {
+app.delete("/api/resource-profiles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteResourceProfile(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete resource profile" });
-  }
-});
+}));
 
-app.get("/api/resource-profiles/:id/resources", async (req, res) => {
-  try {
+app.get("/api/resource-profiles/:id/resources", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignments = await storage.getResourceProfileAssignments(tenantId, req.params.id);
     res.json(assignments);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch profile resources" });
-  }
-});
+}));
 
-app.post("/api/resources/:id/profiles", async (req, res) => {
-  try {
+app.post("/api/resources/:id/profiles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resourceId = req.params.id;
     const { profileId, applyProfile } = req.body;
@@ -856,14 +630,9 @@ app.post("/api/resources/:id/profiles", async (req, res) => {
       }
     }
     res.status(201).json(assignment);
-  } catch (error: any) {
-    if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
-    res.status(500).json({ error: "Failed to assign profile" });
-  }
-});
+}));
 
-app.delete("/api/resources/:id/profiles/:profileId", async (req, res) => {
-  try {
+app.delete("/api/resources/:id/profiles/:profileId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const profile = await storage.getResourceProfile(req.params.profileId);
     if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
@@ -871,14 +640,10 @@ app.delete("/api/resources/:id/profiles/:profileId", async (req, res) => {
     if (!resource || resource.tenantId !== tenantId) return res.status(404).json({ error: "Resource not found" });
     await storage.removeResourceProfileAssignmentByPair(req.params.profileId, req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to remove profile assignment" });
-  }
-});
+}));
 
 // ============== WORK SESSIONS & ENTRIES (Snöret) ==============
-app.get("/api/work-sessions", async (req, res) => {
-  try {
+app.get("/api/work-sessions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId, teamId, startDate, endDate, status } = req.query;
     const options: any = {};
@@ -889,25 +654,16 @@ app.get("/api/work-sessions", async (req, res) => {
     if (status) options.status = status as string;
     const sessions = await storage.getWorkSessions(tenantId, options);
     res.json(sessions);
-  } catch (error) {
-    console.error("Failed to fetch work sessions:", error);
-    res.status(500).json({ error: "Failed to fetch work sessions" });
-  }
-});
+}));
 
-app.get("/api/work-sessions/:id", async (req, res) => {
-  try {
+app.get("/api/work-sessions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const session = await storage.getWorkSession(req.params.id);
     if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
     res.json(session);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch work session" });
-  }
-});
+}));
 
-app.post("/api/work-sessions", async (req, res) => {
-  try {
+app.post("/api/work-sessions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.body.resourceId);
     if (!resource || resource.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltig resurs" });
@@ -921,15 +677,9 @@ app.post("/api/work-sessions", async (req, res) => {
     const data = insertWorkSessionSchema.parse({ ...req.body, tenantId, date: new Date(req.body.date), startTime, endTime });
     const session = await storage.createWorkSession(data);
     res.status(201).json(session);
-  } catch (error: any) {
-    if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
-    console.error("Failed to create work session:", error);
-    res.status(500).json({ error: "Failed to create work session" });
-  }
-});
+}));
 
-app.put("/api/work-sessions/:id", async (req, res) => {
-  try {
+app.put("/api/work-sessions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
@@ -955,74 +705,49 @@ app.put("/api/work-sessions/:id", async (req, res) => {
       }
     }
     res.json(session);
-  } catch (error) {
-    console.error("Failed to update work session:", error);
-    res.status(500).json({ error: "Failed to update work session" });
-  }
-});
+}));
 
-app.delete("/api/work-sessions/:id", async (req, res) => {
-  try {
+app.delete("/api/work-sessions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
     await storage.deleteWorkSession(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete work session" });
-  }
-});
+}));
 
-app.post("/api/work-sessions/:id/check-in", async (req, res) => {
-  try {
+app.post("/api/work-sessions/:id/check-in", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
     const session = await storage.updateWorkSession(req.params.id, { status: "active", startTime: new Date() });
     res.json(session);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to check in" });
-  }
-});
+}));
 
-app.post("/api/work-sessions/:id/check-out", async (req, res) => {
-  try {
+app.post("/api/work-sessions/:id/check-out", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
     const session = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
     const released = await storage.releaseEquipmentByWorkSession(req.params.id);
     res.json({ ...session, releasedBookings: released });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to check out" });
-  }
-});
+}));
 
-app.get("/api/work-sessions/:id/entries", async (req, res) => {
-  try {
+app.get("/api/work-sessions/:id/entries", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const session = await storage.getWorkSession(req.params.id);
     if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
     const entries = await storage.getWorkEntries(req.params.id);
     res.json(entries);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch work entries" });
-  }
-});
+}));
 
-app.get("/api/work-entries/:id", async (req, res) => {
-  try {
+app.get("/api/work-entries/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const entry = await storage.getWorkEntry(req.params.id);
     if (!entry || entry.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
     res.json(entry);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch work entry" });
-  }
-});
+}));
 
-app.post("/api/work-entries", async (req, res) => {
-  try {
+app.post("/api/work-entries", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const session = await storage.getWorkSession(req.body.workSessionId);
     if (!session || session.tenantId !== tenantId) return res.status(400).json({ error: "Ogiltigt arbetspass" });
@@ -1036,15 +761,9 @@ app.post("/api/work-entries", async (req, res) => {
     const data = insertWorkEntrySchema.parse({ ...req.body, tenantId, resourceId: resource.id, startTime, endTime });
     const entry = await storage.createWorkEntry(data);
     res.status(201).json(entry);
-  } catch (error: any) {
-    if (error?.name === "ZodError") return res.status(400).json({ error: error.errors });
-    console.error("Failed to create work entry:", error);
-    res.status(500).json({ error: "Failed to create work entry" });
-  }
-});
+}));
 
-app.put("/api/work-entries/:id", async (req, res) => {
-  try {
+app.put("/api/work-entries/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkEntry(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
@@ -1066,25 +785,17 @@ app.put("/api/work-entries/:id", async (req, res) => {
     if (end && start && new Date(end) <= new Date(start)) return res.status(400).json({ error: "Sluttid måste vara efter starttid" });
     const entry = await storage.updateWorkEntry(req.params.id, updateData);
     res.json(entry);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update work entry" });
-  }
-});
+}));
 
-app.delete("/api/work-entries/:id", async (req, res) => {
-  try {
+app.delete("/api/work-entries/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkEntry(req.params.id);
     if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
     await storage.deleteWorkEntry(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete work entry" });
-  }
-});
+}));
 
-app.get("/api/time-summary", async (req, res) => {
-  try {
+app.get("/api/time-summary", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId, weekNumber, year } = req.query;
     const y = parseInt(year as string) || new Date().getFullYear();
@@ -1202,14 +913,9 @@ app.get("/api/time-summary", async (req, res) => {
       nightRestViolations,
       weeklyRestViolations,
     });
-  } catch (error) {
-    console.error("Failed to generate time summary:", error);
-    res.status(500).json({ error: "Failed to generate time summary" });
-  }
-});
+}));
 
-app.get("/api/payroll-export", async (req, res) => {
-  try {
+app.get("/api/payroll-export", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { weekNumber, year } = req.query;
     const y = parseInt(year as string) || new Date().getFullYear();
@@ -1255,51 +961,31 @@ app.get("/api/payroll-export", async (req, res) => {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename=loneunderlag_v${w}_${y}.csv`);
     res.send("\uFEFF" + rows.join("\n"));
-  } catch (error) {
-    console.error("Failed to generate payroll export:", error);
-    res.status(500).json({ error: "Failed to generate payroll export" });
-  }
-});
+}));
 
 // ============== EQUIPMENT ==============
-app.get("/api/equipment", async (req, res) => {
-  try {
+app.get("/api/equipment", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const equipment = await storage.getEquipment(tenantId);
     res.json(equipment);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch equipment" });
-  }
-});
+}));
 
-app.get("/api/equipment/:id", async (req, res) => {
-  try {
+app.get("/api/equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const equipment = await storage.getEquipmentById(req.params.id);
     const verified = verifyTenantOwnership(equipment, tenantId);
     if (!verified) return res.status(404).json({ error: "Equipment not found" });
     res.json(verified);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch equipment" });
-  }
-});
+}));
 
-app.post("/api/equipment", async (req, res) => {
-  try {
+app.post("/api/equipment", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertEquipmentSchema.parse({ ...req.body, tenantId });
     const equipment = await storage.createEquipment(data);
     res.status(201).json(equipment);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create equipment" });
-  }
-});
+}));
 
-app.patch("/api/equipment/:id", async (req, res) => {
-  try {
+app.patch("/api/equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getEquipmentById(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1309,13 +995,9 @@ app.patch("/api/equipment/:id", async (req, res) => {
     const equipment = await storage.updateEquipment(req.params.id, updateData);
     if (!equipment) return res.status(404).json({ error: "Equipment not found" });
     res.json(equipment);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update equipment" });
-  }
-});
+}));
 
-app.delete("/api/equipment/:id", async (req, res) => {
-  try {
+app.delete("/api/equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getEquipmentById(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1323,14 +1005,10 @@ app.delete("/api/equipment/:id", async (req, res) => {
     }
     await storage.deleteEquipment(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete equipment" });
-  }
-});
+}));
 
 // ============== RESOURCE AVAILABILITY ==============
-app.get("/api/resource-availability/:resourceId", async (req, res) => {
-  try {
+app.get("/api/resource-availability/:resourceId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -1338,13 +1016,9 @@ app.get("/api/resource-availability/:resourceId", async (req, res) => {
     }
     const availability = await storage.getResourceAvailability(req.params.resourceId);
     res.json(availability);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch resource availability" });
-  }
-});
+}));
 
-app.get("/api/resource-availability-item/:id", async (req, res) => {
-  try {
+app.get("/api/resource-availability-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const item = await storage.getResourceAvailabilityById(req.params.id);
     if (!item) return res.status(404).json({ error: "Resource availability not found" });
@@ -1355,13 +1029,9 @@ app.get("/api/resource-availability-item/:id", async (req, res) => {
       return res.status(404).json({ error: "Resource availability not found" });
     }
     res.json(item);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch resource availability" });
-  }
-});
+}));
 
-app.post("/api/resource-availability/:resourceId", async (req, res) => {
-  try {
+app.post("/api/resource-availability/:resourceId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -1374,16 +1044,9 @@ app.post("/api/resource-availability/:resourceId", async (req, res) => {
     });
     const item = await storage.createResourceAvailability(data);
     res.status(201).json(item);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create resource availability" });
-  }
-});
+}));
 
-app.patch("/api/resource-availability-item/:id", async (req, res) => {
-  try {
+app.patch("/api/resource-availability-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceAvailabilityById(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource availability not found" });
@@ -1398,13 +1061,9 @@ app.patch("/api/resource-availability-item/:id", async (req, res) => {
     const item = await storage.updateResourceAvailability(req.params.id, updateData);
     if (!item) return res.status(404).json({ error: "Resource availability not found" });
     res.json(item);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update resource availability" });
-  }
-});
+}));
 
-app.delete("/api/resource-availability-item/:id", async (req, res) => {
-  try {
+app.delete("/api/resource-availability-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceAvailabilityById(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource availability not found" });
@@ -1417,14 +1076,10 @@ app.delete("/api/resource-availability-item/:id", async (req, res) => {
     
     await storage.deleteResourceAvailability(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete resource availability" });
-  }
-});
+}));
 
 // ============== VEHICLE SCHEDULE ==============
-app.get("/api/vehicle-schedule/:vehicleId", async (req, res) => {
-  try {
+app.get("/api/vehicle-schedule/:vehicleId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.params.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
@@ -1432,13 +1087,9 @@ app.get("/api/vehicle-schedule/:vehicleId", async (req, res) => {
     }
     const schedule = await storage.getVehicleSchedule(req.params.vehicleId);
     res.json(schedule);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch vehicle schedule" });
-  }
-});
+}));
 
-app.get("/api/vehicle-schedule-item/:id", async (req, res) => {
-  try {
+app.get("/api/vehicle-schedule-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const item = await storage.getVehicleScheduleById(req.params.id);
     if (!item) return res.status(404).json({ error: "Vehicle schedule not found" });
@@ -1448,13 +1099,9 @@ app.get("/api/vehicle-schedule-item/:id", async (req, res) => {
       return res.status(404).json({ error: "Vehicle schedule not found" });
     }
     res.json(item);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch vehicle schedule" });
-  }
-});
+}));
 
-app.post("/api/vehicle-schedule/:vehicleId", async (req, res) => {
-  try {
+app.post("/api/vehicle-schedule/:vehicleId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.params.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
@@ -1467,16 +1114,9 @@ app.post("/api/vehicle-schedule/:vehicleId", async (req, res) => {
     });
     const item = await storage.createVehicleSchedule(data);
     res.status(201).json(item);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create vehicle schedule" });
-  }
-});
+}));
 
-app.patch("/api/vehicle-schedule-item/:id", async (req, res) => {
-  try {
+app.patch("/api/vehicle-schedule-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicleScheduleById(req.params.id);
     if (!existing) return res.status(404).json({ error: "Vehicle schedule not found" });
@@ -1490,13 +1130,9 @@ app.patch("/api/vehicle-schedule-item/:id", async (req, res) => {
     const item = await storage.updateVehicleSchedule(req.params.id, updateData);
     if (!item) return res.status(404).json({ error: "Vehicle schedule not found" });
     res.json(item);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update vehicle schedule" });
-  }
-});
+}));
 
-app.delete("/api/vehicle-schedule-item/:id", async (req, res) => {
-  try {
+app.delete("/api/vehicle-schedule-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicleScheduleById(req.params.id);
     if (!existing) return res.status(404).json({ error: "Vehicle schedule not found" });
@@ -1508,50 +1144,31 @@ app.delete("/api/vehicle-schedule-item/:id", async (req, res) => {
     
     await storage.deleteVehicleSchedule(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete vehicle schedule" });
-  }
-});
+}));
 
 // ============== SUBSCRIPTIONS ==============
-app.get("/api/subscriptions", async (req, res) => {
-  try {
+app.get("/api/subscriptions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const subscriptions = await storage.getSubscriptions(tenantId);
     res.json(subscriptions);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch subscriptions" });
-  }
-});
+}));
 
-app.get("/api/subscriptions/:id", async (req, res) => {
-  try {
+app.get("/api/subscriptions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const subscription = await storage.getSubscription(req.params.id);
     const verified = verifyTenantOwnership(subscription, tenantId);
     if (!verified) return res.status(404).json({ error: "Subscription not found" });
     res.json(verified);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch subscription" });
-  }
-});
+}));
 
-app.post("/api/subscriptions", async (req, res) => {
-  try {
+app.post("/api/subscriptions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertSubscriptionSchema.parse({ ...req.body, tenantId });
     const subscription = await storage.createSubscription(data);
     res.status(201).json(subscription);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create subscription" });
-  }
-});
+}));
 
-app.patch("/api/subscriptions/:id", async (req, res) => {
-  try {
+app.patch("/api/subscriptions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getSubscription(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1561,13 +1178,9 @@ app.patch("/api/subscriptions/:id", async (req, res) => {
     const subscription = await storage.updateSubscription(req.params.id, updateData);
     if (!subscription) return res.status(404).json({ error: "Subscription not found" });
     res.json(subscription);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update subscription" });
-  }
-});
+}));
 
-app.delete("/api/subscriptions/:id", async (req, res) => {
-  try {
+app.delete("/api/subscriptions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getSubscription(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1575,14 +1188,10 @@ app.delete("/api/subscriptions/:id", async (req, res) => {
     }
     await storage.deleteSubscription(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete subscription" });
-  }
-});
+}));
 
 // Preview scheduled dates based on flexible frequency
-app.post("/api/scheduling/preview-dates", async (req, res) => {
-  try {
+app.post("/api/scheduling/preview-dates", asyncHandler(async (req, res) => {
     const { frequency, startDate, endDate } = req.body;
     
     if (!frequency || !startDate || !endDate) {
@@ -1606,15 +1215,10 @@ app.post("/api/scheduling/preview-dates", async (req, res) => {
         end: end.toISOString(),
       }
     });
-  } catch (error) {
-    console.error("Failed to preview dates:", error);
-    res.status(500).json({ error: "Failed to preview scheduled dates" });
-  }
-});
+}));
 
 // Generate orders from active subscriptions
-app.post("/api/subscriptions/generate-orders", async (req, res) => {
-  try {
+app.post("/api/subscriptions/generate-orders", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const subscriptions = await storage.getSubscriptions(tenantId);
     const now = new Date();
@@ -1701,37 +1305,24 @@ app.post("/api/subscriptions/generate-orders", async (req, res) => {
     }
 
     res.json({ success: true, generatedCount });
-  } catch (error) {
-    console.error("Failed to generate orders:", error);
-    res.status(500).json({ error: "Failed to generate orders from subscriptions" });
-  }
-});
+}));
 
 // ============== TEAMS ==============
-app.get("/api/teams", async (req, res) => {
-  try {
+app.get("/api/teams", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const teams = await storage.getTeams(tenantId);
     res.json(teams);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch teams" });
-  }
-});
+}));
 
-app.get("/api/teams/:id", async (req, res) => {
-  try {
+app.get("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.id);
     const verified = verifyTenantOwnership(team, tenantId);
     if (!verified) return res.status(404).json({ error: "Team not found" });
     res.json(verified);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch team" });
-  }
-});
+}));
 
-app.post("/api/teams", async (req, res) => {
-  try {
+app.post("/api/teams", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (req.body.profileIds && Array.isArray(req.body.profileIds) && req.body.profileIds.length > 0) {
       const tenantProfiles = await storage.getResourceProfiles(tenantId);
@@ -1745,16 +1336,9 @@ app.post("/api/teams", async (req, res) => {
     const data = insertTeamSchema.parse({ ...req.body, tenantId });
     const team = await storage.createTeam(data);
     res.status(201).json(team);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create team" });
-  }
-});
+}));
 
-app.patch("/api/teams/:id", async (req, res) => {
-  try {
+app.patch("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getTeam(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1777,14 +1361,9 @@ app.patch("/api/teams/:id", async (req, res) => {
     const team = await storage.updateTeam(req.params.id, parseResult.data);
     if (!team) return res.status(404).json({ error: "Team not found" });
     res.json(team);
-  } catch (error) {
-    console.error("Failed to update team:", error);
-    res.status(500).json({ error: "Failed to update team" });
-  }
-});
+}));
 
-app.delete("/api/teams/:id", async (req, res) => {
-  try {
+app.delete("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getTeam(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1792,14 +1371,10 @@ app.delete("/api/teams/:id", async (req, res) => {
     }
     await storage.deleteTeam(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete team" });
-  }
-});
+}));
 
 // ============== TEAM MEMBERS ==============
-app.get("/api/team-members/:teamId", async (req, res) => {
-  try {
+app.get("/api/team-members/:teamId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.teamId);
     if (!verifyTenantOwnership(team, tenantId)) {
@@ -1807,23 +1382,15 @@ app.get("/api/team-members/:teamId", async (req, res) => {
     }
     const members = await storage.getTeamMembers(req.params.teamId);
     res.json(members);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch team members" });
-  }
-});
+}));
 
-app.get("/api/team-members", async (req, res) => {
-  try {
+app.get("/api/team-members", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const members = await storage.getAllTeamMembers(tenantId);
     res.json(members);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch team members" });
-  }
-});
+}));
 
-app.get("/api/team-member/:id", async (req, res) => {
-  try {
+app.get("/api/team-member/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const member = await storage.getTeamMember(req.params.id);
     if (!member) return res.status(404).json({ error: "Team member not found" });
@@ -1833,13 +1400,9 @@ app.get("/api/team-member/:id", async (req, res) => {
       return res.status(404).json({ error: "Team member not found" });
     }
     res.json(member);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch team member" });
-  }
-});
+}));
 
-app.post("/api/team-members/:teamId", async (req, res) => {
-  try {
+app.post("/api/team-members/:teamId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.teamId);
     if (!verifyTenantOwnership(team, tenantId)) {
@@ -1848,16 +1411,9 @@ app.post("/api/team-members/:teamId", async (req, res) => {
     const data = insertTeamMemberSchema.parse({ ...req.body, teamId: req.params.teamId });
     const member = await storage.createTeamMember(data);
     res.status(201).json(member);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create team member" });
-  }
-});
+}));
 
-app.patch("/api/team-member/:id", async (req, res) => {
-  try {
+app.patch("/api/team-member/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getTeamMember(req.params.id);
     if (!existing) return res.status(404).json({ error: "Team member not found" });
@@ -1871,13 +1427,9 @@ app.patch("/api/team-member/:id", async (req, res) => {
     const member = await storage.updateTeamMember(req.params.id, updateData);
     if (!member) return res.status(404).json({ error: "Team member not found" });
     res.json(member);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update team member" });
-  }
-});
+}));
 
-app.delete("/api/team-member/:id", async (req, res) => {
-  try {
+app.delete("/api/team-member/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getTeamMember(req.params.id);
     if (!existing) return res.status(404).json({ error: "Team member not found" });
@@ -1889,50 +1441,31 @@ app.delete("/api/team-member/:id", async (req, res) => {
     
     await storage.deleteTeamMember(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete team member" });
-  }
-});
+}));
 
 // ============== PLANNING PARAMETERS ==============
-app.get("/api/planning-parameters", async (req, res) => {
-  try {
+app.get("/api/planning-parameters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const params = await storage.getPlanningParameters(tenantId);
     res.json(params);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch planning parameters" });
-  }
-});
+}));
 
-app.get("/api/planning-parameters/:id", async (req, res) => {
-  try {
+app.get("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const param = await storage.getPlanningParameter(req.params.id);
     const verified = verifyTenantOwnership(param, tenantId);
     if (!verified) return res.status(404).json({ error: "Planning parameter not found" });
     res.json(verified);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch planning parameter" });
-  }
-});
+}));
 
-app.post("/api/planning-parameters", async (req, res) => {
-  try {
+app.post("/api/planning-parameters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertPlanningParameterSchema.parse({ ...req.body, tenantId });
     const param = await storage.createPlanningParameter(data);
     res.status(201).json(param);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create planning parameter" });
-  }
-});
+}));
 
-app.patch("/api/planning-parameters/:id", async (req, res) => {
-  try {
+app.patch("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPlanningParameter(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1946,14 +1479,9 @@ app.patch("/api/planning-parameters/:id", async (req, res) => {
     const param = await storage.updatePlanningParameter(req.params.id, parseResult.data);
     if (!param) return res.status(404).json({ error: "Planning parameter not found" });
     res.json(param);
-  } catch (error) {
-    console.error("Failed to update planning parameter:", error);
-    res.status(500).json({ error: "Failed to update planning parameter" });
-  }
-});
+}));
 
-app.delete("/api/planning-parameters/:id", async (req, res) => {
-  try {
+app.delete("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPlanningParameter(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1961,14 +1489,10 @@ app.delete("/api/planning-parameters/:id", async (req, res) => {
     }
     await storage.deletePlanningParameter(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete planning parameter" });
-  }
-});
+}));
 
 // ============== RESOURCE VEHICLES ==============
-app.get("/api/resources/:resourceId/vehicles", async (req, res) => {
-  try {
+app.get("/api/resources/:resourceId/vehicles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -1976,13 +1500,9 @@ app.get("/api/resources/:resourceId/vehicles", async (req, res) => {
     }
     const resourceVehicles = await storage.getResourceVehicles(req.params.resourceId);
     res.json(resourceVehicles);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch resource vehicles" });
-  }
-});
+}));
 
-app.post("/api/resources/:resourceId/vehicles", async (req, res) => {
-  try {
+app.post("/api/resources/:resourceId/vehicles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -1991,16 +1511,9 @@ app.post("/api/resources/:resourceId/vehicles", async (req, res) => {
     const data = insertResourceVehicleSchema.parse({ ...req.body, resourceId: req.params.resourceId });
     const rv = await storage.createResourceVehicle(data);
     res.status(201).json(rv);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create resource vehicle" });
-  }
-});
+}));
 
-app.patch("/api/resource-vehicles/:id", async (req, res) => {
-  try {
+app.patch("/api/resource-vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceVehicle(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource vehicle not found" });
@@ -2015,13 +1528,9 @@ app.patch("/api/resource-vehicles/:id", async (req, res) => {
     const rv = await storage.updateResourceVehicle(req.params.id, updateData);
     if (!rv) return res.status(404).json({ error: "Resource vehicle not found" });
     res.json(rv);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update resource vehicle" });
-  }
-});
+}));
 
-app.delete("/api/resource-vehicles/:id", async (req, res) => {
-  try {
+app.delete("/api/resource-vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceVehicle(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource vehicle not found" });
@@ -2034,14 +1543,10 @@ app.delete("/api/resource-vehicles/:id", async (req, res) => {
     
     await storage.deleteResourceVehicle(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete resource vehicle" });
-  }
-});
+}));
 
 // ============== RESOURCE EQUIPMENT ==============
-app.get("/api/resources/:resourceId/equipment", async (req, res) => {
-  try {
+app.get("/api/resources/:resourceId/equipment", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -2049,13 +1554,9 @@ app.get("/api/resources/:resourceId/equipment", async (req, res) => {
     }
     const resourceEquipment = await storage.getResourceEquipment(req.params.resourceId);
     res.json(resourceEquipment);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch resource equipment" });
-  }
-});
+}));
 
-app.post("/api/resources/:resourceId/equipment", async (req, res) => {
-  try {
+app.post("/api/resources/:resourceId/equipment", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
@@ -2064,16 +1565,9 @@ app.post("/api/resources/:resourceId/equipment", async (req, res) => {
     const data = insertResourceEquipmentSchema.parse({ ...req.body, resourceId: req.params.resourceId });
     const re = await storage.createResourceEquipment(data);
     res.status(201).json(re);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    res.status(500).json({ error: "Failed to create resource equipment" });
-  }
-});
+}));
 
-app.patch("/api/resource-equipment/:id", async (req, res) => {
-  try {
+app.patch("/api/resource-equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceEquipmentById(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource equipment not found" });
@@ -2088,13 +1582,9 @@ app.patch("/api/resource-equipment/:id", async (req, res) => {
     const re = await storage.updateResourceEquipment(req.params.id, updateData);
     if (!re) return res.status(404).json({ error: "Resource equipment not found" });
     res.json(re);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update resource equipment" });
-  }
-});
+}));
 
-app.delete("/api/resource-equipment/:id", async (req, res) => {
-  try {
+app.delete("/api/resource-equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceEquipmentById(req.params.id);
     if (!existing) return res.status(404).json({ error: "Resource equipment not found" });
@@ -2107,9 +1597,6 @@ app.delete("/api/resource-equipment/:id", async (req, res) => {
     
     await storage.deleteResourceEquipment(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete resource equipment" });
-  }
-});
+}));
 
 }

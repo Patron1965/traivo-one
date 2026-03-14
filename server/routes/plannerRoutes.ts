@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, isMobileAuthenticated } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { workSessions, workEntries, equipmentBookings } from "@shared/schema";
 import { notificationService } from "../notifications";
@@ -14,8 +16,7 @@ export async function registerPlannerRoutes(app: Express) {
 // MOBILE WORK SESSION ENDPOINTS (Snöret)
 // ============================================
 
-app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
@@ -34,27 +35,18 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, async (req: a
       notes: req.body.notes || null,
     });
     res.status(201).json(session);
-  } catch (error) {
-    console.error("Failed to start mobile work session:", error);
-    res.status(500).json({ error: "Kunde inte starta arbetspass" });
-  }
-});
+}));
 
-app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
     if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
     const updated = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
     await storage.releaseEquipmentByWorkSession(req.params.id);
     res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte avsluta arbetspass" });
-  }
-});
+}));
 
-app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
     if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
@@ -69,13 +61,9 @@ app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, async (re
     });
     const updated = await storage.updateWorkSession(req.params.id, { status: "paused" });
     res.json({ session: updated, breakEntry });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte pausa arbetspass" });
-  }
-});
+}));
 
-app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
     if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
@@ -88,25 +76,17 @@ app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, async (r
     }
     const updated = await storage.updateWorkSession(req.params.id, { status: "active" });
     res.json({ session: updated, closedBreakEntry: openBreak?.id || null });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte återuppta arbetspass" });
-  }
-});
+}));
 
-app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
     const sessions = await storage.getWorkSessions(resource.tenantId, { resourceId, status: "active" });
     res.json(sessions[0] || null);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta aktivt arbetspass" });
-  }
-});
+}));
 
-app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
     if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
@@ -129,18 +109,13 @@ app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, async (
       notes: req.body.notes || null,
     });
     res.status(201).json(entry);
-  } catch (error) {
-    console.error("Failed to create mobile work entry:", error);
-    res.status(500).json({ error: "Kunde inte skapa tidspost" });
-  }
-});
+}));
 
 // ============================================
 // PLANNER VIEW API ENDPOINTS (Driver Core)
 // ============================================
 
-app.get("/api/planner/drivers/locations", async (req, res) => {
-  try {
+app.get("/api/planner/drivers/locations", asyncHandler(async (req, res) => {
     const resources = await storage.getActiveResourcePositions();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -161,14 +136,9 @@ app.get("/api/planner/drivers/locations", async (req, res) => {
       }));
 
     res.json(locations);
-  } catch (error) {
-    console.error("Failed to get driver locations:", error);
-    res.status(500).json({ error: "Failed to get driver locations" });
-  }
-});
+}));
 
-app.get("/api/planner/orders", async (req, res) => {
-  try {
+app.get("/api/planner/orders", asyncHandler(async (req, res) => {
     const range = req.query.range as string || "today";
     const tenantId = getTenantIdWithFallback(req);
     const allOrders = await storage.getWorkOrders(tenantId);
@@ -212,11 +182,7 @@ app.get("/api/planner/orders", async (req, res) => {
     );
 
     res.json(enriched);
-  } catch (error) {
-    console.error("Failed to get planner orders:", error);
-    res.status(500).json({ error: "Failed to get planner orders" });
-  }
-});
+}));
 
 // Helper to broadcast planner events via SSE
 function broadcastPlannerEvent(event: { type: string; data: any }) {
@@ -249,8 +215,7 @@ app.get("/api/planner/events", (req, res) => {
   });
 });
 
-app.get("/api/planner/routes", async (req, res) => {
-  try {
+app.get("/api/planner/routes", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const allOrders = await storage.getWorkOrders(tenantId);
     const now = new Date();
@@ -303,14 +268,9 @@ app.get("/api/planner/routes", async (req, res) => {
     }).filter(r => r.waypoints.length >= 2);
 
     res.json(routes);
-  } catch (error) {
-    console.error("Failed to get planner routes:", error);
-    res.status(500).json({ error: "Failed to get planner routes" });
-  }
-});
+}));
 
-app.patch("/api/planner/orders/:id/reassign", async (req, res) => {
-  try {
+app.patch("/api/planner/orders/:id/reassign", asyncHandler(async (req, res) => {
     const orderId = req.params.id;
     const { resourceId } = req.body;
     if (!resourceId) return res.status(400).json({ error: "resourceId krävs" });
@@ -340,11 +300,7 @@ app.patch("/api/planner/orders/:id/reassign", async (req, res) => {
     });
 
     res.json({ success: true, orderId, resourceId, resourceName: resource.name });
-  } catch (error) {
-    console.error("Failed to reassign order:", error);
-    res.status(500).json({ error: "Failed to reassign order" });
-  }
-});
+}));
 
 app.get("/planner/map", (req, res) => {
   const STATUS_COLORS: Record<string, string> = {
@@ -1022,8 +978,7 @@ setInterval(loadRoutes, 60000);
 });
 
 // Get resource position history (breadcrumb trail) for a specific date
-app.get("/api/resources/:id/positions", async (req, res) => {
-  try {
+app.get("/api/resources/:id/positions", asyncHandler(async (req, res) => {
     const resourceId = req.params.id;
     const dateParam = req.query.date as string;
     
@@ -1039,11 +994,7 @@ app.get("/api/resources/:id/positions", async (req, res) => {
     
     const positions = await storage.getResourcePositions(resourceId, startDate, endDate);
     res.json(positions);
-  } catch (error) {
-    console.error("Failed to fetch positions:", error);
-    res.status(500).json({ error: "Failed to fetch positions" });
-  }
-});
+}));
 
 
 }

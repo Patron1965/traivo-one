@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 
@@ -13,8 +15,7 @@ export async function registerOrderConceptRoutes(app: Express) {
 // ORDER CONCEPT WIZARD API
 // ============================================
 
-app.get("/api/order-concepts/:id/wizard", async (req, res) => {
-  try {
+app.get("/api/order-concepts/:id/wizard", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
@@ -40,26 +41,17 @@ app.get("/api/order-concepts/:id/wizard", async (req, res) => {
       schedules,
       filters,
     });
-  } catch (error) {
-    console.error("Failed to get wizard data:", error);
-    res.status(500).json({ error: "Kunde inte hämta wizard-data" });
-  }
-});
+}));
 
-app.get("/api/order-concepts/:id/objects", async (req, res) => {
-  try {
+app.get("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
     const objs = await storage.getOrderConceptObjects(req.params.id);
     res.json(objs);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta objekt" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:id/objects", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
@@ -80,39 +72,26 @@ app.post("/api/order-concepts/:id/objects", async (req, res) => {
     const result = await storage.addOrderConceptObjects(inserts);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalObjects: (await storage.getOrderConceptObjects(req.params.id)).length });
     res.status(201).json(result);
-  } catch (error) {
-    console.error("Failed to add objects:", error);
-    res.status(500).json({ error: "Kunde inte lägga till objekt" });
-  }
-});
+}));
 
-app.delete("/api/order-concepts/:id/objects/:objectId", async (req, res) => {
-  try {
+app.delete("/api/order-concepts/:id/objects/:objectId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
     await storage.removeOrderConceptObject(req.params.id, req.params.objectId);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalObjects: (await storage.getOrderConceptObjects(req.params.id)).length });
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte ta bort objekt" });
-  }
-});
+}));
 
-app.get("/api/order-concepts/:id/articles", async (req, res) => {
-  try {
+app.get("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
     const arts = await storage.getOrderConceptArticles(req.params.id);
     res.json(arts);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta artiklar" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:id/articles", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
@@ -133,14 +112,9 @@ app.post("/api/order-concepts/:id/articles", async (req, res) => {
     const allArticles = await storage.getOrderConceptArticles(req.params.id);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });
     res.status(201).json(result);
-  } catch (error) {
-    console.error("Failed to add article:", error);
-    res.status(500).json({ error: "Kunde inte lägga till artikel" });
-  }
-});
+}));
 
-app.delete("/api/order-concepts/:id/articles/:articleId", async (req, res) => {
-  try {
+app.delete("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
@@ -148,37 +122,25 @@ app.delete("/api/order-concepts/:id/articles/:articleId", async (req, res) => {
     const allArticles = await storage.getOrderConceptArticles(req.params.id);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });
     res.status(204).send();
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte ta bort artikel" });
-  }
-});
+}));
 
-app.get("/api/order-concepts/:id/article-mappings", async (req, res) => {
-  try {
+app.get("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
     const mappings = await storage.getArticleObjectMappings(req.params.id);
     res.json(mappings);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta kopplingar" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:id/article-mappings", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
     const result = await storage.createArticleObjectMapping(req.body);
     res.status(201).json(result);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte skapa koppling" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:id/article-mappings/auto", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
@@ -201,14 +163,9 @@ app.post("/api/order-concepts/:id/article-mappings/auto", async (req, res) => {
     }
 
     res.json({ mappingsCreated });
-  } catch (error) {
-    console.error("Failed to auto-map:", error);
-    res.status(500).json({ error: "Kunde inte skapa automatiska kopplingar" });
-  }
-});
+}));
 
-app.put("/api/order-concepts/:id/invoice-config", async (req, res) => {
-  try {
+app.put("/api/order-concepts/:id/invoice-config", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
@@ -217,13 +174,9 @@ app.put("/api/order-concepts/:id/invoice-config", async (req, res) => {
       ...req.body,
     });
     res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte spara fakturakonfiguration" });
-  }
-});
+}));
 
-app.put("/api/order-concepts/:id/documents", async (req, res) => {
-  try {
+app.put("/api/order-concepts/:id/documents", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
@@ -234,13 +187,9 @@ app.put("/api/order-concepts/:id/documents", async (req, res) => {
     }));
     const result = await storage.upsertDocumentConfigurations(req.params.id, configs);
     res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte spara dokumentkonfiguration" });
-  }
-});
+}));
 
-app.put("/api/order-concepts/:id/delivery", async (req, res) => {
-  try {
+app.put("/api/order-concepts/:id/delivery", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
@@ -261,13 +210,9 @@ app.put("/api/order-concepts/:id/delivery", async (req, res) => {
     const updatedConcept = await storage.getOrderConcept(req.params.id);
     const updatedSchedules = await storage.getDeliverySchedules(req.params.id);
     res.json({ concept: updatedConcept, schedules: updatedSchedules });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte spara leveransmodell" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:id/validate", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
@@ -295,74 +240,48 @@ app.post("/api/order-concepts/:id/validate", async (req, res) => {
     }
 
     res.json({ valid: errors.length === 0, errors, warnings });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte validera orderkoncept" });
-  }
-});
+}));
 
 // ============================================
 // TASK DEPENDENCY TEMPLATES API
 // ============================================
 
-app.get("/api/task-dependency-templates", async (req, res) => {
-  try {
+app.get("/api/task-dependency-templates", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { articleId } = req.query;
     const templates = await storage.getTaskDependencyTemplates(tenantId, articleId as string | undefined);
     res.json(templates);
-  } catch (error) {
-    console.error("Failed to get task dependency templates:", error);
-    res.status(500).json({ error: "Kunde inte hämta beroendemallar" });
-  }
-});
+}));
 
-app.get("/api/task-dependency-templates/:id", async (req, res) => {
-  try {
+app.get("/api/task-dependency-templates/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const template = await storage.getTaskDependencyTemplate(req.params.id);
     if (!template || template.tenantId !== tenantId) {
       return res.status(404).json({ error: "Beroendemall hittades inte" });
     }
     res.json(template);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta beroendemall" });
-  }
-});
+}));
 
-app.post("/api/task-dependency-templates", async (req, res) => {
-  try {
+app.post("/api/task-dependency-templates", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const template = await storage.createTaskDependencyTemplate({ ...req.body, tenantId });
     res.status(201).json(template);
-  } catch (error) {
-    console.error("Failed to create task dependency template:", error);
-    res.status(500).json({ error: "Kunde inte skapa beroendemall" });
-  }
-});
+}));
 
-app.put("/api/task-dependency-templates/:id", async (req, res) => {
-  try {
+app.put("/api/task-dependency-templates/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const updated = await storage.updateTaskDependencyTemplate(req.params.id, tenantId, req.body);
     if (!updated) return res.status(404).json({ error: "Beroendemall hittades inte" });
     res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte uppdatera beroendemall" });
-  }
-});
+}));
 
-app.delete("/api/task-dependency-templates/:id", async (req, res) => {
-  try {
+app.delete("/api/task-dependency-templates/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteTaskDependencyTemplate(req.params.id, tenantId);
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte ta bort beroendemall" });
-  }
-});
+}));
 
-app.post("/api/work-orders/:id/generate-dependent-tasks", async (req, res) => {
-  try {
+app.post("/api/work-orders/:id/generate-dependent-tasks", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
@@ -406,76 +325,50 @@ app.post("/api/work-orders/:id/generate-dependent-tasks", async (req, res) => {
     }
 
     res.json({ created: created.length, tasks: created });
-  } catch (error) {
-    console.error("Failed to generate dependent tasks:", error);
-    res.status(500).json({ error: "Kunde inte generera beroende uppgifter" });
-  }
-});
+}));
 
-app.get("/api/task-dependency-instances", async (req, res) => {
-  try {
+app.get("/api/task-dependency-instances", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { parentWorkOrderId } = req.query;
     const instances = await storage.getTaskDependencyInstances(tenantId, parentWorkOrderId as string | undefined);
     res.json(instances);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta beroendeinstanser" });
-  }
-});
+}));
 
 // ============================================
 // INVOICE RULES API
 // ============================================
 
-app.get("/api/invoice-rules", async (req, res) => {
-  try {
+app.get("/api/invoice-rules", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { orderConceptId } = req.query;
     const rules = await storage.getInvoiceRules(tenantId, orderConceptId as string | undefined);
     res.json(rules);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta faktureringsregler" });
-  }
-});
+}));
 
-app.post("/api/invoice-rules", async (req, res) => {
-  try {
+app.post("/api/invoice-rules", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rule = await storage.createInvoiceRule({ ...req.body, tenantId });
     res.status(201).json(rule);
-  } catch (error) {
-    console.error("Failed to create invoice rule:", error);
-    res.status(500).json({ error: "Kunde inte skapa faktureringsregel" });
-  }
-});
+}));
 
-app.put("/api/invoice-rules/:id", async (req, res) => {
-  try {
+app.put("/api/invoice-rules/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const updated = await storage.updateInvoiceRule(req.params.id, tenantId, req.body);
     if (!updated) return res.status(404).json({ error: "Faktureringsregel hittades inte" });
     res.json(updated);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte uppdatera faktureringsregel" });
-  }
-});
+}));
 
-app.delete("/api/invoice-rules/:id", async (req, res) => {
-  try {
+app.delete("/api/invoice-rules/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteInvoiceRule(req.params.id, tenantId);
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte ta bort faktureringsregel" });
-  }
-});
+}));
 
 // ============================================
 // INVOICE PREVIEW/GENERATION
 // ============================================
 
-app.get("/api/invoice-preview", async (req, res) => {
-  try {
+app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { orderConceptId, customerId, fromDate, toDate } = req.query;
     
@@ -643,29 +536,20 @@ app.get("/api/invoice-preview", async (req, res) => {
     }
     
     res.json(invoicePreviews);
-  } catch (error) {
-    console.error("Failed to generate invoice preview:", error);
-    res.status(500).json({ error: "Kunde inte generera fakturaförhandsgranskning" });
-  }
-});
+}));
 
 // ============================================
 // ORDER CONCEPT RERUN & RUN LOGS API
 // ============================================
 
-app.get("/api/order-concept-run-logs", async (req, res) => {
-  try {
+app.get("/api/order-concept-run-logs", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { orderConceptId } = req.query;
     const logs = await storage.getOrderConceptRunLogs(tenantId, orderConceptId as string | undefined);
     res.json(logs);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta omkörningsloggar" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:id/rerun", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/rerun", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
     const rawConcept = await storage.getOrderConcept(req.params.id);
@@ -789,14 +673,9 @@ app.post("/api/order-concepts/:id/rerun", async (req, res) => {
         details,
       },
     });
-  } catch (error) {
-    console.error("Failed to rerun order concept:", error);
-    res.status(500).json({ error: "Kunde inte köra om orderkonceptet" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:id/validate-min-days", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/validate-min-days", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
@@ -830,17 +709,13 @@ app.post("/api/order-concepts/:id/validate-min-days", async (req, res) => {
     }
 
     res.json({ valid, minDays, conflictingTask });
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte validera min dagar mellan" });
-  }
-});
+}));
 
 // ============================================
 // SCHEDULE API (Week Planning)
 // ============================================
 
-app.get("/api/schedule", async (req, res) => {
-  try {
+app.get("/api/schedule", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { startDate, endDate } = req.query;
 
@@ -945,18 +820,13 @@ app.get("/api/schedule", async (req, res) => {
       unassignedAssignments,
       dateRange: { start: start.toISOString(), end: end.toISOString() }
     });
-  } catch (error) {
-    console.error("Failed to get schedule:", error);
-    res.status(500).json({ error: "Kunde inte hämta schema" });
-  }
-});
+}));
 
 // ============================================
 // ASSIGNMENTS API
 // ============================================
 
-app.get("/api/assignments", async (req, res) => {
-  try {
+app.get("/api/assignments", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { status, resourceId, clusterId, startDate, endDate } = req.query;
     
@@ -968,14 +838,9 @@ app.get("/api/assignments", async (req, res) => {
       endDate: endDate ? new Date(endDate as string) : undefined
     });
     res.json(assignments);
-  } catch (error) {
-    console.error("Failed to get assignments:", error);
-    res.status(500).json({ error: "Kunde inte hämta uppgifter" });
-  }
-});
+}));
 
-app.get("/api/assignments/:id", async (req, res) => {
-  try {
+app.get("/api/assignments/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(assignment, tenantId)) {
@@ -984,14 +849,9 @@ app.get("/api/assignments/:id", async (req, res) => {
     
     const articles = await storage.getAssignmentArticles(assignment!.id);
     res.json({ ...assignment, articles });
-  } catch (error) {
-    console.error("Failed to get assignment:", error);
-    res.status(500).json({ error: "Kunde inte hämta uppgift" });
-  }
-});
+}));
 
-app.post("/api/assignments", async (req, res) => {
-  try {
+app.post("/api/assignments", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
     
@@ -1002,14 +862,9 @@ app.post("/api/assignments", async (req, res) => {
       creationMethod: req.body.creationMethod || "manual"
     });
     res.status(201).json(assignment);
-  } catch (error) {
-    console.error("Failed to create assignment:", error);
-    res.status(500).json({ error: "Kunde inte skapa uppgift" });
-  }
-});
+}));
 
-app.patch("/api/assignments/:id", async (req, res) => {
-  try {
+app.patch("/api/assignments/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1018,14 +873,9 @@ app.patch("/api/assignments/:id", async (req, res) => {
     
     const assignment = await storage.updateAssignment(req.params.id, tenantId, req.body);
     res.json(assignment);
-  } catch (error) {
-    console.error("Failed to update assignment:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera uppgift" });
-  }
-});
+}));
 
-app.delete("/api/assignments/:id", async (req, res) => {
-  try {
+app.delete("/api/assignments/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1034,15 +884,10 @@ app.delete("/api/assignments/:id", async (req, res) => {
     
     await storage.deleteAssignment(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete assignment:", error);
-    res.status(500).json({ error: "Kunde inte radera uppgift" });
-  }
-});
+}));
 
 // Get candidate resources for an assignment
-app.get("/api/assignments/:id/candidates", async (req, res) => {
-  try {
+app.get("/api/assignments/:id/candidates", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(assignment, tenantId)) {
@@ -1132,15 +977,10 @@ app.get("/api/assignments/:id/candidates", async (req, res) => {
     });
 
     res.json(candidates);
-  } catch (error) {
-    console.error("Failed to get candidate resources:", error);
-    res.status(500).json({ error: "Kunde inte hämta kandidatresurser" });
-  }
-});
+}));
 
 // Assign resource to assignment
-app.post("/api/assignments/:id/assign", async (req, res) => {
-  try {
+app.post("/api/assignments/:id/assign", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(assignment, tenantId)) {
@@ -1169,15 +1009,10 @@ app.post("/api/assignments/:id/assign", async (req, res) => {
     });
 
     res.json(updatedAssignment);
-  } catch (error) {
-    console.error("Failed to assign resource:", error);
-    res.status(500).json({ error: "Kunde inte tilldela resurs" });
-  }
-});
+}));
 
 // Assignment Articles
-app.get("/api/assignments/:assignmentId/articles", async (req, res) => {
-  try {
+app.get("/api/assignments/:assignmentId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.assignmentId);
     if (!verifyTenantOwnership(assignment, tenantId)) {
@@ -1186,14 +1021,9 @@ app.get("/api/assignments/:assignmentId/articles", async (req, res) => {
     
     const articles = await storage.getAssignmentArticles(req.params.assignmentId);
     res.json(articles);
-  } catch (error) {
-    console.error("Failed to get assignment articles:", error);
-    res.status(500).json({ error: "Kunde inte hämta artiklar" });
-  }
-});
+}));
 
-app.post("/api/assignments/:assignmentId/articles", async (req, res) => {
-  try {
+app.post("/api/assignments/:assignmentId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.assignmentId);
     if (!verifyTenantOwnership(assignment, tenantId)) {
@@ -1205,14 +1035,9 @@ app.post("/api/assignments/:assignmentId/articles", async (req, res) => {
       assignmentId: req.params.assignmentId
     });
     res.status(201).json(article);
-  } catch (error) {
-    console.error("Failed to create assignment article:", error);
-    res.status(500).json({ error: "Kunde inte lägga till artikel" });
-  }
-});
+}));
 
-app.delete("/api/assignments/:assignmentId/articles/:articleId", async (req, res) => {
-  try {
+app.delete("/api/assignments/:assignmentId/articles/:articleId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.assignmentId);
     if (!verifyTenantOwnership(assignment, tenantId)) {
@@ -1221,18 +1046,13 @@ app.delete("/api/assignments/:assignmentId/articles/:articleId", async (req, res
     
     await storage.deleteAssignmentArticle(req.params.articleId, req.params.assignmentId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete assignment article:", error);
-    res.status(500).json({ error: "Kunde inte radera artikel" });
-  }
-});
+}));
 
 // ============================================
 // CUSTOMER NOTIFICATIONS - E-post notifieringar till kunder
 // ============================================
 
-app.post("/api/notifications/send", async (req, res) => {
-  try {
+app.post("/api/notifications/send", asyncHandler(async (req, res) => {
     const { sendCustomerNotification } = await import("./customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, notificationType, estimatedArrivalMinutes, customMessage } = req.body;
@@ -1263,14 +1083,9 @@ app.post("/api/notifications/send", async (req, res) => {
         ? `Notifiering skickad till ${successCount} mottagare`
         : "Kunde inte skicka notifiering",
     });
-  } catch (error) {
-    console.error("Failed to send notification:", error);
-    res.status(500).json({ error: "Kunde inte skicka notifiering" });
-  }
-});
+}));
 
-app.post("/api/notifications/technician-on-way/:workOrderId", async (req, res) => {
-  try {
+app.post("/api/notifications/technician-on-way/:workOrderId", asyncHandler(async (req, res) => {
     const { notifyTechnicianOnWay } = await import("./customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
@@ -1292,14 +1107,9 @@ app.post("/api/notifications/technician-on-way/:workOrderId", async (req, res) =
         ? `Kunden notifierad om att tekniker är på väg`
         : "Kunde inte skicka notifiering",
     });
-  } catch (error) {
-    console.error("Failed to send technician-on-way notification:", error);
-    res.status(500).json({ error: "Kunde inte skicka notifiering" });
-  }
-});
+}));
 
-app.post("/api/notifications/job-completed/:workOrderId", async (req, res) => {
-  try {
+app.post("/api/notifications/job-completed/:workOrderId", asyncHandler(async (req, res) => {
     const { notifyJobCompleted } = await import("./customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
@@ -1317,14 +1127,9 @@ app.post("/api/notifications/job-completed/:workOrderId", async (req, res) => {
       sent: successCount,
       results,
     });
-  } catch (error) {
-    console.error("Failed to send job-completed notification:", error);
-    res.status(500).json({ error: "Kunde inte skicka notifiering" });
-  }
-});
+}));
 
-app.post("/api/notifications/send-schedule/:resourceId", async (req, res) => {
-  try {
+app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req, res) => {
     const { sendScheduleToResource } = await import("./customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId } = req.params;
@@ -1350,10 +1155,6 @@ app.post("/api/notifications/send-schedule/:resourceId", async (req, res) => {
     );
     
     res.json(result);
-  } catch (error) {
-    console.error("Failed to send schedule to resource:", error);
-    res.status(500).json({ error: "Kunde inte skicka schema till resurs" });
-  }
-});
+}));
 
 }

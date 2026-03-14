@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject } from "@shared/schema";
 import { notificationService } from "../notifications";
@@ -16,8 +18,7 @@ export async function registerMobileRoutes(app: Express) {
 // ========================================
 
 // Mobile login - authenticate with email and PIN
-app.post("/api/mobile/login", async (req, res) => {
-  try {
+app.post("/api/mobile/login", asyncHandler(async (req, res) => {
     const { email, pin, username, password } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -88,41 +89,27 @@ app.post("/api/mobile/login", async (req, res) => {
         executionCodes: resource.executionCodes || [],
       },
     });
-  } catch (error) {
-    console.error("Mobile login failed:", error);
-    res.status(500).json({ error: "Login failed" });
-  }
-});
+}));
 
 // Mobile logout
-app.post("/api/mobile/logout", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/logout", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const authHeader = req.headers.authorization;
     const token = authHeader.substring(7);
     mobileTokens.delete(token);
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: "Logout failed" });
-  }
-});
+}));
 
 // Get current resource info
-app.get("/api/mobile/me", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resource = await storage.getResource(req.mobileResourceId);
     if (!resource) {
       return res.status(404).json({ error: "Resource not found" });
     }
     res.json(resource);
-  } catch (error) {
-    console.error("Failed to get resource:", error);
-    res.status(500).json({ error: "Failed to get resource" });
-  }
-});
+}));
 
 // Get work orders for the logged-in resource
-app.get("/api/mobile/my-orders", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const dateParam = req.query.date as string;
     
@@ -184,15 +171,10 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, async (req: any, res) =>
       },
       unreadNotifications: unreadNotifs,
     });
-  } catch (error) {
-    console.error("Failed to get mobile orders:", error);
-    res.status(500).json({ error: "Failed to get orders" });
-  }
-});
+}));
 
 // Get single work order details
-app.get("/api/mobile/orders/:id", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     
@@ -224,15 +206,10 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, async (req: any, res) =
       customerPhone: customer?.phone,
       customerEmail: customer?.email,
     });
-  } catch (error) {
-    console.error("Failed to get order details:", error);
-    res.status(500).json({ error: "Failed to get order" });
-  }
-});
+}));
 
 // Update work order status from mobile
-app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { status, notes } = req.body;
@@ -301,15 +278,10 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, async (req: an
       type: 'status_changed',
       data: { orderId, orderNumber: updatedOrder.title || `WO-${orderId.substring(0,8)}`, oldStatus: 'unknown', newStatus: status, driverName: '', timestamp: new Date().toISOString() }
     });
-  } catch (error) {
-    console.error("Failed to update order status:", error);
-    res.status(500).json({ error: "Failed to update status" });
-  }
-});
+}));
 
 // Add note to work order
-app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { note } = req.body;
@@ -337,18 +309,13 @@ app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, async (req: any,
     const updatedOrder = await storage.updateWorkOrder(orderId, { notes: updatedNotes });
     
     res.json(updatedOrder);
-  } catch (error) {
-    console.error("Failed to add note:", error);
-    res.status(500).json({ error: "Failed to add note" });
-  }
-});
+}));
 
 // ============================================
 // POSITION TRACKING API ENDPOINTS
 // ============================================
 
-app.post("/api/resources/position", isAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/resources/position", isAuthenticated, asyncHandler(async (req: any, res) => {
     const { resourceId, latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
     
     if (!resourceId) {
@@ -379,15 +346,10 @@ app.post("/api/resources/position", isAuthenticated, async (req: any, res) => {
     });
     
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to update resource position:", error);
-    res.status(500).json({ error: "Failed to update position" });
-  }
-});
+}));
 
 // Update position from mobile app (also handled via WebSocket)
-app.post("/api/mobile/position", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const { latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
     
@@ -409,11 +371,7 @@ app.post("/api/mobile/position", isMobileAuthenticated, async (req: any, res) =>
     });
     
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to update position:", error);
-    res.status(500).json({ error: "Failed to update position" });
-  }
-});
+}));
 
 // ============================================
 // DRIVER CORE FIELD APP API - Extended Endpoints
@@ -528,8 +486,7 @@ async function enrichOrderForMobile(order: any, storage: any) {
   };
 }
 
-app.get("/api/mobile/orders", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/orders", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) return res.status(404).json({ error: "Resource not found" });
@@ -558,14 +515,9 @@ app.get("/api/mobile/orders", isMobileAuthenticated, async (req: any, res) => {
 
     const enriched = await Promise.all(orders.map(o => enrichOrderForMobile(o, storage)));
     res.json(enriched);
-  } catch (error) {
-    console.error("Failed to get mobile orders:", error);
-    res.status(500).json({ error: "Failed to get orders" });
-  }
-});
+}));
 
-app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { id: orderId, stepId } = req.params;
     const resourceId = req.mobileResourceId;
     const { completed } = req.body;
@@ -584,14 +536,9 @@ app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, asyn
 
     await storage.updateWorkOrder(orderId, { metadata });
     res.json({ success: true, stepId, completed });
-  } catch (error) {
-    console.error("Failed to update substep:", error);
-    res.status(500).json({ error: "Failed to update substep" });
-  }
-});
+}));
 
-app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { type, description, latitude, longitude, photos } = req.body;
@@ -632,14 +579,9 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, async (req:
       type: 'deviation_reported',
       data: { orderId, orderNumber: '', deviationType: type, description: description || '', driverName: '', timestamp: new Date().toISOString() }
     });
-  } catch (error) {
-    console.error("Failed to create deviation:", error);
-    res.status(500).json({ error: "Failed to create deviation" });
-  }
-});
+}));
 
-app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { articleId, articleNumber, articleName, quantity } = req.body;
@@ -668,14 +610,9 @@ app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, async (req: 
 
     console.log(`[mobile] Material logged for order ${orderId}: ${articleName || articleNumber} x${quantity}`);
     res.json({ success: true, line });
-  } catch (error) {
-    console.error("Failed to log material:", error);
-    res.status(500).json({ error: "Failed to log material" });
-  }
-});
+}));
 
-app.get("/api/mobile/articles", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/articles", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) return res.status(404).json({ error: "Resource not found" });
@@ -698,14 +635,9 @@ app.get("/api/mobile/articles", isMobileAuthenticated, async (req: any, res) => 
       unit: a.unit || "st",
       category: a.articleType,
     })));
-  } catch (error) {
-    console.error("Failed to search articles:", error);
-    res.status(500).json({ error: "Failed to search articles" });
-  }
-});
+}));
 
-app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { signature } = req.body;
@@ -732,14 +664,9 @@ app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, async (req: 
 
     console.log(`[mobile] Signature captured for order ${orderId} by resource ${resourceId}`);
     res.json({ success: true, protocol });
-  } catch (error) {
-    console.error("Failed to save signature:", error);
-    res.status(500).json({ error: "Failed to save signature" });
-  }
-});
+}));
 
-app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { inspections } = req.body;
@@ -769,14 +696,9 @@ app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, async (req
 
     console.log(`[mobile] ${results.length} inspections saved for order ${orderId}`);
     res.json({ success: true, inspections: results });
-  } catch (error) {
-    console.error("Failed to save inspections:", error);
-    res.status(500).json({ error: "Failed to save inspections" });
-  }
-});
+}));
 
-app.post("/api/mobile/gps", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/gps", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const { latitude, longitude, speed, heading, accuracy, currentOrderId, currentOrderNumber, vehicleRegNo, driverName } = req.body;
 
@@ -796,14 +718,9 @@ app.post("/api/mobile/gps", isMobileAuthenticated, async (req: any, res) => {
     });
 
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to update GPS:", error);
-    res.status(500).json({ error: "Failed to update GPS" });
-  }
-});
+}));
 
-app.get("/api/mobile/summary", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/summary", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) return res.status(404).json({ error: "Resource not found" });
@@ -832,14 +749,9 @@ app.get("/api/mobile/summary", isMobileAuthenticated, async (req: any, res) => {
       remainingOrders: todayOrders.length - completedOrders,
       totalDuration,
     });
-  } catch (error) {
-    console.error("Failed to get summary:", error);
-    res.status(500).json({ error: "Failed to get summary" });
-  }
-});
+}));
 
-app.get("/api/mobile/weather", async (req, res) => {
-  try {
+app.get("/api/mobile/weather", asyncHandler(async (req, res) => {
     const lat = parseFloat(req.query.lat as string) || 57.7089;
     const lon = parseFloat(req.query.lon as string) || 11.9746;
 
@@ -848,14 +760,9 @@ app.get("/api/mobile/weather", async (req, res) => {
     );
     const data = await weatherRes.json();
     res.json(data);
-  } catch (error) {
-    console.error("Failed to fetch weather:", error);
-    res.status(500).json({ error: "Failed to fetch weather" });
-  }
-});
+}));
 
-app.post("/api/mobile/ai/chat", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { message, context } = req.body;
     if (!message) return res.status(400).json({ error: "Message required" });
 
@@ -875,14 +782,9 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, async (req: any, res) => 
     });
 
     res.json({ response: completion.choices[0]?.message?.content || "Inget svar" });
-  } catch (error) {
-    console.error("Failed AI chat:", error);
-    res.status(500).json({ error: "Failed to get AI response" });
-  }
-});
+}));
 
-app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { audio } = req.body;
     if (!audio) return res.status(400).json({ error: "Audio data required" });
 
@@ -899,14 +801,9 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, async (req: any, re
     });
 
     res.json({ text: transcription.text });
-  } catch (error) {
-    console.error("Failed transcription:", error);
-    res.status(500).json({ error: "Failed to transcribe audio" });
-  }
-});
+}));
 
-app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { image, context } = req.body;
     if (!image) return res.status(400).json({ error: "Image data required" });
 
@@ -939,18 +836,13 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, async (req: any,
     } catch {
       res.json({ category: "unknown", description: responseText, severity: "medium" });
     }
-  } catch (error) {
-    console.error("Failed image analysis:", error);
-    res.status(500).json({ error: "Failed to analyze image" });
-  }
-});
+}));
 
 // ============================================
 // OFFLINE SYNC API (Mobile Field App)
 // ============================================
 
-app.post("/api/mobile/sync", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) return res.status(404).json({ error: "Resource not found" });
@@ -1155,14 +1047,9 @@ app.post("/api/mobile/sync", isMobileAuthenticated, async (req: any, res) => {
       failed,
       results,
     });
-  } catch (error) {
-    console.error("Failed to process sync:", error);
-    res.status(500).json({ error: "Failed to process sync" });
-  }
-});
+}));
 
-app.get("/api/mobile/sync/status", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/sync/status", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const status = (req.query.status as string) || undefined;
     const logs = await storage.getOfflineSyncLogs(resourceId, status);
@@ -1189,39 +1076,25 @@ app.get("/api/mobile/sync/status", isMobileAuthenticated, async (req: any, res) 
         processedAt: l.processedAt,
       })),
     });
-  } catch (error) {
-    console.error("Failed to get sync status:", error);
-    res.status(500).json({ error: "Failed to get sync status" });
-  }
-});
+}));
 
 // ============================================
 // CHECKLIST TEMPLATES API
 // ============================================
 
-app.get("/api/checklist-templates", isAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: any, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const templates = await storage.getChecklistTemplates(tenantId);
     res.json(templates);
-  } catch (error) {
-    console.error("Failed to get checklist templates:", error);
-    res.status(500).json({ error: "Failed to get checklist templates" });
-  }
-});
+}));
 
-app.get("/api/checklist-templates/:id", isAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
     const template = await storage.getChecklistTemplate(req.params.id);
     if (!template) return res.status(404).json({ error: "Template not found" });
     res.json(template);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to get template" });
-  }
-});
+}));
 
-app.post("/api/checklist-templates", isAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: any, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { name, articleType, questions, isActive } = req.body;
 
@@ -1239,33 +1112,20 @@ app.post("/api/checklist-templates", isAuthenticated, async (req: any, res) => {
 
     console.log(`[checklist] Template "${name}" created for articleType "${articleType}"`);
     res.json(template);
-  } catch (error) {
-    console.error("Failed to create checklist template:", error);
-    res.status(500).json({ error: "Failed to create template" });
-  }
-});
+}));
 
-app.patch("/api/checklist-templates/:id", isAuthenticated, async (req: any, res) => {
-  try {
+app.patch("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
     const template = await storage.updateChecklistTemplate(req.params.id, req.body);
     if (!template) return res.status(404).json({ error: "Template not found" });
     res.json(template);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to update template" });
-  }
-});
+}));
 
-app.delete("/api/checklist-templates/:id", isAuthenticated, async (req: any, res) => {
-  try {
+app.delete("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
     await storage.deleteChecklistTemplate(req.params.id);
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to delete template" });
-  }
-});
+}));
 
-app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
 
@@ -1309,18 +1169,13 @@ app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, async (req: a
         questions: t.questions,
       })),
     });
-  } catch (error) {
-    console.error("Failed to get checklist for order:", error);
-    res.status(500).json({ error: "Failed to get checklist" });
-  }
-});
+}));
 
 // ============================================
 // DRIVER PUSH NOTIFICATIONS API
 // ============================================
 
-app.get("/api/mobile/notifications", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/notifications", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const unreadOnly = req.query.unread === "true";
     const limit = parseInt(req.query.limit as string) || 50;
@@ -1333,41 +1188,25 @@ app.get("/api/mobile/notifications", isMobileAuthenticated, async (req: any, res
       unreadCount,
       total: notifications.length,
     });
-  } catch (error) {
-    console.error("Failed to get driver notifications:", error);
-    res.status(500).json({ error: "Failed to get notifications" });
-  }
-});
+}));
 
-app.patch("/api/mobile/notifications/:id/read", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.patch("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const notification = await storage.markDriverNotificationRead(req.params.id, resourceId);
     if (!notification) return res.status(404).json({ error: "Notification not found" });
     res.json(notification);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to mark notification as read" });
-  }
-});
+}));
 
-app.patch("/api/mobile/notifications/read-all", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.patch("/api/mobile/notifications/read-all", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const count = await storage.markAllDriverNotificationsRead(resourceId);
     res.json({ success: true, markedRead: count });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to mark all as read" });
-  }
-});
+}));
 
-app.get("/api/mobile/notifications/count", isMobileAuthenticated, async (req: any, res) => {
-  try {
+app.get("/api/mobile/notifications/count", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const unreadCount = await storage.getUnreadNotificationCount(resourceId);
     res.json({ unreadCount });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to get notification count" });
-  }
-});
+}));
 
 }

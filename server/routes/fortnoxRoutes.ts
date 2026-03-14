@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { objects, workOrders, articles } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 
@@ -16,8 +18,7 @@ export async function registerFortnoxRoutes(app: Express) {
 const { createFortnoxClient, exportWorkOrderToFortnox } = await import("../fortnox-client");
 
 // Fortnox OAuth Authorization
-app.get("/api/fortnox/authorize", async (req, res) => {
-  try {
+app.get("/api/fortnox/authorize", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const client = createFortnoxClient(tenantId);
     const redirectUri = `${req.protocol}://${req.get("host")}/api/fortnox/callback`;
@@ -29,15 +30,10 @@ app.get("/api/fortnox/authorize", async (req, res) => {
     }
     
     res.json({ authUrl });
-  } catch (error) {
-    console.error("Failed to generate Fortnox auth URL:", error);
-    res.status(500).json({ error: "Failed to generate authorization URL" });
-  }
-});
+}));
 
 // Fortnox OAuth Callback
-app.get("/api/fortnox/callback", async (req, res) => {
-  try {
+app.get("/api/fortnox/callback", asyncHandler(async (req, res) => {
     const { code, state, error: oauthError } = req.query;
     
     if (oauthError) {
@@ -61,15 +57,10 @@ app.get("/api/fortnox/callback", async (req, res) => {
     await client.exchangeCodeForTokens(code as string, redirectUri);
     
     res.redirect("/fortnox?success=true");
-  } catch (error) {
-    console.error("Fortnox OAuth callback failed:", error);
-    res.redirect(`/fortnox?error=${encodeURIComponent("Token exchange failed")}`);
-  }
-});
+}));
 
 // Fortnox Connection Status
-app.get("/api/fortnox/status", async (req, res) => {
-  try {
+app.get("/api/fortnox/status", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const client = createFortnoxClient(tenantId);
     const isConnected = await client.isConnected();
@@ -80,15 +71,10 @@ app.get("/api/fortnox/status", async (req, res) => {
       hasConfig: !!config?.clientId,
       tokenExpiresAt: config?.tokenExpiresAt,
     });
-  } catch (error) {
-    console.error("Failed to check Fortnox status:", error);
-    res.status(500).json({ error: "Failed to check connection status" });
-  }
-});
+}));
 
 // Process Fortnox Export (send to Fortnox API)
-app.post("/api/fortnox/exports/:id/process", async (req, res) => {
-  try {
+app.post("/api/fortnox/exports/:id/process", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const result = await exportWorkOrderToFortnox(tenantId, req.params.id);
     
@@ -97,26 +83,16 @@ app.post("/api/fortnox/exports/:id/process", async (req, res) => {
     } else {
       res.status(400).json({ success: false, error: result.error });
     }
-  } catch (error) {
-    console.error("Failed to process Fortnox export:", error);
-    res.status(500).json({ error: "Failed to process export" });
-  }
-});
+}));
 
 // Fortnox Config
-app.get("/api/fortnox/config", async (req, res) => {
-  try {
+app.get("/api/fortnox/config", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const config = await storage.getFortnoxConfig(tenantId);
     res.json(config || null);
-  } catch (error) {
-    console.error("Failed to fetch Fortnox config:", error);
-    res.status(500).json({ error: "Failed to fetch Fortnox config" });
-  }
-});
+}));
 
-app.post("/api/fortnox/config", async (req, res) => {
-  try {
+app.post("/api/fortnox/config", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { clientId, clientSecret } = req.body;
     if (!clientId || !clientSecret) {
@@ -140,14 +116,9 @@ app.post("/api/fortnox/config", async (req, res) => {
       isActive: true
     });
     res.status(201).json(config);
-  } catch (error) {
-    console.error("Failed to save Fortnox config:", error);
-    res.status(500).json({ error: "Failed to save Fortnox config" });
-  }
-});
+}));
 
-app.patch("/api/fortnox/config", async (req, res) => {
-  try {
+app.patch("/api/fortnox/config", asyncHandler(async (req, res) => {
     const updateSchema = z.object({
       clientId: z.string().optional(),
       clientSecret: z.string().optional(),
@@ -161,30 +132,17 @@ app.patch("/api/fortnox/config", async (req, res) => {
     const config = await storage.updateFortnoxConfig(tenantId, updateData);
     if (!config) return res.status(404).json({ error: "Config not found" });
     res.json(config);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update Fortnox config:", error);
-    res.status(500).json({ error: "Failed to update Fortnox config" });
-  }
-});
+}));
 
 // Fortnox Mappings
-app.get("/api/fortnox/mappings", async (req, res) => {
-  try {
+app.get("/api/fortnox/mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const entityType = req.query.entityType as string | undefined;
     const mappings = await storage.getFortnoxMappings(tenantId, entityType);
     res.json(mappings);
-  } catch (error) {
-    console.error("Failed to fetch Fortnox mappings:", error);
-    res.status(500).json({ error: "Failed to fetch Fortnox mappings" });
-  }
-});
+}));
 
-app.post("/api/fortnox/mappings", async (req, res) => {
-  try {
+app.post("/api/fortnox/mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { entityType, unicornId, fortnoxId } = req.body;
     if (!entityType || !unicornId || !fortnoxId) {
@@ -204,38 +162,23 @@ app.post("/api/fortnox/mappings", async (req, res) => {
       fortnoxId
     });
     res.status(201).json(mapping);
-  } catch (error) {
-    console.error("Failed to create Fortnox mapping:", error);
-    res.status(500).json({ error: "Failed to create Fortnox mapping" });
-  }
-});
+}));
 
-app.delete("/api/fortnox/mappings/:id", async (req, res) => {
-  try {
+app.delete("/api/fortnox/mappings/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteFortnoxMapping(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete Fortnox mapping:", error);
-    res.status(500).json({ error: "Failed to delete Fortnox mapping" });
-  }
-});
+}));
 
 // Fortnox Invoice Exports
-app.get("/api/fortnox/exports", async (req, res) => {
-  try {
+app.get("/api/fortnox/exports", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const status = req.query.status as string | undefined;
     const exports = await storage.getFortnoxInvoiceExports(tenantId, status);
     res.json(exports);
-  } catch (error) {
-    console.error("Failed to fetch Fortnox exports:", error);
-    res.status(500).json({ error: "Failed to fetch Fortnox exports" });
-  }
-});
+}));
 
-app.post("/api/fortnox/exports", async (req, res) => {
-  try {
+app.post("/api/fortnox/exports", asyncHandler(async (req, res) => {
     const { workOrderId, payerId, costCenter, project } = req.body;
     if (!workOrderId) {
       return res.status(400).json({ error: "Work order ID required" });
@@ -251,14 +194,9 @@ app.post("/api/fortnox/exports", async (req, res) => {
       status: "pending"
     });
     res.status(201).json(invoiceExport);
-  } catch (error) {
-    console.error("Failed to create Fortnox export:", error);
-    res.status(500).json({ error: "Failed to create Fortnox export" });
-  }
-});
+}));
 
-app.patch("/api/fortnox/exports/:id", async (req, res) => {
-  try {
+app.patch("/api/fortnox/exports/:id", asyncHandler(async (req, res) => {
     const updateSchema = z.object({
       status: z.string().optional(),
       fortnoxInvoiceNumber: z.string().nullable().optional(),
@@ -270,35 +208,22 @@ app.patch("/api/fortnox/exports/:id", async (req, res) => {
     const invoiceExport = await storage.updateFortnoxInvoiceExport(req.params.id, tenantId, updateData);
     if (!invoiceExport) return res.status(404).json({ error: "Export not found" });
     res.json(invoiceExport);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update Fortnox export:", error);
-    res.status(500).json({ error: "Failed to update Fortnox export" });
-  }
-});
+}));
 
 // ============================================
 // OBJECT IMAGES - Bildgalleri per objekt
 // ============================================
 
-app.get("/api/objects/:objectId/images", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     const images = await storage.getObjectImages(req.params.objectId);
     res.json(images);
-  } catch (error) {
-    console.error("Failed to fetch object images:", error);
-    res.status(500).json({ error: "Failed to fetch object images" });
-  }
-});
+}));
 
-app.post("/api/objects/:objectId/images", async (req, res) => {
-  try {
+app.post("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -310,35 +235,22 @@ app.post("/api/objects/:objectId/images", async (req, res) => {
     });
     const image = await storage.createObjectImage(data);
     res.status(201).json(image);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create object image:", error);
-    res.status(500).json({ error: "Failed to create object image" });
-  }
-});
+}));
 
-app.delete("/api/objects/:objectId/images/:id", async (req, res) => {
-  try {
+app.delete("/api/objects/:objectId/images/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     await storage.deleteObjectImage(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete object image:", error);
-    res.status(500).json({ error: "Failed to delete object image" });
-  }
-});
+}));
 
 // ============================================
 // OBJECT CONTACTS - Kontakter med arvslogik
 // ============================================
 
-app.get("/api/objects/:objectId/contacts", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -348,14 +260,9 @@ app.get("/api/objects/:objectId/contacts", async (req, res) => {
       ? await storage.getObjectContactsWithInheritance(req.params.objectId, tenantId)
       : await storage.getObjectContacts(req.params.objectId);
     res.json(contacts);
-  } catch (error) {
-    console.error("Failed to fetch object contacts:", error);
-    res.status(500).json({ error: "Failed to fetch object contacts" });
-  }
-});
+}));
 
-app.post("/api/objects/:objectId/contacts", async (req, res) => {
-  try {
+app.post("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -367,17 +274,9 @@ app.post("/api/objects/:objectId/contacts", async (req, res) => {
     });
     const contact = await storage.createObjectContact(data);
     res.status(201).json(contact);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create object contact:", error);
-    res.status(500).json({ error: "Failed to create object contact" });
-  }
-});
+}));
 
-app.patch("/api/objects/:objectId/contacts/:id", async (req, res) => {
-  try {
+app.patch("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
@@ -395,46 +294,28 @@ app.patch("/api/objects/:objectId/contacts/:id", async (req, res) => {
     const contact = await storage.updateObjectContact(req.params.id, req.params.objectId, tenantId, updateData);
     if (!contact) return res.status(404).json({ error: "Contact not found" });
     res.json(contact);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update object contact:", error);
-    res.status(500).json({ error: "Failed to update object contact" });
-  }
-});
+}));
 
-app.delete("/api/objects/:objectId/contacts/:id", async (req, res) => {
-  try {
+app.delete("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     await storage.deleteObjectContact(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete object contact:", error);
-    res.status(500).json({ error: "Failed to delete object contact" });
-  }
-});
+}));
 
 // ============================================
 // TASK TIMEWINDOWS - Flera önskade tidsfönster per uppgift
 // ============================================
 
-app.get("/api/task-timewindows", async (req, res) => {
-  try {
+app.get("/api/task-timewindows", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const timewindows = await storage.getAllTaskTimewindows(tenantId);
     res.json(timewindows);
-  } catch (error) {
-    console.error("Failed to fetch all task timewindows:", error);
-    res.status(500).json({ error: "Failed to fetch task timewindows" });
-  }
-});
+}));
 
-app.get("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
-  try {
+app.get("/api/work-orders/:workOrderId/timewindows", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -442,14 +323,9 @@ app.get("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
     }
     const timewindows = await storage.getTaskTimewindows(req.params.workOrderId);
     res.json(timewindows);
-  } catch (error) {
-    console.error("Failed to fetch task timewindows:", error);
-    res.status(500).json({ error: "Failed to fetch task timewindows" });
-  }
-});
+}));
 
-app.post("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
-  try {
+app.post("/api/work-orders/:workOrderId/timewindows", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -462,17 +338,9 @@ app.post("/api/work-orders/:workOrderId/timewindows", async (req, res) => {
     });
     const timewindow = await storage.createTaskTimewindow(data);
     res.status(201).json(timewindow);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create task timewindow:", error);
-    res.status(500).json({ error: "Failed to create task timewindow" });
-  }
-});
+}));
 
-app.patch("/api/work-orders/:workOrderId/timewindows/:id", async (req, res) => {
-  try {
+app.patch("/api/work-orders/:workOrderId/timewindows/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -489,17 +357,9 @@ app.patch("/api/work-orders/:workOrderId/timewindows/:id", async (req, res) => {
     const timewindow = await storage.updateTaskTimewindow(req.params.id, req.params.workOrderId, tenantId, updateData);
     if (!timewindow) return res.status(404).json({ error: "Timewindow not found" });
     res.json(timewindow);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update task timewindow:", error);
-    res.status(500).json({ error: "Failed to update task timewindow" });
-  }
-});
+}));
 
-app.delete("/api/work-orders/:workOrderId/timewindows/:id", async (req, res) => {
-  try {
+app.delete("/api/work-orders/:workOrderId/timewindows/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -507,17 +367,12 @@ app.delete("/api/work-orders/:workOrderId/timewindows/:id", async (req, res) => 
     }
     await storage.deleteTaskTimewindow(req.params.id, req.params.workOrderId, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete task timewindow:", error);
-    res.status(500).json({ error: "Failed to delete task timewindow" });
-  }
-});
+}));
 
 // ============================================
 // AUTO-PLAN WEEK (Fyll Veckan) - C4
 // ============================================
-app.post("/api/auto-plan-week", async (req, res) => {
-  try {
+app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { weekStartDate, resourceIds, overbookingPercent = 0 } = req.body;
 
@@ -789,14 +644,9 @@ app.post("/api/auto-plan-week", async (req, res) => {
       maxMinutesPerDay: Math.round(maxMinutesPerDay),
       resourceCount: selectedResources.length,
     });
-  } catch (error) {
-    console.error("Auto-plan week error:", error);
-    res.status(500).json({ error: "Failed to auto-plan week" });
-  }
-});
+}));
 
-app.post("/api/auto-plan-week/apply", async (req, res) => {
-  try {
+app.post("/api/auto-plan-week/apply", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { assignments } = req.body;
 
@@ -820,18 +670,13 @@ app.post("/api/auto-plan-week/apply", async (req, res) => {
     }
 
     res.json({ applied: results.length });
-  } catch (error) {
-    console.error("Apply auto-plan error:", error);
-    res.status(500).json({ error: "Failed to apply auto-plan" });
-  }
-});
+}));
 
 // ============================================
 // TASK DEPENDENCIES - Beroendelogik
 // ============================================
 
-app.get("/api/work-orders/:workOrderId/dependencies", async (req, res) => {
-  try {
+app.get("/api/work-orders/:workOrderId/dependencies", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -839,14 +684,9 @@ app.get("/api/work-orders/:workOrderId/dependencies", async (req, res) => {
     }
     const dependencies = await storage.getTaskDependencies(req.params.workOrderId);
     res.json(dependencies);
-  } catch (error) {
-    console.error("Failed to fetch task dependencies:", error);
-    res.status(500).json({ error: "Failed to fetch task dependencies" });
-  }
-});
+}));
 
-app.get("/api/work-orders/:workOrderId/dependents", async (req, res) => {
-  try {
+app.get("/api/work-orders/:workOrderId/dependents", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -854,14 +694,9 @@ app.get("/api/work-orders/:workOrderId/dependents", async (req, res) => {
     }
     const dependents = await storage.getTaskDependents(req.params.workOrderId);
     res.json(dependents);
-  } catch (error) {
-    console.error("Failed to fetch task dependents:", error);
-    res.status(500).json({ error: "Failed to fetch task dependents" });
-  }
-});
+}));
 
-app.post("/api/work-orders/:workOrderId/dependencies", async (req, res) => {
-  try {
+app.post("/api/work-orders/:workOrderId/dependencies", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -874,17 +709,9 @@ app.post("/api/work-orders/:workOrderId/dependencies", async (req, res) => {
     });
     const dependency = await storage.createTaskDependency(data);
     res.status(201).json(dependency);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create task dependency:", error);
-    res.status(500).json({ error: "Failed to create task dependency" });
-  }
-});
+}));
 
-app.delete("/api/work-orders/:workOrderId/dependencies/:id", async (req, res) => {
-  try {
+app.delete("/api/work-orders/:workOrderId/dependencies/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -892,32 +719,22 @@ app.delete("/api/work-orders/:workOrderId/dependencies/:id", async (req, res) =>
     }
     await storage.deleteTaskDependency(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete task dependency:", error);
-    res.status(500).json({ error: "Failed to delete task dependency" });
-  }
-});
+}));
 
-app.post("/api/task-dependencies/batch", async (req, res) => {
-  try {
+app.post("/api/task-dependencies/batch", asyncHandler(async (req, res) => {
     const { workOrderIds } = req.body as { workOrderIds: string[] };
     if (!Array.isArray(workOrderIds)) {
       return res.status(400).json({ error: "workOrderIds must be an array" });
     }
     const result = await storage.getTaskDependenciesBatch(workOrderIds);
     res.json(result);
-  } catch (error) {
-    console.error("Failed to fetch batch dependencies:", error);
-    res.status(500).json({ error: "Failed to fetch batch dependencies" });
-  }
-});
+}));
 
 // ============================================
 // C7: AUTO-CREATE PICKUP TASKS (Beroendeartiklar)
 // ============================================
 
-app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", async (req, res) => {
-  try {
+app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const mainWorkOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!mainWorkOrder || !verifyTenantOwnership(mainWorkOrder, tenantId)) {
@@ -1002,15 +819,10 @@ app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", async (req, res)
       pickupTasks: createdPickups,
       mainWorkOrderId: req.params.workOrderId,
     });
-  } catch (error) {
-    console.error("Generate pickup tasks error:", error);
-    res.status(500).json({ error: "Failed to generate pickup tasks" });
-  }
-});
+}));
 
 // C7: Get full dependency chain for a work order
-app.get("/api/work-orders/:workOrderId/dependency-chain", async (req, res) => {
-  try {
+app.get("/api/work-orders/:workOrderId/dependency-chain", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -1064,18 +876,13 @@ app.get("/api/work-orders/:workOrderId/dependency-chain", async (req, res) => {
       workOrderId: req.params.workOrderId,
       chain,
     });
-  } catch (error) {
-    console.error("Failed to fetch dependency chain:", error);
-    res.status(500).json({ error: "Failed to fetch dependency chain" });
-  }
-});
+}));
 
 // ============================================
 // TASK INFORMATION - Bilagor och info
 // ============================================
 
-app.get("/api/work-orders/:workOrderId/information", async (req, res) => {
-  try {
+app.get("/api/work-orders/:workOrderId/information", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -1083,14 +890,9 @@ app.get("/api/work-orders/:workOrderId/information", async (req, res) => {
     }
     const information = await storage.getTaskInformation(req.params.workOrderId);
     res.json(information);
-  } catch (error) {
-    console.error("Failed to fetch task information:", error);
-    res.status(500).json({ error: "Failed to fetch task information" });
-  }
-});
+}));
 
-app.post("/api/work-orders/:workOrderId/information", async (req, res) => {
-  try {
+app.post("/api/work-orders/:workOrderId/information", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -1103,17 +905,9 @@ app.post("/api/work-orders/:workOrderId/information", async (req, res) => {
     });
     const info = await storage.createTaskInformation(data);
     res.status(201).json(info);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create task information:", error);
-    res.status(500).json({ error: "Failed to create task information" });
-  }
-});
+}));
 
-app.patch("/api/work-orders/:workOrderId/information/:id", async (req, res) => {
-  try {
+app.patch("/api/work-orders/:workOrderId/information/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -1129,17 +923,9 @@ app.patch("/api/work-orders/:workOrderId/information/:id", async (req, res) => {
     const info = await storage.updateTaskInformation(req.params.id, req.params.workOrderId, tenantId, updateData);
     if (!info) return res.status(404).json({ error: "Information not found" });
     res.json(info);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update task information:", error);
-    res.status(500).json({ error: "Failed to update task information" });
-  }
-});
+}));
 
-app.delete("/api/work-orders/:workOrderId/information/:id", async (req, res) => {
-  try {
+app.delete("/api/work-orders/:workOrderId/information/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
@@ -1147,32 +933,22 @@ app.delete("/api/work-orders/:workOrderId/information/:id", async (req, res) => 
     }
     await storage.deleteTaskInformation(req.params.id, req.params.workOrderId, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete task information:", error);
-    res.status(500).json({ error: "Failed to delete task information" });
-  }
-});
+}));
 
 // ============================================
 // OBJECT TIME RESTRICTIONS (C9) - Tidsbegränsningar
 // ============================================
 
-app.get("/api/objects/:objectId/time-restrictions", async (req, res) => {
-  try {
+app.get("/api/objects/:objectId/time-restrictions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
       return res.status(403).json({ error: "Access denied" });
     }
     const restrictions = await storage.getObjectTimeRestrictions(req.params.objectId);
     res.json(restrictions);
-  } catch (error) {
-    console.error("Failed to fetch time restrictions:", error);
-    res.status(500).json({ error: "Failed to fetch time restrictions" });
-  }
-});
+}));
 
-app.get("/api/time-restrictions", async (req, res) => {
-  try {
+app.get("/api/time-restrictions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const objectIds = req.query.objectIds ? (req.query.objectIds as string).split(",") : [];
     let restrictions;
@@ -1182,14 +958,9 @@ app.get("/api/time-restrictions", async (req, res) => {
       restrictions = await storage.getObjectTimeRestrictionsByTenant(tenantId);
     }
     res.json(restrictions);
-  } catch (error) {
-    console.error("Failed to fetch time restrictions:", error);
-    res.status(500).json({ error: "Failed to fetch time restrictions" });
-  }
-});
+}));
 
-app.post("/api/objects/:objectId/time-restrictions", async (req, res) => {
-  try {
+app.post("/api/objects/:objectId/time-restrictions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const restrictionSchema = z.object({
       restrictionType: z.string(),
@@ -1222,14 +993,9 @@ app.post("/api/objects/:objectId/time-restrictions", async (req, res) => {
       isActive: true,
     });
     res.json(restriction);
-  } catch (error) {
-    console.error("Failed to create time restriction:", error);
-    res.status(500).json({ error: "Failed to create time restriction" });
-  }
-});
+}));
 
-app.patch("/api/time-restrictions/:id", async (req, res) => {
-  try {
+app.patch("/api/time-restrictions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const updateSchema = z.object({
       restrictionType: z.string().optional(),
@@ -1247,14 +1013,9 @@ app.patch("/api/time-restrictions/:id", async (req, res) => {
     const restriction = await storage.updateObjectTimeRestriction(req.params.id, tenantId, parsed.data);
     if (!restriction) return res.status(404).json({ error: "Not found" });
     res.json(restriction);
-  } catch (error) {
-    console.error("Failed to update time restriction:", error);
-    res.status(500).json({ error: "Failed to update time restriction" });
-  }
-});
+}));
 
-app.get("/api/slot-preferences/aggregate", async (req, res) => {
-  try {
+app.get("/api/slot-preferences/aggregate", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const objectIds = req.query.objectIds ? (req.query.objectIds as string).split(",") : [];
     if (objectIds.length === 0) return res.json([]);
@@ -1269,26 +1030,16 @@ app.get("/api/slot-preferences/aggregate", async (req, res) => {
       objectName: objectNames.get(r.objectId) || r.objectId,
     }));
     res.json(aggregated);
-  } catch (error) {
-    console.error("Failed to aggregate slot preferences:", error);
-    res.status(500).json({ error: "Failed to aggregate slot preferences" });
-  }
-});
+}));
 
-app.delete("/api/time-restrictions/:id", async (req, res) => {
-  try {
+app.delete("/api/time-restrictions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteObjectTimeRestriction(req.params.id, tenantId);
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to delete time restriction:", error);
-    res.status(500).json({ error: "Failed to delete time restriction" });
-  }
-});
+}));
 
 // C10 - Expand structural article into sub-step work orders
-app.post("/api/work-orders/:id/expand-structural", async (req, res) => {
-  try {
+app.post("/api/work-orders/:id/expand-structural", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder) return res.status(404).json({ error: "Work order not found" });
@@ -1337,15 +1088,10 @@ app.post("/api/work-orders/:id/expand-structural", async (req, res) => {
     }
 
     res.json({ created, parentId: workOrder.id });
-  } catch (error) {
-    console.error("Failed to expand structural article:", error);
-    res.status(500).json({ error: "Failed to expand structural article" });
-  }
-});
+}));
 
 // C10 - Get sub-steps for a work order (structural children)
-app.get("/api/work-orders/:id/sub-steps", async (req, res) => {
-  try {
+app.get("/api/work-orders/:id/sub-steps", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder) return res.status(404).json({ error: "Work order not found" });
@@ -1396,29 +1142,19 @@ app.get("/api/work-orders/:id/sub-steps", async (req, res) => {
         total: subSteps.length || structuralInfo?.totalSteps || 0,
       },
     });
-  } catch (error) {
-    console.error("Failed to fetch sub-steps:", error);
-    res.status(500).json({ error: "Failed to fetch sub-steps" });
-  }
-});
+}));
 
 // ============================================
 // STRUCTURAL ARTICLES - Artiklar med beroendeuppgifter
 // ============================================
 
-app.get("/api/structural-articles", async (req, res) => {
-  try {
+app.get("/api/structural-articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const articles = await storage.getStructuralArticles(tenantId);
     res.json(articles);
-  } catch (error) {
-    console.error("Failed to fetch structural articles:", error);
-    res.status(500).json({ error: "Failed to fetch structural articles" });
-  }
-});
+}));
 
-app.get("/api/articles/:articleId/structural-children", async (req, res) => {
-  try {
+app.get("/api/articles/:articleId/structural-children", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const article = await storage.getArticle(req.params.articleId);
     if (!verifyTenantOwnership(article, tenantId)) {
@@ -1426,14 +1162,9 @@ app.get("/api/articles/:articleId/structural-children", async (req, res) => {
     }
     const children = await storage.getStructuralArticlesByParent(req.params.articleId);
     res.json(children);
-  } catch (error) {
-    console.error("Failed to fetch structural article children:", error);
-    res.status(500).json({ error: "Failed to fetch structural article children" });
-  }
-});
+}));
 
-app.post("/api/structural-articles", async (req, res) => {
-  try {
+app.post("/api/structural-articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertStructuralArticleSchema.parse({
       ...req.body,
@@ -1441,17 +1172,9 @@ app.post("/api/structural-articles", async (req, res) => {
     });
     const article = await storage.createStructuralArticle(data);
     res.status(201).json(article);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create structural article:", error);
-    res.status(500).json({ error: "Failed to create structural article" });
-  }
-});
+}));
 
-app.patch("/api/structural-articles/:id", async (req, res) => {
-  try {
+app.patch("/api/structural-articles/:id", asyncHandler(async (req, res) => {
     const updateSchema = z.object({
       sequenceOrder: z.number().optional(),
       stepName: z.string().nullable().optional(),
@@ -1462,29 +1185,16 @@ app.patch("/api/structural-articles/:id", async (req, res) => {
     const article = await storage.updateStructuralArticle(req.params.id, tenantId, updateData);
     if (!article) return res.status(404).json({ error: "Structural article not found" });
     res.json(article);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to update structural article:", error);
-    res.status(500).json({ error: "Failed to update structural article" });
-  }
-});
+}));
 
-app.delete("/api/structural-articles/:id", async (req, res) => {
-  try {
+app.delete("/api/structural-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     await storage.deleteStructuralArticle(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete structural article:", error);
-    res.status(500).json({ error: "Failed to delete structural article" });
-  }
-});
+}));
 
 // Preview dynamic structural article steps
-app.post("/api/structural-articles/:parentArticleId/preview-tasks", async (req, res) => {
-  try {
+app.post("/api/structural-articles/:parentArticleId/preview-tasks", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { parentArticleId } = req.params;
     const { executionDate, objectMetadata, individualObjects } = req.body;
@@ -1525,14 +1235,9 @@ app.post("/api/structural-articles/:parentArticleId/preview-tasks", async (req, 
       applicableCount: tasks.filter(t => t.isApplicable).length,
       skippedCount: tasks.filter(t => !t.isApplicable).length,
     });
-  } catch (error) {
-    console.error("Failed to preview structural article tasks:", error);
-    res.status(500).json({ error: "Failed to preview structural article tasks" });
-  }
-});
+}));
 
-app.post("/api/work-orders/:workOrderId/expand-structural", async (req, res) => {
-  try {
+app.post("/api/work-orders/:workOrderId/expand-structural", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!workOrder || !verifyTenantOwnership(workOrder, tenantId)) {
@@ -1578,15 +1283,10 @@ app.post("/api/work-orders/:workOrderId/expand-structural", async (req, res) => 
       expanded: [result],
       message: `${result.createdWorkOrders.length} deluppgifter skapades`
     });
-  } catch (error) {
-    console.error("Failed to expand structural articles:", error);
-    res.status(500).json({ error: "Kunde inte expandera strukturartiklar" });
-  }
-});
+}));
 
 // Route Optimization API
-app.post("/api/route/optimize", async (req, res) => {
-  try {
+app.post("/api/route/optimize", asyncHandler(async (req, res) => {
     const { stops } = req.body;
     
     if (!stops || !Array.isArray(stops)) {
@@ -1598,15 +1298,10 @@ app.post("/api/route/optimize", async (req, res) => {
     const result = await optimizeRoute(stops);
     
     res.json(result);
-  } catch (error) {
-    console.error("Failed to optimize route:", error);
-    res.status(500).json({ error: "Kunde inte optimera rutt" });
-  }
-});
+}));
 
 // Generate Google Maps URL for route
-app.post("/api/route/google-maps-url", async (req, res) => {
-  try {
+app.post("/api/route/google-maps-url", asyncHandler(async (req, res) => {
     const { stops } = req.body;
     
     if (!stops || !Array.isArray(stops)) {
@@ -1618,15 +1313,10 @@ app.post("/api/route/google-maps-url", async (req, res) => {
     const url = generateGoogleMapsUrl(stops);
     
     res.json({ url });
-  } catch (error) {
-    console.error("Failed to generate Google Maps URL:", error);
-    res.status(500).json({ error: "Kunde inte generera Google Maps-länk" });
-  }
-});
+}));
 
 // Send route to mobile app via WebSocket
-app.post("/api/route/send-to-mobile", async (req, res) => {
-  try {
+app.post("/api/route/send-to-mobile", asyncHandler(async (req, res) => {
     const { resourceId, stops, date, googleMapsUrl } = req.body;
     
     if (!resourceId || !stops) {
@@ -1649,29 +1339,19 @@ app.post("/api/route/send-to-mobile", async (req, res) => {
       success: true, 
       message: `Rutt skickad till resurs ${resourceId}` 
     });
-  } catch (error) {
-    console.error("Failed to send route to mobile:", error);
-    res.status(500).json({ error: "Kunde inte skicka rutt till mobilapp" });
-  }
-});
+}));
 
 // ============================================
 // ORDER CONCEPTS API
 // ============================================
 
-app.get("/api/order-concepts", async (req, res) => {
-  try {
+app.get("/api/order-concepts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const concepts = await storage.getOrderConcepts(tenantId);
     res.json(concepts);
-  } catch (error) {
-    console.error("Failed to get order concepts:", error);
-    res.status(500).json({ error: "Kunde inte hämta orderkoncept" });
-  }
-});
+}));
 
-app.get("/api/order-concepts/:id", async (req, res) => {
-  try {
+app.get("/api/order-concepts/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const concept = await storage.getOrderConcept(req.params.id);
     const verifiedConcept = verifyTenantOwnership(concept, tenantId);
@@ -1681,14 +1361,9 @@ app.get("/api/order-concepts/:id", async (req, res) => {
     
     const filters = await storage.getConceptFilters(verifiedConcept.id);
     res.json({ ...verifiedConcept, filters });
-  } catch (error) {
-    console.error("Failed to get order concept:", error);
-    res.status(500).json({ error: "Kunde inte hämta orderkoncept" });
-  }
-});
+}));
 
-app.post("/api/order-concepts", async (req, res) => {
-  try {
+app.post("/api/order-concepts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
     
@@ -1702,14 +1377,9 @@ app.post("/api/order-concepts", async (req, res) => {
       createdBy: userId
     });
     res.status(201).json(concept);
-  } catch (error) {
-    console.error("Failed to create order concept:", error);
-    res.status(500).json({ error: "Kunde inte skapa orderkoncept" });
-  }
-});
+}));
 
-app.patch("/api/order-concepts/:id", async (req, res) => {
-  try {
+app.patch("/api/order-concepts/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1722,14 +1392,9 @@ app.patch("/api/order-concepts/:id", async (req, res) => {
     
     const concept = await storage.updateOrderConcept(req.params.id, tenantId, req.body);
     res.json(concept);
-  } catch (error) {
-    console.error("Failed to update order concept:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera orderkoncept" });
-  }
-});
+}));
 
-app.delete("/api/order-concepts/:id", async (req, res) => {
-  try {
+app.delete("/api/order-concepts/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -1738,14 +1403,9 @@ app.delete("/api/order-concepts/:id", async (req, res) => {
     
     await storage.deleteOrderConcept(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete order concept:", error);
-    res.status(500).json({ error: "Kunde inte radera orderkoncept" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/check-customer-metadata", async (req, res) => {
-  try {
+app.post("/api/order-concepts/check-customer-metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectIds } = req.body;
     if (!Array.isArray(objectIds) || objectIds.length === 0) {
@@ -1766,15 +1426,10 @@ app.post("/api/order-concepts/check-customer-metadata", async (req, res) => {
       }
     }
     res.json({ missingCustomer, withCustomer, total: objectsList.length });
-  } catch (error) {
-    console.error("Failed to check customer metadata:", error);
-    res.status(500).json({ error: "Kunde inte kontrollera kundmetadata" });
-  }
-});
+}));
 
 // Concept Filters
-app.get("/api/order-concepts/:conceptId/filters", async (req, res) => {
-  try {
+app.get("/api/order-concepts/:conceptId/filters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const concept = await storage.getOrderConcept(req.params.conceptId);
     if (!verifyTenantOwnership(concept, tenantId)) {
@@ -1783,14 +1438,9 @@ app.get("/api/order-concepts/:conceptId/filters", async (req, res) => {
     
     const filters = await storage.getConceptFilters(req.params.conceptId);
     res.json(filters);
-  } catch (error) {
-    console.error("Failed to get concept filters:", error);
-    res.status(500).json({ error: "Kunde inte hämta filter" });
-  }
-});
+}));
 
-app.post("/api/order-concepts/:conceptId/filters", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:conceptId/filters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const concept = await storage.getOrderConcept(req.params.conceptId);
     if (!verifyTenantOwnership(concept, tenantId)) {
@@ -1802,14 +1452,9 @@ app.post("/api/order-concepts/:conceptId/filters", async (req, res) => {
       orderConceptId: req.params.conceptId
     });
     res.status(201).json(filter);
-  } catch (error) {
-    console.error("Failed to create concept filter:", error);
-    res.status(500).json({ error: "Kunde inte skapa filter" });
-  }
-});
+}));
 
-app.delete("/api/order-concepts/:conceptId/filters/:filterId", async (req, res) => {
-  try {
+app.delete("/api/order-concepts/:conceptId/filters/:filterId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const concept = await storage.getOrderConcept(req.params.conceptId);
     if (!verifyTenantOwnership(concept, tenantId)) {
@@ -1818,15 +1463,10 @@ app.delete("/api/order-concepts/:conceptId/filters/:filterId", async (req, res) 
     
     await storage.deleteConceptFilter(req.params.filterId, req.params.conceptId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete concept filter:", error);
-    res.status(500).json({ error: "Kunde inte radera filter" });
-  }
-});
+}));
 
 // Execute order concept - generates assignments from filters
-app.post("/api/order-concepts/:id/execute", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/execute", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
     const rawConcept = await storage.getOrderConcept(req.params.id);
@@ -1960,15 +1600,10 @@ app.post("/api/order-concepts/:id/execute", async (req, res) => {
       objectsMatched: matchingObjects.length,
       assignments: createdAssignments
     });
-  } catch (error) {
-    console.error("Failed to execute order concept:", error);
-    res.status(500).json({ error: "Kunde inte köra orderkoncept" });
-  }
-});
+}));
 
 // Preview order concept execution (dry run)
-app.post("/api/order-concepts/:id/preview", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/preview", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
@@ -2074,15 +1709,10 @@ app.post("/api/order-concepts/:id/preview", async (req, res) => {
       schedulePreview,
       subscriptionCalc,
     });
-  } catch (error) {
-    console.error("Failed to preview order concept:", error);
-    res.status(500).json({ error: "Kunde inte förhandsgranska orderkoncept" });
-  }
-});
+}));
 
 // Rolling schedule execution - generate assignments for upcoming windows
-app.post("/api/order-concepts/:id/run-rolling", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/run-rolling", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
     const rawConcept = await storage.getOrderConcept(req.params.id);
@@ -2204,15 +1834,10 @@ app.post("/api/order-concepts/:id/run-rolling", async (req, res) => {
       assignmentsCreated: createdAssignments.length,
       objectsMatched: matchingObjects.length,
     });
-  } catch (error) {
-    console.error("Failed to run rolling schedule:", error);
-    res.status(500).json({ error: "Kunde inte köra rullande schema" });
-  }
-});
+}));
 
 // Subscription calculation
-app.get("/api/order-concepts/:id/subscription-calc", async (req, res) => {
-  try {
+app.get("/api/order-concepts/:id/subscription-calc", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
@@ -2268,15 +1893,10 @@ app.get("/api/order-concepts/:id/subscription-calc", async (req, res) => {
       billingFrequency: concept.billingFrequency || "monthly",
       contractLockMonths: concept.contractLockMonths,
     });
-  } catch (error) {
-    console.error("Failed to calc subscription:", error);
-    res.status(500).json({ error: "Kunde inte beräkna abonnemang" });
-  }
-});
+}));
 
 // Subscription changes
-app.get("/api/subscription-changes", async (req, res) => {
-  try {
+app.get("/api/subscription-changes", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { conceptId, status } = req.query;
     const changes = await storage.getSubscriptionChanges(
@@ -2285,14 +1905,9 @@ app.get("/api/subscription-changes", async (req, res) => {
       status as string | undefined
     );
     res.json(changes);
-  } catch (error) {
-    console.error("Failed to get subscription changes:", error);
-    res.status(500).json({ error: "Kunde inte hämta abonnemangsändringar" });
-  }
-});
+}));
 
-app.patch("/api/subscription-changes/:id", async (req, res) => {
-  try {
+app.patch("/api/subscription-changes/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = req.session?.user?.id;
     const { approvalStatus } = req.body;
@@ -2306,15 +1921,10 @@ app.patch("/api/subscription-changes/:id", async (req, res) => {
       return res.status(404).json({ error: "Ändring hittades inte" });
     }
     res.json(change);
-  } catch (error) {
-    console.error("Failed to update subscription change:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera ändring" });
-  }
-});
+}));
 
 // Detect subscription changes
-app.post("/api/order-concepts/:id/detect-changes", async (req, res) => {
-  try {
+app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
@@ -2394,10 +2004,6 @@ app.post("/api/order-concepts/:id/detect-changes", async (req, res) => {
       changesDetected: createdChanges.length,
       changes: createdChanges,
     });
-  } catch (error) {
-    console.error("Failed to detect changes:", error);
-    res.status(500).json({ error: "Kunde inte detektera ändringar" });
-  }
-});
+}));
 
 }

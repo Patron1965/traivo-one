@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject } from "@shared/schema";
 import { getISOWeek } from "./helpers";
@@ -32,8 +34,7 @@ export async function registerAIRoutes(app: Express) {
 //
 // Byt modell genom att ändra "model: gpt-4o-mini" till önskad modell nedan
 // ============================================
-app.post("/api/ai/field-assistant", async (req, res) => {
-  try {
+app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
     const { question, jobContext, conversationHistory = [] } = req.body;
     if (!question || typeof question !== "string") {
       return res.status(400).json({ error: "Fråga krävs" });
@@ -413,11 +414,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       answer: rawAnswer,
       suggestedQuestions: suggestedQuestions.slice(0, 3)
     });
-  } catch (error) {
-    console.error("Field AI error:", error);
-    res.status(500).json({ error: "Något gick fel" });
-  }
-});
+}));
 
 // AI Predictive Maintenance - analyze order history to predict service needs
 const handlePredictiveMaintenance = async (req: any, res: any) => {
@@ -520,11 +517,10 @@ const handlePredictiveMaintenance = async (req: any, res: any) => {
     res.status(500).json({ error: "Kunde inte generera prediktioner" });
   }
 };
-app.get("/api/ai/predictive-maintenance", isAuthenticated, handlePredictiveMaintenance);
-app.post("/api/ai/predictive-maintenance", isAuthenticated, handlePredictiveMaintenance);
+app.get("/api/ai/predictive-maintenance", isAuthenticated, asyncHandler(handlePredictiveMaintenance));
+app.post("/api/ai/predictive-maintenance", isAuthenticated, asyncHandler(handlePredictiveMaintenance));
 
-app.post("/api/ai/service-patterns", isAuthenticated, async (req, res) => {
-  try {
+app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectIds } = req.body as { objectIds?: string[] };
 
@@ -645,16 +641,11 @@ app.post("/api/ai/service-patterns", isAuthenticated, async (req, res) => {
     }
 
     res.json({ summary, patterns, anomalies: anomalies.slice(0, 20) });
-  } catch (error) {
-    console.error("Service pattern analysis error:", error);
-    res.status(500).json({ error: "Kunde inte analysera servicemönster" });
-  }
-});
+}));
 
 // AI Proactive Tips - background anomaly analysis for proactive suggestions
 // OPTIMIZED: Uses efficient SQL COUNT queries instead of fetching all records
-app.get("/api/ai/proactive-tips", isAuthenticated, async (req, res) => {
-  try {
+app.get("/api/ai/proactive-tips", isAuthenticated, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     // Use optimized count queries - much faster than fetching all orders
@@ -690,15 +681,10 @@ app.get("/api/ai/proactive-tips", isAuthenticated, async (req, res) => {
     }
     
     res.json({ tips: tips.slice(0, 3) }); // Return max 3 tips
-  } catch (error) {
-    console.error("Proactive tips error:", error);
-    res.json({ tips: [] });
-  }
-});
+}));
 
 // AI Planning suggestions - now with KPIs
-app.post("/api/ai/planning-suggestions", async (req, res) => {
-  try {
+app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
     const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("./ai-planner");
     const { weekStart, weekEnd } = req.body;
     
@@ -724,14 +710,9 @@ app.post("/api/ai/planning-suggestions", async (req, res) => {
     });
     
     res.json(suggestions);
-  } catch (error) {
-    console.error("AI Planning error:", error);
-    res.status(500).json({ error: "Kunde inte generera planeringsförslag" });
-  }
-});
+}));
 
-app.get("/api/ai/planning-analysis", async (req, res) => {
-  try {
+app.get("/api/ai/planning-analysis", asyncHandler(async (req, res) => {
     const { calculatePlanningKPIs } = await import("./ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     const week = req.query.week as string || "current";
@@ -888,15 +869,10 @@ app.get("/api/ai/planning-analysis", async (req, res) => {
         savingsPercent: 18,
       },
     });
-  } catch (error) {
-    console.error("AI Planning analysis error:", error);
-    res.status(500).json({ error: "Kunde inte generera planeringsanalys" });
-  }
-});
+}));
 
 // AI KPIs endpoint - get planning KPIs for dashboard/analysis
-app.get("/api/ai/kpis", async (req, res) => {
-  try {
+app.get("/api/ai/kpis", asyncHandler(async (req, res) => {
     const { calculatePlanningKPIs } = await import("./ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     
@@ -909,15 +885,10 @@ app.get("/api/ai/kpis", async (req, res) => {
     
     const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
     res.json(kpis);
-  } catch (error) {
-    console.error("AI KPIs error:", error);
-    res.status(500).json({ error: "Kunde inte beräkna nyckeltal" });
-  }
-});
+}));
 
 // AI Explain Anomaly - get AI explanation for a specific anomaly
-app.post("/api/ai/explain-anomaly", async (req, res) => {
-  try {
+app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
     const { explainAnomaly } = await import("./ai-planner");
     const { anomalyType, context } = req.body;
     
@@ -927,15 +898,10 @@ app.post("/api/ai/explain-anomaly", async (req, res) => {
     
     const explanation = await explainAnomaly(anomalyType, context || {});
     res.json(explanation);
-  } catch (error) {
-    console.error("Explain anomaly error:", error);
-    res.status(500).json({ error: "Kunde inte generera förklaring" });
-  }
-});
+}));
 
 // AI Auto-Schedule - automatisk schemaläggning av oschemalagda ordrar
-app.post("/api/ai/auto-schedule", async (req, res) => {
-  try {
+app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
     const { aiEnhancedSchedule } = await import("./ai-planner");
     const { weekStart, weekEnd } = req.body;
     
@@ -964,15 +930,10 @@ app.post("/api/ai/auto-schedule", async (req, res) => {
     });
     
     res.json(result);
-  } catch (error) {
-    console.error("AI Auto-Schedule error:", error);
-    res.status(500).json({ error: "Kunde inte generera automatisk schemaläggning" });
-  }
-});
+}));
 
 // Route optimization per day
-app.post("/api/ai/optimize-routes", async (req, res) => {
-  try {
+app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
     const { optimizeDayRoutes } = await import("./route-optimizer");
     const { date } = req.body;
     
@@ -989,15 +950,10 @@ app.post("/api/ai/optimize-routes", async (req, res) => {
     
     const result = await optimizeDayRoutes(date, workOrders, resources, objects);
     res.json(result);
-  } catch (error) {
-    console.error("Route optimization error:", error);
-    res.status(500).json({ error: "Kunde inte optimera rutter" });
-  }
-});
+}));
 
 // VRP-based route optimization using Geoapify Route Planner
-app.post("/api/ai/optimize-vrp", async (req, res) => {
-  try {
+app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     const { optimizeRoutesVRP } = await import("./route-optimizer");
     const { date, clusterId } = req.body;
     
@@ -1033,15 +989,10 @@ app.post("/api/ai/optimize-vrp", async (req, res) => {
     
     const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters);
     res.json(result);
-  } catch (error) {
-    console.error("VRP optimization error:", error);
-    res.status(500).json({ error: "Kunde inte optimera rutter med VRP" });
-  }
-});
+}));
 
 // AI Route Recommendations - weather and history based suggestions
-app.get("/api/ai/route-recommendations", async (req, res) => {
-  try {
+app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
     const { fetchWeatherForecast } = await import("./weather-service");
     const tenantId = getTenantIdWithFallback(req);
     const date = req.query.date as string || new Date().toISOString().split("T")[0];
@@ -1183,15 +1134,10 @@ app.get("/api/ai/route-recommendations", async (req, res) => {
         ? `${recommendations.filter(r => r.priority === "high").length} höga, ${recommendations.filter(r => r.priority === "medium").length} medel prioriterade förslag`
         : "Inga särskilda rekommendationer för idag",
     });
-  } catch (error) {
-    console.error("Route recommendations error:", error);
-    res.status(500).json({ error: "Kunde inte hämta rekommendationer" });
-  }
-});
+}));
 
 // Apply VRP optimization - update order sequence
-app.post("/api/ai/optimize-vrp/apply", async (req, res) => {
-  try {
+app.post("/api/ai/optimize-vrp/apply", asyncHandler(async (req, res) => {
     const { routes } = req.body as { 
       routes: Array<{
         resourceId: string;
@@ -1230,15 +1176,10 @@ app.post("/api/ai/optimize-vrp/apply", async (req, res) => {
       message: `${successCount} ordrar uppdaterade med optimerad sekvens`,
       results 
     });
-  } catch (error) {
-    console.error("Apply VRP optimization error:", error);
-    res.status(500).json({ error: "Kunde inte tillämpa VRP-optimering" });
-  }
-});
+}));
 
 // Apply auto-schedule assignments
-app.post("/api/ai/auto-schedule/apply", async (req, res) => {
-  try {
+app.post("/api/ai/auto-schedule/apply", asyncHandler(async (req, res) => {
     const { assignments } = req.body as { assignments: Array<{
       workOrderId: string;
       resourceId: string;
@@ -1269,15 +1210,10 @@ app.post("/api/ai/auto-schedule/apply", async (req, res) => {
       total: assignments.length,
       results 
     });
-  } catch (error) {
-    console.error("Apply auto-schedule error:", error);
-    res.status(500).json({ error: "Kunde inte tillämpa schemaläggning" });
-  }
-});
+}));
 
 // Workload analysis - detect imbalances
-app.post("/api/ai/workload-analysis", async (req, res) => {
-  try {
+app.post("/api/ai/workload-analysis", asyncHandler(async (req, res) => {
     const { analyzeWorkloadImbalances } = await import("./ai-planner");
     const { weekStart, weekEnd } = req.body;
     
@@ -1297,14 +1233,9 @@ app.post("/api/ai/workload-analysis", async (req, res) => {
     });
     
     res.json(analysis);
-  } catch (error) {
-    console.error("Workload analysis error:", error);
-    res.status(500).json({ error: "Kunde inte analysera arbetsbelastning" });
-  }
-});
+}));
 
-app.post("/api/ai/planner-chat", async (req, res) => {
-  try {
+app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
     const { processConversationalPlannerQueryV2 } = await import("./ai-planner");
     const { query, weekStart, weekEnd, conversationHistory } = req.body;
     
@@ -1331,18 +1262,10 @@ app.post("/api/ai/planner-chat", async (req, res) => {
     }, conversationHistory || []);
     
     res.json(response);
-  } catch (error) {
-    console.error("Conversational planner error:", error);
-    res.status(500).json({ 
-      message: "Ett fel uppstod vid bearbetning av din fråga.",
-      followUpQuestions: ["Visa alla ordrar", "Vilka resurser finns?"]
-    });
-  }
-});
+}));
 
 // Execute conversational planner action (reschedule, etc.)
-app.post("/api/ai/planner-chat/execute", async (req, res) => {
-  try {
+app.post("/api/ai/planner-chat/execute", asyncHandler(async (req, res) => {
     const { action, params, workOrderIds, toResourceId, toDate } = req.body;
     
     if (!action || typeof action !== "string") {
@@ -1399,15 +1322,10 @@ app.post("/api/ai/planner-chat/execute", async (req, res) => {
     }
     
     res.status(400).json({ success: false, message: "Ogiltig åtgärd eller saknade parametrar." });
-  } catch (error) {
-    console.error("Planner action error:", error);
-    res.status(500).json({ success: false, message: "Kunde inte utföra åtgärden." });
-  }
-});
+}));
 
 // AI Setup Time Insights
-app.get("/api/ai/setup-insights", async (req, res) => {
-  try {
+app.get("/api/ai/setup-insights", asyncHandler(async (req, res) => {
     const { analyzeSetupTimeLogs } = await import("./ai-planner");
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1419,15 +1337,10 @@ app.get("/api/ai/setup-insights", async (req, res) => {
     
     const analysis = analyzeSetupTimeLogs(logs, objects, clusters);
     res.json(analysis);
-  } catch (error) {
-    console.error("Setup time insights error:", error);
-    res.status(500).json({ error: "Kunde inte analysera ställtider" });
-  }
-});
+}));
 
 // Apply recommended setup time updates
-app.post("/api/ai/apply-setup-updates", async (req, res) => {
-  try {
+app.post("/api/ai/apply-setup-updates", asyncHandler(async (req, res) => {
     const { updates } = req.body;
     if (!Array.isArray(updates) || updates.length === 0) {
       return res.status(400).json({ error: "Updates måste vara en icke-tom array" });
@@ -1464,15 +1377,10 @@ app.post("/api/ai/apply-setup-updates", async (req, res) => {
       message: `Uppdaterade ${successCount} av ${validUpdates.length} objekt.`,
       results 
     });
-  } catch (error) {
-    console.error("Apply setup updates error:", error);
-    res.status(500).json({ error: "Kunde inte tillämpa uppdateringar" });
-  }
-});
+}));
 
 // AI Predictive Planning
-app.get("/api/ai/predictive-planning", async (req, res) => {
-  try {
+app.get("/api/ai/predictive-planning", asyncHandler(async (req, res) => {
     const weeksAhead = parseInt(req.query.weeksAhead as string) || 4;
     
     const { generatePredictivePlanning } = await import("./ai-planner");
@@ -1491,15 +1399,10 @@ app.get("/api/ai/predictive-planning", async (req, res) => {
     );
     
     res.json(result);
-  } catch (error) {
-    console.error("Predictive planning error:", error);
-    res.status(500).json({ error: "Kunde inte generera prognoser" });
-  }
-});
+}));
 
 // Simple weather for today (mobile app)
-app.get("/api/weather/today", async (_req, res) => {
-  try {
+app.get("/api/weather/today", asyncHandler(async (_req, res) => {
     const { fetchWeatherForecast } = await import("./weather-service");
     const result = await fetchWeatherForecast(63.826, 20.263, 1);
     
@@ -1519,20 +1422,10 @@ app.get("/api/weather/today", async (_req, res) => {
         precipitation: 0,
       });
     }
-  } catch (error) {
-    console.error("Today weather error:", error);
-    res.json({
-      temperature: 5,
-      description: "Okänt",
-      windSpeed: 8,
-      precipitation: 0,
-    });
-  }
-});
+}));
 
 // Weather forecast for capacity planning
-app.get("/api/weather/forecast", async (req, res) => {
-  try {
+app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
     const latitude = parseFloat(req.query.latitude as string) || 59.3293;
     const longitude = parseFloat(req.query.longitude as string) || 18.0686;
     const days = parseInt(req.query.days as string) || 7;
@@ -1541,15 +1434,10 @@ app.get("/api/weather/forecast", async (req, res) => {
     const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
     
     res.json(result);
-  } catch (error) {
-    console.error("Weather forecast error:", error);
-    res.status(500).json({ error: "Kunde inte hämta väderprognos" });
-  }
-});
+}));
 
 // Weather impact for specific cluster
-app.get("/api/weather/cluster/:clusterId", async (req, res) => {
-  try {
+app.get("/api/weather/cluster/:clusterId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.clusterId);
     if (!cluster || !verifyTenantOwnership(cluster, tenantId)) {
@@ -1567,15 +1455,10 @@ app.get("/api/weather/cluster/:clusterId", async (req, res) => {
       ...result,
       location: { ...result.location, name: cluster.name }
     });
-  } catch (error) {
-    console.error("Cluster weather error:", error);
-    res.status(500).json({ error: "Kunde inte hämta väderprognos för kluster" });
-  }
-});
+}));
 
 // Multi-strategi klustergenerering
-app.post("/api/clusters/auto-generate", async (req, res) => {
-  try {
+app.post("/api/clusters/auto-generate", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { strategy, config } = req.body;
     
@@ -1879,14 +1762,9 @@ app.post("/api/clusters/auto-generate", async (req, res) => {
         coverage: allObjects.length > 0 ? Math.round((totalCoveredObjects / allObjects.length) * 100) : 0
       }
     });
-  } catch (error) {
-    console.error("Multi-strategy auto-cluster error:", error);
-    res.status(500).json({ error: "Kunde inte generera klusterförslag" });
-  }
-});
+}));
 
-app.post("/api/clusters/auto-assign-unclustered", async (req, res) => {
-  try {
+app.post("/api/clusters/auto-assign-unclustered", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { unclusteredObjectIds, suggestions } = req.body as {
       unclusteredObjectIds: string[];
@@ -1980,14 +1858,9 @@ app.post("/api/clusters/auto-assign-unclustered", async (req, res) => {
       totalAssigned: unclusteredObjectIds.length - remaining.length,
       totalUnclustered: unclusteredObjectIds.length
     });
-  } catch (error) {
-    console.error("Auto-assign unclustered error:", error);
-    res.status(500).json({ error: "Kunde inte auto-tilldela objekt" });
-  }
-});
+}));
 
-app.post("/api/objects/export-unclustered", async (req, res) => {
-  try {
+app.post("/api/objects/export-unclustered", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectIds } = req.body as { objectIds: string[] };
     if (!Array.isArray(objectIds) || objectIds.length === 0) {
@@ -2012,14 +1885,9 @@ app.post("/api/objects/export-unclustered", async (req, res) => {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", "attachment; filename=oklustrade-objekt.csv");
     res.send(csv);
-  } catch (error) {
-    console.error("Export unclustered error:", error);
-    res.status(500).json({ error: "Kunde inte exportera" });
-  }
-});
+}));
 
-app.post("/api/objects/import-corrections", async (req, res) => {
-  try {
+app.post("/api/objects/import-corrections", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { corrections } = req.body as {
       corrections: { id: string; postalCode?: string; city?: string; latitude?: number | null; longitude?: number | null }[];
@@ -2060,14 +1928,9 @@ app.post("/api/objects/import-corrections", async (req, res) => {
     }
 
     res.json({ updated, errors, total: corrections.length });
-  } catch (error) {
-    console.error("Import corrections error:", error);
-    res.status(500).json({ error: "Kunde inte importera korrigeringar" });
-  }
-});
+}));
 
-app.post("/api/clusters/auto-generate/recalculate", async (req, res) => {
-  try {
+app.post("/api/clusters/auto-generate/recalculate", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { centerLatitude, centerLongitude, radiusKm, currentObjectIds } = req.body;
     
@@ -2097,15 +1960,10 @@ app.post("/api/clusters/auto-generate/recalculate", async (req, res) => {
     }
     
     res.json({ objectIds, objectCount: objectIds.length });
-  } catch (error) {
-    console.error("Recalculate cluster error:", error);
-    res.status(500).json({ error: "Kunde inte beräkna om kluster" });
-  }
-});
+}));
 
 // Applicera kluster från multi-strategi förslag
-app.post("/api/clusters/auto-generate/apply", async (req, res) => {
-  try {
+app.post("/api/clusters/auto-generate/apply", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { suggestions } = req.body;
     
@@ -2192,11 +2050,7 @@ app.post("/api/clusters/auto-generate/apply", async (req, res) => {
       totalWorkOrdersLinked,
       errors: errors.length > 0 ? errors : undefined
     });
-  } catch (error) {
-    console.error("Apply multi-strategy cluster error:", error);
-    res.status(500).json({ error: "Kunde inte skapa kluster" });
-  }
-});
+}));
 
 // AI Auto-Clustering - Föreslå optimala klustergränser
 const handleAutoCluster = async (req: any, res: any) => {
@@ -2223,12 +2077,11 @@ const handleAutoCluster = async (req: any, res: any) => {
     res.status(500).json({ error: "Kunde inte generera klusterförslag" });
   }
 };
-app.get("/api/ai/auto-cluster", handleAutoCluster);
-app.post("/api/ai/auto-cluster", handleAutoCluster);
+app.get("/api/ai/auto-cluster", asyncHandler(handleAutoCluster));
+app.post("/api/ai/auto-cluster", asyncHandler(handleAutoCluster));
 
 // Skapa kluster från AI-förslag
-app.post("/api/ai/auto-cluster/apply", async (req, res) => {
-  try {
+app.post("/api/ai/auto-cluster/apply", asyncHandler(async (req, res) => {
     const { suggestions } = req.body;
     
     if (!suggestions || !Array.isArray(suggestions) || suggestions.length === 0) {
@@ -2329,15 +2182,10 @@ app.post("/api/ai/auto-cluster/apply", async (req, res) => {
       clusters: createdClusters,
       errors: errors.length > 0 ? errors : undefined
     });
-  } catch (error) {
-    console.error("Apply auto-cluster error:", error);
-    res.status(500).json({ error: "Kunde inte skapa kluster" });
-  }
-});
+}));
 
 // Delete all data (for re-import)
-app.get("/api/import/batches", async (req, res) => {
-  try {
+app.get("/api/import/batches", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const allObjects = await storage.getObjects(tenantId);
@@ -2378,14 +2226,9 @@ app.get("/api/import/batches", async (req, res) => {
     );
     
     res.json(batches);
-  } catch (error) {
-    console.error("Failed to list import batches:", error);
-    res.status(500).json({ error: "Kunde inte lista import-batchar" });
-  }
-});
+}));
 
-app.delete("/api/import/batch/:batchId", async (req, res) => {
-  try {
+app.delete("/api/import/batch/:batchId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { batchId } = req.params;
     
@@ -2427,14 +2270,9 @@ app.delete("/api/import/batch/:batchId", async (req, res) => {
       deleted: { objects: deletedObjects, workOrders: deletedWorkOrders, customers: deletedCustomers, workOrderLines: deletedWorkOrderLines },
       batchId 
     });
-  } catch (error) {
-    console.error("Failed to undo import batch:", error);
-    res.status(500).json({ error: "Kunde inte ångra import" });
-  }
-});
+}));
 
-app.delete("/api/import/clear/:type", async (req, res) => {
-  try {
+app.delete("/api/import/clear/:type", asyncHandler(async (req, res) => {
     const { type } = req.params;
     const tenantId = getTenantIdWithFallback(req);
     
@@ -2465,16 +2303,11 @@ app.delete("/api/import/clear/:type", async (req, res) => {
     } else {
       res.status(400).json({ error: "Okänd typ" });
     }
-  } catch (error) {
-    console.error("Clear error:", error);
-    res.status(500).json({ error: "Kunde inte rensa data" });
-  }
-});
+}));
 
 // Notification token endpoint - generates auth token for WebSocket connection
 // Requires authentication and validates resource ownership
-app.post("/api/notifications/token", isAuthenticated, async (req: any, res) => {
-  try {
+app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: any, res) => {
     const { resourceId } = req.body;
     
     if (!resourceId) {
@@ -2506,10 +2339,6 @@ app.post("/api/notifications/token", isAuthenticated, async (req: any, res) => {
       expiresIn: 300, // 5 minutes
       resourceId 
     });
-  } catch (error) {
-    console.error("Failed to generate notification token:", error);
-    res.status(500).json({ error: "Failed to generate token" });
-  }
-});
+}));
 
 }

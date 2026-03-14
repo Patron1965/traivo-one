@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
 import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema } from "@shared/schema";
 import { notificationService } from "../notifications";
@@ -64,18 +66,12 @@ async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Pro
   return session as PortalSession;
 }
 
-app.get("/api/portal/tenants", async (req, res) => {
-  try {
+app.get("/api/portal/tenants", asyncHandler(async (req, res) => {
     const tenants = await storage.getPublicTenants();
     res.json(tenants.map(t => ({ id: t.id, name: t.name })));
-  } catch (error) {
-    console.error("Failed to get tenants:", error);
-    res.status(500).json({ error: "Kunde inte hämta företag" });
-  }
-});
+}));
 
-app.post("/api/portal/auth/request-link", async (req, res) => {
-  try {
+app.post("/api/portal/auth/request-link", asyncHandler(async (req, res) => {
     const { email } = req.body;
     let { tenantId } = req.body;
     
@@ -135,14 +131,9 @@ app.post("/api/portal/auth/request-link", async (req, res) => {
       message: "Inloggningslänk skickad till din e-post",
       emailSent,
     });
-  } catch (error) {
-    console.error("Failed to request magic link:", error);
-    res.status(500).json({ error: "Kunde inte skicka inloggningslänk" });
-  }
-});
+}));
 
-app.post("/api/portal/auth/verify", async (req, res) => {
-  try {
+app.post("/api/portal/auth/verify", asyncHandler(async (req, res) => {
     const { token } = req.body;
     
     if (!token) {
@@ -170,14 +161,9 @@ app.post("/api/portal/auth/verify", async (req, res) => {
         name: result.session?.tenant?.name,
       },
     });
-  } catch (error) {
-    console.error("Failed to verify magic link:", error);
-    res.status(500).json({ error: "Kunde inte verifiera inloggning" });
-  }
-});
+}));
 
-app.get("/api/portal/me", async (req, res) => {
-  try {
+app.get("/api/portal/me", asyncHandler(async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader?.startsWith("Bearer ")) {
       return res.status(401).json({ error: "Autentisering krävs" });
@@ -205,14 +191,9 @@ app.get("/api/portal/me", async (req, res) => {
         name: tenant?.name,
       },
     });
-  } catch (error) {
-    console.error("Failed to get portal user:", error);
-    res.status(500).json({ error: "Kunde inte hämta användarinfo" });
-  }
-});
+}));
 
-app.get("/api/portal/orders", async (req, res) => {
-  try {
+app.get("/api/portal/orders", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -257,14 +238,9 @@ app.get("/api/portal/orders", async (req, res) => {
       .slice(0, 20);
 
     res.json({ upcoming, history });
-  } catch (error) {
-    console.error("Failed to get portal orders:", error);
-    res.status(500).json({ error: "Kunde inte hämta ordrar" });
-  }
-});
+}));
 
-app.get("/api/portal/objects", async (req, res) => {
-  try {
+app.get("/api/portal/objects", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -277,15 +253,10 @@ app.get("/api/portal/objects", async (req, res) => {
       city: o.city,
       objectType: o.objectType,
     })));
-  } catch (error) {
-    console.error("Failed to get portal objects:", error);
-    res.status(500).json({ error: "Kunde inte hämta objekt" });
-  }
-});
+}));
 
 // Portal cluster/objects hierarchy overview
-app.get("/api/portal/clusters", async (req, res) => {
-  try {
+app.get("/api/portal/clusters", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -391,11 +362,7 @@ app.get("/api/portal/clusters", async (req, res) => {
       total: customerObjects.length,
       tree: rootObjects,
     });
-  } catch (error) {
-    console.error("Failed to get portal clusters:", error);
-    res.status(500).json({ error: "Kunde inte hämta klusteröversikt" });
-  }
-});
+}));
 
 // Predefined time slots for booking requests
 const VALID_TIME_SLOTS = ["morning", "afternoon", "all_day"] as const;
@@ -434,8 +401,7 @@ async function getPortalBookingConfig(tenantId: string) {
   };
 }
 
-app.get("/api/portal/booking-options", async (req, res) => {
-  try {
+app.get("/api/portal/booking-options", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -446,22 +412,13 @@ app.get("/api/portal/booking-options", async (req, res) => {
       serviceTypes: config.serviceTypes.filter((t: any) => t.enabled),
       selfBookingEnabled: config.selfBookingEnabled,
     });
-  } catch (error) {
-    console.error("Failed to get booking options:", error);
-    res.status(500).json({ error: "Kunde inte hämta bokningsalternativ" });
-  }
-});
+}));
 
-app.get("/api/portal-booking-config", async (req, res) => {
-  try {
+app.get("/api/portal-booking-config", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const config = await getPortalBookingConfig(tenantId);
     res.json(config);
-  } catch (error) {
-    console.error("Failed to get portal booking config:", error);
-    res.status(500).json({ error: "Kunde inte hämta portalkonfiguration" });
-  }
-});
+}));
 
 const bookingOptionItemSchema = z.object({
   value: z.string().min(1),
@@ -476,8 +433,7 @@ const portalBookingConfigSchema = z.object({
   selfBookingEnabled: z.boolean().optional(),
 });
 
-app.put("/api/portal-booking-config", requireAdmin, async (req, res) => {
-  try {
+app.put("/api/portal-booking-config", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const parseResult = portalBookingConfigSchema.safeParse(req.body);
     if (!parseResult.success) {
@@ -500,11 +456,7 @@ app.put("/api/portal-booking-config", requireAdmin, async (req, res) => {
     await storage.updateTenant(tenantId, { settings: updatedSettings });
     const updated = await getPortalBookingConfig(tenantId);
     res.json(updated);
-  } catch (error) {
-    console.error("Failed to update portal booking config:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera portalkonfiguration" });
-  }
-});
+}));
 
 // Flexible date validation that accepts ISO date strings (YYYY-MM-DD) or datetime strings
 const flexibleDateSchema = z.string().refine(
@@ -527,8 +479,7 @@ const portalBookingRequestSchema = z.object({
   customerNotes: z.string().max(2000, "Meddelande får max vara 2000 tecken").optional().nullable(),
 });
 
-app.post("/api/portal/booking-requests", async (req, res) => {
-  try {
+app.post("/api/portal/booking-requests", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -557,43 +508,28 @@ app.post("/api/portal/booking-requests", async (req, res) => {
     });
 
     res.json({ success: true, bookingRequest });
-  } catch (error) {
-    console.error("Failed to create booking request:", error);
-    res.status(500).json({ error: "Kunde inte skapa bokningsförfrågan" });
-  }
-});
+}));
 
-app.get("/api/portal/booking-requests", async (req, res) => {
-  try {
+app.get("/api/portal/booking-requests", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
     const requests = await storage.getBookingRequests(session.tenantId!, session.customerId!);
     res.json(requests);
-  } catch (error) {
-    console.error("Failed to get booking requests:", error);
-    res.status(500).json({ error: "Kunde inte hämta bokningsförfrågningar" });
-  }
-});
+}));
 
 // Portal Messages - Get all messages
-app.get("/api/portal/messages", async (req, res) => {
-  try {
+app.get("/api/portal/messages", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
     const messages = await storage.getLegacyPortalMessages(session.tenantId!, session.customerId!);
     await storage.markLegacyPortalMessagesAsRead(session.tenantId!, session.customerId!);
     res.json(messages);
-  } catch (error) {
-    console.error("Failed to get portal messages:", error);
-    res.status(500).json({ error: "Kunde inte hämta meddelanden" });
-  }
-});
+}));
 
 // Portal Messages - Send a message
-app.post("/api/portal/messages", async (req, res) => {
-  try {
+app.post("/api/portal/messages", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -610,60 +546,40 @@ app.post("/api/portal/messages", async (req, res) => {
     });
 
     res.json(newMessage);
-  } catch (error) {
-    console.error("Failed to send portal message:", error);
-    res.status(500).json({ error: "Kunde inte skicka meddelande" });
-  }
-});
+}));
 
 // Portal Messages - Get unread count
-app.get("/api/portal/messages/unread-count", async (req, res) => {
-  try {
+app.get("/api/portal/messages/unread-count", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
     const count = await storage.getLegacyUnreadMessageCount(session.tenantId!, session.customerId!);
     res.json({ count });
-  } catch (error) {
-    console.error("Failed to get unread count:", error);
-    res.status(500).json({ error: "Kunde inte hämta antal olästa" });
-  }
-});
+}));
 
 // ============================================
 // PORTAL - INVOICES (Fakturor)
 // ============================================
-app.get("/api/portal/invoices", async (req, res) => {
-  try {
+app.get("/api/portal/invoices", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
     const invoices = await storage.getCustomerInvoices(session.tenantId!, session.customerId!);
     res.json(invoices);
-  } catch (error) {
-    console.error("Failed to get portal invoices:", error);
-    res.status(500).json({ error: "Kunde inte hämta fakturor" });
-  }
-});
+}));
 
 // ============================================
 // PORTAL - ISSUE REPORTS (Felanmälningar)
 // ============================================
-app.get("/api/portal/issue-reports", async (req, res) => {
-  try {
+app.get("/api/portal/issue-reports", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
     const reports = await storage.getCustomerIssueReports(session.tenantId!, session.customerId!);
     res.json(reports);
-  } catch (error) {
-    console.error("Failed to get issue reports:", error);
-    res.status(500).json({ error: "Kunde inte hämta felanmälningar" });
-  }
-});
+}));
 
-app.post("/api/portal/issue-reports", async (req, res) => {
-  try {
+app.post("/api/portal/issue-reports", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -684,33 +600,23 @@ app.post("/api/portal/issue-reports", async (req, res) => {
     });
 
     res.json(report);
-  } catch (error) {
-    console.error("Failed to create issue report:", error);
-    res.status(500).json({ error: "Kunde inte skapa felanmälan" });
-  }
-});
+}));
 
 // ============================================
 // PORTAL - SERVICE CONTRACTS (Tjänsteavtal)
 // ============================================
-app.get("/api/portal/service-contracts", async (req, res) => {
-  try {
+app.get("/api/portal/service-contracts", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
     const contracts = await storage.getCustomerServiceContracts(session.tenantId!, session.customerId!);
     res.json(contracts);
-  } catch (error) {
-    console.error("Failed to get service contracts:", error);
-    res.status(500).json({ error: "Kunde inte hämta tjänsteavtal" });
-  }
-});
+}));
 
 // ============================================
 // PORTAL - NOTIFICATION SETTINGS (Profil)
 // ============================================
-app.get("/api/portal/notification-settings", async (req, res) => {
-  try {
+app.get("/api/portal/notification-settings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -735,14 +641,9 @@ app.get("/api/portal/notification-settings", async (req, res) => {
     }
 
     res.json(settings);
-  } catch (error) {
-    console.error("Failed to get notification settings:", error);
-    res.status(500).json({ error: "Kunde inte hämta inställningar" });
-  }
-});
+}));
 
-app.put("/api/portal/notification-settings", async (req, res) => {
-  try {
+app.put("/api/portal/notification-settings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -754,17 +655,12 @@ app.put("/api/portal/notification-settings", async (req, res) => {
     });
 
     res.json(settings);
-  } catch (error) {
-    console.error("Failed to update notification settings:", error);
-    res.status(500).json({ error: "Kunde inte spara inställningar" });
-  }
-});
+}));
 
 // ============================================
 // PORTAL - VISIT PROTOCOLS (Besöksprotokoll)
 // ============================================
-app.get("/api/portal/visit-protocols", async (req, res) => {
-  try {
+app.get("/api/portal/visit-protocols", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -790,14 +686,9 @@ app.get("/api/portal/visit-protocols", async (req, res) => {
       .slice(0, 50);
 
     res.json(protocols);
-  } catch (error) {
-    console.error("Failed to get visit protocols:", error);
-    res.status(500).json({ error: "Kunde inte hämta protokoll" });
-  }
-});
+}));
 
-app.post("/api/portal/auth/demo-login", async (req, res) => {
-  try {
+app.post("/api/portal/auth/demo-login", asyncHandler(async (req, res) => {
     const demoEmail = "demo@traivo.se";
     const tenantId = "default-tenant";
     
@@ -834,14 +725,9 @@ app.post("/api/portal/auth/demo-login", async (req, res) => {
         name: tenant?.name,
       },
     });
-  } catch (error) {
-    console.error("Failed demo login:", error);
-    res.status(500).json({ error: "Kunde inte skapa demosession" });
-  }
-});
+}));
 
-app.post("/api/portal/logout", async (req, res) => {
-  try {
+app.post("/api/portal/logout", asyncHandler(async (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const sessionToken = authHeader.substring(7);
@@ -849,18 +735,13 @@ app.post("/api/portal/logout", async (req, res) => {
       await logout(sessionToken);
     }
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to logout:", error);
-    res.status(500).json({ error: "Kunde inte logga ut" });
-  }
-});
+}));
 
 // ============================================
 // CUSTOMER PORTAL - Staff API (authenticated staff)
 // ============================================
 
-app.get("/api/portal/customer/:customerId/orders", async (req, res) => {
-  try {
+app.get("/api/portal/customer/:customerId/orders", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
     
@@ -921,19 +802,14 @@ app.get("/api/portal/customer/:customerId/orders", async (req, res) => {
       upcoming,
       history,
     });
-  } catch (error) {
-    console.error("Failed to get portal orders:", error);
-    res.status(500).json({ error: "Kunde inte hämta ordrar" });
-  }
-});
+}));
 
 // ============================================
 // CUSTOMER PORTAL - Staff Messages API
 // ============================================
 
 // Get all customers with messages (for staff inbox)
-app.get("/api/staff/portal-messages", async (req, res) => {
-  try {
+app.get("/api/staff/portal-messages", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const customerIds = await storage.getCustomersWithMessages(tenantId);
     const customers = await Promise.all(
@@ -966,15 +842,10 @@ app.get("/api/staff/portal-messages", async (req, res) => {
     });
 
     res.json(customerMessages);
-  } catch (error) {
-    console.error("Failed to get portal messages for staff:", error);
-    res.status(500).json({ error: "Kunde inte hämta meddelanden" });
-  }
-});
+}));
 
 // Get messages for a specific customer (staff view)
-app.get("/api/staff/portal-messages/:customerId", async (req, res) => {
-  try {
+app.get("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
     
@@ -995,15 +866,10 @@ app.get("/api/staff/portal-messages/:customerId", async (req, res) => {
       },
       messages,
     });
-  } catch (error) {
-    console.error("Failed to get customer messages:", error);
-    res.status(500).json({ error: "Kunde inte hämta kundmeddelanden" });
-  }
-});
+}));
 
 // Send message to customer (staff)
-app.post("/api/staff/portal-messages/:customerId", async (req, res) => {
-  try {
+app.post("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId } = req.params;
     const { message } = req.body;
@@ -1025,19 +891,14 @@ app.post("/api/staff/portal-messages/:customerId", async (req, res) => {
     });
 
     res.json(newMessage);
-  } catch (error) {
-    console.error("Failed to send message to customer:", error);
-    res.status(500).json({ error: "Kunde inte skicka meddelande" });
-  }
-});
+}));
 
 // ============================================
 // CUSTOMER PORTAL 2.0 - Visit Confirmations, Ratings, Chat, Self-Booking
 // ============================================
 
 // Visit Confirmations - Customer confirms job completion
-app.get("/api/portal/visit-confirmations", async (req, res) => {
-  try {
+app.get("/api/portal/visit-confirmations", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1045,11 +906,7 @@ app.get("/api/portal/visit-confirmations", async (req, res) => {
       customerId: session.customerId 
     });
     res.json(confirmations);
-  } catch (error) {
-    console.error("Failed to get visit confirmations:", error);
-    res.status(500).json({ error: "Kunde inte hämta besökskvitteringar" });
-  }
-});
+}));
 
 const visitConfirmationRequestSchema = insertVisitConfirmationSchema
   .omit({ tenantId: true, customerId: true, confirmedByEmail: true })
@@ -1057,8 +914,7 @@ const visitConfirmationRequestSchema = insertVisitConfirmationSchema
     confirmationStatus: z.enum(["confirmed", "disputed"]).optional(),
   });
 
-app.post("/api/portal/visit-confirmations", async (req, res) => {
-  try {
+app.post("/api/portal/visit-confirmations", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1093,15 +949,10 @@ app.post("/api/portal/visit-confirmations", async (req, res) => {
     });
     
     res.status(201).json(confirmation);
-  } catch (error) {
-    console.error("Failed to create visit confirmation:", error);
-    res.status(500).json({ error: "Kunde inte kvittera besök" });
-  }
-});
+}));
 
 // Technician Ratings
-app.get("/api/portal/technician-ratings", async (req, res) => {
-  try {
+app.get("/api/portal/technician-ratings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1109,11 +960,7 @@ app.get("/api/portal/technician-ratings", async (req, res) => {
       customerId: session.customerId 
     });
     res.json(ratings);
-  } catch (error) {
-    console.error("Failed to get ratings:", error);
-    res.status(500).json({ error: "Kunde inte hämta betyg" });
-  }
-});
+}));
 
 const technicianRatingRequestSchema = insertTechnicianRatingSchema
   .omit({ tenantId: true, customerId: true, resourceId: true })
@@ -1128,8 +975,7 @@ const technicianRatingRequestSchema = insertTechnicianRatingSchema
     }).optional(),
   });
 
-app.post("/api/portal/technician-ratings", async (req, res) => {
-  try {
+app.post("/api/portal/technician-ratings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1164,15 +1010,10 @@ app.post("/api/portal/technician-ratings", async (req, res) => {
     });
     
     res.status(201).json(newRating);
-  } catch (error) {
-    console.error("Failed to create rating:", error);
-    res.status(500).json({ error: "Kunde inte spara betyg" });
-  }
-});
+}));
 
 // Portal Messages (Chat) - New unified chat for work orders
-app.get("/api/portal/work-order-chat/:workOrderId", async (req, res) => {
-  try {
+app.get("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1208,11 +1049,7 @@ app.get("/api/portal/work-order-chat/:workOrderId", async (req, res) => {
       } : null,
       messages,
     });
-  } catch (error) {
-    console.error("Failed to get work order chat:", error);
-    res.status(500).json({ error: "Kunde inte hämta meddelanden" });
-  }
-});
+}));
 
 const chatMessageRequestSchema = insertPortalMessageSchema
   .pick({ message: true })
@@ -1220,8 +1057,7 @@ const chatMessageRequestSchema = insertPortalMessageSchema
     message: z.string().min(1, "Meddelande krävs"),
   });
 
-app.post("/api/portal/work-order-chat/:workOrderId", async (req, res) => {
-  try {
+app.post("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1253,15 +1089,10 @@ app.post("/api/portal/work-order-chat/:workOrderId", async (req, res) => {
     });
     
     res.status(201).json(newMessage);
-  } catch (error) {
-    console.error("Failed to send message:", error);
-    res.status(500).json({ error: "Kunde inte skicka meddelande" });
-  }
-});
+}));
 
 // Self-Booking Slots - Get available slots
-app.get("/api/portal/booking-slots", async (req, res) => {
-  try {
+app.get("/api/portal/booking-slots", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1281,15 +1112,10 @@ app.get("/api/portal/booking-slots", async (req, res) => {
     const availableSlots = slots.filter(s => (s.currentBookings || 0) < (s.maxBookings || 1));
     
     res.json(availableSlots);
-  } catch (error) {
-    console.error("Failed to get booking slots:", error);
-    res.status(500).json({ error: "Kunde inte hämta tillgängliga tider" });
-  }
-});
+}));
 
 // Self-Bookings - Customer's bookings
-app.get("/api/portal/self-bookings", async (req, res) => {
-  try {
+app.get("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1312,11 +1138,7 @@ app.get("/api/portal/self-bookings", async (req, res) => {
     }));
     
     res.json(enrichedBookings);
-  } catch (error) {
-    console.error("Failed to get self-bookings:", error);
-    res.status(500).json({ error: "Kunde inte hämta bokningar" });
-  }
-});
+}));
 
 const selfBookingRequestSchema = insertSelfBookingSchema
   .omit({ tenantId: true, customerId: true, status: true })
@@ -1324,8 +1146,7 @@ const selfBookingRequestSchema = insertSelfBookingSchema
     serviceType: z.string().min(1, "Tjänsttyp krävs"),
   });
 
-app.post("/api/portal/self-bookings", async (req, res) => {
-  try {
+app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
@@ -1381,14 +1202,9 @@ app.post("/api/portal/self-bookings", async (req, res) => {
     await storage.incrementSlotBookingCount(slotId);
     
     res.status(201).json(booking);
-  } catch (error) {
-    console.error("Failed to create self-booking:", error);
-    res.status(500).json({ error: "Kunde inte skapa bokning" });
-  }
-});
+}));
 
-app.delete("/api/portal/self-bookings/:id", async (req, res) => {
-  try {
+app.delete("/api/portal/self-bookings/:id", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
     
@@ -1408,15 +1224,10 @@ app.delete("/api/portal/self-bookings/:id", async (req, res) => {
     });
     
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to cancel self-booking:", error);
-    res.status(500).json({ error: "Kunde inte avboka" });
-  }
-});
+}));
 
 // Staff API - Self-booking slot management
-app.get("/api/self-booking-slots", async (req, res) => {
-  try {
+app.get("/api/self-booking-slots", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { startDate, endDate } = req.query;
     
@@ -1426,14 +1237,9 @@ app.get("/api/self-booking-slots", async (req, res) => {
     });
     
     res.json(slots);
-  } catch (error) {
-    console.error("Failed to get booking slots:", error);
-    res.status(500).json({ error: "Kunde inte hämta tidsluckor" });
-  }
-});
+}));
 
-app.post("/api/self-booking-slots", async (req, res) => {
-  try {
+app.post("/api/self-booking-slots", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const user = (req as any).user;
     
@@ -1446,17 +1252,9 @@ app.post("/api/self-booking-slots", async (req, res) => {
     
     const slot = await storage.createSelfBookingSlot(validated);
     res.status(201).json(slot);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create booking slot:", error);
-    res.status(500).json({ error: "Kunde inte skapa tidslucka" });
-  }
-});
+}));
 
-app.patch("/api/self-booking-slots/:id", async (req, res) => {
-  try {
+app.patch("/api/self-booking-slots/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getSelfBookingSlot(req.params.id);
@@ -1466,14 +1264,9 @@ app.patch("/api/self-booking-slots/:id", async (req, res) => {
     
     const updated = await storage.updateSelfBookingSlot(req.params.id, req.body);
     res.json(updated);
-  } catch (error) {
-    console.error("Failed to update booking slot:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera tidslucka" });
-  }
-});
+}));
 
-app.delete("/api/self-booking-slots/:id", async (req, res) => {
-  try {
+app.delete("/api/self-booking-slots/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getSelfBookingSlot(req.params.id);
@@ -1483,15 +1276,10 @@ app.delete("/api/self-booking-slots/:id", async (req, res) => {
     
     await storage.deleteSelfBookingSlot(req.params.id);
     res.json({ success: true });
-  } catch (error) {
-    console.error("Failed to delete booking slot:", error);
-    res.status(500).json({ error: "Kunde inte ta bort tidslucka" });
-  }
-});
+}));
 
 // Staff API - View all self-bookings
-app.get("/api/self-bookings", async (req, res) => {
-  try {
+app.get("/api/self-bookings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { status } = req.query;
     
@@ -1515,14 +1303,9 @@ app.get("/api/self-bookings", async (req, res) => {
     }));
     
     res.json(enrichedBookings);
-  } catch (error) {
-    console.error("Failed to get self-bookings:", error);
-    res.status(500).json({ error: "Kunde inte hämta bokningar" });
-  }
-});
+}));
 
-app.patch("/api/self-bookings/:id", async (req, res) => {
-  try {
+app.patch("/api/self-bookings/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getSelfBooking(req.params.id);
@@ -1543,15 +1326,10 @@ app.patch("/api/self-bookings/:id", async (req, res) => {
     
     const updated = await storage.updateSelfBooking(req.params.id, updateData as any);
     res.json(updated);
-  } catch (error) {
-    console.error("Failed to update self-booking:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera bokning" });
-  }
-});
+}));
 
 // Staff API - View technician ratings
-app.get("/api/technician-ratings", async (req, res) => {
-  try {
+app.get("/api/technician-ratings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId } = req.query;
     
@@ -1560,26 +1338,16 @@ app.get("/api/technician-ratings", async (req, res) => {
     });
     
     res.json(ratings);
-  } catch (error) {
-    console.error("Failed to get technician ratings:", error);
-    res.status(500).json({ error: "Kunde inte hämta teknikerbetyg" });
-  }
-});
+}));
 
-app.get("/api/technician-ratings/average/:resourceId", async (req, res) => {
-  try {
+app.get("/api/technician-ratings/average/:resourceId", asyncHandler(async (req, res) => {
     const { resourceId } = req.params;
     const avgRating = await storage.getResourceAverageRating(resourceId);
     res.json(avgRating);
-  } catch (error) {
-    console.error("Failed to get average rating:", error);
-    res.status(500).json({ error: "Kunde inte hämta genomsnittsbetyg" });
-  }
-});
+}));
 
 // Staff API - View visit confirmations
-app.get("/api/visit-confirmations", async (req, res) => {
-  try {
+app.get("/api/visit-confirmations", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { customerId, workOrderId } = req.query;
     
@@ -1589,31 +1357,21 @@ app.get("/api/visit-confirmations", async (req, res) => {
     });
     
     res.json(confirmations);
-  } catch (error) {
-    console.error("Failed to get visit confirmations:", error);
-    res.status(500).json({ error: "Kunde inte hämta besökskvitteringar" });
-  }
-});
+}));
 
 // ============================================
 // QR CODE LINKS API
 // ============================================
 
-app.get("/api/qr-code-links", async (req, res) => {
-  try {
+app.get("/api/qr-code-links", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId } = req.query;
     
     const links = await storage.getQrCodeLinks(tenantId, objectId as string);
     res.json(links);
-  } catch (error) {
-    console.error("Failed to get QR code links:", error);
-    res.status(500).json({ error: "Kunde inte hämta QR-koder" });
-  }
-});
+}));
 
-app.get("/api/qr-code-links/:id", async (req, res) => {
-  try {
+app.get("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const link = await storage.getQrCodeLink(req.params.id);
     
@@ -1622,14 +1380,9 @@ app.get("/api/qr-code-links/:id", async (req, res) => {
     }
     
     res.json(link);
-  } catch (error) {
-    console.error("Failed to get QR code link:", error);
-    res.status(500).json({ error: "Kunde inte hämta QR-kod" });
-  }
-});
+}));
 
-app.post("/api/qr-code-links", async (req, res) => {
-  try {
+app.post("/api/qr-code-links", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const user = (req as any).user;
     
@@ -1646,17 +1399,9 @@ app.post("/api/qr-code-links", async (req, res) => {
     
     const link = await storage.createQrCodeLink(validated);
     res.status(201).json(link);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create QR code link:", error);
-    res.status(500).json({ error: "Kunde inte skapa QR-kod" });
-  }
-});
+}));
 
-app.patch("/api/qr-code-links/:id", async (req, res) => {
-  try {
+app.patch("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getQrCodeLink(req.params.id);
@@ -1666,14 +1411,9 @@ app.patch("/api/qr-code-links/:id", async (req, res) => {
     
     const link = await storage.updateQrCodeLink(req.params.id, tenantId, req.body);
     res.json(link);
-  } catch (error) {
-    console.error("Failed to update QR code link:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera QR-kod" });
-  }
-});
+}));
 
-app.delete("/api/qr-code-links/:id", async (req, res) => {
-  try {
+app.delete("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getQrCodeLink(req.params.id);
@@ -1683,18 +1423,13 @@ app.delete("/api/qr-code-links/:id", async (req, res) => {
     
     await storage.deleteQrCodeLink(req.params.id, tenantId);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete QR code link:", error);
-    res.status(500).json({ error: "Kunde inte ta bort QR-kod" });
-  }
-});
+}));
 
 // ============================================
 // ROLE-SCOPED ENDPOINTS (customer & reporter)
 // ============================================
 
-app.get("/api/my-reports", async (req, res) => {
-  try {
+app.get("/api/my-reports", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = (req.user as any)?.claims?.sub;
     if (!userId) {
@@ -1711,14 +1446,9 @@ app.get("/api/my-reports", async (req, res) => {
       return false;
     });
     res.json(myReports);
-  } catch (error) {
-    console.error("Failed to get user reports:", error);
-    res.status(500).json({ error: "Kunde inte hämta dina felanmälningar" });
-  }
-});
+}));
 
-app.get("/api/my-objects", async (req, res) => {
-  try {
+app.get("/api/my-objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const userId = (req.user as any)?.claims?.sub;
     if (!userId) {
@@ -1747,18 +1477,13 @@ app.get("/api/my-objects", async (req, res) => {
     const allObjects = await storage.getObjects(tenantId);
     const myObjects = allObjects.filter((o: any) => customerIds.has(o.customerId));
     res.json(myObjects);
-  } catch (error) {
-    console.error("Failed to get customer objects:", error);
-    res.status(500).json({ error: "Kunde inte hämta dina objekt" });
-  }
-});
+}));
 
 // ============================================
 // PUBLIC ISSUE REPORTS API (Internal management)
 // ============================================
 
-app.get("/api/public-issue-reports", async (req, res) => {
-  try {
+app.get("/api/public-issue-reports", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId, status } = req.query;
     
@@ -1768,14 +1493,9 @@ app.get("/api/public-issue-reports", async (req, res) => {
     });
     
     res.json(reports);
-  } catch (error) {
-    console.error("Failed to get public issue reports:", error);
-    res.status(500).json({ error: "Kunde inte hämta felanmälningar" });
-  }
-});
+}));
 
-app.get("/api/public-issue-reports/:id", async (req, res) => {
-  try {
+app.get("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const report = await storage.getPublicIssueReport(req.params.id);
     
@@ -1784,14 +1504,9 @@ app.get("/api/public-issue-reports/:id", async (req, res) => {
     }
     
     res.json(report);
-  } catch (error) {
-    console.error("Failed to get public issue report:", error);
-    res.status(500).json({ error: "Kunde inte hämta felanmälan" });
-  }
-});
+}));
 
-app.patch("/api/public-issue-reports/:id", async (req, res) => {
-  try {
+app.patch("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     
     const existing = await storage.getPublicIssueReport(req.params.id);
@@ -1801,15 +1516,10 @@ app.patch("/api/public-issue-reports/:id", async (req, res) => {
     
     const report = await storage.updatePublicIssueReport(req.params.id, tenantId, req.body);
     res.json(report);
-  } catch (error) {
-    console.error("Failed to update public issue report:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera felanmälan" });
-  }
-});
+}));
 
 // Convert public issue report to deviation report
-app.post("/api/public-issue-reports/:id/convert-to-deviation", async (req, res) => {
-  try {
+app.post("/api/public-issue-reports/:id/convert-to-deviation", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const user = (req as any).user;
     
@@ -1844,14 +1554,9 @@ app.post("/api/public-issue-reports/:id/convert-to-deviation", async (req, res) 
       deviation,
       message: "Felanmälan konverterad till avvikelse",
     });
-  } catch (error) {
-    console.error("Failed to convert public issue to deviation:", error);
-    res.status(500).json({ error: "Kunde inte konvertera felanmälan" });
-  }
-});
+}));
 
-app.post("/api/public-issue-reports/:id/create-interim-object", async (req, res) => {
-  try {
+app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const report = await storage.getPublicIssueReport(req.params.id);
     if (!report || !verifyTenantOwnership(report, tenantId)) {
@@ -1893,10 +1598,6 @@ app.post("/api/public-issue-reports/:id/create-interim-object", async (req, res)
       status: "converted",
     });
     res.status(201).json(interimObject);
-  } catch (error) {
-    console.error("Failed to create interim object from issue:", error);
-    res.status(500).json({ error: "Kunde inte skapa interimobjekt" });
-  }
-});
+}));
 
 }

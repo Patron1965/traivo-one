@@ -5,6 +5,8 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import multer from "multer";
 import Papa from "papaparse";
 import { importJobs, notifyImportProgress } from "./helpers";
@@ -23,8 +25,7 @@ const upload = multer({
 });
 
 export async function registerImportRoutes(app: Express) {
-app.post("/api/import/customers", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/customers", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -67,14 +68,9 @@ app.post("/api/import/customers", upload.single("file"), async (req, res) => {
     }
     
     res.json({ imported: imported.length, errors });
-  } catch (error) {
-    console.error("Import error:", error);
-    res.status(500).json({ error: "Import misslyckades" });
-  }
-});
+}));
 
-app.post("/api/import/resources", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/resources", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -117,14 +113,9 @@ app.post("/api/import/resources", upload.single("file"), async (req, res) => {
     }
     
     res.json({ imported: imported.length, errors });
-  } catch (error) {
-    console.error("Import error:", error);
-    res.status(500).json({ error: "Import misslyckades" });
-  }
-});
+}));
 
-app.post("/api/import/objects", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -212,27 +203,18 @@ app.post("/api/import/objects", upload.single("file"), async (req, res) => {
     }
     
     res.json({ imported: imported.length, errors });
-  } catch (error) {
-    console.error("Import error:", error);
-    res.status(500).json({ error: "Import misslyckades" });
-  }
-});
+}));
 
-app.get("/api/tenant", async (req, res) => {
-  try {
+app.get("/api/tenant", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     if (!tenant) {
       return res.status(404).json({ error: "Tenant not found" });
     }
     res.json(tenant);
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch tenant" });
-  }
-});
+}));
 
-app.patch("/api/tenant", async (req, res) => {
-  try {
+app.patch("/api/tenant", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenantUpdateSchema = z.object({
       name: z.string().min(1).optional(),
@@ -250,28 +232,19 @@ app.patch("/api/tenant", async (req, res) => {
       return res.status(404).json({ error: "Tenant not found" });
     }
     res.json(tenant);
-  } catch (error) {
-    console.error("Failed to update tenant:", error);
-    res.status(500).json({ error: "Failed to update tenant" });
-  }
-});
+}));
 
 // Tenant settings
-app.get("/api/tenant/settings", async (req, res) => {
-  try {
+app.get("/api/tenant/settings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     if (!tenant) {
       return res.status(404).json({ error: "Tenant not found" });
     }
     res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings || {} });
-  } catch (error) {
-    res.status(500).json({ error: "Failed to fetch settings" });
-  }
-});
+}));
 
-app.patch("/api/tenant/settings", async (req, res) => {
-  try {
+app.patch("/api/tenant/settings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const settingsSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.string())]));
     const parseResult = settingsSchema.safeParse(req.body);
@@ -283,15 +256,10 @@ app.patch("/api/tenant/settings", async (req, res) => {
       return res.status(404).json({ error: "Tenant not found" });
     }
     res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings });
-  } catch (error) {
-    console.error("Failed to update settings:", error);
-    res.status(500).json({ error: "Failed to update settings" });
-  }
-});
+}));
 
 // Export data as CSV
-app.get("/api/export/:type", async (req, res) => {
-  try {
+app.get("/api/export/:type", asyncHandler(async (req, res) => {
     const { type } = req.params;
     let data: Record<string, unknown>[] = [];
     let headers: string[] = [];
@@ -352,14 +320,9 @@ app.get("/api/export/:type", async (req, res) => {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename=${type}_export.csv`);
     res.send("\ufeff" + csv);
-  } catch (error) {
-    console.error("Export error:", error);
-    res.status(500).json({ error: "Export misslyckades" });
-  }
-});
+}));
 
-app.post("/api/routes/directions", async (req, res) => {
-  try {
+app.post("/api/routes/directions", asyncHandler(async (req, res) => {
     const { coordinates } = req.body;
     
     if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 2) {
@@ -387,14 +350,9 @@ app.post("/api/routes/directions", async (req, res) => {
 
     const data = await response.json();
     res.json(data);
-  } catch (error) {
-    console.error("Route directions error:", error);
-    res.status(500).json({ error: "Failed to calculate route" });
-  }
-});
+}));
 
-app.post("/api/routes/optimize", async (req, res) => {
-  try {
+app.post("/api/routes/optimize", asyncHandler(async (req, res) => {
     const { jobs, agents, vehicles } = req.body;
     const resolvedAgents = agents || vehicles;
     
@@ -424,11 +382,7 @@ app.post("/api/routes/optimize", async (req, res) => {
 
     const data = await response.json();
     res.json(data);
-  } catch (error) {
-    console.error("Route optimization error:", error);
-    res.status(500).json({ error: "Failed to optimize route" });
-  }
-});
+}));
 
 app.get("/api/import/progress/:jobId", (req, res) => {
   const { jobId } = req.params;
@@ -455,8 +409,7 @@ app.get("/api/import/progress/:jobId", (req, res) => {
   });
 });
 
-app.post("/api/import/modus/validate", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -632,15 +585,10 @@ app.post("/api/import/modus/validate", upload.single("file"), async (req, res) =
       typeStats,
       emptyTypeCount,
     });
-  } catch (error) {
-    console.error("Modus validate error:", error);
-    res.status(500).json({ error: "Validering misslyckades", details: String(error) });
-  }
-});
+}));
 
 // Modus 2.0 Import - Objects (semicolon-separated)
-app.post("/api/import/modus/objects", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -940,22 +888,10 @@ app.post("/api/import/modus/objects", upload.single("file"), async (req, res) =>
     job.result = responseData;
     notifyImportProgress(importBatchId);
     setTimeout(() => importJobs.delete(importBatchId), 300000);
-  } catch (error) {
-    console.error("Modus import error:", error);
-    const failedJob = importJobs.get(importBatchId);
-    if (failedJob) {
-      failedJob.status = "failed";
-      failedJob.phase = "fel";
-      failedJob.result = { error: String(error), importBatchId };
-      notifyImportProgress(importBatchId);
-    }
-    setTimeout(() => importJobs.delete(importBatchId), 300000);
-  }
-});
+}));
 
 // Modus 2.0 Import - Tasks (uppgifter)
-app.post("/api/import/modus/tasks", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -1112,15 +1048,10 @@ app.post("/api/import/modus/tasks", upload.single("file"), async (req, res) => {
       errors: errors.slice(0, 50),
       totalRows: (result.data as unknown[]).length,
     });
-  } catch (error) {
-    console.error("Modus tasks import error:", error);
-    res.status(500).json({ error: "Modus tasks import misslyckades" });
-  }
-});
+}));
 
 // Modus 2.0 Import - Task Events (for setup time analysis)
-app.post("/api/import/modus/events", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -1188,15 +1119,10 @@ app.post("/api/import/modus/events", upload.single("file"), async (req, res) => 
         over30min: setupTimes.filter(s => s.minutes >= 30).length,
       },
     });
-  } catch (error) {
-    console.error("Modus events import error:", error);
-    res.status(500).json({ error: "Modus events import misslyckades" });
-  }
-});
+}));
 
 // Modus 2.0 Import - Invoice Lines (fakturarader)
-app.post("/api/import/modus/invoice-lines", upload.single("file"), async (req, res) => {
-  try {
+app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
       return res.status(400).json({ error: "Ingen fil uppladdad" });
     }
@@ -1311,10 +1237,6 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), async (req, r
       errors: errors.slice(0, 50),
       totalRows: (result.data as unknown[]).length,
     });
-  } catch (error) {
-    console.error("Modus invoice lines import error:", error);
-    res.status(500).json({ error: "Modus fakturarader import misslyckades" });
-  }
-});
+}));
 
 }

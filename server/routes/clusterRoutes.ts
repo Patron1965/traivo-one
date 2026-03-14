@@ -5,36 +5,27 @@ import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+import { asyncHandler } from "../asyncHandler";
+import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { insertClusterSchema, objects, workOrders } from "@shared/schema";
 
 export async function registerClusterRoutes(app: Express) {
 // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
-app.get("/api/clusters", async (req, res) => {
-  try {
+app.get("/api/clusters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const clusters = await storage.getClusters(tenantId);
     res.json(clusters || []);
-  } catch (error) {
-    console.error("Failed to fetch clusters:", error);
-    res.status(500).json({ error: "Kunde inte hämta kluster", details: String(error) });
-  }
-});
+}));
 
-app.get("/api/clusters/:id", async (req, res) => {
-  try {
+app.get("/api/clusters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getClusterWithStats(req.params.id);
     const verified = verifyTenantOwnership(cluster, tenantId);
     if (!verified) return res.status(404).json({ error: "Kluster hittades inte" });
     res.json(verified);
-  } catch (error) {
-    console.error("Failed to fetch cluster:", error);
-    res.status(500).json({ error: "Kunde inte hämta kluster" });
-  }
-});
+}));
 
-app.post("/api/clusters", async (req, res) => {
-  try {
+app.post("/api/clusters", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const data = insertClusterSchema.parse({ ...req.body, tenantId });
     if (data.radiusKm && data.radiusKm > 50) data.radiusKm = 50;
@@ -74,17 +65,9 @@ app.post("/api/clusters", async (req, res) => {
     await storage.updateClusterCaches(cluster.id);
     const updated = await storage.getCluster(cluster.id);
     res.status(201).json(updated || cluster);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json(formatZodError(error));
-    }
-    console.error("Failed to create cluster:", error);
-    res.status(500).json({ error: "Kunde inte skapa kluster" });
-  }
-});
+}));
 
-app.patch("/api/clusters/:id", async (req, res) => {
-  try {
+app.patch("/api/clusters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -94,14 +77,9 @@ app.patch("/api/clusters/:id", async (req, res) => {
     const cluster = await storage.updateCluster(req.params.id, updateData);
     if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
     res.json(cluster);
-  } catch (error) {
-    console.error("Failed to update cluster:", error);
-    res.status(500).json({ error: "Kunde inte uppdatera kluster" });
-  }
-});
+}));
 
-app.delete("/api/clusters/:id", async (req, res) => {
-  try {
+app.delete("/api/clusters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -109,15 +87,10 @@ app.delete("/api/clusters/:id", async (req, res) => {
     }
     await storage.deleteCluster(req.params.id);
     res.status(204).send();
-  } catch (error) {
-    console.error("Failed to delete cluster:", error);
-    res.status(500).json({ error: "Kunde inte ta bort kluster" });
-  }
-});
+}));
 
 // Cluster aggregations - "snöret"
-app.get("/api/clusters/:id/objects", async (req, res) => {
-  try {
+app.get("/api/clusters/:id/objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
@@ -125,13 +98,9 @@ app.get("/api/clusters/:id/objects", async (req, res) => {
     }
     const objects = await storage.getClusterObjects(req.params.id);
     res.json(objects);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta objekt i kluster" });
-  }
-});
+}));
 
-app.get("/api/clusters/:id/work-orders", async (req, res) => {
-  try {
+app.get("/api/clusters/:id/work-orders", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
@@ -141,13 +110,9 @@ app.get("/api/clusters/:id/work-orders", async (req, res) => {
     const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
     const workOrders = await storage.getClusterWorkOrders(req.params.id, { startDate, endDate });
     res.json(workOrders);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta ordrar i kluster" });
-  }
-});
+}));
 
-app.get("/api/clusters/:id/subscriptions", async (req, res) => {
-  try {
+app.get("/api/clusters/:id/subscriptions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
@@ -155,14 +120,10 @@ app.get("/api/clusters/:id/subscriptions", async (req, res) => {
     }
     const subscriptions = await storage.getClusterSubscriptions(req.params.id);
     res.json(subscriptions);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte hämta abonnemang i kluster" });
-  }
-});
+}));
 
 // Get all contacts for objects in a cluster (including inherited)
-app.get("/api/clusters/:id/object-contacts", async (req, res) => {
-  try {
+app.get("/api/clusters/:id/object-contacts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
@@ -177,14 +138,9 @@ app.get("/api/clusters/:id/object-contacts", async (req, res) => {
       contactsByObject[obj.id] = contacts;
     }
     res.json(contactsByObject);
-  } catch (error) {
-    console.error("Error fetching cluster object contacts:", error);
-    res.status(500).json({ error: "Kunde inte hämta kontakter för objekt i kluster" });
-  }
-});
+}));
 
-app.post("/api/clusters/:id/refresh-cache", async (req, res) => {
-  try {
+app.post("/api/clusters/:id/refresh-cache", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
@@ -193,14 +149,10 @@ app.post("/api/clusters/:id/refresh-cache", async (req, res) => {
     const cluster = await storage.updateClusterCaches(req.params.id);
     if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
     res.json(cluster);
-  } catch (error) {
-    res.status(500).json({ error: "Kunde inte uppdatera klustercache" });
-  }
-});
+}));
 
 // AI General Chat - contextual AI assistant for all modules
-app.post("/api/ai/chat", async (req, res) => {
-  try {
+app.post("/api/ai/chat", asyncHandler(async (req, res) => {
     const { question, context, conversationHistory = [] } = req.body;
     if (!question || typeof question !== "string") {
       return res.status(400).json({ error: "Fråga krävs" });
@@ -307,10 +259,6 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
       answer: rawAnswer,
       suggestedQuestions: suggestedQuestions.slice(0, 3)
     });
-  } catch (error) {
-    console.error("AI Chat error:", error);
-    res.status(500).json({ error: "Kunde inte behandla frågan" });
-  }
-});
+}));
 
 }
