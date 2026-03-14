@@ -139,7 +139,7 @@ export function TenantBrandingProvider({ children }: { children: React.ReactNode
     accentColor: branding?.accentColor || "#F59E0B",
     companyName: branding?.companyName || "Traivo",
     logoUrl: branding?.logoUrl || null,
-    logoIconUrl: (branding?.logoIconUrl && !branding.logoIconUrl.includes("traivo-logo")) ? branding.logoIconUrl : null,
+    logoIconUrl: (branding?.logoIconUrl && !branding.logoIconUrl.includes("traivo_logo")) ? branding.logoIconUrl : null,
     fontFamily: branding?.fontFamily || "Inter",
   };
 
