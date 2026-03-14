@@ -498,30 +498,30 @@ export default function CustomerPortalPage() {
                       </CardTitle>
                       <CardDescription>Era registrerade hämtningsställen</CardDescription>
                     </div>
-                    {geoObjects.length > 0 && (
-                      <div className="flex gap-1 border rounded-lg p-1" data-testid="pickup-view-toggle">
-                        <Button
-                          variant={pickupViewMode === "list" ? "default" : "ghost"}
-                          size="sm"
-                          className="h-8 px-3"
-                          onClick={() => setPickupViewMode("list")}
-                          data-testid="button-pickup-list-view"
-                        >
-                          <List className="h-4 w-4 mr-1" />
-                          Lista
-                        </Button>
-                        <Button
-                          variant={pickupViewMode === "map" ? "default" : "ghost"}
-                          size="sm"
-                          className="h-8 px-3"
-                          onClick={() => setPickupViewMode("map")}
-                          data-testid="button-pickup-map-view"
-                        >
-                          <Map className="h-4 w-4 mr-1" />
-                          Karta
-                        </Button>
-                      </div>
-                    )}
+                    <div className="flex gap-1 border rounded-lg p-1" data-testid="pickup-view-toggle">
+                      <Button
+                        variant={pickupViewMode === "list" ? "default" : "ghost"}
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setPickupViewMode("list")}
+                        data-testid="button-pickup-list-view"
+                      >
+                        <List className="h-4 w-4 mr-1" />
+                        Lista
+                      </Button>
+                      <Button
+                        variant={pickupViewMode === "map" ? "default" : "ghost"}
+                        size="sm"
+                        className="h-8 px-3"
+                        onClick={() => setPickupViewMode("map")}
+                        disabled={geoObjects.length === 0}
+                        title={geoObjects.length === 0 ? "Inga hämtningsställen med koordinater" : undefined}
+                        data-testid="button-pickup-map-view"
+                      >
+                        <Map className="h-4 w-4 mr-1" />
+                        Karta
+                      </Button>
+                    </div>
                   </div>
                 </CardHeader>
                 <CardContent>
@@ -549,7 +549,7 @@ export default function CustomerPortalPage() {
                                 <div className="p-1 min-w-[160px]">
                                   <div className="font-semibold text-sm">{obj.name}</div>
                                   {obj.address && <div className="text-xs text-gray-600">{obj.address}</div>}
-                                  {obj.postalCode && <div className="text-xs text-gray-600">{obj.postalCode} {obj.city}</div>}
+                                  {(obj.postalCode || obj.city) && <div className="text-xs text-gray-600">{[obj.postalCode, obj.city].filter(Boolean).join(" ")}</div>}
                                   <div className="mt-1 flex flex-wrap gap-1">
                                     {obj.objectType && (
                                       <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{obj.objectType}</span>
