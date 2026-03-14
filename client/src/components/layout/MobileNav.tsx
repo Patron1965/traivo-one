@@ -11,7 +11,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import traivoLogo from "@assets/traivo_koncept_3_dynamic_flow_1773502018603.png";
+import traivoLogo from "@assets/traivo_logo_transparent.png";
 import {
   Menu,
   Calendar,

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import traivoLogo from "@assets/traivo_koncept_3_dynamic_flow_1773502018603.png";
+import traivoLogo from "@assets/traivo_logo_transparent.png";
 import { 
   Truck, 
   Clock, 

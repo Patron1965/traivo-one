@@ -10279,7 +10279,7 @@ const STATUS_COLORS = ${JSON.stringify(STATUS_COLORS)};
 const STATUS_LABELS = ${JSON.stringify(STATUS_LABELS)};
 const ROUTE_COLORS = ${JSON.stringify(ROUTE_COLORS)};
 const map = L.map('map').setView([57.7089, 11.9746], 11);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);
+fetch('/api/system/map-config').then(r=>r.json()).then(function(cfg){L.tileLayer(cfg.tileUrl,{attribution:cfg.attribution,maxZoom:20}).addTo(map);}).catch(function(){L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);});
 
 const driverLayer = L.layerGroup().addTo(map);
 const jobCluster = L.markerClusterGroup({maxClusterRadius:40}).addTo(map);
