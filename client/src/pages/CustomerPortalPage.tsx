@@ -8,13 +8,37 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Calendar, Truck, Package, Clock, CalendarPlus, CheckCircle, AlertCircle, Loader2, Search, MapPin, Phone, Building } from "lucide-react";
+import { Calendar, Truck, Package, Clock, CalendarPlus, CheckCircle, AlertCircle, Loader2, Search, MapPin, Phone, Building, List, Map } from "lucide-react";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 import { format, addDays, isAfter, startOfDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import type { WorkOrder, Customer, ServiceObject, Subscription } from "@shared/schema";
+
+function PickupMapFitBounds({ positions }: { positions: [number, number][] }) {
+  const map = useMap();
+  if (positions.length > 0) {
+    const bounds = L.latLngBounds(positions.map(p => L.latLng(p[0], p[1])));
+    map.fitBounds(bounds, { padding: [50, 50] });
+  }
+  return null;
+}
+
+function createPickupIcon() {
+  return L.divIcon({
+    className: "custom-marker",
+    html: `<div style="width:28px;height:28px;border-radius:50%;background:#4A9B9B;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);display:flex;align-items:center;justify-content:center">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg>
+    </div>`,
+    iconSize: [28, 28],
+    iconAnchor: [14, 28],
+    popupAnchor: [0, -28],
+  });
+}
 
 const orderStatusLabels: Record<string, string> = {
   pending: "Väntar",
@@ -42,6 +66,7 @@ export default function CustomerPortalPage() {
   const isCustomerRole = user?.role === "customer";
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
+  const [pickupViewMode, setPickupViewMode] = useState<"list" | "map">("list");
   const [showExtraBookingDialog, setShowExtraBookingDialog] = useState(false);
   const [extraBookingForm, setExtraBookingForm] = useState({
     objectId: "",
@@ -459,47 +484,121 @@ export default function CustomerPortalPage() {
             </Card>
           </div>
 
-          {customerObjects.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <MapPin className="h-5 w-5" />
-                  Hämtningsställen
-                </CardTitle>
-                <CardDescription>Era registrerade hämtningsställen</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {customerObjects.map(obj => {
-                    const sub = subscriptions.find(s => s.objectId === obj.id && s.status === "active");
-                    return (
-                      <div 
-                        key={obj.id}
-                        className="p-4 rounded-lg border"
-                        data-testid={`card-object-${obj.id}`}
-                      >
-                        <p className="font-medium">{obj.name}</p>
-                        <p className="text-sm text-muted-foreground">{obj.address}</p>
-                        {obj.postalCode && (
-                          <p className="text-sm text-muted-foreground">{obj.postalCode} {obj.city}</p>
-                        )}
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {obj.objectType && (
-                            <Badge variant="outline" className="text-xs">{obj.objectType}</Badge>
-                          )}
-                          {sub && (
-                            <Badge variant="secondary" className="text-xs bg-green-500/20 text-green-600">
-                              Aktivt abonnemang
-                            </Badge>
-                          )}
-                        </div>
+          {customerObjects.length > 0 && (() => {
+            const geoObjects = customerObjects.filter(o => o.latitude && o.longitude);
+            const mapPositions: [number, number][] = geoObjects.map(o => [o.latitude!, o.longitude!]);
+            return (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <CardTitle className="flex items-center gap-2">
+                        <MapPin className="h-5 w-5" />
+                        Hämtningsställen
+                      </CardTitle>
+                      <CardDescription>Era registrerade hämtningsställen</CardDescription>
+                    </div>
+                    {geoObjects.length > 0 && (
+                      <div className="flex gap-1 border rounded-lg p-1" data-testid="pickup-view-toggle">
+                        <Button
+                          variant={pickupViewMode === "list" ? "default" : "ghost"}
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => setPickupViewMode("list")}
+                          data-testid="button-pickup-list-view"
+                        >
+                          <List className="h-4 w-4 mr-1" />
+                          Lista
+                        </Button>
+                        <Button
+                          variant={pickupViewMode === "map" ? "default" : "ghost"}
+                          size="sm"
+                          className="h-8 px-3"
+                          onClick={() => setPickupViewMode("map")}
+                          data-testid="button-pickup-map-view"
+                        >
+                          <Map className="h-4 w-4 mr-1" />
+                          Karta
+                        </Button>
                       </div>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {pickupViewMode === "map" && geoObjects.length > 0 ? (
+                    <div className="rounded-lg overflow-hidden border" style={{ height: "400px" }} data-testid="pickup-map-container">
+                      <MapContainer
+                        center={mapPositions[0] || [59.33, 18.07]}
+                        zoom={12}
+                        style={{ height: "100%", width: "100%" }}
+                      >
+                        <TileLayer
+                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        />
+                        <PickupMapFitBounds positions={mapPositions} />
+                        {geoObjects.map(obj => {
+                          const sub = subscriptions.find(s => s.objectId === obj.id && s.status === "active");
+                          return (
+                            <Marker
+                              key={obj.id}
+                              position={[obj.latitude!, obj.longitude!]}
+                              icon={createPickupIcon()}
+                            >
+                              <Popup>
+                                <div className="p-1 min-w-[160px]">
+                                  <div className="font-semibold text-sm">{obj.name}</div>
+                                  {obj.address && <div className="text-xs text-gray-600">{obj.address}</div>}
+                                  {obj.postalCode && <div className="text-xs text-gray-600">{obj.postalCode} {obj.city}</div>}
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {obj.objectType && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{obj.objectType}</span>
+                                    )}
+                                    {sub && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">Aktivt abonnemang</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </Popup>
+                            </Marker>
+                          );
+                        })}
+                      </MapContainer>
+                    </div>
+                  ) : (
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {customerObjects.map(obj => {
+                        const sub = subscriptions.find(s => s.objectId === obj.id && s.status === "active");
+                        return (
+                          <div 
+                            key={obj.id}
+                            className="p-4 rounded-lg border"
+                            data-testid={`card-object-${obj.id}`}
+                          >
+                            <p className="font-medium">{obj.name}</p>
+                            <p className="text-sm text-muted-foreground">{obj.address}</p>
+                            {obj.postalCode && (
+                              <p className="text-sm text-muted-foreground">{obj.postalCode} {obj.city}</p>
+                            )}
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {obj.objectType && (
+                                <Badge variant="outline" className="text-xs">{obj.objectType}</Badge>
+                              )}
+                              {sub && (
+                                <Badge variant="secondary" className="text-xs bg-green-500/20 text-green-600">
+                                  Aktivt abonnemang
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })()}
         </>
       )}
     </div>
