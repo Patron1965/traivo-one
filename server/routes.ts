@@ -159,7 +159,10 @@ export async function registerRoutes(
       const [clusterStats] = await db.execute(sql`
         SELECT COUNT(*) FILTER (WHERE status = 'active') AS active FROM clusters WHERE tenant_id = ${tenantId}
       `);
-      const stats = orderStats as Record<string, any>;
+      const stats = orderStats as Record<string, string | number | null>;
+      const custStats = customerStats as Record<string, string | number | null>;
+      const resStats = resourceStats as Record<string, string | number | null>;
+      const cluStats = clusterStats as Record<string, string | number | null>;
       res.json({
         completedOrders: Number(stats.completed || 0),
         pendingOrders: Number(stats.pending || 0),
@@ -167,9 +170,9 @@ export async function registerRoutes(
         scheduledOrders: Number(stats.scheduled || 0),
         totalOrderValue: Number(stats.total_value || 0),
         totalOrders: Number(stats.total || 0),
-        activeCustomers: Number((customerStats as any).total || 0),
-        activeResources: Number((resourceStats as any).active || 0),
-        activeClusters: Number((clusterStats as any).active || 0),
+        activeCustomers: Number(custStats.total || 0),
+        activeResources: Number(resStats.active || 0),
+        activeClusters: Number(cluStats.active || 0),
       });
     } catch (error) {
       console.error("Failed to fetch dashboard stats:", error);
