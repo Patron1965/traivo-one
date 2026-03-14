@@ -12731,7 +12731,10 @@ setInterval(loadRoutes, 60000);
         weekDays.push(d);
       }
 
-      const allWorkOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 4);
+      weekEnd.setHours(23, 59, 59, 999);
+      const allWorkOrders = await storage.getWorkOrders(tenantId, weekStart, weekEnd, true);
       const allResources = await storage.getResources(tenantId);
 
       const selectedResources = allResources.filter(r => resourceIds.includes(r.id));
