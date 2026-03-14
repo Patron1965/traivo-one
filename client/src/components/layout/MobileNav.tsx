@@ -151,9 +151,9 @@ export function MobileNav() {
       <SheetContent side="left" className="w-80 p-0" data-testid="mobile-nav-sheet">
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center gap-3">
-            <img src={logoDark} alt="Nordnav One" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-mobile-nav-logo" />
-            <img src={logoLight} alt="Nordnav One" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-mobile-nav-logo-dark" />
-            <SheetTitle className="sr-only">Nordnav One</SheetTitle>
+            <img src={logoDark} alt="Traivo" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-mobile-nav-logo" />
+            <img src={logoLight} alt="Traivo" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-mobile-nav-logo-dark" />
+            <SheetTitle className="sr-only">Traivo</SheetTitle>
           </div>
         </SheetHeader>
         <ScrollArea className="h-[calc(100vh-80px)]">

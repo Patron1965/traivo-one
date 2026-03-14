@@ -311,7 +311,7 @@ export default function FortnoxSettingsPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <p>
-              Fortnox-integrationen synkroniserar kunder, artiklar och fakturor mellan Nordnav One och Fortnox.
+              Fortnox-integrationen synkroniserar kunder, artiklar och fakturor mellan Traivo och Fortnox.
             </p>
             <div className="space-y-2">
               <h4 className="font-medium text-foreground">Mappningar:</h4>
@@ -372,7 +372,7 @@ export default function FortnoxSettingsPage() {
                 </div>
               </div>
               <CardDescription>
-                Koppla Nordnav One-entiteter till motsvarande Fortnox-ID:n
+                Koppla Traivo-entiteter till motsvarande Fortnox-ID:n
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -542,7 +542,7 @@ export default function FortnoxSettingsPage() {
           <DialogHeader>
             <DialogTitle>Lägg till koppling</DialogTitle>
             <DialogDescription>
-              Koppla en Nordnav One-entitet till ett Fortnox-ID
+              Koppla en Traivo-entitet till ett Fortnox-ID
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
@@ -565,7 +565,7 @@ export default function FortnoxSettingsPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Nordnav One-entitet</Label>
+              <Label>Traivo-entitet</Label>
               <Select value={selectedNordnavOneId} onValueChange={setSelectedNordnavOneId}>
                 <SelectTrigger data-testid="dialog-select-nordfield-entity">
                   <SelectValue placeholder="Välj entitet" />

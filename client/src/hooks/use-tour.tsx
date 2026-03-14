@@ -32,7 +32,7 @@ interface TourContextValue {
   resetAllTours: () => void;
 }
 
-const STORAGE_KEY = "nordfield-tours-seen";
+const STORAGE_KEY = "traivo-tours-seen";
 
 function getSeenTours(): string[] {
   try {

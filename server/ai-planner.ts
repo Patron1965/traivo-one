@@ -925,7 +925,7 @@ export function analyzeWorkloadImbalances(context: PlanningContext): WorkloadAna
 export async function aiEnhancedSchedule(
   context: PlanningContext
 ): Promise<AutoScheduleResult> {
-  // Hämta väderprognos för Umeå (Nordfields huvudort)
+  // Hämta väderprognos för Umeå (huvudort)
   const UMEA_LAT = 63.82;
   const UMEA_LON = 20.26;
   let weatherInfo = "";
@@ -970,7 +970,7 @@ export async function aiEnhancedSchedule(
       .join("\n");
     
     const prompt = `
-Du är en expert på fältserviceoptimering för ett avfallshanteringsföretag i Umeå (Nordnav One).
+Du är en expert på fältserviceoptimering för ett avfallshanteringsföretag.
 Analysera denna automatiska schemaläggning och ge förbättringsförslag.
 
 RESURSER (${context.resources.length} st):
@@ -2705,7 +2705,7 @@ ${clusters.slice(0, 10).map(c => `- ${c.name}`).join("\n")}
 ${clusters.length > 10 ? `...och ${clusters.length - 10} fler` : ""}
 `;
 
-  const systemPrompt = `Du är en AI-planeringsassistent för Nordnav One fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
+  const systemPrompt = `Du är en AI-planeringsassistent för Traivo fältserviceplattform. Du hjälper planerare att hantera arbetsordrar och resurser genom naturligt språk.
 
 ${contextSummary}
 

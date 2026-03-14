@@ -202,7 +202,7 @@ export default function EnvironmentalCertificatePage() {
     const pageHeight = doc.internal.pageSize.getHeight();
     doc.setFontSize(8);
     doc.setTextColor(128, 128, 128);
-    doc.text("Detta certifikat är automatiskt genererat av Nordnav One Field Service Platform.", pageWidth / 2, pageHeight - 15, { align: "center" });
+    doc.text("Detta certifikat är automatiskt genererat av Traivo Field Service Platform.", pageWidth / 2, pageHeight - 15, { align: "center" });
     doc.text(`Certifikat-ID: ${certificateData.customerId.slice(0, 8)}-${certificateData.year}`, pageWidth / 2, pageHeight - 10, { align: "center" });
     
     doc.save(`miljocertifikat_${certificateData.customerName.replace(/\s+/g, "_")}_${certificateData.year}.pdf`);

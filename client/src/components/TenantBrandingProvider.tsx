@@ -20,7 +20,7 @@ const BrandingContext = createContext<BrandingContextValue>({
   primaryColor: "#EA580C",
   secondaryColor: "#991B1B",
   accentColor: "#F59E0B",
-  companyName: "Nordnav One",
+  companyName: "Traivo",
   logoUrl: null,
   logoIconUrl: null,
   fontFamily: "Inter",
@@ -137,9 +137,9 @@ export function TenantBrandingProvider({ children }: { children: React.ReactNode
     primaryColor: branding?.primaryColor || "#EA580C",
     secondaryColor: branding?.secondaryColor || "#991B1B",
     accentColor: branding?.accentColor || "#F59E0B",
-    companyName: branding?.companyName || "Nordnav One",
+    companyName: branding?.companyName || "Traivo",
     logoUrl: branding?.logoUrl || null,
-    logoIconUrl: (branding?.logoIconUrl && !branding.logoIconUrl.includes("nordfield-logo")) ? branding.logoIconUrl : null,
+    logoIconUrl: (branding?.logoIconUrl && !branding.logoIconUrl.includes("traivo-logo")) ? branding.logoIconUrl : null,
     fontFamily: branding?.fontFamily || "Inter",
   };
 

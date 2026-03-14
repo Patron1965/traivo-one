@@ -127,7 +127,7 @@ export default function SettingsPage() {
         </div>
         <Badge variant="outline" className="gap-1">
           <Building2 className="h-3 w-3" />
-          Nordnav One
+          Traivo
         </Badge>
       </div>
 
@@ -542,12 +542,12 @@ export default function SettingsPage() {
                 <Database className="h-4 w-4" />
                 Företagsinformation
               </CardTitle>
-              <CardDescription>Information om Nordnav One</CardDescription>
+              <CardDescription>Information om Traivo</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between gap-4">
                 <span className="text-muted-foreground">Företagsnamn</span>
-                <span>Nordnav One</span>
+                <span>Traivo</span>
               </div>
               <Separator />
               <div className="flex justify-between gap-4">

@@ -529,7 +529,7 @@ export function Dashboard() {
       };
 
       // SIDA 1 - Sammanfattning
-      yPos = addHeader("Nordnav One - Månadsrapport");
+      yPos = addHeader("Traivo - Månadsrapport");
       
       yPos = addSectionTitle("Nyckeltal", yPos);
       
@@ -764,10 +764,10 @@ export function Dashboard() {
         doc.setPage(i);
         doc.setFontSize(8);
         doc.setTextColor(128, 128, 128);
-        doc.text(`Nordnav One - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
+        doc.text(`Traivo - Sida ${i} av ${totalPages}`, pageWidth / 2, pageHeight - 8, { align: "center" });
       }
 
-      doc.save(`nordfield-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
+      doc.save(`traivo-rapport-${format(new Date(), "yyyy-MM-dd")}.pdf`);
       
       toast({
         title: "Rapport exporterad",
@@ -791,7 +791,7 @@ export function Dashboard() {
   const handleExportExcel = useCallback(() => {
     try {
       const today = format(new Date(), "yyyy-MM-dd");
-      let csv = "Nordnav One Dashboard Export - " + today + "\n\n";
+      let csv = "Traivo Dashboard Export - " + today + "\n\n";
       
       csv += "NYCKELTAL\n";
       csv += "Mått;Värde;Detaljer\n";
@@ -849,7 +849,7 @@ export function Dashboard() {
       const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `nordfield-export-${today}.csv`;
+      link.download = `traivo-export-${today}.csv`;
       link.click();
       URL.revokeObjectURL(link.href);
       

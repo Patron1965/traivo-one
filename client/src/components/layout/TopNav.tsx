@@ -247,8 +247,8 @@ function TenantLogo() {
   return (
     <Link href="/">
       <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5" data-testid="link-home-logo">
-        <img src={logoDark} alt="Nordnav One" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-tenant-logo" />
-        <img src={logoLight} alt="Nordnav One" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-tenant-logo-dark" />
+        <img src={logoDark} alt="Traivo" className="h-10 w-auto object-contain block dark:hidden" data-testid="img-tenant-logo" />
+        <img src={logoLight} alt="Traivo" className="h-10 w-auto object-contain hidden dark:block" data-testid="img-tenant-logo-dark" />
       </div>
     </Link>
   );

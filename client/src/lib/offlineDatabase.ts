@@ -90,7 +90,7 @@ interface OfflineDBSchema extends DBSchema {
   };
 }
 
-const DB_NAME = 'nordfield-offline-db';
+const DB_NAME = 'traivo-offline-db';
 const DB_VERSION = 1;
 
 let dbInstance: IDBPDatabase<OfflineDBSchema> | null = null;

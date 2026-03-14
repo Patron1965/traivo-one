@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 import type { WorkOrder } from "@shared/schema";
 import { IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
 
-const CACHE_KEY_PREFIX = "nordfield_anomaly_explanation_";
+const CACHE_KEY_PREFIX = "traivo_anomaly_explanation_";
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 
 function getCacheKey(anomalyType: string, id: string): string {

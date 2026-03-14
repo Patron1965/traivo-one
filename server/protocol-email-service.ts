@@ -41,7 +41,7 @@ export async function sendProtocolToCustomer(
     const pdfBuffer = await generateProtocolPdf(protocol, context);
     const pdfBase64 = pdfBuffer.toString('base64');
     
-    const fromName = context.tenant?.name || 'Nordnav One Fältservice';
+    const fromName = context.tenant?.name || 'Traivo Fältservice';
     const fromEmail = 'protokoll@resend.dev'; // In production, use verified domain
 
     const emailHtml = `
@@ -162,7 +162,7 @@ export async function sendDeviationReportToCustomer(
       throw new Error('RESEND_API_KEY is not configured');
     }
 
-    const fromName = context.tenant?.name || 'Nordnav One Fältservice';
+    const fromName = context.tenant?.name || 'Traivo Fältservice';
     const fromEmail = 'avvikelse@resend.dev';
     
     const reportedDate = format(new Date(deviation.reportedAt), 'PPP', { locale: sv });

@@ -30,8 +30,8 @@ export default function LandingPage() {
       <header className="border-b sticky top-0 bg-background/95 backdrop-blur z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <img src={logoDark} alt="Nordnav One" className="h-16 w-auto object-contain block dark:hidden" data-testid="img-landing-logo" />
-            <img src={logoLight} alt="Nordnav One" className="h-16 w-auto object-contain hidden dark:block" data-testid="img-landing-logo-dark" />
+            <img src={logoDark} alt="Traivo" className="h-16 w-auto object-contain block dark:hidden" data-testid="img-landing-logo" />
+            <img src={logoLight} alt="Traivo" className="h-16 w-auto object-contain hidden dark:block" data-testid="img-landing-logo-dark" />
             <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
@@ -226,9 +226,9 @@ export default function LandingPage() {
                     <Zap className="h-3 w-3" />
                     Designpartner
                   </div>
-                  <h2 className="text-3xl font-bold mb-4">Utvecklat tillsammans med Nordnav One</h2>
+                  <h2 className="text-3xl font-bold mb-4">Utvecklat tillsammans med Traivo</h2>
                   <p className="text-muted-foreground mb-6">
-                    Nordnav One utvecklas i nära samarbete med branschledande aktörer inom avfallshantering i Norden. 
+                    Traivo utvecklas i nära samarbete med branschledande aktörer inom avfallshantering i Norden. 
                     En plattform byggd för att lösa verkliga utmaningar.
                   </p>
                   <ul className="space-y-3">
@@ -263,7 +263,7 @@ export default function LandingPage() {
                   <blockquote className="text-lg mb-4">
                     "AI-stöd ska genomsyra hela plattformen. Varje funktion bör övervägas för AI-förbättring."
                   </blockquote>
-                  <cite className="text-sm opacity-80">— Nordnav One designprincip</cite>
+                  <cite className="text-sm opacity-80">— Traivo designprincip</cite>
                 </div>
               </div>
             </div>
@@ -312,7 +312,7 @@ export default function LandingPage() {
 
         <section className="py-20 bg-muted/30">
           <div className="container mx-auto px-4 text-center">
-            <h2 className="text-3xl font-bold mb-4">Redo att testa Nordnav One?</h2>
+            <h2 className="text-3xl font-bold mb-4">Redo att testa Traivo?</h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-xl mx-auto">
               Logga in för att utforska plattformens alla funktioner.
             </p>
@@ -332,8 +332,8 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-12">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img src={logoDark} alt="Nordnav One" className="h-8 w-auto object-contain block dark:hidden" data-testid="img-landing-footer-logo" />
-              <img src={logoLight} alt="Nordnav One" className="h-8 w-auto object-contain hidden dark:block" data-testid="img-landing-footer-logo-dark" />
+              <img src={logoDark} alt="Traivo" className="h-8 w-auto object-contain block dark:hidden" data-testid="img-landing-footer-logo" />
+              <img src={logoLight} alt="Traivo" className="h-8 w-auto object-contain hidden dark:block" data-testid="img-landing-footer-logo-dark" />
               <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">

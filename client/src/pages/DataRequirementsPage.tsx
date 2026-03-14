@@ -120,10 +120,10 @@ export default function DataRequirementsPage() {
     const pageWidth = doc.internal.pageSize.getWidth();
     
     doc.setFontSize(20);
-    doc.text("Datakrav för Nordnav One-import", pageWidth / 2, 20, { align: "center" });
+    doc.text("Datakrav för Traivo-import", pageWidth / 2, 20, { align: "center" });
     
     doc.setFontSize(12);
-    doc.text("Nordnav One AB", pageWidth / 2, 28, { align: "center" });
+    doc.text("Traivo", pageWidth / 2, 28, { align: "center" });
     
     doc.setFontSize(10);
     doc.text(`Genererad: ${new Date().toLocaleDateString("sv-SE")}`, pageWidth / 2, 35, { align: "center" });
@@ -191,19 +191,19 @@ export default function DataRequirementsPage() {
     doc.setFontSize(10);
     doc.text("Vid frågor om dataexporten, kontakta:", 14, yPos);
     yPos += 6;
-    doc.text("E-post: support@nordfield.se", 14, yPos);
+    doc.text("E-post: support@traivo.se", 14, yPos);
 
-    doc.save("Nordnav One_Datakrav_Nordnav One.pdf");
+    doc.save("Traivo_Datakrav.pdf");
     
     toast({
       title: "PDF nedladdad",
-      description: "Filen 'Nordnav One_Datakrav_Nordnav One.pdf' har sparats."
+      description: "Filen 'Traivo_Datakrav.pdf' har sparats."
     });
   };
 
   const emailBody = `Hej,
 
-Vi håller på att implementera Nordnav One som nytt planeringssystem och behöver exportera data från Modus 2.0.
+Vi håller på att implementera Traivo som nytt planeringssystem och behöver exportera data från Modus 2.0.
 
 Bifogat finns en specifikation av vilken data vi behöver. Kortfattat:
 
@@ -226,7 +226,7 @@ En fil per kategori.
 Se bifogad PDF för detaljerad specifikation med alla fält och exempel.
 
 Med vänliga hälsningar,
-Nordnav One AB`;
+Traivo`;
 
   const copyEmail = () => {
     navigator.clipboard.writeText(emailBody);
@@ -238,9 +238,9 @@ Nordnav One AB`;
   return (
     <div className="container mx-auto p-6 max-w-5xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Datakrav för Nordnav One-import</h1>
+        <h1 className="text-3xl font-bold mb-2">Datakrav för Traivo-import</h1>
         <p className="text-muted-foreground">
-          Specifikation av data som behövs för att ladda in i Nordnav One
+          Specifikation av data som behövs för att ladda in i Traivo
         </p>
       </div>
 

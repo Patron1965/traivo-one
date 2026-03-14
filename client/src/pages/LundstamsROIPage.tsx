@@ -131,7 +131,7 @@ export default function LundstamsROIPage() {
     pdf.text("Lundstams Atervinning AB", margin, 38);
 
     pdf.setFontSize(10);
-    pdf.text("Nordnav One - AI-driven faltserviceplanering", pageWidth - margin - 80, 38);
+    pdf.text("Traivo - AI-driven faltserviceplanering", pageWidth - margin - 80, 38);
 
     y = 62;
     pdf.setTextColor(15, 23, 42);
@@ -172,7 +172,7 @@ export default function LundstamsROIPage() {
     pdf.setFont("helvetica", "bold");
     pdf.text("Uppgift", margin + 2, y);
     pdf.text("Idag (tim/v)", margin + 70, y);
-    pdf.text("Med Nordnav One", margin + 100, y);
+    pdf.text("Med Traivo", margin + 100, y);
     pdf.text("Besparing", margin + 135, y);
     y += 6;
 
@@ -212,7 +212,7 @@ export default function LundstamsROIPage() {
     pdf.setFont("helvetica", "bold");
     pdf.text("Uppgift", margin + 2, y);
     pdf.text("Idag (min/dag)", margin + 65, y);
-    pdf.text("Med Nordnav One", margin + 100, y);
+    pdf.text("Med Traivo", margin + 100, y);
     pdf.text("Besparing", margin + 135, y);
     y += 6;
 
@@ -279,7 +279,7 @@ export default function LundstamsROIPage() {
 
     pdf.setTextColor(148, 163, 184);
     pdf.setFontSize(8);
-    pdf.text("Sida 1/2 | ROI-analys Lundstams | (C) 2026 Nordnav One", margin, pageHeight - 10);
+    pdf.text("Sida 1/2 | ROI-analys Lundstams | (C) 2026 Traivo", margin, pageHeight - 10);
 
     pdf.addPage();
     y = 15;
@@ -317,7 +317,7 @@ export default function LundstamsROIPage() {
     pdf.setTextColor(15, 23, 42);
     pdf.setFontSize(14);
     pdf.setFont("helvetica", "bold");
-    pdf.text("Nordnav One-funktioner for Lundstams", margin, y);
+    pdf.text("Traivo-funktioner for Lundstams", margin, y);
 
     y += 8;
     pdf.setFontSize(9);
@@ -388,7 +388,7 @@ export default function LundstamsROIPage() {
 
     pdf.setTextColor(148, 163, 184);
     pdf.setFontSize(8);
-    pdf.text("Sida 2/2 | ROI-analys Lundstams | (C) 2026 Nordnav One | Konfidentiellt", margin, pageHeight - 10);
+    pdf.text("Sida 2/2 | ROI-analys Lundstams | (C) 2026 Traivo | Konfidentiellt", margin, pageHeight - 10);
 
     pdf.save("lundstams-roi-analys.pdf");
     setIsGenerating(false);
@@ -402,7 +402,7 @@ export default function LundstamsROIPage() {
             <h1 className="text-3xl font-bold">ROI-analys</h1>
             <Badge variant="outline" className="text-sm">Lundstams Återvinning</Badge>
           </div>
-          <p className="text-muted-foreground mt-1">Beräknad avkastning vid implementation av Nordnav One</p>
+          <p className="text-muted-foreground mt-1">Beräknad avkastning vid implementation av Traivo</p>
         </div>
         <Button 
           onClick={generatePDF} 

@@ -30,7 +30,7 @@ export default function WorkflowGuidePage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold mb-2">Arbetsflödesguide</h1>
         <p className="text-muted-foreground">
-          Steg-för-steg guide för hur Nordnav Ones personal använder Nordnav One dag-för-dag
+          Steg-för-steg guide för hur personalen använder Traivo dag-för-dag
         </p>
       </div>
 

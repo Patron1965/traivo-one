@@ -85,7 +85,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [showCompletedDialog, setShowCompletedDialog] = useState(false);
   const [dismissedInstallBanner, setDismissedInstallBanner] = useState(() => {
     try {
-      return localStorage.getItem("nordfield_pwa_install_dismissed") === "true";
+      return localStorage.getItem("traivo_pwa_install_dismissed") === "true";
     } catch {
       return false;
     }
@@ -94,7 +94,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const handleDismissInstallBanner = () => {
     setDismissedInstallBanner(true);
     try {
-      localStorage.setItem("nordfield_pwa_install_dismissed", "true");
+      localStorage.setItem("traivo_pwa_install_dismissed", "true");
     } catch {
       // localStorage not available
     }

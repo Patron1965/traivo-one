@@ -34,7 +34,7 @@ const slides = [
   {
     id: "cover",
     type: "cover",
-    title: "Nordnav One",
+    title: "Traivo",
     subtitle: "AI-driven fältserviceplanering för Norden",
     tagline: "Från manuell kaos till intelligent automation"
   },
@@ -53,7 +53,7 @@ const slides = [
   {
     id: "solution",
     type: "solution",
-    title: "Lösningen: Nordnav One",
+    title: "Lösningen: Traivo",
     subtitle: "AI-first plattform för intelligent fältserviceplanering",
     features: [
       { icon: Brain, title: "AI-optimering", desc: "Automatisk ruttplanering med maskininlärning" },
@@ -95,15 +95,15 @@ const slides = [
   {
     id: "traction",
     type: "traction",
-    title: "Pilotkund: Nordnav One",
+    title: "Pilotkund",
     stats: [
       { value: "22,714", label: "Ordrar i systemet" },
       { value: "901", label: "Kunder" },
       { value: "103", label: "Funktioner live" },
       { value: "20", label: "Modulkategorier" },
     ],
-    testimonial: "Nordnav One har potential att revolutionera hur vi planerar våra rutter och kommunicerar med kunder.",
-    company: "Nordnav One, Sundsvall"
+    testimonial: "Traivo har potential att revolutionera hur vi planerar våra rutter och kommunicerar med kunder.",
+    company: "Designpartner, Sundsvall"
   },
   {
     id: "sustainability",
@@ -116,7 +116,7 @@ const slides = [
       { icon: PiggyBank, title: "CO2-besparing", desc: "Uppskattning av klimatnytta från avfallshantering" },
       { icon: BarChart3, title: "Hållbarhetsrating", desc: "Klimatpositiv → Utmärkt → Bra → Medel-skala" },
     ],
-    bottomLine: "Nordnav One hjälper kunder att dokumentera sin miljöpåverkan och kommunicera hållbarhetsarbete till intressenter"
+    bottomLine: "Traivo hjälper kunder att dokumentera sin miljöpåverkan och kommunicera hållbarhetsarbete till intressenter"
   },
   {
     id: "business-model",
@@ -153,7 +153,7 @@ const slides = [
     type: "roadmap",
     title: "Roadmap 2025-2027",
     phases: [
-      { quarter: "Q4 2025", items: ["Nordnav One pilot live", "AI-planering med Conversational AI", "Mobilapp med offline-stöd"], status: "done" },
+      { quarter: "Q4 2025", items: ["Pilot live", "AI-planering med Conversational AI", "Mobilapp med offline-stöd"], status: "done" },
       { quarter: "Q1 2026", items: ["Kundportal 2.0", "White-label flerföretagsstöd", "Miljöcertifikat & SMS"], status: "done" },
       { quarter: "Q2 2026", items: ["Första betalande kunder", "Branschpaket städ & fastighet", "API-dokumentation"], status: "current" },
       { quarter: "Q3-Q4 2026", items: ["Norge-expansion", "Advanced analytics", "Partnerintegrations-marketplace"], status: "planned" },
@@ -217,10 +217,10 @@ const slides = [
   {
     id: "closing",
     type: "closing",
-    title: "Nordnav One",
+    title: "Traivo",
     subtitle: "Framtidens fältserviceplanering",
-    cta: "Låt oss prata om hur Nordnav One kan förändra branschen",
-    contact: "kontakt@nordfield.se"
+    cta: "Låt oss prata om hur Traivo kan förändra branschen",
+    contact: "kontakt@traivo.se"
   }
 ];
 
@@ -1229,10 +1229,10 @@ export default function InvestorPitchPage() {
       addPageNumber(index);
     });
 
-    doc.save("NordnavOne_Investor_Pitch.pdf");
+    doc.save("Traivo_Investor_Pitch.pdf");
     toast({
       title: "PDF nedladdad",
-      description: "Filen 'NordnavOne_Investor_Pitch.pdf' har sparats och är redo att mailas."
+      description: "Filen 'Traivo_Investor_Pitch.pdf' har sparats och är redo att mailas."
     });
   };
 
@@ -1245,7 +1245,7 @@ export default function InvestorPitchPage() {
       <div className="flex items-center justify-between p-4 border-b">
         <div className="flex items-center gap-2">
           <Presentation className="h-5 w-5 text-primary" />
-          <span className="font-semibold">Nordnav One Investerarpresentation</span>
+          <span className="font-semibold">Traivo Investerarpresentation</span>
         </div>
         <div className="flex items-center gap-4">
           <span className="text-sm text-muted-foreground">

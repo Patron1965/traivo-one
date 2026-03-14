@@ -1,18 +1,18 @@
-# Nordnav One - AI-Driven Field Service Planning Platform
+# Traivo - AI-Driven Field Service Planning Platform
 
 ## Overview
-Nordnav One is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
+Traivo (formerly Nordnav One) is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
-- **Design:** Clean, professional Nordic aesthetic — Nordnav One Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
+- **Design:** Clean, professional Nordic aesthetic — Traivo Color Palette: Deep Ocean Blue (#1B4B6B), Arctic Ice (#E8F4F8), Mountain Gray (#6B7C8C), Northern Teal (#4A9B9B), Midnight Navy (#2C3E50), Aurora Green (#7DBFB0)
 - **Logo:** `@assets/nordnav_one_logo_final_upward_1773311964126.png`
 - **Theme:** Dark/light mode support
 - **Font:** Inter for UI
 - **Development:** Alla nya funktioner ska alltid läggas till i frontend med navigeringslänkar - användaren vill se helheten och vad som byggs under skalet
 
 ## System Architecture
-The Nordnav One platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
+The Traivo platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
 
 ### UI/UX Decisions
 The user interface includes a sticky TopNav, global search, user utilities, a mobile-friendly hamburger menu, Floating Action Button, QuickStats, a drag-and-drop WeekPlanner, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Mobile interfaces for field technicians feature a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help, progressive loading, white-label multi-tenancy, and an AI Command Center. An interactive Tour Guide system provides step-by-step onboarding, and role-based navigation filtering ensures relevant options are displayed.
@@ -23,7 +23,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI (gpt-4o-mini, gpt-4o) for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner.
-- **MCP Server:** Enables external AI assistants to interact with Nordfield data via SSE.
+- **MCP Server:** Enables external AI assistants to interact with Traivo data via SSE.
 - **Modus 2.0 Import System:** Dedicated `/import` page for step-by-step data migration from Modus 2.0 via CSV, supporting objects, tasks, invoice lines, and events. Features include upsert logic, pre-import validation, batch tracking, and SSE-based real-time progress feedback.
 - **Geoapify Geocoding Integration:** Address resolution via Geoapify Geocoding API (replaced Google Geocoding to eliminate costs), with fallback to Nominatim. Used for precise distance calculations in route optimization.
 - **Performance:** Database indexes, server-side pagination, optimized WeekPlanner loading, lazy object loading, and Address Search/Autocomplete with Geoapify Geocoding and OpenStreetMap Nominatim fallback.
@@ -69,7 +69,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
-- **External Optimization:** Route optimization is offloaded to a separate Nordfield optimization service.
+- **External Optimization:** Route optimization is offloaded to a separate Traivo optimization service.
 - **Data Validation:** DataClean service handles external data validation and geocoding.
 - **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app.
 
@@ -79,7 +79,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **OpenAI API:** AI planning suggestions, conversational AI.
 - **Geoapify:** Route calculation (Routing API) and VRP optimization (Route Planner API).
 - **OpenStreetMap Nominatim:** Geocoding for Swedish addresses.
-- **External Nordfield Optimization Service:** Dedicated route optimization.
+- **External Traivo Optimization Service:** Dedicated route optimization.
 - **DataClean Service:** External service for data validation and geocoding.
 - **Modus 2.0:** Source of CSV data for imports.
 - **react-leaflet:** Interactive map visualizations.

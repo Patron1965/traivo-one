@@ -1597,7 +1597,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   /**
-   * Hämta artiklar som är applicerbara för ett specifikt objekt baserat på hookLevel (Nordfield fasthakning)
+   * Hämta artiklar som är applicerbara för ett specifikt objekt baserat på hookLevel (Traivo fasthakning)
    * 
    * Fasthakning-logik:
    * - Artikeln matchar om objektets nivå/typ EXAKT motsvarar artikelns hookLevel

@@ -225,7 +225,7 @@ function buildEmailHtml(
 <div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;margin-top:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
 
   <div style="background:linear-gradient(135deg,#3b82f6,#1d4ed8);color:#fff;padding:32px 24px;">
-    <h1 style="margin:0;font-size:24px;">Nordnav One Veckorapport</h1>
+    <h1 style="margin:0;font-size:24px;">Traivo Veckorapport</h1>
     <p style="margin:8px 0 0;opacity:0.9;font-size:14px;">${tenantName} &mdash; ${weekLabel}</p>
   </div>
 
@@ -334,7 +334,7 @@ function buildEmailHtml(
     </div>
 
     <p style="margin-top:28px;font-size:12px;color:#94a3b8;text-align:center;">
-      Automatiskt genererad av Nordfield &bull; Skickad varje fredag
+      Automatiskt genererad av Traivo &bull; Skickad varje fredag
     </p>
   </div>
 </div>
@@ -372,7 +372,7 @@ export async function generateAndSendWeeklyReports(): Promise<{ sent: number; er
 
         await sendEmail({
           to: tenant.contactEmail,
-          subject: `Nordnav One Veckorapport - ${weekLabel} - ${tenant.name}`,
+          subject: `Traivo Veckorapport - ${weekLabel} - ${tenant.name}`,
           html,
         });
 

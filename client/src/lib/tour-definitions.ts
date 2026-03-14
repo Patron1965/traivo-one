@@ -3,11 +3,11 @@ import type { TourDefinition } from "@/hooks/use-tour";
 export const platformTour: TourDefinition = {
   id: "platform-overview",
   name: "Plattformsguide",
-  description: "Lär dig grunderna i Nordnav One-plattformen",
+  description: "Lär dig grunderna i Traivo-plattformen",
   steps: [
     {
       target: '[data-testid="img-tenant-logo"], [data-testid="img-tenant-logo-fallback"]',
-      title: "Välkommen till Nordnav One",
+      title: "Välkommen till Traivo",
       description: "Det här är din organisation. Klicka på loggan för att alltid komma tillbaka till startsidan.",
       placement: "bottom",
     },
@@ -294,7 +294,7 @@ export const customerPortalTour: TourDefinition = {
     {
       target: '[data-testid="nav-dropdown-grunddata"]',
       title: "Kundportal",
-      description: "Nordnav One har en kundportal där era kunder kan logga in, se besök, boka extra tjänster och chatta — utan att ringa er.",
+      description: "Traivo har en kundportal där era kunder kan logga in, se besök, boka extra tjänster och chatta — utan att ringa er.",
       placement: "bottom",
     },
     {
