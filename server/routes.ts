@@ -198,10 +198,16 @@ export async function registerRoutes(
   registerIoTRoutes(app);
 
   app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
-    console.error("[global-error]", err);
     if (err instanceof z.ZodError) {
       return res.status(400).json(formatZodError(err));
     }
+
+    const { AppError } = require("./errors");
+    if (err instanceof AppError) {
+      return res.status(err.statusCode).json({ error: err.message });
+    }
+
+    console.error("[global-error]", err);
     const message = err.message || "Ett oväntat serverfel uppstod";
     res.status(err.status || 500).json({ error: message });
   });
