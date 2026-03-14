@@ -1,5 +1,5 @@
 import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, Brain, Database, ClipboardCheck, MapPin, History } from "lucide-react";
-import traivoLogo from "@assets/nordnav_one_logo_final_upward_1773311964126.png";
+import traivoLogo from "@assets/traivo_logo.png";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,

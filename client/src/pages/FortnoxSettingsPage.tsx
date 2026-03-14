@@ -65,7 +65,7 @@ interface FortnoxMapping {
   id: string;
   tenantId: string;
   entityType: string;
-  nordfieldId: string;
+  unicornId: string;
   fortnoxId: string;
   lastSyncedAt: string | null;
   createdAt: string;
@@ -100,7 +100,7 @@ export default function FortnoxSettingsPage() {
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [selectedEntityType, setSelectedEntityType] = useState("customer");
-  const [selectedNordnavOneId, setSelectedNordnavOneId] = useState("");
+  const [selectedEntityId, setSelectedEntityId] = useState("");
   const [fortnoxIdInput, setFortnoxIdInput] = useState("");
 
   const { data: config, isLoading: configLoading } = useQuery<FortnoxConfig>({
@@ -153,12 +153,12 @@ export default function FortnoxSettingsPage() {
   });
 
   const createMappingMutation = useMutation({
-    mutationFn: (data: { entityType: string; nordfieldId: string; fortnoxId: string }) =>
+    mutationFn: (data: { entityType: string; unicornId: string; fortnoxId: string }) =>
       apiRequest("POST", "/api/fortnox/mappings", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
       setMappingDialogOpen(false);
-      setSelectedNordnavOneId("");
+      setSelectedEntityId("");
       setFortnoxIdInput("");
       toast({ title: "Koppling skapad" });
     },
@@ -191,19 +191,19 @@ export default function FortnoxSettingsPage() {
     }
   };
 
-  const getEntityName = (entityType: string, nordfieldId: string) => {
+  const getEntityName = (entityType: string, entityId: string) => {
     switch (entityType) {
       case "customer":
-        return customers.find(c => c.id === nordfieldId)?.name || nordfieldId;
+        return customers.find(c => c.id === entityId)?.name || entityId;
       case "article":
-        const article = articles.find(a => a.id === nordfieldId);
-        return article ? `${article.articleNumber} - ${article.name}` : nordfieldId;
+        const article = articles.find(a => a.id === entityId);
+        return article ? `${article.articleNumber} - ${article.name}` : entityId;
       case "costcenter":
-        return resources.find(r => r.id === nordfieldId)?.name || nordfieldId;
+        return resources.find(r => r.id === entityId)?.name || entityId;
       case "project":
-        return teams.find(t => t.id === nordfieldId)?.name || nordfieldId;
+        return teams.find(t => t.id === entityId)?.name || entityId;
       default:
-        return nordfieldId;
+        return entityId;
     }
   };
 
@@ -396,7 +396,7 @@ export default function FortnoxSettingsPage() {
                       >
                         <div className="flex-1 min-w-0">
                           <p className="font-medium truncate">
-                            {getEntityName(mapping.entityType, mapping.nordfieldId)}
+                            {getEntityName(mapping.entityType, mapping.unicornId)}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             Fortnox ID: <span className="font-mono">{mapping.fortnoxId}</span>
@@ -566,8 +566,8 @@ export default function FortnoxSettingsPage() {
             </div>
             <div className="space-y-2">
               <Label>Traivo-entitet</Label>
-              <Select value={selectedNordnavOneId} onValueChange={setSelectedNordnavOneId}>
-                <SelectTrigger data-testid="dialog-select-nordfield-entity">
+              <Select value={selectedEntityId} onValueChange={setSelectedEntityId}>
+                <SelectTrigger data-testid="dialog-select-entity">
                   <SelectValue placeholder="Välj entitet" />
                 </SelectTrigger>
                 <SelectContent>
@@ -597,10 +597,10 @@ export default function FortnoxSettingsPage() {
             <Button
               onClick={() => createMappingMutation.mutate({
                 entityType: selectedEntityType,
-                nordfieldId: selectedNordnavOneId,
+                unicornId: selectedEntityId,
                 fortnoxId: fortnoxIdInput,
               })}
-              disabled={!selectedNordnavOneId || !fortnoxIdInput || createMappingMutation.isPending}
+              disabled={!selectedEntityId || !fortnoxIdInput || createMappingMutation.isPending}
               data-testid="button-create-mapping"
             >
               {createMappingMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

@@ -1,6 +1,6 @@
 {
   "name": "Traivo Fältapp",
-  "short_name": "Fältapp",
+  "short_name": "Traivo",
   "description": "AI-driven fältassistent för chaufförer och tekniker",
   "start_url": "/field",
   "display": "standalone",
