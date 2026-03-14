@@ -34,7 +34,7 @@ app.get("/api/articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const article = await storage.getArticle(req.params.id);
     const verified = verifyTenantOwnership(article, tenantId);
-    if (!verified) return res.status(404).json({ error: "Article not found" });
+    if (!verified) return res.status(404).json({ error: "Artikel hittades inte" });
     res.json(verified);
 }));
 
@@ -49,7 +49,7 @@ app.patch("/api/articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getArticle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Article not found" });
+      return res.status(404).json({ error: "Artikel hittades inte" });
     }
     const updateSchema = insertArticleSchema.partial().omit({ tenantId: true });
     const parseResult = updateSchema.safeParse(req.body);
@@ -58,7 +58,7 @@ app.patch("/api/articles/:id", asyncHandler(async (req, res) => {
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
     const article = await storage.updateArticle(req.params.id, updateData);
-    if (!article) return res.status(404).json({ error: "Article not found" });
+    if (!article) return res.status(404).json({ error: "Artikel hittades inte" });
     res.json(article);
 }));
 
@@ -66,7 +66,7 @@ app.delete("/api/articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getArticle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Article not found" });
+      return res.status(404).json({ error: "Artikel hittades inte" });
     }
     await storage.deleteArticle(req.params.id);
     res.status(204).send();
@@ -77,7 +77,7 @@ app.get("/api/objects/:objectId/applicable-articles", asyncHandler(async (req, r
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
-      return res.status(404).json({ error: "Object not found" });
+      return res.status(404).json({ error: "Objekt hittades inte" });
     }
     const applicableArticles = await storage.getApplicableArticlesForObject(
       tenantId,
@@ -91,7 +91,7 @@ app.get("/api/objects/:objectId/article-prices", asyncHandler(async (req, res) =
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
-      return res.status(404).json({ error: "Object not found" });
+      return res.status(404).json({ error: "Objekt hittades inte" });
     }
     const prices = await storage.getResolvedArticlePricesForObject(tenantId, req.params.objectId);
     res.json(prices);
@@ -102,7 +102,7 @@ app.post("/api/objects/:objectId/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
-      return res.status(404).json({ error: "Object not found" });
+      return res.status(404).json({ error: "Objekt hittades inte" });
     }
     const { articleId, overridePrice } = req.body;
     if (!articleId) {
@@ -110,11 +110,11 @@ app.post("/api/objects/:objectId/articles", asyncHandler(async (req, res) => {
     }
     const article = await storage.getArticle(articleId);
     if (!article || article.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Article not found" });
+      return res.status(404).json({ error: "Artikel hittades inte" });
     }
     const existing = await storage.getObjectArticles(tenantId, req.params.objectId);
     if (existing.some(e => e.articleId === articleId)) {
-      return res.status(409).json({ error: "Article already linked to this object" });
+      return res.status(409).json({ error: "Artikeln är redan länkad till detta objekt" });
     }
     const result = await storage.addObjectArticle({
       tenantId,
@@ -129,11 +129,11 @@ app.delete("/api/objects/:objectId/articles/:linkId", asyncHandler(async (req, r
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
-      return res.status(404).json({ error: "Object not found" });
+      return res.status(404).json({ error: "Objekt hittades inte" });
     }
     const deleted = await storage.removeObjectArticle(tenantId, req.params.objectId, req.params.linkId);
     if (!deleted) {
-      return res.status(404).json({ error: "Article link not found" });
+      return res.status(404).json({ error: "Artikellänk hittades inte" });
     }
     res.json({ success: true });
 }));
@@ -142,7 +142,7 @@ app.patch("/api/objects/:objectId/articles/:linkId", asyncHandler(async (req, re
     const tenantId = getTenantIdWithFallback(req);
     const object = await storage.getObject(req.params.objectId);
     if (!verifyTenantOwnership(object, tenantId)) {
-      return res.status(404).json({ error: "Object not found" });
+      return res.status(404).json({ error: "Objekt hittades inte" });
     }
     const { overridePrice } = req.body;
     if (overridePrice !== null && overridePrice !== undefined && typeof overridePrice !== 'number') {
@@ -174,7 +174,7 @@ app.get("/api/price-lists/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const priceList = await storage.getPriceList(req.params.id);
     const verified = verifyTenantOwnership(priceList, tenantId);
-    if (!verified) return res.status(404).json({ error: "Price list not found" });
+    if (!verified) return res.status(404).json({ error: "Prislista hittades inte" });
     res.json(verified);
 }));
 
@@ -189,7 +189,7 @@ app.patch("/api/price-lists/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceList(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Price list not found" });
+      return res.status(404).json({ error: "Prislista hittades inte" });
     }
     const updateSchema = insertPriceListSchema.partial().omit({ tenantId: true });
     const parseResult = updateSchema.safeParse(req.body);
@@ -198,7 +198,7 @@ app.patch("/api/price-lists/:id", asyncHandler(async (req, res) => {
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
     const priceList = await storage.updatePriceList(req.params.id, updateData);
-    if (!priceList) return res.status(404).json({ error: "Price list not found" });
+    if (!priceList) return res.status(404).json({ error: "Prislista hittades inte" });
     res.json(priceList);
 }));
 
@@ -206,7 +206,7 @@ app.delete("/api/price-lists/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceList(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Price list not found" });
+      return res.status(404).json({ error: "Prislista hittades inte" });
     }
     await storage.deletePriceList(req.params.id);
     res.status(204).send();
@@ -217,7 +217,7 @@ app.get("/api/price-lists/:priceListId/articles", asyncHandler(async (req, res) 
     const tenantId = getTenantIdWithFallback(req);
     const priceList = await storage.getPriceList(req.params.priceListId);
     if (!verifyTenantOwnership(priceList, tenantId)) {
-      return res.status(404).json({ error: "Price list not found" });
+      return res.status(404).json({ error: "Prislista hittades inte" });
     }
     const priceListArticles = await storage.getPriceListArticles(req.params.priceListId);
     res.json(priceListArticles);
@@ -227,7 +227,7 @@ app.post("/api/price-lists/:priceListId/articles", asyncHandler(async (req, res)
     const tenantId = getTenantIdWithFallback(req);
     const priceList = await storage.getPriceList(req.params.priceListId);
     if (!verifyTenantOwnership(priceList, tenantId)) {
-      return res.status(404).json({ error: "Price list not found" });
+      return res.status(404).json({ error: "Prislista hittades inte" });
     }
     const data = insertPriceListArticleSchema.parse({ ...req.body, priceListId: req.params.priceListId });
     const priceListArticle = await storage.createPriceListArticle(data);
@@ -237,12 +237,12 @@ app.post("/api/price-lists/:priceListId/articles", asyncHandler(async (req, res)
 app.patch("/api/price-list-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceListArticle(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Price list article not found" });
+    if (!existing) return res.status(404).json({ error: "Prislisteartikel hittades inte" });
     
     // Verify the parent price list belongs to the tenant
     const priceList = await storage.getPriceList(existing.priceListId);
     if (!verifyTenantOwnership(priceList, tenantId)) {
-      return res.status(404).json({ error: "Price list article not found" });
+      return res.status(404).json({ error: "Prislisteartikel hittades inte" });
     }
     
     const updateSchema = insertPriceListArticleSchema.partial().omit({ tenantId: true });
@@ -252,19 +252,19 @@ app.patch("/api/price-list-articles/:id", asyncHandler(async (req, res) => {
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
     const priceListArticle = await storage.updatePriceListArticle(req.params.id, updateData);
-    if (!priceListArticle) return res.status(404).json({ error: "Price list article not found" });
+    if (!priceListArticle) return res.status(404).json({ error: "Prislisteartikel hittades inte" });
     res.json(priceListArticle);
 }));
 
 app.delete("/api/price-list-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPriceListArticle(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Price list article not found" });
+    if (!existing) return res.status(404).json({ error: "Prislisteartikel hittades inte" });
     
     // Verify the parent price list belongs to the tenant
     const priceList = await storage.getPriceList(existing.priceListId);
     if (!verifyTenantOwnership(priceList, tenantId)) {
-      return res.status(404).json({ error: "Price list article not found" });
+      return res.status(404).json({ error: "Prislisteartikel hittades inte" });
     }
     
     await storage.deletePriceListArticle(req.params.id);
@@ -276,7 +276,7 @@ app.get("/api/resources/:resourceId/articles", asyncHandler(async (req, res) => 
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const resourceArticles = await storage.getResourceArticles(req.params.resourceId);
     res.json(resourceArticles);
@@ -286,7 +286,7 @@ app.post("/api/resources/:resourceId/articles", asyncHandler(async (req, res) =>
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const data = insertResourceArticleSchema.parse({ ...req.body, resourceId: req.params.resourceId });
     const resourceArticle = await storage.createResourceArticle(data);
@@ -296,12 +296,12 @@ app.post("/api/resources/:resourceId/articles", asyncHandler(async (req, res) =>
 app.patch("/api/resource-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceArticle(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource article not found" });
+    if (!existing) return res.status(404).json({ error: "Resursartikel hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource article not found" });
+      return res.status(404).json({ error: "Resursartikel hittades inte" });
     }
     
     const updateSchema = insertResourceArticleSchema.partial().omit({ tenantId: true });
@@ -311,19 +311,19 @@ app.patch("/api/resource-articles/:id", asyncHandler(async (req, res) => {
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
     const resourceArticle = await storage.updateResourceArticle(req.params.id, updateData);
-    if (!resourceArticle) return res.status(404).json({ error: "Resource article not found" });
+    if (!resourceArticle) return res.status(404).json({ error: "Resursartikel hittades inte" });
     res.json(resourceArticle);
 }));
 
 app.delete("/api/resource-articles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceArticle(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource article not found" });
+    if (!existing) return res.status(404).json({ error: "Resursartikel hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource article not found" });
+      return res.status(404).json({ error: "Resursartikel hittades inte" });
     }
     
     await storage.deleteResourceArticle(req.params.id);
@@ -341,7 +341,7 @@ app.get("/api/vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.params.id);
     const verified = verifyTenantOwnership(vehicle, tenantId);
-    if (!verified) return res.status(404).json({ error: "Vehicle not found" });
+    if (!verified) return res.status(404).json({ error: "Fordon hittades inte" });
     res.json(verified);
 }));
 
@@ -356,7 +356,7 @@ app.patch("/api/vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ error: "Fordon hittades inte" });
     }
     const updateSchema = insertVehicleSchema.partial().omit({ tenantId: true });
     const parseResult = updateSchema.safeParse(req.body);
@@ -365,7 +365,7 @@ app.patch("/api/vehicles/:id", asyncHandler(async (req, res) => {
     }
     const { tenantId: _t, id: _id, createdAt: _c, deletedAt: _d, ...updateData } = parseResult.data as any;
     const vehicle = await storage.updateVehicle(req.params.id, updateData);
-    if (!vehicle) return res.status(404).json({ error: "Vehicle not found" });
+    if (!vehicle) return res.status(404).json({ error: "Fordon hittades inte" });
     res.json(vehicle);
 }));
 
@@ -373,7 +373,7 @@ app.delete("/api/vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicle(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ error: "Fordon hittades inte" });
     }
     await storage.deleteVehicle(req.params.id);
     res.status(204).send();
@@ -524,7 +524,7 @@ app.post("/api/fuel-logs", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.body.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ error: "Fordon hittades inte" });
     }
     const data = insertFuelLogSchema.parse({ ...req.body, tenantId });
     const log = await storage.createFuelLog(data);
@@ -549,7 +549,7 @@ app.post("/api/maintenance-logs", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.body.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ error: "Fordon hittades inte" });
     }
     const data = insertMaintenanceLogSchema.parse({ ...req.body, tenantId });
     const log = await storage.createMaintenanceLog(data);
@@ -572,7 +572,7 @@ app.get("/api/resource-profiles", asyncHandler(async (req, res) => {
 app.get("/api/resource-profiles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const profile = await storage.getResourceProfile(req.params.id);
-    if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+    if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profil hittades inte" });
     res.json(profile);
 }));
 
@@ -586,10 +586,10 @@ app.post("/api/resource-profiles", asyncHandler(async (req, res) => {
 app.put("/api/resource-profiles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceProfile(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Profil hittades inte" });
     const { tenantId: _, id: __, ...updateData } = req.body;
     const profile = await storage.updateResourceProfile(req.params.id, updateData);
-    if (!profile) return res.status(404).json({ error: "Profile not found" });
+    if (!profile) return res.status(404).json({ error: "Profil hittades inte" });
     res.json(profile);
 }));
 
@@ -610,9 +610,9 @@ app.post("/api/resources/:id/profiles", asyncHandler(async (req, res) => {
     const resourceId = req.params.id;
     const { profileId, applyProfile } = req.body;
     const profile = await storage.getResourceProfile(profileId);
-    if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+    if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profil hittades inte" });
     const resource = await storage.getResource(resourceId);
-    if (!resource || resource.tenantId !== tenantId) return res.status(404).json({ error: "Resource not found" });
+    if (!resource || resource.tenantId !== tenantId) return res.status(404).json({ error: "Resurs hittades inte" });
     const data = insertResourceProfileAssignmentSchema.parse({ tenantId, resourceId, profileId });
     const assignment = await storage.assignResourceProfile(data);
     if (applyProfile !== false && profile && resource) {
@@ -635,9 +635,9 @@ app.post("/api/resources/:id/profiles", asyncHandler(async (req, res) => {
 app.delete("/api/resources/:id/profiles/:profileId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const profile = await storage.getResourceProfile(req.params.profileId);
-    if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profile not found" });
+    if (!profile || profile.tenantId !== tenantId) return res.status(404).json({ error: "Profil hittades inte" });
     const resource = await storage.getResource(req.params.id);
-    if (!resource || resource.tenantId !== tenantId) return res.status(404).json({ error: "Resource not found" });
+    if (!resource || resource.tenantId !== tenantId) return res.status(404).json({ error: "Resurs hittades inte" });
     await storage.removeResourceProfileAssignmentByPair(req.params.profileId, req.params.id);
     res.status(204).send();
 }));
@@ -659,7 +659,7 @@ app.get("/api/work-sessions", asyncHandler(async (req, res) => {
 app.get("/api/work-sessions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const session = await storage.getWorkSession(req.params.id);
-    if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+    if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Arbetspass hittades inte" });
     res.json(session);
 }));
 
@@ -682,7 +682,7 @@ app.post("/api/work-sessions", asyncHandler(async (req, res) => {
 app.put("/api/work-sessions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Arbetspass hittades inte" });
     const { tenantId: _, id: __, ...updateData } = req.body;
     if (updateData.status && !["active", "paused", "completed"].includes(updateData.status)) return res.status(400).json({ error: "Ogiltig status" });
     if (updateData.resourceId) {
@@ -710,7 +710,7 @@ app.put("/api/work-sessions/:id", asyncHandler(async (req, res) => {
 app.delete("/api/work-sessions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Arbetspass hittades inte" });
     await storage.deleteWorkSession(req.params.id);
     res.status(204).send();
 }));
@@ -718,7 +718,7 @@ app.delete("/api/work-sessions/:id", asyncHandler(async (req, res) => {
 app.post("/api/work-sessions/:id/check-in", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Arbetspass hittades inte" });
     const session = await storage.updateWorkSession(req.params.id, { status: "active", startTime: new Date() });
     res.json(session);
 }));
@@ -726,7 +726,7 @@ app.post("/api/work-sessions/:id/check-in", asyncHandler(async (req, res) => {
 app.post("/api/work-sessions/:id/check-out", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkSession(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Arbetspass hittades inte" });
     const session = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
     const released = await storage.releaseEquipmentByWorkSession(req.params.id);
     res.json({ ...session, releasedBookings: released });
@@ -735,7 +735,7 @@ app.post("/api/work-sessions/:id/check-out", asyncHandler(async (req, res) => {
 app.get("/api/work-sessions/:id/entries", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const session = await storage.getWorkSession(req.params.id);
-    if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Session not found" });
+    if (!session || session.tenantId !== tenantId) return res.status(404).json({ error: "Arbetspass hittades inte" });
     const entries = await storage.getWorkEntries(req.params.id);
     res.json(entries);
 }));
@@ -743,7 +743,7 @@ app.get("/api/work-sessions/:id/entries", asyncHandler(async (req, res) => {
 app.get("/api/work-entries/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const entry = await storage.getWorkEntry(req.params.id);
-    if (!entry || entry.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
+    if (!entry || entry.tenantId !== tenantId) return res.status(404).json({ error: "Post hittades inte" });
     res.json(entry);
 }));
 
@@ -766,7 +766,7 @@ app.post("/api/work-entries", asyncHandler(async (req, res) => {
 app.put("/api/work-entries/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkEntry(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Post hittades inte" });
     const { tenantId: _, id: __, workSessionId: ___, ...updateData } = req.body;
     const validTypes = ["work", "travel", "setup", "break", "rest"];
     if (updateData.entryType && !validTypes.includes(updateData.entryType)) return res.status(400).json({ error: "Ogiltig posttyp" });
@@ -790,7 +790,7 @@ app.put("/api/work-entries/:id", asyncHandler(async (req, res) => {
 app.delete("/api/work-entries/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getWorkEntry(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Entry not found" });
+    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Post hittades inte" });
     await storage.deleteWorkEntry(req.params.id);
     res.status(204).send();
 }));
@@ -974,7 +974,7 @@ app.get("/api/equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const equipment = await storage.getEquipmentById(req.params.id);
     const verified = verifyTenantOwnership(equipment, tenantId);
-    if (!verified) return res.status(404).json({ error: "Equipment not found" });
+    if (!verified) return res.status(404).json({ error: "Utrustning hittades inte" });
     res.json(verified);
 }));
 
@@ -989,11 +989,11 @@ app.patch("/api/equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getEquipmentById(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Equipment not found" });
+      return res.status(404).json({ error: "Utrustning hittades inte" });
     }
     const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
     const equipment = await storage.updateEquipment(req.params.id, updateData);
-    if (!equipment) return res.status(404).json({ error: "Equipment not found" });
+    if (!equipment) return res.status(404).json({ error: "Utrustning hittades inte" });
     res.json(equipment);
 }));
 
@@ -1001,7 +1001,7 @@ app.delete("/api/equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getEquipmentById(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Equipment not found" });
+      return res.status(404).json({ error: "Utrustning hittades inte" });
     }
     await storage.deleteEquipment(req.params.id);
     res.status(204).send();
@@ -1012,7 +1012,7 @@ app.get("/api/resource-availability/:resourceId", asyncHandler(async (req, res) 
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const availability = await storage.getResourceAvailability(req.params.resourceId);
     res.json(availability);
@@ -1021,12 +1021,12 @@ app.get("/api/resource-availability/:resourceId", asyncHandler(async (req, res) 
 app.get("/api/resource-availability-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const item = await storage.getResourceAvailabilityById(req.params.id);
-    if (!item) return res.status(404).json({ error: "Resource availability not found" });
+    if (!item) return res.status(404).json({ error: "Resurstillgänglighet hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(item.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource availability not found" });
+      return res.status(404).json({ error: "Resurstillgänglighet hittades inte" });
     }
     res.json(item);
 }));
@@ -1035,7 +1035,7 @@ app.post("/api/resource-availability/:resourceId", asyncHandler(async (req, res)
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const data = insertResourceAvailabilitySchema.parse({ 
       ...req.body, 
@@ -1049,29 +1049,29 @@ app.post("/api/resource-availability/:resourceId", asyncHandler(async (req, res)
 app.patch("/api/resource-availability-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceAvailabilityById(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource availability not found" });
+    if (!existing) return res.status(404).json({ error: "Resurstillgänglighet hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource availability not found" });
+      return res.status(404).json({ error: "Resurstillgänglighet hittades inte" });
     }
     
     const { tenantId: _, id, resourceId, createdAt, ...updateData } = req.body;
     const item = await storage.updateResourceAvailability(req.params.id, updateData);
-    if (!item) return res.status(404).json({ error: "Resource availability not found" });
+    if (!item) return res.status(404).json({ error: "Resurstillgänglighet hittades inte" });
     res.json(item);
 }));
 
 app.delete("/api/resource-availability-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceAvailabilityById(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource availability not found" });
+    if (!existing) return res.status(404).json({ error: "Resurstillgänglighet hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource availability not found" });
+      return res.status(404).json({ error: "Resurstillgänglighet hittades inte" });
     }
     
     await storage.deleteResourceAvailability(req.params.id);
@@ -1083,7 +1083,7 @@ app.get("/api/vehicle-schedule/:vehicleId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.params.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ error: "Fordon hittades inte" });
     }
     const schedule = await storage.getVehicleSchedule(req.params.vehicleId);
     res.json(schedule);
@@ -1092,11 +1092,11 @@ app.get("/api/vehicle-schedule/:vehicleId", asyncHandler(async (req, res) => {
 app.get("/api/vehicle-schedule-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const item = await storage.getVehicleScheduleById(req.params.id);
-    if (!item) return res.status(404).json({ error: "Vehicle schedule not found" });
+    if (!item) return res.status(404).json({ error: "Fordonsschema hittades inte" });
     
     const vehicle = await storage.getVehicle(item.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
-      return res.status(404).json({ error: "Vehicle schedule not found" });
+      return res.status(404).json({ error: "Fordonsschema hittades inte" });
     }
     res.json(item);
 }));
@@ -1105,7 +1105,7 @@ app.post("/api/vehicle-schedule/:vehicleId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const vehicle = await storage.getVehicle(req.params.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
-      return res.status(404).json({ error: "Vehicle not found" });
+      return res.status(404).json({ error: "Fordon hittades inte" });
     }
     const data = insertVehicleScheduleSchema.parse({ 
       ...req.body, 
@@ -1119,27 +1119,27 @@ app.post("/api/vehicle-schedule/:vehicleId", asyncHandler(async (req, res) => {
 app.patch("/api/vehicle-schedule-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicleScheduleById(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Vehicle schedule not found" });
+    if (!existing) return res.status(404).json({ error: "Fordonsschema hittades inte" });
     
     const vehicle = await storage.getVehicle(existing.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
-      return res.status(404).json({ error: "Vehicle schedule not found" });
+      return res.status(404).json({ error: "Fordonsschema hittades inte" });
     }
     
     const { tenantId: _, id, vehicleId, createdAt, ...updateData } = req.body;
     const item = await storage.updateVehicleSchedule(req.params.id, updateData);
-    if (!item) return res.status(404).json({ error: "Vehicle schedule not found" });
+    if (!item) return res.status(404).json({ error: "Fordonsschema hittades inte" });
     res.json(item);
 }));
 
 app.delete("/api/vehicle-schedule-item/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getVehicleScheduleById(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Vehicle schedule not found" });
+    if (!existing) return res.status(404).json({ error: "Fordonsschema hittades inte" });
     
     const vehicle = await storage.getVehicle(existing.vehicleId);
     if (!verifyTenantOwnership(vehicle, tenantId)) {
-      return res.status(404).json({ error: "Vehicle schedule not found" });
+      return res.status(404).json({ error: "Fordonsschema hittades inte" });
     }
     
     await storage.deleteVehicleSchedule(req.params.id);
@@ -1157,7 +1157,7 @@ app.get("/api/subscriptions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const subscription = await storage.getSubscription(req.params.id);
     const verified = verifyTenantOwnership(subscription, tenantId);
-    if (!verified) return res.status(404).json({ error: "Subscription not found" });
+    if (!verified) return res.status(404).json({ error: "Prenumeration hittades inte" });
     res.json(verified);
 }));
 
@@ -1172,11 +1172,11 @@ app.patch("/api/subscriptions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getSubscription(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Subscription not found" });
+      return res.status(404).json({ error: "Prenumeration hittades inte" });
     }
     const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
     const subscription = await storage.updateSubscription(req.params.id, updateData);
-    if (!subscription) return res.status(404).json({ error: "Subscription not found" });
+    if (!subscription) return res.status(404).json({ error: "Prenumeration hittades inte" });
     res.json(subscription);
 }));
 
@@ -1184,7 +1184,7 @@ app.delete("/api/subscriptions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getSubscription(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Subscription not found" });
+      return res.status(404).json({ error: "Prenumeration hittades inte" });
     }
     await storage.deleteSubscription(req.params.id);
     res.status(204).send();
@@ -1318,7 +1318,7 @@ app.get("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.id);
     const verified = verifyTenantOwnership(team, tenantId);
-    if (!verified) return res.status(404).json({ error: "Team not found" });
+    if (!verified) return res.status(404).json({ error: "Team hittades inte" });
     res.json(verified);
 }));
 
@@ -1342,7 +1342,7 @@ app.patch("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getTeam(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Team not found" });
+      return res.status(404).json({ error: "Team hittades inte" });
     }
     if (req.body.profileIds && Array.isArray(req.body.profileIds) && req.body.profileIds.length > 0) {
       const tenantProfiles = await storage.getResourceProfiles(tenantId);
@@ -1359,7 +1359,7 @@ app.patch("/api/teams/:id", asyncHandler(async (req, res) => {
       return res.status(400).json({ error: parseResult.error.errors });
     }
     const team = await storage.updateTeam(req.params.id, parseResult.data);
-    if (!team) return res.status(404).json({ error: "Team not found" });
+    if (!team) return res.status(404).json({ error: "Team hittades inte" });
     res.json(team);
 }));
 
@@ -1367,7 +1367,7 @@ app.delete("/api/teams/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getTeam(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Team not found" });
+      return res.status(404).json({ error: "Team hittades inte" });
     }
     await storage.deleteTeam(req.params.id);
     res.status(204).send();
@@ -1378,7 +1378,7 @@ app.get("/api/team-members/:teamId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.teamId);
     if (!verifyTenantOwnership(team, tenantId)) {
-      return res.status(404).json({ error: "Team not found" });
+      return res.status(404).json({ error: "Team hittades inte" });
     }
     const members = await storage.getTeamMembers(req.params.teamId);
     res.json(members);
@@ -1406,7 +1406,7 @@ app.post("/api/team-members/:teamId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const team = await storage.getTeam(req.params.teamId);
     if (!verifyTenantOwnership(team, tenantId)) {
-      return res.status(404).json({ error: "Team not found" });
+      return res.status(404).json({ error: "Team hittades inte" });
     }
     const data = insertTeamMemberSchema.parse({ ...req.body, teamId: req.params.teamId });
     const member = await storage.createTeamMember(data);
@@ -1454,7 +1454,7 @@ app.get("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const param = await storage.getPlanningParameter(req.params.id);
     const verified = verifyTenantOwnership(param, tenantId);
-    if (!verified) return res.status(404).json({ error: "Planning parameter not found" });
+    if (!verified) return res.status(404).json({ error: "Planeringsparameter hittades inte" });
     res.json(verified);
 }));
 
@@ -1469,7 +1469,7 @@ app.patch("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPlanningParameter(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Planning parameter not found" });
+      return res.status(404).json({ error: "Planeringsparameter hittades inte" });
     }
     const updateSchema = insertPlanningParameterSchema.partial().omit({ tenantId: true });
     const parseResult = updateSchema.safeParse(req.body);
@@ -1477,7 +1477,7 @@ app.patch("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
       return res.status(400).json({ error: parseResult.error.errors });
     }
     const param = await storage.updatePlanningParameter(req.params.id, parseResult.data);
-    if (!param) return res.status(404).json({ error: "Planning parameter not found" });
+    if (!param) return res.status(404).json({ error: "Planeringsparameter hittades inte" });
     res.json(param);
 }));
 
@@ -1485,7 +1485,7 @@ app.delete("/api/planning-parameters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getPlanningParameter(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Planning parameter not found" });
+      return res.status(404).json({ error: "Planeringsparameter hittades inte" });
     }
     await storage.deletePlanningParameter(req.params.id);
     res.status(204).send();
@@ -1496,7 +1496,7 @@ app.get("/api/resources/:resourceId/vehicles", asyncHandler(async (req, res) => 
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const resourceVehicles = await storage.getResourceVehicles(req.params.resourceId);
     res.json(resourceVehicles);
@@ -1506,7 +1506,7 @@ app.post("/api/resources/:resourceId/vehicles", asyncHandler(async (req, res) =>
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const data = insertResourceVehicleSchema.parse({ ...req.body, resourceId: req.params.resourceId });
     const rv = await storage.createResourceVehicle(data);
@@ -1516,29 +1516,29 @@ app.post("/api/resources/:resourceId/vehicles", asyncHandler(async (req, res) =>
 app.patch("/api/resource-vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceVehicle(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource vehicle not found" });
+    if (!existing) return res.status(404).json({ error: "Resursfordon hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource vehicle not found" });
+      return res.status(404).json({ error: "Resursfordon hittades inte" });
     }
     
     const { id, resourceId, vehicleId, createdAt, ...updateData } = req.body;
     const rv = await storage.updateResourceVehicle(req.params.id, updateData);
-    if (!rv) return res.status(404).json({ error: "Resource vehicle not found" });
+    if (!rv) return res.status(404).json({ error: "Resursfordon hittades inte" });
     res.json(rv);
 }));
 
 app.delete("/api/resource-vehicles/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceVehicle(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource vehicle not found" });
+    if (!existing) return res.status(404).json({ error: "Resursfordon hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource vehicle not found" });
+      return res.status(404).json({ error: "Resursfordon hittades inte" });
     }
     
     await storage.deleteResourceVehicle(req.params.id);
@@ -1550,7 +1550,7 @@ app.get("/api/resources/:resourceId/equipment", asyncHandler(async (req, res) =>
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const resourceEquipment = await storage.getResourceEquipment(req.params.resourceId);
     res.json(resourceEquipment);
@@ -1560,7 +1560,7 @@ app.post("/api/resources/:resourceId/equipment", asyncHandler(async (req, res) =
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(req.params.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     const data = insertResourceEquipmentSchema.parse({ ...req.body, resourceId: req.params.resourceId });
     const re = await storage.createResourceEquipment(data);
@@ -1570,29 +1570,29 @@ app.post("/api/resources/:resourceId/equipment", asyncHandler(async (req, res) =
 app.patch("/api/resource-equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceEquipmentById(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource equipment not found" });
+    if (!existing) return res.status(404).json({ error: "Resursutrustning hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource equipment not found" });
+      return res.status(404).json({ error: "Resursutrustning hittades inte" });
     }
     
     const { id, resourceId, equipmentId, createdAt, ...updateData } = req.body;
     const re = await storage.updateResourceEquipment(req.params.id, updateData);
-    if (!re) return res.status(404).json({ error: "Resource equipment not found" });
+    if (!re) return res.status(404).json({ error: "Resursutrustning hittades inte" });
     res.json(re);
 }));
 
 app.delete("/api/resource-equipment/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getResourceEquipmentById(req.params.id);
-    if (!existing) return res.status(404).json({ error: "Resource equipment not found" });
+    if (!existing) return res.status(404).json({ error: "Resursutrustning hittades inte" });
     
     // Verify the parent resource belongs to the tenant
     const resource = await storage.getResource(existing.resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resource equipment not found" });
+      return res.status(404).json({ error: "Resursutrustning hittades inte" });
     }
     
     await storage.deleteResourceEquipment(req.params.id);

@@ -209,7 +209,7 @@ app.get("/api/tenant", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     if (!tenant) {
-      return res.status(404).json({ error: "Tenant not found" });
+      return res.status(404).json({ error: "Företag hittades inte" });
     }
     res.json(tenant);
 }));
@@ -229,7 +229,7 @@ app.patch("/api/tenant", asyncHandler(async (req, res) => {
     }
     const tenant = await storage.updateTenant(tenantId, parseResult.data);
     if (!tenant) {
-      return res.status(404).json({ error: "Tenant not found" });
+      return res.status(404).json({ error: "Företag hittades inte" });
     }
     res.json(tenant);
 }));
@@ -239,7 +239,7 @@ app.get("/api/tenant/settings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     if (!tenant) {
-      return res.status(404).json({ error: "Tenant not found" });
+      return res.status(404).json({ error: "Företag hittades inte" });
     }
     res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings || {} });
 }));
@@ -253,7 +253,7 @@ app.patch("/api/tenant/settings", asyncHandler(async (req, res) => {
     }
     const tenant = await storage.updateTenantSettings(tenantId, parseResult.data);
     if (!tenant) {
-      return res.status(404).json({ error: "Tenant not found" });
+      return res.status(404).json({ error: "Företag hittades inte" });
     }
     res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings });
 }));

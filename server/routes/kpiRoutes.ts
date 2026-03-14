@@ -167,14 +167,14 @@ app.get("/api/system/branding-templates", asyncHandler(async (req, res) => {
 // Branding Templates - Get by ID
 app.get("/api/system/branding-templates/:id", asyncHandler(async (req, res) => {
     const template = await storage.getBrandingTemplate(req.params.id);
-    if (!template) return res.status(404).json({ error: "Template not found" });
+    if (!template) return res.status(404).json({ error: "Mall hittades inte" });
     res.json(template);
 }));
 
 // Branding Templates - Get by slug
 app.get("/api/system/branding-templates/slug/:slug", asyncHandler(async (req, res) => {
     const template = await storage.getBrandingTemplateBySlug(req.params.slug);
-    if (!template) return res.status(404).json({ error: "Template not found" });
+    if (!template) return res.status(404).json({ error: "Mall hittades inte" });
     res.json(template);
 }));
 
@@ -253,7 +253,7 @@ app.post("/api/system/tenant-branding/publish", requireAdmin, asyncHandler(async
     const result = await storage.publishTenantBranding(tenantId);
     
     if (!result) {
-      return res.status(404).json({ error: "Branding not found" });
+      return res.status(404).json({ error: "Varumärke hittades inte" });
     }
     
     await storage.createAuditLog({
@@ -272,7 +272,7 @@ app.get("/api/system/sms-config", requireAdmin, asyncHandler(async (req, res) =>
     const tenant = await storage.getTenant(tenantId);
     
     if (!tenant) {
-      return res.status(404).json({ error: "Tenant not found" });
+      return res.status(404).json({ error: "Företag hittades inte" });
     }
     
     res.json({
@@ -294,13 +294,13 @@ app.put("/api/system/sms-config", requireAdmin, asyncHandler(async (req, res) =>
     
     const parseResult = smsConfigSchema.safeParse(req.body);
     if (!parseResult.success) {
-      return res.status(400).json({ error: "Invalid request data", details: parseResult.error.flatten() });
+      return res.status(400).json({ error: "Ogiltig förfrågan", details: parseResult.error.flatten() });
     }
     
     const tenant = await storage.updateTenantSmsSettings(tenantId, parseResult.data);
     
     if (!tenant) {
-      return res.status(404).json({ error: "Tenant not found" });
+      return res.status(404).json({ error: "Företag hittades inte" });
     }
     
     await storage.createAuditLog({
@@ -324,12 +324,12 @@ app.post("/api/system/sms-config/test", requireAdmin, asyncHandler(async (req, r
     const { phoneNumber } = req.body;
     
     if (!phoneNumber) {
-      return res.status(400).json({ error: "Phone number is required" });
+      return res.status(400).json({ error: "Telefonnummer krävs" });
     }
     
     const tenant = await storage.getTenant(tenantId);
     if (!tenant?.smsEnabled) {
-      return res.status(400).json({ error: "SMS is not enabled for this tenant" });
+      return res.status(400).json({ error: "SMS är inte aktiverat för detta företag" });
     }
     
     const { sendNotification } = await import("./unified-notifications");
@@ -348,7 +348,7 @@ app.post("/api/system/sms-config/test", requireAdmin, asyncHandler(async (req, r
     if (result.success && result.smsSent > 0) {
       res.json({ success: true, message: "Test-SMS skickat!" });
     } else {
-      res.status(500).json({ success: false, error: result.errors.join(", ") || "Failed to send test SMS" });
+      res.status(500).json({ success: false, error: result.errors.join(", ") || "Kunde inte skicka test-SMS" });
     }
 }));
 
@@ -365,13 +365,13 @@ app.post("/api/system/user-roles", requireAdmin, asyncHandler(async (req, res) =
     const { userId, name, role, permissions, password } = req.body;
     
     if (!userId || !role) {
-      return res.status(400).json({ error: "userId and role are required" });
+      return res.status(400).json({ error: "userId och roll krävs" });
     }
     
     // Check if user already has a role
     const existing = await storage.getUserTenantRole(userId, tenantId);
     if (existing) {
-      return res.status(400).json({ error: "User already has a role in this tenant" });
+      return res.status(400).json({ error: "Användaren har redan en roll i detta företag" });
     }
     
     // Create or update user record with password if provided
@@ -418,7 +418,7 @@ app.patch("/api/system/user-roles/:id", requireAdmin, asyncHandler(async (req, r
     });
     
     if (!result) {
-      return res.status(404).json({ error: "User role not found" });
+      return res.status(404).json({ error: "Användarroll hittades inte" });
     }
     
     // Update password if provided
@@ -451,7 +451,7 @@ app.post("/api/system/user-roles/import", requireAdmin, asyncHandler(async (req,
     const { users } = req.body;
     
     if (!Array.isArray(users) || users.length === 0) {
-      return res.status(400).json({ error: "No users provided" });
+      return res.status(400).json({ error: "Inga användare angivna" });
     }
     
     let imported = 0;
@@ -540,7 +540,7 @@ app.get("/api/system/industry-packages", asyncHandler(async (req, res) => {
 // Industry Packages - Get by ID with full data
 app.get("/api/system/industry-packages/:id", asyncHandler(async (req, res) => {
     const pkg = await storage.getIndustryPackage(req.params.id);
-    if (!pkg) return res.status(404).json({ error: "Package not found" });
+    if (!pkg) return res.status(404).json({ error: "Paket hittades inte" });
     
     const packageData = await storage.getIndustryPackageData(req.params.id);
     res.json({ ...pkg, data: packageData });
@@ -560,7 +560,7 @@ app.post("/api/system/industry-packages/:id/install", requireAdmin, asyncHandler
     const userId = (req.user as any)?.id;
     
     const pkg = await storage.getIndustryPackage(packageId);
-    if (!pkg) return res.status(404).json({ error: "Package not found" });
+    if (!pkg) return res.status(404).json({ error: "Paket hittades inte" });
     
     const packageData = await storage.getIndustryPackageData(packageId);
     
@@ -1037,7 +1037,7 @@ app.get("/api/metadata-definitions/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const definition = await storage.getMetadataDefinition(req.params.id);
     const verified = verifyTenantOwnership(definition, tenantId);
-    if (!verified) return res.status(404).json({ error: "Definition not found" });
+    if (!verified) return res.status(404).json({ error: "Definition hittades inte" });
     res.json(verified);
 }));
 
@@ -1052,7 +1052,7 @@ app.patch("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getMetadataDefinition(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Definition not found" });
+      return res.status(404).json({ error: "Definition hittades inte" });
     }
     // Only allow updating safe fields - never tenantId, id, fieldKey, or createdAt
     const updateSchema = z.object({
@@ -1065,7 +1065,7 @@ app.patch("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (req
     });
     const updateData = updateSchema.parse(req.body);
     const definition = await storage.updateMetadataDefinition(req.params.id, updateData);
-    if (!definition) return res.status(404).json({ error: "Definition not found" });
+    if (!definition) return res.status(404).json({ error: "Definition hittades inte" });
     res.json(definition);
 }));
 
@@ -1073,7 +1073,7 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getMetadataDefinition(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Definition not found" });
+      return res.status(404).json({ error: "Definition hittades inte" });
     }
     await storage.deleteMetadataDefinition(req.params.id);
     res.status(204).send();
@@ -1089,7 +1089,7 @@ async function verifyObjectTenant(objectId: string, tenantId: string): Promise<b
 app.get("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const metadata = await storage.getObjectMetadata(req.params.objectId);
     res.json(metadata);
@@ -1098,7 +1098,7 @@ app.get("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
 app.post("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const data = insertObjectMetadataSchema.parse({ 
       ...req.body, 
@@ -1112,7 +1112,7 @@ app.post("/api/objects/:objectId/metadata", asyncHandler(async (req, res) => {
 app.patch("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const updateSchema = z.object({
       value: z.string().optional(),
@@ -1128,7 +1128,7 @@ app.patch("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) =
 app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     // Storage method enforces objectId and tenantId match at DB level
     await storage.deleteObjectMetadata(req.params.id, req.params.objectId, tenantId);
@@ -1139,7 +1139,7 @@ app.delete("/api/objects/:objectId/metadata/:id", asyncHandler(async (req, res) 
 app.get("/api/objects/:objectId/effective-metadata", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const effectiveMetadata = await storage.getEffectiveMetadata(req.params.objectId, tenantId);
     res.json(effectiveMetadata);
@@ -1149,7 +1149,7 @@ app.get("/api/objects/:objectId/effective-metadata", asyncHandler(async (req, re
 app.get("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const payers = await storage.getObjectPayers(req.params.objectId);
     res.json(payers);
@@ -1158,7 +1158,7 @@ app.get("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
 app.post("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const data = insertObjectPayerSchema.parse({
       ...req.body,
@@ -1172,7 +1172,7 @@ app.post("/api/objects/:objectId/payers", asyncHandler(async (req, res) => {
 app.patch("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const updateSchema = z.object({
       customerId: z.string().optional(),
@@ -1188,14 +1188,14 @@ app.patch("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => 
     });
     const updateData = updateSchema.parse(req.body);
     const payer = await storage.updateObjectPayer(req.params.id, req.params.objectId, tenantId, updateData);
-    if (!payer) return res.status(404).json({ error: "Payer not found or does not belong to this object" });
+    if (!payer) return res.status(404).json({ error: "Betalare hittades inte eller tillhör inte detta objekt" });
     res.json(payer);
 }));
 
 app.delete("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     await storage.deleteObjectPayer(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();

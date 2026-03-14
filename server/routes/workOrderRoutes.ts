@@ -84,7 +84,7 @@ app.post("/api/work-orders/bulk-unschedule", asyncHandler(async (req, res) => {
   const parsedStart = new Date(startDate);
   const parsedEnd = new Date(endDate);
   if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
-    throw new ValidationError("Invalid date format");
+    throw new ValidationError("Ogiltigt datumformat");
   }
   if (resourceIds && (!Array.isArray(resourceIds) || resourceIds.some((id: unknown) => typeof id !== "string"))) {
     throw new ValidationError("resourceIds must be an array of strings");
@@ -293,7 +293,7 @@ app.post("/api/work-orders/:id/status", asyncHandler(async (req, res) => {
     if (!workOrder) throw new NotFoundError("Arbetsorder");
     res.json(workOrder);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Invalid status transition")) {
+    if (error instanceof Error && error.message.includes("Ogiltig statusövergång")) {
       throw new ConflictError(error.message);
     }
     throw error;

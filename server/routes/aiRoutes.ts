@@ -1772,7 +1772,7 @@ app.post("/api/clusters/auto-assign-unclustered", asyncHandler(async (req, res) 
     };
 
     if (!Array.isArray(unclusteredObjectIds) || !Array.isArray(suggestions)) {
-      return res.status(400).json({ error: "Missing data" });
+      return res.status(400).json({ error: "Data saknas" });
     }
 
     const allObjects = await storage.getObjectsByTenant(tenantId);
@@ -1864,7 +1864,7 @@ app.post("/api/objects/export-unclustered", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectIds } = req.body as { objectIds: string[] };
     if (!Array.isArray(objectIds) || objectIds.length === 0) {
-      return res.status(400).json({ error: "Missing objectIds" });
+      return res.status(400).json({ error: "Objekt-ID saknas" });
     }
     const objects = await storage.getObjectsByIds(tenantId, objectIds);
 
@@ -1893,7 +1893,7 @@ app.post("/api/objects/import-corrections", asyncHandler(async (req, res) => {
       corrections: { id: string; postalCode?: string; city?: string; latitude?: number | null; longitude?: number | null }[];
     };
     if (!Array.isArray(corrections) || corrections.length === 0) {
-      return res.status(400).json({ error: "Missing corrections" });
+      return res.status(400).json({ error: "Korrektioner saknas" });
     }
 
     const correctionIds = corrections.map(c => c.id);
@@ -2317,7 +2317,7 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     // Validate resource exists
     const resource = await storage.getResource(resourceId);
     if (!resource) {
-      return res.status(404).json({ error: "Resource not found" });
+      return res.status(404).json({ error: "Resurs hittades inte" });
     }
     
     // Verify resource belongs to the same tenant
@@ -2326,7 +2326,7 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     const tenantId = getTenantIdWithFallback(req);
     if (resource.tenantId !== tenantId) {
       console.log(`[notifications] Token request denied: resource ${resourceId} belongs to different tenant`);
-      return res.status(403).json({ error: "Not authorized to access this resource" });
+      return res.status(403).json({ error: "Ej behörig att komma åt denna resurs" });
     }
     
     // Generate token for this resource

@@ -130,7 +130,7 @@ app.patch("/api/fortnox/config", asyncHandler(async (req, res) => {
     const updateData = updateSchema.parse(req.body);
     const tenantId = getTenantIdWithFallback(req);
     const config = await storage.updateFortnoxConfig(tenantId, updateData);
-    if (!config) return res.status(404).json({ error: "Config not found" });
+    if (!config) return res.status(404).json({ error: "Konfiguration hittades inte" });
     res.json(config);
 }));
 
@@ -146,7 +146,7 @@ app.post("/api/fortnox/mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { entityType, unicornId, fortnoxId } = req.body;
     if (!entityType || !unicornId || !fortnoxId) {
-      return res.status(400).json({ error: "All fields required" });
+      return res.status(400).json({ error: "Alla fält krävs" });
     }
 
     const existing = await storage.getFortnoxMapping(tenantId, entityType, unicornId);
@@ -181,7 +181,7 @@ app.get("/api/fortnox/exports", asyncHandler(async (req, res) => {
 app.post("/api/fortnox/exports", asyncHandler(async (req, res) => {
     const { workOrderId, payerId, costCenter, project } = req.body;
     if (!workOrderId) {
-      return res.status(400).json({ error: "Work order ID required" });
+      return res.status(400).json({ error: "Arbetsorder-ID krävs" });
     }
 
     const tenantId = getTenantIdWithFallback(req);
@@ -206,7 +206,7 @@ app.patch("/api/fortnox/exports/:id", asyncHandler(async (req, res) => {
     const updateData = updateSchema.parse(req.body);
     const tenantId = getTenantIdWithFallback(req);
     const invoiceExport = await storage.updateFortnoxInvoiceExport(req.params.id, tenantId, updateData);
-    if (!invoiceExport) return res.status(404).json({ error: "Export not found" });
+    if (!invoiceExport) return res.status(404).json({ error: "Export hittades inte" });
     res.json(invoiceExport);
 }));
 
@@ -217,7 +217,7 @@ app.patch("/api/fortnox/exports/:id", asyncHandler(async (req, res) => {
 app.get("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const images = await storage.getObjectImages(req.params.objectId);
     res.json(images);
@@ -226,7 +226,7 @@ app.get("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
 app.post("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const data = insertObjectImageSchema.parse({
       ...req.body,
@@ -240,7 +240,7 @@ app.post("/api/objects/:objectId/images", asyncHandler(async (req, res) => {
 app.delete("/api/objects/:objectId/images/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     await storage.deleteObjectImage(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
@@ -253,7 +253,7 @@ app.delete("/api/objects/:objectId/images/:id", asyncHandler(async (req, res) =>
 app.get("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const withInheritance = req.query.inheritance === "true";
     const contacts = withInheritance
@@ -265,7 +265,7 @@ app.get("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
 app.post("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const data = insertObjectContactSchema.parse({
       ...req.body,
@@ -279,7 +279,7 @@ app.post("/api/objects/:objectId/contacts", asyncHandler(async (req, res) => {
 app.patch("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const updateSchema = z.object({
       name: z.string().optional(),
@@ -292,14 +292,14 @@ app.patch("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) =
     });
     const updateData = updateSchema.parse(req.body);
     const contact = await storage.updateObjectContact(req.params.id, req.params.objectId, tenantId, updateData);
-    if (!contact) return res.status(404).json({ error: "Contact not found" });
+    if (!contact) return res.status(404).json({ error: "Kontakt hittades inte" });
     res.json(contact);
 }));
 
 app.delete("/api/objects/:objectId/contacts/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     await storage.deleteObjectContact(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
@@ -319,7 +319,7 @@ app.get("/api/work-orders/:workOrderId/timewindows", asyncHandler(async (req, re
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const timewindows = await storage.getTaskTimewindows(req.params.workOrderId);
     res.json(timewindows);
@@ -329,7 +329,7 @@ app.post("/api/work-orders/:workOrderId/timewindows", asyncHandler(async (req, r
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const data = insertTaskDesiredTimewindowSchema.parse({
       ...req.body,
@@ -344,7 +344,7 @@ app.patch("/api/work-orders/:workOrderId/timewindows/:id", asyncHandler(async (r
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const updateSchema = z.object({
       weekNumber: z.number().nullable().optional(),
@@ -355,7 +355,7 @@ app.patch("/api/work-orders/:workOrderId/timewindows/:id", asyncHandler(async (r
     });
     const updateData = updateSchema.parse(req.body);
     const timewindow = await storage.updateTaskTimewindow(req.params.id, req.params.workOrderId, tenantId, updateData);
-    if (!timewindow) return res.status(404).json({ error: "Timewindow not found" });
+    if (!timewindow) return res.status(404).json({ error: "Tidsfönster hittades inte" });
     res.json(timewindow);
 }));
 
@@ -363,7 +363,7 @@ app.delete("/api/work-orders/:workOrderId/timewindows/:id", asyncHandler(async (
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     await storage.deleteTaskTimewindow(req.params.id, req.params.workOrderId, tenantId);
     res.status(204).send();
@@ -396,7 +396,7 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
 
     const selectedResources = allResources.filter(r => resourceIds.includes(r.id));
     if (selectedResources.length === 0) {
-      return res.status(400).json({ error: "No valid resources found" });
+      return res.status(400).json({ error: "Inga giltiga resurser hittades" });
     }
 
     const allTeams = await storage.getTeams(tenantId);
@@ -680,7 +680,7 @@ app.get("/api/work-orders/:workOrderId/dependencies", asyncHandler(async (req, r
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const dependencies = await storage.getTaskDependencies(req.params.workOrderId);
     res.json(dependencies);
@@ -690,7 +690,7 @@ app.get("/api/work-orders/:workOrderId/dependents", asyncHandler(async (req, res
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const dependents = await storage.getTaskDependents(req.params.workOrderId);
     res.json(dependents);
@@ -700,7 +700,7 @@ app.post("/api/work-orders/:workOrderId/dependencies", asyncHandler(async (req, 
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const data = insertTaskDependencySchema.parse({
       ...req.body,
@@ -715,7 +715,7 @@ app.delete("/api/work-orders/:workOrderId/dependencies/:id", asyncHandler(async 
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     await storage.deleteTaskDependency(req.params.id, tenantId);
     res.status(204).send();
@@ -738,7 +738,7 @@ app.post("/api/work-orders/:workOrderId/generate-pickup-tasks", asyncHandler(asy
     const tenantId = getTenantIdWithFallback(req);
     const mainWorkOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!mainWorkOrder || !verifyTenantOwnership(mainWorkOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
 
     const lines = await storage.getWorkOrderLines(req.params.workOrderId);
@@ -826,7 +826,7 @@ app.get("/api/work-orders/:workOrderId/dependency-chain", asyncHandler(async (re
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
 
     const dependencies = await storage.getTaskDependencies(req.params.workOrderId);
@@ -886,7 +886,7 @@ app.get("/api/work-orders/:workOrderId/information", asyncHandler(async (req, re
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const information = await storage.getTaskInformation(req.params.workOrderId);
     res.json(information);
@@ -896,7 +896,7 @@ app.post("/api/work-orders/:workOrderId/information", asyncHandler(async (req, r
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const data = insertTaskInformationSchema.parse({
       ...req.body,
@@ -911,7 +911,7 @@ app.patch("/api/work-orders/:workOrderId/information/:id", asyncHandler(async (r
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     const updateSchema = z.object({
       infoValue: z.string().nullable().optional(),
@@ -921,7 +921,7 @@ app.patch("/api/work-orders/:workOrderId/information/:id", asyncHandler(async (r
     });
     const updateData = updateSchema.parse(req.body);
     const info = await storage.updateTaskInformation(req.params.id, req.params.workOrderId, tenantId, updateData);
-    if (!info) return res.status(404).json({ error: "Information not found" });
+    if (!info) return res.status(404).json({ error: "Information hittades inte" });
     res.json(info);
 }));
 
@@ -929,7 +929,7 @@ app.delete("/api/work-orders/:workOrderId/information/:id", asyncHandler(async (
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
     await storage.deleteTaskInformation(req.params.id, req.params.workOrderId, tenantId);
     res.status(204).send();
@@ -942,7 +942,7 @@ app.delete("/api/work-orders/:workOrderId/information/:id", asyncHandler(async (
 app.get("/api/objects/:objectId/time-restrictions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
-      return res.status(403).json({ error: "Access denied" });
+      return res.status(403).json({ error: "Åtkomst nekad" });
     }
     const restrictions = await storage.getObjectTimeRestrictions(req.params.objectId);
     res.json(restrictions);
@@ -977,7 +977,7 @@ app.post("/api/objects/:objectId/time-restrictions", asyncHandler(async (req, re
     const { restrictionType, description, weekdays, startTime, endTime, isBlockingAllDay, preference, reason } = parsed.data;
 
     const obj = await storage.getObject(req.params.objectId);
-    if (!obj || obj.tenantId !== tenantId) return res.status(404).json({ error: "Object not found" });
+    if (!obj || obj.tenantId !== tenantId) return res.status(404).json({ error: "Objekt hittades inte" });
 
     const restriction = await storage.createObjectTimeRestriction({
       tenantId,
@@ -1011,7 +1011,7 @@ app.patch("/api/time-restrictions/:id", asyncHandler(async (req, res) => {
     const parsed = updateSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(formatZodError(parsed.error));
     const restriction = await storage.updateObjectTimeRestriction(req.params.id, tenantId, parsed.data);
-    if (!restriction) return res.status(404).json({ error: "Not found" });
+    if (!restriction) return res.status(404).json({ error: "Hittades inte" });
     res.json(restriction);
 }));
 
@@ -1042,10 +1042,10 @@ app.delete("/api/time-restrictions/:id", asyncHandler(async (req, res) => {
 app.post("/api/work-orders/:id/expand-structural", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
-    if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+    if (!workOrder) return res.status(404).json({ error: "Arbetsorder hittades inte" });
 
     const articleId = workOrder.articleId;
-    if (!articleId) return res.status(400).json({ error: "Work order has no article" });
+    if (!articleId) return res.status(400).json({ error: "Arbetsordern saknar artikel" });
 
     const subArticles = await storage.getStructuralArticlesByParent(articleId);
     if (subArticles.length === 0) return res.json({ created: [], message: "No structural sub-articles found" });
@@ -1094,7 +1094,7 @@ app.post("/api/work-orders/:id/expand-structural", asyncHandler(async (req, res)
 app.get("/api/work-orders/:id/sub-steps", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
-    if (!workOrder) return res.status(404).json({ error: "Work order not found" });
+    if (!workOrder) return res.status(404).json({ error: "Arbetsorder hittades inte" });
 
     const allDeps = await storage.getTaskDependencies(req.params.id);
     const structuralDeps = allDeps.filter(d => d.dependsOnWorkOrderId === req.params.id && d.dependencyType === "structural");
@@ -1158,7 +1158,7 @@ app.get("/api/articles/:articleId/structural-children", asyncHandler(async (req,
     const tenantId = getTenantIdWithFallback(req);
     const article = await storage.getArticle(req.params.articleId);
     if (!verifyTenantOwnership(article, tenantId)) {
-      return res.status(404).json({ error: "Article not found" });
+      return res.status(404).json({ error: "Artikel hittades inte" });
     }
     const children = await storage.getStructuralArticlesByParent(req.params.articleId);
     res.json(children);
@@ -1183,7 +1183,7 @@ app.patch("/api/structural-articles/:id", asyncHandler(async (req, res) => {
     const updateData = updateSchema.parse(req.body);
     const tenantId = getTenantIdWithFallback(req);
     const article = await storage.updateStructuralArticle(req.params.id, tenantId, updateData);
-    if (!article) return res.status(404).json({ error: "Structural article not found" });
+    if (!article) return res.status(404).json({ error: "Strukturartikel hittades inte" });
     res.json(article);
 }));
 
@@ -1241,7 +1241,7 @@ app.post("/api/work-orders/:workOrderId/expand-structural", asyncHandler(async (
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.workOrderId);
     if (!workOrder || !verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Work order not found" });
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
     }
 
     // Use structuralArticleId from work order
