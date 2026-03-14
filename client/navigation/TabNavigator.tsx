@@ -15,7 +15,7 @@ const Tab = createBottomTabNavigator();
 function HeaderTitle() {
   return (
     <Image
-      source={require('../../assets/nordnav-logo.png')}
+      source={require('../../assets/traivo-logo.png')}
       style={{ width: 120, height: 32 }}
       resizeMode="contain"
     />

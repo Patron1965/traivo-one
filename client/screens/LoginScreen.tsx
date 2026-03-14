@@ -89,7 +89,7 @@ export function LoginScreen() {
       >
         <View style={styles.header}>
           <Image
-            source={require('../../assets/nordnav-logo.png')}
+            source={require('../../assets/traivo-logo.png')}
             style={styles.logoImage}
             resizeMode="contain"
           />
