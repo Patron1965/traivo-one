@@ -1480,6 +1480,11 @@ export async function registerRoutes(
         }
       }
       
+      // Convert lockedAt string to Date object if present
+      if (updateData.lockedAt && typeof updateData.lockedAt === 'string') {
+        updateData.lockedAt = new Date(updateData.lockedAt);
+      }
+      
       const workOrder = await storage.updateWorkOrder(req.params.id, updateData);
       if (!workOrder) return res.status(404).json({ error: "Work order not found" });
       
