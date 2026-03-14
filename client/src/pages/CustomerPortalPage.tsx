@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { Calendar, Truck, Package, Clock, CalendarPlus, CheckCircle, AlertCircle, Loader2, Search, MapPin, Phone, Building, List, Map } from "lucide-react";
+import { Calendar, Truck, Package, Clock, CalendarPlus, CheckCircle, AlertCircle, Loader2, Search, MapPin, Phone, Building, List, Map, Maximize2, X } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -69,6 +69,7 @@ export default function CustomerPortalPage() {
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [pickupViewMode, setPickupViewMode] = useState<"list" | "map">("list");
+  const [fullscreenMap, setFullscreenMap] = useState(false);
   const [showExtraBookingDialog, setShowExtraBookingDialog] = useState(false);
   const [extraBookingForm, setExtraBookingForm] = useState({
     objectId: "",
@@ -112,6 +113,26 @@ export default function CustomerPortalPage() {
   const customerSubscriptions = subscriptions.filter(s => 
     customerObjects.some(obj => obj.id === s.objectId)
   );
+
+  const geoObjects = customerObjects.filter(o => o.latitude && o.longitude);
+  const allMapPositions: [number, number][] = geoObjects.map(o => [o.latitude!, o.longitude!]);
+
+  useEffect(() => {
+    setFullscreenMap(false);
+  }, [selectedCustomerId]);
+
+  useEffect(() => {
+    if (!fullscreenMap) return;
+    document.body.style.overflow = "hidden";
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreenMap(false);
+    };
+    window.addEventListener("keydown", handleEsc);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", handleEsc);
+    };
+  }, [fullscreenMap]);
 
   const upcomingOrders = customerOrders
     .filter(o => o.scheduledDate && isAfter(new Date(o.scheduledDate), startOfDay(new Date())))
@@ -487,8 +508,6 @@ export default function CustomerPortalPage() {
           </div>
 
           {customerObjects.length > 0 && (() => {
-            const geoObjects = customerObjects.filter(o => o.latitude && o.longitude);
-            const mapPositions: [number, number][] = geoObjects.map(o => [o.latitude!, o.longitude!]);
             return (
               <Card>
                 <CardHeader>
@@ -528,9 +547,9 @@ export default function CustomerPortalPage() {
                 </CardHeader>
                 <CardContent>
                   {pickupViewMode === "map" && geoObjects.length > 0 ? (
-                    <div className="rounded-lg overflow-hidden border" style={{ height: "400px" }} data-testid="pickup-map-container">
+                    <div className="relative rounded-lg overflow-hidden border" style={{ height: "400px" }} data-testid="pickup-map-container">
                       <MapContainer
-                        center={mapPositions[0] || [59.33, 18.07]}
+                        center={allMapPositions[0] || [59.33, 18.07]}
                         zoom={12}
                         style={{ height: "100%", width: "100%" }}
                       >
@@ -538,7 +557,7 @@ export default function CustomerPortalPage() {
                           attribution={mapConfig.attribution}
                           url={mapConfig.tileUrl}
                         />
-                        <PickupMapFitBounds positions={mapPositions} />
+                        <PickupMapFitBounds positions={allMapPositions} />
                         {geoObjects.map(obj => {
                           const sub = subscriptions.find(s => s.objectId === obj.id && s.status === "active");
                           return (
@@ -566,6 +585,16 @@ export default function CustomerPortalPage() {
                           );
                         })}
                       </MapContainer>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        className="absolute top-3 right-3 z-[1000] shadow-lg bg-white/90 dark:bg-gray-800/90 hover:bg-white dark:hover:bg-gray-800"
+                        onClick={() => setFullscreenMap(true)}
+                        data-testid="button-expand-map"
+                      >
+                        <Maximize2 className="h-4 w-4 mr-1" />
+                        Helskärm
+                      </Button>
                     </div>
                   ) : (
                     <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -602,6 +631,79 @@ export default function CustomerPortalPage() {
             );
           })()}
         </>
+      )}
+
+      {fullscreenMap && geoObjects.length > 0 && (
+        <div className="fixed inset-0 z-[9999] bg-background flex flex-col" role="dialog" aria-modal="true" aria-label="Översiktskarta" data-testid="fullscreen-map-overlay">
+          <div className="flex items-center justify-between px-4 py-3 border-b bg-card">
+            <div className="flex items-center gap-3">
+              <MapPin className="h-5 w-5 text-[#4A9B9B]" />
+              <div>
+                <h2 className="text-lg font-semibold">Översiktskarta</h2>
+                <p className="text-sm text-muted-foreground">
+                  {geoObjects.length} hämtningsställen
+                  {selectedCustomer ? ` — ${selectedCustomer.name}` : ""}
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFullscreenMap(false)}
+              autoFocus
+              data-testid="button-close-fullscreen-map"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Stäng
+            </Button>
+          </div>
+          <div className="flex-1 relative">
+            <MapContainer
+              center={[62.5, 17.5]}
+              zoom={5}
+              style={{ height: "100%", width: "100%" }}
+              scrollWheelZoom={true}
+            >
+              <TileLayer
+                attribution={mapConfig.attribution}
+                url={mapConfig.tileUrl}
+              />
+              <PickupMapFitBounds positions={allMapPositions} />
+              {geoObjects.map(obj => {
+                const sub = subscriptions.find(s => s.objectId === obj.id && s.status === "active");
+                return (
+                  <Marker
+                    key={obj.id}
+                    position={[obj.latitude!, obj.longitude!]}
+                    icon={createPickupIcon()}
+                  >
+                    <Popup>
+                      <div className="p-1 min-w-[200px]">
+                        <div className="font-semibold text-sm">{obj.name}</div>
+                        {obj.objectNumber && <div className="text-xs text-gray-500">#{obj.objectNumber}</div>}
+                        {obj.address && <div className="text-xs text-gray-600 mt-1">{obj.address}</div>}
+                        {(obj.postalCode || obj.city) && (
+                          <div className="text-xs text-gray-600">{[obj.postalCode, obj.city].filter(Boolean).join(" ")}</div>
+                        )}
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                          {obj.objectType && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{obj.objectType}</span>
+                          )}
+                          {sub && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700">Aktivt abonnemang</span>
+                          )}
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                );
+              })}
+            </MapContainer>
+            <div className="absolute bottom-4 left-4 z-[1000] bg-card/90 backdrop-blur rounded-lg px-3 py-2 shadow-lg border text-sm" data-testid="text-map-object-count">
+              <span className="font-medium">{geoObjects.length}</span> objekt på kartan
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
