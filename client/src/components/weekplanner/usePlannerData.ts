@@ -10,19 +10,45 @@ import type { ViewMode, PlannerAction, WeatherForecastData, WeatherImpactDay } f
 import { HOURS_IN_DAY, DAY_START_HOUR, DAY_END_HOUR } from "./types";
 
 const UNSCHEDULED_PAGE_SIZE = 50;
+const PLANNER_FILTERS_KEY = "traivo-planner-filters";
+
+function loadSavedFilters(): {
+  filterCustomer: string;
+  filterPriority: string;
+  filterCluster: string;
+  filterTeam: string;
+  filterExecutionCode: string;
+  hiddenResourceIds: string[];
+  zoomLevel: number;
+  showUnscheduled: boolean;
+  viewMode: ViewMode;
+} | null {
+  try {
+    const stored = localStorage.getItem(PLANNER_FILTERS_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {}
+  return null;
+}
+
+function savePlannerFilters(filters: Record<string, unknown>) {
+  try {
+    localStorage.setItem(PLANNER_FILTERS_KEY, JSON.stringify(filters));
+  } catch {}
+}
 
 export function usePlannerData() {
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  const saved = useMemo(() => loadSavedFilters(), []);
+  const [viewMode, setViewMode] = useState<ViewMode>(saved?.viewMode ?? "week");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [currentWeekStart, setCurrentWeekStart] = useState(startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [selectedJob, setSelectedJob] = useState<string | null>(null);
-  const [showUnscheduled, setShowUnscheduled] = useState(true);
-  const [filterCustomer, setFilterCustomer] = useState<string>("all");
-  const [filterPriority, setFilterPriority] = useState<string>("all");
-  const [filterCluster, setFilterCluster] = useState<string>("all");
-  const [filterTeam, setFilterTeam] = useState<string>("all");
-  const [filterExecutionCode, setFilterExecutionCode] = useState<string>("all");
-  const [hiddenResourceIds, setHiddenResourceIds] = useState<Set<string>>(new Set());
+  const [showUnscheduled, setShowUnscheduled] = useState(saved?.showUnscheduled ?? true);
+  const [filterCustomer, setFilterCustomer] = useState<string>(saved?.filterCustomer ?? "all");
+  const [filterPriority, setFilterPriority] = useState<string>(saved?.filterPriority ?? "all");
+  const [filterCluster, setFilterCluster] = useState<string>(saved?.filterCluster ?? "all");
+  const [filterTeam, setFilterTeam] = useState<string>(saved?.filterTeam ?? "all");
+  const [filterExecutionCode, setFilterExecutionCode] = useState<string>(saved?.filterExecutionCode ?? "all");
+  const [hiddenResourceIds, setHiddenResourceIds] = useState<Set<string>>(new Set(saved?.hiddenResourceIds ?? []));
   const [orderstockSearch, setOrderstockSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sidebarFiltersOpen, setSidebarFiltersOpen] = useState(false);
@@ -53,10 +79,18 @@ export function usePlannerData() {
   const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number; clusterSkipped: number } | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState<number>(1);
+  const [zoomLevel, setZoomLevel] = useState<number>(saved?.zoomLevel ?? 1);
   const [expandedSubSteps, setExpandedSubSteps] = useState<Record<string, boolean>>({});
   const [activeDragJob, setActiveDragJob] = useState<WorkOrderWithObject | null>(null);
   const { toast } = useToast();
+
+  useEffect(() => {
+    savePlannerFilters({
+      filterCustomer, filterPriority, filterCluster, filterTeam,
+      filterExecutionCode, hiddenResourceIds: Array.from(hiddenResourceIds),
+      zoomLevel, showUnscheduled, viewMode,
+    });
+  }, [filterCustomer, filterPriority, filterCluster, filterTeam, filterExecutionCode, hiddenResourceIds, zoomLevel, showUnscheduled, viewMode]);
 
   const { data: teamsData = [] } = useQuery<Array<{ id: string; name: string; clusterId: string | null; color: string | null }>>({ queryKey: ["/api/teams"] });
   const { data: teamMembersData = [] } = useQuery<Array<{ teamId: string; resourceId: string }>>({ queryKey: ["/api/team-members"] });

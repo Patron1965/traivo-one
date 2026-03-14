@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useAuth } from "@/hooks/use-auth";
 import { ThemeProvider, useTheme } from "@/hooks/use-theme";
 import { CommandPalette } from "@/components/CommandPalette";
+import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import NotFound from "@/pages/not-found";
 import WeekPlannerPage from "@/pages/WeekPlannerPage";
 import RoutesPage from "@/pages/RoutesPage";
@@ -312,6 +313,7 @@ function AuthenticatedApp() {
           {!hideFloatingButton && <FloatingActionButton />}
           <MobileBottomNav />
           <CommandPalette onThemeToggle={toggleTheme} currentTheme={theme} />
+          <KeyboardShortcutsDialog />
           <TourGuide />
           <TourAutoStart />
         </div>

@@ -44,6 +44,7 @@ import { sv } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
 import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
 import { ProactiveTips } from "@/components/ProactiveTips";
+import { Activity } from "lucide-react";
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 
@@ -325,6 +326,55 @@ function RecentPages() {
                   {page.title}
                 </Button>
               </Link>
+            );
+          })}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function RecentChanges({ orders }: { orders: WorkOrder[] }) {
+  const recentlyChanged = orders
+    .filter(o => o.createdAt)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 8);
+
+  if (recentlyChanged.length === 0) return null;
+
+  const statusLabels: Record<string, { label: string; color: string }> = {
+    skapad: { label: "Skapad", color: "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200" },
+    planerad_pre: { label: "Förplanerad", color: "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200" },
+    planerad_resurs: { label: "Planerad", color: "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200" },
+    completed: { label: "Utförd", color: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200" },
+    scheduled: { label: "Schemalagd", color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200" },
+  };
+
+  return (
+    <Card className="mb-4" data-testid="card-recent-changes">
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Activity className="h-4 w-4 text-muted-foreground" />
+          Senaste aktivitet
+        </CardTitle>
+        <CardDescription>Senast skapade ordrar</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-2">
+          {recentlyChanged.map(order => {
+            const s = statusLabels[order.orderStatus || order.status] || { label: order.orderStatus || order.status, color: "bg-gray-100 text-gray-800" };
+            return (
+              <div key={order.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors" data-testid={`recent-change-${order.id}`}>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{order.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(order.createdAt), "d MMM HH:mm", { locale: sv })}
+                  </p>
+                </div>
+                <Badge variant="secondary" className={`text-xs shrink-0 ${s.color}`}>
+                  {s.label}
+                </Badge>
+              </div>
             );
           })}
         </div>
@@ -654,6 +704,9 @@ export default function MyTasksPage() {
 
         {/* Recent Pages - compact */}
         <RecentPages />
+
+        {/* Recent Changes */}
+        {!ordersLoading && <RecentChanges orders={orders} />}
 
         {/* Proactive AI Tips - smaller */}
         <ProactiveTips />

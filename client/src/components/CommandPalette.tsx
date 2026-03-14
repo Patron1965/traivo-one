@@ -46,6 +46,9 @@ import {
   Moon,
   Sun,
   History,
+  MapPin,
+  User,
+  Loader2,
 } from "lucide-react";
 
 const allNavItems = [
@@ -88,6 +91,13 @@ const quickActions = [
   { title: "Importera data", icon: Upload, action: "import", keywords: ["csv", "fil", "ladda"] },
 ];
 
+interface SearchResult {
+  type: "object" | "customer" | "workOrder";
+  id: string;
+  title: string;
+  subtitle?: string;
+}
+
 interface CommandPaletteProps {
   onThemeToggle?: () => void;
   currentTheme?: string;
@@ -97,6 +107,9 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
   const [open, setOpen] = useState(false);
   const [, setLocation] = useLocation();
   const [recentItems, setRecentItems] = useState<string[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("traivo-recent-pages");
@@ -108,6 +121,62 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
       }
     }
   }, []);
+
+  useEffect(() => {
+    if (!open) {
+      setSearchQuery("");
+      setSearchResults([]);
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (searchQuery.length < 2) {
+      setSearchResults([]);
+      return;
+    }
+    const abortController = new AbortController();
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const q = encodeURIComponent(searchQuery);
+        const [objRes, custRes] = await Promise.all([
+          fetch(`/api/objects?search=${q}&limit=5`, { credentials: "include", signal: abortController.signal }).then(r => r.ok ? r.json() : []).catch(() => []),
+          fetch(`/api/customers?search=${q}&limit=5`, { credentials: "include", signal: abortController.signal }).then(r => r.ok ? r.json() : []).catch(() => []),
+        ]);
+        const results: SearchResult[] = [];
+        const objects = Array.isArray(objRes) ? objRes : (objRes?.objects || objRes?.data || []);
+        objects.slice(0, 5).forEach((o: any) => {
+          results.push({
+            type: "object",
+            id: o.id,
+            title: o.name || o.objectNumber || "Objekt",
+            subtitle: o.address || o.objectNumber || "",
+          });
+        });
+        const customers = Array.isArray(custRes) ? custRes : (custRes?.customers || custRes?.data || []);
+        customers.slice(0, 5).forEach((c: any) => {
+          results.push({
+            type: "customer",
+            id: c.id,
+            title: c.name || "Kund",
+            subtitle: c.contactPerson || c.email || "",
+          });
+        });
+        if (!abortController.signal.aborted) {
+          setSearchResults(results);
+        }
+      } catch {
+      } finally {
+        if (!abortController.signal.aborted) {
+          setIsSearching(false);
+        }
+      }
+    }, 300);
+    return () => {
+      clearTimeout(timer);
+      abortController.abort();
+    };
+  }, [searchQuery]);
 
   const addToRecent = useCallback((url: string) => {
     setRecentItems((prev) => {
@@ -160,6 +229,14 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
     setOpen(false);
   };
 
+  const handleSearchResultClick = (result: SearchResult) => {
+    if (result.type === "object") {
+      handleNavigate(`/objects/${result.id}`);
+    } else if (result.type === "customer") {
+      handleNavigate(`/objects?customer=${result.id}`);
+    }
+  };
+
   const recentNavItems = recentItems
     .map((url) => allNavItems.find((item) => item.url === url))
     .filter(Boolean);
@@ -172,11 +249,55 @@ export function CommandPalette({ onThemeToggle, currentTheme }: CommandPalettePr
     return acc;
   }, {} as Record<string, typeof allNavItems>);
 
+  const showDataResults = searchQuery.length >= 2;
+
   return (
     <CommandDialog open={open} onOpenChange={setOpen}>
-      <CommandInput placeholder="Sök sidor, åtgärder..." data-testid="input-command-palette" />
+      <CommandInput
+        placeholder="Sök sidor, objekt, kunder..."
+        data-testid="input-command-palette"
+        value={searchQuery}
+        onValueChange={setSearchQuery}
+      />
       <CommandList>
         <CommandEmpty>Inga resultat hittades.</CommandEmpty>
+
+        {showDataResults && (searchResults.length > 0 || isSearching) && (
+          <CommandGroup heading={isSearching ? "Söker..." : "Sökresultat"}>
+            {isSearching && searchResults.length === 0 && (
+              <CommandItem disabled className="gap-3 opacity-60">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Söker i databasen...</span>
+              </CommandItem>
+            )}
+            {searchResults.map((result) => (
+              <CommandItem
+                key={`search-${result.type}-${result.id}`}
+                value={`search-${result.type}-${result.title}-${result.subtitle}`}
+                onSelect={() => handleSearchResultClick(result)}
+                className="gap-3"
+                data-testid={`command-search-${result.type}-${result.id}`}
+              >
+                {result.type === "object" ? (
+                  <MapPin className="h-4 w-4 text-blue-500" />
+                ) : (
+                  <User className="h-4 w-4 text-green-500" />
+                )}
+                <div className="flex flex-col">
+                  <span className="text-sm">{result.title}</span>
+                  {result.subtitle && (
+                    <span className="text-xs text-muted-foreground">{result.subtitle}</span>
+                  )}
+                </div>
+                <span className="ml-auto text-xs text-muted-foreground">
+                  {result.type === "object" ? "Objekt" : "Kund"}
+                </span>
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+
+        {showDataResults && searchResults.length > 0 && <CommandSeparator />}
 
         {recentNavItems.length > 0 && (
           <CommandGroup heading="Senaste">

@@ -30,6 +30,8 @@ import { ObjectContactsDialog } from "@/components/ObjectContactsPanel";
 import { ObjectImagesDialog } from "@/components/ObjectImagesGallery";
 import { AddressSearch } from "@/components/AddressSearch";
 import { GeocodedObjectsMap, ObjectsMapTab } from "@/components/ObjectsMapView";
+import { BulkActionBar } from "@/components/BulkActionBar";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { ServiceObject, Customer, SetupTimeLog } from "@shared/schema";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
@@ -68,7 +70,11 @@ export default function ObjectsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilterRaw] = useState("all");
   const [accessFilter, setAccessFilterRaw] = useState("all");
-  const [customerFilter, setCustomerFilterRaw] = useState<string[]>([]);
+  const [customerFilter, setCustomerFilterRaw] = useState<string[]>(() => {
+    const params = new URLSearchParams(window.location.search);
+    const c = params.get("customer");
+    return c ? [c] : [];
+  });
   const [hierarchyFilter, setHierarchyFilterRaw] = useState("all");
   const [setupTimeRange, setSetupTimeRange] = useState<[number, number]>([0, 60]);
   const [expandedAreas, setExpandedAreas] = useState<Set<string>>(new Set());
@@ -91,6 +97,12 @@ export default function ObjectsPage() {
   const removeCustomerFilter = (id: string) => { setCustomerFilter(customerFilter.filter(c => c !== id)); };
   const setHierarchyFilter = (v: string) => { setHierarchyFilterRaw(v); setCurrentPage(0); };
   const [interimFilter, setInterimFilter] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelected = useCallback((id: string) => {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  }, []);
+  const [bulkStatusDialogOpen, setBulkStatusDialogOpen] = useState(false);
+  const [bulkNewStatus, setBulkNewStatus] = useState("active");
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [servicePatternDialog, setServicePatternDialog] = useState<{ open: boolean; loading: boolean; data?: { summary: string; patterns: { label: string; value: string }[]; anomalies: { objectId: string; objectName: string; reason: string }[] } }>({ open: false, loading: false });
@@ -538,10 +550,17 @@ export default function ObjectsPage() {
     return (
       <div key={obj.id} className="border-b last:border-b-0">
         <div 
-          className={`flex items-center gap-3 p-3 hover-elevate cursor-pointer ${level > 0 ? 'bg-muted/30' : ''}`}
+          className={`flex items-center gap-3 p-3 hover-elevate cursor-pointer ${level > 0 ? 'bg-muted/30' : ''} ${selectedIds.has(obj.id) ? 'bg-primary/5' : ''}`}
           style={{ paddingLeft: `${12 + level * 24}px` }}
           data-testid={`object-row-${obj.id}`}
         >
+          <Checkbox
+            checked={selectedIds.has(obj.id)}
+            onCheckedChange={() => toggleSelected(obj.id)}
+            onClick={(e) => e.stopPropagation()}
+            className="shrink-0"
+            data-testid={`checkbox-object-${obj.id}`}
+          />
           <div onClick={() => hasChildren && toggleExpand(obj.id)} className="shrink-0">
             {hasChildren ? (
               <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
@@ -1065,6 +1084,42 @@ export default function ObjectsPage() {
         </TabsList>
 
         <TabsContent value="list" className="mt-4">
+          <BulkActionBar
+            selectedCount={selectedIds.size}
+            totalCount={filteredTopLevel.length}
+            onSelectAll={() => setSelectedIds(new Set(filteredTopLevel.map(o => o.id)))}
+            onClearSelection={() => setSelectedIds(new Set())}
+          >
+            <Select value={bulkNewStatus} onValueChange={setBulkNewStatus}>
+              <SelectTrigger className="w-[140px] h-8" data-testid="select-bulk-status">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Aktiv</SelectItem>
+                <SelectItem value="inactive">Inaktiv</SelectItem>
+                <SelectItem value="paused">Pausad</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              size="sm"
+              onClick={async () => {
+                const ids = Array.from(selectedIds);
+                let updated = 0;
+                for (const id of ids) {
+                  try {
+                    await apiRequest("PATCH", `/api/objects/${id}`, { status: bulkNewStatus });
+                    updated++;
+                  } catch {}
+                }
+                queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+                setSelectedIds(new Set());
+                toast({ title: "Statusändring klar", description: `${updated} objekt uppdaterade till ${bulkNewStatus}` });
+              }}
+              data-testid="button-bulk-change-status"
+            >
+              Ändra status
+            </Button>
+          </BulkActionBar>
           <div className="border rounded-md bg-card">
             {filteredTopLevel.length > 0 ? (
               filteredTopLevel.map(obj => renderObjectTree(obj))

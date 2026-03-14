@@ -25,6 +25,8 @@ import {
 } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { BulkActionBar } from "@/components/BulkActionBar";
+import { Checkbox } from "@/components/ui/checkbox";
 import type { WorkOrder, SimulationScenario, Customer, Article, WorkOrderLine, Team, Resource, MetadataKatalog } from "@shared/schema";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
 import { 
@@ -140,6 +142,12 @@ export default function OrderStockPage() {
       : "all" as const;
     return { initialStatus: status, initialSearch: q };
   }, []);
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const toggleSelected = (id: string) => {
+    setSelectedIds(prev => { const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next; });
+  };
+  const [bulkNewStatus, setBulkNewStatus] = useState<string>("planerad_pre");
 
   const [statusFilter, setStatusFilter] = useState<OrderStatus | "all">(initialStatus);
   const [searchTerm, setSearchTerm] = useState(initialSearch);
@@ -765,6 +773,45 @@ export default function OrderStockPage() {
           </div>
         </CardHeader>
         <Separator />
+        <BulkActionBar
+          selectedCount={selectedIds.size}
+          totalCount={displayOrders.length}
+          onSelectAll={() => setSelectedIds(new Set(displayOrders.map(o => o.id)))}
+          onClearSelection={() => setSelectedIds(new Set())}
+        >
+          <Select value={bulkNewStatus} onValueChange={setBulkNewStatus}>
+            <SelectTrigger className="w-[160px] h-8" data-testid="select-bulk-order-status">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="skapad">Skapad</SelectItem>
+              <SelectItem value="planerad_pre">Förplanerad</SelectItem>
+              <SelectItem value="planerad_resurs">Planerad</SelectItem>
+              <SelectItem value="planerad_las">Låst</SelectItem>
+              <SelectItem value="utford">Utförd</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button
+            size="sm"
+            onClick={async () => {
+              const ids = Array.from(selectedIds);
+              let updated = 0;
+              for (const id of ids) {
+                try {
+                  await apiRequest("PATCH", `/api/work-orders/${id}`, { orderStatus: bulkNewStatus });
+                  updated++;
+                } catch {}
+              }
+              queryClient.invalidateQueries({ queryKey: ["/api/order-stock"] });
+              queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+              setSelectedIds(new Set());
+              toast({ title: "Statusändring klar", description: `${updated} ordrar uppdaterade` });
+            }}
+            data-testid="button-bulk-change-order-status"
+          >
+            Ändra status
+          </Button>
+        </BulkActionBar>
         <ScrollArea className="h-[500px]">
           <div className="divide-y">
             {displayOrders.length === 0 ? (
@@ -782,9 +829,16 @@ export default function OrderStockPage() {
                 return (
                   <div 
                     key={order.id} 
-                    className="p-4 flex items-center gap-4 hover-elevate"
+                    className={`p-4 flex items-center gap-4 hover-elevate ${selectedIds.has(order.id) ? 'bg-primary/5' : ''}`}
                     data-testid={`row-order-${order.id}`}
                   >
+                    <Checkbox
+                      checked={selectedIds.has(order.id)}
+                      onCheckedChange={() => toggleSelected(order.id)}
+                      onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                      className="shrink-0"
+                      data-testid={`checkbox-order-${order.id}`}
+                    />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium truncate">{order.title}</span>

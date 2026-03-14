@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
+import { useUnsavedChanges } from "@/hooks/useUnsavedChanges";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle } from "lucide-react";
@@ -60,11 +61,14 @@ export default function OrderConceptWizardPage() {
   const { toast } = useToast();
 
   const isEditing = !!params.id;
+  const [hasUnsavedWork, setHasUnsavedWork] = useState(false);
+  useUnsavedChanges(hasUnsavedWork);
   const [currentStep, setCurrentStep] = useState(1);
   const [resumeStep, setResumeStep] = useState<number | null>(null);
   const [showResumeBanner, setShowResumeBanner] = useState(false);
   const [conceptId, setConceptId] = useState<string | null>(params.id || null);
-  const [conceptName, setConceptName] = useState("");
+  const [conceptName, setConceptNameRaw] = useState("");
+  const setConceptName = (v: string) => { setConceptNameRaw(v); setHasUnsavedWork(true); };
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerMode, setCustomerMode] = useState<CustomerMode>("HARDCODED");
   const [selectedObjectIds, setSelectedObjectIds] = useState<Set<string>>(new Set());
@@ -367,6 +371,7 @@ export default function OrderConceptWizardPage() {
       const newStep = currentStep + 1;
       setShowResumeBanner(false);
       setCurrentStep(newStep);
+      setHasUnsavedWork(false);
       if (activeConceptId) {
         try { await apiRequest("PATCH", `/api/order-concepts/${activeConceptId}`, { currentStep: newStep }); } catch {}
       }
@@ -392,6 +397,7 @@ export default function OrderConceptWizardPage() {
     }
     if (activeId) {
       await saveStepMutation.mutateAsync({ step: currentStep, overrideConceptId: activeId });
+      setHasUnsavedWork(false);
       toast({ title: "Utkast sparat" });
     }
   }, [conceptId, currentStep, conceptName]);
@@ -401,6 +407,7 @@ export default function OrderConceptWizardPage() {
     await saveStepMutation.mutateAsync({ step: 9 });
     await apiRequest("PATCH", `/api/order-concepts/${conceptId}`, { status: "active" });
     queryClient.invalidateQueries({ queryKey: ["/api/order-concepts"] });
+    setHasUnsavedWork(false);
     toast({ title: "Orderkoncept aktiverat!" });
     navigate("/order-concepts");
   }, [conceptId, navigate]);
