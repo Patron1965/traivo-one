@@ -120,7 +120,7 @@ export function AppSidebar() {
           <img 
             src={traivoLogo} 
             alt="Traivo" 
-            className="h-10 w-auto dark:bg-white/90 dark:rounded dark:px-1"
+            className="h-14 w-auto object-contain"
             data-testid="img-traivo-logo"
           />
           <div>

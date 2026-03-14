@@ -246,7 +246,7 @@ function TenantLogo() {
   return (
     <Link href="/">
       <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5" data-testid="link-home-logo">
-        <img src={traivoLogo} alt="Traivo" className="h-10 w-auto object-contain dark:bg-white/90 dark:rounded dark:px-1" data-testid="img-tenant-logo" />
+        <img src={traivoLogo} alt="Traivo" className="h-14 w-auto object-contain" data-testid="img-tenant-logo" />
       </div>
     </Link>
   );
