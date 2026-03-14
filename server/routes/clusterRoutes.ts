@@ -21,7 +21,7 @@ app.get("/api/clusters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getClusterWithStats(req.params.id);
     const verified = verifyTenantOwnership(cluster, tenantId);
-    if (!verified) return res.status(404).json({ error: "Kluster hittades inte" });
+    if (!verified) throw new NotFoundError("Kluster hittades inte");
     res.json(verified);
 }));
 
@@ -71,11 +71,11 @@ app.patch("/api/clusters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     const { tenantId: _, id, createdAt, deletedAt, ...updateData } = req.body;
     const cluster = await storage.updateCluster(req.params.id, updateData);
-    if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
+    if (!cluster) throw new NotFoundError("Kluster hittades inte");
     res.json(cluster);
 }));
 
@@ -83,7 +83,7 @@ app.delete("/api/clusters/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     await storage.deleteCluster(req.params.id);
     res.status(204).send();
@@ -94,7 +94,7 @@ app.get("/api/clusters/:id/objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     const objects = await storage.getClusterObjects(req.params.id);
     res.json(objects);
@@ -104,7 +104,7 @@ app.get("/api/clusters/:id/work-orders", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
     const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
@@ -116,7 +116,7 @@ app.get("/api/clusters/:id/subscriptions", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     const subscriptions = await storage.getClusterSubscriptions(req.params.id);
     res.json(subscriptions);
@@ -127,7 +127,7 @@ app.get("/api/clusters/:id/object-contacts", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(cluster, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     const objects = await storage.getClusterObjects(req.params.id);
     
@@ -144,10 +144,10 @@ app.post("/api/clusters/:id/refresh-cache", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getCluster(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     const cluster = await storage.updateClusterCaches(req.params.id);
-    if (!cluster) return res.status(404).json({ error: "Kluster hittades inte" });
+    if (!cluster) throw new NotFoundError("Kluster hittades inte");
     res.json(cluster);
 }));
 
@@ -155,7 +155,7 @@ app.post("/api/clusters/:id/refresh-cache", asyncHandler(async (req, res) => {
 app.post("/api/ai/chat", asyncHandler(async (req, res) => {
     const { question, context, conversationHistory = [] } = req.body;
     if (!question || typeof question !== "string") {
-      return res.status(400).json({ error: "Fråga krävs" });
+      throw new ValidationError("Fråga krävs");
     }
 
     const OpenAI = (await import("openai")).default;

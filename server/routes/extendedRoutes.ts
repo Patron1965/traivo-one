@@ -6,7 +6,7 @@ import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
+import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
@@ -26,7 +26,7 @@ app.get("/api/public/report/:code", asyncHandler(async (req, res) => {
     
     const qrLink = await storage.getQrCodeLinkByCode(code);
     if (!qrLink) {
-      return res.status(404).json({ error: "Ogiltig QR-kod" });
+      throw new NotFoundError("Ogiltig QR-kod");
     }
     
     if (!qrLink.isActive) {
@@ -39,7 +39,7 @@ app.get("/api/public/report/:code", asyncHandler(async (req, res) => {
     // Get object info (limited)
     const object = await storage.getObject(qrLink.objectId);
     if (!object) {
-      return res.status(404).json({ error: "Objekt hittades inte" });
+      throw new NotFoundError("Objekt hittades inte");
     }
     
     // Get tenant branding
@@ -75,7 +75,7 @@ app.post("/api/public/report/:code", asyncHandler(async (req, res) => {
     
     const qrLink = await storage.getQrCodeLinkByCode(code);
     if (!qrLink) {
-      return res.status(404).json({ error: "Ogiltig QR-kod" });
+      throw new NotFoundError("Ogiltig QR-kod");
     }
     
     if (!qrLink.isActive) {
@@ -83,7 +83,7 @@ app.post("/api/public/report/:code", asyncHandler(async (req, res) => {
     }
     
     if (!category || !title) {
-      return res.status(400).json({ error: "Kategori och titel krävs" });
+      throw new ValidationError("Kategori och titel krävs");
     }
     
     // Create public issue report
@@ -217,7 +217,7 @@ app.get("/api/protocols/:id", asyncHandler(async (req, res) => {
     const protocol = await storage.getProtocol(req.params.id);
     
     if (!protocol || !verifyTenantOwnership(protocol, tenantId)) {
-      return res.status(404).json({ error: "Protokoll hittades inte" });
+      throw new NotFoundError("Protokoll hittades inte");
     }
     
     res.json(protocol);
@@ -238,7 +238,7 @@ app.patch("/api/protocols/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getProtocol(req.params.id);
     if (!existing || !verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Protokoll hittades inte" });
+      throw new NotFoundError("Protokoll hittades inte");
     }
     
     const protocol = await storage.updateProtocol(req.params.id, tenantId, req.body);
@@ -250,7 +250,7 @@ app.delete("/api/protocols/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getProtocol(req.params.id);
     if (!existing || !verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Protokoll hittades inte" });
+      throw new NotFoundError("Protokoll hittades inte");
     }
     
     await storage.deleteProtocol(req.params.id, tenantId);
@@ -263,7 +263,7 @@ app.post("/api/protocols/:id/generate-pdf", asyncHandler(async (req, res) => {
     
     const protocol = await storage.getProtocol(req.params.id);
     if (!protocol || !verifyTenantOwnership(protocol, tenantId)) {
-      return res.status(404).json({ error: "Protokoll hittades inte" });
+      throw new NotFoundError("Protokoll hittades inte");
     }
     
     const { generateProtocolPdf } = await import('./protocol-pdf-generator');
@@ -292,7 +292,7 @@ app.post("/api/protocols/:id/send-to-customer", asyncHandler(async (req, res) =>
     
     const protocol = await storage.getProtocol(req.params.id);
     if (!protocol || !verifyTenantOwnership(protocol, tenantId)) {
-      return res.status(404).json({ error: "Protokoll hittades inte" });
+      throw new NotFoundError("Protokoll hittades inte");
     }
     
     const { sendProtocolToCustomer } = await import('./protocol-email-service');
@@ -303,7 +303,7 @@ app.post("/api/protocols/:id/send-to-customer", asyncHandler(async (req, res) =>
     const tenant = await storage.getTenant(tenantId);
     
     if (!customer?.email) {
-      return res.status(400).json({ error: "Kunden har ingen e-postadress" });
+      throw new ValidationError("Kunden har ingen e-postadress");
     }
     
     const result = await sendProtocolToCustomer(protocol, {
@@ -346,7 +346,7 @@ app.get("/api/deviation-reports/:id", asyncHandler(async (req, res) => {
     const report = await storage.getDeviationReport(req.params.id);
     
     if (!report || !verifyTenantOwnership(report, tenantId)) {
-      return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      throw new NotFoundError("Avvikelserapport hittades inte");
     }
     
     res.json(report);
@@ -367,7 +367,7 @@ app.patch("/api/deviation-reports/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getDeviationReport(req.params.id);
     if (!existing || !verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      throw new NotFoundError("Avvikelserapport hittades inte");
     }
     
     const report = await storage.updateDeviationReport(req.params.id, tenantId, req.body);
@@ -380,13 +380,13 @@ app.post("/api/deviation-reports/:id/create-order", asyncHandler(async (req, res
     
     const report = await storage.getDeviationReport(req.params.id);
     if (!report || !verifyTenantOwnership(report, tenantId)) {
-      return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      throw new NotFoundError("Avvikelserapport hittades inte");
     }
     
     // Get object and customer info
     const object = await storage.getObject(report.objectId);
     if (!object) {
-      return res.status(400).json({ error: "Objekt hittades inte" });
+      throw new ValidationError("Objekt hittades inte");
     }
     
     // Create new work order for fixing the deviation
@@ -427,7 +427,7 @@ app.post("/api/deviation-reports/:id/resolve", asyncHandler(async (req, res) => 
     
     const report = await storage.getDeviationReport(req.params.id);
     if (!report || !verifyTenantOwnership(report, tenantId)) {
-      return res.status(404).json({ error: "Avvikelserapport hittades inte" });
+      throw new NotFoundError("Avvikelserapport hittades inte");
     }
     
     const updated = await storage.updateDeviationReport(report.id, tenantId, {
@@ -446,7 +446,7 @@ app.get("/api/objects/:id/issue-history", asyncHandler(async (req, res) => {
     
     const obj = await storage.getObject(objectId);
     if (!obj || !verifyTenantOwnership(obj, tenantId)) {
-      return res.status(404).json({ error: "Objekt hittades inte" });
+      throw new NotFoundError("Objekt hittades inte");
     }
     
     const deviations = await storage.getDeviationReports(tenantId, { objectId });
@@ -645,7 +645,7 @@ app.get("/api/environmental-certificates/:customerId", asyncHandler(async (req, 
     const customers = await storage.getCustomers(tenantId);
     const customer = customers.find(c => c.id === customerId);
     if (!customer) {
-      return res.status(404).json({ error: "Kund hittades inte" });
+      throw new NotFoundError("Kund hittades inte");
     }
     
     // Get work orders for this customer
@@ -888,7 +888,7 @@ app.get("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) =
 app.put("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) => {
     const { service, monthlyBudgetUsd, alertThresholdPercent, tenantId } = req.body;
     if (!service || monthlyBudgetUsd === undefined) {
-      return res.status(400).json({ error: "Service och budget krävs" });
+      throw new ValidationError("Service och budget krävs");
     }
     
     const existing = await db.select().from(apiBudgets)
@@ -980,7 +980,7 @@ app.post("/api/field-worker/tasks/:id/start", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const updated = await storage.updateWorkOrder(req.params.id, {
@@ -999,7 +999,7 @@ app.post("/api/field-worker/tasks/:id/complete", asyncHandler(async (req, res) =
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const updated = await storage.updateWorkOrder(req.params.id, {
@@ -1024,7 +1024,7 @@ app.post("/api/field-worker/tasks/:id/update-metadata", asyncHandler(async (req,
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const { metadata } = req.body;
@@ -1054,7 +1054,7 @@ app.post("/api/field-worker/tasks/:id/upload-photo", asyncHandler(async (req, re
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
@@ -1073,12 +1073,12 @@ app.post("/api/field-worker/tasks/:id/confirm-photo", asyncHandler(async (req, r
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const { objectPath, category } = req.body;
     if (!objectPath) {
-      return res.status(400).json({ error: "objectPath krävs" });
+      throw new ValidationError("objectPath krävs");
     }
     
     const metadata = (workOrder.metadata as Record<string, any>) || {};
@@ -1105,7 +1105,7 @@ app.post("/api/invoice-preview/export-to-fortnox", asyncHandler(async (req, res)
     const { invoices } = req.body;
     
     if (!invoices || !Array.isArray(invoices) || invoices.length === 0) {
-      return res.status(400).json({ error: "Inga fakturor att exportera" });
+      throw new ValidationError("Inga fakturor att exportera");
     }
     
     const results: Array<{ customerId: string; customerName: string; status: string; exportId?: string; error?: string }> = [];
@@ -1266,7 +1266,7 @@ app.post("/api/ai/communications/eta-update", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, estimatedMinutes } = req.body;
     if (!workOrderId || estimatedMinutes === undefined) {
-      return res.status(400).json({ error: "workOrderId och estimatedMinutes krävs" });
+      throw new ValidationError("workOrderId och estimatedMinutes krävs");
     }
     const result = await sendETAUpdate(workOrderId, estimatedMinutes, tenantId);
     res.json(result);
@@ -1276,7 +1276,7 @@ app.post("/api/ai/communications/send-manual", asyncHandler(async (req, res) => 
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, notificationType, channel, customMessage } = req.body;
     if (!workOrderId) {
-      return res.status(400).json({ error: "workOrderId krävs" });
+      throw new ValidationError("workOrderId krävs");
     }
     const result = await handleWorkOrderStatusChange(
       workOrderId, 
@@ -1328,7 +1328,7 @@ app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => 
     const { email, firstName, lastName, password, role, resourceId } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ error: "E-post och lösenord krävs" });
+      throw new ValidationError("E-post och lösenord krävs");
     }
 
     const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer", "customer", "reporter"];
@@ -1338,7 +1338,7 @@ app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => 
 
     const existing = await storage.getUserByUsername(email);
     if (existing) {
-      return res.status(409).json({ error: "En användare med den e-postadressen finns redan" });
+      throw new ConflictError("En användare med den e-postadressen finns redan");
     }
 
     const hashedPassword = hashPassword(password);
@@ -1365,7 +1365,7 @@ app.post("/api/admin/users", requireAdminAuth, asyncHandler(async (req, res) => 
 app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, res) => {
     const { ids, updates } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
-      return res.status(400).json({ error: "Inga användare valda" });
+      throw new ValidationError("Inga användare valda");
     }
     const validUpdates: Record<string, any> = {};
     if (updates.role !== undefined) {
@@ -1377,7 +1377,7 @@ app.patch("/api/admin/users/bulk", requireAdminAuth, asyncHandler(async (req, re
     }
     if (updates.isActive !== undefined) validUpdates.isActive = updates.isActive;
     if (Object.keys(validUpdates).length === 0) {
-      return res.status(400).json({ error: "Inga uppdateringar angivna" });
+      throw new ValidationError("Inga uppdateringar angivna");
     }
     let updatedCount = 0;
     const tenantId = (req as any).tenantId;
@@ -1415,7 +1415,7 @@ app.patch("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, res
     }
 
     const user = await storage.updateUser(req.params.id, updateData);
-    if (!user) return res.status(404).json({ error: "Användaren hittades inte" });
+    if (!user) throw new NotFoundError("Användaren hittades inte");
 
     if (role !== undefined) {
       const tenantId = (req as any).tenantId;
@@ -1437,7 +1437,7 @@ app.delete("/api/admin/users/:id", requireAdminAuth, asyncHandler(async (req, re
 app.post("/api/auth/login", asyncHandler(async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password) {
-      return res.status(400).json({ error: "E-post och lösenord krävs" });
+      throw new ValidationError("E-post och lösenord krävs");
     }
 
     const { verifyPassword } = await import("./password");
@@ -1446,7 +1446,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
       return res.status(401).json({ error: "Felaktig e-post eller lösenord" });
     }
     if (user.isActive === false) {
-      return res.status(403).json({ error: "Kontot är inaktiverat" });
+      throw new ForbiddenError("Kontot är inaktiverat");
     }
 
     const valid = verifyPassword(password, user.passwordHash);

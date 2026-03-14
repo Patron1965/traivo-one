@@ -55,7 +55,7 @@ app.post("/api/iot/signals", asyncHandler(async (req, res) => {
     const { deviceId, externalDeviceId, signalType, payload, batteryLevel } = parsed.data;
 
     if (!deviceId && !externalDeviceId) {
-      return res.status(400).json({ error: "Ange antingen deviceId eller externalDeviceId." });
+      throw new ValidationError("Ange antingen deviceId eller externalDeviceId.");
     }
 
     let device;
@@ -64,8 +64,8 @@ app.post("/api/iot/signals", asyncHandler(async (req, res) => {
     } else if (externalDeviceId) {
       device = await storage.getIotDeviceByExternalId(auth.tenantId, externalDeviceId);
     }
-    if (!device) return res.status(404).json({ error: "Enhet hittades inte." });
-    if (device.tenantId !== auth.tenantId) return res.status(403).json({ error: "Enheten tillhör inte denna tenant." });
+    if (!device) throw new NotFoundError("Enhet hittades inte.");
+    if (device.tenantId !== auth.tenantId) throw new ForbiddenError("Enheten tillhör inte denna tenant.");
 
     await storage.updateIotDevice(device.id, {
       lastSignal: signalType,
@@ -166,7 +166,7 @@ app.post("/api/iot/devices", asyncHandler(async (req, res) => {
     const data = insertIotDeviceSchema.parse({ ...req.body, tenantId });
     const obj = await storage.getObject(data.objectId);
     if (!obj || obj.tenantId !== tenantId) {
-      return res.status(400).json({ error: "Objektet hittades inte eller tillhör inte er tenant." });
+      throw new ValidationError("Objektet hittades inte eller tillhör inte er tenant.");
     }
     const device = await storage.createIotDevice(data);
     res.status(201).json(device);
@@ -175,7 +175,7 @@ app.post("/api/iot/devices", asyncHandler(async (req, res) => {
 app.patch("/api/iot/devices/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getIotDevice(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Enhet hittades inte." });
+    if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Enhet hittades inte.");
     const updateSchema = z.object({
       deviceType: z.string().optional(),
       externalDeviceId: z.string().nullable().optional(),
@@ -190,7 +190,7 @@ app.patch("/api/iot/devices/:id", asyncHandler(async (req, res) => {
 app.delete("/api/iot/devices/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getIotDevice(req.params.id);
-    if (!existing || existing.tenantId !== tenantId) return res.status(404).json({ error: "Enhet hittades inte." });
+    if (!existing || existing.tenantId !== tenantId) throw new NotFoundError("Enhet hittades inte.");
     await storage.deleteIotDevice(req.params.id);
     res.status(204).send();
 }));
@@ -216,7 +216,7 @@ app.delete("/api/iot/api-keys/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const keys = await storage.getIotApiKeys(tenantId);
     const key = keys.find(k => k.id === req.params.id);
-    if (!key) return res.status(404).json({ error: "API-nyckel hittades inte." });
+    if (!key) throw new NotFoundError("API-nyckel hittades inte.");
     await storage.deleteIotApiKey(req.params.id);
     res.status(204).send();
 }));

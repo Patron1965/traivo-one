@@ -27,7 +27,7 @@ const upload = multer({
 export async function registerImportRoutes(app: Express) {
 app.post("/api/import/customers", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
     
     const csvText = req.file.buffer.toString("utf-8");
@@ -72,7 +72,7 @@ app.post("/api/import/customers", upload.single("file"), asyncHandler(async (req
 
 app.post("/api/import/resources", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
     
     const csvText = req.file.buffer.toString("utf-8");
@@ -117,7 +117,7 @@ app.post("/api/import/resources", upload.single("file"), asyncHandler(async (req
 
 app.post("/api/import/objects", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
     
     const csvText = req.file.buffer.toString("utf-8");
@@ -209,7 +209,7 @@ app.get("/api/tenant", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     if (!tenant) {
-      return res.status(404).json({ error: "Företag hittades inte" });
+      throw new NotFoundError("Företag hittades inte");
     }
     res.json(tenant);
 }));
@@ -229,7 +229,7 @@ app.patch("/api/tenant", asyncHandler(async (req, res) => {
     }
     const tenant = await storage.updateTenant(tenantId, parseResult.data);
     if (!tenant) {
-      return res.status(404).json({ error: "Företag hittades inte" });
+      throw new NotFoundError("Företag hittades inte");
     }
     res.json(tenant);
 }));
@@ -239,7 +239,7 @@ app.get("/api/tenant/settings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     if (!tenant) {
-      return res.status(404).json({ error: "Företag hittades inte" });
+      throw new NotFoundError("Företag hittades inte");
     }
     res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings || {} });
 }));
@@ -253,7 +253,7 @@ app.patch("/api/tenant/settings", asyncHandler(async (req, res) => {
     }
     const tenant = await storage.updateTenantSettings(tenantId, parseResult.data);
     if (!tenant) {
-      return res.status(404).json({ error: "Företag hittades inte" });
+      throw new NotFoundError("Företag hittades inte");
     }
     res.json({ id: tenant.id, name: tenant.name, settings: tenant.settings });
 }));
@@ -309,7 +309,7 @@ app.get("/api/export/:type", asyncHandler(async (req, res) => {
         kärl: o.containerCount || 0,
       }));
     } else {
-      return res.status(400).json({ error: "Okänd exporttyp" });
+      throw new ValidationError("Okänd exporttyp");
     }
 
     const csv = [
@@ -326,7 +326,7 @@ app.post("/api/routes/directions", asyncHandler(async (req, res) => {
     const { coordinates } = req.body;
     
     if (!coordinates || !Array.isArray(coordinates) || coordinates.length < 2) {
-      return res.status(400).json({ error: "At least 2 coordinates required" });
+      throw new ValidationError("At least 2 coordinates required");
     }
 
     const apiKey = process.env.GEOAPIFY_API_KEY;
@@ -411,7 +411,7 @@ app.get("/api/import/progress/:jobId", (req, res) => {
 
 app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
 
     const csvText = req.file.buffer.toString("utf-8");
@@ -590,7 +590,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
 // Modus 2.0 Import - Objects (semicolon-separated)
 app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
     
     const csvText = req.file.buffer.toString("utf-8");
@@ -893,7 +893,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
 // Modus 2.0 Import - Tasks (uppgifter)
 app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
     
     const csvText = req.file.buffer.toString("utf-8");
@@ -1053,7 +1053,7 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
 // Modus 2.0 Import - Task Events (for setup time analysis)
 app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
     
     const csvText = req.file.buffer.toString("utf-8");
@@ -1124,7 +1124,7 @@ app.post("/api/import/modus/events", upload.single("file"), asyncHandler(async (
 // Modus 2.0 Import - Invoice Lines (fakturarader)
 app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: "Ingen fil uppladdad" });
+      throw new ValidationError("Ingen fil uppladdad");
     }
     
     const csvText = req.file.buffer.toString("utf-8");

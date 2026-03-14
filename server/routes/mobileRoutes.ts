@@ -48,7 +48,7 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
         }
       }
     } else {
-      return res.status(400).json({ error: "PIN or username/password required" });
+      throw new ValidationError("PIN or username/password required");
     }
 
     if (!resource) {
@@ -103,7 +103,7 @@ app.post("/api/mobile/logout", isMobileAuthenticated, asyncHandler(async (req: a
 app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resource = await storage.getResource(req.mobileResourceId);
     if (!resource) {
-      return res.status(404).json({ error: "Resurs hittades inte" });
+      throw new NotFoundError("Resurs hittades inte");
     }
     res.json(resource);
 }));
@@ -181,12 +181,12 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
     const order = await storage.getWorkOrder(orderId);
     
     if (!order) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new NotFoundError("Order hittades inte");
     }
     
     // Verify this order belongs to the resource
     if (order.resourceId !== resourceId) {
-      return res.status(403).json({ error: "Ej behörig" });
+      throw new ForbiddenError("Ej behörig");
     }
     
     // Enrich with object and customer info
@@ -217,11 +217,11 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     const order = await storage.getWorkOrder(orderId);
     
     if (!order) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new NotFoundError("Order hittades inte");
     }
     
     if (order.resourceId !== resourceId) {
-      return res.status(403).json({ error: "Ej behörig" });
+      throw new ForbiddenError("Ej behörig");
     }
     
     const updateData: any = {};
@@ -287,17 +287,17 @@ app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, asyncHandler(asy
     const { note } = req.body;
     
     if (!note || !note.trim()) {
-      return res.status(400).json({ error: "Anteckning krävs" });
+      throw new ValidationError("Anteckning krävs");
     }
     
     const order = await storage.getWorkOrder(orderId);
     
     if (!order) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new NotFoundError("Order hittades inte");
     }
     
     if (order.resourceId !== resourceId) {
-      return res.status(403).json({ error: "Ej behörig" });
+      throw new ForbiddenError("Ej behörig");
     }
     
     const timestamp = new Date().toLocaleString('sv-SE');
@@ -319,19 +319,19 @@ app.post("/api/resources/position", isAuthenticated, asyncHandler(async (req: an
     const { resourceId, latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
     
     if (!resourceId) {
-      return res.status(400).json({ error: "resourceId is required" });
+      throw new ValidationError("resourceId is required");
     }
     if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
-      return res.status(400).json({ error: "Latitud och longitud krävs" });
+      throw new ValidationError("Latitud och longitud krävs");
     }
 
     const resource = await storage.getResource(resourceId);
     if (!resource) {
-      return res.status(404).json({ error: "Resurs hittades inte" });
+      throw new NotFoundError("Resurs hittades inte");
     }
     const tenantId = getTenantIdWithFallback(req);
     if (resource.tenantId && resource.tenantId !== tenantId) {
-      return res.status(403).json({ error: "Åtkomst nekad" });
+      throw new ForbiddenError("Åtkomst nekad");
     }
 
     await notificationService.handlePositionUpdate({
@@ -355,7 +355,7 @@ app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req:
     
     // Validate coordinates - allow 0 values (equator/prime meridian)
     if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
-      return res.status(400).json({ error: "Latitud och longitud krävs" });
+      throw new ValidationError("Latitud och longitud krävs");
     }
     
     // Use the notification service to handle position update (broadcasts to planners)
@@ -489,7 +489,7 @@ async function enrichOrderForMobile(order: any, storage: any) {
 app.get("/api/mobile/orders", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
 
     const tenantId = resource.tenantId;
     const allOrders = await storage.getWorkOrders(tenantId);
@@ -523,8 +523,8 @@ app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, asyn
     const { completed } = req.body;
 
     const order = await storage.getWorkOrder(orderId);
-    if (!order) return res.status(404).json({ error: "Order hittades inte" });
-    if (order.resourceId !== resourceId) return res.status(403).json({ error: "Ej behörig" });
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     const metadata: any = order.metadata || {};
     if (!metadata.completedSubSteps) metadata.completedSubSteps = [];
@@ -544,8 +544,8 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
     const { type, description, latitude, longitude, photos } = req.body;
 
     const order = await storage.getWorkOrder(orderId);
-    if (!order) return res.status(404).json({ error: "Order hittades inte" });
-    if (order.resourceId !== resourceId) return res.status(403).json({ error: "Ej behörig" });
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     const resource = await storage.getResource(resourceId);
 
@@ -587,8 +587,8 @@ app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler
     const { articleId, articleNumber, articleName, quantity } = req.body;
 
     const order = await storage.getWorkOrder(orderId);
-    if (!order) return res.status(404).json({ error: "Order hittades inte" });
-    if (order.resourceId !== resourceId) return res.status(403).json({ error: "Ej behörig" });
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     let resolvedArticleId = articleId;
     if (!resolvedArticleId && articleNumber) {
@@ -598,7 +598,7 @@ app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler
     }
 
     if (!resolvedArticleId) {
-      return res.status(400).json({ error: "Article ID or valid article number required" });
+      throw new ValidationError("Article ID or valid article number required");
     }
 
     const line = await storage.createWorkOrderLine({
@@ -615,7 +615,7 @@ app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler
 app.get("/api/mobile/articles", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
 
     const search = (req.query.search as string || "").toLowerCase();
     const articles = await storage.getArticles(resource.tenantId);
@@ -642,11 +642,11 @@ app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, asyncHandler
     const resourceId = req.mobileResourceId;
     const { signature } = req.body;
 
-    if (!signature) return res.status(400).json({ error: "Signaturdata krävs" });
+    if (!signature) throw new ValidationError("Signaturdata krävs");
 
     const order = await storage.getWorkOrder(orderId);
-    if (!order) return res.status(404).json({ error: "Order hittades inte" });
-    if (order.resourceId !== resourceId) return res.status(403).json({ error: "Ej behörig" });
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     const resource = await storage.getResource(resourceId);
 
@@ -672,12 +672,12 @@ app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandl
     const { inspections } = req.body;
 
     if (!inspections || !Array.isArray(inspections)) {
-      return res.status(400).json({ error: "Inspektionslista krävs" });
+      throw new ValidationError("Inspektionslista krävs");
     }
 
     const order = await storage.getWorkOrder(orderId);
-    if (!order) return res.status(404).json({ error: "Order hittades inte" });
-    if (order.resourceId !== resourceId) return res.status(403).json({ error: "Ej behörig" });
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     const results = await Promise.all(
       inspections.map((insp: any) =>
@@ -703,7 +703,7 @@ app.post("/api/mobile/gps", isMobileAuthenticated, asyncHandler(async (req: any,
     const { latitude, longitude, speed, heading, accuracy, currentOrderId, currentOrderNumber, vehicleRegNo, driverName } = req.body;
 
     if (latitude === undefined || longitude === undefined) {
-      return res.status(400).json({ error: "Latitud och longitud krävs" });
+      throw new ValidationError("Latitud och longitud krävs");
     }
 
     await notificationService.handlePositionUpdate({
@@ -723,7 +723,7 @@ app.post("/api/mobile/gps", isMobileAuthenticated, asyncHandler(async (req: any,
 app.get("/api/mobile/summary", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
 
     const tenantId = resource.tenantId;
     const allOrders = await storage.getWorkOrders(tenantId);
@@ -764,7 +764,7 @@ app.get("/api/mobile/weather", asyncHandler(async (req, res) => {
 
 app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { message, context } = req.body;
-    if (!message) return res.status(400).json({ error: "Meddelande krävs" });
+    if (!message) throw new ValidationError("Meddelande krävs");
 
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
@@ -786,7 +786,7 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
 
 app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { audio } = req.body;
-    if (!audio) return res.status(400).json({ error: "Ljuddata krävs" });
+    if (!audio) throw new ValidationError("Ljuddata krävs");
 
     const buffer = Buffer.from(audio, "base64");
     const blob = new Blob([buffer], { type: "audio/webm" });
@@ -805,7 +805,7 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
 
 app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { image, context } = req.body;
-    if (!image) return res.status(400).json({ error: "Image data required" });
+    if (!image) throw new ValidationError("Image data required");
 
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
@@ -845,12 +845,12 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
 app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
     const tenantId = resource.tenantId;
     const { actions } = req.body;
 
     if (!actions || !Array.isArray(actions)) {
-      return res.status(400).json({ error: "actions array required" });
+      throw new ValidationError("actions array required");
     }
 
     const results: Array<{ clientId: string; status: string; error?: string }> = [];
@@ -1090,7 +1090,7 @@ app.get("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: an
 
 app.get("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
     const template = await storage.getChecklistTemplate(req.params.id);
-    if (!template) return res.status(404).json({ error: "Mall hittades inte" });
+    if (!template) throw new NotFoundError("Mall hittades inte");
     res.json(template);
 }));
 
@@ -1099,7 +1099,7 @@ app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: a
     const { name, articleType, questions, isActive } = req.body;
 
     if (!name || !articleType) {
-      return res.status(400).json({ error: "name and articleType required" });
+      throw new ValidationError("name and articleType required");
     }
 
     const template = await storage.createChecklistTemplate({
@@ -1116,7 +1116,7 @@ app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: a
 
 app.patch("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
     const template = await storage.updateChecklistTemplate(req.params.id, req.body);
-    if (!template) return res.status(404).json({ error: "Mall hittades inte" });
+    if (!template) throw new NotFoundError("Mall hittades inte");
     res.json(template);
 }));
 
@@ -1130,11 +1130,11 @@ app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(
     const resourceId = req.mobileResourceId;
 
     const order = await storage.getWorkOrder(orderId);
-    if (!order) return res.status(404).json({ error: "Order hittades inte" });
-    if (order.resourceId !== resourceId) return res.status(403).json({ error: "Ej behörig" });
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
 
     const lines = await storage.getWorkOrderLines(orderId);
     const articleIds = lines.map(l => l.articleId).filter(Boolean);
@@ -1193,7 +1193,7 @@ app.get("/api/mobile/notifications", isMobileAuthenticated, asyncHandler(async (
 app.patch("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const notification = await storage.markDriverNotificationRead(req.params.id, resourceId);
-    if (!notification) return res.status(404).json({ error: "Avisering hittades inte" });
+    if (!notification) throw new NotFoundError("Avisering hittades inte");
     res.json(notification);
 }));
 

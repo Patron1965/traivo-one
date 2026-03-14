@@ -19,7 +19,7 @@ app.get("/api/order-concepts/:id/wizard", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
-    if (!concept) return res.status(404).json({ error: "Orderkoncept hittades inte" });
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
 
     const [conceptObjects, conceptArticles, mappings, invoiceConfig, documentConfigs, schedules, filters] = await Promise.all([
       storage.getOrderConceptObjects(concept.id),
@@ -46,7 +46,7 @@ app.get("/api/order-concepts/:id/wizard", asyncHandler(async (req, res) => {
 app.get("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const objs = await storage.getOrderConceptObjects(req.params.id);
     res.json(objs);
 }));
@@ -54,16 +54,16 @@ app.get("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
 app.post("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const { objectIds } = req.body;
     if (!Array.isArray(objectIds) || objectIds.length === 0) {
-      return res.status(400).json({ error: "objectIds krävs" });
+      throw new ValidationError("objectIds krävs");
     }
     const tenantObjects = await storage.getObjects(tenantId);
     const tenantObjectIds = new Set(tenantObjects.map(o => o.id));
     const validObjectIds = objectIds.filter((id: string) => tenantObjectIds.has(id));
     if (validObjectIds.length === 0) {
-      return res.status(400).json({ error: "Inga giltiga objekt hittades" });
+      throw new ValidationError("Inga giltiga objekt hittades");
     }
     const inserts = validObjectIds.map((objectId: string) => ({
       orderConceptId: req.params.id,
@@ -77,7 +77,7 @@ app.post("/api/order-concepts/:id/objects", asyncHandler(async (req, res) => {
 app.delete("/api/order-concepts/:id/objects/:objectId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     await storage.removeOrderConceptObject(req.params.id, req.params.objectId);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalObjects: (await storage.getOrderConceptObjects(req.params.id)).length });
     res.status(204).send();
@@ -86,7 +86,7 @@ app.delete("/api/order-concepts/:id/objects/:objectId", asyncHandler(async (req,
 app.get("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const arts = await storage.getOrderConceptArticles(req.params.id);
     res.json(arts);
 }));
@@ -94,14 +94,14 @@ app.get("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
 app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const { articleId, quantity, unitPrice } = req.body;
     if (!articleId || typeof articleId !== "string") {
-      return res.status(400).json({ error: "articleId krävs" });
+      throw new ValidationError("articleId krävs");
     }
     const tenantArticles = await storage.getArticles(tenantId);
     if (!tenantArticles.find(a => a.id === articleId)) {
-      return res.status(400).json({ error: "Artikeln hittades inte" });
+      throw new ValidationError("Artikeln hittades inte");
     }
     const result = await storage.addOrderConceptArticle({
       orderConceptId: req.params.id,
@@ -117,7 +117,7 @@ app.post("/api/order-concepts/:id/articles", asyncHandler(async (req, res) => {
 app.delete("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     await storage.removeOrderConceptArticle(req.params.articleId, req.params.id);
     const allArticles = await storage.getOrderConceptArticles(req.params.id);
     await storage.updateOrderConcept(req.params.id, tenantId, { totalArticles: allArticles.length });
@@ -127,7 +127,7 @@ app.delete("/api/order-concepts/:id/articles/:articleId", asyncHandler(async (re
 app.get("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const mappings = await storage.getArticleObjectMappings(req.params.id);
     res.json(mappings);
 }));
@@ -135,7 +135,7 @@ app.get("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, res
 app.post("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const result = await storage.createArticleObjectMapping(req.body);
     res.status(201).json(result);
 }));
@@ -143,7 +143,7 @@ app.post("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, re
 app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
 
     await storage.deleteArticleObjectMappings(req.params.id);
     const conceptObjects = await storage.getOrderConceptObjects(req.params.id);
@@ -168,7 +168,7 @@ app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (re
 app.put("/api/order-concepts/:id/invoice-config", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const result = await storage.upsertInvoiceConfiguration({
       orderConceptId: req.params.id,
       ...req.body,
@@ -179,7 +179,7 @@ app.put("/api/order-concepts/:id/invoice-config", asyncHandler(async (req, res) 
 app.put("/api/order-concepts/:id/documents", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const { documents } = req.body;
     const configs = (documents || []).map((d: any) => ({
       orderConceptId: req.params.id,
@@ -192,7 +192,7 @@ app.put("/api/order-concepts/:id/documents", asyncHandler(async (req, res) => {
 app.put("/api/order-concepts/:id/delivery", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
-    if (!verifyTenantOwnership(rawConcept, tenantId)) return res.status(404).json({ error: "Ej hittad" });
+    if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
     const { deliveryModel, schedules: scheduleData, ...conceptData } = req.body;
 
     if (deliveryModel) {
@@ -216,7 +216,7 @@ app.post("/api/order-concepts/:id/validate", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
-    if (!concept) return res.status(404).json({ error: "Ej hittad" });
+    if (!concept) throw new NotFoundError("Ej hittad");
 
     const errors: { code: string; message: string }[] = [];
     const warnings: { code: string; message: string }[] = [];
@@ -257,7 +257,7 @@ app.get("/api/task-dependency-templates/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const template = await storage.getTaskDependencyTemplate(req.params.id);
     if (!template || template.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Beroendemall hittades inte" });
+      throw new NotFoundError("Beroendemall hittades inte");
     }
     res.json(template);
 }));
@@ -271,7 +271,7 @@ app.post("/api/task-dependency-templates", asyncHandler(async (req, res) => {
 app.put("/api/task-dependency-templates/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const updated = await storage.updateTaskDependencyTemplate(req.params.id, tenantId, req.body);
-    if (!updated) return res.status(404).json({ error: "Beroendemall hittades inte" });
+    if (!updated) throw new NotFoundError("Beroendemall hittades inte");
     res.json(updated);
 }));
 
@@ -285,7 +285,7 @@ app.post("/api/work-orders/:id/generate-dependent-tasks", asyncHandler(async (re
     const tenantId = getTenantIdWithFallback(req);
     const workOrder = await storage.getWorkOrder(req.params.id);
     if (!workOrder || workOrder.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      throw new NotFoundError("Arbetsorder hittades inte");
     }
 
     const templates = await storage.getTaskDependencyTemplates(tenantId, workOrder.articleId || undefined);
@@ -354,7 +354,7 @@ app.post("/api/invoice-rules", asyncHandler(async (req, res) => {
 app.put("/api/invoice-rules/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const updated = await storage.updateInvoiceRule(req.params.id, tenantId, req.body);
-    if (!updated) return res.status(404).json({ error: "Faktureringsregel hittades inte" });
+    if (!updated) throw new NotFoundError("Faktureringsregel hittades inte");
     res.json(updated);
 }));
 
@@ -554,7 +554,7 @@ app.post("/api/order-concepts/:id/rerun", asyncHandler(async (req, res) => {
     const userId = req.session?.user?.id;
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
-    if (!concept) return res.status(404).json({ error: "Orderkoncept hittades inte" });
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
 
     let tasksCreated = 0;
     let tasksSkipped = 0;
@@ -679,11 +679,11 @@ app.post("/api/order-concepts/:id/validate-min-days", asyncHandler(async (req, r
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     const concept = verifyTenantOwnership(rawConcept, tenantId);
-    if (!concept) return res.status(404).json({ error: "Orderkoncept hittades inte" });
+    if (!concept) throw new NotFoundError("Orderkoncept hittades inte");
 
     const minDays = concept.minDaysBetween || 60;
     const { proposedDate } = req.body;
-    if (!proposedDate) return res.status(400).json({ error: "proposedDate krävs" });
+    if (!proposedDate) throw new ValidationError("proposedDate krävs");
 
     const existingAssignments = await storage.getAssignments(tenantId, {});
     const conceptAssignments = existingAssignments.filter(a => a.orderConceptId === concept.id);
@@ -720,7 +720,7 @@ app.get("/api/schedule", asyncHandler(async (req, res) => {
     const { startDate, endDate } = req.query;
 
     if (!startDate || !endDate) {
-      return res.status(400).json({ error: "startDate och endDate krävs" });
+      throw new ValidationError("startDate och endDate krävs");
     }
 
     const start = new Date(startDate as string);
@@ -844,7 +844,7 @@ app.get("/api/assignments/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(assignment, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const articles = await storage.getAssignmentArticles(assignment!.id);
@@ -868,7 +868,7 @@ app.patch("/api/assignments/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const assignment = await storage.updateAssignment(req.params.id, tenantId, req.body);
@@ -879,7 +879,7 @@ app.delete("/api/assignments/:id", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     await storage.deleteAssignment(req.params.id, tenantId);
@@ -891,7 +891,7 @@ app.get("/api/assignments/:id/candidates", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(assignment, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
 
     // Get all active resources for the tenant
@@ -984,19 +984,19 @@ app.post("/api/assignments/:id/assign", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.id);
     if (!verifyTenantOwnership(assignment, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
 
     const { resourceId, scheduledDate, scheduledStartTime, scheduledEndTime } = req.body;
     
     if (!resourceId) {
-      return res.status(400).json({ error: "ResourceId krävs" });
+      throw new ValidationError("ResourceId krävs");
     }
 
     // Verify resource exists and belongs to tenant
     const resource = await storage.getResource(resourceId);
     if (!verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resurs hittades inte" });
+      throw new NotFoundError("Resurs hittades inte");
     }
 
     // Update assignment with resource and scheduling info
@@ -1016,7 +1016,7 @@ app.get("/api/assignments/:assignmentId/articles", asyncHandler(async (req, res)
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.assignmentId);
     if (!verifyTenantOwnership(assignment, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const articles = await storage.getAssignmentArticles(req.params.assignmentId);
@@ -1027,7 +1027,7 @@ app.post("/api/assignments/:assignmentId/articles", asyncHandler(async (req, res
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.assignmentId);
     if (!verifyTenantOwnership(assignment, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     const article = await storage.createAssignmentArticle({
@@ -1041,7 +1041,7 @@ app.delete("/api/assignments/:assignmentId/articles/:articleId", asyncHandler(as
     const tenantId = getTenantIdWithFallback(req);
     const assignment = await storage.getAssignment(req.params.assignmentId);
     if (!verifyTenantOwnership(assignment, tenantId)) {
-      return res.status(404).json({ error: "Uppgift hittades inte" });
+      throw new NotFoundError("Uppgift hittades inte");
     }
     
     await storage.deleteAssignmentArticle(req.params.articleId, req.params.assignmentId);
@@ -1058,12 +1058,12 @@ app.post("/api/notifications/send", asyncHandler(async (req, res) => {
     const { workOrderId, notificationType, estimatedArrivalMinutes, customMessage } = req.body;
     
     if (!workOrderId || !notificationType) {
-      return res.status(400).json({ error: "workOrderId och notificationType krävs" });
+      throw new ValidationError("workOrderId och notificationType krävs");
     }
     
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      throw new NotFoundError("Arbetsorder hittades inte");
     }
     
     const results = await sendCustomerNotification(tenantId, {
@@ -1093,7 +1093,7 @@ app.post("/api/notifications/technician-on-way/:workOrderId", asyncHandler(async
     
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      throw new NotFoundError("Arbetsorder hittades inte");
     }
     
     const results = await notifyTechnicianOnWay(tenantId, workOrderId, estimatedMinutes);
@@ -1116,7 +1116,7 @@ app.post("/api/notifications/job-completed/:workOrderId", asyncHandler(async (re
     
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!verifyTenantOwnership(workOrder, tenantId)) {
-      return res.status(404).json({ error: "Arbetsorder hittades inte" });
+      throw new NotFoundError("Arbetsorder hittades inte");
     }
     
     const results = await notifyJobCompleted(tenantId, workOrderId);
@@ -1137,11 +1137,11 @@ app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req
     
     const resource = await storage.getResource(resourceId);
     if (!resource || !verifyTenantOwnership(resource, tenantId)) {
-      return res.status(404).json({ error: "Resurs hittades inte" });
+      throw new NotFoundError("Resurs hittades inte");
     }
     
     if (!resource.email) {
-      return res.status(400).json({ error: "Resursen har ingen e-postadress registrerad" });
+      throw new ValidationError("Resursen har ingen e-postadress registrerad");
     }
     
     const result = await sendScheduleToResource(

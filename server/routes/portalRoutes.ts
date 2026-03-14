@@ -76,7 +76,7 @@ app.post("/api/portal/auth/request-link", asyncHandler(async (req, res) => {
     let { tenantId } = req.body;
     
     if (!email) {
-      return res.status(400).json({ error: "E-postadress krävs" });
+      throw new ValidationError("E-postadress krävs");
     }
 
     if (!tenantId) {
@@ -84,9 +84,9 @@ app.post("/api/portal/auth/request-link", asyncHandler(async (req, res) => {
       if (tenants.length === 1) {
         tenantId = tenants[0].id;
       } else if (tenants.length === 0) {
-        return res.status(400).json({ error: "Ingen aktiv tenant hittades" });
+        throw new ValidationError("Ingen aktiv tenant hittades");
       } else {
-        return res.status(400).json({ error: "Välj ett företag" });
+        throw new ValidationError("Välj ett företag");
       }
     }
 
@@ -137,7 +137,7 @@ app.post("/api/portal/auth/verify", asyncHandler(async (req, res) => {
     const { token } = req.body;
     
     if (!token) {
-      return res.status(400).json({ error: "Token krävs" });
+      throw new ValidationError("Token krävs");
     }
 
     const { verifyMagicLink } = await import("./portal-auth");
@@ -442,7 +442,7 @@ app.put("/api/portal-booking-config", requireAdmin, asyncHandler(async (req, res
     const { serviceTypes, timeSlots, requestTypes, selfBookingEnabled } = parseResult.data;
 
     const tenant = await storage.getTenant(tenantId);
-    if (!tenant) return res.status(404).json({ error: "Tenant ej hittad" });
+    if (!tenant) throw new NotFoundError("Tenant ej hittad");
 
     const currentSettings = (tenant.settings || {}) as any;
     const updatedSettings = {
@@ -535,7 +535,7 @@ app.post("/api/portal/messages", asyncHandler(async (req, res) => {
 
     const { message } = req.body;
     if (!message || typeof message !== "string" || message.trim().length === 0) {
-      return res.status(400).json({ error: "Meddelande krävs" });
+      throw new ValidationError("Meddelande krävs");
     }
 
     const newMessage = await storage.createLegacyPortalMessage({
@@ -586,7 +586,7 @@ app.post("/api/portal/issue-reports", asyncHandler(async (req, res) => {
     const { issueType, title, description, objectId, customerContact } = req.body;
     
     if (!issueType || !title) {
-      return res.status(400).json({ error: "Typ och rubrik krävs" });
+      throw new ValidationError("Typ och rubrik krävs");
     }
 
     const report = await storage.createCustomerIssueReport({
@@ -694,7 +694,7 @@ app.post("/api/portal/auth/demo-login", asyncHandler(async (req, res) => {
     
     const customer = await storage.getCustomerByEmail(demoEmail, tenantId);
     if (!customer) {
-      return res.status(404).json({ error: "Demokund finns inte. Skapa en kund med e-post demo@traivo.se." });
+      throw new NotFoundError("Demokund finns inte. Skapa en kund med e-post demo@traivo.se.");
     }
 
     const { generateSessionToken } = await import("./portal-auth");
@@ -748,7 +748,7 @@ app.get("/api/portal/customer/:customerId/orders", asyncHandler(async (req, res)
     const rawCustomer = await storage.getCustomer(customerId);
     const customer = verifyTenantOwnership(rawCustomer, tenantId);
     if (!customer) {
-      return res.status(404).json({ error: "Kund hittades inte" });
+      throw new NotFoundError("Kund hittades inte");
     }
     
     const workOrders = await storage.getWorkOrders(tenantId);
@@ -852,7 +852,7 @@ app.get("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) 
     const rawCustomer = await storage.getCustomer(customerId);
     const customer = verifyTenantOwnership(rawCustomer, tenantId);
     if (!customer) {
-      return res.status(404).json({ error: "Kund hittades inte" });
+      throw new NotFoundError("Kund hittades inte");
     }
 
     const messages = await storage.getLegacyPortalMessages(tenantId, customerId);
@@ -875,12 +875,12 @@ app.post("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res)
     const { message } = req.body;
 
     if (!message || typeof message !== "string" || message.trim().length === 0) {
-      return res.status(400).json({ error: "Meddelande krävs" });
+      throw new ValidationError("Meddelande krävs");
     }
 
     const customer = await storage.getCustomer(customerId);
     if (!verifyTenantOwnership(customer, tenantId)) {
-      return res.status(404).json({ error: "Kund hittades inte" });
+      throw new NotFoundError("Kund hittades inte");
     }
 
     const newMessage = await storage.createLegacyPortalMessage({
@@ -928,13 +928,13 @@ app.post("/api/portal/visit-confirmations", asyncHandler(async (req, res) => {
     // Check if already confirmed
     const existing = await storage.getVisitConfirmationByWorkOrder(workOrderId);
     if (existing) {
-      return res.status(400).json({ error: "Besöket är redan kvitterat" });
+      throw new ValidationError("Besöket är redan kvitterat");
     }
     
     // Get work order to validate ownership
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder || workOrder.customerId !== session.customerId) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new NotFoundError("Order hittades inte");
     }
     
     const confirmation = await storage.createVisitConfirmation({
@@ -989,13 +989,13 @@ app.post("/api/portal/technician-ratings", asyncHandler(async (req, res) => {
     // Check if already rated
     const existing = await storage.getTechnicianRatingByWorkOrder(workOrderId);
     if (existing) {
-      return res.status(400).json({ error: "Du har redan betygsatt detta besök" });
+      throw new ValidationError("Du har redan betygsatt detta besök");
     }
     
     // Get work order to get resource and validate
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder || workOrder.customerId !== session.customerId) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new NotFoundError("Order hittades inte");
     }
     
     const newRating = await storage.createTechnicianRating({
@@ -1022,7 +1022,7 @@ app.get("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, res
     // Verify work order ownership
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder || workOrder.customerId !== session.customerId) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new NotFoundError("Order hittades inte");
     }
     
     // Get resource info
@@ -1073,7 +1073,7 @@ app.post("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, re
     // Verify work order ownership
     const workOrder = await storage.getWorkOrder(workOrderId);
     if (!workOrder || workOrder.customerId !== session.customerId) {
-      return res.status(404).json({ error: "Order hittades inte" });
+      throw new NotFoundError("Order hittades inte");
     }
     
     const newMessage = await storage.createPortalMessage({
@@ -1152,7 +1152,7 @@ app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
 
     const bookingConfig = await getPortalBookingConfig(session.tenantId!);
     if (!bookingConfig.selfBookingEnabled) {
-      return res.status(403).json({ error: "Självbokning är inte aktiverat för denna organisation." });
+      throw new ForbiddenError("Självbokning är inte aktiverat för denna organisation.");
     }
     
     const parseResult = selfBookingRequestSchema.safeParse(req.body);
@@ -1166,24 +1166,24 @@ app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
       .filter((t: any) => t.enabled)
       .map((t: any) => t.value);
     if (!enabledServiceTypes.includes(serviceType)) {
-      return res.status(400).json({ error: "Vald tjänsttyp är inte tillgänglig." });
+      throw new ValidationError("Vald tjänsttyp är inte tillgänglig.");
     }
     
     // Verify slot exists and is available
     const slot = await storage.getSelfBookingSlot(slotId);
     if (!slot || slot.tenantId !== session.tenantId) {
-      return res.status(404).json({ error: "Tidslucka hittades inte" });
+      throw new NotFoundError("Tidslucka hittades inte");
     }
     
     if ((slot.currentBookings || 0) >= (slot.maxBookings || 1)) {
-      return res.status(400).json({ error: "Tidsluckan är fullbokad" });
+      throw new ValidationError("Tidsluckan är fullbokad");
     }
     
     // Verify object belongs to customer if provided
     if (objectId) {
       const object = await storage.getObject(objectId);
       if (!object || object.customerId !== session.customerId) {
-        return res.status(404).json({ error: "Objekt hittades inte" });
+        throw new NotFoundError("Objekt hittades inte");
       }
     }
     
@@ -1210,11 +1210,11 @@ app.delete("/api/portal/self-bookings/:id", asyncHandler(async (req, res) => {
     
     const booking = await storage.getSelfBooking(req.params.id);
     if (!booking || booking.customerId !== session.customerId) {
-      return res.status(404).json({ error: "Bokning hittades inte" });
+      throw new NotFoundError("Bokning hittades inte");
     }
     
     if (booking.status !== "pending") {
-      return res.status(400).json({ error: "Endast väntande bokningar kan avbokas" });
+      throw new ValidationError("Endast väntande bokningar kan avbokas");
     }
     
     await storage.updateSelfBooking(req.params.id, {
@@ -1259,7 +1259,7 @@ app.patch("/api/self-booking-slots/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getSelfBookingSlot(req.params.id);
     if (!existing || existing.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Tidslucka hittades inte" });
+      throw new NotFoundError("Tidslucka hittades inte");
     }
     
     const updated = await storage.updateSelfBookingSlot(req.params.id, req.body);
@@ -1271,7 +1271,7 @@ app.delete("/api/self-booking-slots/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getSelfBookingSlot(req.params.id);
     if (!existing || existing.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Tidslucka hittades inte" });
+      throw new NotFoundError("Tidslucka hittades inte");
     }
     
     await storage.deleteSelfBookingSlot(req.params.id);
@@ -1310,7 +1310,7 @@ app.patch("/api/self-bookings/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getSelfBooking(req.params.id);
     if (!existing || existing.tenantId !== tenantId) {
-      return res.status(404).json({ error: "Bokning hittades inte" });
+      throw new NotFoundError("Bokning hittades inte");
     }
     
     const { status, workOrderId } = req.body;
@@ -1376,7 +1376,7 @@ app.get("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     const link = await storage.getQrCodeLink(req.params.id);
     
     if (!link || !verifyTenantOwnership(link, tenantId)) {
-      return res.status(404).json({ error: "QR-kod hittades inte" });
+      throw new NotFoundError("QR-kod hittades inte");
     }
     
     res.json(link);
@@ -1406,7 +1406,7 @@ app.patch("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getQrCodeLink(req.params.id);
     if (!existing || !verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "QR-kod hittades inte" });
+      throw new NotFoundError("QR-kod hittades inte");
     }
     
     const link = await storage.updateQrCodeLink(req.params.id, tenantId, req.body);
@@ -1418,7 +1418,7 @@ app.delete("/api/qr-code-links/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getQrCodeLink(req.params.id);
     if (!existing || !verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "QR-kod hittades inte" });
+      throw new NotFoundError("QR-kod hittades inte");
     }
     
     await storage.deleteQrCodeLink(req.params.id, tenantId);
@@ -1459,7 +1459,7 @@ app.get("/api/my-objects", asyncHandler(async (req, res) => {
       return res.json([]);
     }
     if (role !== "customer") {
-      return res.status(403).json({ error: "Denna endpoint är avsedd för kundanvändare. Använd /api/objects istället." });
+      throw new ForbiddenError("Denna endpoint är avsedd för kundanvändare. Använd /api/objects istället.");
     }
     const dbUser = await storage.getUser(userId);
     if (!dbUser) {
@@ -1500,7 +1500,7 @@ app.get("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
     const report = await storage.getPublicIssueReport(req.params.id);
     
     if (!report || !verifyTenantOwnership(report, tenantId)) {
-      return res.status(404).json({ error: "Felanmälan hittades inte" });
+      throw new NotFoundError("Felanmälan hittades inte");
     }
     
     res.json(report);
@@ -1511,7 +1511,7 @@ app.patch("/api/public-issue-reports/:id", asyncHandler(async (req, res) => {
     
     const existing = await storage.getPublicIssueReport(req.params.id);
     if (!existing || !verifyTenantOwnership(existing, tenantId)) {
-      return res.status(404).json({ error: "Felanmälan hittades inte" });
+      throw new NotFoundError("Felanmälan hittades inte");
     }
     
     const report = await storage.updatePublicIssueReport(req.params.id, tenantId, req.body);
@@ -1525,7 +1525,7 @@ app.post("/api/public-issue-reports/:id/convert-to-deviation", asyncHandler(asyn
     
     const report = await storage.getPublicIssueReport(req.params.id);
     if (!report || !verifyTenantOwnership(report, tenantId)) {
-      return res.status(404).json({ error: "Felanmälan hittades inte" });
+      throw new NotFoundError("Felanmälan hittades inte");
     }
     
     // Create deviation report from public issue
@@ -1560,21 +1560,21 @@ app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(asy
     const tenantId = getTenantIdWithFallback(req);
     const report = await storage.getPublicIssueReport(req.params.id);
     if (!report || !verifyTenantOwnership(report, tenantId)) {
-      return res.status(404).json({ error: "Felanmälan hittades inte" });
+      throw new NotFoundError("Felanmälan hittades inte");
     }
     if (report.status === "converted" || report.status === "resolved") {
-      return res.status(400).json({ error: "Felanmälan är redan hanterad" });
+      throw new ValidationError("Felanmälan är redan hanterad");
     }
     const { customerId, parentId, objectType, name } = req.body;
-    if (!customerId) return res.status(400).json({ error: "customerId krävs" });
+    if (!customerId) throw new ValidationError("customerId krävs");
     const customer = await storage.getCustomer(customerId);
     if (!verifyTenantOwnership(customer, tenantId)) {
-      return res.status(404).json({ error: "Kund hittades inte" });
+      throw new NotFoundError("Kund hittades inte");
     }
     if (parentId) {
       const parentObj = await storage.getObject(parentId);
       if (!verifyTenantOwnership(parentObj, tenantId)) {
-        return res.status(404).json({ error: "Förälderobjekt hittades inte" });
+        throw new NotFoundError("Förälderobjekt hittades inte");
       }
     }
     const objectName = name || report.title || "Interimobjekt från felanmälan";

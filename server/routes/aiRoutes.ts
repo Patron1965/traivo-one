@@ -37,7 +37,7 @@ export async function registerAIRoutes(app: Express) {
 app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
     const { question, jobContext, conversationHistory = [] } = req.body;
     if (!question || typeof question !== "string") {
-      return res.status(400).json({ error: "Fråga krävs" });
+      throw new ValidationError("Fråga krävs");
     }
 
     const OpenAI = (await import("openai")).default;
@@ -424,7 +424,7 @@ const handlePredictiveMaintenance = async (req: any, res: any) => {
 
     const objectIds = req.body?.objectIds as string[] | undefined;
     if (objectIds && (!Array.isArray(objectIds) || objectIds.length > 500)) {
-      return res.status(400).json({ error: "objectIds måste vara en array med max 500 element" });
+      throw new ValidationError("objectIds måste vara en array med max 500 element");
     }
 
     const objects = objectIds && objectIds.length > 0
@@ -525,7 +525,7 @@ app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, r
     const { objectIds } = req.body as { objectIds?: string[] };
 
     if (objectIds && (!Array.isArray(objectIds) || objectIds.length > 500)) {
-      return res.status(400).json({ error: "objectIds måste vara en array med max 500 element" });
+      throw new ValidationError("objectIds måste vara en array med max 500 element");
     }
 
     const allObjects = objectIds && objectIds.length > 0
@@ -893,7 +893,7 @@ app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
     const { anomalyType, context } = req.body;
     
     if (!anomalyType || !["setup_time", "cost"].includes(anomalyType)) {
-      return res.status(400).json({ error: "Ogiltig anomalityp" });
+      throw new ValidationError("Ogiltig anomalityp");
     }
     
     const explanation = await explainAnomaly(anomalyType, context || {});
@@ -938,7 +938,7 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
     const { date } = req.body;
     
     if (!date) {
-      return res.status(400).json({ error: "date krävs" });
+      throw new ValidationError("date krävs");
     }
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1149,7 +1149,7 @@ app.post("/api/ai/optimize-vrp/apply", asyncHandler(async (req, res) => {
     };
     
     if (!Array.isArray(routes)) {
-      return res.status(400).json({ error: "routes måste vara en array" });
+      throw new ValidationError("routes måste vara en array");
     }
     
     const results: Array<{ orderId: string; success: boolean; error?: string }> = [];
@@ -1187,7 +1187,7 @@ app.post("/api/ai/auto-schedule/apply", asyncHandler(async (req, res) => {
     }> };
     
     if (!Array.isArray(assignments)) {
-      return res.status(400).json({ error: "assignments måste vara en array" });
+      throw new ValidationError("assignments måste vara en array");
     }
     
     const results = await Promise.all(
@@ -1240,7 +1240,7 @@ app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
     const { query, weekStart, weekEnd, conversationHistory } = req.body;
     
     if (!query || typeof query !== "string") {
-      return res.status(400).json({ error: "Fråga krävs" });
+      throw new ValidationError("Fråga krävs");
     }
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1343,7 +1343,7 @@ app.get("/api/ai/setup-insights", asyncHandler(async (req, res) => {
 app.post("/api/ai/apply-setup-updates", asyncHandler(async (req, res) => {
     const { updates } = req.body;
     if (!Array.isArray(updates) || updates.length === 0) {
-      return res.status(400).json({ error: "Updates måste vara en icke-tom array" });
+      throw new ValidationError("Updates måste vara en icke-tom array");
     }
     
     // Validera varje uppdatering
@@ -1354,7 +1354,7 @@ app.post("/api/ai/apply-setup-updates", asyncHandler(async (req, res) => {
     );
     
     if (validUpdates.length === 0) {
-      return res.status(400).json({ error: "Inga giltiga uppdateringar" });
+      throw new ValidationError("Inga giltiga uppdateringar");
     }
     
     const results = await Promise.all(
@@ -1441,7 +1441,7 @@ app.get("/api/weather/cluster/:clusterId", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const cluster = await storage.getCluster(req.params.clusterId);
     if (!cluster || !verifyTenantOwnership(cluster, tenantId)) {
-      return res.status(404).json({ error: "Kluster hittades inte" });
+      throw new NotFoundError("Kluster hittades inte");
     }
     
     const latitude = cluster.centerLatitude || 59.3293;
@@ -1463,7 +1463,7 @@ app.post("/api/clusters/auto-generate", asyncHandler(async (req, res) => {
     const { strategy, config } = req.body;
     
     if (!strategy || !["geographic", "frequency", "team", "customer", "manual"].includes(strategy)) {
-      return res.status(400).json({ error: "Ogiltig strategi. Välj: geographic, frequency, team, customer, manual" });
+      throw new ValidationError("Ogiltig strategi. Välj: geographic, frequency, team, customer, manual");
     }
     
     const allObjects = await storage.getObjects(tenantId);
@@ -1772,7 +1772,7 @@ app.post("/api/clusters/auto-assign-unclustered", asyncHandler(async (req, res) 
     };
 
     if (!Array.isArray(unclusteredObjectIds) || !Array.isArray(suggestions)) {
-      return res.status(400).json({ error: "Data saknas" });
+      throw new ValidationError("Data saknas");
     }
 
     const allObjects = await storage.getObjectsByTenant(tenantId);
@@ -1864,7 +1864,7 @@ app.post("/api/objects/export-unclustered", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectIds } = req.body as { objectIds: string[] };
     if (!Array.isArray(objectIds) || objectIds.length === 0) {
-      return res.status(400).json({ error: "Objekt-ID saknas" });
+      throw new ValidationError("Objekt-ID saknas");
     }
     const objects = await storage.getObjectsByIds(tenantId, objectIds);
 
@@ -1893,7 +1893,7 @@ app.post("/api/objects/import-corrections", asyncHandler(async (req, res) => {
       corrections: { id: string; postalCode?: string; city?: string; latitude?: number | null; longitude?: number | null }[];
     };
     if (!Array.isArray(corrections) || corrections.length === 0) {
-      return res.status(400).json({ error: "Korrektioner saknas" });
+      throw new ValidationError("Korrektioner saknas");
     }
 
     const correctionIds = corrections.map(c => c.id);
@@ -1935,7 +1935,7 @@ app.post("/api/clusters/auto-generate/recalculate", asyncHandler(async (req, res
     const { centerLatitude, centerLongitude, radiusKm, currentObjectIds } = req.body;
     
     if (typeof centerLatitude !== "number" || typeof centerLongitude !== "number" || typeof radiusKm !== "number") {
-      return res.status(400).json({ error: "centerLatitude, centerLongitude och radiusKm krävs" });
+      throw new ValidationError("centerLatitude, centerLongitude och radiusKm krävs");
     }
     
     const allObjects = await storage.getObjects(tenantId);
@@ -1968,7 +1968,7 @@ app.post("/api/clusters/auto-generate/apply", asyncHandler(async (req, res) => {
     const { suggestions } = req.body;
     
     if (!suggestions || !Array.isArray(suggestions) || suggestions.length === 0) {
-      return res.status(400).json({ error: "Inga förslag att tillämpa" });
+      throw new ValidationError("Inga förslag att tillämpa");
     }
     
     let totalObjectsLinked = 0;
@@ -2059,7 +2059,7 @@ const handleAutoCluster = async (req: any, res: any) => {
     
     const objectIds = req.body?.objectIds as string[] | undefined;
     if (objectIds && (!Array.isArray(objectIds) || objectIds.length > 500)) {
-      return res.status(400).json({ error: "objectIds måste vara en array med max 500 element" });
+      throw new ValidationError("objectIds måste vara en array med max 500 element");
     }
 
     const { generateAutoClusterSuggestions } = await import("./ai-planner");
@@ -2085,7 +2085,7 @@ app.post("/api/ai/auto-cluster/apply", asyncHandler(async (req, res) => {
     const { suggestions } = req.body;
     
     if (!suggestions || !Array.isArray(suggestions) || suggestions.length === 0) {
-      return res.status(400).json({ error: "Inga förslag att tillämpa" });
+      throw new ValidationError("Inga förslag att tillämpa");
     }
     
     const createdClusters = [];
@@ -2311,13 +2311,13 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     const { resourceId } = req.body;
     
     if (!resourceId) {
-      return res.status(400).json({ error: "resourceId required" });
+      throw new ValidationError("resourceId required");
     }
     
     // Validate resource exists
     const resource = await storage.getResource(resourceId);
     if (!resource) {
-      return res.status(404).json({ error: "Resurs hittades inte" });
+      throw new NotFoundError("Resurs hittades inte");
     }
     
     // Verify resource belongs to the same tenant
@@ -2326,7 +2326,7 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     const tenantId = getTenantIdWithFallback(req);
     if (resource.tenantId !== tenantId) {
       console.log(`[notifications] Token request denied: resource ${resourceId} belongs to different tenant`);
-      return res.status(403).json({ error: "Ej behörig att komma åt denna resurs" });
+      throw new ForbiddenError("Ej behörig att komma åt denna resurs");
     }
     
     // Generate token for this resource

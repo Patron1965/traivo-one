@@ -19,10 +19,10 @@ export async function registerPlannerRoutes(app: Express) {
 app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
     if (req.body.teamId) {
       const team = await storage.getTeam(req.body.teamId);
-      if (!team || team.tenantId !== resource.tenantId) return res.status(400).json({ error: "Ogiltigt team" });
+      if (!team || team.tenantId !== resource.tenantId) throw new ValidationError("Ogiltigt team");
     }
     const now = new Date();
     const session = await storage.createWorkSession({
@@ -40,7 +40,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
 app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
-    if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+    if (!session || session.resourceId !== resourceId) throw new NotFoundError("Arbetspass hittades inte");
     const updated = await storage.updateWorkSession(req.params.id, { status: "completed", endTime: new Date() });
     await storage.releaseEquipmentByWorkSession(req.params.id);
     res.json(updated);
@@ -49,7 +49,7 @@ app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, asyncHandl
 app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
-    if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+    if (!session || session.resourceId !== resourceId) throw new NotFoundError("Arbetspass hittades inte");
     const now = new Date();
     const breakEntry = await storage.createWorkEntry({
       tenantId: session.tenantId,
@@ -66,7 +66,7 @@ app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, asyncHand
 app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
-    if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+    if (!session || session.resourceId !== resourceId) throw new NotFoundError("Arbetspass hittades inte");
     const now = new Date();
     const entries = await storage.getWorkEntries(session.id);
     const openBreak = entries.find(e => e.entryType === "break" && !e.endTime);
@@ -81,7 +81,7 @@ app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, asyncHan
 app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
     const sessions = await storage.getWorkSessions(resource.tenantId, { resourceId, status: "active" });
     res.json(sessions[0] || null);
 }));
@@ -89,12 +89,12 @@ app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(
 app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const session = await storage.getWorkSession(req.params.id);
-    if (!session || session.resourceId !== resourceId) return res.status(404).json({ error: "Arbetspass hittades inte" });
+    if (!session || session.resourceId !== resourceId) throw new NotFoundError("Arbetspass hittades inte");
     const validTypes = ["work", "travel", "setup", "break", "rest"];
-    if (!validTypes.includes(req.body.entryType)) return res.status(400).json({ error: "Ogiltig posttyp" });
+    if (!validTypes.includes(req.body.entryType)) throw new ValidationError("Ogiltig posttyp");
     const startTime = new Date(req.body.startTime || new Date());
     const endTime = req.body.endTime ? new Date(req.body.endTime) : undefined;
-    if (endTime && endTime <= startTime) return res.status(400).json({ error: "Sluttid måste vara efter starttid" });
+    if (endTime && endTime <= startTime) throw new ValidationError("Sluttid måste vara efter starttid");
     const entry = await storage.createWorkEntry({
       tenantId: session.tenantId,
       workSessionId: session.id,
@@ -273,20 +273,20 @@ app.get("/api/planner/routes", asyncHandler(async (req, res) => {
 app.patch("/api/planner/orders/:id/reassign", asyncHandler(async (req, res) => {
     const orderId = req.params.id;
     const { resourceId } = req.body;
-    if (!resourceId) return res.status(400).json({ error: "resourceId krävs" });
+    if (!resourceId) throw new ValidationError("resourceId krävs");
 
     const tenantId = getTenantIdWithFallback(req);
     const resource = await storage.getResource(resourceId);
-    if (!resource) return res.status(404).json({ error: "Resurs hittades inte" });
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
 
     const existingOrder = await storage.getWorkOrder(orderId);
-    if (!existingOrder) return res.status(404).json({ error: "Order hittades inte" });
+    if (!existingOrder) throw new NotFoundError("Order hittades inte");
     if (existingOrder.tenantId && existingOrder.tenantId !== tenantId) {
-      return res.status(403).json({ error: "Åtkomst nekad" });
+      throw new ForbiddenError("Åtkomst nekad");
     }
 
     const updated = await storage.updateWorkOrder(orderId, { resourceId });
-    if (!updated) return res.status(404).json({ error: "Order hittades inte" });
+    if (!updated) throw new NotFoundError("Order hittades inte");
 
     broadcastPlannerEvent({
       type: 'order_reassigned',
