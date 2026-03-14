@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
-import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema } from "@shared/schema";
+import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject } from "@shared/schema";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 
@@ -55,7 +55,7 @@ async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Pro
   }
 
   const sessionToken = authHeader.substring(7);
-  const { validateSession } = await import("./portal-auth");
+  const { validateSession } = await import("../portal-auth");
   const session = await validateSession(sessionToken);
 
   if (!session.valid || !session.customerId || !session.tenantId) {
@@ -95,7 +95,7 @@ app.post("/api/portal/auth/request-link", asyncHandler(async (req, res) => {
       return res.status(429).json({ error: "För många inloggningsförsök. Försök igen om 15 minuter." });
     }
 
-    const { requestMagicLink, sendPortalMagicLinkEmail } = await import("./portal-auth");
+    const { requestMagicLink, sendPortalMagicLinkEmail } = await import("../portal-auth");
     const result = await requestMagicLink(
       email,
       tenantId,
@@ -140,7 +140,7 @@ app.post("/api/portal/auth/verify", asyncHandler(async (req, res) => {
       throw new ValidationError("Token krävs");
     }
 
-    const { verifyMagicLink } = await import("./portal-auth");
+    const { verifyMagicLink } = await import("../portal-auth");
     const ip = req.ip || req.socket.remoteAddress;
     const result = await verifyMagicLink(token, ip, req.headers["user-agent"]);
 
@@ -170,7 +170,7 @@ app.get("/api/portal/me", asyncHandler(async (req, res) => {
     }
 
     const sessionToken = authHeader.substring(7);
-    const { validateSession } = await import("./portal-auth");
+    const { validateSession } = await import("../portal-auth");
     const session = await validateSession(sessionToken);
 
     if (!session.valid) {
@@ -697,7 +697,7 @@ app.post("/api/portal/auth/demo-login", asyncHandler(async (req, res) => {
       throw new NotFoundError("Demokund finns inte. Skapa en kund med e-post demo@traivo.se.");
     }
 
-    const { generateSessionToken } = await import("./portal-auth");
+    const { generateSessionToken } = await import("../portal-auth");
     const sessionToken = generateSessionToken();
     const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
@@ -731,7 +731,7 @@ app.post("/api/portal/logout", asyncHandler(async (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const sessionToken = authHeader.substring(7);
-      const { logout } = await import("./portal-auth");
+      const { logout } = await import("../portal-auth");
       await logout(sessionToken);
     }
     res.json({ success: true });
@@ -1171,7 +1171,7 @@ app.post("/api/portal/self-bookings", asyncHandler(async (req, res) => {
     
     // Verify slot exists and is available
     const slot = await storage.getSelfBookingSlot(slotId);
-    if (!slot || slot.tenantId !== session.tenantId) {
+    if (!slot || !session.tenantId || slot.tenantId !== session.tenantId) {
       throw new NotFoundError("Tidslucka hittades inte");
     }
     
@@ -1585,7 +1585,7 @@ app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(asy
       name: objectName,
       objectType: objectType || "fastighet",
       objectLevel: 1,
-      address: report.locationDescription || null,
+      address: report.description || null,
       latitude: report.latitude || null,
       longitude: report.longitude || null,
       isInterimObject: true,

@@ -919,7 +919,7 @@ app.put("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) =
 }));
 
 app.get("/api/system/api-costs/pricing", requireAdmin, async (_req, res) => {
-  const { PRICING } = await import("./api-usage-tracker");
+  const { PRICING } = await import("../api-usage-tracker");
   res.json(PRICING);
 });
 
@@ -1057,7 +1057,7 @@ app.post("/api/field-worker/tasks/:id/upload-photo", asyncHandler(async (req, re
       throw new NotFoundError("Uppgift hittades inte");
     }
     
-    const { ObjectStorageService } = await import("./replit_integrations/object_storage/objectStorage");
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
     const objectStorageService = new ObjectStorageService();
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
@@ -1181,14 +1181,14 @@ app.get("/api/inspection-metadata/search", asyncHandler(async (req, res) => {
 // ============================================
 
 app.get("/api/ai/eta-overview", asyncHandler(async (req, res) => {
-    const { calculateETAForTodaysOrders } = await import("./ai-eta-service");
+    const { calculateETAForTodaysOrders } = await import("../ai-eta-service");
     const tenantId = getTenantIdWithFallback(req);
     const overview = await calculateETAForTodaysOrders(tenantId);
     res.json(overview);
 }));
 
 app.post("/api/ai/eta-check-delays", asyncHandler(async (req, res) => {
-    const { checkAndNotifyDelays } = await import("./ai-eta-service");
+    const { checkAndNotifyDelays } = await import("../ai-eta-service");
     const tenantId = getTenantIdWithFallback(req);
     const { thresholdMinutes } = req.body;
     const result = await checkAndNotifyDelays(tenantId, thresholdMinutes || 20);
@@ -1200,7 +1200,7 @@ app.post("/api/ai/eta-check-delays", asyncHandler(async (req, res) => {
 // ============================================
 
 app.get("/api/ai/insights", asyncHandler(async (req, res) => {
-    const { generateInsightCards } = await import("./ai-insights");
+    const { generateInsightCards } = await import("../ai-insights");
     const tenantId = getTenantIdWithFallback(req);
     const cards = await generateInsightCards(tenantId);
     res.json(cards);
@@ -1211,7 +1211,7 @@ app.get("/api/ai/insights", asyncHandler(async (req, res) => {
 // ============================================
 
 app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
-    const { aiAssistedSchedule } = await import("./ai-planner");
+    const { aiAssistedSchedule } = await import("../ai-planner");
     const { weekStart, weekEnd, instruction } = req.body;
 
     const tenantId = getTenantIdWithFallback(req);
@@ -1440,7 +1440,7 @@ app.post("/api/auth/login", asyncHandler(async (req, res) => {
       throw new ValidationError("E-post och lösenord krävs");
     }
 
-    const { verifyPassword } = await import("./password");
+    const { verifyPassword } = await import("../password");
     const user = await storage.getUserByUsername(email);
     if (!user || !user.passwordHash) {
       return res.status(401).json({ error: "Felaktig e-post eller lösenord" });

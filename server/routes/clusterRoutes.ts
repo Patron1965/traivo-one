@@ -165,7 +165,7 @@ app.post("/api/ai/chat", asyncHandler(async (req, res) => {
     });
     
     // Use shared persona module
-    const { buildSystemPrompt } = await import("./ai/persona");
+    const { buildSystemPrompt } = await import("../ai/persona");
 
     // Fetch contextual data based on current module
     let moduleData = "";
@@ -242,7 +242,7 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
       temperature: 0.7,
     });
 
-    const { trackOpenAIResponse } = await import("./api-usage-tracker");
+    const { trackOpenAIResponse } = await import("../api-usage-tracker");
     trackOpenAIResponse(response);
 
     let rawAnswer = response.choices[0]?.message?.content || "Kunde inte generera ett svar.";

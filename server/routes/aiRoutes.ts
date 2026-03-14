@@ -320,7 +320,7 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
     }
 
     // Use shared persona module for consistent AI personality
-    const { buildSystemPromptWithTools } = await import("./ai/persona");
+    const { buildSystemPromptWithTools } = await import("../ai/persona");
     const systemPrompt = buildSystemPromptWithTools({ role: "field_worker" }) + `
 
 VIKTIGT: Avsluta ALLTID ditt svar med exakt 2-3 föreslagna följdfrågor som användaren kan ställa.
@@ -349,7 +349,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       content: question
     });
 
-    const { trackOpenAIResponse: trackOAIResponse } = await import("./api-usage-tracker");
+    const { trackOpenAIResponse: trackOAIResponse } = await import("../api-usage-tracker");
 
     // First API call with tools
     let response = await openai.chat.completions.create({
@@ -685,7 +685,7 @@ app.get("/api/ai/proactive-tips", isAuthenticated, asyncHandler(async (req, res)
 
 // AI Planning suggestions - now with KPIs
 app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
-    const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("./ai-planner");
+    const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -713,7 +713,7 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
 }));
 
 app.get("/api/ai/planning-analysis", asyncHandler(async (req, res) => {
-    const { calculatePlanningKPIs } = await import("./ai-planner");
+    const { calculatePlanningKPIs } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     const week = req.query.week as string || "current";
     const now = new Date();
@@ -873,7 +873,7 @@ app.get("/api/ai/planning-analysis", asyncHandler(async (req, res) => {
 
 // AI KPIs endpoint - get planning KPIs for dashboard/analysis
 app.get("/api/ai/kpis", asyncHandler(async (req, res) => {
-    const { calculatePlanningKPIs } = await import("./ai-planner");
+    const { calculatePlanningKPIs } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     
     const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
@@ -889,7 +889,7 @@ app.get("/api/ai/kpis", asyncHandler(async (req, res) => {
 
 // AI Explain Anomaly - get AI explanation for a specific anomaly
 app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
-    const { explainAnomaly } = await import("./ai-planner");
+    const { explainAnomaly } = await import("../ai-planner");
     const { anomalyType, context } = req.body;
     
     if (!anomalyType || !["setup_time", "cost"].includes(anomalyType)) {
@@ -902,7 +902,7 @@ app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
 
 // AI Auto-Schedule - automatisk schemaläggning av oschemalagda ordrar
 app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
-    const { aiEnhancedSchedule } = await import("./ai-planner");
+    const { aiEnhancedSchedule } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -934,7 +934,7 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
 
 // Route optimization per day
 app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
-    const { optimizeDayRoutes } = await import("./route-optimizer");
+    const { optimizeDayRoutes } = await import("../route-optimizer");
     const { date } = req.body;
     
     if (!date) {
@@ -954,7 +954,7 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
 
 // VRP-based route optimization using Geoapify Route Planner
 app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
-    const { optimizeRoutesVRP } = await import("./route-optimizer");
+    const { optimizeRoutesVRP } = await import("../route-optimizer");
     const { date, clusterId } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -993,7 +993,7 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
 
 // AI Route Recommendations - weather and history based suggestions
 app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
-    const { fetchWeatherForecast } = await import("./weather-service");
+    const { fetchWeatherForecast } = await import("../weather-service");
     const tenantId = getTenantIdWithFallback(req);
     const date = req.query.date as string || new Date().toISOString().split("T")[0];
     
@@ -1214,7 +1214,7 @@ app.post("/api/ai/auto-schedule/apply", asyncHandler(async (req, res) => {
 
 // Workload analysis - detect imbalances
 app.post("/api/ai/workload-analysis", asyncHandler(async (req, res) => {
-    const { analyzeWorkloadImbalances } = await import("./ai-planner");
+    const { analyzeWorkloadImbalances } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1236,7 +1236,7 @@ app.post("/api/ai/workload-analysis", asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
-    const { processConversationalPlannerQueryV2 } = await import("./ai-planner");
+    const { processConversationalPlannerQueryV2 } = await import("../ai-planner");
     const { query, weekStart, weekEnd, conversationHistory } = req.body;
     
     if (!query || typeof query !== "string") {
@@ -1326,7 +1326,7 @@ app.post("/api/ai/planner-chat/execute", asyncHandler(async (req, res) => {
 
 // AI Setup Time Insights
 app.get("/api/ai/setup-insights", asyncHandler(async (req, res) => {
-    const { analyzeSetupTimeLogs } = await import("./ai-planner");
+    const { analyzeSetupTimeLogs } = await import("../ai-planner");
     
     const tenantId = getTenantIdWithFallback(req);
     const [logs, objects, clusters] = await Promise.all([
@@ -1383,7 +1383,7 @@ app.post("/api/ai/apply-setup-updates", asyncHandler(async (req, res) => {
 app.get("/api/ai/predictive-planning", asyncHandler(async (req, res) => {
     const weeksAhead = parseInt(req.query.weeksAhead as string) || 4;
     
-    const { generatePredictivePlanning } = await import("./ai-planner");
+    const { generatePredictivePlanning } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     const workOrders = await storage.getWorkOrders(tenantId, undefined, undefined, true, 5000);
     const clusters = await storage.getClusters(tenantId);
@@ -1403,7 +1403,7 @@ app.get("/api/ai/predictive-planning", asyncHandler(async (req, res) => {
 
 // Simple weather for today (mobile app)
 app.get("/api/weather/today", asyncHandler(async (_req, res) => {
-    const { fetchWeatherForecast } = await import("./weather-service");
+    const { fetchWeatherForecast } = await import("../weather-service");
     const result = await fetchWeatherForecast(63.826, 20.263, 1);
     
     if (result.forecasts && result.forecasts.length > 0) {
@@ -1430,7 +1430,7 @@ app.get("/api/weather/forecast", asyncHandler(async (req, res) => {
     const longitude = parseFloat(req.query.longitude as string) || 18.0686;
     const days = parseInt(req.query.days as string) || 7;
     
-    const { fetchWeatherForecast } = await import("./weather-service");
+    const { fetchWeatherForecast } = await import("../weather-service");
     const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
     
     res.json(result);
@@ -1448,7 +1448,7 @@ app.get("/api/weather/cluster/:clusterId", asyncHandler(async (req, res) => {
     const longitude = cluster.centerLongitude || 18.0686;
     const days = parseInt(req.query.days as string) || 7;
     
-    const { fetchWeatherForecast } = await import("./weather-service");
+    const { fetchWeatherForecast } = await import("../weather-service");
     const result = await fetchWeatherForecast(latitude, longitude, Math.min(days, 14));
     
     res.json({
@@ -2062,7 +2062,7 @@ const handleAutoCluster = async (req: any, res: any) => {
       throw new ValidationError("objectIds måste vara en array med max 500 element");
     }
 
-    const { generateAutoClusterSuggestions } = await import("./ai-planner");
+    const { generateAutoClusterSuggestions } = await import("../ai-planner");
     const tenantId = getTenantIdWithFallback(req);
     const objects = objectIds && objectIds.length > 0
       ? await storage.getObjectsByIds(tenantId, objectIds)

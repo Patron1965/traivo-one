@@ -544,11 +544,8 @@ export interface IStorage {
   updateBookingRequest(id: string, tenantId: string, data: Partial<InsertCustomerBookingRequest>): Promise<CustomerBookingRequest | undefined>;
   getWorkOrdersByCustomer(customerId: string, tenantId: string): Promise<WorkOrder[]>;
   
-  // Customer Portal - Messages
-  getPortalMessages(tenantId: string, customerId: string): Promise<CustomerPortalMessage[]>;
-  createPortalMessage(message: InsertCustomerPortalMessage): Promise<CustomerPortalMessage>;
+  // Customer Portal - Messages (legacy)
   markPortalMessagesAsRead(tenantId: string, customerId: string): Promise<void>;
-  getUnreadMessageCount(tenantId: string, customerId?: string): Promise<number>;
   getAllPortalMessagesForStaff(tenantId: string): Promise<CustomerPortalMessage[]>;
   getCustomersWithMessages(tenantId: string): Promise<string[]>;
   markStaffMessagesAsRead(tenantId: string, customerId: string): Promise<void>;
@@ -1100,6 +1097,7 @@ export class DatabaseStorage implements IStorage {
       onSiteAt: workOrders.onSiteAt,
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
+      importBatchId: workOrders.importBatchId,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -1172,6 +1170,7 @@ export class DatabaseStorage implements IStorage {
       onSiteAt: workOrders.onSiteAt,
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
+      importBatchId: workOrders.importBatchId,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -1267,6 +1266,7 @@ export class DatabaseStorage implements IStorage {
       onSiteAt: workOrders.onSiteAt,
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
+      importBatchId: workOrders.importBatchId,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -1390,6 +1390,7 @@ export class DatabaseStorage implements IStorage {
       onSiteAt: workOrders.onSiteAt,
       inspectedAt: workOrders.inspectedAt,
       executionCode: workOrders.executionCode,
+      importBatchId: workOrders.importBatchId,
       objectName: objects.name,
       objectAddress: objects.address,
       objectAccessCode: objects.resolvedAccessCode,
@@ -4228,6 +4229,17 @@ export class DatabaseStorage implements IStorage {
       .from(customerPortalMessages)
       .where(eq(customerPortalMessages.tenantId, tenantId));
     return result.map(r => r.customerId);
+  }
+
+  async markPortalMessagesAsRead(tenantId: string, customerId: string): Promise<void> {
+    await db.update(customerPortalMessages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(customerPortalMessages.tenantId, tenantId),
+        eq(customerPortalMessages.customerId, customerId),
+        eq(customerPortalMessages.sender, "staff"),
+        isNull(customerPortalMessages.readAt)
+      ));
   }
 
   async markStaffMessagesAsRead(tenantId: string, customerId: string): Promise<void> {

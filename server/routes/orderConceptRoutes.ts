@@ -1053,7 +1053,7 @@ app.delete("/api/assignments/:assignmentId/articles/:articleId", asyncHandler(as
 // ============================================
 
 app.post("/api/notifications/send", asyncHandler(async (req, res) => {
-    const { sendCustomerNotification } = await import("./customer-notifications");
+    const { sendCustomerNotification } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId, notificationType, estimatedArrivalMinutes, customMessage } = req.body;
     
@@ -1086,7 +1086,7 @@ app.post("/api/notifications/send", asyncHandler(async (req, res) => {
 }));
 
 app.post("/api/notifications/technician-on-way/:workOrderId", asyncHandler(async (req, res) => {
-    const { notifyTechnicianOnWay } = await import("./customer-notifications");
+    const { notifyTechnicianOnWay } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
     const { estimatedMinutes } = req.body;
@@ -1110,7 +1110,7 @@ app.post("/api/notifications/technician-on-way/:workOrderId", asyncHandler(async
 }));
 
 app.post("/api/notifications/job-completed/:workOrderId", asyncHandler(async (req, res) => {
-    const { notifyJobCompleted } = await import("./customer-notifications");
+    const { notifyJobCompleted } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { workOrderId } = req.params;
     
@@ -1130,7 +1130,7 @@ app.post("/api/notifications/job-completed/:workOrderId", asyncHandler(async (re
 }));
 
 app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req, res) => {
-    const { sendScheduleToResource } = await import("./customer-notifications");
+    const { sendScheduleToResource } = await import("../customer-notifications");
     const tenantId = getTenantIdWithFallback(req);
     const { resourceId } = req.params;
     const { jobs, dateRange, fieldAppUrl } = req.body;

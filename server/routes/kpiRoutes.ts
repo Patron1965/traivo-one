@@ -332,7 +332,7 @@ app.post("/api/system/sms-config/test", requireAdmin, asyncHandler(async (req, r
       throw new ValidationError("SMS är inte aktiverat för detta företag");
     }
     
-    const { sendNotification } = await import("./unified-notifications");
+    const { sendNotification } = await import("../unified-notifications");
     const result = await sendNotification({
       tenantId,
       recipients: [{ phone: phoneNumber, name: "Test" }],
@@ -856,7 +856,7 @@ app.post("/api/system/onboard-tenant", requireAdmin, asyncHandler(async (req, re
 
 // Industry Packages - Seed default packages (admin only, one-time setup)
 app.post("/api/system/industry-packages/seed", requireAdmin, asyncHandler(async (req, res) => {
-    const { allPackages, getPackageData } = await import("./data/industryPackages");
+    const { allPackages, getPackageData } = await import("../data/industryPackages");
     
     const results = [];
     for (const pkgData of allPackages) {

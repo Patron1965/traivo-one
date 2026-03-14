@@ -1266,7 +1266,7 @@ app.post("/api/work-orders/:workOrderId/expand-structural", asyncHandler(async (
     const allArticles = await storage.getArticles(tenantId);
     const articlesMap = new Map(allArticles.map(a => [a.id, a]));
 
-    const { expandStructuralArticle } = await import("./ai-planner");
+    const { expandStructuralArticle } = await import("../ai-planner");
 
     const children = structuralArticlesMap.get(structuralArticleId) || [];
     
@@ -1293,7 +1293,7 @@ app.post("/api/route/optimize", asyncHandler(async (req, res) => {
       throw new ValidationError("Stops array krävs");
     }
     
-    const { optimizeRoute } = await import("./ai-planner");
+    const { optimizeRoute } = await import("../ai-planner");
     
     const result = await optimizeRoute(stops);
     
@@ -1308,7 +1308,7 @@ app.post("/api/route/google-maps-url", asyncHandler(async (req, res) => {
       throw new ValidationError("Stops array krävs");
     }
     
-    const { generateGoogleMapsUrl } = await import("./ai-planner");
+    const { generateGoogleMapsUrl } = await import("../ai-planner");
     
     const url = generateGoogleMapsUrl(stops);
     
