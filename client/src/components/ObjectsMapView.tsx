@@ -4,6 +4,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { DoorOpen, Key, Keyboard, Users } from "lucide-react";
 import type { ServiceObject } from "@shared/schema";
+import { useMapConfig } from "@/hooks/use-map-config";
 
 const objectTypeLabels: Record<string, string> = {
   omrade: "Område",
@@ -85,6 +86,7 @@ export function BatchGeoMapFitter({ objects }: { objects: ServiceObject[] }) {
 }
 
 export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: { objects: Array<{ id: string; name: string; address?: string | null; latitude?: number | null; longitude?: number | null; entranceLatitude?: number | null; entranceLongitude?: number | null }> }) {
+  const mapConfig = useMapConfig();
   const validObjects = objects.filter(o => o.latitude && o.longitude);
   if (validObjects.length === 0) return null;
 
@@ -107,8 +109,8 @@ export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: 
           style={{ height: "100%", width: "100%" }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution={mapConfig.attribution}
+            url={mapConfig.tileUrl}
           />
           <BatchGeoMapFitter objects={validObjects as any} />
           {validObjects.map((obj) => (
@@ -169,6 +171,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   mapPositions: [number, number][];
   defaultCenter: [number, number];
 }) {
+  const mapConfig = useMapConfig();
   return (
     <div className="h-[500px] overflow-hidden rounded-md border bg-card">
       <div className="p-0 h-full relative">
@@ -179,8 +182,8 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
           scrollWheelZoom={true}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution={mapConfig.attribution}
+            url={mapConfig.tileUrl}
           />
           {mapPositions.length > 0 && <MapFitBounds positions={mapPositions} />}
           {objectsWithCoords.map(obj => (

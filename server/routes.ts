@@ -11012,6 +11012,21 @@ setInterval(loadRoutes, 60000);
   });
 
   // Tenant Branding - Get current tenant branding
+  app.get("/api/system/map-config", (_req, res) => {
+    const apiKey = process.env.GEOAPIFY_API_KEY;
+    if (apiKey) {
+      res.json({
+        tileUrl: `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png?apiKey=${apiKey}`,
+        attribution: '&copy; <a href="https://www.geoapify.com/">Geoapify</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      });
+    } else {
+      res.json({
+        tileUrl: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      });
+    }
+  });
+
   app.get("/api/system/tenant-branding", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

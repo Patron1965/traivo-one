@@ -13,6 +13,7 @@ import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject, Customer } from "@shared/schema";
 import { calculateTravelTime, haversineDistance } from "./types";
 import { SortableRouteItem } from "./DndComponents";
+import { useMapConfig } from "@/hooks/use-map-config";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
@@ -48,6 +49,8 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     routeJobs, routeJobOrder, customerMap, isOptimizing,
     selectedJob, onJobClick, onSortEnd, onOptimizeRoute, onSendSchedule,
   } = props;
+
+  const mapConfig = useMapConfig();
 
   const orderedJobs = useMemo(() => {
     if (routeJobOrder.length === 0) return routeJobs;
@@ -207,8 +210,8 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
           style={{ zIndex: 1 }}
         >
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution={mapConfig.attribution}
+            url={mapConfig.tileUrl}
           />
           {mapBounds && <MapFitBounds bounds={mapBounds} />}
           {routePolyline.length > 1 && (

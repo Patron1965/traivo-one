@@ -80,6 +80,7 @@ import { MapContainer, TileLayer, Circle, Marker, Popup, useMap } from "react-le
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import type { Cluster, Team, Customer } from "@shared/schema";
+import { useMapConfig } from "@/hooks/use-map-config";
 
 const SLA_LEVELS = [
   { value: "standard", label: "Standard", color: "bg-muted text-muted-foreground" },
@@ -179,6 +180,7 @@ function MapFitBounds({ clusters }: MapFitBoundsProps) {
 }
 
 export default function ClustersPage() {
+  const mapConfig = useMapConfig();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
@@ -502,8 +504,8 @@ export default function ClustersPage() {
                   scrollWheelZoom={true}
                 >
                   <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                    attribution={mapConfig.attribution}
+                    url={mapConfig.tileUrl}
                   />
                   <MapFitBounds clusters={clustersWithCoordinates} />
                   {clustersWithCoordinates.map((cluster) => {

@@ -56,6 +56,7 @@ import { sv } from "date-fns/locale";
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { useMapConfig } from "@/hooks/use-map-config";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
@@ -305,6 +306,7 @@ function MapFitBounds({ positions }: { positions: [number, number][] }) {
 }
 
 export default function ClusterDetailPage() {
+  const mapConfig = useMapConfig();
   const [, navigate] = useLocation();
   const [match, params] = useRoute("/clusters/:id");
   const clusterId = params?.id;
@@ -668,8 +670,8 @@ export default function ClusterDetailPage() {
                     style={{ height: "100%", width: "100%" }}
                   >
                     <TileLayer
-                      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                      attribution={mapConfig.attribution}
+                      url={mapConfig.tileUrl}
                     />
                     {cluster.centerLatitude && cluster.centerLongitude && cluster.radiusKm && (
                       <Circle

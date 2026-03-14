@@ -13,6 +13,7 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useObjectsByIds } from "@/hooks/useObjectSearch";
+import { useMapConfig } from "@/hooks/use-map-config";
 import type { Resource, WorkOrderWithObject, ServiceObject } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -113,6 +114,7 @@ interface RouteData {
 type ColorMode = "setupTime" | "accessType";
 
 export function RouteMap({ onNavigate }: RouteMapProps) {
+  const mapConfig = useMapConfig();
   const [selectedResource, setSelectedResource] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<Date>(new Date());
   const [viewMode, setViewMode] = useState<"day" | "week">("day");
@@ -650,8 +652,8 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
             scrollWheelZoom={true}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution={mapConfig.attribution}
+              url={mapConfig.tileUrl}
             />
             
             {jobPositions.length > 0 && <MapFitBounds positions={jobPositions} />}

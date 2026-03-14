@@ -15,6 +15,7 @@ import { MapContainer, TileLayer, Circle, CircleMarker, Marker, Popup, useMap, u
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { useMapConfig } from "@/hooks/use-map-config";
 
 type Strategy = "geographic" | "frequency" | "team" | "customer" | "manual";
 
@@ -218,6 +219,7 @@ function DraggableCluster({ suggestion, isSelected, isHovered, onSelect, onHover
 }
 
 export default function AutoClusterPage() {
+  const mapConfig = useMapConfig();
   const { toast } = useToast();
   const [strategy, setStrategy] = useState<Strategy>("geographic");
   const [selectedSuggestions, setSelectedSuggestions] = useState<Set<string>>(new Set());
@@ -894,8 +896,8 @@ export default function AutoClusterPage() {
                       scrollWheelZoom={true}
                     >
                       <TileLayer
-                        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                        attribution={mapConfig.attribution}
+                        url={mapConfig.tileUrl}
                       />
                       <MapFitBounds suggestions={suggestionsWithCoords} fitKey={mapFitKey} />
                       {focusedCluster && <FlyToCluster lat={focusedCluster.lat} lng={focusedCluster.lng} />}

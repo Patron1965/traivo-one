@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, Navigation, RefreshCw, Wifi, WifiOff, Users } from "lucide-react";
+import { useMapConfig } from "@/hooks/use-map-config";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -69,6 +70,7 @@ export function LiveResourceMap({
   className = "h-96",
   onResourceClick 
 }: LiveResourceMapProps) {
+  const mapConfig = useMapConfig();
   const [wsConnected, setWsConnected] = useState(false);
   const [livePositions, setLivePositions] = useState<Map<string, ActiveResource>>(new Map());
 
@@ -224,8 +226,8 @@ export function LiveResourceMap({
         scrollWheelZoom={true}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={mapConfig.attribution}
+          url={mapConfig.tileUrl}
         />
         
         {positions.length > 0 && <MapFitBounds positions={positions} />}

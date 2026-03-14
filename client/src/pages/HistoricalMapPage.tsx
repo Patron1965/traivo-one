@@ -3,6 +3,7 @@ import { MapContainer, TileLayer, Polyline, Marker, CircleMarker, Popup, useMap 
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useQuery } from "@tanstack/react-query";
+import { useMapConfig } from "@/hooks/use-map-config";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -126,6 +127,7 @@ function getToday() {
 }
 
 export default function HistoricalMapPage() {
+  const mapConfig = useMapConfig();
   const [selectedDate, setSelectedDate] = useState(getToday);
   const [selectedResourceId, setSelectedResourceId] = useState<string>("");
   const [playbackIndex, setPlaybackIndex] = useState(0);
@@ -389,8 +391,8 @@ export default function HistoricalMapPage() {
             scrollWheelZoom={true}
           >
             <TileLayer
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              attribution={mapConfig.attribution}
+              url={mapConfig.tileUrl}
             />
             <MapFitBounds positions={allPositions} />
 

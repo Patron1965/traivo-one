@@ -26,6 +26,7 @@ import {
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder } from "@shared/schema";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
@@ -157,6 +158,7 @@ const defaultIcon = L.icon({
 });
 
 export default function ObjectDetailPage() {
+  const mapConfig = useMapConfig();
   const [, params] = useRoute("/objects/:id");
   const [, navigate] = useLocation();
   const { toast } = useToast();
@@ -697,8 +699,8 @@ export default function ObjectDetailPage() {
                     style={{ height: "100%", width: "100%" }}
                   >
                     <TileLayer
-                      url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                      attribution='&copy; OpenStreetMap'
+                      url={mapConfig.tileUrl}
+                      attribution={mapConfig.attribution}
                     />
                     <Marker position={[Number(obj.latitude), Number(obj.longitude)]} icon={defaultIcon}>
                       <Popup>

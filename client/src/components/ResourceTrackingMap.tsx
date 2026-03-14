@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, MapPin, Navigation } from "lucide-react";
+import { useMapConfig } from "@/hooks/use-map-config";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -71,6 +72,7 @@ export function ResourceTrackingMap({
   showCurrentPosition = true,
   className = "h-96"
 }: ResourceTrackingMapProps) {
+  const mapConfig = useMapConfig();
   const dateParam = date ? format(date, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd");
   
   const { data: positions, isLoading } = useQuery<ResourcePosition[]>({
@@ -150,8 +152,8 @@ export function ResourceTrackingMap({
         scrollWheelZoom={true}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={mapConfig.attribution}
+          url={mapConfig.tileUrl}
         />
         
         <MapFitBounds positions={polylinePositions} />

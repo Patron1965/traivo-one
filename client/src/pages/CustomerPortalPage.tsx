@@ -12,6 +12,7 @@ import { Calendar, Truck, Package, Clock, CalendarPlus, CheckCircle, AlertCircle
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { useMapConfig } from "@/hooks/use-map-config";
 import { format, addDays, isAfter, startOfDay } from "date-fns";
 import { sv } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
@@ -61,6 +62,7 @@ const orderStatusColors: Record<string, string> = {
 };
 
 export default function CustomerPortalPage() {
+  const mapConfig = useMapConfig();
   const { toast } = useToast();
   const { user } = useAuth();
   const isCustomerRole = user?.role === "customer";
@@ -533,8 +535,8 @@ export default function CustomerPortalPage() {
                         style={{ height: "100%", width: "100%" }}
                       >
                         <TileLayer
-                          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                          attribution={mapConfig.attribution}
+                          url={mapConfig.tileUrl}
                         />
                         <PickupMapFitBounds positions={mapPositions} />
                         {geoObjects.map(obj => {

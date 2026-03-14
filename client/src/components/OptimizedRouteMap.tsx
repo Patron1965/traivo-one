@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Maximize2, Minimize2, X, AlertTriangle } from "lucide-react";
+import { useMapConfig } from "@/hooks/use-map-config";
 
 interface RouteStop {
   workOrderId: string;
@@ -67,6 +68,7 @@ export function OptimizedRouteMap({
   expanded = false,
   onToggleExpand 
 }: OptimizedRouteMapProps) {
+  const mapConfig = useMapConfig();
   // Filter stops with valid coordinates and keep track of both positions and stop data
   const validStops = useMemo(() => {
     return stops.filter(s => s.latitude && s.longitude);
@@ -132,8 +134,8 @@ export function OptimizedRouteMap({
         scrollWheelZoom={true}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution={mapConfig.attribution}
+          url={mapConfig.tileUrl}
         />
         
         <MapFitBounds positions={positions} />
