@@ -1212,18 +1212,41 @@ app.get("/api/mobile/notifications/count", isMobileAuthenticated, asyncHandler(a
 // ============================================
 // ROUTE FEEDBACK — drivers rate daily routes
 // ============================================
+app.get("/api/mobile/route-feedback/mine", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const { startDate, endDate, limit: limitStr } = req.query as Record<string, string>;
+    const parsedLimit = limitStr ? Math.min(Math.max(parseInt(limitStr) || 20, 1), 100) : 20;
+    const feedback = await storage.getRouteFeedback(resource.tenantId, {
+      resourceId,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      limit: parsedLimit,
+    });
+    res.json(feedback);
+}));
+
 app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
+    const VALID_REASON_CATEGORIES = ["optimal", "too_long", "wrong_order", "too_many_stops", "bad_timing", "missing_info", "traffic", "other"];
     const schema = z.object({
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       rating: z.number().int().min(1).max(5),
       reasonCategory: z.string().optional(),
       freeText: z.string().max(1000).optional(),
       workSessionId: z.string().optional(),
-    });
+    }).refine((data) => {
+      if (data.rating <= 2 && !data.reasonCategory) return false;
+      return true;
+    }, { message: "reasonCategory krävs för betyg 1-2" }).refine((data) => {
+      if (data.reasonCategory && !VALID_REASON_CATEGORIES.includes(data.reasonCategory)) return false;
+      return true;
+    }, { message: `reasonCategory måste vara en av: ${VALID_REASON_CATEGORIES.join(", ")}` });
 
     const parseResult = schema.safeParse(req.body);
     if (!parseResult.success) {

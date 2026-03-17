@@ -94,6 +94,23 @@ const REASON_CATEGORY_LABELS: Record<string, string> = {
 const RATING_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
 
 function RouteFeedbackTab() {
+  const [feedbackResourceFilter, setFeedbackResourceFilter] = useState<string>("all");
+  const [feedbackDateRange, setFeedbackDateRange] = useState<string>("30d");
+
+  const dateParams = useMemo(() => {
+    const end = new Date();
+    const start = new Date();
+    if (feedbackDateRange === "7d") start.setDate(start.getDate() - 7);
+    else if (feedbackDateRange === "30d") start.setDate(start.getDate() - 30);
+    else if (feedbackDateRange === "90d") start.setDate(start.getDate() - 90);
+    else start.setFullYear(start.getFullYear() - 1);
+    return {
+      startDate: start.toISOString().split("T")[0],
+      endDate: end.toISOString().split("T")[0],
+    };
+  }, [feedbackDateRange]);
+
+  const summaryUrl = `/api/route-feedback/summary?startDate=${dateParams.startDate}&endDate=${dateParams.endDate}`;
   const { data: summary, isLoading, isError } = useQuery<{
     avgRating: number;
     totalCount: number;
@@ -101,9 +118,10 @@ function RouteFeedbackTab() {
     byResource: { resourceId: string; resourceName: string; avgRating: number; count: number }[];
     ratingDistribution: Record<string, number>;
   }>({
-    queryKey: ["/api/route-feedback/summary"],
+    queryKey: [summaryUrl],
   });
 
+  const listUrl = `/api/route-feedback?limit=50&startDate=${dateParams.startDate}&endDate=${dateParams.endDate}${feedbackResourceFilter !== "all" ? `&resourceId=${feedbackResourceFilter}` : ""}`;
   const { data: recentFeedback } = useQuery<Array<{
     id: string;
     resourceName: string;
@@ -112,7 +130,7 @@ function RouteFeedbackTab() {
     reasonCategory: string | null;
     freeText: string | null;
   }>>({
-    queryKey: ["/api/route-feedback?limit=20"],
+    queryKey: [listUrl],
   });
 
   if (isLoading) {
@@ -164,8 +182,53 @@ function RouteFeedbackTab() {
     .sort((a, b) => b.avgRating - a.avgRating)
     .slice(0, 10);
 
+  const dailyTrend = useMemo(() => {
+    if (!recentFeedback || recentFeedback.length === 0) return [];
+    const byDate = new Map<string, { sum: number; count: number }>();
+    for (const fb of recentFeedback) {
+      const d = byDate.get(fb.date) || { sum: 0, count: 0 };
+      d.sum += fb.rating;
+      d.count += 1;
+      byDate.set(fb.date, d);
+    }
+    return Array.from(byDate.entries())
+      .map(([date, { sum, count }]) => ({
+        date,
+        avgRating: Math.round((sum / count) * 10) / 10,
+        count,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [recentFeedback]);
+
   return (
     <>
+      <div className="flex flex-wrap gap-3 items-center" data-testid="feedback-filters">
+        <Select value={feedbackDateRange} onValueChange={setFeedbackDateRange}>
+          <SelectTrigger className="w-[160px]" data-testid="feedback-date-filter">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="7d">Senaste 7 dagar</SelectItem>
+            <SelectItem value="30d">Senaste 30 dagar</SelectItem>
+            <SelectItem value="90d">Senaste 90 dagar</SelectItem>
+            <SelectItem value="1y">Senaste året</SelectItem>
+          </SelectContent>
+        </Select>
+        {summary && summary.byResource.length > 0 && (
+          <Select value={feedbackResourceFilter} onValueChange={setFeedbackResourceFilter}>
+            <SelectTrigger className="w-[200px]" data-testid="feedback-resource-filter">
+              <SelectValue placeholder="Alla förare" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alla förare</SelectItem>
+              {summary.byResource.map((r) => (
+                <SelectItem key={r.resourceId} value={r.resourceId}>{r.resourceName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KPICard
           title="Snittbetyg"
@@ -190,6 +253,28 @@ function RouteFeedbackTab() {
           subtitle="unika orsaker"
         />
       </div>
+
+      {dailyTrend.length > 1 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-4 w-4" />
+              Betyg över tid
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={dailyTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis domain={[0, 5]} ticks={[1, 2, 3, 4, 5]} />
+                <RechartsTooltip />
+                <Area type="monotone" dataKey="avgRating" name="Snittbetyg" stroke="#4A9B9B" fill="#4A9B9B" fillOpacity={0.2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-4">
         <Card>
