@@ -1391,11 +1391,22 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       <OfflineBanner isOnline={isOnline} />
       <div className="p-4 border-b bg-card space-y-3">
         <div className="flex items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-bold">Dagens schema</h1>
-            <p className="text-sm text-muted-foreground">
-              {format(today, "EEEE d MMMM", { locale: sv })}
-            </p>
+          <div className="flex items-center gap-3">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 shrink-0"
+              data-testid="button-back-mobile"
+              onClick={() => window.history.back()}
+            >
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+            <div>
+              <h1 className="text-xl font-bold">Dagens schema</h1>
+              <p className="text-sm text-muted-foreground">
+                {format(today, "EEEE d MMMM", { locale: sv })}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {weatherData && (
