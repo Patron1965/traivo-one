@@ -647,9 +647,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       }
     }
 
-    const GEOCODE_BATCH_LIMIT = 50;
-    const geocodeBatch = rowsNeedingGeocode.slice(0, GEOCODE_BATCH_LIMIT);
-    for (const item of geocodeBatch) {
+    for (const item of rowsNeedingGeocode) {
       try {
         const fullAddress = item.city ? `${item.address}, ${item.city}, Sverige` : `${item.address}, Sverige`;
         const geoResult = await geocodeAddress(fullAddress, tenantId);
@@ -668,11 +666,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
         addressRows[item.index].issue = "Geokodning misslyckades";
       }
     }
-    const geocodeSkipped = rowsNeedingGeocode.length - geocodeBatch.length;
-    for (let j = GEOCODE_BATCH_LIMIT; j < rowsNeedingGeocode.length; j++) {
-      addressRows[rowsNeedingGeocode[j].index].geocodeStatus = "skipped";
-      addressRows[rowsNeedingGeocode[j].index].issue = "Ej geokodad (batchgräns)";
-    }
+    const geocodeSkipped = 0;
 
     const addressOk = addressComplete + geocodedCount;
     const addressTotal = totalRows;
@@ -1068,6 +1062,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
           metadataColumns: metadataColumns.map(c => c.metadataName),
           parentsUpdated,
           customersCreated: customerNames.size,
+          scorecardCategories: scorecardSummary?.categories || null,
         },
       });
     } catch (e) {

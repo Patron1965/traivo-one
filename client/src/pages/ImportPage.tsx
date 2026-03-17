@@ -805,6 +805,12 @@ export default function ImportPage() {
       requiredFields: modusValidation.scorecard.categories.requiredFields.score,
       accessInfo: modusValidation.scorecard.categories.accessInfo.score,
       duplicates: modusValidation.scorecard.categories.duplicates.score,
+      categories: {
+        addresses: { score: modusValidation.scorecard.categories.addresses.score, ok: modusValidation.scorecard.categories.addresses.ok, total: modusValidation.scorecard.categories.addresses.total, details: modusValidation.scorecard.categories.addresses.details },
+        requiredFields: { score: modusValidation.scorecard.categories.requiredFields.score, ok: modusValidation.scorecard.categories.requiredFields.ok, total: modusValidation.scorecard.categories.requiredFields.total, details: modusValidation.scorecard.categories.requiredFields.details },
+        accessInfo: { score: modusValidation.scorecard.categories.accessInfo.score, ok: modusValidation.scorecard.categories.accessInfo.ok, total: modusValidation.scorecard.categories.accessInfo.total, details: modusValidation.scorecard.categories.accessInfo.details },
+        duplicates: { score: modusValidation.scorecard.categories.duplicates.score, ok: modusValidation.scorecard.categories.duplicates.ok, total: modusValidation.scorecard.categories.duplicates.total, details: modusValidation.scorecard.categories.duplicates.details },
+      },
     } : null;
     await handleModusUpload("objects", modusObjectFile, scorecardSummary);
     setModusObjectFile(null);

@@ -2262,6 +2262,7 @@ app.get("/api/import/batches", asyncHandler(async (req, res) => {
         const existing = batchMap.get(pb.batchId);
         if (existing) {
           existing.scorecardSummary = pb.scorecardSummary;
+          (existing as Record<string, unknown>).scorecardCategories = (pb.metadata as Record<string, unknown>)?.scorecardCategories || null;
         }
       }
     } catch {}
