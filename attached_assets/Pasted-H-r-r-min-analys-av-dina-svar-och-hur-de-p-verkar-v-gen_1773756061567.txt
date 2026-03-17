@@ -1,0 +1,30 @@
+Här är min analys av dina svar och hur de påverkar vägen framåt:
+
+1. Branschpaket & Terminologi (The "Last Mile" of UX)
+Att ni kör metadata (EAV) för kärltyper/maskintyper är tekniskt helt rätt. Det som återstår – terminologi-konfiguration – är ofta det som avgör om en kund känner att systemet är "byggt för dem" eller om de känner att de använder ett system byggt för någon annan.
+
+Mitt omdöme: Om en ventilationsfirma ser ordet "Soprum" eller "Kärltyp" i gränssnittet kommer de tveka, även om logiken bakom är korrekt.
+Förslag på lösning: Inför en "Terminologi-mappning" per tenant.
+Exempel: Label_Object_Level_1 = "Fastighet" (Standard) eller "Vindkraftspark" (Energi).
+Exempel: Label_Asset_Type = "Kärl" (Avfall) eller "Aggregat" (Ventilation).
+Detta gör att ni kan sälja in systemet till helt nya vertikaler utan att ändra en rad kod i frontend.
+2. Onboarding & Datatvätt (The "Time-to-Value" Factor)
+Att kunna gå från CSV till rutt på en arbetsdag är imponerande och en stark USP (Unique Selling Point). Den största risken här är som du säger datakvalitet.
+
+Mitt omdöme: "Dirty data" är den största orsaken till att SaaS-projekt inom fältservice misslyckas under de första 90 dagarna.
+Förslag på lösning: Bygg in en "Data Health Scorecard" i importsteget.
+Innan importen slutförs får användaren en rapport: "85% av adresserna kunde geokodas exakt, 10% är osäkra, 5% saknar koordinater. 12 objekt saknar tillgångsinformation (kod/nyckel)."
+Detta flyttar ansvaret för datakvalitet till kunden på ett pedagogiskt sätt och minskar supporttrycket på er.
+3. AI-förtroende & Feedback-loopen (The "Human-in-the-loop")
+Detta är er mest kritiska utvecklingspunkt för att AI:n ska bli "smart" på riktigt. Om en chaufför tvingas köra en dålig rutt tre dagar i rad utan att kunna säga ifrån, kommer de sluta lita på systemet.
+
+Mitt omdöme: En AI som inte kan ta emot kritik blir snabbt en irritation i fält.
+Förslag på lösning: "Rutt-recension"
+När ett arbetspass avslutas i Nordnav Go, ge chauffören en enkel fråga: "Hur fungerade dagens rutt?" med 1–5 stjärnor.
+Vid lågt betyg (1–2 stjärnor) får de välja en orsak: "Felaktig ordningsföljd", "Orimliga körtider", "Vägarbete/Hinder".
+Värdet: Denna data blir guld värd för plannern. Hen kan se: "AI:n föreslår konsekvent rutt X, men chaufförerna ger den 1 stjärna p.g.a. trafik. Jag behöver justera parametrarna för det området."
+Sammanfattande rekommendation för nästa sprint/fas:
+Prioritera "Rutt-feedback": Det är den funktion som snabbast kommer öka acceptansen hos chaufförerna och ge plannern bättre beslutsunderlag. Det gör också att ni kan marknadsföra AI:n som "självlärande baserat på fältdata".
+Abstrahera terminologin: Skapa en enkel tabell i databasen för tenant_labels så att ni kan "översätta" gränssnittet för nästa bransch ni kliver in i.
+Förstärk import-valideringen: Gör det omöjligt att importera "trasig" data utan att systemet varnar tydligt. Det sparar enormt mycket tid i onboarding-fasen.
+Hur ser planen ut för nästa bransch efter Kinab? Har ni redan en specifik "Design Partner" i sikte för t.ex. Städ eller Fastighetsservice?
