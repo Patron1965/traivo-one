@@ -1599,4 +1599,53 @@ app.delete("/api/resource-equipment/:id", asyncHandler(async (req, res) => {
     res.status(204).send();
 }));
 
+// ============== TERMINOLOGY (Tenant Labels) ==============
+app.get("/api/terminology", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { tenantLabels, DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } = await import("@shared/schema");
+    const labels = await db.select().from(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
+    const tenant = await storage.getTenant(tenantId);
+    const industry = tenant?.industry || "waste_management";
+    const industryDefaults = INDUSTRY_TERMINOLOGY[industry] || {};
+    const merged: Record<string, string> = { ...DEFAULT_TERMINOLOGY, ...industryDefaults };
+    for (const label of labels) {
+      merged[label.labelKey] = label.labelValue;
+    }
+    res.json({ labels: merged, customized: labels.map(l => l.labelKey), industry });
+}));
+
+app.put("/api/terminology", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { tenantLabels, DEFAULT_TERMINOLOGY } = await import("@shared/schema");
+    const updates = req.body.labels as Record<string, string>;
+    if (!updates || typeof updates !== "object") {
+      throw new ValidationError("labels krävs som objekt");
+    }
+    const allowedKeys = new Set(Object.keys(DEFAULT_TERMINOLOGY));
+    await db.delete(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
+    for (const [key, value] of Object.entries(updates)) {
+      if (typeof key !== "string" || typeof value !== "string") continue;
+      if (!allowedKeys.has(key)) continue;
+      const trimmedValue = value.trim();
+      if (trimmedValue && trimmedValue.length <= 100) {
+        await db.insert(tenantLabels).values({ tenantId, labelKey: key, labelValue: trimmedValue });
+      }
+    }
+    res.json({ success: true });
+}));
+
+app.get("/api/mobile/terminology", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { tenantLabels, DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } = await import("@shared/schema");
+    const labels = await db.select().from(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
+    const tenant = await storage.getTenant(tenantId);
+    const industry = tenant?.industry || "waste_management";
+    const industryDefaults = INDUSTRY_TERMINOLOGY[industry] || {};
+    const merged: Record<string, string> = { ...DEFAULT_TERMINOLOGY, ...industryDefaults };
+    for (const label of labels) {
+      merged[label.labelKey] = label.labelValue;
+    }
+    res.json(merged);
+}));
+
 }

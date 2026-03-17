@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { useTerminology } from "@/hooks/use-terminology";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import traivoLogo from "@assets/traivo_logo_transparent.png";
 import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
@@ -57,47 +58,48 @@ import {
   Clock,
 } from "lucide-react";
 
-const grunddataItems = [
-  { title: "Kluster", url: "/clusters", icon: Target, description: "Arbetsområden" },
-  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
-  { title: "Objekt", url: "/objects", icon: Building2, description: "Fastigheter och platser" },
-  { title: "Resurser", url: "/resources", icon: Users, description: "Personal" },
-  { title: "Arbetspass", url: "/work-sessions", icon: Clock, description: "Tidloggning och löneunderlag" },
-  { title: "Fordon", url: "/vehicles", icon: Truck, description: "Fordon" },
-  { title: "Artiklar", url: "/articles", icon: Package, description: "Produkter och tjänster" },
-  { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
-];
-
-const ordrarItems = [
-  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
-  { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks, description: "Intelligenta ordergeneratorer" },
-  { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: "Alla ordrar" },
-  { title: "Uppdrag", url: "/assignments", icon: UserCheck, description: "Genererade uppgifter" },
-];
-
-const planeringItems = [
-  { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
-  { title: "Ruttplanering", url: "/routes", icon: Map, description: "Optimera körvägar" },
-  { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
-  { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
-  { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
-];
-
-const faltItems = [
-  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },
-  { title: "Besiktning", url: "/inspections", icon: ClipboardList, description: "Inspektionsprotokoll" },
-  { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardList, description: "Inspektionsfrågor per artikeltyp" },
-  { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
-];
-
-const analysItems = [
-  { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
-  { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
-  { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
-  { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
-  { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
-  { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
-];
+function useNavItems() {
+  const { t } = useTerminology();
+  return useMemo(() => ({
+    grunddata: [
+      { title: t("cluster_plural", "Kluster"), url: "/clusters", icon: Target, description: "Arbetsområden" },
+      { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
+      { title: t("object_plural", "Objekt"), url: "/objects", icon: Building2, description: "Fastigheter och platser" },
+      { title: t("resource_plural", "Resurser"), url: "/resources", icon: Users, description: "Personal" },
+      { title: "Arbetspass", url: "/work-sessions", icon: Clock, description: "Tidloggning och löneunderlag" },
+      { title: t("vehicle_plural", "Fordon"), url: "/vehicles", icon: Truck, description: t("vehicle_plural", "Fordon") },
+      { title: t("article_plural", "Artiklar"), url: "/articles", icon: Package, description: "Produkter och tjänster" },
+      { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
+    ],
+    ordrar: [
+      { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
+      { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks, description: "Intelligenta ordergeneratorer" },
+      { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: `Alla ${t("work_order_plural", "uppgifter").toLowerCase()}` },
+      { title: "Uppdrag", url: "/assignments", icon: UserCheck, description: "Genererade uppgifter" },
+    ],
+    planering: [
+      { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
+      { title: "Ruttplanering", url: "/routes", icon: Map, description: "Optimera körvägar" },
+      { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
+      { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
+      { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
+    ],
+    falt: [
+      { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },
+      { title: t("inspection_singular", "Besiktning"), url: "/inspections", icon: ClipboardList, description: "Inspektionsprotokoll" },
+      { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardList, description: "Inspektionsfrågor per artikeltyp" },
+      { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
+    ],
+    analys: [
+      { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
+      { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
+      { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
+      { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
+      { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
+      { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
+    ],
+  }), [t]);
+}
 
 const adminItems = [
   { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tider" },
@@ -113,9 +115,11 @@ const adminItems = [
   { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
 ];
 
+type NavItem = { title: string; url: string; icon: React.ElementType; description: string };
+
 interface NavDropdownProps {
   label: string;
-  items: typeof grunddataItems;
+  items: NavItem[];
   icon: React.ElementType;
   colorClass: string;
 }
@@ -255,13 +259,14 @@ function TenantLogo() {
 export function TopNav() {
   const { user } = useAuth();
   const userRole = user?.role || "user";
+  const navItems = useNavItems();
 
-  const menuGroups: { label: string; items: typeof grunddataItems; icon: React.ElementType; colorClass: string; group: NavMenuGroup }[] = [
-    { label: "Grunddata", items: grunddataItems, icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { label: "Ordrar", items: ordrarItems, icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
-    { label: "Planering & Karta", items: planeringItems, icon: Calendar, group: "planering", colorClass: "text-green-500" },
-    { label: "Fält & Utförande", items: faltItems, icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
-    { label: "Analys", items: analysItems, icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
+  const menuGroups: { label: string; items: NavItem[]; icon: React.ElementType; colorClass: string; group: NavMenuGroup }[] = [
+    { label: "Grunddata", items: navItems.grunddata, icon: Database, group: "grunddata", colorClass: "text-blue-500" },
+    { label: "Ordrar", items: navItems.ordrar, icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
+    { label: "Planering & Karta", items: navItems.planering, icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { label: "Fält & Utförande", items: navItems.falt, icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
+    { label: "Analys", items: navItems.analys, icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
     { label: "Administration", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 

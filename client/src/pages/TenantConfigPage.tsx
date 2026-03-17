@@ -15,6 +15,7 @@ import { Link } from "wouter";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
 import type { Article, Resource, PriceList, Tenant, ResourceProfile, ResourceProfileAssignment, IotDevice, IotApiKey, IotSignal, ServiceObject } from "@shared/schema";
+import { DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } from "@shared/schema";
 import {
   Building2,
   Save,
@@ -1497,6 +1498,193 @@ function IoTTab() {
   );
 }
 
+const LABEL_KEY_DESCRIPTIONS: Record<string, string> = {
+  object_singular: "Objekt (singular) — t.ex. \"Kärl\", \"Fastighet\", \"Aggregat\"",
+  object_plural: "Objekt (plural) — t.ex. \"Kärl\", \"Fastigheter\", \"Aggregat\"",
+  work_order_singular: "Uppgift (singular) — t.ex. \"Ärende\", \"Order\"",
+  work_order_plural: "Uppgifter (plural) — t.ex. \"Ärenden\", \"Ordrar\"",
+  resource_singular: "Resurs (singular) — t.ex. \"Tekniker\", \"Förare\"",
+  resource_plural: "Resurser (plural) — t.ex. \"Tekniker\", \"Förare\"",
+  customer_singular: "Kund (singular)",
+  customer_plural: "Kunder (plural)",
+  cluster_singular: "Kluster (singular) — t.ex. \"Område\", \"Distrikt\"",
+  cluster_plural: "Kluster (plural) — t.ex. \"Områden\", \"Distrikt\"",
+  article_singular: "Artikel (singular) — t.ex. \"Tjänst\", \"Produkt\"",
+  article_plural: "Artiklar (plural) — t.ex. \"Tjänster\", \"Produkter\"",
+  vehicle_singular: "Fordon (singular)",
+  vehicle_plural: "Fordon (plural)",
+  container_singular: "Kärl (singular) — t.ex. \"Enhet\", \"Behållare\"",
+  container_plural: "Kärl (plural) — t.ex. \"Enheter\", \"Behållare\"",
+  route_singular: "Rutt (singular) — t.ex. \"Tur\", \"Slinga\"",
+  route_plural: "Rutter (plural) — t.ex. \"Turer\", \"Slingor\"",
+  asset_type: "Objekttyp — t.ex. \"Kärltyp\", \"Fastighetstyp\"",
+  service_area: "Serviceområde — t.ex. \"Hämtområde\", \"Förvaltningsområde\"",
+  inspection_singular: "Besiktning (singular) — t.ex. \"Kontroll\"",
+  inspection_plural: "Besiktningar (plural) — t.ex. \"Kontroller\"",
+};
+
+function TerminologyTab() {
+  const { toast } = useToast();
+  const { data, isLoading } = useQuery<{ labels: Record<string, string>; customized: string[]; industry: string }>({
+    queryKey: ["/api/terminology"],
+  });
+
+  const [editValues, setEditValues] = useState<Record<string, string>>({});
+  const [hasChanges, setHasChanges] = useState(false);
+
+  useEffect(() => {
+    if (data?.labels) {
+      setEditValues(data.labels);
+    }
+  }, [data]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (values: Record<string, string>) => {
+      const industry = data?.industry || "waste_management";
+      const industryDefaults = INDUSTRY_TERMINOLOGY[industry as keyof typeof INDUSTRY_TERMINOLOGY] || {};
+      const baseline = { ...DEFAULT_TERMINOLOGY, ...industryDefaults };
+      const overrides: Record<string, string> = {};
+      for (const key of Object.keys(DEFAULT_TERMINOLOGY)) {
+        const val = values[key] || "";
+        const base = baseline[key] || "";
+        if (val && val !== base) {
+          overrides[key] = val;
+        }
+      }
+      return apiRequest("PUT", "/api/terminology", { labels: overrides });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/terminology"] });
+      setHasChanges(false);
+      toast({ title: "Sparat", description: "Terminologin har uppdaterats." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+  }
+
+  const customized = data?.customized || [];
+
+  const previewItems = [
+    { key: "object_plural", context: "Meny: " },
+    { key: "work_order_plural", context: "Meny: " },
+    { key: "resource_plural", context: "Meny: " },
+    { key: "customer_plural", context: "Meny: " },
+    { key: "cluster_plural", context: "Meny: " },
+    { key: "article_plural", context: "Meny: " },
+  ];
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2" data-testid="text-terminology-title">
+            <Palette className="h-5 w-5" />
+            Branschanpassad terminologi
+          </CardTitle>
+          <CardDescription>
+            Anpassa termer i gränssnittet så att de matchar er bransch. Lämna fältet tomt för att använda standardvärdet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-[300px]">Nyckel</TableHead>
+                    <TableHead>Värde</TableHead>
+                    <TableHead className="w-[80px]">Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {Object.keys(LABEL_KEY_DESCRIPTIONS).map(key => (
+                    <TableRow key={key} data-testid={`row-label-${key}`}>
+                      <TableCell>
+                        <div>
+                          <span className="font-mono text-xs text-muted-foreground">{key}</span>
+                          <p className="text-xs text-muted-foreground mt-0.5">{LABEL_KEY_DESCRIPTIONS[key]}</p>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          data-testid={`input-label-${key}`}
+                          value={editValues[key] || ""}
+                          onChange={(e) => {
+                            setEditValues(prev => ({ ...prev, [key]: e.target.value }));
+                            setHasChanges(true);
+                          }}
+                          placeholder={data?.labels[key] || key}
+                          className="max-w-[250px]"
+                        />
+                      </TableCell>
+                      <TableCell>
+                        {customized.includes(key) ? (
+                          <Badge variant="default" className="text-xs">Anpassad</Badge>
+                        ) : (
+                          <Badge variant="outline" className="text-xs">Standard</Badge>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div>
+              <Card className="sticky top-4">
+                <CardHeader>
+                  <CardTitle className="text-sm">Förhandsvisning</CardTitle>
+                  <CardDescription className="text-xs">Så här ser termerna ut i navigeringen</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2" data-testid="terminology-preview">
+                    {previewItems.map(item => (
+                      <div key={item.key} className="flex items-center gap-2 px-3 py-2 rounded-md bg-muted/50 text-sm">
+                        <span className="text-muted-foreground">{item.context}</span>
+                        <span className="font-medium">{editValues[item.key] || data?.labels[item.key] || item.key}</span>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          <Separator />
+          <div className="flex justify-end gap-3">
+            <Button
+              variant="outline"
+              data-testid="button-reset-terminology"
+              onClick={() => {
+                if (data?.labels) {
+                  setEditValues(data.labels);
+                  setHasChanges(false);
+                }
+              }}
+              disabled={!hasChanges}
+            >
+              Återställ
+            </Button>
+            <Button
+              data-testid="button-save-terminology"
+              onClick={() => saveMutation.mutate(editValues)}
+              disabled={!hasChanges || saveMutation.isPending}
+            >
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Spara terminologi
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function TenantConfigPage() {
   const { data: tenant } = useQuery<Tenant>({ queryKey: ["/api/tenant"] });
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
@@ -1551,10 +1739,14 @@ export default function TenantConfigPage() {
       </Card>
 
       <Tabs defaultValue="company" className="w-full">
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="company" data-testid="tab-company" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Företagsinfo</span>
+          </TabsTrigger>
+          <TabsTrigger value="terminology" data-testid="tab-terminology" className="flex items-center gap-2">
+            <Palette className="h-4 w-4" />
+            <span className="hidden sm:inline">Terminologi</span>
           </TabsTrigger>
           <TabsTrigger value="articles" data-testid="tab-articles" className="flex items-center gap-2">
             <Package className="h-4 w-4" />
@@ -1580,6 +1772,9 @@ export default function TenantConfigPage() {
 
         <TabsContent value="company">
           <CompanyInfoTab />
+        </TabsContent>
+        <TabsContent value="terminology">
+          <TerminologyTab />
         </TabsContent>
         <TabsContent value="articles">
           <ArticlesExecutionTab />

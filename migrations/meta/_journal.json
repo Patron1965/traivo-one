@@ -78,6 +78,13 @@
       "when": 1773760058902,
       "tag": "0010_glossy_ultron",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1773761002333,
+      "tag": "0011_right_moondragon",
+      "breakpoints": true
     }
   ]
 }

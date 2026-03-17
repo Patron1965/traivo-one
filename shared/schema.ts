@@ -4248,6 +4248,87 @@ export const insertImportBatchSchema = createInsertSchema(importBatches).omit({ 
 export type InsertImportBatch = z.infer<typeof insertImportBatchSchema>;
 export type ImportBatch = typeof importBatches.$inferSelect;
 
+// ============================================
+// Tenant Labels — branschanpassad terminologi
+// ============================================
+export const tenantLabels = pgTable("tenant_labels", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  labelKey: varchar("label_key", { length: 100 }).notNull(),
+  labelValue: text("label_value").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_tenant_labels_tenant").on(table.tenantId),
+  uniqueIndex("idx_tenant_labels_unique").on(table.tenantId, table.labelKey),
+]);
+
+export const insertTenantLabelSchema = createInsertSchema(tenantLabels).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTenantLabel = z.infer<typeof insertTenantLabelSchema>;
+export type TenantLabel = typeof tenantLabels.$inferSelect;
+
+export const DEFAULT_TERMINOLOGY: Record<string, string> = {
+  object_singular: "Objekt",
+  object_plural: "Objekt",
+  work_order_singular: "Uppgift",
+  work_order_plural: "Uppgifter",
+  resource_singular: "Resurs",
+  resource_plural: "Resurser",
+  customer_singular: "Kund",
+  customer_plural: "Kunder",
+  cluster_singular: "Kluster",
+  cluster_plural: "Kluster",
+  article_singular: "Artikel",
+  article_plural: "Artiklar",
+  vehicle_singular: "Fordon",
+  vehicle_plural: "Fordon",
+  container_singular: "Kärl",
+  container_plural: "Kärl",
+  route_singular: "Rutt",
+  route_plural: "Rutter",
+  asset_type: "Objekttyp",
+  service_area: "Serviceområde",
+  inspection_singular: "Besiktning",
+  inspection_plural: "Besiktningar",
+};
+
+export const INDUSTRY_TERMINOLOGY: Record<string, Record<string, string>> = {
+  waste_management: {
+    object_singular: "Kärl",
+    object_plural: "Kärl",
+    container_singular: "Kärl",
+    container_plural: "Kärl",
+    asset_type: "Kärltyp",
+    service_area: "Hämtområde",
+    inspection_singular: "Kontroll",
+    inspection_plural: "Kontroller",
+  },
+  property_maintenance: {
+    object_singular: "Fastighet",
+    object_plural: "Fastigheter",
+    container_singular: "Enhet",
+    container_plural: "Enheter",
+    asset_type: "Fastighetstyp",
+    service_area: "Förvaltningsområde",
+    work_order_singular: "Ärende",
+    work_order_plural: "Ärenden",
+    inspection_singular: "Besiktning",
+    inspection_plural: "Besiktningar",
+  },
+  cleaning: {
+    object_singular: "Lokal",
+    object_plural: "Lokaler",
+    container_singular: "Yta",
+    container_plural: "Ytor",
+    asset_type: "Lokaltyp",
+    service_area: "Städområde",
+    work_order_singular: "Uppdrag",
+    work_order_plural: "Uppdrag",
+    inspection_singular: "Kvalitetskontroll",
+    inspection_plural: "Kvalitetskontroller",
+  },
+};
+
 export type TimeSummaryResponse = {
   week: number;
   year: number;
