@@ -4225,6 +4225,29 @@ export const insertRouteFeedbackSchema = createInsertSchema(routeFeedback).omit(
 export type InsertRouteFeedback = z.infer<typeof insertRouteFeedbackSchema>;
 export type RouteFeedback = typeof routeFeedback.$inferSelect;
 
+// ============================================
+// Import Batches — persist import history with scorecard metadata
+// ============================================
+export const importBatches = pgTable("import_batches", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  batchId: varchar("batch_id").notNull(),
+  totalRows: integer("total_rows").default(0),
+  created: integer("created").default(0),
+  updated: integer("updated").default(0),
+  errors: integer("errors").default(0),
+  scorecardSummary: jsonb("scorecard_summary"),
+  metadata: jsonb("metadata").default({}),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_import_batches_tenant").on(table.tenantId),
+  uniqueIndex("idx_import_batches_batch_id").on(table.batchId),
+]);
+
+export const insertImportBatchSchema = createInsertSchema(importBatches).omit({ id: true, createdAt: true });
+export type InsertImportBatch = z.infer<typeof insertImportBatchSchema>;
+export type ImportBatch = typeof importBatches.$inferSelect;
+
 export type TimeSummaryResponse = {
   week: number;
   year: number;

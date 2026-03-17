@@ -1021,6 +1021,22 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       scorecardSummary,
     };
     
+    try {
+      const { importBatches: importBatchesTable } = await import("@shared/schema");
+      await db.insert(importBatchesTable).values({
+        tenantId,
+        batchId: importBatchId,
+        totalRows: (result.data as unknown[]).length,
+        created: created.length,
+        updated: updated.length,
+        errors: errors.length + metadataErrors.length,
+        scorecardSummary: scorecardSummary || null,
+        metadata: { metadataWritten, metadataColumns: metadataColumns.map(c => c.metadataName), parentsUpdated, customersCreated: customerNames.size },
+      });
+    } catch (e) {
+      console.error("Failed to persist import batch:", e);
+    }
+
     job.status = "completed";
     job.phase = "klar";
     job.result = responseData;

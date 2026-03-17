@@ -2226,12 +2226,12 @@ app.get("/api/import/batches", asyncHandler(async (req, res) => {
     const allWorkOrders = await storage.getWorkOrders(tenantId);
     const allCustomers = await storage.getCustomers(tenantId);
     
-    const batchMap = new Map<string, { batchId: string; objects: number; workOrders: number; customers: number; importedAt: string | null }>();
+    const batchMap = new Map<string, { batchId: string; objects: number; workOrders: number; customers: number; importedAt: string | null; scorecardSummary: unknown }>();
     
     for (const obj of allObjects) {
       if (obj.importBatchId) {
         if (!batchMap.has(obj.importBatchId)) {
-          batchMap.set(obj.importBatchId, { batchId: obj.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: obj.createdAt ? new Date(obj.createdAt).toISOString() : null });
+          batchMap.set(obj.importBatchId, { batchId: obj.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: obj.createdAt ? new Date(obj.createdAt).toISOString() : null, scorecardSummary: null });
         }
         batchMap.get(obj.importBatchId)!.objects++;
       }
@@ -2240,7 +2240,7 @@ app.get("/api/import/batches", asyncHandler(async (req, res) => {
     for (const wo of allWorkOrders) {
       if (wo.importBatchId) {
         if (!batchMap.has(wo.importBatchId)) {
-          batchMap.set(wo.importBatchId, { batchId: wo.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: wo.createdAt ? new Date(wo.createdAt).toISOString() : null });
+          batchMap.set(wo.importBatchId, { batchId: wo.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: wo.createdAt ? new Date(wo.createdAt).toISOString() : null, scorecardSummary: null });
         }
         batchMap.get(wo.importBatchId)!.workOrders++;
       }
@@ -2249,11 +2249,22 @@ app.get("/api/import/batches", asyncHandler(async (req, res) => {
     for (const c of allCustomers) {
       if (c.importBatchId) {
         if (!batchMap.has(c.importBatchId)) {
-          batchMap.set(c.importBatchId, { batchId: c.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: c.createdAt ? new Date(c.createdAt).toISOString() : null });
+          batchMap.set(c.importBatchId, { batchId: c.importBatchId, objects: 0, workOrders: 0, customers: 0, importedAt: c.createdAt ? new Date(c.createdAt).toISOString() : null, scorecardSummary: null });
         }
         batchMap.get(c.importBatchId)!.customers++;
       }
     }
+    
+    try {
+      const { importBatches: importBatchesTable } = await import("@shared/schema");
+      const persistedBatches = await db.select().from(importBatchesTable).where(eq(importBatchesTable.tenantId, tenantId));
+      for (const pb of persistedBatches) {
+        const existing = batchMap.get(pb.batchId);
+        if (existing) {
+          existing.scorecardSummary = pb.scorecardSummary;
+        }
+      }
+    } catch {}
     
     const batches = Array.from(batchMap.values()).sort((a, b) => 
       (b.importedAt || '').localeCompare(a.importedAt || '')
