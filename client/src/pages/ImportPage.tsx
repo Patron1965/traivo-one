@@ -255,31 +255,31 @@ function StepIndicator({ step, title, active, completed }: { step: number; title
 }
 
 function getScorecardColor(score: number): string {
-  if (score >= 90) return "text-green-600";
+  if (score > 90) return "text-green-600";
   if (score >= 70) return "text-yellow-600";
   return "text-red-600";
 }
 
 function getScorecardBg(score: number): string {
-  if (score >= 90) return "bg-green-100 dark:bg-green-950/30 border-green-200 dark:border-green-800";
+  if (score > 90) return "bg-green-100 dark:bg-green-950/30 border-green-200 dark:border-green-800";
   if (score >= 70) return "bg-yellow-100 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800";
   return "bg-red-100 dark:bg-red-950/30 border-red-200 dark:border-red-800";
 }
 
 function getScorecardProgressColor(score: number): string {
-  if (score >= 90) return "bg-green-500";
+  if (score > 90) return "bg-green-500";
   if (score >= 70) return "bg-yellow-500";
   return "bg-red-500";
 }
 
 function getScorecardLabel(score: number): string {
-  if (score >= 90) return "Utmärkt";
+  if (score > 90) return "Utmärkt";
   if (score >= 70) return "Acceptabel";
   return "Behöver åtgärdas";
 }
 
 function getScorecardIcon(score: number) {
-  if (score >= 90) return <CheckCircle className="h-4 w-4 text-green-600" />;
+  if (score > 90) return <CheckCircle className="h-4 w-4 text-green-600" />;
   if (score >= 70) return <AlertCircle className="h-4 w-4 text-yellow-600" />;
   return <X className="h-4 w-4 text-red-600" />;
 }
@@ -324,7 +324,7 @@ function DataHealthScorecardView({ scorecard, validation, onExportProblems }: {
             onClick={() => setExpandedCategory(expandedCategory === key ? null : key)}
             className={`text-left p-3 rounded-lg border transition-all hover:shadow-sm ${
               expandedCategory === key ? "ring-2 ring-blue-400" : ""
-            } ${cat.score >= 90 ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : 
+            } ${cat.score > 90 ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : 
                 cat.score >= 70 ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800" : 
                 "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"}`}
             data-testid={`scorecard-category-${key}`}
