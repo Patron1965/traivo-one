@@ -24,7 +24,8 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner.
 - **MCP Server:** Enables external AI assistants to interact with Traivo data via SSE.
-- **Modus 2.0 Import System:** Dedicated import page for step-by-step data migration via CSV with validation and real-time progress.
+- **Modus 2.0 Import System:** Dedicated import page for step-by-step data migration via CSV with validation, real-time progress, and Data Health Scorecard.
+- **Data Health Scorecard:** Visual quality report at import validation showing overall data health score with category breakdowns (addresses, required fields, access info, duplicates), color-coded thresholds (green >90%, yellow 70-90%, red <70%), expandable detail views per category, problem row export to CSV, and "Import ändå" / "Åtgärda först" decision flow.
 - **Geoapify Geocoding Integration:** Address resolution via Geoapify Geocoding API with Nominatim fallback for precise distance calculations.
 - **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.

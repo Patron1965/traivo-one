@@ -566,6 +566,135 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       }
     }
 
+    const addressRows: { row: number; name: string; address: string; hasCoords: boolean; issue: string }[] = [];
+    const requiredFieldRows: { row: number; name: string; missingFields: string[] }[] = [];
+    const accessInfoRows: { row: number; name: string; issue: string }[] = [];
+    const duplicateRows: { row: number; name: string; modusId: string }[] = [];
+
+    let addressWithCoords = 0;
+    let addressWithAddress = 0;
+    let addressComplete = 0;
+    let hasNameCount = 0;
+    let hasTypCount = 0;
+    let hasIdCount = 0;
+    let hasAccessCode = 0;
+    let hasKeyNumber = 0;
+    let accessRelevantCount = 0;
+
+    const invalidCoordRows = new Set(invalidCoordinates.map(ic => ic.row));
+    const duplicateIdSet = new Set<string>();
+    for (const dup of duplicateModusIds) {
+      duplicateIdSet.add(dup.modusId);
+    }
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      const name = (row["Namn"] || "").trim();
+      const id = (row["Id"] || "").trim().replace(/\s/g, "");
+      const typ = (row["Typ"] || "").trim();
+      const address = (row["Adress 1"] || "").trim();
+      const city = (row["Ort"] || "").trim();
+      const latStr = (row["Latitud"] || "").trim();
+      const lngStr = (row["Longitud"] || "").trim();
+      const hasLat = latStr.length > 0;
+      const hasLng = lngStr.length > 0;
+      const hasValidCoords = hasLat && hasLng && !invalidCoordRows.has(rowNum);
+
+      if (hasValidCoords) addressWithCoords++;
+      if (address) addressWithAddress++;
+      if (hasValidCoords && address) {
+        addressComplete++;
+      } else if (!hasValidCoords && !address) {
+        addressRows.push({ row: rowNum, name: name || id, address: "", hasCoords: false, issue: "Saknar adress och koordinater" });
+      } else if (!hasValidCoords) {
+        addressRows.push({ row: rowNum, name: name || id, address, hasCoords: false, issue: "Saknar giltiga koordinater" });
+      } else if (!address) {
+        addressRows.push({ row: rowNum, name: name || id, address: "", hasCoords: true, issue: "Saknar gatuadress" });
+      }
+
+      if (name) hasNameCount++;
+      if (typ) hasTypCount++;
+      if (id) hasIdCount++;
+      const missing: string[] = [];
+      if (!name) missing.push("Namn");
+      if (!id) missing.push("Id");
+      if (!typ) missing.push("Typ");
+      if (missing.length > 0) {
+        requiredFieldRows.push({ row: rowNum, name: name || id || `Rad ${rowNum}`, missingFields: missing });
+      }
+
+      const typLower = typ.toLowerCase();
+      const needsAccess = typLower.includes("fastighet") || typLower.includes("byggnad") || typLower.includes("rum") || typLower.includes("soprum") || typLower.includes("miljörum");
+      if (needsAccess) {
+        accessRelevantCount++;
+        const nyckelKod = (row["Metadata - Nyckel eller kod"] || "").trim();
+        if (nyckelKod) {
+          if (nyckelKod.toLowerCase().includes("nyckel")) hasKeyNumber++;
+          else hasAccessCode++;
+        } else {
+          accessInfoRows.push({ row: rowNum, name: name || id, issue: "Saknar accessinfo (nyckel/kod)" });
+        }
+      }
+
+      if (duplicateIdSet.has(id)) {
+        duplicateRows.push({ row: rowNum, name: name || id, modusId: id });
+      }
+    }
+
+    const addressOk = addressComplete;
+    const addressTotal = totalRows;
+    const addressPercent = totalRows > 0 ? Math.round((addressOk / addressTotal) * 100) : 100;
+
+    const requiredOk = totalRows - requiredFieldRows.length;
+    const requiredPercent = totalRows > 0 ? Math.round((requiredOk / totalRows) * 100) : 100;
+
+    const accessOk = accessRelevantCount > 0 ? (hasAccessCode + hasKeyNumber) : 0;
+    const accessPercent = accessRelevantCount > 0 ? Math.round((accessOk / accessRelevantCount) * 100) : 100;
+
+    const uniqueRowCount = totalRows - duplicateRows.length;
+    const duplicatePercent = totalRows > 0 ? Math.round((uniqueRowCount / totalRows) * 100) : 100;
+
+    const overallScore = Math.round((addressPercent + requiredPercent + accessPercent + duplicatePercent) / 4);
+
+    const scorecard = {
+      overallScore,
+      categories: {
+        addresses: {
+          label: "Adresser",
+          score: addressPercent,
+          ok: addressOk,
+          total: addressTotal,
+          details: { withCoords: addressWithCoords, withAddress: addressWithAddress, complete: addressComplete },
+          problemRows: addressRows.slice(0, 100),
+        },
+        requiredFields: {
+          label: "Obligatoriska fält",
+          score: requiredPercent,
+          ok: requiredOk,
+          total: totalRows,
+          details: { hasName: hasNameCount, hasId: hasIdCount, hasType: hasTypCount },
+          problemRows: requiredFieldRows.slice(0, 100),
+        },
+        accessInfo: {
+          label: "Tillgångsinformation",
+          score: accessPercent,
+          ok: accessOk,
+          total: accessRelevantCount,
+          details: { withAccessCode: hasAccessCode, withKeyNumber: hasKeyNumber, relevant: accessRelevantCount },
+          problemRows: accessInfoRows.slice(0, 100),
+        },
+        duplicates: {
+          label: "Dubbletter",
+          score: duplicatePercent,
+          ok: uniqueRowCount,
+          total: totalRows,
+          details: { uniqueIds: uniqueRowCount, duplicateIds: duplicateRows.length },
+          problemRows: duplicateRows.slice(0, 100),
+        },
+      },
+    };
+
     res.json({
       totalRows,
       columns,
@@ -584,6 +713,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       warnings,
       typeStats,
       emptyTypeCount,
+      scorecard,
     });
 }));
 

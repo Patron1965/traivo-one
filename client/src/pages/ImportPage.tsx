@@ -73,6 +73,25 @@ interface ModusEventsResult {
   };
 }
 
+interface ScorecardCategory {
+  label: string;
+  score: number;
+  ok: number;
+  total: number;
+  details: Record<string, number>;
+  problemRows: { row: number; name: string; [key: string]: unknown }[];
+}
+
+interface DataHealthScorecard {
+  overallScore: number;
+  categories: {
+    addresses: ScorecardCategory;
+    requiredFields: ScorecardCategory;
+    accessInfo: ScorecardCategory;
+    duplicates: ScorecardCategory;
+  };
+}
+
 interface ModusValidationResult {
   totalRows: number;
   columns: string[];
@@ -89,6 +108,7 @@ interface ModusValidationResult {
   missingParents: string[];
   metadataColumns: string[];
   warnings: string[];
+  scorecard: DataHealthScorecard;
 }
 
 interface ParsedRow {
@@ -220,6 +240,176 @@ function StepIndicator({ step, title, active, completed }: { step: number; title
         completed ? "text-green-700 dark:text-green-300" :
         "text-muted-foreground"
       }`}>{title}</span>
+    </div>
+  );
+}
+
+function getScorecardColor(score: number): string {
+  if (score >= 90) return "text-green-600";
+  if (score >= 70) return "text-yellow-600";
+  return "text-red-600";
+}
+
+function getScorecardBg(score: number): string {
+  if (score >= 90) return "bg-green-100 dark:bg-green-950/30 border-green-200 dark:border-green-800";
+  if (score >= 70) return "bg-yellow-100 dark:bg-yellow-950/30 border-yellow-200 dark:border-yellow-800";
+  return "bg-red-100 dark:bg-red-950/30 border-red-200 dark:border-red-800";
+}
+
+function getScorecardProgressColor(score: number): string {
+  if (score >= 90) return "bg-green-500";
+  if (score >= 70) return "bg-yellow-500";
+  return "bg-red-500";
+}
+
+function getScorecardLabel(score: number): string {
+  if (score >= 90) return "Utmärkt";
+  if (score >= 70) return "Acceptabel";
+  return "Behöver åtgärdas";
+}
+
+function getScorecardIcon(score: number) {
+  if (score >= 90) return <CheckCircle className="h-4 w-4 text-green-600" />;
+  if (score >= 70) return <AlertCircle className="h-4 w-4 text-yellow-600" />;
+  return <X className="h-4 w-4 text-red-600" />;
+}
+
+function DataHealthScorecardView({ scorecard, validation, onExportProblems }: { 
+  scorecard: DataHealthScorecard; 
+  validation: ModusValidationResult;
+  onExportProblems: () => void;
+}) {
+  const [expandedCategory, setExpandedCategory] = useState<string | null>(null);
+  const categories = Object.entries(scorecard.categories) as [string, ScorecardCategory][];
+
+  return (
+    <div className="space-y-4" data-testid="data-health-scorecard">
+      <div className={`flex items-center gap-4 p-4 rounded-lg border ${getScorecardBg(scorecard.overallScore)}`}>
+        <div className="flex flex-col items-center justify-center min-w-[80px]">
+          <div className={`text-3xl font-bold ${getScorecardColor(scorecard.overallScore)}`} data-testid="text-scorecard-overall">
+            {scorecard.overallScore}%
+          </div>
+          <div className={`text-xs font-medium ${getScorecardColor(scorecard.overallScore)}`}>
+            {getScorecardLabel(scorecard.overallScore)}
+          </div>
+        </div>
+        <div className="flex-1 space-y-1">
+          <div className="text-sm font-medium">Data Health Score</div>
+          <div className="text-xs text-muted-foreground">
+            Sammanfattning av datakvaliteten i {validation.totalRows} rader
+          </div>
+          <div className="w-full bg-muted rounded-full h-2 mt-2">
+            <div
+              className={`h-2 rounded-full transition-all ${getScorecardProgressColor(scorecard.overallScore)}`}
+              style={{ width: `${scorecard.overallScore}%` }}
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {categories.map(([key, cat]) => (
+          <button
+            key={key}
+            onClick={() => setExpandedCategory(expandedCategory === key ? null : key)}
+            className={`text-left p-3 rounded-lg border transition-all hover:shadow-sm ${
+              expandedCategory === key ? "ring-2 ring-blue-400" : ""
+            } ${cat.score >= 90 ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" : 
+                cat.score >= 70 ? "bg-yellow-50 dark:bg-yellow-950/20 border-yellow-200 dark:border-yellow-800" : 
+                "bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-800"}`}
+            data-testid={`scorecard-category-${key}`}
+          >
+            <div className="flex items-center gap-2 mb-1">
+              {getScorecardIcon(cat.score)}
+              <span className="text-xs font-medium truncate">{cat.label}</span>
+            </div>
+            <div className={`text-xl font-bold ${getScorecardColor(cat.score)}`}>{cat.score}%</div>
+            <div className="text-xs text-muted-foreground">{cat.ok} / {cat.total}</div>
+            <div className="w-full bg-muted rounded-full h-1.5 mt-2">
+              <div
+                className={`h-1.5 rounded-full ${getScorecardProgressColor(cat.score)}`}
+                style={{ width: `${cat.score}%` }}
+              />
+            </div>
+          </button>
+        ))}
+      </div>
+
+      {expandedCategory && scorecard.categories[expandedCategory as keyof typeof scorecard.categories] && (() => {
+        const cat = scorecard.categories[expandedCategory as keyof typeof scorecard.categories];
+        return (
+          <div className="border rounded-lg p-4 space-y-3 bg-muted/30" data-testid={`scorecard-detail-${expandedCategory}`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {getScorecardIcon(cat.score)}
+                <span className="font-medium text-sm">{cat.label} — detaljer</span>
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => setExpandedCategory(null)}>
+                <X className="h-3 w-3" />
+              </Button>
+            </div>
+
+            <div className="flex flex-wrap gap-3 text-xs">
+              {Object.entries(cat.details).map(([k, v]) => (
+                <div key={k} className="px-2 py-1 bg-background rounded border">
+                  <span className="text-muted-foreground">{
+                    k === "withCoords" ? "Med koordinater" :
+                    k === "withAddress" ? "Med adress" :
+                    k === "complete" ? "Komplett" :
+                    k === "hasName" ? "Har namn" :
+                    k === "hasId" ? "Har ID" :
+                    k === "hasType" ? "Har typ" :
+                    k === "withAccessCode" ? "Med portkod" :
+                    k === "withKeyNumber" ? "Med nyckel" :
+                    k === "relevant" ? "Relevanta" :
+                    k === "uniqueIds" ? "Unika" :
+                    k === "duplicateIds" ? "Dubbletter" :
+                    k
+                  }: </span>
+                  <span className="font-medium">{v}</span>
+                </div>
+              ))}
+            </div>
+
+            {cat.problemRows.length > 0 && (
+              <div>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Rader med problem ({cat.problemRows.length}{cat.problemRows.length >= 100 ? "+" : ""})
+                </p>
+                <ScrollArea className="h-40 border rounded-md">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-16 text-xs">Rad</TableHead>
+                        <TableHead className="text-xs">Namn</TableHead>
+                        <TableHead className="text-xs">Problem</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cat.problemRows.map((pr, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="font-mono text-xs">{pr.row}</TableCell>
+                          <TableCell className="text-xs">{pr.name}</TableCell>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {(pr as any).issue || (pr as any).missingFields?.join(", ") || (pr as any).modusId || ""}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" onClick={onExportProblems} data-testid="button-export-problems">
+          <Download className="h-4 w-4 mr-2" />
+          Exportera problemrader (CSV)
+        </Button>
+      </div>
     </div>
   );
 }
@@ -528,6 +718,33 @@ export default function ImportPage() {
     }
   };
 
+  const exportProblemRows = useCallback(() => {
+    if (!modusValidation?.scorecard) return;
+    const sc = modusValidation.scorecard;
+    const csvRows: string[][] = [["Rad", "Namn", "Kategori", "Problem"]];
+    
+    for (const [key, cat] of Object.entries(sc.categories)) {
+      for (const pr of cat.problemRows) {
+        csvRows.push([
+          String(pr.row),
+          String(pr.name),
+          cat.label,
+          String((pr as any).issue || (pr as any).missingFields?.join(", ") || (pr as any).modusId || ""),
+        ]);
+      }
+    }
+    
+    const csv = csvRows.map(r => r.map(c => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "problemrader_import.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+    toast({ title: "Exporterat", description: "Problemrader exporterade till CSV" });
+  }, [modusValidation, toast]);
+
   const handleModusValidate = async (file: File) => {
     setModusObjectFile(file);
     setModusValidation(null);
@@ -826,10 +1043,10 @@ export default function ImportPage() {
               </div>
 
               {modusValidation && !modusResults.objects && (
-                <div className="space-y-3 p-4 border rounded-lg bg-muted/30">
+                <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
                   <div className="flex items-center gap-2 mb-2">
                     <Eye className="h-4 w-4 text-blue-600" />
-                    <span className="font-medium text-sm">Valideringsresultat</span>
+                    <span className="font-medium text-sm">Data Health Scorecard</span>
                     <Badge variant="secondary" className="text-xs">{modusObjectFile?.name}</Badge>
                   </div>
 
@@ -869,36 +1086,20 @@ export default function ImportPage() {
                     )}
                   </div>
 
-                  {(modusValidation.missingFieldsCount > 0 || modusValidation.duplicateModusIdsCount > 0 || modusValidation.invalidCoordinatesCount > 0 || modusValidation.missingParents.length > 0 || modusValidation.warnings.length > 0) && (
+                  {modusValidation.scorecard && (
+                    <DataHealthScorecardView
+                      scorecard={modusValidation.scorecard}
+                      validation={modusValidation}
+                      onExportProblems={exportProblemRows}
+                    />
+                  )}
+
+                  {modusValidation.warnings.length > 0 && (
                     <div className="space-y-2 border-t pt-3">
                       <p className="text-xs font-medium text-orange-600 flex items-center gap-1">
                         <AlertCircle className="h-3 w-3" />
-                        Varningar
+                        Övriga varningar
                       </p>
-                      {modusValidation.missingFieldsCount > 0 && (
-                        <div className="text-xs text-muted-foreground flex items-start gap-2">
-                          <X className="h-3 w-3 text-red-500 mt-0.5 shrink-0" />
-                          <span>{modusValidation.missingFieldsCount} rader saknar obligatoriska fält (Id eller Namn)</span>
-                        </div>
-                      )}
-                      {modusValidation.duplicateModusIdsCount > 0 && (
-                        <div className="text-xs text-muted-foreground flex items-start gap-2">
-                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
-                          <span>{modusValidation.duplicateModusIdsCount} duplicerade Modus-ID i filen</span>
-                        </div>
-                      )}
-                      {modusValidation.invalidCoordinatesCount > 0 && (
-                        <div className="text-xs text-muted-foreground flex items-start gap-2">
-                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
-                          <span>{modusValidation.invalidCoordinatesCount} rader med ogiltiga koordinater (utanför Sverige)</span>
-                        </div>
-                      )}
-                      {modusValidation.missingParents.length > 0 && (
-                        <div className="text-xs text-muted-foreground flex items-start gap-2">
-                          <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
-                          <span>{modusValidation.missingParents.length} saknade föräldra-ID:n</span>
-                        </div>
-                      )}
                       {modusValidation.warnings.map((w, i) => (
                         <div key={i} className="text-xs text-muted-foreground flex items-start gap-2">
                           <AlertCircle className="h-3 w-3 text-orange-500 mt-0.5 shrink-0" />
@@ -920,14 +1121,23 @@ export default function ImportPage() {
                       ) : (
                         <Upload className="h-4 w-4 mr-2" />
                       )}
-                      Starta import ({modusValidation.totalRows} objekt)
+                      {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70
+                        ? "Importera ändå"
+                        : `Starta import (${modusValidation.totalRows} objekt)`}
                     </Button>
+                    {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70 && (
+                      <Badge variant="destructive" className="text-xs">
+                        Låg datakvalitet — överväg att åtgärda först
+                      </Badge>
+                    )}
                     <Button
                       variant="ghost"
                       onClick={() => { setModusValidation(null); setModusObjectFile(null); }}
                       data-testid="button-modus-cancel-validation"
                     >
-                      Avbryt
+                      {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70
+                        ? "Åtgärda först"
+                        : "Avbryt"}
                     </Button>
                   </div>
                 </div>
