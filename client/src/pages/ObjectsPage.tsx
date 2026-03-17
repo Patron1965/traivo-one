@@ -921,7 +921,7 @@ export default function ObjectsPage() {
               <div className="relative flex-1 min-w-[200px] max-w-md">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input 
-                  placeholder="Sök objekt, kund, adress, stad..." 
+                  placeholder={`Sök ${t("object_plural").toLowerCase()}, kund, adress, stad...`} 
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-9"
@@ -1007,7 +1007,7 @@ export default function ObjectsPage() {
             <div className="flex items-center gap-4 flex-wrap">
               <Select value={typeFilter} onValueChange={setTypeFilter}>
                 <SelectTrigger className="w-[160px]" data-testid="select-type-filter">
-                  <SelectValue placeholder="Objekttyp" />
+                  <SelectValue placeholder={t("asset_type")} />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Alla typer</SelectItem>
@@ -1300,7 +1300,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Skapa nytt objekt</DialogTitle>
+            <DialogTitle>Skapa nytt {t("object_singular").toLowerCase()}</DialogTitle>
             <DialogDescription>
               Fyll i uppgifterna för det nya objektet.
             </DialogDescription>
@@ -1316,7 +1316,7 @@ Fastighet A,FAST-100,fastighet,Storgatan 1,Stockholm,code,1234,10"
               />
             </div>
             <div>
-              <Label>Objekttyp</Label>
+              <Label>{t("asset_type")}</Label>
               <Select value={newObject.objectType} onValueChange={(v) => setNewObject({ ...newObject, objectType: v })}>
                 <SelectTrigger data-testid="select-new-object-type">
                   <SelectValue />

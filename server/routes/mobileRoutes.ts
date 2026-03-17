@@ -1291,7 +1291,10 @@ app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async
 app.get("/api/mobile/terminology", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
-    const tenantId = resource?.tenantId || 1;
+    if (!resource) {
+      return res.status(404).json({ error: "Resurs hittades inte" });
+    }
+    const tenantId = resource.tenantId;
     const { tenantLabels, DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } = await import("@shared/schema");
     const labels = await db.select().from(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
     const tenant = await storage.getTenant(tenantId);
