@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "idx_route_feedback_unique_daily" ON "route_feedback" USING btree ("tenant_id","resource_id","date");

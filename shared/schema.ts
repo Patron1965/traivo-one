@@ -4218,6 +4218,7 @@ export const routeFeedback = pgTable("route_feedback", {
 }, (table) => [
   index("idx_route_feedback_tenant").on(table.tenantId, table.date),
   index("idx_route_feedback_resource").on(table.resourceId, table.date),
+  uniqueIndex("idx_route_feedback_unique_daily").on(table.tenantId, table.resourceId, table.date),
 ]);
 
 export const insertRouteFeedbackSchema = createInsertSchema(routeFeedback).omit({ id: true, createdAt: true });
