@@ -1622,15 +1622,17 @@ app.put("/api/terminology", requireAdmin, asyncHandler(async (req, res) => {
       throw new ValidationError("labels krävs som objekt");
     }
     const allowedKeys = new Set(Object.keys(DEFAULT_TERMINOLOGY));
-    await db.delete(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
-    for (const [key, value] of Object.entries(updates)) {
-      if (typeof key !== "string" || typeof value !== "string") continue;
-      if (!allowedKeys.has(key)) continue;
-      const trimmedValue = value.trim();
-      if (trimmedValue && trimmedValue.length <= 100) {
-        await db.insert(tenantLabels).values({ tenantId, labelKey: key, labelValue: trimmedValue });
+    await db.transaction(async (tx) => {
+      await tx.delete(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
+      for (const [key, value] of Object.entries(updates)) {
+        if (typeof key !== "string" || typeof value !== "string") continue;
+        if (!allowedKeys.has(key)) continue;
+        const trimmedValue = value.trim();
+        if (trimmedValue && trimmedValue.length <= 100) {
+          await tx.insert(tenantLabels).values({ tenantId, labelKey: key, labelValue: trimmedValue });
+        }
       }
-    }
+    });
     res.json({ success: true });
 }));
 
