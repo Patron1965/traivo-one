@@ -56,6 +56,7 @@ import {
   ListChecks,
   Activity,
   Clock,
+  ArrowLeft,
 } from "lucide-react";
 
 function useNavItems() {
@@ -278,6 +279,15 @@ export function TopNav() {
           <TenantLogo />
 
           <nav className="hidden md:flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              data-testid="button-back"
+              onClick={() => window.history.back()}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
             <Link href="/">
               <Button
                 variant="ghost"
