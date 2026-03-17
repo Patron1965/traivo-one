@@ -73,13 +73,23 @@ interface ModusEventsResult {
   };
 }
 
+interface ScorecardProblemRow {
+  row: number;
+  name: string;
+  issue?: string;
+  missingFields?: string[];
+  modusId?: string;
+  address?: string;
+  hasCoords?: boolean;
+}
+
 interface ScorecardCategory {
   label: string;
   score: number;
   ok: number;
   total: number;
   details: Record<string, number>;
-  problemRows: { row: number; name: string; [key: string]: unknown }[];
+  problemRows: ScorecardProblemRow[];
 }
 
 interface DataHealthScorecard {
@@ -391,7 +401,7 @@ function DataHealthScorecardView({ scorecard, validation, onExportProblems }: {
                           <TableCell className="font-mono text-xs">{pr.row}</TableCell>
                           <TableCell className="text-xs">{pr.name}</TableCell>
                           <TableCell className="text-xs text-muted-foreground">
-                            {(pr as any).issue || (pr as any).missingFields?.join(", ") || (pr as any).modusId || ""}
+                            {pr.issue || pr.missingFields?.join(", ") || pr.modusId || ""}
                           </TableCell>
                         </TableRow>
                       ))}
@@ -729,7 +739,7 @@ export default function ImportPage() {
           String(pr.row),
           String(pr.name),
           cat.label,
-          String((pr as any).issue || (pr as any).missingFields?.join(", ") || (pr as any).modusId || ""),
+          String(pr.issue || pr.missingFields?.join(", ") || pr.modusId || ""),
         ]);
       }
     }
@@ -786,15 +796,25 @@ export default function ImportPage() {
   const handleModusImportAfterValidation = async () => {
     if (!modusObjectFile) return;
     setImportProgress(null);
-    await handleModusUpload("objects", modusObjectFile);
+    const scorecardSummary = modusValidation?.scorecard ? {
+      overallScore: modusValidation.scorecard.overallScore,
+      addresses: modusValidation.scorecard.categories.addresses.score,
+      requiredFields: modusValidation.scorecard.categories.requiredFields.score,
+      accessInfo: modusValidation.scorecard.categories.accessInfo.score,
+      duplicates: modusValidation.scorecard.categories.duplicates.score,
+    } : null;
+    await handleModusUpload("objects", modusObjectFile, scorecardSummary);
     setModusObjectFile(null);
     setModusValidation(null);
   };
 
-  const handleModusUpload = async (type: ModusImportType, file: File) => {
+  const handleModusUpload = async (type: ModusImportType, file: File, scorecardSummary?: Record<string, number> | null) => {
     setModusUploading(type);
     const formData = new FormData();
     formData.append("file", file);
+    if (scorecardSummary) {
+      formData.append("scorecardSummary", JSON.stringify(scorecardSummary));
+    }
     
     if (type === "objects") {
       setImportProgress({ status: "running", phase: "startar", processed: 0, total: 0, created: 0, updated: 0, errors: 0 });

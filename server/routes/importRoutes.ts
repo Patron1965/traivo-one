@@ -666,7 +666,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
           ok: addressOk,
           total: addressTotal,
           details: { withCoords: addressWithCoords, withAddress: addressWithAddress, complete: addressComplete },
-          problemRows: addressRows.slice(0, 100),
+          problemRows: addressRows,
         },
         requiredFields: {
           label: "Obligatoriska fält",
@@ -674,7 +674,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
           ok: requiredOk,
           total: totalRows,
           details: { hasName: hasNameCount, hasId: hasIdCount, hasType: hasTypCount },
-          problemRows: requiredFieldRows.slice(0, 100),
+          problemRows: requiredFieldRows,
         },
         accessInfo: {
           label: "Tillgångsinformation",
@@ -682,7 +682,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
           ok: accessOk,
           total: accessRelevantCount,
           details: { withAccessCode: hasAccessCode, withKeyNumber: hasKeyNumber, relevant: accessRelevantCount },
-          problemRows: accessInfoRows.slice(0, 100),
+          problemRows: accessInfoRows,
         },
         duplicates: {
           label: "Dubbletter",
@@ -690,7 +690,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
           ok: uniqueRowCount,
           total: totalRows,
           details: { uniqueIds: uniqueRowCount, duplicateIds: duplicateRows.length },
-          problemRows: duplicateRows.slice(0, 100),
+          problemRows: duplicateRows,
         },
       },
     };
@@ -747,6 +747,13 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
     const tenantId = getTenantIdWithFallback(req);
     const importBatchId = crypto.randomUUID();
     const totalRows = (result.data as unknown[]).length;
+    
+    let scorecardSummary: Record<string, number> | null = null;
+    try {
+      if (req.body?.scorecardSummary) {
+        scorecardSummary = JSON.parse(req.body.scorecardSummary);
+      }
+    } catch {}
     
     importJobs.set(importBatchId, { tenantId, status: "running", phase: "kunder", processed: 0, total: totalRows, created: 0, updated: 0, errors: 0, listeners: new Set() });
     
@@ -1011,6 +1018,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
       metadataColumns: metadataColumns.map(c => c.metadataName),
       errors: [...errors, ...metadataErrors].slice(0, 50),
       totalRows: (result.data as unknown[]).length,
+      scorecardSummary,
     };
     
     job.status = "completed";
