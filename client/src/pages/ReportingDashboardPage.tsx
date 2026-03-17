@@ -96,6 +96,11 @@ const RATING_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
 function RouteFeedbackTab() {
   const [feedbackResourceFilter, setFeedbackResourceFilter] = useState<string>("all");
   const [feedbackDateRange, setFeedbackDateRange] = useState<string>("30d");
+  const [feedbackAreaFilter, setFeedbackAreaFilter] = useState<string>("all");
+
+  const { data: clusters } = useQuery<Cluster[]>({
+    queryKey: ["/api/clusters"],
+  });
 
   const dateParams = useMemo(() => {
     const end = new Date();
@@ -110,7 +115,8 @@ function RouteFeedbackTab() {
     };
   }, [feedbackDateRange]);
 
-  const summaryUrl = `/api/route-feedback/summary?startDate=${dateParams.startDate}&endDate=${dateParams.endDate}`;
+  const clusterParam = feedbackAreaFilter !== "all" ? `&clusterId=${feedbackAreaFilter}` : "";
+  const summaryUrl = `/api/route-feedback/summary?startDate=${dateParams.startDate}&endDate=${dateParams.endDate}${clusterParam}`;
   const { data: summary, isLoading, isError } = useQuery<{
     avgRating: number;
     totalCount: number;
@@ -121,7 +127,7 @@ function RouteFeedbackTab() {
     queryKey: [summaryUrl],
   });
 
-  const listUrl = `/api/route-feedback?limit=50&startDate=${dateParams.startDate}&endDate=${dateParams.endDate}${feedbackResourceFilter !== "all" ? `&resourceId=${feedbackResourceFilter}` : ""}`;
+  const listUrl = `/api/route-feedback?limit=50&startDate=${dateParams.startDate}&endDate=${dateParams.endDate}${feedbackResourceFilter !== "all" ? `&resourceId=${feedbackResourceFilter}` : ""}${clusterParam}`;
   const { data: recentFeedback } = useQuery<Array<{
     id: string;
     resourceName: string;
@@ -223,6 +229,19 @@ function RouteFeedbackTab() {
               <SelectItem value="all">Alla förare</SelectItem>
               {summary.byResource.map((r) => (
                 <SelectItem key={r.resourceId} value={r.resourceId}>{r.resourceName}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {clusters && clusters.length > 0 && (
+          <Select value={feedbackAreaFilter} onValueChange={setFeedbackAreaFilter}>
+            <SelectTrigger className="w-[200px]" data-testid="feedback-area-filter">
+              <SelectValue placeholder="Alla områden" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Alla områden</SelectItem>
+              {clusters.map((c) => (
+                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>
