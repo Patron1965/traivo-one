@@ -366,6 +366,9 @@ function DataHealthScorecardView({ scorecard, validation, onExportProblems }: {
                     k === "withCoords" ? "Med koordinater" :
                     k === "withAddress" ? "Med adress" :
                     k === "complete" ? "Komplett" :
+                    k === "geocoded" ? "Geokodade" :
+                    k === "geocodeFailed" ? "Geokodning misslyckad" :
+                    k === "geocodeSkipped" ? "Ej testade" :
                     k === "hasName" ? "Har namn" :
                     k === "hasId" ? "Har ID" :
                     k === "hasType" ? "Har typ" :

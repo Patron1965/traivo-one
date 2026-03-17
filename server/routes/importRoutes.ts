@@ -566,7 +566,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       }
     }
 
-    const addressRows: { row: number; name: string; address: string; hasCoords: boolean; issue: string }[] = [];
+    const addressRows: { row: number; name: string; address: string; hasCoords: boolean; issue: string; geocodeStatus?: string }[] = [];
     const requiredFieldRows: { row: number; name: string; missingFields: string[] }[] = [];
     const accessInfoRows: { row: number; name: string; issue: string }[] = [];
     const duplicateRows: { row: number; name: string; modusId: string }[] = [];
@@ -574,6 +574,8 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
     let addressWithCoords = 0;
     let addressWithAddress = 0;
     let addressComplete = 0;
+    let geocodedCount = 0;
+    let geocodeFailedCount = 0;
     let hasNameCount = 0;
     let hasTypCount = 0;
     let hasIdCount = 0;
@@ -586,6 +588,8 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
     for (const dup of duplicateModusIds) {
       duplicateIdSet.add(dup.modusId);
     }
+
+    const rowsNeedingGeocode: { index: number; rowNum: number; address: string; city: string; name: string; id: string }[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
@@ -606,11 +610,12 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       if (hasValidCoords && address) {
         addressComplete++;
       } else if (!hasValidCoords && !address) {
-        addressRows.push({ row: rowNum, name: name || id, address: "", hasCoords: false, issue: "Saknar adress och koordinater" });
-      } else if (!hasValidCoords) {
-        addressRows.push({ row: rowNum, name: name || id, address, hasCoords: false, issue: "Saknar giltiga koordinater" });
+        addressRows.push({ row: rowNum, name: name || id, address: "", hasCoords: false, issue: "Saknar adress och koordinater", geocodeStatus: "missing" });
+      } else if (!hasValidCoords && address) {
+        rowsNeedingGeocode.push({ index: addressRows.length, rowNum, address, city, name: name || id, id });
+        addressRows.push({ row: rowNum, name: name || id, address, hasCoords: false, issue: "Saknar koordinater — geokodas", geocodeStatus: "pending" });
       } else if (!address) {
-        addressRows.push({ row: rowNum, name: name || id, address: "", hasCoords: true, issue: "Saknar gatuadress" });
+        addressRows.push({ row: rowNum, name: name || id, address: "", hasCoords: true, issue: "Saknar gatuadress", geocodeStatus: "coords_only" });
       }
 
       if (name) hasNameCount++;
@@ -642,7 +647,34 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
       }
     }
 
-    const addressOk = addressComplete;
+    const GEOCODE_BATCH_LIMIT = 50;
+    const geocodeBatch = rowsNeedingGeocode.slice(0, GEOCODE_BATCH_LIMIT);
+    for (const item of geocodeBatch) {
+      try {
+        const fullAddress = item.city ? `${item.address}, ${item.city}, Sverige` : `${item.address}, Sverige`;
+        const geoResult = await geocodeAddress(fullAddress, tenantId);
+        if (geoResult && geoResult.latitude && geoResult.longitude) {
+          geocodedCount++;
+          addressRows[item.index].geocodeStatus = "geocoded";
+          addressRows[item.index].issue = "Geokodad från adress";
+        } else {
+          geocodeFailedCount++;
+          addressRows[item.index].geocodeStatus = "failed";
+          addressRows[item.index].issue = "Kunde inte geokodas";
+        }
+      } catch {
+        geocodeFailedCount++;
+        addressRows[item.index].geocodeStatus = "failed";
+        addressRows[item.index].issue = "Geokodning misslyckades";
+      }
+    }
+    const geocodeSkipped = rowsNeedingGeocode.length - geocodeBatch.length;
+    for (let j = GEOCODE_BATCH_LIMIT; j < rowsNeedingGeocode.length; j++) {
+      addressRows[rowsNeedingGeocode[j].index].geocodeStatus = "skipped";
+      addressRows[rowsNeedingGeocode[j].index].issue = "Ej geokodad (batchgräns)";
+    }
+
+    const addressOk = addressComplete + geocodedCount;
     const addressTotal = totalRows;
     const addressPercent = totalRows > 0 ? Math.round((addressOk / addressTotal) * 100) : 100;
 
@@ -665,7 +697,7 @@ app.post("/api/import/modus/validate", upload.single("file"), asyncHandler(async
           score: addressPercent,
           ok: addressOk,
           total: addressTotal,
-          details: { withCoords: addressWithCoords, withAddress: addressWithAddress, complete: addressComplete },
+          details: { withCoords: addressWithCoords, withAddress: addressWithAddress, complete: addressComplete, geocoded: geocodedCount, geocodeFailed: geocodeFailedCount, geocodeSkipped },
           problemRows: addressRows,
         },
         requiredFields: {
@@ -1031,7 +1063,12 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         updated: updated.length,
         errors: errors.length + metadataErrors.length,
         scorecardSummary: scorecardSummary || null,
-        metadata: { metadataWritten, metadataColumns: metadataColumns.map(c => c.metadataName), parentsUpdated, customersCreated: customerNames.size },
+        metadata: {
+          metadataWritten,
+          metadataColumns: metadataColumns.map(c => c.metadataName),
+          parentsUpdated,
+          customersCreated: customerNames.size,
+        },
       });
     } catch (e) {
       console.error("Failed to persist import batch:", e);
