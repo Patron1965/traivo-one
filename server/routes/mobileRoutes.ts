@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable } from "@shared/schema";
 import { notificationService } from "../notifications";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
 
@@ -1207,6 +1207,62 @@ app.get("/api/mobile/notifications/count", isMobileAuthenticated, asyncHandler(a
     const resourceId = req.mobileResourceId;
     const unreadCount = await storage.getUnreadNotificationCount(resourceId);
     res.json({ unreadCount });
+}));
+
+// ============================================
+// ROUTE FEEDBACK — drivers rate daily routes
+// ============================================
+app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const schema = z.object({
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      rating: z.number().int().min(1).max(5),
+      reasonCategory: z.string().optional(),
+      freeText: z.string().max(1000).optional(),
+      workSessionId: z.string().optional(),
+    });
+
+    const parseResult = schema.safeParse(req.body);
+    if (!parseResult.success) {
+      throw new ValidationError(formatZodError(parseResult.error));
+    }
+
+    const existing = await storage.getRouteFeedback(resource.tenantId, {
+      resourceId,
+      startDate: parseResult.data.date,
+      endDate: parseResult.data.date,
+      limit: 1,
+    });
+
+    let feedback;
+    if (existing.length > 0) {
+      const [updated] = await db.update(routeFeedbackTable)
+        .set({
+          rating: parseResult.data.rating,
+          reasonCategory: parseResult.data.reasonCategory || null,
+          freeText: parseResult.data.freeText || null,
+          workSessionId: parseResult.data.workSessionId || null,
+        })
+        .where(eq(routeFeedbackTable.id, existing[0].id))
+        .returning();
+      feedback = updated;
+    } else {
+      feedback = await storage.createRouteFeedback({
+        tenantId: resource.tenantId,
+        resourceId,
+        date: parseResult.data.date,
+        rating: parseResult.data.rating,
+        reasonCategory: parseResult.data.reasonCategory || null,
+        freeText: parseResult.data.freeText || null,
+        workSessionId: parseResult.data.workSessionId || null,
+      });
+    }
+
+    console.log(`[mobile] Route feedback: resource ${resourceId} rated ${parseResult.data.date} as ${parseResult.data.rating}/5`);
+    res.status(existing.length > 0 ? 200 : 201).json(feedback);
 }));
 
 }

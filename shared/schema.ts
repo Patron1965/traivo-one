@@ -4202,6 +4202,28 @@ export const insertIotSignalSchema = createInsertSchema(iotSignals).omit({ id: t
 export type InsertIotSignal = z.infer<typeof insertIotSignalSchema>;
 export type IotSignal = typeof iotSignals.$inferSelect;
 
+// ============================================
+// Route Feedback — drivers rate daily routes
+// ============================================
+export const routeFeedback = pgTable("route_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull(),
+  resourceId: varchar("resource_id").notNull(),
+  date: varchar("date").notNull(),
+  rating: integer("rating").notNull(),
+  reasonCategory: varchar("reason_category"),
+  freeText: text("free_text"),
+  workSessionId: varchar("work_session_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_route_feedback_tenant").on(table.tenantId, table.date),
+  index("idx_route_feedback_resource").on(table.resourceId, table.date),
+]);
+
+export const insertRouteFeedbackSchema = createInsertSchema(routeFeedback).omit({ id: true, createdAt: true });
+export type InsertRouteFeedback = z.infer<typeof insertRouteFeedbackSchema>;
+export type RouteFeedback = typeof routeFeedback.$inferSelect;
+
 export type TimeSummaryResponse = {
   week: number;
   year: number;

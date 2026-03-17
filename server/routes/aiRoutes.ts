@@ -132,6 +132,21 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
           description: "Hämta systemstatistik (antal ordrar, resurser, objekt)",
           parameters: { type: "object", properties: {}, required: [] }
         }
+      },
+      {
+        type: "function",
+        function: {
+          name: "get_route_feedback",
+          description: "Hämta rutt-feedback från förare (betyg 1-5 på dagliga rutter). Kan filtrera på datum.",
+          parameters: {
+            type: "object",
+            properties: {
+              startDate: { type: "string", description: "Startdatum YYYY-MM-DD" },
+              endDate: { type: "string", description: "Slutdatum YYYY-MM-DD" }
+            },
+            required: []
+          }
+        }
       }
     ];
 
@@ -314,6 +329,25 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
           });
         }
         
+        case "get_route_feedback": {
+          const startDate = args.startDate as string | undefined;
+          const endDate = args.endDate as string | undefined;
+          const summary = await storage.getRouteFeedbackSummary(tenantId, { startDate, endDate });
+          const resources = await storage.getResources(tenantId);
+          const resourceMap = new Map(resources.map(r => [r.id, r.name]));
+          return JSON.stringify({
+            snittbetyg: summary.avgRating,
+            antalSvar: summary.totalCount,
+            betygsfördelning: summary.ratingDistribution,
+            perKategori: summary.byCategory,
+            perFörare: summary.byResource.map(r => ({
+              namn: resourceMap.get(r.resourceId) || r.resourceId,
+              snittbetyg: r.avgRating,
+              antal: r.count,
+            })),
+          });
+        }
+
         default:
           return JSON.stringify({ error: "Okänt verktyg" });
       }

@@ -1,7 +1,7 @@
 # Traivo - AI-Driven Field Service Planning Platform
 
 ## Overview
-Traivo is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full flerföretagsstöd (multi-tenant).
+Traivo is an AI-driven platform designed to optimize field service operations for Nordic companies, starting with waste management. It aims to transition from manual management to AI-driven optimization, providing real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's ambition is to become the standard platform for Nordic field service, scaling into a commercial SaaS solution with full multi-tenant support.
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
@@ -15,18 +15,18 @@ Traivo is an AI-driven platform designed to optimize field service operations fo
 The Traivo platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
 
 ### UI/UX Decisions
-The user interface includes a sticky TopNav, global search, user utilities, a mobile-friendly hamburger menu, Floating Action Button, QuickStats, a drag-and-drop WeekPlanner, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Mobile interfaces for field technicians feature a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help, progressive loading, white-label multi-tenancy, and an AI Command Center. An interactive Tour Guide system provides step-by-step onboarding, and role-based navigation filtering ensures relevant options are displayed.
+The user interface includes a sticky TopNav, global search, user utilities, a mobile-friendly hamburger menu, Floating Action Button, QuickStats, a drag-and-drop WeekPlanner, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Mobile interfaces for field technicians feature a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help, progressive loading, white-label multi-tenancy, an AI Command Center, interactive Tour Guide, and role-based navigation filtering.
 
 ### Technical Implementations
 - **Frontend:** React, TypeScript, Vite.
-- **Backend:** Express.js with modular route architecture (`server/routes/` — 16 route modules: customerRoutes, objectRoutes, resourceRoutes, workOrderRoutes, importRoutes, configRoutes, clusterRoutes, aiRoutes, mobileRoutes, plannerRoutes, kpiRoutes, fortnoxRoutes, orderConceptRoutes, portalRoutes, extendedRoutes, iotRoutes). Shared helpers in `server/routes/helpers.ts`. All 544 route handlers use `asyncHandler` wrapper (`server/asyncHandler.ts`) with centralized error handling via `AppError` classes (`server/errors.ts`: NotFoundError, ValidationError, ConflictError, ForbiddenError).
+- **Backend:** Express.js with modular route architecture and centralized error handling.
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
-- **AI Integration:** AI-first approach with OpenAI (gpt-4o-mini, gpt-4o) for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner.
+- **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner.
 - **MCP Server:** Enables external AI assistants to interact with Traivo data via SSE.
-- **Modus 2.0 Import System:** Dedicated `/import` page for step-by-step data migration from Modus 2.0 via CSV, supporting objects, tasks, invoice lines, and events. Features include upsert logic, pre-import validation, batch tracking, and SSE-based real-time progress feedback.
-- **Geoapify Geocoding Integration:** Address resolution via Geoapify Geocoding API (replaced Google Geocoding to eliminate costs), with fallback to Nominatim. Used for precise distance calculations in route optimization.
-- **Performance:** Database indexes, server-side pagination, optimized WeekPlanner loading, lazy object loading, and Address Search/Autocomplete with Geoapify Geocoding and OpenStreetMap Nominatim fallback.
+- **Modus 2.0 Import System:** Dedicated import page for step-by-step data migration via CSV with validation and real-time progress.
+- **Geoapify Geocoding Integration:** Address resolution via Geoapify Geocoding API with Nominatim fallback for precise distance calculations.
+- **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.
 - **Offline Architecture:** Complete offline-first architecture for mobile field workers using IndexedDB.
 - **Automatic Anomaly Monitoring:** Background job for detecting operational anomalies and broadcasting alerts.
@@ -34,38 +34,39 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Checklist Templates:** Article-type-based inspection checklist templates with admin CRUD.
 - **Driver Push Notifications:** Persistent notification storage with REST polling and WebSocket integration.
 - **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, comprehensive work order management, and per-object article management with resolved pricing.
-- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, and self-booking. Configurable portal booking options (service types, time slots, request types) stored in tenant settings JSONB with admin API (`GET/PUT /api/portal-booking-config`), server-side enforcement on `POST /api/portal/self-bookings`, and dynamic `SelfBookingWidget` that fetches options from `/api/portal/booking-options`.
+- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, self-booking with configurable options, and dynamic widget.
 - **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality with cluster-aware resource assignment.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
 - **Environmental Statistics & Certificates:** Tracking mileage, fuel, CO2, and generation of annual environmental certificates.
 - **Metadata-triggers:** System for listing objects with deviations and tracking issue history.
 - **Industry Packages System:** Predefined templates for different industries with configurable articles and metadata.
 - **SMS Infrastructure:** Unified multi-channel notification service supporting email and SMS.
+- **Route Feedback System:** Driver daily route ratings, reason categories, free text, and reporting UI with KPI cards and charts. AI field assistant tool for querying feedback data.
 - **Planner Map (`/planner/map`):** Real-time driver/job map with real road geometry via Geoapify, per-route filtering, status filter chips, enhanced job popups, colored driver avatars, and route information.
 - **Historical Map View:** Playback of daily GPS movement patterns per resource with timeline slider and KPI overlay.
 - **API Cost Monitoring Dashboard:** Admin-only dashboard for real-time monitoring of external API costs.
 - **Reporting & KPI Dashboard:** Enhanced `/reporting` page with tabs for overview, productivity, completion, deviations, resources, areas, and customers, featuring Recharts diagrams.
 - **Execution Codes:** Many-to-many system mapping resource capabilities to task requirements.
-- **Resource Profiles (Utföranderoller):** Profile templates defining execution codes, equipment types, cost center, project code, and service areas. Profiles are assigned to resources and used in auto-planning capability matching. Admin UI in TenantConfigPage "Utföranderoller" tab. WeekPlanner resource filter includes profile-based quick filtering. Teams can be linked to profiles via `teams.profileIds` — team members automatically inherit profile execution codes for auto-planning capability matching. Team profile assignment UI in UserManagementPage team dialog.
-- **Work Sessions & Time Tracking (Snöret):** Complete work session management system at `/work-sessions` with `workSessions` and `workEntries` tables. Features include check-in/check-out, time entries by type (work/travel/setup/break/rest), weekly time summaries with progress bars, night rest (<11h) and weekly rest (<36h) labor rule violation detection, and payroll CSV export. API: GET/POST/PUT/DELETE `/api/work-sessions`, `/api/work-entries`, plus `/api/time-summary` and `/api/payroll-export`.
-- **Equipment Sharing & Shift Collision Control:** `equipment_bookings` table tracking vehicle/equipment bookings per day with service area zones. Collision detection warns when equipment is double-booked across different geographic zones on the same day. Auto-release via `releaseEquipmentByWorkSession` when work sessions end (both admin check-out and mobile stop). Availability timeline tab in VehiclesPage showing weekly booking grid with collision highlighting. API: GET/POST/DELETE `/api/equipment-bookings`, POST `/api/equipment-bookings/check-collision`.
+- **Resource Profiles (Utföranderoller):** Profile templates defining execution codes, equipment types, cost center, project code, and service areas, used in auto-planning capability matching. Admin UI and WeekPlanner integration.
+- **Work Sessions & Time Tracking (Snöret):** Complete work session management system with check-in/check-out, time entries by type, weekly time summaries, labor rule violation detection, and payroll CSV export.
+- **Equipment Sharing & Shift Collision Control:** Tracking vehicle/equipment bookings per day with service area zones, collision detection, auto-release, and availability timeline.
 - **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner.
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.
 - **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.
-- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard for building delivery schedules and subscription calculations. Includes `customerMode` field (HARDCODED/FROM_METADATA) for customer identification — HARDCODED uses a single customer for all objects, FROM_METADATA reads each object's own customer reference. Customer metadata check endpoint `POST /api/order-concepts/check-customer-metadata` validates object customer references. Wizard Step 1 has customerMode selector; Step 2 shows warnings for objects with invalid customer references when in FROM_METADATA mode.
+- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard for building delivery schedules and subscription calculations, including customer identification modes and validation.
 - **Field Worker Task Dependency View:** Mobile app displays task dependencies.
 - **Field Worker Photo Upload:** Two-step presigned URL flow for photo capture.
 - **Inspection & Metadata System:** Structured inspection checklist integrated into the mobile app.
-- **Invoice Preview/Generation & Fortnox Export:** Full invoicing page at `/invoicing` with preview, filtering, batch selection, Fortnox export, and export history.
-- **Team Management & User Administration:** User management page at `/user-management` with admin CRUD for users, team system, and bulk actions.
+- **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
+- **Team Management & User Administration:** User management page with admin CRUD for users, team system, and bulk actions.
 - **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, and permissions.
-- **Fleet Management:** Comprehensive fleet management page at `/fleet` with vehicle dashboard, maintenance planning, and fuel tracking.
-- **Tenant Onboarding Wizard:** Admin wizard at `/onboarding` for creating new company accounts with industry package selection.
+- **Fleet Management:** Comprehensive fleet management page with vehicle dashboard, maintenance planning, and fuel tracking.
+- **Tenant Onboarding Wizard:** Admin wizard for creating new company accounts with industry package selection.
 - **Multi-Strategy Auto-Clustering:** Enhanced `/auto-cluster` page with 5 strategies for automatic cluster generation, including smart auto-assignment and manual cluster movement.
-- **Interim Objects & Object Verification:** `isInterimObject` boolean flag on objects table. Interim objects can be created from public issue reports via `POST /api/public-issue-reports/:id/create-interim-object`. Admin UI in ObjectsPage shows interim object count badge, filter toggle, and per-object verify/reject actions. Verify (`PUT /api/objects/:id/verify`) sets `isInterimObject=false`. Reject (`PUT /api/objects/:id/reject`) soft-deletes with `status="rejected"`.
-- **IoT API & Automatic Order Generation:** `iot_devices`, `iot_api_keys`, and `iot_signals` tables. IoT devices are linked to objects and receive sensor signals via `POST /api/iot/signals` (API key auth via `X-Api-Key` header, bypasses tenant middleware). Signal types `full`, `damaged`, `overflow`, `tilt`, `fire` auto-generate work orders with `orderType: "iot_auto"`. Devices support lookup by internal ID or `externalDeviceId`. API key management via `GET/POST/DELETE /api/iot/api-keys` (keys are masked in list responses). Device CRUD via `GET/POST/PATCH/DELETE /api/iot/devices`. Admin UI in TenantConfigPage "IoT" tab with device registry, API key management, and signal history.
-- **SlotPreference System:** Extended `object_time_restrictions` table with `preference` (favorable/unfavorable, default unfavorable) and `reason` text fields. Object detail page "SlotPreference" tab shows a week calendar with green (favorable) and red (unfavorable) color-coded time slots, plus a list view with preference badges and reason text. Aggregated slot preferences endpoint `GET /api/slot-preferences/aggregate?objectIds=...` returns combined restrictions with object names for use in order placement. Order wizard Step 1 (object selection) shows aggregated slot preferences for selected objects with mini week calendar.
+- **Interim Objects & Object Verification:** `isInterimObject` flag on objects table for public issue reports, with admin UI for verification/rejection.
+- **IoT API & Automatic Order Generation:** Management of IoT devices, API keys, and signals. Auto-generates work orders based on sensor signals (e.g., `full`, `damaged`, `overflow`).
+- **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields, UI for visualization, and aggregated preferences for order placement.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

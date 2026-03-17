@@ -97,7 +97,8 @@ import {
   type IotApiKey, type InsertIotApiKey,
   type IotSignal, type InsertIotSignal,
   workSessions, workEntries, equipmentBookings,
-  iotDevices, iotApiKeys, iotSignals,
+  iotDevices, iotApiKeys, iotSignals, routeFeedback,
+  type RouteFeedback, type InsertRouteFeedback,
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
   resourceProfiles, resourceProfileAssignments,
@@ -722,6 +723,10 @@ export interface IStorage {
   getIotSignals(tenantId: string, options?: { deviceId?: string; limit?: number }): Promise<IotSignal[]>;
   createIotSignal(signal: InsertIotSignal): Promise<IotSignal>;
   updateIotSignal(id: string, data: Partial<InsertIotSignal>): Promise<IotSignal | undefined>;
+
+  getRouteFeedback(tenantId: string, options?: { resourceId?: string; startDate?: string; endDate?: string; limit?: number }): Promise<RouteFeedback[]>;
+  createRouteFeedback(feedback: InsertRouteFeedback): Promise<RouteFeedback>;
+  getRouteFeedbackSummary(tenantId: string, options?: { startDate?: string; endDate?: string }): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number>; byResource: { resourceId: string; avgRating: number; count: number }[]; ratingDistribution: Record<number, number> }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5166,6 +5171,52 @@ export class DatabaseStorage implements IStorage {
   async updateIotSignal(id: string, data: Partial<InsertIotSignal>): Promise<IotSignal | undefined> {
     const [result] = await db.update(iotSignals).set(data).where(eq(iotSignals.id, id)).returning();
     return result || undefined;
+  }
+
+  async getRouteFeedback(tenantId: string, options?: { resourceId?: string; startDate?: string; endDate?: string; limit?: number }): Promise<RouteFeedback[]> {
+    const conditions = [eq(routeFeedback.tenantId, tenantId)];
+    if (options?.resourceId) conditions.push(eq(routeFeedback.resourceId, options.resourceId));
+    if (options?.startDate) conditions.push(gte(routeFeedback.date, options.startDate));
+    if (options?.endDate) conditions.push(lte(routeFeedback.date, options.endDate));
+    const query = db.select().from(routeFeedback).where(and(...conditions)).orderBy(desc(routeFeedback.createdAt));
+    return options?.limit ? query.limit(options.limit) : query.limit(200);
+  }
+
+  async createRouteFeedback(feedback: InsertRouteFeedback): Promise<RouteFeedback> {
+    const [result] = await db.insert(routeFeedback).values(feedback).returning();
+    return result;
+  }
+
+  async getRouteFeedbackSummary(tenantId: string, options?: { startDate?: string; endDate?: string }): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number>; byResource: { resourceId: string; avgRating: number; count: number }[]; ratingDistribution: Record<number, number> }> {
+    const conditions = [eq(routeFeedback.tenantId, tenantId)];
+    if (options?.startDate) conditions.push(gte(routeFeedback.date, options.startDate));
+    if (options?.endDate) conditions.push(lte(routeFeedback.date, options.endDate));
+
+    const rows = await db.select().from(routeFeedback).where(and(...conditions));
+
+    const totalCount = rows.length;
+    const avgRating = totalCount > 0 ? Math.round((rows.reduce((s, r) => s + r.rating, 0) / totalCount) * 10) / 10 : 0;
+
+    const byCategory: Record<string, number> = {};
+    const ratingDistribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+    const resourceMap = new Map<string, { sum: number; count: number }>();
+
+    for (const row of rows) {
+      if (row.reasonCategory) byCategory[row.reasonCategory] = (byCategory[row.reasonCategory] || 0) + 1;
+      ratingDistribution[row.rating] = (ratingDistribution[row.rating] || 0) + 1;
+      const rm = resourceMap.get(row.resourceId) || { sum: 0, count: 0 };
+      rm.sum += row.rating;
+      rm.count += 1;
+      resourceMap.set(row.resourceId, rm);
+    }
+
+    const byResource = Array.from(resourceMap.entries()).map(([resourceId, { sum, count }]) => ({
+      resourceId,
+      avgRating: Math.round((sum / count) * 10) / 10,
+      count,
+    }));
+
+    return { avgRating, totalCount, byCategory, byResource, ratingDistribution };
   }
 }
 

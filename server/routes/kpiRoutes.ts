@@ -1201,4 +1201,42 @@ app.delete("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) =>
     res.status(204).send();
 }));
 
+// ============================================
+// ROUTE FEEDBACK ENDPOINTS
+// ============================================
+app.get("/api/route-feedback", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { resourceId, startDate, endDate, limit: limitStr } = req.query as Record<string, string>;
+    const parsedLimit = limitStr ? Math.min(Math.max(parseInt(limitStr) || 50, 1), 200) : undefined;
+    const feedback = await storage.getRouteFeedback(tenantId, {
+      resourceId: resourceId || undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      limit: parsedLimit,
+    });
+    const resources = await storage.getResources(tenantId);
+    const resourceMap = new Map(resources.map(r => [r.id, r.name]));
+    const enriched = feedback.map(f => ({
+      ...f,
+      resourceName: resourceMap.get(f.resourceId) || f.resourceId,
+    }));
+    res.json(enriched);
+}));
+
+app.get("/api/route-feedback/summary", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { startDate, endDate } = req.query as Record<string, string>;
+    const summary = await storage.getRouteFeedbackSummary(tenantId, {
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+    });
+    const resources = await storage.getResources(tenantId);
+    const resourceMap = new Map(resources.map(r => [r.id, r.name]));
+    const enrichedByResource = summary.byResource.map(r => ({
+      ...r,
+      resourceName: resourceMap.get(r.resourceId) || r.resourceId,
+    }));
+    res.json({ ...summary, byResource: enrichedByResource });
+}));
+
 }

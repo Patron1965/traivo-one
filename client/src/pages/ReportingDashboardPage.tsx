@@ -11,7 +11,7 @@ import {
   Loader2, TrendingUp, DollarSign, Users, MapPin, BarChart3, 
   CheckCircle2, Clock, Truck, Target, ArrowUpRight, ArrowDownRight,
   AlertTriangle, Activity, Zap, FileText, Download, Building2,
-  Timer, Gauge, ShieldAlert, CircleSlash, Award
+  Timer, Gauge, ShieldAlert, CircleSlash, Award, Star, MessageSquare
 } from "lucide-react";
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -79,6 +79,239 @@ const CHART_TOOLTIP_STYLE = {
   borderRadius: "8px",
   fontSize: "12px"
 };
+
+const REASON_CATEGORY_LABELS: Record<string, string> = {
+  optimal: "Optimal rutt",
+  too_long: "För lång rutt",
+  wrong_order: "Fel ordning",
+  too_many_stops: "För många stopp",
+  bad_timing: "Dålig tidplanering",
+  missing_info: "Saknad info",
+  traffic: "Trafikproblem",
+  other: "Övrigt",
+};
+
+const RATING_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
+
+function RouteFeedbackTab() {
+  const { data: summary, isLoading, isError } = useQuery<{
+    avgRating: number;
+    totalCount: number;
+    byCategory: Record<string, number>;
+    byResource: { resourceId: string; resourceName: string; avgRating: number; count: number }[];
+    ratingDistribution: Record<string, number>;
+  }>({
+    queryKey: ["/api/route-feedback/summary"],
+  });
+
+  const { data: recentFeedback } = useQuery<Array<{
+    id: string;
+    resourceName: string;
+    date: string;
+    rating: number;
+    reasonCategory: string | null;
+    freeText: string | null;
+  }>>({
+    queryKey: ["/api/route-feedback?limit=20"],
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+          <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+          <h3 className="text-lg font-medium mb-2">Kunde inte ladda feedback</h3>
+          <p className="text-sm text-muted-foreground">Ett fel uppstod vid hämtning av rutt-feedback. Försök ladda om sidan.</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (!summary || summary.totalCount === 0) {
+    return (
+      <Card>
+        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+          <Star className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-lg font-medium mb-2">Ingen rutt-feedback ännu</h3>
+          <p className="text-sm text-muted-foreground max-w-md">
+            Förare kan betygsätta sina dagliga rutter via mobilappen. Feedback visas här när den börjar komma in.
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const ratingData = Object.entries(summary.ratingDistribution).map(([rating, count]) => ({
+    rating: `${rating} ★`,
+    count: count as number,
+    fill: RATING_COLORS[parseInt(rating) - 1],
+  }));
+
+  const categoryData = Object.entries(summary.byCategory).map(([cat, count]) => ({
+    category: REASON_CATEGORY_LABELS[cat] || cat,
+    count: count as number,
+  })).sort((a, b) => b.count - a.count);
+
+  const resourceData = [...summary.byResource]
+    .sort((a, b) => b.avgRating - a.avgRating)
+    .slice(0, 10);
+
+  return (
+    <>
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <KPICard
+          title="Snittbetyg"
+          value={`${summary.avgRating}/5`}
+          icon={<Star className="h-4 w-4 text-yellow-500" />}
+          subtitle={`Baserat på ${summary.totalCount} svar`}
+        />
+        <KPICard
+          title="Antal svar"
+          value={summary.totalCount}
+          icon={<MessageSquare className="h-4 w-4 text-blue-500" />}
+        />
+        <KPICard
+          title="Nöjda förare (4-5)"
+          value={`${summary.totalCount > 0 ? Math.round((((summary.ratingDistribution[4] || 0) + (summary.ratingDistribution[5] || 0)) / summary.totalCount) * 100) : 0}%`}
+          icon={<Award className="h-4 w-4 text-green-500" />}
+        />
+        <KPICard
+          title="Kategorier"
+          value={Object.keys(summary.byCategory).length}
+          icon={<BarChart3 className="h-4 w-4 text-purple-500" />}
+          subtitle="unika orsaker"
+        />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Star className="h-4 w-4" />
+              Betygsfördelning
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={ratingData}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="rating" />
+                <YAxis allowDecimals={false} />
+                <RechartsTooltip />
+                <Bar dataKey="count" name="Antal">
+                  {ratingData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {categoryData.length > 0 && (
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Orsaker
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={categoryData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis dataKey="category" type="category" width={120} tick={{ fontSize: 12 }} />
+                  <RechartsTooltip />
+                  <Bar dataKey="count" name="Antal" fill="#4A9B9B" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      {resourceData.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Users className="h-4 w-4" />
+              Snittbetyg per förare
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {resourceData.map((r) => (
+                <div key={r.resourceId} className="flex items-center gap-3" data-testid={`feedback-resource-${r.resourceId}`}>
+                  <div className="w-32 truncate text-sm font-medium">{r.resourceName}</div>
+                  <div className="flex-1">
+                    <Progress value={(r.avgRating / 5) * 100} className="h-2" />
+                  </div>
+                  <div className="flex items-center gap-1 w-20 justify-end">
+                    <Star className="h-3 w-3 text-yellow-500 fill-yellow-500" />
+                    <span className="text-sm font-medium">{r.avgRating}</span>
+                    <span className="text-xs text-muted-foreground">({r.count})</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {recentFeedback && recentFeedback.length > 0 && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Senaste feedback
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-[300px]">
+              <div className="space-y-3">
+                {recentFeedback.map((fb) => (
+                  <div key={fb.id} className="flex items-start gap-3 p-3 rounded-lg border" data-testid={`feedback-item-${fb.id}`}>
+                    <div className="flex items-center gap-0.5 mt-0.5">
+                      {[1, 2, 3, 4, 5].map((s) => (
+                        <Star
+                          key={s}
+                          className={`h-3.5 w-3.5 ${s <= fb.rating ? "text-yellow-500 fill-yellow-500" : "text-gray-300"}`}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">{fb.resourceName}</span>
+                        <span className="text-muted-foreground">{fb.date}</span>
+                        {fb.reasonCategory && (
+                          <Badge variant="outline" className="text-xs">
+                            {REASON_CATEGORY_LABELS[fb.reasonCategory] || fb.reasonCategory}
+                          </Badge>
+                        )}
+                      </div>
+                      {fb.freeText && (
+                        <p className="text-sm text-muted-foreground mt-1">{fb.freeText}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      )}
+    </>
+  );
+}
 
 export default function ReportingDashboardPage() {
   const [timeRange, setTimeRange] = useState<"week" | "month" | "quarter">("month");
@@ -668,6 +901,7 @@ export default function ReportingDashboardPage() {
           <TabsTrigger value="resources" data-testid="tab-resources">Resurser</TabsTrigger>
           <TabsTrigger value="areas" data-testid="tab-areas">Områden</TabsTrigger>
           <TabsTrigger value="customers" data-testid="tab-customers">Kunder</TabsTrigger>
+          <TabsTrigger value="route-feedback" data-testid="tab-route-feedback">Rutt-feedback</TabsTrigger>
         </TabsList>
 
         {/* === OVERVIEW TAB === */}
@@ -1394,6 +1628,11 @@ export default function ReportingDashboardPage() {
               </ScrollArea>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* === ROUTE FEEDBACK TAB === */}
+        <TabsContent value="route-feedback" className="space-y-4" data-testid="tab-content-route-feedback">
+          <RouteFeedbackTab />
         </TabsContent>
       </Tabs>
     </div>
