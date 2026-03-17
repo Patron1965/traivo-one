@@ -1242,25 +1242,26 @@ app.get("/api/route-feedback", asyncHandler(async (req, res) => {
 app.get("/api/route-feedback/summary", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { startDate, endDate, clusterId } = req.query as Record<string, string>;
-    const summary = await storage.getRouteFeedbackSummary(tenantId, {
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
-    });
 
-    let byResource = summary.byResource;
+    let areaResourceIds: string[] | undefined;
     if (clusterId) {
       const clusterObjects = await storage.getClusterObjects(clusterId);
       const clusterOrders = await storage.getWorkOrders(tenantId);
       const objectIds = new Set(clusterObjects.map(o => o.id));
-      const areaResourceIds = new Set(
+      areaResourceIds = [...new Set(
         clusterOrders.filter(o => o.objectId && objectIds.has(o.objectId) && o.resourceId).map(o => o.resourceId!)
-      );
-      byResource = byResource.filter(r => areaResourceIds.has(r.resourceId));
+      )];
     }
+
+    const summary = await storage.getRouteFeedbackSummary(tenantId, {
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+      resourceIds: areaResourceIds,
+    });
 
     const resources = await storage.getResources(tenantId);
     const resourceMap = new Map(resources.map(r => [r.id, r.name]));
-    const enrichedByResource = byResource.map(r => ({
+    const enrichedByResource = summary.byResource.map(r => ({
       ...r,
       resourceName: resourceMap.get(r.resourceId) || r.resourceId,
     }));

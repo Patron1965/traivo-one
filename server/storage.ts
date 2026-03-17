@@ -726,7 +726,7 @@ export interface IStorage {
 
   getRouteFeedback(tenantId: string, options?: { resourceId?: string; startDate?: string; endDate?: string; limit?: number }): Promise<RouteFeedback[]>;
   createRouteFeedback(feedback: InsertRouteFeedback): Promise<RouteFeedback>;
-  getRouteFeedbackSummary(tenantId: string, options?: { startDate?: string; endDate?: string }): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number>; byResource: { resourceId: string; avgRating: number; count: number }[]; ratingDistribution: Record<number, number> }>;
+  getRouteFeedbackSummary(tenantId: string, options?: { startDate?: string; endDate?: string; resourceIds?: string[] }): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number>; byResource: { resourceId: string; avgRating: number; count: number }[]; ratingDistribution: Record<number, number>; byDay: { date: string; avgRating: number; count: number }[] }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -5187,10 +5187,13 @@ export class DatabaseStorage implements IStorage {
     return result;
   }
 
-  async getRouteFeedbackSummary(tenantId: string, options?: { startDate?: string; endDate?: string }): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number>; byResource: { resourceId: string; avgRating: number; count: number }[]; ratingDistribution: Record<number, number> }> {
+  async getRouteFeedbackSummary(tenantId: string, options?: { startDate?: string; endDate?: string; resourceIds?: string[] }): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number>; byResource: { resourceId: string; avgRating: number; count: number }[]; ratingDistribution: Record<number, number>; byDay: { date: string; avgRating: number; count: number }[] }> {
     const conditions = [eq(routeFeedback.tenantId, tenantId)];
     if (options?.startDate) conditions.push(gte(routeFeedback.date, options.startDate));
     if (options?.endDate) conditions.push(lte(routeFeedback.date, options.endDate));
+    if (options?.resourceIds && options.resourceIds.length > 0) {
+      conditions.push(inArray(routeFeedback.resourceId, options.resourceIds));
+    }
 
     const rows = await db.select().from(routeFeedback).where(and(...conditions));
 
@@ -5200,6 +5203,7 @@ export class DatabaseStorage implements IStorage {
     const byCategory: Record<string, number> = {};
     const ratingDistribution: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
     const resourceMap = new Map<string, { sum: number; count: number }>();
+    const dayMap = new Map<string, { sum: number; count: number }>();
 
     for (const row of rows) {
       if (row.reasonCategory) byCategory[row.reasonCategory] = (byCategory[row.reasonCategory] || 0) + 1;
@@ -5208,6 +5212,10 @@ export class DatabaseStorage implements IStorage {
       rm.sum += row.rating;
       rm.count += 1;
       resourceMap.set(row.resourceId, rm);
+      const dm = dayMap.get(row.date) || { sum: 0, count: 0 };
+      dm.sum += row.rating;
+      dm.count += 1;
+      dayMap.set(row.date, dm);
     }
 
     const byResource = Array.from(resourceMap.entries()).map(([resourceId, { sum, count }]) => ({
@@ -5216,7 +5224,15 @@ export class DatabaseStorage implements IStorage {
       count,
     }));
 
-    return { avgRating, totalCount, byCategory, byResource, ratingDistribution };
+    const byDay = Array.from(dayMap.entries())
+      .map(([date, { sum, count }]) => ({
+        date,
+        avgRating: Math.round((sum / count) * 10) / 10,
+        count,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    return { avgRating, totalCount, byCategory, byResource, ratingDistribution, byDay };
   }
 }
 

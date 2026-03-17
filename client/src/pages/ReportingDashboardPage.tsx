@@ -81,14 +81,14 @@ const CHART_TOOLTIP_STYLE = {
 };
 
 const REASON_CATEGORY_LABELS: Record<string, string> = {
+  felaktig_ordning: "Felaktig ordningsföljd",
+  orimliga_kortider: "Orimliga körtider",
+  vagarbete_hinder: "Vägarbete/Hinder",
+  for_manga_stopp: "För många stopp",
+  saknad_info: "Saknad info",
+  trafik: "Trafikproblem",
   optimal: "Optimal rutt",
-  too_long: "För lång rutt",
-  wrong_order: "Fel ordning",
-  too_many_stops: "För många stopp",
-  bad_timing: "Dålig tidplanering",
-  missing_info: "Saknad info",
-  traffic: "Trafikproblem",
-  other: "Övrigt",
+  ovrigt: "Övrigt",
 };
 
 const RATING_COLORS = ["#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e"];
@@ -123,6 +123,7 @@ function RouteFeedbackTab() {
     byCategory: Record<string, number>;
     byResource: { resourceId: string; resourceName: string; avgRating: number; count: number }[];
     ratingDistribution: Record<string, number>;
+    byDay: { date: string; avgRating: number; count: number }[];
   }>({
     queryKey: [summaryUrl],
   });
@@ -188,23 +189,7 @@ function RouteFeedbackTab() {
     .sort((a, b) => b.avgRating - a.avgRating)
     .slice(0, 10);
 
-  const dailyTrend = useMemo(() => {
-    if (!recentFeedback || recentFeedback.length === 0) return [];
-    const byDate = new Map<string, { sum: number; count: number }>();
-    for (const fb of recentFeedback) {
-      const d = byDate.get(fb.date) || { sum: 0, count: 0 };
-      d.sum += fb.rating;
-      d.count += 1;
-      byDate.set(fb.date, d);
-    }
-    return Array.from(byDate.entries())
-      .map(([date, { sum, count }]) => ({
-        date,
-        avgRating: Math.round((sum / count) * 10) / 10,
-        count,
-      }))
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [recentFeedback]);
+  const dailyTrend = summary?.byDay || [];
 
   return (
     <>

@@ -1233,7 +1233,7 @@ app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
-    const VALID_REASON_CATEGORIES = ["optimal", "too_long", "wrong_order", "too_many_stops", "bad_timing", "missing_info", "traffic", "other"];
+    const VALID_REASON_CATEGORIES = ["felaktig_ordning", "orimliga_kortider", "vagarbete_hinder", "for_manga_stopp", "saknad_info", "trafik", "optimal", "ovrigt"];
     const schema = z.object({
       date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
       rating: z.number().int().min(1).max(5),
