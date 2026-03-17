@@ -6,3 +6,9 @@ id = "HpuNKdWSW1OtP2dr86zCA"
 uri = "file://.local/nordnav-one-integration-prompt.md"
 type = "text"
 title = "Nordnav Go ↔ Nordnav One — API-krav och integrationsbeskrivning"
+
+[[outputs]]
+id = "JEuz__hGh8T42gNvZ3xp7"
+uri = "file://Traivo-Go-Systemskiss.md"
+type = "text"
+title = "Traivo Go — Systemskiss"
