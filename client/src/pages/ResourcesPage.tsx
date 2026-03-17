@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTerminology } from "@/hooks/use-terminology";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -239,6 +240,7 @@ const emptyFormData: ResourceFormData = {
 
 export default function ResourcesPage() {
   const { toast } = useToast();
+  const { t } = useTerminology();
   const [searchQuery, setSearchQuery] = useState("");
   const [competencyFilter, setCompetencyFilter] = useState<string>("all");
   const [availabilityFilter, setAvailabilityFilter] = useState<string>("all");
@@ -576,7 +578,7 @@ export default function ResourcesPage() {
     <div className="space-y-6 p-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold">Resurser</h1>
+          <h1 className="text-2xl font-semibold">{t("resource_plural")}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">{resources.length} tekniker registrerade</span>
             <Badge variant="secondary" className="text-xs font-normal gap-1">

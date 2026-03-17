@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useTerminology } from "@/hooks/use-terminology";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -66,6 +67,7 @@ const PAGE_SIZE = 100;
 export default function ObjectsPage() {
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { t } = useTerminology();
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilterRaw] = useState("all");
@@ -830,7 +832,7 @@ export default function ObjectsPage() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold">Objekt</h1>
+          <h1 className="text-2xl font-semibold">{t("object_plural")}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">
               {filteredObjects.length} av {totalObjects.toLocaleString("sv")} objekt visas

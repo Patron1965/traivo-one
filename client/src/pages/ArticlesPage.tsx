@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTerminology } from "@/hooks/use-terminology";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -176,6 +177,7 @@ const emptyFormData: ArticleFormData = {
 
 export default function ArticlesPage() {
   const { toast } = useToast();
+  const { t } = useTerminology();
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [objectTypeFilter, setObjectTypeFilter] = useState<string>("all");
@@ -388,7 +390,7 @@ export default function ArticlesPage() {
       <div className="flex flex-col gap-4 mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold" data-testid="text-page-title">Artiklar</h1>
+            <h1 className="text-2xl font-bold" data-testid="text-page-title">{t("article_plural")}</h1>
             <div className="flex items-center gap-3 mt-1 flex-wrap">
               <span className="text-sm text-muted-foreground">
                 Produkter och tjänster som kan läggas på ordrar

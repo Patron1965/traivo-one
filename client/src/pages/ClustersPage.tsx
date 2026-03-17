@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { useTerminology } from "@/hooks/use-terminology";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -182,6 +183,7 @@ function MapFitBounds({ clusters }: MapFitBoundsProps) {
 export default function ClustersPage() {
   const mapConfig = useMapConfig();
   const { toast } = useToast();
+  const { t } = useTerminology();
   const [, navigate] = useLocation();
   const [searchQuery, setSearchQuery] = useState("");
   const [viewMode, setViewMode] = useState<"list" | "map">("list");
@@ -395,7 +397,7 @@ export default function ClustersPage() {
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Kluster</h1>
+          <h1 className="text-2xl font-semibold">{t("cluster_plural")}</h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">
               Kundhierarkier med dataärvning - navet i verksamheten

@@ -1288,4 +1288,20 @@ app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async
     res.status(existing.length > 0 ? 200 : 201).json(feedback);
 }));
 
+app.get("/api/mobile/terminology", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    const tenantId = resource?.tenantId || 1;
+    const { tenantLabels, DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } = await import("@shared/schema");
+    const labels = await db.select().from(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
+    const tenant = await storage.getTenant(tenantId);
+    const industry = tenant?.industry || "waste_management";
+    const industryDefaults = INDUSTRY_TERMINOLOGY[industry] || {};
+    const merged: Record<string, string> = { ...DEFAULT_TERMINOLOGY, ...industryDefaults };
+    for (const label of labels) {
+      merged[label.labelKey] = label.labelValue;
+    }
+    res.json(merged);
+}));
+
 }

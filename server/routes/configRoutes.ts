@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { insertArticleSchema, insertPriceListSchema, insertPriceListArticleSchema, insertResourceArticleSchema, insertVehicleSchema, insertEquipmentSchema, insertResourceVehicleSchema, insertResourceEquipmentSchema, insertResourceAvailabilitySchema, insertVehicleScheduleSchema, insertSubscriptionSchema, insertTeamSchema, insertTeamMemberSchema, insertPlanningParameterSchema, insertResourceProfileSchema, insertResourceProfileAssignmentSchema, insertWorkSessionSchema, insertWorkEntrySchema, insertFuelLogSchema, insertMaintenanceLogSchema, workSessions, workEntries, timeLogs, equipmentBookings } from "@shared/schema";
@@ -1614,7 +1614,7 @@ app.get("/api/terminology", asyncHandler(async (req, res) => {
     res.json({ labels: merged, customized: labels.map(l => l.labelKey), industry });
 }));
 
-app.put("/api/terminology", asyncHandler(async (req, res) => {
+app.put("/api/terminology", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { tenantLabels, DEFAULT_TERMINOLOGY } = await import("@shared/schema");
     const updates = req.body.labels as Record<string, string>;
@@ -1634,18 +1634,5 @@ app.put("/api/terminology", asyncHandler(async (req, res) => {
     res.json({ success: true });
 }));
 
-app.get("/api/mobile/terminology", asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
-    const { tenantLabels, DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } = await import("@shared/schema");
-    const labels = await db.select().from(tenantLabels).where(eq(tenantLabels.tenantId, tenantId));
-    const tenant = await storage.getTenant(tenantId);
-    const industry = tenant?.industry || "waste_management";
-    const industryDefaults = INDUSTRY_TERMINOLOGY[industry] || {};
-    const merged: Record<string, string> = { ...DEFAULT_TERMINOLOGY, ...industryDefaults };
-    for (const label of labels) {
-      merged[label.labelKey] = label.labelValue;
-    }
-    res.json(merged);
-}));
 
 }
