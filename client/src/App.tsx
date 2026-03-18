@@ -213,7 +213,7 @@ function useFieldLoginRedirect() {
 function useLoginSplash() {
   const [showSplash, setShowSplash] = useState(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.has("login")) {
+    if (params.get("login") === "1") {
       const url = new URL(window.location.href);
       url.searchParams.delete("login");
       window.history.replaceState({}, "", url.pathname + url.search);
