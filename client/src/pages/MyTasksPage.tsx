@@ -48,6 +48,7 @@ import { ProactiveTips } from "@/components/ProactiveTips";
 import { Activity, ChevronDown } from "lucide-react";
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
+import { OnboardingGuide } from "@/components/OnboardingGuide";
 
 interface AIMessage {
   id: string;
@@ -595,6 +596,8 @@ export default function MyTasksPage() {
             Fråga din AI-assistent
           </Button>
         </div>
+
+        <OnboardingGuide />
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           {ordersLoading ? (
