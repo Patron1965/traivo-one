@@ -87,7 +87,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **react-leaflet:** Interactive map visualizations.
 - **shadcn/ui:** UI component library.
 - **Open-Meteo API:** Provides weather forecast data.
-- **Fortnox API:** Integration with the Fortnox accounting system, including customer import from Fortnox with preview, selection/deselection, search/filter, duplicate detection, and batch import with automatic Fortnox mapping.
+- **Fortnox API:** Integration with the Fortnox accounting system, including full entity import (customers, articles, cost centers, projects) from Fortnox with preview, selection/deselection, search/filter, duplicate detection, and batch import with automatic Fortnox mapping.
 - **Resend:** Email notification service.
 - **Twilio API:** SMS notification service.
 - **jsPDF:** PDF generation library.

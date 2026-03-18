@@ -2132,4 +2132,248 @@ app.post("/api/fortnox/customers/import", asyncHandler(async (req, res) => {
     });
 }));
 
+// ============================================
+// ARTICLES FETCH & IMPORT
+// ============================================
+
+app.get("/api/fortnox/articles/fetch", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      throw new ValidationError("Fortnox är inte anslutet.");
+    }
+
+    const fortnoxArticles = await client.getArticles();
+    const existingArticles = await storage.getArticles(tenantId);
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "article");
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+
+    const enriched = fortnoxArticles.map((fa: any) => {
+      const articleNumber = fa.ArticleNumber || "";
+      const alreadyImported = mappedFortnoxIds.has(articleNumber);
+      const numberMatch = existingArticles.find(
+        ea => ea.articleNumber?.toLowerCase() === articleNumber.toLowerCase()
+      );
+      return {
+        articleNumber,
+        description: fa.Description || "",
+        unit: fa.Unit || "st",
+        salesPrice: fa.SalesPrice || 0,
+        purchasePrice: fa.PurchasePrice || 0,
+        type: fa.Type || "",
+        active: fa.Active !== false,
+        alreadyImported,
+        existingMatch: numberMatch ? { id: numberMatch.id, name: numberMatch.name } : null,
+      };
+    });
+
+    res.json({ total: enriched.length, articles: enriched });
+}));
+
+app.post("/api/fortnox/articles/import", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      throw new ValidationError("Fortnox är inte anslutet.");
+    }
+
+    const schema = z.object({
+      articles: z.array(z.object({
+        articleNumber: z.string(),
+        description: z.string(),
+        unit: z.string().optional(),
+        salesPrice: z.number().optional(),
+        type: z.string().optional(),
+      })),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "article");
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+    const results: Array<{ articleNumber: string; description: string; status: "created" | "skipped" | "error"; error?: string }> = [];
+
+    for (const fa of parsed.data.articles) {
+      try {
+        if (mappedFortnoxIds.has(fa.articleNumber)) {
+          results.push({ articleNumber: fa.articleNumber, description: fa.description, status: "skipped" });
+          continue;
+        }
+        const newArticle = await storage.createArticle({
+          tenantId,
+          articleNumber: fa.articleNumber,
+          name: fa.description || fa.articleNumber,
+          description: fa.description,
+          unit: fa.unit || "st",
+          listPrice: Math.round((fa.salesPrice || 0) * 100),
+          articleType: fa.type === "STOCK" ? "vara" : "tjanst",
+        });
+        await storage.createFortnoxMapping({
+          tenantId,
+          entityType: "article",
+          unicornId: newArticle.id,
+          fortnoxId: fa.articleNumber,
+        });
+        results.push({ articleNumber: fa.articleNumber, description: fa.description, status: "created" });
+      } catch (err: any) {
+        results.push({ articleNumber: fa.articleNumber, description: fa.description, status: "error", error: err.message });
+      }
+    }
+
+    const created = results.filter(r => r.status === "created").length;
+    const skipped = results.filter(r => r.status === "skipped").length;
+    const errors = results.filter(r => r.status === "error").length;
+    res.json({ summary: { created, skipped, errors, total: results.length }, results });
+}));
+
+// ============================================
+// COST CENTERS FETCH & IMPORT
+// ============================================
+
+app.get("/api/fortnox/costcenters/fetch", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      throw new ValidationError("Fortnox är inte anslutet.");
+    }
+
+    const fortnoxCCs = await client.getCostCenters();
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "costcenter");
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+
+    const enriched = fortnoxCCs.map((cc: any) => {
+      const code = cc.Code || "";
+      return {
+        code,
+        description: cc.Description || "",
+        active: cc.Active !== false,
+        alreadyImported: mappedFortnoxIds.has(code),
+      };
+    });
+
+    res.json({ total: enriched.length, costcenters: enriched });
+}));
+
+app.post("/api/fortnox/costcenters/import", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      throw new ValidationError("Fortnox är inte anslutet.");
+    }
+
+    const schema = z.object({
+      costcenters: z.array(z.object({
+        code: z.string(),
+        description: z.string(),
+      })),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "costcenter");
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+    const results: Array<{ code: string; description: string; status: "created" | "skipped" | "error"; error?: string }> = [];
+
+    for (const cc of parsed.data.costcenters) {
+      try {
+        if (mappedFortnoxIds.has(cc.code)) {
+          results.push({ code: cc.code, description: cc.description, status: "skipped" });
+          continue;
+        }
+        await storage.createFortnoxMapping({
+          tenantId,
+          entityType: "costcenter",
+          unicornId: cc.code,
+          fortnoxId: cc.code,
+        });
+        results.push({ code: cc.code, description: cc.description, status: "created" });
+      } catch (err: any) {
+        results.push({ code: cc.code, description: cc.description, status: "error", error: err.message });
+      }
+    }
+
+    const created = results.filter(r => r.status === "created").length;
+    const skipped = results.filter(r => r.status === "skipped").length;
+    const errors = results.filter(r => r.status === "error").length;
+    res.json({ summary: { created, skipped, errors, total: results.length }, results });
+}));
+
+// ============================================
+// PROJECTS FETCH & IMPORT
+// ============================================
+
+app.get("/api/fortnox/projects/fetch", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      throw new ValidationError("Fortnox är inte anslutet.");
+    }
+
+    const fortnoxProjects = await client.getProjects();
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "project");
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+
+    const enriched = fortnoxProjects.map((p: any) => {
+      const projectNumber = p.ProjectNumber || "";
+      return {
+        projectNumber,
+        description: p.Description || "",
+        status: p.Status || "",
+        startDate: p.StartDate || "",
+        endDate: p.EndDate || "",
+        active: p.Status !== "FINISHED",
+        alreadyImported: mappedFortnoxIds.has(projectNumber),
+      };
+    });
+
+    res.json({ total: enriched.length, projects: enriched });
+}));
+
+app.post("/api/fortnox/projects/import", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+    if (!(await client.isConnected())) {
+      throw new ValidationError("Fortnox är inte anslutet.");
+    }
+
+    const schema = z.object({
+      projects: z.array(z.object({
+        projectNumber: z.string(),
+        description: z.string(),
+      })),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "project");
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+    const results: Array<{ projectNumber: string; description: string; status: "created" | "skipped" | "error"; error?: string }> = [];
+
+    for (const p of parsed.data.projects) {
+      try {
+        if (mappedFortnoxIds.has(p.projectNumber)) {
+          results.push({ projectNumber: p.projectNumber, description: p.description, status: "skipped" });
+          continue;
+        }
+        await storage.createFortnoxMapping({
+          tenantId,
+          entityType: "project",
+          unicornId: p.projectNumber,
+          fortnoxId: p.projectNumber,
+        });
+        results.push({ projectNumber: p.projectNumber, description: p.description, status: "created" });
+      } catch (err: any) {
+        results.push({ projectNumber: p.projectNumber, description: p.description, status: "error", error: err.message });
+      }
+    }
+
+    const created = results.filter(r => r.status === "created").length;
+    const skipped = results.filter(r => r.status === "skipped").length;
+    const errors = results.filter(r => r.status === "error").length;
+    res.json({ summary: { created, skipped, errors, total: results.length }, results });
+}));
+
 }

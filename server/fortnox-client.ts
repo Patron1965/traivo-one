@@ -239,12 +239,43 @@ export class FortnoxClient {
     return this.apiRequest("GET", `/articles/${articleNumber}`);
   }
 
-  async getCostCenters(): Promise<any> {
-    return this.apiRequest("GET", "/costcenters");
+  async getCostCenters(): Promise<any[]> {
+    const all: any[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+    while (currentPage <= totalPages) {
+      const response: any = await this.apiRequest("GET", `/costcenters?limit=500&page=${currentPage}`);
+      if (response?.CostCenters) all.push(...response.CostCenters);
+      if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
+      currentPage++;
+    }
+    return all;
   }
 
-  async getProjects(): Promise<any> {
-    return this.apiRequest("GET", "/projects");
+  async getProjects(): Promise<any[]> {
+    const all: any[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+    while (currentPage <= totalPages) {
+      const response: any = await this.apiRequest("GET", `/projects?limit=500&page=${currentPage}`);
+      if (response?.Projects) all.push(...response.Projects);
+      if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
+      currentPage++;
+    }
+    return all;
+  }
+
+  async getArticles(): Promise<any[]> {
+    const all: any[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+    while (currentPage <= totalPages) {
+      const response: any = await this.apiRequest("GET", `/articles?limit=500&page=${currentPage}`);
+      if (response?.Articles) all.push(...response.Articles);
+      if (response?.MetaInformation) totalPages = response.MetaInformation["@TotalPages"] || 1;
+      currentPage++;
+    }
+    return all;
   }
 
   async getCustomers(): Promise<any[]> {
