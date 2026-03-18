@@ -298,10 +298,10 @@ function AppContent() {
   }
 
   return (
-    <>
+    <TenantBrandingProvider>
       {showSplash && <WelcomeSplash onComplete={dismissSplash} />}
       <AuthenticatedApp />
-    </>
+    </TenantBrandingProvider>
   );
 }
 
@@ -324,25 +324,23 @@ function AuthenticatedApp() {
   const hideFloatingButton = location.startsWith("/order-concepts/new") || location.includes("/edit");
   
   return (
-    <TenantBrandingProvider>
-      <TourProvider>
-        <div className="flex flex-col min-h-screen bg-background pb-16 md:pb-0">
-          <TechnicianRedirect />
-          <TopNav />
-          <main className="flex-1">
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
-          </main>
-          {!hideFloatingButton && <FloatingActionButton />}
-          <MobileBottomNav />
-          <CommandPalette onThemeToggle={toggleTheme} currentTheme={theme} />
-          <KeyboardShortcutsDialog />
-          <TourGuide />
-          <TourAutoStart />
-        </div>
-      </TourProvider>
-    </TenantBrandingProvider>
+    <TourProvider>
+      <div className="flex flex-col min-h-screen bg-background pb-16 md:pb-0">
+        <TechnicianRedirect />
+        <TopNav />
+        <main className="flex-1">
+          <ErrorBoundary>
+            <Router />
+          </ErrorBoundary>
+        </main>
+        {!hideFloatingButton && <FloatingActionButton />}
+        <MobileBottomNav />
+        <CommandPalette onThemeToggle={toggleTheme} currentTheme={theme} />
+        <KeyboardShortcutsDialog />
+        <TourGuide />
+        <TourAutoStart />
+      </div>
+    </TourProvider>
   );
 }
 
