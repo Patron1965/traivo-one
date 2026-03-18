@@ -14,7 +14,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Link } from "wouter";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import type { Article, Resource, PriceList, Tenant, ResourceProfile, ResourceProfileAssignment, IotDevice, IotApiKey, IotSignal, ServiceObject } from "@shared/schema";
+import type { Article, Resource, PriceList, Tenant, ResourceProfile, ResourceProfileAssignment, IotDevice, IotApiKey, IotSignal, ServiceObject, TenantBranding } from "@shared/schema";
 import { DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } from "@shared/schema";
 import {
   Building2,
@@ -50,6 +50,9 @@ import {
   Copy,
   Battery,
   Signal,
+  Eye,
+  Image,
+  Type,
   type LucideIcon,
 } from "lucide-react";
 
@@ -1685,6 +1688,337 @@ function TerminologyTab() {
   );
 }
 
+function BrandingTab() {
+  const { toast } = useToast();
+  const { data: branding, isLoading } = useQuery<TenantBranding | null>({
+    queryKey: ["/api/system/tenant-branding"],
+  });
+
+  const [form, setForm] = useState({
+    companyName: "",
+    logoUrl: "",
+    primaryColor: "#1B4B6B",
+    secondaryColor: "#2C3E50",
+    accentColor: "#4A9B9B",
+    tagline: "",
+  });
+
+  const [showPreview, setShowPreview] = useState(false);
+
+  useEffect(() => {
+    if (branding) {
+      setForm({
+        companyName: branding.companyName || "",
+        logoUrl: branding.logoUrl || "",
+        primaryColor: branding.primaryColor || "#1B4B6B",
+        secondaryColor: branding.secondaryColor || "#2C3E50",
+        accentColor: branding.accentColor || "#4A9B9B",
+        tagline: branding.tagline || "",
+      });
+    }
+  }, [branding]);
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: typeof form) => {
+      return apiRequest("PUT", "/api/system/tenant-branding", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system/tenant-branding"] });
+      toast({ title: "Sparat", description: "Varumärkesprofilen har uppdaterats. Ändringarna syns direkt." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("PUT", "/api/system/tenant-branding", {
+        companyName: "",
+        logoUrl: "",
+        primaryColor: "#1B4B6B",
+        secondaryColor: "#2C3E50",
+        accentColor: "#4A9B9B",
+        tagline: "",
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/system/tenant-branding"] });
+      setForm({
+        companyName: "",
+        logoUrl: "",
+        primaryColor: "#1B4B6B",
+        secondaryColor: "#2C3E50",
+        accentColor: "#4A9B9B",
+        tagline: "",
+      });
+      toast({ title: "Återställt", description: "Varumärkesprofilen har återställts till Traivo-standard." });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
+  }
+
+  const hasCustomBranding = !!(form.companyName || form.logoUrl);
+
+  const darken = (hex: string, amount: number) => {
+    const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+    if (!result) return hex;
+    const r = Math.max(0, parseInt(result[1], 16) - amount);
+    const g = Math.max(0, parseInt(result[2], 16) - amount);
+    const b = Math.max(0, parseInt(result[3], 16) - amount);
+    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Palette className="h-5 w-5" />
+            Snabbkonfiguration — Varumärke
+          </CardTitle>
+          <CardDescription>
+            Anpassa utseendet för demos och säljpresentationer. Konfigurera företagsnamn, logotyp och färger — ändringarna syns direkt i hela systemet.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="brandCompanyName" className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Företagsnamn
+                </Label>
+                <Input
+                  id="brandCompanyName"
+                  data-testid="input-brand-company-name"
+                  value={form.companyName}
+                  onChange={(e) => setForm(prev => ({ ...prev, companyName: e.target.value }))}
+                  placeholder="t.ex. Lundstams Åkeri AB"
+                />
+                <p className="text-xs text-muted-foreground">Visas i splash-skärmen och navigeringen</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="brandLogoUrl" className="flex items-center gap-2">
+                  <Image className="h-4 w-4" />
+                  Logotyp-URL
+                </Label>
+                <Input
+                  id="brandLogoUrl"
+                  data-testid="input-brand-logo-url"
+                  value={form.logoUrl}
+                  onChange={(e) => setForm(prev => ({ ...prev, logoUrl: e.target.value }))}
+                  placeholder="https://example.com/logo.png"
+                />
+                <p className="text-xs text-muted-foreground">Används i splash-skärmen och TopNav. Rekommenderad storlek: 200×80px, transparent bakgrund.</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="brandTagline" className="flex items-center gap-2">
+                  <Type className="h-4 w-4" />
+                  Tagline
+                </Label>
+                <Input
+                  id="brandTagline"
+                  data-testid="input-brand-tagline"
+                  value={form.tagline}
+                  onChange={(e) => setForm(prev => ({ ...prev, tagline: e.target.value }))}
+                  placeholder="t.ex. Smart avfallshantering"
+                />
+                <p className="text-xs text-muted-foreground">Visas under logotypen i splash-skärmen</p>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="flex items-center gap-2">
+                  <Palette className="h-4 w-4" />
+                  Färgpalett
+                </Label>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="brandPrimaryColor" className="text-xs text-muted-foreground">Primärfärg</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        id="brandPrimaryColor"
+                        data-testid="input-brand-primary-color"
+                        value={form.primaryColor}
+                        onChange={(e) => setForm(prev => ({ ...prev, primaryColor: e.target.value }))}
+                        className="w-10 h-10 rounded cursor-pointer border border-border"
+                      />
+                      <Input
+                        value={form.primaryColor}
+                        onChange={(e) => setForm(prev => ({ ...prev, primaryColor: e.target.value }))}
+                        className="font-mono text-xs h-8"
+                        maxLength={7}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="brandSecondaryColor" className="text-xs text-muted-foreground">Sekundärfärg</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        id="brandSecondaryColor"
+                        data-testid="input-brand-secondary-color"
+                        value={form.secondaryColor}
+                        onChange={(e) => setForm(prev => ({ ...prev, secondaryColor: e.target.value }))}
+                        className="w-10 h-10 rounded cursor-pointer border border-border"
+                      />
+                      <Input
+                        value={form.secondaryColor}
+                        onChange={(e) => setForm(prev => ({ ...prev, secondaryColor: e.target.value }))}
+                        className="font-mono text-xs h-8"
+                        maxLength={7}
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="brandAccentColor" className="text-xs text-muted-foreground">Accentfärg</Label>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="color"
+                        id="brandAccentColor"
+                        data-testid="input-brand-accent-color"
+                        value={form.accentColor}
+                        onChange={(e) => setForm(prev => ({ ...prev, accentColor: e.target.value }))}
+                        className="w-10 h-10 rounded cursor-pointer border border-border"
+                      />
+                      <Input
+                        value={form.accentColor}
+                        onChange={(e) => setForm(prev => ({ ...prev, accentColor: e.target.value }))}
+                        className="font-mono text-xs h-8"
+                        maxLength={7}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {form.logoUrl && (
+                <div className="space-y-2">
+                  <Label className="text-xs text-muted-foreground">Förhandsvisning av logotyp</Label>
+                  <div className="border rounded-lg p-4 bg-muted/30 flex items-center justify-center">
+                    <img
+                      src={form.logoUrl}
+                      alt="Logotyp"
+                      className="h-16 w-auto object-contain"
+                      data-testid="img-brand-logo-preview"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="button-preview-branding"
+                onClick={() => setShowPreview(!showPreview)}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                {showPreview ? "Dölj förhandsvisning" : "Visa förhandsvisning"}
+              </Button>
+              {hasCustomBranding && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  data-testid="button-reset-branding"
+                  onClick={() => resetMutation.mutate()}
+                  disabled={resetMutation.isPending}
+                >
+                  {resetMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                  Återställ till Traivo
+                </Button>
+              )}
+            </div>
+            <Button
+              data-testid="button-save-branding"
+              onClick={() => saveMutation.mutate(form)}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}
+              Spara varumärke
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {showPreview && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Förhandsvisning</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Splash-skärm (inloggning)</p>
+              <div
+                className="rounded-lg overflow-hidden relative flex flex-col items-center justify-center py-12"
+                style={{
+                  background: `linear-gradient(135deg, ${form.primaryColor} 0%, ${darken(form.primaryColor, 30)} 50%, ${form.primaryColor} 100%)`,
+                  minHeight: "200px",
+                }}
+                data-testid="preview-splash"
+              >
+                <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                  <div
+                    className="absolute -top-16 -right-16 w-48 h-48 rounded-full opacity-20"
+                    style={{ background: `radial-gradient(circle, ${form.accentColor} 0%, transparent 70%)` }}
+                  />
+                  <div
+                    className="absolute -bottom-12 -left-12 w-40 h-40 rounded-full opacity-15"
+                    style={{ background: `radial-gradient(circle, ${form.accentColor} 0%, transparent 70%)` }}
+                  />
+                </div>
+                <div className="relative flex flex-col items-center gap-3">
+                  {form.logoUrl ? (
+                    <img src={form.logoUrl} alt="Logo" className="h-16 w-auto object-contain drop-shadow-2xl" style={{ filter: "brightness(1.1) contrast(1.05)", maxWidth: "200px" }} />
+                  ) : form.companyName ? (
+                    <span className="text-white text-2xl font-bold drop-shadow-lg">{form.companyName}</span>
+                  ) : (
+                    <span className="text-white/60 text-sm italic">Traivo-logotyp (standard)</span>
+                  )}
+                  <p className="text-white/90 text-sm font-light tracking-wide">
+                    {form.tagline || "Intelligent fältservice"}
+                  </p>
+                  <div className="w-12 h-0.5 rounded-full bg-gradient-to-r from-transparent via-white/40 to-transparent mt-2" />
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">TopNav-logotyp</p>
+              <div className="border rounded-lg p-3 bg-background flex items-center gap-3" data-testid="preview-topnav">
+                {form.logoUrl ? (
+                  <img src={form.logoUrl} alt="Logo" className="h-10 w-auto object-contain" style={{ maxWidth: "140px" }} />
+                ) : (
+                  <span className="text-sm text-muted-foreground italic">Traivo-logotyp (standard)</span>
+                )}
+                <span className="text-xs text-muted-foreground ml-auto">← Så ser navigeringen ut</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export default function TenantConfigPage() {
   const { data: tenant } = useQuery<Tenant>({ queryKey: ["/api/tenant"] });
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
@@ -1739,13 +2073,17 @@ export default function TenantConfigPage() {
       </Card>
 
       <Tabs defaultValue="company" className="w-full">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="company" data-testid="tab-company" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Företagsinfo</span>
           </TabsTrigger>
-          <TabsTrigger value="terminology" data-testid="tab-terminology" className="flex items-center gap-2">
+          <TabsTrigger value="branding" data-testid="tab-branding" className="flex items-center gap-2">
             <Palette className="h-4 w-4" />
+            <span className="hidden sm:inline">Varumärke</span>
+          </TabsTrigger>
+          <TabsTrigger value="terminology" data-testid="tab-terminology" className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
             <span className="hidden sm:inline">Terminologi</span>
           </TabsTrigger>
           <TabsTrigger value="articles" data-testid="tab-articles" className="flex items-center gap-2">
@@ -1772,6 +2110,9 @@ export default function TenantConfigPage() {
 
         <TabsContent value="company">
           <CompanyInfoTab />
+        </TabsContent>
+        <TabsContent value="branding">
+          <BrandingTab />
         </TabsContent>
         <TabsContent value="terminology">
           <TerminologyTab />

@@ -61,7 +61,8 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Inspection & Metadata System:** Structured inspection checklist integrated into the mobile app.
 - **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
 - **Team Management & User Administration:** User management page with admin CRUD for users, team system, and bulk actions.
-- **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, and permissions.
+- **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, permissions, and branded demo configuration.
+- **Branded Demo Experience:** Quick branding editor in Företagsinställningar → Varumärke tab. Configure company name, logo URL, tagline, and color palette for sales demos. Live preview of splash screen and TopNav. WelcomeSplash and TopNav automatically reflect tenant branding when configured, falling back to Traivo defaults.
 - **Fleet Management:** Comprehensive fleet management page with vehicle dashboard, maintenance planning, and fuel tracking.
 - **Tenant Onboarding Wizard:** Admin wizard for creating new company accounts with industry package selection.
 - **Multi-Strategy Auto-Clustering:** Enhanced `/auto-cluster` page with 5 strategies for automatic cluster generation, including smart auto-assignment and manual cluster movement.
