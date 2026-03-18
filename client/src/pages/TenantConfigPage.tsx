@@ -1765,6 +1765,13 @@ function BrandingTab() {
 
   const hasCustomBranding = !!(form.companyName || form.logoUrl);
 
+  const isValidHex = (v: string) => /^#[0-9A-Fa-f]{6}$/.test(v);
+  const setColor = (field: "primaryColor" | "secondaryColor" | "accentColor", value: string) => {
+    if (value.startsWith("#") && value.length <= 7) {
+      setForm(prev => ({ ...prev, [field]: value }));
+    }
+  };
+
   const darken = (hex: string, amount: number) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     if (!result) return hex;
@@ -1849,14 +1856,14 @@ function BrandingTab() {
                         type="color"
                         id="brandPrimaryColor"
                         data-testid="input-brand-primary-color"
-                        value={form.primaryColor}
-                        onChange={(e) => setForm(prev => ({ ...prev, primaryColor: e.target.value }))}
+                        value={isValidHex(form.primaryColor) ? form.primaryColor : "#1B4B6B"}
+                        onChange={(e) => setColor("primaryColor", e.target.value)}
                         className="w-10 h-10 rounded cursor-pointer border border-border"
                       />
                       <Input
                         value={form.primaryColor}
-                        onChange={(e) => setForm(prev => ({ ...prev, primaryColor: e.target.value }))}
-                        className="font-mono text-xs h-8"
+                        onChange={(e) => setColor("primaryColor", e.target.value)}
+                        className={`font-mono text-xs h-8 ${!isValidHex(form.primaryColor) && form.primaryColor.length === 7 ? "border-destructive" : ""}`}
                         maxLength={7}
                       />
                     </div>
@@ -1868,14 +1875,14 @@ function BrandingTab() {
                         type="color"
                         id="brandSecondaryColor"
                         data-testid="input-brand-secondary-color"
-                        value={form.secondaryColor}
-                        onChange={(e) => setForm(prev => ({ ...prev, secondaryColor: e.target.value }))}
+                        value={isValidHex(form.secondaryColor) ? form.secondaryColor : "#2C3E50"}
+                        onChange={(e) => setColor("secondaryColor", e.target.value)}
                         className="w-10 h-10 rounded cursor-pointer border border-border"
                       />
                       <Input
                         value={form.secondaryColor}
-                        onChange={(e) => setForm(prev => ({ ...prev, secondaryColor: e.target.value }))}
-                        className="font-mono text-xs h-8"
+                        onChange={(e) => setColor("secondaryColor", e.target.value)}
+                        className={`font-mono text-xs h-8 ${!isValidHex(form.secondaryColor) && form.secondaryColor.length === 7 ? "border-destructive" : ""}`}
                         maxLength={7}
                       />
                     </div>
@@ -1887,14 +1894,14 @@ function BrandingTab() {
                         type="color"
                         id="brandAccentColor"
                         data-testid="input-brand-accent-color"
-                        value={form.accentColor}
-                        onChange={(e) => setForm(prev => ({ ...prev, accentColor: e.target.value }))}
+                        value={isValidHex(form.accentColor) ? form.accentColor : "#4A9B9B"}
+                        onChange={(e) => setColor("accentColor", e.target.value)}
                         className="w-10 h-10 rounded cursor-pointer border border-border"
                       />
                       <Input
                         value={form.accentColor}
-                        onChange={(e) => setForm(prev => ({ ...prev, accentColor: e.target.value }))}
-                        className="font-mono text-xs h-8"
+                        onChange={(e) => setColor("accentColor", e.target.value)}
+                        className={`font-mono text-xs h-8 ${!isValidHex(form.accentColor) && form.accentColor.length === 7 ? "border-destructive" : ""}`}
                         maxLength={7}
                       />
                     </div>
