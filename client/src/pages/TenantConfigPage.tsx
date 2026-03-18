@@ -2103,37 +2103,52 @@ function BrandingTab() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <p className="text-xs text-muted-foreground mb-2">Splash-skärm (inloggning)</p>
+              <p className="text-xs text-muted-foreground mb-2">Splash-skärm (inloggning) — smiley + företagsinfo</p>
               <div
-                className="rounded-lg overflow-hidden relative flex flex-col items-center justify-center py-12"
+                className="rounded-lg overflow-hidden relative flex flex-col items-center justify-center py-10"
                 style={{
                   background: `linear-gradient(135deg, ${form.primaryColor} 0%, ${darken(form.primaryColor, 30)} 50%, ${form.primaryColor} 100%)`,
-                  minHeight: "200px",
+                  minHeight: "220px",
                 }}
                 data-testid="preview-splash"
               >
-                <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                  <div
-                    className="absolute -top-16 -right-16 w-48 h-48 rounded-full opacity-20"
-                    style={{ background: `radial-gradient(circle, ${form.accentColor} 0%, transparent 70%)` }}
-                  />
-                  <div
-                    className="absolute -bottom-12 -left-12 w-40 h-40 rounded-full opacity-15"
-                    style={{ background: `radial-gradient(circle, ${form.accentColor} 0%, transparent 70%)` }}
-                  />
-                </div>
-                <div className="relative flex flex-col items-center gap-3">
-                  {form.logoUrl ? (
-                    <img src={form.logoUrl} alt="Logo" className="h-16 w-auto object-contain drop-shadow-2xl" style={{ filter: "brightness(1.1) contrast(1.05)", maxWidth: "200px" }} />
-                  ) : form.companyName ? (
-                    <span className="text-white text-2xl font-bold drop-shadow-lg">{form.companyName}</span>
-                  ) : (
-                    <span className="text-white/60 text-sm italic">Traivo-logotyp (standard)</span>
+                <div className="relative flex flex-col items-center gap-4">
+                  <svg width="80" height="80" viewBox="0 0 120 120" className="drop-shadow-2xl">
+                    <defs>
+                      <radialGradient id="prevFaceGrad" cx="40%" cy="35%">
+                        <stop offset="0%" stopColor="#FFE066" />
+                        <stop offset="100%" stopColor="#FFD700" />
+                      </radialGradient>
+                    </defs>
+                    <circle cx="60" cy="60" r="55" fill="url(#prevFaceGrad)" stroke="#E6B800" strokeWidth="2" />
+                    <ellipse cx="42" cy="45" rx="7" ry="9" fill="#4A3728" />
+                    <ellipse cx="78" cy="45" rx="7" ry="9" fill="#4A3728" />
+                    <ellipse cx="44" cy="42" rx="2.5" ry="3" fill="white" />
+                    <ellipse cx="80" cy="42" rx="2.5" ry="3" fill="white" />
+                    <path d="M 30 70 Q 60 100 90 70" fill="none" stroke="#4A3728" strokeWidth="4" strokeLinecap="round" />
+                    <ellipse cx="25" cy="65" rx="10" ry="7" fill="#FFB3B3" opacity="0.5" />
+                    <ellipse cx="95" cy="65" rx="10" ry="7" fill="#FFB3B3" opacity="0.5" />
+                  </svg>
+                  <p className="text-white/60 text-xs">Smileyn exploderar sedan i partiklar</p>
+
+                  {(form.logoUrl || form.companyName) && (
+                    <div className="flex flex-col items-center gap-1 mt-1">
+                      {form.logoUrl ? (
+                        <img src={form.logoUrl} alt="Logo" className="h-10 w-auto object-contain drop-shadow-lg" style={{ maxWidth: "160px" }} />
+                      ) : form.companyName ? (
+                        <span className="text-white text-lg font-bold drop-shadow-lg">{form.companyName}</span>
+                      ) : null}
+                      {form.tagline && (
+                        <p className="text-white/80 text-xs font-light tracking-wide">{form.tagline}</p>
+                      )}
+                    </div>
                   )}
-                  <p className="text-white/90 text-sm font-light tracking-wide">
-                    {form.tagline || "Intelligent fältservice"}
-                  </p>
-                  <div className="w-12 h-0.5 rounded-full bg-gradient-to-r from-transparent via-white/40 to-transparent mt-2" />
+
+                  {!form.logoUrl && !form.companyName && (
+                    <p className="text-white/80 text-xs font-light tracking-wide">
+                      {form.tagline || "Intelligent fältservice"}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
