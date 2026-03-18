@@ -200,6 +200,143 @@ app.get("/api/system/tenant-branding", asyncHandler(async (req, res) => {
     res.json(branding || null);
 }));
 
+app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, res) => {
+    const { url } = req.body;
+    if (!url || typeof url !== "string") {
+      throw new ValidationError("URL krävs");
+    }
+
+    let targetUrl = url.trim();
+    if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+      targetUrl = "https://" + targetUrl;
+    }
+
+    try {
+      const parsedUrl = new URL(targetUrl);
+      const baseUrl = `${parsedUrl.protocol}//${parsedUrl.host}`;
+
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+
+      const response = await fetch(targetUrl, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; TraivoBrandBot/1.0)",
+          "Accept": "text/html,application/xhtml+xml",
+        },
+      });
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`Kunde inte hämta sidan (HTTP ${response.status})`);
+      }
+
+      const html = await response.text();
+
+      const logos: string[] = [];
+      const colors: string[] = [];
+      let companyName = "";
+
+      const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
+      if (titleMatch) {
+        let t = titleMatch[1].trim();
+        t = t.split(/\s*[-–—|•·]\s*/)[0].trim();
+        if (t.length > 0 && t.length < 80) {
+          companyName = t;
+        }
+      }
+
+      const ogTitleMatch = html.match(/<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i)
+        || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i);
+      if (ogTitleMatch && ogTitleMatch[1].length < 80) {
+        companyName = ogTitleMatch[1].split(/\s*[-–—|•·]\s*/)[0].trim();
+      }
+
+      const resolveUrl = (src: string) => {
+        if (!src) return "";
+        if (src.startsWith("//")) return parsedUrl.protocol + src;
+        if (src.startsWith("http")) return src;
+        if (src.startsWith("/")) return baseUrl + src;
+        return baseUrl + "/" + src;
+      };
+
+      const ogImageMatch = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)
+        || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i);
+      if (ogImageMatch) {
+        logos.push(resolveUrl(ogImageMatch[1]));
+      }
+
+      const linkIconMatches = [...html.matchAll(/<link[^>]+rel=["'](?:icon|apple-touch-icon|shortcut icon)["'][^>]*href=["']([^"']+)["'][^>]*>/gi)];
+      for (const m of linkIconMatches) {
+        if (m[1]) logos.push(resolveUrl(m[1]));
+      }
+
+      const imgLogoPatterns = [
+        /<img[^>]+(?:class|id|alt)=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
+        /<img[^>]+src=["']([^"']+)["'][^>]*(?:class|id|alt)=["'][^"']*logo[^"']*["']/gi,
+        /<img[^>]+src=["']([^"']*logo[^"']*)["']/gi,
+      ];
+      for (const pattern of imgLogoPatterns) {
+        const matches = [...html.matchAll(pattern)];
+        for (const m of matches) {
+          if (m[1] && !m[1].includes("data:image/svg") && m[1].length < 500) {
+            logos.push(resolveUrl(m[1]));
+          }
+        }
+      }
+
+      const svgLogoMatch = html.match(/<(?:a[^>]+(?:class|id)=["'][^"']*logo[^"']*["'][^>]*>|header[^>]*>)[\s\S]*?(<svg[\s\S]*?<\/svg>)/i);
+      if (svgLogoMatch) {
+        const svgDataUrl = "data:image/svg+xml;base64," + Buffer.from(svgLogoMatch[1]).toString("base64");
+        logos.unshift(svgDataUrl);
+      }
+
+      const hexColors = new Set<string>();
+      const colorPatterns = [
+        /(?:background-color|background|color|border-color)\s*:\s*(#[0-9a-fA-F]{6})\b/g,
+        /(?:background-color|background|color|border-color)\s*:\s*(#[0-9a-fA-F]{3})\b/g,
+      ];
+      for (const pattern of colorPatterns) {
+        const matches = [...html.matchAll(pattern)];
+        for (const m of matches) {
+          let hex = m[1];
+          if (hex.length === 4) {
+            hex = "#" + hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3];
+          }
+          hex = hex.toUpperCase();
+          if (hex !== "#FFFFFF" && hex !== "#000000" && hex !== "#F5F5F5" && hex !== "#EEEEEE" && hex !== "#333333" && hex !== "#666666" && hex !== "#999999" && hex !== "#CCCCCC") {
+            hexColors.add(hex);
+          }
+        }
+      }
+
+      const themeColorMatch = html.match(/<meta[^>]+name=["']theme-color["'][^>]+content=["']([^"']+)["']/i)
+        || html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+name=["']theme-color["']/i);
+      if (themeColorMatch && /^#[0-9a-fA-F]{3,6}$/.test(themeColorMatch[1])) {
+        let tc = themeColorMatch[1].toUpperCase();
+        if (tc.length === 4) tc = "#" + tc[1] + tc[1] + tc[2] + tc[2] + tc[3] + tc[3];
+        hexColors.add(tc);
+        colors.unshift(tc);
+      }
+
+      colors.push(...[...hexColors].filter(c => !colors.includes(c)).slice(0, 10));
+
+      const uniqueLogos = [...new Set(logos)].slice(0, 5);
+
+      res.json({
+        companyName,
+        logos: uniqueLogos,
+        colors,
+        sourceUrl: targetUrl,
+      });
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        throw new ValidationError("Timeout: Sidan svarade inte inom 10 sekunder");
+      }
+      throw new ValidationError(err.message || "Kunde inte analysera webbplatsen");
+    }
+}));
+
 // Tenant Branding - Update or create branding
 app.put("/api/system/tenant-branding", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);

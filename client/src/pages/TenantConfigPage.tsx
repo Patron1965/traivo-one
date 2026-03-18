@@ -53,6 +53,9 @@ import {
   Eye,
   Image,
   Type,
+  Globe,
+  Search,
+  Check,
   type LucideIcon,
 } from "lucide-react";
 
@@ -1704,6 +1707,42 @@ function BrandingTab() {
   });
 
   const [showPreview, setShowPreview] = useState(false);
+  const [scrapeUrl, setScrapeUrl] = useState("");
+  const [scrapeResult, setScrapeResult] = useState<{
+    companyName: string;
+    logos: string[];
+    colors: string[];
+    sourceUrl: string;
+  } | null>(null);
+
+  const scrapeMutation = useMutation({
+    mutationFn: async (url: string) => {
+      const resp = await apiRequest("POST", "/api/system/scrape-branding", { url });
+      return resp.json();
+    },
+    onSuccess: (data) => {
+      setScrapeResult(data);
+      if (data.companyName && !form.companyName) {
+        setForm(prev => ({ ...prev, companyName: data.companyName }));
+      }
+      if (data.logos.length > 0 && !form.logoUrl) {
+        setForm(prev => ({ ...prev, logoUrl: data.logos[0] }));
+      }
+      if (data.colors.length >= 1) {
+        setForm(prev => ({
+          ...prev,
+          primaryColor: data.colors[0] || prev.primaryColor,
+          secondaryColor: data.colors[1] || prev.secondaryColor,
+          accentColor: data.colors[2] || prev.accentColor,
+        }));
+      }
+      setShowPreview(true);
+      toast({ title: "Hämtat!", description: `Hittade ${data.logos.length} logotyper och ${data.colors.length} färger från ${data.companyName || data.sourceUrl}` });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte hämta", description: error.message, variant: "destructive" });
+    },
+  });
 
   useEffect(() => {
     if (branding) {
@@ -1794,6 +1833,97 @@ function BrandingTab() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
+          <div className="rounded-lg border border-dashed border-primary/30 bg-primary/5 p-4 space-y-3">
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <Globe className="h-4 w-4" />
+              Hämta varumärke från webbplats
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Ange företagets webbadress — logotyp, färger och namn hämtas automatiskt.
+            </p>
+            <div className="flex gap-2">
+              <Input
+                data-testid="input-scrape-url"
+                value={scrapeUrl}
+                onChange={(e) => setScrapeUrl(e.target.value)}
+                placeholder="t.ex. lundstams.se"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && scrapeUrl.trim()) {
+                    e.preventDefault();
+                    scrapeMutation.mutate(scrapeUrl);
+                  }
+                }}
+              />
+              <Button
+                data-testid="button-scrape-branding"
+                onClick={() => scrapeMutation.mutate(scrapeUrl)}
+                disabled={scrapeMutation.isPending || !scrapeUrl.trim()}
+                variant="default"
+                size="default"
+              >
+                {scrapeMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Search className="h-4 w-4 mr-2" />
+                )}
+                Hämta
+              </Button>
+            </div>
+
+            {scrapeResult && (
+              <div className="space-y-3 pt-2">
+                {scrapeResult.logos.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Hittade logotyper (klicka för att välja)</Label>
+                    <div className="flex flex-wrap gap-2">
+                      {scrapeResult.logos.map((logo, i) => (
+                        <button
+                          key={i}
+                          data-testid={`button-select-logo-${i}`}
+                          onClick={() => setForm(prev => ({ ...prev, logoUrl: logo }))}
+                          className={`relative border rounded-lg p-2 bg-white dark:bg-gray-800 hover:border-primary transition-colors ${form.logoUrl === logo ? "border-primary ring-2 ring-primary/30" : "border-border"}`}
+                          style={{ minWidth: "60px", maxWidth: "140px" }}
+                        >
+                          <img
+                            src={logo}
+                            alt={`Logo ${i + 1}`}
+                            className="h-10 w-auto object-contain"
+                            onError={(e) => { (e.target as HTMLImageElement).parentElement!.style.display = "none"; }}
+                          />
+                          {form.logoUrl === logo && (
+                            <div className="absolute -top-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
+                              <Check className="h-2.5 w-2.5 text-white" />
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {scrapeResult.colors.length > 0 && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Hittade färger (klicka för att använda som primärfärg)</Label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {scrapeResult.colors.slice(0, 12).map((color, i) => (
+                        <button
+                          key={i}
+                          data-testid={`button-select-color-${i}`}
+                          onClick={() => setForm(prev => ({ ...prev, primaryColor: color }))}
+                          className={`w-8 h-8 rounded border-2 transition-transform hover:scale-110 ${form.primaryColor === color ? "border-foreground scale-110 ring-2 ring-primary/30" : "border-border"}`}
+                          style={{ backgroundColor: color }}
+                          title={color}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <Separator />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               <div className="space-y-2">
