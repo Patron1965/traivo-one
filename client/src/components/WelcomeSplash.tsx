@@ -1,18 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
-import traivoLogo from "@assets/traivo_logo_transparent.png";
 
 interface WelcomeSplashProps {
   onComplete: () => void;
 }
 
-function lightenColor(hex: string, amount: number): string {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  if (!result) return hex;
-  const r = Math.min(255, parseInt(result[1], 16) + amount);
-  const g = Math.min(255, parseInt(result[2], 16) + amount);
-  const b = Math.min(255, parseInt(result[3], 16) + amount);
-  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+interface Particle {
+  id: number;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  color: string;
+  emoji: string;
+  rotation: number;
+  rotationSpeed: number;
+  opacity: number;
 }
 
 function darkenColor(hex: string, amount: number): string {
@@ -24,127 +28,175 @@ function darkenColor(hex: string, amount: number): string {
   return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
 }
 
-const DEFAULT_PRIMARY = "#1B4B6B";
-const DEFAULT_ORB1 = "#4A9B9B";
-const DEFAULT_ORB2 = "#7DBFB0";
+const PARTICLE_EMOJIS = ["😊", "🎉", "✨", "⭐", "💫", "🌟", "😄", "🙌", "👋", "🎊", "💚", "🚀"];
+const PARTICLE_COLORS = ["#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DFE6E9", "#A29BFE", "#FD79A8", "#00CEC9"];
 
 export function WelcomeSplash({ onComplete }: WelcomeSplashProps) {
-  const [phase, setPhase] = useState<"enter" | "visible" | "exit">("enter");
+  const [phase, setPhase] = useState<"grow" | "pulse" | "explode" | "fade">("grow");
+  const [smileyScale, setSmileyScale] = useState(0);
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const animFrameRef = useRef<number>(0);
   const { branding } = useTenantBranding();
 
   const defaultPrimaries = ["#3B82F6", "#1B4B6B"];
   const hasCustomColor = !!(branding?.primaryColor && !defaultPrimaries.includes(branding.primaryColor));
   const hasAnyBranding = !!(branding && (branding.logoUrl || branding.companyName || branding.tagline || hasCustomColor));
   const customPrimary = hasAnyBranding && branding?.primaryColor ? branding.primaryColor : null;
-  const gradientStart = customPrimary || DEFAULT_PRIMARY;
-  const gradientMid = customPrimary ? darkenColor(customPrimary, 30) : "#2C3E50";
+  const bgColor = customPrimary || "#1B4B6B";
+  const bgDark = customPrimary ? darkenColor(customPrimary, 30) : "#2C3E50";
 
-  const orbColor1 = customPrimary ? lightenColor(customPrimary, 40) : DEFAULT_ORB1;
-  const orbColor2 = customPrimary ? lightenColor(customPrimary, 60) : DEFAULT_ORB2;
-
-  const customLogo = branding?.logoUrl || null;
-  const customName = branding?.companyName || null;
-  const displayTagline = branding?.tagline || "Intelligent fältservice";
+  const createParticles = useCallback(() => {
+    const newParticles: Particle[] = [];
+    const count = 60;
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5) * 0.5;
+      const speed = 3 + Math.random() * 8;
+      newParticles.push({
+        id: i,
+        x: 50,
+        y: 50,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 16 + Math.random() * 28,
+        color: PARTICLE_COLORS[Math.floor(Math.random() * PARTICLE_COLORS.length)],
+        emoji: PARTICLE_EMOJIS[Math.floor(Math.random() * PARTICLE_EMOJIS.length)],
+        rotation: Math.random() * 360,
+        rotationSpeed: (Math.random() - 0.5) * 20,
+        opacity: 1,
+      });
+    }
+    return newParticles;
+  }, []);
 
   useEffect(() => {
-    const enterTimer = setTimeout(() => setPhase("visible"), 50);
-    const exitTimer = setTimeout(() => setPhase("exit"), 2800);
-    const completeTimer = setTimeout(() => onComplete(), 3600);
+    const growDuration = 800;
+    const growStart = performance.now();
+
+    const animateGrow = (now: number) => {
+      const elapsed = now - growStart;
+      const progress = Math.min(elapsed / growDuration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setSmileyScale(eased);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animateGrow);
+      }
+    };
+    animFrameRef.current = requestAnimationFrame(animateGrow);
+
+    const pulseTimer = setTimeout(() => setPhase("pulse"), growDuration);
+    const explodeTimer = setTimeout(() => {
+      setPhase("explode");
+      setParticles(createParticles());
+    }, growDuration + 600);
+    const fadeTimer = setTimeout(() => setPhase("fade"), growDuration + 600 + 800);
+    const completeTimer = setTimeout(() => onComplete(), growDuration + 600 + 800 + 500);
 
     return () => {
-      clearTimeout(enterTimer);
-      clearTimeout(exitTimer);
+      cancelAnimationFrame(animFrameRef.current);
+      clearTimeout(pulseTimer);
+      clearTimeout(explodeTimer);
+      clearTimeout(fadeTimer);
       clearTimeout(completeTimer);
     };
-  }, [onComplete]);
+  }, [onComplete, createParticles]);
+
+  useEffect(() => {
+    if (phase !== "explode" && phase !== "fade") return;
+
+    let lastTime = performance.now();
+    const animate = (now: number) => {
+      const dt = (now - lastTime) / 16;
+      lastTime = now;
+
+      setParticles(prev =>
+        prev.map(p => ({
+          ...p,
+          x: p.x + p.vx * dt,
+          y: p.y + p.vy * dt,
+          vy: p.vy + 0.15 * dt,
+          rotation: p.rotation + p.rotationSpeed * dt,
+          opacity: Math.max(0, p.opacity - 0.012 * dt),
+        })).filter(p => p.opacity > 0)
+      );
+
+      animFrameRef.current = requestAnimationFrame(animate);
+    };
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(animFrameRef.current);
+  }, [phase]);
+
+  const smileySize = phase === "pulse" ? "scale-[3.5]" : "";
+  const pulseAnim = phase === "pulse" ? "animate-bounce" : "";
 
   return (
     <div
-      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-opacity duration-700 ease-out ${
-        phase === "exit" ? "opacity-0" : phase === "visible" ? "opacity-100" : "opacity-0"
+      className={`fixed inset-0 z-[9999] flex flex-col items-center justify-center transition-opacity duration-500 ease-out ${
+        phase === "fade" ? "opacity-0" : "opacity-100"
       }`}
       style={{
-        background: `linear-gradient(135deg, ${gradientStart} 0%, ${gradientMid} 50%, ${gradientStart} 100%)`,
+        background: `linear-gradient(135deg, ${bgColor} 0%, ${bgDark} 50%, ${bgColor} 100%)`,
       }}
       data-testid="welcome-splash"
     >
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+      {phase !== "explode" && phase !== "fade" && (
         <div
-          className={`absolute -top-32 -right-32 w-96 h-96 rounded-full transition-all ease-out ${
-            phase !== "enter" ? "opacity-20 scale-100" : "opacity-0 scale-50"
-          }`}
+          className={`transition-transform duration-300 ease-out ${smileySize} ${pulseAnim}`}
           style={{
-            background: `radial-gradient(circle, ${orbColor1} 0%, transparent 70%)`,
-            transitionDuration: "2000ms",
+            transform: phase === "grow" ? `scale(${smileyScale * 3.5})` : undefined,
           }}
-        />
+        >
+          <div className="relative" data-testid="splash-smiley">
+            <svg width="120" height="120" viewBox="0 0 120 120" className="drop-shadow-2xl">
+              <defs>
+                <radialGradient id="faceGrad" cx="40%" cy="35%">
+                  <stop offset="0%" stopColor="#FFE066" />
+                  <stop offset="100%" stopColor="#FFD700" />
+                </radialGradient>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="3" result="blur" />
+                  <feMerge>
+                    <feMergeNode in="blur" />
+                    <feMergeNode in="SourceGraphic" />
+                  </feMerge>
+                </filter>
+              </defs>
+              <circle cx="60" cy="60" r="55" fill="url(#faceGrad)" stroke="#E6B800" strokeWidth="2" filter="url(#glow)" />
+              <ellipse cx="42" cy="45" rx="7" ry="9" fill="#4A3728" />
+              <ellipse cx="78" cy="45" rx="7" ry="9" fill="#4A3728" />
+              <ellipse cx="44" cy="42" rx="2.5" ry="3" fill="white" />
+              <ellipse cx="80" cy="42" rx="2.5" ry="3" fill="white" />
+              <path
+                d="M 30 70 Q 60 100 90 70"
+                fill="none"
+                stroke="#4A3728"
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <ellipse cx="25" cy="65" rx="10" ry="7" fill="#FFB3B3" opacity="0.5" />
+              <ellipse cx="95" cy="65" rx="10" ry="7" fill="#FFB3B3" opacity="0.5" />
+            </svg>
+          </div>
+        </div>
+      )}
+
+      {(phase === "explode" || phase === "fade") && particles.map(p => (
         <div
-          className={`absolute -bottom-24 -left-24 w-80 h-80 rounded-full transition-all ease-out delay-300 ${
-            phase !== "enter" ? "opacity-15 scale-100" : "opacity-0 scale-50"
-          }`}
+          key={p.id}
+          className="absolute pointer-events-none"
           style={{
-            background: `radial-gradient(circle, ${orbColor2} 0%, transparent 70%)`,
-            transitionDuration: "2500ms",
+            left: `${p.x}%`,
+            top: `${p.y}%`,
+            transform: `translate(-50%, -50%) rotate(${p.rotation}deg)`,
+            fontSize: `${p.size}px`,
+            opacity: p.opacity,
+            willChange: "transform, opacity, left, top",
           }}
-        />
-      </div>
-
-      <div className="relative flex flex-col items-center gap-6">
-        <div
-          className={`transition-all duration-1000 ease-out ${
-            phase !== "enter"
-              ? "opacity-100 translate-y-0 scale-100"
-              : "opacity-0 translate-y-6 scale-90"
-          }`}
         >
-          {customLogo ? (
-            <img
-              src={customLogo}
-              alt={customName || "Logo"}
-              className="h-24 md:h-32 w-auto object-contain drop-shadow-2xl"
-              style={{ filter: "brightness(1.1) contrast(1.05)", maxWidth: "320px" }}
-              data-testid="img-splash-logo"
-            />
-          ) : customName ? (
-            <h1
-              className="text-4xl md:text-5xl font-bold text-white drop-shadow-2xl tracking-tight"
-              data-testid="text-splash-company-name"
-            >
-              {customName}
-            </h1>
-          ) : (
-            <img
-              src={traivoLogo}
-              alt="Traivo"
-              className="h-24 md:h-32 w-auto object-contain drop-shadow-2xl"
-              style={{ filter: "brightness(1.1) contrast(1.05)" }}
-              data-testid="img-splash-logo"
-            />
-          )}
+          {p.emoji}
         </div>
-
-        <div
-          className={`transition-all duration-1000 ease-out delay-500 ${
-            phase !== "enter"
-              ? "opacity-100 translate-y-0"
-              : "opacity-0 translate-y-4"
-          }`}
-        >
-          <p className="text-white/90 text-lg md:text-xl font-light tracking-wide text-center">
-            {displayTagline}
-          </p>
-        </div>
-
-        <div
-          className={`mt-4 transition-all duration-1000 ease-out delay-700 ${
-            phase !== "enter"
-              ? "opacity-100 scale-x-100"
-              : "opacity-0 scale-x-0"
-          }`}
-        >
-          <div className="w-16 h-0.5 rounded-full bg-gradient-to-r from-transparent via-white/40 to-transparent" />
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
