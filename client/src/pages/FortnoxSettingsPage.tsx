@@ -27,6 +27,15 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import {
   ExternalLink,
   Link2,
@@ -44,6 +53,10 @@ import {
   Clock,
   Trash2,
   Plus,
+  Download,
+  Search,
+  CheckCheck,
+  Ban,
 } from "lucide-react";
 import type { Customer, Article, Resource, Team } from "@shared/schema";
 
@@ -86,6 +99,22 @@ interface FortnoxInvoiceExport {
   createdAt: string;
 }
 
+interface FortnoxCustomer {
+  customerNumber: string;
+  name: string;
+  organisationNumber: string;
+  address1: string;
+  address2: string;
+  zipCode: string;
+  city: string;
+  phone: string;
+  email: string;
+  contactPerson: string;
+  active: boolean;
+  alreadyImported: boolean;
+  existingMatch: { id: string; name: string } | null;
+}
+
 const ENTITY_TYPES = [
   { value: "customer", label: "Kunder", icon: Users },
   { value: "article", label: "Artiklar", icon: Package },
@@ -102,6 +131,11 @@ export default function FortnoxSettingsPage() {
   const [selectedEntityType, setSelectedEntityType] = useState("customer");
   const [selectedEntityId, setSelectedEntityId] = useState("");
   const [fortnoxIdInput, setFortnoxIdInput] = useState("");
+  const [fortnoxCustomers, setFortnoxCustomers] = useState<FortnoxCustomer[]>([]);
+  const [selectedForImport, setSelectedForImport] = useState<Set<string>>(new Set());
+  const [customerSearch, setCustomerSearch] = useState("");
+  const [customerFilter, setCustomerFilter] = useState<"all" | "new" | "imported">("all");
+  const [importComplete, setImportComplete] = useState<{ created: number; skipped: number; errors: number } | null>(null);
 
   const { data: config, isLoading: configLoading } = useQuery<FortnoxConfig>({
     queryKey: ["/api/fortnox/config"],
@@ -174,6 +208,35 @@ export default function FortnoxSettingsPage() {
     onError: () => toast({ title: "Kunde inte ta bort koppling", variant: "destructive" }),
   });
 
+  const fetchFortnoxCustomersMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("GET", "/api/fortnox/customers/fetch");
+      return res.json();
+    },
+    onSuccess: (data: { total: number; customers: FortnoxCustomer[] }) => {
+      setFortnoxCustomers(data.customers);
+      const newCustomers = data.customers.filter(c => !c.alreadyImported);
+      setSelectedForImport(new Set(newCustomers.map(c => c.customerNumber)));
+      setImportComplete(null);
+      toast({ title: `${data.total} kunder hämtade från Fortnox` });
+    },
+    onError: () => toast({ title: "Kunde inte hämta kunder från Fortnox", variant: "destructive" }),
+  });
+
+  const importCustomersMutation = useMutation({
+    mutationFn: async (customerList: FortnoxCustomer[]) => {
+      const res = await apiRequest("POST", "/api/fortnox/customers/import", { customers: customerList });
+      return res.json();
+    },
+    onSuccess: (data: { summary: { created: number; skipped: number; errors: number } }) => {
+      setImportComplete(data.summary);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/fortnox/mappings"] });
+      toast({ title: `${data.summary.created} kunder importerade` });
+    },
+    onError: () => toast({ title: "Import misslyckades", variant: "destructive" }),
+  });
+
   const isConnected = config?.isActive && config?.accessToken;
 
   const getEntityOptions = () => {
@@ -208,6 +271,59 @@ export default function FortnoxSettingsPage() {
   };
 
   const filteredMappings = mappings.filter(m => m.entityType === selectedEntityType);
+
+  const filteredFortnoxCustomers = fortnoxCustomers.filter(c => {
+    if (customerFilter === "new" && c.alreadyImported) return false;
+    if (customerFilter === "imported" && !c.alreadyImported) return false;
+    if (customerSearch) {
+      const q = customerSearch.toLowerCase();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        c.customerNumber.toLowerCase().includes(q) ||
+        c.city.toLowerCase().includes(q) ||
+        c.email.toLowerCase().includes(q)
+      );
+    }
+    return true;
+  });
+
+  const selectableCustomers = filteredFortnoxCustomers.filter(c => !c.alreadyImported);
+  const allSelectableSelected = selectableCustomers.length > 0 && selectableCustomers.every(c => selectedForImport.has(c.customerNumber));
+
+  const toggleCustomer = (customerNumber: string) => {
+    setSelectedForImport(prev => {
+      const next = new Set(prev);
+      if (next.has(customerNumber)) {
+        next.delete(customerNumber);
+      } else {
+        next.add(customerNumber);
+      }
+      return next;
+    });
+  };
+
+  const toggleAllVisible = () => {
+    setSelectedForImport(prev => {
+      const next = new Set(prev);
+      if (allSelectableSelected) {
+        selectableCustomers.forEach(c => next.delete(c.customerNumber));
+      } else {
+        selectableCustomers.forEach(c => next.add(c.customerNumber));
+      }
+      return next;
+    });
+  };
+
+  const removeSelected = () => {
+    setFortnoxCustomers(prev => prev.filter(c => !selectedForImport.has(c.customerNumber)));
+    setSelectedForImport(new Set());
+  };
+
+  const handleImport = () => {
+    const toImport = fortnoxCustomers.filter(c => selectedForImport.has(c.customerNumber) && !c.alreadyImported);
+    if (toImport.length === 0) return;
+    importCustomersMutation.mutate(toImport);
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -342,6 +458,10 @@ export default function FortnoxSettingsPage() {
             <FileText className="h-4 w-4" />
             Fakturaexporter
           </TabsTrigger>
+          <TabsTrigger value="import-customers" className="gap-1" data-testid="tab-import-customers">
+            <Download className="h-4 w-4" />
+            Importera kunder
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="mappings" className="mt-4">
@@ -475,6 +595,223 @@ export default function FortnoxSettingsPage() {
                     ))}
                   </div>
                 </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="import-customers" className="mt-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div>
+                  <CardTitle className="text-lg">Importera kunder från Fortnox</CardTitle>
+                  <CardDescription>
+                    Hämta kundregistret från Fortnox, granska och välj vilka kunder som ska importeras till Traivo
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={() => fetchFortnoxCustomersMutation.mutate()}
+                  disabled={!isConnected || fetchFortnoxCustomersMutation.isPending}
+                  data-testid="button-fetch-fortnox-customers"
+                >
+                  {fetchFortnoxCustomersMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4 mr-2" />
+                  )}
+                  Hämta kunder från Fortnox
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {!isConnected && (
+                <Alert>
+                  <AlertTriangle className="h-4 w-4" />
+                  <AlertTitle>Fortnox ej anslutet</AlertTitle>
+                  <AlertDescription>
+                    Anslut till Fortnox först under "Anslutningsstatus" ovan för att kunna importera kunder.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {importComplete && (
+                <Alert className="mb-4">
+                  <CheckCircle2 className="h-4 w-4" />
+                  <AlertTitle>Import klar</AlertTitle>
+                  <AlertDescription>
+                    {importComplete.created} kunder importerade
+                    {importComplete.skipped > 0 && `, ${importComplete.skipped} hoppades över (redan importerade)`}
+                    {importComplete.errors > 0 && `, ${importComplete.errors} fel`}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {fortnoxCustomers.length > 0 && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="relative flex-1 min-w-[200px]">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Sök namn, kundnummer, stad, e-post..."
+                        value={customerSearch}
+                        onChange={(e) => setCustomerSearch(e.target.value)}
+                        className="pl-9"
+                        data-testid="input-customer-search"
+                      />
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={customerFilter === "all" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCustomerFilter("all")}
+                        data-testid="filter-all"
+                      >
+                        Alla ({fortnoxCustomers.length})
+                      </Button>
+                      <Button
+                        variant={customerFilter === "new" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCustomerFilter("new")}
+                        data-testid="filter-new"
+                      >
+                        Nya ({fortnoxCustomers.filter(c => !c.alreadyImported).length})
+                      </Button>
+                      <Button
+                        variant={customerFilter === "imported" ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCustomerFilter("imported")}
+                        data-testid="filter-imported"
+                      >
+                        Redan importerade ({fortnoxCustomers.filter(c => c.alreadyImported).length})
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <span>{selectedForImport.size} markerade för import</span>
+                      <span>·</span>
+                      <span>{filteredFortnoxCustomers.length} visas</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {selectedForImport.size > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={removeSelected}
+                          className="text-destructive border-destructive/30 hover:bg-destructive/10"
+                          data-testid="button-remove-selected"
+                        >
+                          <Trash2 className="h-4 w-4 mr-1" />
+                          Ta bort markerade ({selectedForImport.size})
+                        </Button>
+                      )}
+                      <Button
+                        onClick={handleImport}
+                        disabled={selectedForImport.size === 0 || importCustomersMutation.isPending}
+                        data-testid="button-import-customers"
+                      >
+                        {importCustomersMutation.isPending ? (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        ) : (
+                          <CheckCheck className="h-4 w-4 mr-2" />
+                        )}
+                        Importera markerade ({selectedForImport.size})
+                      </Button>
+                    </div>
+                  </div>
+
+                  <ScrollArea className="h-[500px] border rounded-md">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="w-[40px]">
+                            <Checkbox
+                              checked={allSelectableSelected}
+                              onCheckedChange={toggleAllVisible}
+                              data-testid="checkbox-select-all"
+                            />
+                          </TableHead>
+                          <TableHead>Kundnr</TableHead>
+                          <TableHead>Namn</TableHead>
+                          <TableHead className="hidden md:table-cell">Org.nr</TableHead>
+                          <TableHead className="hidden md:table-cell">Ort</TableHead>
+                          <TableHead className="hidden lg:table-cell">E-post</TableHead>
+                          <TableHead className="hidden lg:table-cell">Telefon</TableHead>
+                          <TableHead>Status</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredFortnoxCustomers.map((c) => (
+                          <TableRow
+                            key={c.customerNumber}
+                            className={c.alreadyImported ? "opacity-50" : selectedForImport.has(c.customerNumber) ? "bg-primary/5" : ""}
+                            data-testid={`row-customer-${c.customerNumber}`}
+                          >
+                            <TableCell>
+                              <Checkbox
+                                checked={selectedForImport.has(c.customerNumber)}
+                                onCheckedChange={() => toggleCustomer(c.customerNumber)}
+                                disabled={c.alreadyImported}
+                                data-testid={`checkbox-customer-${c.customerNumber}`}
+                              />
+                            </TableCell>
+                            <TableCell className="font-mono text-sm">{c.customerNumber}</TableCell>
+                            <TableCell>
+                              <div>
+                                <span className="font-medium">{c.name}</span>
+                                {c.contactPerson && (
+                                  <p className="text-xs text-muted-foreground">{c.contactPerson}</p>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell className="hidden md:table-cell text-sm">{c.organisationNumber || "–"}</TableCell>
+                            <TableCell className="hidden md:table-cell text-sm">
+                              {c.city || "–"}
+                              {c.zipCode && <span className="text-muted-foreground ml-1">({c.zipCode})</span>}
+                            </TableCell>
+                            <TableCell className="hidden lg:table-cell text-sm">{c.email || "–"}</TableCell>
+                            <TableCell className="hidden lg:table-cell text-sm">{c.phone || "–"}</TableCell>
+                            <TableCell>
+                              {c.alreadyImported ? (
+                                <Badge variant="secondary" className="gap-1">
+                                  <CheckCircle2 className="h-3 w-3" />
+                                  Importerad
+                                </Badge>
+                              ) : c.existingMatch ? (
+                                <Badge variant="outline" className="gap-1 text-yellow-600 border-yellow-300">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  Namnmatchning
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="gap-1 text-green-600 border-green-300">
+                                  <Plus className="h-3 w-3" />
+                                  Ny
+                                </Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                </div>
+              )}
+
+              {fortnoxCustomers.length === 0 && isConnected && !fetchFortnoxCustomersMutation.isPending && (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Users className="h-12 w-12 mx-auto mb-3 opacity-40" />
+                  <p className="font-medium">Inga kunder hämtade ännu</p>
+                  <p className="text-sm mt-1">Klicka "Hämta kunder från Fortnox" för att ladda kundregistret</p>
+                </div>
+              )}
+
+              {fetchFortnoxCustomersMutation.isPending && (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+                  <p className="text-muted-foreground">Hämtar kunder från Fortnox...</p>
+                </div>
               )}
             </CardContent>
           </Card>

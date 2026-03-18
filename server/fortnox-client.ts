@@ -247,6 +247,30 @@ export class FortnoxClient {
     return this.apiRequest("GET", "/projects");
   }
 
+  async getCustomers(): Promise<any[]> {
+    const allCustomers: any[] = [];
+    let currentPage = 1;
+    let totalPages = 1;
+
+    while (currentPage <= totalPages) {
+      const response: any = await this.apiRequest("GET", `/customers?limit=500&page=${currentPage}`);
+      if (response?.Customers) {
+        allCustomers.push(...response.Customers);
+      }
+      if (response?.MetaInformation) {
+        totalPages = response.MetaInformation["@TotalPages"] || 1;
+      }
+      currentPage++;
+    }
+
+    return allCustomers;
+  }
+
+  async getCustomerDetails(customerNumber: string): Promise<any> {
+    const response: any = await this.apiRequest("GET", `/customers/${customerNumber}`);
+    return response?.Customer || null;
+  }
+
   async isConnected(): Promise<boolean> {
     const config = await storage.getFortnoxConfig(this.tenantId);
     return !!(config?.accessToken && config?.isActive);

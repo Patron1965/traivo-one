@@ -2006,4 +2006,130 @@ app.post("/api/order-concepts/:id/detect-changes", asyncHandler(async (req, res)
     });
 }));
 
+// Fetch all customers from Fortnox for import preview
+app.get("/api/fortnox/customers/fetch", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+
+    const isConnected = await client.isConnected();
+    if (!isConnected) {
+      throw new ValidationError("Fortnox är inte anslutet. Anslut först under Fortnox-inställningar.");
+    }
+
+    const fortnoxCustomers = await client.getCustomers();
+
+    const existingCustomers = await storage.getCustomers(tenantId);
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "customer");
+
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+
+    const enrichedCustomers = fortnoxCustomers.map((fc: any) => {
+      const customerNumber = fc.CustomerNumber || "";
+      const alreadyImported = mappedFortnoxIds.has(customerNumber);
+      const nameMatch = existingCustomers.find(
+        ec => ec.name?.toLowerCase().trim() === (fc.Name || "").toLowerCase().trim()
+      );
+
+      return {
+        customerNumber,
+        name: fc.Name || "",
+        organisationNumber: fc.OrganisationNumber || "",
+        address1: fc.Address1 || "",
+        address2: fc.Address2 || "",
+        zipCode: fc.ZipCode || "",
+        city: fc.City || "",
+        phone: fc.Phone1 || fc.Phone2 || "",
+        email: fc.Email || "",
+        contactPerson: fc.YourReference || "",
+        active: fc.Active !== false,
+        alreadyImported,
+        existingMatch: nameMatch ? { id: nameMatch.id, name: nameMatch.name } : null,
+      };
+    });
+
+    res.json({
+      total: enrichedCustomers.length,
+      customers: enrichedCustomers,
+    });
+}));
+
+// Import selected customers from Fortnox
+app.post("/api/fortnox/customers/import", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const client = createFortnoxClient(tenantId);
+
+    const isConnected = await client.isConnected();
+    if (!isConnected) {
+      throw new ValidationError("Fortnox är inte anslutet.");
+    }
+
+    const schema = z.object({
+      customers: z.array(z.object({
+        customerNumber: z.string(),
+        name: z.string(),
+        organisationNumber: z.string().optional(),
+        address1: z.string().optional(),
+        address2: z.string().optional(),
+        zipCode: z.string().optional(),
+        city: z.string().optional(),
+        phone: z.string().optional(),
+        email: z.string().optional(),
+        contactPerson: z.string().optional(),
+      })),
+    });
+
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(formatZodError(parsed.error));
+    }
+
+    const results: Array<{ customerNumber: string; name: string; status: "created" | "skipped" | "error"; error?: string; customerId?: string }> = [];
+    const existingMappings = await storage.getFortnoxMappings(tenantId, "customer");
+    const mappedFortnoxIds = new Set(existingMappings.map(m => m.fortnoxId));
+
+    for (const fc of parsed.data.customers) {
+      try {
+        if (mappedFortnoxIds.has(fc.customerNumber)) {
+          results.push({ customerNumber: fc.customerNumber, name: fc.name, status: "skipped" });
+          continue;
+        }
+
+        const addressParts = [fc.address1, fc.address2].filter(Boolean);
+        const newCustomer = await storage.createCustomer({
+          tenantId,
+          name: fc.name,
+          customerNumber: fc.customerNumber,
+          contactPerson: fc.contactPerson || null,
+          email: fc.email || null,
+          phone: fc.phone || null,
+          address: addressParts.join(", ") || null,
+          city: fc.city || null,
+          postalCode: fc.zipCode || null,
+          notes: fc.organisationNumber ? `Org.nr: ${fc.organisationNumber}` : null,
+          importBatchId: `fortnox-${new Date().toISOString().slice(0, 10)}`,
+        });
+
+        await storage.createFortnoxMapping({
+          tenantId,
+          entityType: "customer",
+          unicornId: newCustomer.id,
+          fortnoxId: fc.customerNumber,
+        });
+
+        results.push({ customerNumber: fc.customerNumber, name: fc.name, status: "created", customerId: newCustomer.id });
+      } catch (err: any) {
+        results.push({ customerNumber: fc.customerNumber, name: fc.name, status: "error", error: err.message });
+      }
+    }
+
+    const created = results.filter(r => r.status === "created").length;
+    const skipped = results.filter(r => r.status === "skipped").length;
+    const errors = results.filter(r => r.status === "error").length;
+
+    res.json({
+      summary: { created, skipped, errors, total: results.length },
+      results,
+    });
+}));
+
 }
