@@ -15,7 +15,11 @@ interface WeatherCache {
 }
 
 const weatherCache = new Map<string, WeatherCache>();
-const CACHE_TTL = 30 * 60 * 1000; // 30 minutes
+const CACHE_TTL = 60 * 60 * 1000; // 1 hour
+const ERROR_CACHE_TTL = 5 * 60 * 1000; // 5 minutes for failed requests
+
+let lastRequestTime = 0;
+const MIN_REQUEST_INTERVAL = 1500; // 1.5 seconds between requests
 
 function getCacheKey(latitude: number, longitude: number, days: number): string {
   return `${latitude.toFixed(2)}_${longitude.toFixed(2)}_${days}`;
@@ -80,61 +84,58 @@ function calculateWeatherImpact(forecast: WeatherForecast): WeatherImpact {
   if (forecast.precipitation > 20) {
     impactLevel = "severe";
     capacityMultiplier = 0.5;
-    reasons.push("Mycket kraftig nederbörd");
-    recommendations.push("Överväg att skjuta upp icke-akuta ordrar");
-    recommendations.push("Prioritera inomhusarbeten");
+    reasons.push("Kraftigt regn");
+    recommendations.push("Prioritera inomhusuppgifter");
+    recommendations.push("Överväg att skjuta upp utomhusarbeten");
   } else if (forecast.precipitation > 10) {
     impactLevel = "high";
     capacityMultiplier = 0.7;
-    reasons.push("Kraftig nederbörd");
-    recommendations.push("Planera för längre ställtider");
-    recommendations.push("Ta med extra regnskydd");
+    reasons.push("Regn");
+    recommendations.push("Planera för längre körtider");
   } else if (forecast.precipitation > 5) {
     impactLevel = "medium";
     capacityMultiplier = 0.85;
-    reasons.push("Måttlig nederbörd");
-    recommendations.push("Förläng tidsuppskattningar med 15%");
-  } else if (forecast.precipitation > 1) {
+    reasons.push("Lätt regn");
+    recommendations.push("Normal planering med viss marginal");
+  } else if (forecast.precipitation > 2) {
     impactLevel = "low";
     capacityMultiplier = 0.95;
-    reasons.push("Lätt nederbörd");
+    reasons.push("Duggregn");
   }
 
-  if (forecast.windSpeed > 15) {
-    if (impactLevel === "none" || impactLevel === "low") {
+  if (forecast.windSpeed > 60) {
+    impactLevel = "severe";
+    capacityMultiplier = Math.min(capacityMultiplier, 0.4);
+    reasons.push("Storm");
+    recommendations.push("Avvakta med utomhusarbete");
+  } else if (forecast.windSpeed > 40) {
+    if (impactLevel !== "severe") {
       impactLevel = "high";
-      capacityMultiplier = Math.min(capacityMultiplier, 0.7);
+      capacityMultiplier = Math.min(capacityMultiplier, 0.6);
     }
-    reasons.push("Kraftig vind");
-    recommendations.push("Undvik arbete på höjd");
-    recommendations.push("Säkra lösa material");
-  } else if (forecast.windSpeed > 10) {
-    if (impactLevel === "none") {
-      impactLevel = "low";
-      capacityMultiplier = Math.min(capacityMultiplier, 0.9);
-    }
-    reasons.push("Blåsigt");
-  }
-
-  if (forecast.temperature < -10) {
+    reasons.push("Hård vind");
+    recommendations.push("Undvik höghöjdsarbete");
+  } else if (forecast.windSpeed > 25) {
     if (impactLevel === "none" || impactLevel === "low") {
       impactLevel = "medium";
       capacityMultiplier = Math.min(capacityMultiplier, 0.8);
     }
+    reasons.push("Blåsigt");
+  }
+
+  if (forecast.temperature < -15) {
+    impactLevel = "severe";
+    capacityMultiplier = Math.min(capacityMultiplier, 0.5);
     reasons.push("Extrem kyla");
-    recommendations.push("Planera för uppvärmning av fordon");
-    recommendations.push("Kortare arbetspass utomhus");
-  } else if (forecast.temperature < 0) {
-    reasons.push("Frostgradigt");
-    recommendations.push("Kontrollera halkrisker");
-  } else if (forecast.temperature > 30) {
-    if (impactLevel === "none") {
-      impactLevel = "low";
-      capacityMultiplier = Math.min(capacityMultiplier, 0.9);
+    recommendations.push("Begränsa utomhusvistelse");
+    recommendations.push("Kontrollera fordonsstarter");
+  } else if (forecast.temperature < -5) {
+    if (impactLevel === "none" || impactLevel === "low") {
+      impactLevel = "medium";
+      capacityMultiplier = Math.min(capacityMultiplier, 0.8);
     }
-    reasons.push("Extrem värme");
-    recommendations.push("Planera fler pauser");
-    recommendations.push("Se till att personal har vatten");
+    reasons.push("Kyla");
+    recommendations.push("Extra uppvärmningstid för fordon");
   }
 
   if ([71, 73, 75, 85, 86].includes(forecast.weatherCode)) {
@@ -163,6 +164,16 @@ function calculateWeatherImpact(forecast: WeatherForecast): WeatherImpact {
   };
 }
 
+async function fetchWithRateLimit(url: string): Promise<Response> {
+  const now = Date.now();
+  const timeSinceLastRequest = now - lastRequestTime;
+  if (timeSinceLastRequest < MIN_REQUEST_INTERVAL) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_INTERVAL - timeSinceLastRequest));
+  }
+  lastRequestTime = Date.now();
+  return fetch(url);
+}
+
 export async function fetchWeatherForecast(
   latitude: number,
   longitude: number,
@@ -175,11 +186,15 @@ export async function fetchWeatherForecast(
     return cached.result;
   }
 
+  if (cached && cached.result.forecasts.length === 0 && Date.now() - cached.timestamp < ERROR_CACHE_TTL) {
+    return cached.result;
+  }
+
   try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${latitude}&longitude=${longitude}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,wind_speed_10m_max,weather_code&timezone=Europe/Stockholm&forecast_days=${Math.min(days, 16)}`;
 
     const startTime = Date.now();
-    const response = await fetch(url);
+    const response = await fetchWithRateLimit(url);
     trackApiUsage({
       service: "open-meteo",
       method: "forecast",
@@ -188,6 +203,22 @@ export async function fetchWeatherForecast(
       statusCode: response.status,
       durationMs: Date.now() - startTime,
     });
+
+    if (response.status === 429) {
+      console.warn("[weather] Rate limited by Open-Meteo API, using cached data if available");
+      if (cached) {
+        cached.timestamp = Date.now() - CACHE_TTL + ERROR_CACHE_TTL;
+        return cached.result;
+      }
+      const errorResult: WeatherForecastResult = {
+        location: { latitude, longitude },
+        forecasts: [],
+        impacts: [],
+        summary: "Väder-API:et är tillfälligt överbelastat. Försök igen om några minuter.",
+      };
+      weatherCache.set(cacheKey, { result: errorResult, timestamp: Date.now() });
+      return errorResult;
+    }
 
     if (!response.ok) {
       throw new Error(`Weather API error: ${response.status}`);
@@ -227,12 +258,19 @@ export async function fetchWeatherForecast(
     return result;
   } catch (error) {
     console.error("Weather fetch error:", error);
-    return {
+    if (cached && cached.result.forecasts.length > 0) {
+      console.log("[weather] Using stale cache after fetch error");
+      cached.timestamp = Date.now() - CACHE_TTL + ERROR_CACHE_TTL;
+      return cached.result;
+    }
+    const errorResult: WeatherForecastResult = {
       location: { latitude, longitude },
       forecasts: [],
       impacts: [],
-      summary: "Kunde inte hämta väderprognos. Kontrollera internetanslutning.",
+      summary: "Kunde inte hämta väderprognos just nu. Försök igen om en stund.",
     };
+    weatherCache.set(cacheKey, { result: errorResult, timestamp: Date.now() });
+    return errorResult;
   }
 }
 
