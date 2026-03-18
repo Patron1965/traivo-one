@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Link } from "wouter";
 import {
   Calendar,
@@ -44,7 +45,7 @@ import { sv } from "date-fns/locale";
 import { apiRequest } from "@/lib/queryClient";
 import type { WorkOrder, Resource, ServiceObject } from "@shared/schema";
 import { ProactiveTips } from "@/components/ProactiveTips";
-import { Activity } from "lucide-react";
+import { Activity, ChevronDown } from "lucide-react";
 import { ObjectContactsPanel } from "@/components/ObjectContactsPanel";
 import { ObjectImagesGallery } from "@/components/ObjectImagesGallery";
 
@@ -350,36 +351,48 @@ function RecentChanges({ orders }: { orders: WorkOrder[] }) {
     scheduled: { label: "Schemalagd", color: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200" },
   };
 
+  const [isOpen, setIsOpen] = useState(false);
+
   return (
-    <Card className="mb-4" data-testid="card-recent-changes">
-      <CardHeader className="pb-3">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Activity className="h-4 w-4 text-muted-foreground" />
-          Senaste aktivitet
-        </CardTitle>
-        <CardDescription>Senast skapade ordrar</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-2">
-          {recentlyChanged.map(order => {
-            const s = statusLabels[order.orderStatus || order.status] || { label: order.orderStatus || order.status, color: "bg-gray-100 text-gray-800" };
-            return (
-              <div key={order.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors" data-testid={`recent-change-${order.id}`}>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{order.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(order.createdAt), "d MMM HH:mm", { locale: sv })}
-                  </p>
-                </div>
-                <Badge variant="secondary" className={`text-xs shrink-0 ${s.color}`}>
-                  {s.label}
-                </Badge>
-              </div>
-            );
-          })}
-        </div>
-      </CardContent>
-    </Card>
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Card className="mb-4" data-testid="card-recent-changes">
+        <CollapsibleTrigger asChild>
+          <CardHeader className="pb-3 cursor-pointer hover:bg-muted/30 transition-colors rounded-t-lg">
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Activity className="h-4 w-4 text-muted-foreground" />
+                Senaste aktivitet
+                <span className="text-xs font-normal text-muted-foreground">({recentlyChanged.length})</span>
+              </CardTitle>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+            </div>
+            <CardDescription>Senast skapade ordrar</CardDescription>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent>
+            <div className="space-y-2">
+              {recentlyChanged.map(order => {
+                const s = statusLabels[order.orderStatus || order.status] || { label: order.orderStatus || order.status, color: "bg-gray-100 text-gray-800" };
+                return (
+                  <div key={order.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors" data-testid={`recent-change-${order.id}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{order.title}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(order.createdAt), "d MMM HH:mm", { locale: sv })}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className={`text-xs shrink-0 ${s.color}`}>
+                      {s.label}
+                    </Badge>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }
 
