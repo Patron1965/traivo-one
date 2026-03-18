@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -12,6 +12,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { ThemeProvider, useTheme } from "@/hooks/use-theme";
 import { CommandPalette } from "@/components/CommandPalette";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
+import { WelcomeSplash } from "@/components/WelcomeSplash";
 import NotFound from "@/pages/not-found";
 import WeekPlannerPage from "@/pages/WeekPlannerPage";
 import RoutesPage from "@/pages/RoutesPage";
@@ -209,9 +210,27 @@ function useFieldLoginRedirect() {
   return sessionStorage.getItem("field_login_redirect") !== null;
 }
 
+function useLoginSplash() {
+  const [showSplash, setShowSplash] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("login")) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("login");
+      window.history.replaceState({}, "", url.pathname + url.search);
+      return true;
+    }
+    return false;
+  });
+
+  const dismissSplash = useCallback(() => setShowSplash(false), []);
+
+  return { showSplash, dismissSplash };
+}
+
 function AppContent() {
   const [location] = useLocation();
   const { isAuthenticated, isLoading } = useAuth();
+  const { showSplash, dismissSplash } = useLoginSplash();
   
   const isPendingFieldRedirect = useFieldLoginRedirect();
   
@@ -278,7 +297,12 @@ function AppContent() {
     return <LandingPage />;
   }
 
-  return <AuthenticatedApp />;
+  return (
+    <>
+      {showSplash && <WelcomeSplash onComplete={dismissSplash} />}
+      <AuthenticatedApp />
+    </>
+  );
 }
 
 function TechnicianRedirect() {
