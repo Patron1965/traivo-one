@@ -32,7 +32,9 @@ export function WelcomeSplash({ onComplete }: WelcomeSplashProps) {
   const [phase, setPhase] = useState<"enter" | "visible" | "exit">("enter");
   const { branding } = useTenantBranding();
 
-  const hasAnyBranding = !!(branding && (branding.logoUrl || branding.companyName || branding.tagline || (branding.primaryColor && branding.primaryColor !== "#3B82F6")));
+  const defaultPrimaries = ["#3B82F6", "#1B4B6B"];
+  const hasCustomColor = !!(branding?.primaryColor && !defaultPrimaries.includes(branding.primaryColor));
+  const hasAnyBranding = !!(branding && (branding.logoUrl || branding.companyName || branding.tagline || hasCustomColor));
   const customPrimary = hasAnyBranding && branding?.primaryColor ? branding.primaryColor : null;
   const gradientStart = customPrimary || DEFAULT_PRIMARY;
   const gradientMid = customPrimary ? darkenColor(customPrimary, 30) : "#2C3E50";
