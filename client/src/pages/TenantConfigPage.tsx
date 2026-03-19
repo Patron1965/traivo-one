@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -56,6 +56,8 @@ import {
   Globe,
   Search,
   Check,
+  Upload,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -1707,6 +1709,9 @@ function BrandingTab() {
   });
 
   const [showPreview, setShowPreview] = useState(false);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoDragOver, setLogoDragOver] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
   const [scrapeUrl, setScrapeUrl] = useState("");
   const [scrapeResult, setScrapeResult] = useState<{
     companyName: string;
@@ -1797,6 +1802,39 @@ function BrandingTab() {
       toast({ title: "Fel", description: error.message, variant: "destructive" });
     },
   });
+
+  const handleLogoUpload = async (file: File) => {
+    if (!file.type.startsWith("image/")) {
+      toast({ title: "Fel filtyp", description: "Välj en bildfil (PNG, JPG, SVG)", variant: "destructive" });
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: "Filen är för stor", description: "Max 5 MB", variant: "destructive" });
+      return;
+    }
+
+    setLogoUploading(true);
+    try {
+      const resp = await apiRequest("POST", "/api/system/tenant-branding/upload-logo", {});
+      const { uploadURL, objectPath } = await resp.json();
+
+      await fetch(uploadURL, {
+        method: "PUT",
+        body: file,
+        headers: { "Content-Type": file.type },
+      });
+
+      const confirmResp = await apiRequest("POST", "/api/system/tenant-branding/confirm-logo", { objectPath });
+      const { url } = await confirmResp.json();
+
+      setForm(prev => ({ ...prev, logoUrl: url }));
+      toast({ title: "Logotyp uppladdad", description: "Logotypen har laddats upp." });
+    } catch (error: any) {
+      toast({ title: "Uppladdning misslyckades", description: error.message, variant: "destructive" });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
 
   if (isLoading) {
     return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
@@ -1942,18 +1980,74 @@ function BrandingTab() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="brandLogoUrl" className="flex items-center gap-2">
+                <Label className="flex items-center gap-2">
                   <Image className="h-4 w-4" />
-                  Logotyp-URL
+                  Logotyp
                 </Label>
-                <Input
-                  id="brandLogoUrl"
-                  data-testid="input-brand-logo-url"
-                  value={form.logoUrl}
-                  onChange={(e) => setForm(prev => ({ ...prev, logoUrl: e.target.value }))}
-                  placeholder="https://example.com/logo.png"
-                />
-                <p className="text-xs text-muted-foreground">Används i splash-skärmen och TopNav. Rekommenderad storlek: 200×80px, transparent bakgrund.</p>
+                {form.logoUrl ? (
+                  <div className="border rounded-lg p-4 bg-muted/30 relative" data-testid="logo-upload-preview">
+                    <div className="flex items-center justify-center">
+                      <img
+                        src={form.logoUrl}
+                        alt="Logotyp"
+                        className="h-16 w-auto object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.display = "none";
+                        }}
+                      />
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="absolute top-2 right-2 h-6 w-6"
+                      data-testid="button-remove-logo"
+                      onClick={() => setForm(prev => ({ ...prev, logoUrl: "" }))}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                    <p className="text-xs text-muted-foreground text-center mt-2">Klicka × för att ta bort och ladda upp en ny</p>
+                  </div>
+                ) : (
+                  <div
+                    className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors ${logoDragOver ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"} ${logoUploading ? "pointer-events-none opacity-60" : ""}`}
+                    data-testid="logo-upload-dropzone"
+                    onClick={() => !logoUploading && logoInputRef.current?.click()}
+                    onDragOver={(e) => { e.preventDefault(); setLogoDragOver(true); }}
+                    onDragLeave={() => setLogoDragOver(false)}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      setLogoDragOver(false);
+                      const file = e.dataTransfer.files[0];
+                      if (file) handleLogoUpload(file);
+                    }}
+                  >
+                    <input
+                      ref={logoInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      data-testid="input-logo-file"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleLogoUpload(file);
+                        e.target.value = "";
+                      }}
+                    />
+                    {logoUploading ? (
+                      <div className="flex flex-col items-center gap-2">
+                        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Laddar upp...</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-2">
+                        <Upload className="h-8 w-8 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Dra och släpp logotyp här</p>
+                        <p className="text-xs text-muted-foreground">eller klicka för att välja fil</p>
+                        <p className="text-xs text-muted-foreground/60">PNG, JPG, SVG — max 5 MB, rekommenderad: 200×80px, transparent bakgrund</p>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">
@@ -2039,7 +2133,7 @@ function BrandingTab() {
                 </div>
               </div>
 
-              {form.logoUrl && (
+              {false && form.logoUrl && (
                 <div className="space-y-2">
                   <Label className="text-xs text-muted-foreground">Förhandsvisning av logotyp</Label>
                   <div className="border rounded-lg p-4 bg-muted/30 flex items-center justify-center">

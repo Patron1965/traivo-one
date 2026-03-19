@@ -337,6 +337,33 @@ app.post("/api/system/scrape-branding", requireAdmin, asyncHandler(async (req, r
     }
 }));
 
+app.post("/api/system/tenant-branding/upload-logo", requireAdmin, asyncHandler(async (req, res) => {
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const objectStorageService = new ObjectStorageService();
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+    res.json({ uploadURL, objectPath });
+}));
+
+app.post("/api/system/tenant-branding/confirm-logo", requireAdmin, asyncHandler(async (req, res) => {
+    const { objectPath } = req.body;
+    if (!objectPath || typeof objectPath !== "string") {
+      throw new ValidationError("objectPath krävs");
+    }
+
+    const serveUrl = `/api/storage/serve${objectPath}`;
+    res.json({ url: serveUrl, objectPath });
+}));
+
+app.get("/api/storage/serve/objects/*", asyncHandler(async (req, res) => {
+    const objectPath = `/objects/${(req.params as any)[0]}`;
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const objectStorageService = new ObjectStorageService();
+    const file = await objectStorageService.getObjectEntityFile(objectPath);
+    await objectStorageService.downloadObject(file, res, 86400);
+}));
+
 // Tenant Branding - Update or create branding
 app.put("/api/system/tenant-branding", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
