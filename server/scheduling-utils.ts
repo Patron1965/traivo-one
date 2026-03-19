@@ -249,7 +249,7 @@ function getEffectiveAllowedDays(frequency: FlexibleFrequency): number[] {
 /**
  * Kontrollerar om ett datum faller inom angiven säsong
  */
-function isDateInSeason(date: Date, season?: Season): boolean {
+export function isDateInSeason(date: Date, season?: Season): boolean {
   if (!season || season === 'all_year') return true;
   
   const month = getMonth(date); // 0-11

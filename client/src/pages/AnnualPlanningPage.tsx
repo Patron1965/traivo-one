@@ -66,10 +66,14 @@ import {
   Download,
   Filter,
   ArrowUpDown,
+  Sparkles,
+  CalendarDays,
+  Check,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Customer, Article } from "@shared/schema";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from "recharts";
 
 type AnnualGoalWithProgress = {
   id: string;
@@ -144,6 +148,14 @@ export default function AnnualPlanningPage() {
   const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [sortField, setSortField] = useState<string>("forecast");
   const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const [aiDistributeDialogOpen, setAiDistributeDialogOpen] = useState(false);
+  const [aiScope, setAiScope] = useState<string>("all");
+  const [aiStartMonth, setAiStartMonth] = useState(1);
+  const [aiEndMonth, setAiEndMonth] = useState(12);
+  const [aiProposals, setAiProposals] = useState<any[] | null>(null);
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiApplyDialogOpen, setAiApplyDialogOpen] = useState(false);
+  const [selectedProposalIndex, setSelectedProposalIndex] = useState(0);
 
   const form = useForm<GoalFormValues>({
     resolver: zodResolver(goalFormSchema),
@@ -296,6 +308,49 @@ export default function AnnualPlanningPage() {
     onError: () => toast({ title: "Fel", description: "Kunde inte generera mål.", variant: "destructive" }),
   });
 
+  const aiDistributeMutation = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, unknown> = { year: selectedYear, startMonth: aiStartMonth, endMonth: aiEndMonth };
+      if (aiScope !== "all" && aiScope.startsWith("customer:")) body.customerId = aiScope.replace("customer:", "");
+      if (aiScope !== "all" && aiScope.startsWith("cluster:")) body.clusterId = aiScope.replace("cluster:", "");
+      const res = await apiRequest("POST", "/api/annual-planning/ai-distribute", body);
+      return res.json();
+    },
+    onSuccess: (data: { proposals: any[]; summary: string; year: number }) => {
+      setAiProposals(data.proposals);
+      setAiSummary(data.summary);
+      setAiProposalYear(data.year || selectedYear);
+      setSelectedProposalIndex(0);
+      setAiDistributeDialogOpen(false);
+      toast({ title: "AI-fördelning klar", description: `${data.proposals.length} mål analyserade` });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte analysera fördelning.", variant: "destructive" }),
+  });
+
+  const [aiProposalYear, setAiProposalYear] = useState(currentYear);
+
+  const aiApplyMutation = useMutation({
+    mutationFn: async () => {
+      if (!aiProposals) throw new Error("Inga förslag");
+      const res = await apiRequest("POST", "/api/annual-planning/apply-distribution", {
+        proposals: aiProposals.map((p: any) => ({
+          goalId: p.goalId,
+          proposedDistribution: p.proposedDistribution,
+        })),
+        year: aiProposalYear,
+      });
+      return res.json();
+    },
+    onSuccess: (data: { created: number; goalsProcessed: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setAiApplyDialogOpen(false);
+      setAiProposals(null);
+      toast({ title: "Fördelning tillämpad", description: `${data.created} arbetsordrar skapade för ${data.goalsProcessed} mål.` });
+    },
+    onError: () => toast({ title: "Fel", description: "Kunde inte tillämpa fördelning.", variant: "destructive" }),
+  });
+
   const handleEdit = (goal: AnnualGoalWithProgress) => {
     setEditing(goal);
     form.reset({
@@ -410,6 +465,10 @@ export default function AnnualPlanningPage() {
           <TabsTrigger value="warnings" data-testid="tab-warnings">
             <AlertTriangle className="h-4 w-4 mr-2" />
             Varningar ({behindGoals.length})
+          </TabsTrigger>
+          <TabsTrigger value="ai-distribute" data-testid="tab-ai-distribute">
+            <Sparkles className="h-4 w-4 mr-2" />
+            AI-fördelning
           </TabsTrigger>
         </TabsList>
 
@@ -632,7 +691,277 @@ export default function AnnualPlanningPage() {
             </>
           )}
         </TabsContent>
+
+        <TabsContent value="ai-distribute" className="space-y-4 mt-4">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div>
+              <h3 className="font-semibold flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-primary" />
+                AI-driven besöksfördelning
+              </h3>
+              <p className="text-sm text-muted-foreground">
+                Låt AI fördela besök jämnt över året baserat på frekvens, säsong och kapacitet
+              </p>
+            </div>
+            <Button onClick={() => setAiDistributeDialogOpen(true)} data-testid="button-ai-distribute">
+              <Sparkles className="h-4 w-4 mr-2" />
+              Fördela besök
+            </Button>
+          </div>
+
+          {aiDistributeMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4 text-primary" />
+                <p className="font-medium">AI analyserar fördelning...</p>
+                <p className="text-sm text-muted-foreground">Beräknar optimal besöksfördelning baserat på era mål</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {aiProposals && aiProposals.length > 0 && !aiDistributeMutation.isPending && (
+            <>
+              {aiSummary && (
+                <Card className="border-primary/20 bg-primary/5">
+                  <CardContent className="pt-4 pb-3">
+                    <div className="flex items-start gap-3">
+                      <Sparkles className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+                      <div>
+                        <p className="font-medium text-sm">AI-analys</p>
+                        <p className="text-sm text-muted-foreground mt-1">{aiSummary}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">{aiProposals.length} mål analyserade</span>
+                  {aiProposals.length > 1 && (
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedProposalIndex(Math.max(0, selectedProposalIndex - 1))}
+                        disabled={selectedProposalIndex === 0}
+                        data-testid="button-prev-proposal"
+                      >
+                        ←
+                      </Button>
+                      <span className="text-sm px-2">{selectedProposalIndex + 1} / {aiProposals.length}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSelectedProposalIndex(Math.min(aiProposals.length - 1, selectedProposalIndex + 1))}
+                        disabled={selectedProposalIndex === aiProposals.length - 1}
+                        data-testid="button-next-proposal"
+                      >
+                        →
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => { setAiProposals(null); setAiSummary(""); }} data-testid="button-clear-proposals">
+                    Rensa
+                  </Button>
+                  <Button onClick={() => setAiApplyDialogOpen(true)} data-testid="button-apply-distribution">
+                    <Check className="h-4 w-4 mr-2" />
+                    Godkänn och skapa ordrar
+                  </Button>
+                </div>
+              </div>
+
+              {(() => {
+                const proposal = aiProposals[selectedProposalIndex];
+                if (!proposal) return null;
+
+                const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "Maj", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"];
+                const chartData = MONTH_LABELS.map((label, i) => ({
+                  name: label,
+                  Nuvarande: proposal.currentDistribution[i]?.count || 0,
+                  Föreslagen: proposal.proposedDistribution[i]?.count || 0,
+                }));
+
+                const totalProposed = proposal.proposedDistribution.reduce((s: number, d: { count: number }) => s + d.count, 0);
+
+                return (
+                  <Card data-testid={`card-proposal-${proposal.goalId}`}>
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">
+                          {proposal.customerName || proposal.clusterName || "—"}
+                          {proposal.objectName && <span className="text-muted-foreground font-normal ml-2">/ {proposal.objectName}</span>}
+                        </CardTitle>
+                        <Badge variant="outline">{ARTICLE_TYPE_LABELS[proposal.articleType] || proposal.articleType}</Badge>
+                      </div>
+                      <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                        <span>Mål: {proposal.targetCount}</span>
+                        <span>Utfört: {proposal.completedCount}</span>
+                        <span>Kvar: {proposal.remainingCount}</span>
+                        <span>Föreslagen total: {totalProposed}</span>
+                        {proposal.seasonRestriction && proposal.seasonRestriction !== "all_year" && (
+                          <Badge variant="secondary" className="text-xs">
+                            <CalendarDays className="h-3 w-3 mr-1" />
+                            Säsong: {proposal.seasonRestriction}
+                          </Badge>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {proposal.reasoning && (
+                        <p className="text-sm text-muted-foreground mb-4 italic">
+                          AI: {proposal.reasoning}
+                        </p>
+                      )}
+                      <div className="h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="name" className="text-xs" />
+                            <YAxis allowDecimals={false} className="text-xs" />
+                            <Tooltip
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                            />
+                            <Legend />
+                            <Bar dataKey="Nuvarande" fill="#6B7C8C" radius={[2, 2, 0, 0]} />
+                            <Bar dataKey="Föreslagen" fill="#4A9B9B" radius={[2, 2, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })()}
+            </>
+          )}
+
+          {!aiProposals && !aiDistributeMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Sparkles className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium mb-2">Inga förslag genererade</p>
+                <p className="text-sm">Klicka "Fördela besök" för att låta AI analysera era årsmål och föreslå en optimal besöksfördelning</p>
+              </CardContent>
+            </Card>
+          )}
+
+          {aiProposals && aiProposals.length === 0 && !aiDistributeMutation.isPending && (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                <Target className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p className="font-medium mb-2">Inga mål hittades</p>
+                <p className="text-sm">Skapa årsmål först under fliken "Alla mål"</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
       </Tabs>
+
+      <Dialog open={aiDistributeDialogOpen} onOpenChange={setAiDistributeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              AI-fördelning av besök
+            </DialogTitle>
+            <DialogDescription>
+              Välj scope och period för att generera en fördelningsplan
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium">Omfattning</label>
+              <Select value={aiScope} onValueChange={setAiScope}>
+                <SelectTrigger data-testid="select-ai-scope">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Alla mål</SelectItem>
+                  {customers.map(c => (
+                    <SelectItem key={c.id} value={`customer:${c.id}`}>Kund: {c.name}</SelectItem>
+                  ))}
+                  {clustersList.map(c => (
+                    <SelectItem key={c.id} value={`cluster:${c.id}`}>Kluster: {c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium">Från månad</label>
+                <Select value={String(aiStartMonth)} onValueChange={(v) => setAiStartMonth(parseInt(v))}>
+                  <SelectTrigger data-testid="select-ai-start-month">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>
+                        {["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"][i]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-sm font-medium">Till månad</label>
+                <Select value={String(aiEndMonth)} onValueChange={(v) => setAiEndMonth(parseInt(v))}>
+                  <SelectTrigger data-testid="select-ai-end-month">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 12 }, (_, i) => (
+                      <SelectItem key={i + 1} value={String(i + 1)}>
+                        {["Januari", "Februari", "Mars", "April", "Maj", "Juni", "Juli", "Augusti", "September", "Oktober", "November", "December"][i]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAiDistributeDialogOpen(false)}>Avbryt</Button>
+            <Button onClick={() => aiDistributeMutation.mutate()} disabled={aiDistributeMutation.isPending} data-testid="button-run-ai-distribute">
+              {aiDistributeMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              <Sparkles className="h-4 w-4 mr-2" />
+              Analysera
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={aiApplyDialogOpen} onOpenChange={setAiApplyDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Godkänn AI-fördelning?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Arbetsordrar skapas enligt den föreslagna fördelningen. Befintliga ordrar påverkas inte.
+              {aiProposals && (
+                <span className="block mt-2 font-medium">
+                  {aiProposals.length} mål berörs, nya ordrar skapas för resterande besök.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => aiApplyMutation.mutate()}
+              disabled={aiApplyMutation.isPending}
+              data-testid="button-confirm-apply-distribution"
+            >
+              {aiApplyMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Godkänn
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">

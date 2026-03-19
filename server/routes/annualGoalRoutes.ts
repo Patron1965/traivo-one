@@ -1,12 +1,15 @@
 import type { Express } from "express";
 import type { SQL } from "drizzle-orm";
 import { db } from "../db";
-import { eq, and, gte, lte, isNull, sql, desc } from "drizzle-orm";
+import { eq, and, gte, lte, isNull, sql, desc, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, insertAnnualGoalSchema } from "@shared/schema";
+import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, insertAnnualGoalSchema, insertWorkOrderSchema } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
+import { generateScheduleDates, isDateInSeason, convertLegacyPeriodicity } from "../scheduling-utils";
+import OpenAI from "openai";
+import { trackOpenAIResponse } from "../api-usage-tracker";
 
 function buildGoalScopeConditions(
   tenantId: string,
@@ -410,6 +413,385 @@ app.post("/api/annual-goals/generate-from-subscriptions", asyncHandler(async (re
   }
 
   res.json({ created, skipped, year });
+}));
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+interface MonthlyDistribution {
+  month: number;
+  count: number;
+}
+
+interface GoalDistributionProposal {
+  goalId: string;
+  customerName: string | null;
+  objectName: string | null;
+  clusterName: string | null;
+  articleType: string;
+  targetCount: number;
+  completedCount: number;
+  remainingCount: number;
+  currentDistribution: MonthlyDistribution[];
+  proposedDistribution: MonthlyDistribution[];
+  seasonRestriction: string | null;
+  reasoning: string;
+}
+
+app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { year, customerId, clusterId, startMonth, endMonth } = req.body;
+
+  const targetYear = year || new Date().getFullYear();
+  const periodStart = startMonth || 1;
+  const periodEnd = endMonth || 12;
+
+  if (periodStart < 1 || periodStart > 12 || periodEnd < 1 || periodEnd > 12 || periodEnd < periodStart) {
+    throw new ValidationError("Ogiltig period. startMonth och endMonth måste vara 1-12, endMonth >= startMonth.");
+  }
+
+  const goalConditions: SQL[] = [
+    eq(annualGoals.tenantId, tenantId),
+    eq(annualGoals.year, targetYear),
+    eq(annualGoals.status, "active"),
+    isNull(annualGoals.deletedAt),
+  ];
+  if (customerId) goalConditions.push(eq(annualGoals.customerId, customerId));
+  if (clusterId) goalConditions.push(eq(annualGoals.clusterId, clusterId));
+
+  const goalsData = await db
+    .select({
+      id: annualGoals.id,
+      tenantId: annualGoals.tenantId,
+      customerId: annualGoals.customerId,
+      objectId: annualGoals.objectId,
+      clusterId: annualGoals.clusterId,
+      articleType: annualGoals.articleType,
+      targetCount: annualGoals.targetCount,
+      year: annualGoals.year,
+      sourceType: annualGoals.sourceType,
+      sourceId: annualGoals.sourceId,
+      customerName: customers.name,
+      objectName: objects.name,
+      clusterName: clusters.name,
+    })
+    .from(annualGoals)
+    .leftJoin(customers, eq(annualGoals.customerId, customers.id))
+    .leftJoin(objects, eq(annualGoals.objectId, objects.id))
+    .leftJoin(clusters, eq(annualGoals.clusterId, clusters.id))
+    .where(and(...goalConditions));
+
+  if (goalsData.length === 0) {
+    return res.json({ proposals: [], summary: "Inga aktiva mål hittades för vald period." });
+  }
+
+  const yearStart = new Date(targetYear, 0, 1);
+  const yearEnd = new Date(targetYear, 11, 31, 23, 59, 59);
+
+  const tenantResources = await db
+    .select({ id: resources.id, weeklyHours: resources.weeklyHours })
+    .from(resources)
+    .where(and(eq(resources.tenantId, tenantId), eq(resources.status, "active"), isNull(resources.deletedAt)));
+
+  const totalWeeklyCapacity = tenantResources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
+  const monthlyCapacityHours = (totalWeeklyCapacity * 52) / 12;
+
+  const proposals: GoalDistributionProposal[] = [];
+
+  for (const goal of goalsData) {
+    const scopeConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId, goal.clusterId);
+
+    const [completedResult] = await db
+      .select({ count: sql<number>`count(distinct ${workOrders.id})::int` })
+      .from(workOrders)
+      .innerJoin(workOrderLines, eq(workOrders.id, workOrderLines.workOrderId))
+      .innerJoin(articles, eq(workOrderLines.articleId, articles.id))
+      .where(and(
+        ...scopeConditions,
+        eq(workOrders.executionStatus, "completed"),
+        eq(articles.articleType, goal.articleType),
+      ));
+    const completedCount = completedResult?.count || 0;
+
+    const existingOrders = await db
+      .select({
+        id: workOrders.id,
+        scheduledDate: workOrders.scheduledDate,
+        executionStatus: workOrders.executionStatus,
+      })
+      .from(workOrders)
+      .innerJoin(workOrderLines, eq(workOrders.id, workOrderLines.workOrderId))
+      .innerJoin(articles, eq(workOrderLines.articleId, articles.id))
+      .where(and(
+        ...scopeConditions,
+        eq(articles.articleType, goal.articleType),
+      ));
+
+    const currentDistribution: MonthlyDistribution[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, count: 0 }));
+    for (const order of existingOrders) {
+      if (order.scheduledDate) {
+        const d = order.scheduledDate instanceof Date ? order.scheduledDate : new Date(order.scheduledDate);
+        const m = d.getMonth();
+        currentDistribution[m].count++;
+      }
+    }
+
+    const remainingCount = Math.max(0, goal.targetCount - completedCount);
+
+    let seasonRestriction: string | null = null;
+    if (goal.sourceId && goal.sourceType === "subscription") {
+      const [sub] = await db
+        .select({ activeSeason: subscriptions.activeSeason, flexibleFrequency: subscriptions.flexibleFrequency })
+        .from(subscriptions)
+        .where(eq(subscriptions.id, goal.sourceId));
+      if (sub?.activeSeason) seasonRestriction = sub.activeSeason as string;
+      if (sub?.flexibleFrequency) {
+        const freq = sub.flexibleFrequency as { season?: string };
+        if (freq.season) seasonRestriction = freq.season;
+      }
+    }
+
+    const allowedMonths: number[] = [];
+    for (let m = periodStart; m <= periodEnd; m++) {
+      const testDate = new Date(targetYear, m - 1, 15);
+      if (!seasonRestriction || isDateInSeason(testDate, seasonRestriction as any)) {
+        allowedMonths.push(m);
+      }
+    }
+
+    const proposedDistribution: MonthlyDistribution[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, count: 0 }));
+
+    if (remainingCount > 0 && allowedMonths.length > 0) {
+      const pendingPlannedInPeriod = allowedMonths.reduce((sum, m) => {
+        return sum + existingOrders.filter(o => {
+          if (!o.scheduledDate) return false;
+          const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+          return d.getMonth() === m - 1 && o.executionStatus !== "completed";
+        }).length;
+      }, 0);
+
+      const actualRemaining = Math.max(0, remainingCount - pendingPlannedInPeriod);
+
+      if (actualRemaining > 0) {
+        const perMonth = Math.floor(actualRemaining / allowedMonths.length);
+        const remainder = actualRemaining % allowedMonths.length;
+
+        for (let i = 0; i < allowedMonths.length; i++) {
+          const m = allowedMonths[i];
+          proposedDistribution[m - 1].count = perMonth + (i < remainder ? 1 : 0);
+        }
+      }
+    }
+
+    proposals.push({
+      goalId: goal.id,
+      customerName: goal.customerName,
+      objectName: goal.objectName,
+      clusterName: goal.clusterName,
+      articleType: goal.articleType,
+      targetCount: goal.targetCount,
+      completedCount,
+      remainingCount,
+      currentDistribution,
+      proposedDistribution,
+      seasonRestriction,
+      reasoning: "",
+    });
+  }
+
+  let aiSummary = "";
+  try {
+    const goalsSummary = proposals.slice(0, 20).map(p => ({
+      scope: p.customerName || p.objectName || p.clusterName || "Okänd",
+      articleType: p.articleType,
+      target: p.targetCount,
+      completed: p.completedCount,
+      remaining: p.remainingCount,
+      season: p.seasonRestriction || "all_year",
+      proposed: p.proposedDistribution.filter(d => d.count > 0).map(d => `M${d.month}:${d.count}`).join(","),
+    }));
+
+    const aiResponse = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: "Du är en fältservice-planerare i Sverige. Analysera besöksfördelningen och ge kort sammanfattning samt eventuella justeringsförslag. Svara i JSON: { \"summary\": \"...\", \"adjustments\": [{ \"goalIndex\": 0, \"reasoning\": \"...\", \"suggestedMonthlyChanges\": { \"3\": 2, \"6\": 1 } }] }. goalIndex refererar till index i listan. suggestedMonthlyChanges är { month: count } för justerade månader. Ge max 3 justeringar. Svara alltid på svenska.",
+        },
+        {
+          role: "user",
+          content: `Resurskapacitet: ${monthlyCapacityHours.toFixed(0)}h/månad med ${tenantResources.length} resurser.\n\nÅrsmål:\n${JSON.stringify(goalsSummary, null, 2)}\n\nAnalysera: Är fördelningen balanserad? Bör något justeras för att jämna ut arbetsbelastningen?`,
+        },
+      ],
+      temperature: 0.5,
+      max_tokens: 800,
+      response_format: { type: "json_object" },
+    });
+
+    trackOpenAIResponse(aiResponse);
+    const aiContent = JSON.parse(aiResponse.choices[0]?.message?.content || "{}");
+
+    aiSummary = aiContent.summary || "";
+
+    if (Array.isArray(aiContent.adjustments)) {
+      for (const adj of aiContent.adjustments) {
+        const idx = adj.goalIndex;
+        if (typeof idx === "number" && idx >= 0 && idx < proposals.length && adj.suggestedMonthlyChanges) {
+          const proposal = proposals[idx];
+          proposal.reasoning = adj.reasoning || "";
+          for (const [monthStr, count] of Object.entries(adj.suggestedMonthlyChanges)) {
+            const m = parseInt(monthStr, 10);
+            if (m >= 1 && m <= 12 && typeof count === "number" && count >= 0) {
+              proposal.proposedDistribution[m - 1].count = count;
+            }
+          }
+        }
+      }
+    }
+  } catch (aiErr) {
+    console.error("[ai-distribute] AI analysis failed, using balanced distribution:", aiErr);
+    aiSummary = "AI-analys kunde inte genomföras. En jämn fördelning har beräknats baserat på frekvens och säsong.";
+  }
+
+  res.json({
+    proposals,
+    summary: aiSummary,
+    year: targetYear,
+    periodStart,
+    periodEnd,
+    resourceCount: tenantResources.length,
+    monthlyCapacityHours: Math.round(monthlyCapacityHours),
+  });
+}));
+
+const applyDistributionSchema = z.object({
+  proposals: z.array(z.object({
+    goalId: z.string().min(1),
+    proposedDistribution: z.array(z.object({
+      month: z.number().int().min(1).max(12),
+      count: z.number().int().min(0).max(100),
+    })),
+  })).min(1).max(200),
+  year: z.number().int().min(2020).max(2050),
+});
+
+app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const parsed = applyDistributionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    throw new ValidationError("Ogiltigt förslag: " + parsed.error.issues.map(i => i.message).join(", "));
+  }
+
+  const { proposals, year: targetYear } = parsed.data;
+  let totalCreated = 0;
+  const appliedGoals: string[] = [];
+
+  for (const proposal of proposals) {
+    const { goalId, proposedDistribution } = proposal;
+
+    const [goal] = await db
+      .select()
+      .from(annualGoals)
+      .where(and(eq(annualGoals.id, goalId), eq(annualGoals.tenantId, tenantId), isNull(annualGoals.deletedAt)));
+    if (!goal) continue;
+
+    let objectId = goal.objectId;
+    let customerIdForOrder = goal.customerId;
+    const clusterId = goal.clusterId;
+
+    if (!objectId && customerIdForOrder) {
+      const [firstObj] = await db
+        .select({ id: objects.id })
+        .from(objects)
+        .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, customerIdForOrder), isNull(objects.deletedAt)))
+        .limit(1);
+      if (firstObj) objectId = firstObj.id;
+    }
+    if (!objectId && clusterId) {
+      const [firstObj] = await db
+        .select({ id: objects.id })
+        .from(objects)
+        .where(and(eq(objects.tenantId, tenantId), sql`${objects.clusterId} = ${clusterId}`, isNull(objects.deletedAt)))
+        .limit(1);
+      if (firstObj) objectId = firstObj.id;
+    }
+
+    if (!objectId || !customerIdForOrder) {
+      if (objectId && !customerIdForOrder) {
+        const [obj] = await db.select({ customerId: objects.customerId }).from(objects).where(eq(objects.id, objectId));
+        if (obj) customerIdForOrder = obj.customerId;
+      }
+      if (!objectId || !customerIdForOrder) continue;
+    }
+
+    const [matchingArticle] = await db
+      .select({ id: articles.id, name: articles.name })
+      .from(articles)
+      .where(and(eq(articles.tenantId, tenantId), eq(articles.articleType, goal.articleType)))
+      .limit(1);
+
+    for (const dist of proposedDistribution) {
+      const m = dist.month - 1;
+      const toCreate = dist.count;
+      if (toCreate <= 0) continue;
+
+      for (let i = 0; i < toCreate; i++) {
+        const dayInMonth = Math.min(28, Math.floor(((i + 1) / (toCreate + 1)) * 28) + 1);
+        let scheduledDate = new Date(targetYear, m, dayInMonth, 12, 0, 0);
+        const dow = scheduledDate.getDay();
+        if (dow === 0) scheduledDate = new Date(scheduledDate.getTime() + 86400000);
+        if (dow === 6) scheduledDate = new Date(scheduledDate.getTime() + 2 * 86400000);
+
+        const orderData = {
+          tenantId,
+          customerId: customerIdForOrder!,
+          objectId: objectId!,
+          clusterId: clusterId || undefined,
+          title: `${goal.articleType} — AI-planerad (${targetYear}-${String(m + 1).padStart(2, "0")})`,
+          orderType: "service",
+          priority: "normal",
+          status: "draft",
+          orderStatus: "skapad" as const,
+          executionStatus: "not_planned",
+          creationMethod: "automatic",
+          scheduledDate,
+          estimatedDuration: 60,
+          isSimulated: false,
+          metadata: {
+            aiDistributed: true,
+            aiDistributedAt: new Date().toISOString(),
+            annualGoalId: goal.id,
+          },
+        };
+
+        const [created] = await db.insert(workOrders).values(orderData).returning();
+        totalCreated++;
+
+        if (matchingArticle) {
+          await db.insert(workOrderLines).values({
+            tenantId,
+            workOrderId: created.id,
+            articleId: matchingArticle.id,
+            quantity: 1,
+            resolvedPrice: 0,
+            resolvedCost: 0,
+            resolvedProductionMinutes: 60,
+            priceSource: "ai-distribution",
+          });
+        }
+      }
+    }
+
+    appliedGoals.push(goalId);
+  }
+
+  res.json({
+    created: totalCreated,
+    goalsProcessed: appliedGoals.length,
+    appliedGoalIds: appliedGoals,
+  });
 }));
 
 }
