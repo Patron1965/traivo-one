@@ -887,10 +887,30 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
   const totalWeeklyCapacity = tenantResources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
   const monthlyCapacity = Math.ceil((totalWeeklyCapacity * 52) / 12);
 
+  const existingWorkloadApply = new Array(12).fill(0);
+  const existingOrdersForCapacity = await db
+    .select({ scheduledDate: workOrders.scheduledDate, estimatedDuration: workOrders.estimatedDuration })
+    .from(workOrders)
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
+      lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
+    ));
+  for (const o of existingOrdersForCapacity) {
+    if (!o.scheduledDate) continue;
+    const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+    existingWorkloadApply[d.getMonth()] += (o.estimatedDuration || 60) / 60;
+  }
+
   const capacityWarnings: string[] = [];
+  const capacityBuffer = 1.2;
   for (let mi = 0; mi < 12; mi++) {
-    if (globalMonthTotals[mi] > monthlyCapacity) {
-      capacityWarnings.push(`Månad ${mi + 1}: ${globalMonthTotals[mi]} nya ordrar kan vara nära kapacitetsgränsen (${monthlyCapacity}h).`);
+    const projectedLoad = existingWorkloadApply[mi] + globalMonthTotals[mi];
+    if (projectedLoad > monthlyCapacity * capacityBuffer) {
+      throw new ValidationError(`Månad ${mi + 1} överskrider kapaciteten med 20% marginal (${Math.round(projectedLoad)}h > ${Math.round(monthlyCapacity * capacityBuffer)}h). Justera förslaget.`);
+    }
+    if (projectedLoad > monthlyCapacity) {
+      capacityWarnings.push(`Månad ${mi + 1}: ${Math.round(projectedLoad)}h nära kapacitetsgränsen (${monthlyCapacity}h).`);
     }
   }
 

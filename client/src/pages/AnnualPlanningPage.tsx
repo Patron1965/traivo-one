@@ -964,7 +964,7 @@ export default function AnnualPlanningPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Godkänn AI-fördelning?</AlertDialogTitle>
             <AlertDialogDescription>
-              Arbetsordrar skapas enligt den föreslagna fördelningen. Befintliga ordrar påverkas inte.
+              Nya arbetsordrar skapas och befintliga ej-slutförda ordrar kan flyttas mellan månader för att matcha fördelningen. Slutförda ordrar påverkas aldrig.
               {aiProposals && (
                 <span className="block mt-2 font-medium">
                   {aiProposals.length} mål berörs, nya ordrar skapas för resterande besök.
