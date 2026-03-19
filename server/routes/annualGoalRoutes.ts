@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, and, gte, lte, isNull, sql, desc } from "drizzle-orm";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, insertAnnualGoalSchema } from "@shared/schema";
+import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, insertAnnualGoalSchema } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 
@@ -14,6 +14,7 @@ function buildGoalScopeConditions(
   yearEnd: Date,
   objectId: string | null,
   customerId: string | null,
+  clusterId: string | null,
 ): SQL[] {
   const conditions: SQL[] = [
     eq(workOrders.tenantId, tenantId),
@@ -24,6 +25,8 @@ function buildGoalScopeConditions(
 
   if (objectId) {
     conditions.push(eq(workOrders.objectId, objectId));
+  } else if (clusterId) {
+    conditions.push(sql`${workOrders.objectId} IN (SELECT id FROM objects WHERE cluster_id = ${clusterId})`);
   } else if (customerId) {
     conditions.push(eq(workOrders.customerId, customerId));
   }
@@ -43,6 +46,7 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
       tenantId: annualGoals.tenantId,
       customerId: annualGoals.customerId,
       objectId: annualGoals.objectId,
+      clusterId: annualGoals.clusterId,
       articleType: annualGoals.articleType,
       targetCount: annualGoals.targetCount,
       year: annualGoals.year,
@@ -55,10 +59,12 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
       customerName: customers.name,
       objectName: objects.name,
       objectAddress: objects.address,
+      clusterName: clusters.name,
     })
     .from(annualGoals)
     .leftJoin(customers, eq(annualGoals.customerId, customers.id))
     .leftJoin(objects, eq(annualGoals.objectId, objects.id))
+    .leftJoin(clusters, eq(annualGoals.clusterId, clusters.id))
     .where(and(
       eq(annualGoals.tenantId, tenantId),
       eq(annualGoals.year, year),
@@ -74,7 +80,7 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
   const yearProgress = Math.max(0, Math.min(dayOfYear / totalDaysInYear, 1));
 
   const enriched = await Promise.all(goals.map(async (goal) => {
-    const baseConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId);
+    const baseConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId, goal.clusterId);
 
     const [completedResult] = await db
       .select({ count: sql<number>`count(distinct ${workOrders.id})::int` })
@@ -135,8 +141,9 @@ app.post("/api/annual-goals", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const data = insertAnnualGoalSchema.parse({ ...req.body, tenantId });
 
-  if (!data.customerId && !data.objectId) {
-    throw new ValidationError("Antingen kund eller objekt måste anges");
+  const scopeCount = [data.customerId, data.objectId, data.clusterId].filter(Boolean).length;
+  if (scopeCount === 0) {
+    throw new ValidationError("Minst en av kund, objekt eller kluster måste anges");
   }
 
   if (data.targetCount < 1) {
@@ -159,6 +166,7 @@ app.put("/api/annual-goals/:id", asyncHandler(async (req, res) => {
   const updateSchema = z.object({
     customerId: z.string().nullable().optional(),
     objectId: z.string().nullable().optional(),
+    clusterId: z.string().nullable().optional(),
     articleType: z.string().min(1).optional(),
     targetCount: z.number().min(1).optional(),
     year: z.number().min(2020).max(2050).optional(),
@@ -290,7 +298,35 @@ app.post("/api/annual-goals/generate-from-subscriptions", asyncHandler(async (re
       yearlyCount = (oc.timesPerPeriod || 1) * (periodMultiplier[oc.periodType] || 1);
     }
 
-    if (oc.customerId) {
+    if (oc.targetClusterId) {
+      const [existingClusterGoal] = await db
+        .select({ id: annualGoals.id })
+        .from(annualGoals)
+        .where(and(
+          eq(annualGoals.tenantId, tenantId),
+          eq(annualGoals.year, year),
+          eq(annualGoals.clusterId, oc.targetClusterId),
+          eq(annualGoals.articleType, art.articleType),
+          isNull(annualGoals.deletedAt),
+        ));
+
+      if (existingClusterGoal) {
+        skipped++;
+      } else {
+        await db.insert(annualGoals).values({
+          tenantId,
+          customerId: oc.customerId,
+          clusterId: oc.targetClusterId,
+          articleType: art.articleType,
+          targetCount: yearlyCount,
+          year,
+          sourceType: "order_concept",
+          sourceId: oc.id,
+          status: "active",
+        });
+        created++;
+      }
+    } else if (oc.customerId) {
       const customerObjects = await db
         .select({ id: objects.id, customerId: objects.customerId })
         .from(objects)

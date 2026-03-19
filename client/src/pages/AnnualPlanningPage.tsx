@@ -76,6 +76,7 @@ type AnnualGoalWithProgress = {
   tenantId: string;
   customerId: string | null;
   objectId: string | null;
+  clusterId: string | null;
   articleType: string;
   targetCount: number;
   year: number;
@@ -87,6 +88,7 @@ type AnnualGoalWithProgress = {
   customerName: string | null;
   objectName: string | null;
   objectAddress: string | null;
+  clusterName: string | null;
   completedCount: number;
   plannedCount: number;
   progressPercent: number;
@@ -99,6 +101,7 @@ type AnnualGoalWithProgress = {
 const goalFormSchema = z.object({
   customerId: z.string().optional(),
   objectId: z.string().optional(),
+  clusterId: z.string().optional(),
   articleType: z.string().min(1, "Artikeltyp krävs"),
   targetCount: z.coerce.number().min(1, "Målantal måste vara minst 1"),
   year: z.coerce.number().min(2020).max(2050),
@@ -147,6 +150,7 @@ export default function AnnualPlanningPage() {
     defaultValues: {
       customerId: "",
       objectId: "",
+      clusterId: "",
       articleType: "tjanst",
       targetCount: 12,
       year: currentYear,
@@ -173,7 +177,12 @@ export default function AnnualPlanningPage() {
 
   const { data: objectsList = [] } = useQuery<{ id: string; name: string; customerId: string }[]>({
     queryKey: ["/api/objects"],
-    select: (data: any[]) => data.map((o) => ({ id: o.id, name: o.name, customerId: o.customerId })),
+    select: (data: { id: string; name: string; customerId: string }[]) => data.map((o) => ({ id: o.id, name: o.name, customerId: o.customerId })),
+  });
+
+  const { data: clustersList = [] } = useQuery<{ id: string; name: string }[]>({
+    queryKey: ["/api/clusters"],
+    select: (data: { id: string; name: string }[]) => data.map((c) => ({ id: c.id, name: c.name })),
   });
 
   const uniqueArticleTypes = useMemo(() => {
@@ -237,6 +246,7 @@ export default function AnnualPlanningPage() {
         tenantId: "default-tenant",
         customerId: data.customerId || null,
         objectId: data.objectId || null,
+        clusterId: data.clusterId || null,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
@@ -292,6 +302,7 @@ export default function AnnualPlanningPage() {
     form.reset({
       customerId: goal.customerId || "",
       objectId: goal.objectId || "",
+      clusterId: goal.clusterId || "",
       articleType: goal.articleType,
       targetCount: goal.targetCount,
       year: goal.year,
@@ -341,7 +352,7 @@ export default function AnnualPlanningPage() {
             <Download className="h-4 w-4 mr-2" />
             Generera från abonnemang
           </Button>
-          <Button onClick={() => { setEditing(null); form.reset({ customerId: "", objectId: "", articleType: "tjanst", targetCount: 12, year: selectedYear, notes: "" }); setDialogOpen(true); }} data-testid="button-add-goal">
+          <Button onClick={() => { setEditing(null); form.reset({ customerId: "", objectId: "", clusterId: "", articleType: "tjanst", targetCount: 12, year: selectedYear, notes: "" }); setDialogOpen(true); }} data-testid="button-add-goal">
             <Plus className="h-4 w-4 mr-2" />
             Nytt årsmål
           </Button>
@@ -485,6 +496,9 @@ export default function AnnualPlanningPage() {
                           <div className="font-medium">{goal.customerName || "—"}</div>
                           {goal.objectName && (
                             <div className="text-sm text-muted-foreground">{goal.objectName}</div>
+                          )}
+                          {goal.clusterName && (
+                            <div className="text-sm text-muted-foreground">Kluster: {goal.clusterName}</div>
                           )}
                         </div>
                       </TableCell>
@@ -654,6 +668,26 @@ export default function AnnualPlanningPage() {
                       <SelectItem value="__none__">Inget specifikt objekt</SelectItem>
                       {filteredObjects.map(o => (
                         <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )} />
+
+              <FormField control={form.control} name="clusterId" render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Kluster / Objektgrupp</FormLabel>
+                  <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
+                    <FormControl>
+                      <SelectTrigger data-testid="select-goal-cluster">
+                        <SelectValue placeholder="Välj kluster (valfritt)" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="__none__">Inget specifikt kluster</SelectItem>
+                      {clustersList.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

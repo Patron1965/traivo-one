@@ -4363,6 +4363,7 @@ export const annualGoals = pgTable("annual_goals", {
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
   customerId: varchar("customer_id").references(() => customers.id),
   objectId: varchar("object_id").references(() => objects.id),
+  clusterId: varchar("cluster_id").references(() => clusters.id),
   articleType: text("article_type").notNull(),
   targetCount: integer("target_count").notNull(),
   year: integer("year").notNull(),
@@ -4377,12 +4378,14 @@ export const annualGoals = pgTable("annual_goals", {
   index("idx_annual_goals_tenant_year").on(table.tenantId, table.year),
   index("idx_annual_goals_customer").on(table.customerId),
   index("idx_annual_goals_object").on(table.objectId),
+  index("idx_annual_goals_cluster").on(table.clusterId),
 ]);
 
 export const annualGoalsRelations = relations(annualGoals, ({ one }) => ({
   tenant: one(tenants, { fields: [annualGoals.tenantId], references: [tenants.id] }),
   customer: one(customers, { fields: [annualGoals.customerId], references: [customers.id] }),
   object: one(objects, { fields: [annualGoals.objectId], references: [objects.id] }),
+  cluster: one(clusters, { fields: [annualGoals.clusterId], references: [clusters.id] }),
 }));
 
 export const insertAnnualGoalSchema = createInsertSchema(annualGoals).omit({ id: true, createdAt: true });
