@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "Xv0HtBKAwfHpr8TFw45jj"
+uri = "file://Arsplanering_Funktionsoversikt_2026.pdf"
+type = "pdf"
+title = "Årsplanering — Funktionsöversikt (PDF-rapport)"
