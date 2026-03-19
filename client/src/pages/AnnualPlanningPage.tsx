@@ -643,14 +643,14 @@ export default function AnnualPlanningPage() {
               <FormField control={form.control} name="customerId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Kund</FormLabel>
-                  <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
+                  <Select value={field.value || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; field.onChange(val); if (val) { form.setValue("objectId", ""); form.setValue("clusterId", ""); } }}>
                     <FormControl>
                       <SelectTrigger data-testid="select-goal-customer">
-                        <SelectValue placeholder="Välj kund (valfritt)" />
+                        <SelectValue placeholder="Välj kund" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="__none__">Ingen specifik kund</SelectItem>
+                      <SelectItem value="__none__">Ingen</SelectItem>
                       {customers.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
@@ -663,14 +663,14 @@ export default function AnnualPlanningPage() {
               <FormField control={form.control} name="objectId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Objekt</FormLabel>
-                  <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
+                  <Select value={field.value || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; field.onChange(val); if (val) { form.setValue("customerId", ""); form.setValue("clusterId", ""); } }}>
                     <FormControl>
                       <SelectTrigger data-testid="select-goal-object">
-                        <SelectValue placeholder="Välj objekt (valfritt)" />
+                        <SelectValue placeholder="Välj objekt" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="__none__">Inget specifikt objekt</SelectItem>
+                      <SelectItem value="__none__">Inget</SelectItem>
                       {filteredObjects.map(o => (
                         <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>
                       ))}
@@ -683,14 +683,14 @@ export default function AnnualPlanningPage() {
               <FormField control={form.control} name="clusterId" render={({ field }) => (
                 <FormItem>
                   <FormLabel>Kluster / Objektgrupp</FormLabel>
-                  <Select value={field.value || "__none__"} onValueChange={(v) => field.onChange(v === "__none__" ? "" : v)}>
+                  <Select value={field.value || "__none__"} onValueChange={(v) => { const val = v === "__none__" ? "" : v; field.onChange(val); if (val) { form.setValue("customerId", ""); form.setValue("objectId", ""); } }}>
                     <FormControl>
                       <SelectTrigger data-testid="select-goal-cluster">
-                        <SelectValue placeholder="Välj kluster (valfritt)" />
+                        <SelectValue placeholder="Välj kluster" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="__none__">Inget specifikt kluster</SelectItem>
+                      <SelectItem value="__none__">Inget</SelectItem>
                       {clustersList.map(c => (
                         <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
