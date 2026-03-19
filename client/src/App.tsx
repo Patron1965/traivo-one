@@ -14,6 +14,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { KeyboardShortcutsDialog } from "@/components/KeyboardShortcutsDialog";
 import { WelcomeSplash } from "@/components/WelcomeSplash";
 import NotFound from "@/pages/not-found";
+import AccessDeniedPage from "@/pages/AccessDeniedPage";
 import WeekPlannerPage from "@/pages/WeekPlannerPage";
 import RoutesPage from "@/pages/RoutesPage";
 import ObjectsPage from "@/pages/ObjectsPage";
@@ -229,7 +230,7 @@ function useLoginSplash() {
 
 function AppContent() {
   const [location] = useLocation();
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, accessGranted } = useAuth();
   const { showSplash, dismissSplash } = useLoginSplash();
   
   const isPendingFieldRedirect = useFieldLoginRedirect();
@@ -279,6 +280,10 @@ function AppContent() {
       return <FieldLoginPage />;
     }
     
+    if (!accessGranted) {
+      return <AccessDeniedPage />;
+    }
+    
     return <FieldAppContent />;
   }
 
@@ -295,6 +300,10 @@ function AppContent() {
 
   if (!isAuthenticated) {
     return <LandingPage />;
+  }
+
+  if (!accessGranted) {
+    return <AccessDeniedPage />;
   }
 
   return (

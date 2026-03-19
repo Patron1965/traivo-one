@@ -52,14 +52,20 @@ function updateUserSession(
 
 async function upsertUser(claims: any) {
   const userId = claims["sub"];
+  const email = claims["email"];
   
   await authStorage.upsertUser({
     id: userId,
-    email: claims["email"],
+    email,
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
   });
+  
+  // Process any pending invitations for this email
+  if (email) {
+    await authStorage.processInvitations(userId, email);
+  }
   
   // Auto-assign new users to default tenant if they don't have any tenant assignment
   await authStorage.ensureDefaultTenantAssignment(userId);

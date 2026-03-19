@@ -66,7 +66,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Resource, Team, TeamMember, ResourceProfile } from "@shared/schema";
+import type { Resource, Team, TeamMember, ResourceProfile, Invitation } from "@shared/schema";
 
 interface UserData {
   id: string;
@@ -172,6 +172,38 @@ export default function UserManagementPage() {
 
   const { data: profiles = [] } = useQuery<ResourceProfile[]>({
     queryKey: ["/api/resource-profiles"],
+  });
+
+  const { data: invitationsList = [], isLoading: invitationsLoading } = useQuery<Invitation[]>({
+    queryKey: ["/api/invitations"],
+  });
+
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [inviteForm, setInviteForm] = useState({ email: "", role: "user" });
+
+  const createInviteMutation = useMutation({
+    mutationFn: (data: { email: string; role: string }) =>
+      apiRequest("POST", "/api/invitations", data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      toast({ title: "Inbjudan skickad", description: `Inbjudan skapad för ${inviteForm.email}` });
+      setInviteDialogOpen(false);
+      setInviteForm({ email: "", role: "user" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteInviteMutation = useMutation({
+    mutationFn: (id: string) => apiRequest("DELETE", `/api/invitations/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/invitations"] });
+      toast({ title: "Inbjudan borttagen" });
+    },
+    onError: (error: Error) => {
+      toast({ title: "Fel", description: error.message, variant: "destructive" });
+    },
   });
 
   const createMutation = useMutation({
@@ -564,6 +596,15 @@ export default function UserManagementPage() {
             <UsersRound className="h-4 w-4 mr-2" />
             Team
           </TabsTrigger>
+          <TabsTrigger value="invitations" data-testid="tab-invitations">
+            <Mail className="h-4 w-4 mr-2" />
+            Inbjudningar
+            {invitationsList.filter(i => i.status === "pending").length > 0 && (
+              <Badge variant="secondary" className="ml-1.5 h-5 min-w-5 px-1 text-xs">
+                {invitationsList.filter(i => i.status === "pending").length}
+              </Badge>
+            )}
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="users" className="space-y-4 mt-4">
@@ -922,7 +963,145 @@ export default function UserManagementPage() {
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="invitations" className="space-y-4 mt-4">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Inbjudningar</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Bjud in nya användare via e-post. De kopplas automatiskt till organisationen när de loggar in.
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  data-testid="button-invite-user"
+                  onClick={() => setInviteDialogOpen(true)}
+                >
+                  <UserPlus className="h-4 w-4 mr-2" />
+                  Bjud in
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {invitationsLoading ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : invitationsList.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Mail className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                  <p>Inga inbjudningar ännu</p>
+                  <p className="text-xs mt-1">Klicka "Bjud in" för att bjuda in en ny användare</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>E-post</TableHead>
+                      <TableHead>Roll</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Skapad</TableHead>
+                      <TableHead className="w-16"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {invitationsList.map((inv) => (
+                      <TableRow key={inv.id} data-testid={`row-invitation-${inv.id}`}>
+                        <TableCell className="font-medium">{inv.email}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-xs">
+                            {ROLE_CONFIG[inv.role]?.label || inv.role}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={inv.status === "pending" ? "default" : inv.status === "used" ? "secondary" : "outline"}
+                            className="text-xs"
+                          >
+                            {inv.status === "pending" ? "Väntande" : inv.status === "used" ? "Använd" : inv.status === "expired" ? "Utgången" : inv.status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-sm">
+                          {inv.createdAt ? new Date(inv.createdAt).toLocaleDateString("sv-SE") : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {inv.status === "pending" && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              data-testid={`button-delete-invitation-${inv.id}`}
+                              onClick={() => deleteInviteMutation.mutate(inv.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                            </Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
       </Tabs>
+
+      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Bjud in användare</DialogTitle>
+            <DialogDescription>
+              Ange e-postadressen och välj roll. Användaren kopplas automatiskt till organisationen vid inloggning.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>E-postadress</Label>
+              <Input
+                type="email"
+                placeholder="namn@foretag.se"
+                value={inviteForm.email}
+                onChange={(e) => setInviteForm(prev => ({ ...prev, email: e.target.value }))}
+                data-testid="input-invite-email"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Roll</Label>
+              <Select
+                value={inviteForm.role}
+                onValueChange={(v) => setInviteForm(prev => ({ ...prev, role: v }))}
+              >
+                <SelectTrigger data-testid="select-invite-role">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="planner">Planerare</SelectItem>
+                  <SelectItem value="technician">Tekniker</SelectItem>
+                  <SelectItem value="user">Användare</SelectItem>
+                  <SelectItem value="viewer">Betraktare</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setInviteDialogOpen(false)}>
+              Avbryt
+            </Button>
+            <Button
+              data-testid="button-confirm-invite"
+              onClick={() => createInviteMutation.mutate(inviteForm)}
+              disabled={!inviteForm.email || createInviteMutation.isPending}
+            >
+              {createInviteMutation.isPending && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+              Skicka inbjudan
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={closeDialog}>
         <DialogContent className="sm:max-w-[450px]">

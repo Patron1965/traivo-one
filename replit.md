@@ -60,7 +60,8 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Field Worker Photo Upload:** Two-step presigned URL flow for photo capture.
 - **Inspection & Metadata System:** Structured inspection checklist integrated into the mobile app.
 - **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
-- **Team Management & User Administration:** User management page with admin CRUD for users, team system, and bulk actions.
+- **Team Management & User Administration:** User management page with admin CRUD for users, team system, bulk actions, and invitation system for pre-approving new users.
+- **Access Control & Invitations:** Frontend access gate blocks unauthenticated/unauthorized users (showing AccessDeniedPage). Admin invitation system allows pre-approving users by email with role assignment. Invitations are auto-processed on login — matching email gets auto-assigned to the correct tenant with the specified role.
 - **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, permissions, and branded demo configuration.
 - **Branded Demo Experience:** Quick branding editor in Företagsinställningar → Varumärke tab. Configure company name, logo URL, tagline, and color palette for sales demos. Live preview of splash screen and TopNav. WelcomeSplash and TopNav automatically reflect tenant branding when configured, falling back to Traivo defaults. **Auto-scrape feature:** enter a prospect's website URL and the system automatically extracts logos, brand colors, and company name from the HTML (og:image, theme-color, favicon, logo images, inline CSS colors).
 - **Fleet Management:** Comprehensive fleet management page with vehicle dashboard, maintenance planning, and fuel tracking.

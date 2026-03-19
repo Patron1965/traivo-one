@@ -1224,7 +1224,35 @@ export const userTenantRoles = pgTable("user_tenant_roles", {
 }, (table) => [
   index("idx_user_tenant_roles_user").on(table.userId),
   index("idx_user_tenant_roles_tenant").on(table.tenantId),
+  uniqueIndex("idx_user_tenant_roles_unique").on(table.userId, table.tenantId),
 ]);
+
+// Invitations - Pre-approved user invitations
+export const invitations = pgTable("invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email", { length: 255 }).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  role: varchar("role", { length: 20 }).default("user").notNull(),
+  invitedBy: varchar("invited_by").references(() => users.id),
+  status: varchar("status", { length: 20 }).default("pending").notNull(),
+  usedBy: varchar("used_by").references(() => users.id),
+  usedAt: timestamp("used_at"),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_invitations_email").on(table.email),
+  index("idx_invitations_tenant").on(table.tenantId),
+  index("idx_invitations_status").on(table.status),
+]);
+
+export const invitationsRelations = relations(invitations, ({ one }) => ({
+  tenant: one(tenants, { fields: [invitations.tenantId], references: [tenants.id] }),
+  invitedByUser: one(users, { fields: [invitations.invitedBy], references: [users.id] }),
+}));
+
+export const insertInvitationSchema = createInsertSchema(invitations).omit({ id: true, createdAt: true });
+export type Invitation = typeof invitations.$inferSelect;
+export type InsertInvitation = z.infer<typeof insertInvitationSchema>;
 
 // Audit Logs - Track all changes in the system
 export const auditLogs = pgTable("audit_logs", {

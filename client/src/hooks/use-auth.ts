@@ -1,7 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import type { User } from "@shared/schema";
 
-async function fetchUser(): Promise<User | null> {
+type AuthUser = User & { accessGranted?: boolean };
+
+async function fetchUser(): Promise<AuthUser | null> {
   const response = await fetch("/api/auth/user", {
     credentials: "include",
   });
@@ -18,7 +20,7 @@ async function fetchUser(): Promise<User | null> {
 }
 
 export function useAuth() {
-  const { data: user, isLoading } = useQuery<User | null>({
+  const { data: user, isLoading } = useQuery<AuthUser | null>({
     queryKey: ["/api/auth/user"],
     queryFn: fetchUser,
     retry: false,
@@ -29,5 +31,6 @@ export function useAuth() {
     user,
     isLoading,
     isAuthenticated: !!user,
+    accessGranted: user?.accessGranted ?? false,
   };
 }

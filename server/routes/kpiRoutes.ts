@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
-import { objects, workOrders, apiUsageLogs, apiBudgets, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema } from "@shared/schema";
+import { objects, workOrders, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 
@@ -1430,6 +1430,85 @@ app.get("/api/route-feedback/summary", asyncHandler(async (req, res) => {
       resourceName: resourceMap.get(r.resourceId) || r.resourceId,
     }));
     res.json({ ...summary, byResource: enrichedByResource });
+}));
+
+// ============================================
+// INVITATIONS - User invitation management
+// ============================================
+
+app.get("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const result = await db
+      .select()
+      .from(invitations)
+      .where(eq(invitations.tenantId, tenantId))
+      .orderBy(desc(invitations.createdAt));
+    res.json(result);
+}));
+
+app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const user = req.user as any;
+    const userId = user?.claims?.sub;
+
+    const { email, role } = req.body;
+    if (!email || typeof email !== "string" || !email.includes("@")) {
+      throw new ValidationError("Giltig e-postadress krävs");
+    }
+
+    const validRoles = ["owner", "admin", "planner", "technician", "user", "viewer"];
+    if (role && !validRoles.includes(role)) {
+      throw new ValidationError("Ogiltig roll");
+    }
+
+    const existing = await db
+      .select()
+      .from(invitations)
+      .where(
+        and(
+          eq(invitations.email, email.toLowerCase()),
+          eq(invitations.tenantId, tenantId),
+          eq(invitations.status, "pending")
+        )
+      );
+
+    if (existing.length > 0) {
+      throw new ConflictError("En inbjudan finns redan för denna e-postadress");
+    }
+
+    const [invitation] = await db
+      .insert(invitations)
+      .values({
+        email: email.toLowerCase(),
+        tenantId,
+        role: role || "user",
+        invitedBy: userId,
+        status: "pending",
+      })
+      .returning();
+
+    res.json(invitation);
+}));
+
+app.delete("/api/invitations/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { id } = req.params;
+
+    const [invitation] = await db
+      .select()
+      .from(invitations)
+      .where(eq(invitations.id, id));
+
+    if (!invitation || invitation.tenantId !== tenantId) {
+      throw new NotFoundError("Inbjudan hittades inte");
+    }
+
+    if (invitation.status !== "pending") {
+      throw new ValidationError("Kan bara ta bort väntande inbjudningar");
+    }
+
+    await db.delete(invitations).where(eq(invitations.id, id));
+    res.json({ success: true });
 }));
 
 }
