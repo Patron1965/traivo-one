@@ -655,33 +655,32 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
           eq(objectTimeRestrictions.isActive, true),
         ));
       if (restrictions.length > 0) {
-        const blockedMonths = new Set<number>();
+        const restrictionData = restrictions as TimeRestriction[];
+        const restrictedMonths = new Set<number>();
         for (let mi = 0; mi < 12; mi++) {
           if (proposedDistribution[mi].count === 0) continue;
-          const testDate = new Date(targetYear, mi, 15);
-          for (const r of restrictions) {
-            if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
-              if (testDate >= r.validFromDate && testDate <= r.validToDate) {
-                blockedMonths.add(mi);
-                proposedDistribution[mi].count = 0;
-              }
-            }
-            if (r.weekdays && r.weekdays.length > 0 && r.weekdays.length <= 2) {
-              proposedDistribution[mi].count = Math.max(0, Math.floor(proposedDistribution[mi].count * 0.5));
-            }
+          const availableDays = countAvailableWorkdaysInMonth(targetYear, mi, restrictionData);
+          const totalWorkdays = countAvailableWorkdaysInMonth(targetYear, mi, []);
+          if (availableDays === 0) {
+            restrictedMonths.add(mi);
+            proposedDistribution[mi].count = 0;
+          } else if (availableDays < totalWorkdays) {
+            const ratio = availableDays / totalWorkdays;
+            proposedDistribution[mi].count = Math.max(1, Math.round(proposedDistribution[mi].count * ratio));
           }
         }
 
-        const lostCount = remainingCount - proposedDistribution.reduce((s, d) => s + d.count, 0);
-        if (lostCount > 0) {
-          const redistributableMonths = proposedDistribution
+        const currentTotal = proposedDistribution.reduce((s, d) => s + d.count, 0);
+        const deficit = remainingCount - currentTotal;
+        if (deficit > 0) {
+          const openMonths = proposedDistribution
             .map((d, i) => ({ idx: i, count: d.count }))
-            .filter(d => !blockedMonths.has(d.idx) && d.count >= 0)
+            .filter(d => !restrictedMonths.has(d.idx) && d.count >= 0)
             .sort((a, b) => a.count - b.count);
-          let toAdd = lostCount;
-          for (const rm of redistributableMonths) {
+          let toAdd = deficit;
+          for (const rm of openMonths) {
             if (toAdd <= 0) break;
-            const addHere = Math.ceil(toAdd / redistributableMonths.length);
+            const addHere = Math.ceil(toAdd / Math.max(1, openMonths.length));
             proposedDistribution[rm.idx].count += addHere;
             toAdd -= addHere;
           }
@@ -802,6 +801,51 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
     monthlyCapacityHours: Math.round(monthlyCapacityHours),
   });
 }));
+
+type TimeRestriction = {
+  restrictionType: string;
+  isBlockingAllDay: boolean | null;
+  weekdays: number[] | null;
+  startTime: string | null;
+  endTime: string | null;
+  validFromDate: Date | null;
+  validToDate: Date | null;
+  isActive: boolean | null;
+};
+
+function isDateRestricted(date: Date, restrictions: TimeRestriction[]): boolean {
+  for (const r of restrictions) {
+    if (!r.isActive) continue;
+
+    if (r.validFromDate && r.validToDate) {
+      if (date < r.validFromDate || date > r.validToDate) continue;
+    }
+
+    if (r.isBlockingAllDay) return true;
+
+    const dayOfWeek = date.getDay();
+    if (r.weekdays && r.weekdays.length > 0 && r.weekdays.includes(dayOfWeek)) {
+      if (!r.startTime || !r.endTime) return true;
+      const hour = date.getHours();
+      const startHour = parseInt(r.startTime.split(":")[0], 10);
+      const endHour = parseInt(r.endTime.split(":")[0], 10);
+      if (hour >= startHour && hour < endHour) return true;
+    }
+  }
+  return false;
+}
+
+function countAvailableWorkdaysInMonth(year: number, month: number, restrictions: TimeRestriction[]): number {
+  let count = 0;
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  for (let d = 1; d <= daysInMonth; d++) {
+    const date = new Date(year, month, d, 12, 0, 0);
+    const dow = date.getDay();
+    if (dow === 0 || dow === 6) continue;
+    if (!isDateRestricted(date, restrictions)) count++;
+  }
+  return count;
+}
 
 const applyDistributionSchema = z.object({
   proposals: z.array(z.object({
@@ -997,6 +1041,31 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       }
     }
 
+    let goalDeficit = 0;
+    const restrictionData = objectRestrictions as TimeRestriction[];
+
+    function findValidDate(year: number, month: number, attempt: number, total: number): Date | null {
+      const dayInMonth = Math.min(28, Math.floor(((attempt + 1) / (total + 1)) * 28) + 1);
+      let candidate = new Date(year, month, dayInMonth, 12, 0, 0);
+      const dow = candidate.getDay();
+      if (dow === 0) candidate = new Date(candidate.getTime() + 86400000);
+      if (dow === 6) candidate = new Date(candidate.getTime() + 2 * 86400000);
+
+      if (!isDateRestricted(candidate, restrictionData)) return candidate;
+
+      for (let offset = 1; offset <= 10; offset++) {
+        const alt = new Date(candidate.getTime() + offset * 86400000);
+        if (alt.getMonth() === month && alt.getDay() !== 0 && alt.getDay() !== 6 && !isDateRestricted(alt, restrictionData)) {
+          return alt;
+        }
+        const alt2 = new Date(candidate.getTime() - offset * 86400000);
+        if (alt2.getMonth() === month && alt2.getDay() !== 0 && alt2.getDay() !== 6 && !isDateRestricted(alt2, restrictionData)) {
+          return alt2;
+        }
+      }
+      return null;
+    }
+
     const excessOrders: typeof movableOrders = [];
     for (let mi = 0; mi < 12; mi++) {
       const ordersInMonth = movablePool.filter(o => {
@@ -1013,24 +1082,17 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     }
 
     for (let mi = 0; mi < 12; mi++) {
+      let moveAttempt = 0;
       while (neededByMonth[mi] > 0 && excessOrders.length > 0) {
         const orderToMove = excessOrders.shift()!;
-        const dayInMonth = Math.min(28, Math.floor(Math.random() * 20) + 5);
-        let newDate = new Date(targetYear, mi, dayInMonth, 12, 0, 0);
-        const dow = newDate.getDay();
-        if (dow === 0) newDate = new Date(newDate.getTime() + 86400000);
-        if (dow === 6) newDate = new Date(newDate.getTime() + 2 * 86400000);
+        const newDate = findValidDate(targetYear, mi, moveAttempt, Math.max(neededByMonth[mi], 1));
+        moveAttempt++;
 
-        let blocked = false;
-        for (const r of objectRestrictions) {
-          if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
-            if (newDate >= r.validFromDate && newDate <= r.validToDate) {
-              blocked = true;
-              break;
-            }
-          }
+        if (!newDate) {
+          excessOrders.push(orderToMove);
+          goalDeficit++;
+          break;
         }
-        if (blocked) continue;
 
         await db.update(workOrders)
           .set({
@@ -1047,39 +1109,6 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
         totalMoved++;
         neededByMonth[mi]--;
       }
-    }
-
-    let goalDeficit = 0;
-
-    function isDateBlocked(date: Date): boolean {
-      for (const r of objectRestrictions) {
-        if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
-          if (date >= r.validFromDate && date <= r.validToDate) return true;
-        }
-      }
-      return false;
-    }
-
-    function findValidDate(year: number, month: number, attempt: number, total: number): Date | null {
-      const dayInMonth = Math.min(28, Math.floor(((attempt + 1) / (total + 1)) * 28) + 1);
-      let candidate = new Date(year, month, dayInMonth, 12, 0, 0);
-      const dow = candidate.getDay();
-      if (dow === 0) candidate = new Date(candidate.getTime() + 86400000);
-      if (dow === 6) candidate = new Date(candidate.getTime() + 2 * 86400000);
-
-      if (!isDateBlocked(candidate)) return candidate;
-
-      for (let offset = 1; offset <= 5; offset++) {
-        const alt = new Date(candidate.getTime() + offset * 86400000);
-        if (alt.getMonth() === month && !isDateBlocked(alt) && alt.getDay() !== 0 && alt.getDay() !== 6) {
-          return alt;
-        }
-        const alt2 = new Date(candidate.getTime() - offset * 86400000);
-        if (alt2.getMonth() === month && !isDateBlocked(alt2) && alt2.getDay() !== 0 && alt2.getDay() !== 6) {
-          return alt2;
-        }
-      }
-      return null;
     }
 
     for (let mi = 0; mi < 12; mi++) {
