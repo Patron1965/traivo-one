@@ -25,7 +25,7 @@ export function registerAuthRoutes(app: Express): void {
         .where(eq(userTenantRoles.userId, userId));
 
       const accessGranted = roles.some(
-        r => r.assignedBy !== null || r.role !== "user"
+        r => r.tenantId !== "default-tenant" || r.assignedBy !== null || r.role !== "user"
       );
 
       res.json({

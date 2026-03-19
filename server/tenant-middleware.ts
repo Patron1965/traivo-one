@@ -150,7 +150,6 @@ export async function getUserTenants(userId: string): Promise<TenantContext[]> {
 export const requireTenantWithFallback: RequestHandler = async (req, res, next) => {
   const user = req.user as any;
   
-  // Unauthenticated users: reject (security requirement)
   if (!user || !user.claims?.sub) {
     return res.status(401).json({ 
       error: "Ej autentiserad", 
@@ -161,13 +160,33 @@ export const requireTenantWithFallback: RequestHandler = async (req, res, next) 
   const userId = user.claims.sub;
   const tenantContext = await getUserTenantRole(userId);
 
-  // Authenticated users without tenant membership: reject
-  // They must be explicitly assigned to a tenant by an admin
   if (!tenantContext) {
     return res.status(403).json({ 
       error: "Ingen organisation kopplad", 
       message: "Din användare är inte kopplad till någon organisation. Kontakta administratör för att bli tilldelad en organisation." 
     });
+  }
+
+  if (tenantContext.tenantId === "default-tenant" && tenantContext.role === "user") {
+    const allRoles = await db
+      .select({
+        tenantId: userTenantRoles.tenantId,
+        role: userTenantRoles.role,
+        assignedBy: userTenantRoles.assignedBy,
+      })
+      .from(userTenantRoles)
+      .where(eq(userTenantRoles.userId, userId));
+
+    const hasAccess = allRoles.some(
+      r => r.tenantId !== "default-tenant" || r.assignedBy !== null || r.role !== "user"
+    );
+
+    if (!hasAccess) {
+      return res.status(403).json({
+        error: "Åtkomst nekad",
+        message: "Du har inte behörighet att komma åt denna resurs. En administratör måste bjuda in dig först.",
+      });
+    }
   }
 
   req.tenantId = tenantContext.tenantId;
