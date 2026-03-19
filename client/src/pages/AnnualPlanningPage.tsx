@@ -243,7 +243,6 @@ export default function AnnualPlanningPage() {
     mutationFn: (data: GoalFormValues) =>
       apiRequest("POST", "/api/annual-goals", {
         ...data,
-        tenantId: "default-tenant",
         customerId: data.customerId || null,
         objectId: data.objectId || null,
         clusterId: data.clusterId || null,
@@ -406,7 +405,7 @@ export default function AnnualPlanningPage() {
           </TabsTrigger>
           <TabsTrigger value="warnings" data-testid="tab-warnings">
             <AlertTriangle className="h-4 w-4 mr-2" />
-            Varningar ({behindGoals.length + atRiskGoals.length})
+            Varningar ({behindGoals.length})
           </TabsTrigger>
         </TabsList>
 

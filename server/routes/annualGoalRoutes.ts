@@ -143,7 +143,10 @@ app.post("/api/annual-goals", asyncHandler(async (req, res) => {
 
   const scopeCount = [data.customerId, data.objectId, data.clusterId].filter(Boolean).length;
   if (scopeCount === 0) {
-    throw new ValidationError("Minst en av kund, objekt eller kluster måste anges");
+    throw new ValidationError("Välj exakt en av kund, objekt eller kluster");
+  }
+  if (scopeCount > 1) {
+    throw new ValidationError("Välj exakt en av kund, objekt eller kluster — inte flera samtidigt");
   }
 
   if (data.targetCount < 1) {
@@ -181,7 +184,10 @@ app.put("/api/annual-goals/:id", asyncHandler(async (req, res) => {
   const mergedClusterId = updateData.clusterId !== undefined ? updateData.clusterId : existing.clusterId;
   const scopeCount = [mergedCustomerId, mergedObjectId, mergedClusterId].filter(Boolean).length;
   if (scopeCount === 0) {
-    throw new ValidationError("Minst en av kund, objekt eller kluster måste anges");
+    throw new ValidationError("Välj exakt en av kund, objekt eller kluster");
+  }
+  if (scopeCount > 1) {
+    throw new ValidationError("Välj exakt en av kund, objekt eller kluster — inte flera samtidigt");
   }
 
   const [updated] = await db
