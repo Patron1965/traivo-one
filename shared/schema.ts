@@ -4357,6 +4357,38 @@ export const INDUSTRY_TERMINOLOGY: Record<string, Record<string, string>> = {
   },
 };
 
+// Annual Goals - Årsmål per kund/objekt
+export const annualGoals = pgTable("annual_goals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id),
+  objectId: varchar("object_id").references(() => objects.id),
+  articleType: text("article_type").notNull(),
+  targetCount: integer("target_count").notNull(),
+  year: integer("year").notNull(),
+  notes: text("notes"),
+  sourceType: text("source_type").default("manual"),
+  sourceId: varchar("source_id"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"),
+}, (table) => [
+  index("idx_annual_goals_tenant").on(table.tenantId),
+  index("idx_annual_goals_tenant_year").on(table.tenantId, table.year),
+  index("idx_annual_goals_customer").on(table.customerId),
+  index("idx_annual_goals_object").on(table.objectId),
+]);
+
+export const annualGoalsRelations = relations(annualGoals, ({ one }) => ({
+  tenant: one(tenants, { fields: [annualGoals.tenantId], references: [tenants.id] }),
+  customer: one(customers, { fields: [annualGoals.customerId], references: [customers.id] }),
+  object: one(objects, { fields: [annualGoals.objectId], references: [objects.id] }),
+}));
+
+export const insertAnnualGoalSchema = createInsertSchema(annualGoals).omit({ id: true, createdAt: true });
+export type AnnualGoal = typeof annualGoals.$inferSelect;
+export type InsertAnnualGoal = z.infer<typeof insertAnnualGoalSchema>;
+
 export type TimeSummaryResponse = {
   week: number;
   year: number;

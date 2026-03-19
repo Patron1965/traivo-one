@@ -84,6 +84,7 @@ function useNavItems() {
       { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
       { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
       { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
+      { title: "Årsplanering", url: "/annual-planning", icon: Target, description: "Årsmål & uppföljning" },
     ],
     falt: [
       { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },

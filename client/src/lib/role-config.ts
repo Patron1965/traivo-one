@@ -72,6 +72,7 @@ const PLANNER_ROUTES = new Set([
   "/planner-map",
   "/historical-map",
   "/checklist-templates",
+  "/annual-planning",
 ]);
 
 const TECHNICIAN_ROUTES = new Set([

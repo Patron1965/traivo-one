@@ -50,6 +50,7 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Execution Codes:** Many-to-many system mapping resource capabilities to task requirements.
 - **Resource Profiles (Utföranderoller):** Profile templates defining execution codes, equipment types, cost center, project code, and service areas, used in auto-planning capability matching. Admin UI and WeekPlanner integration.
 - **Work Sessions & Time Tracking (Snöret):** Complete work session management system with check-in/check-out, time entries by type, weekly time summaries, labor rule violation detection, and payroll CSV export.
+- **Annual Planning (Årsplanering):** Annual goal tracking per customer/object with `annual_goals` table. CRUD endpoints at `/api/annual-goals`. Auto-generation from subscriptions and order concepts via `POST /api/annual-goals/generate-from-subscriptions`. Frontend at `/annual-planning` with KPI summary cards, progress bars, forecast icons (green/yellow/red), filter/search/sort, warning tab for behind/at-risk goals.
 - **Equipment Sharing & Shift Collision Control:** Tracking vehicle/equipment bookings per day with service area zones, collision detection, auto-release, and availability timeline.
 - **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner.
