@@ -154,7 +154,9 @@ export default function ObjectsPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("create") === "true") {
       setCreateDialogOpen(true);
-      window.history.replaceState({}, "", window.location.pathname);
+      params.delete("create");
+      const remaining = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (remaining ? `?${remaining}` : ""));
     }
   }, []);
 
@@ -1144,7 +1146,7 @@ export default function ObjectsPage() {
                 <div className="flex items-center justify-center gap-3">
                   <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-empty-create-object">
                     <Plus className="h-4 w-4 mr-2" />
-                    Skapa {t("object_singular").toLowerCase()}
+                    Skapa ditt första {t("object_singular").toLowerCase()}
                   </Button>
                   <Button variant="outline" onClick={() => setImportDialogOpen(true)} data-testid="button-empty-import">
                     <Upload className="h-4 w-4 mr-2" />
