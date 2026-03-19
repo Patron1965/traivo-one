@@ -317,6 +317,10 @@ export default function AnnualPlanningPage() {
       objectId: data.objectId || null,
       clusterId: data.clusterId || null,
     };
+    if (!normalized.customerId && !normalized.objectId && !normalized.clusterId) {
+      toast({ title: "Välj mål", description: "Välj exakt en av kund, objekt eller kluster.", variant: "destructive" });
+      return;
+    }
     if (editing) {
       updateMutation.mutate({ id: editing.id, data: normalized });
     } else {
