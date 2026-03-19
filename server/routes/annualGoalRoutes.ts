@@ -860,7 +860,8 @@ const applyDistributionSchema = z.object({
 
 app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const approverUserId: string = (req.user as any)?.claims?.sub || "unknown";
+  const userWithClaims = req.user as { claims?: { sub?: string } } | undefined;
+  const approverUserId: string = userWithClaims?.claims?.sub || "unknown";
   const parsed = applyDistributionSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError("Ogiltigt förslag: " + parsed.error.issues.map(i => i.message).join(", "));
