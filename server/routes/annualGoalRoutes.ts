@@ -541,7 +541,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
     const remainingCount = Math.max(0, goal.targetCount - completedCount);
 
     let seasonRestriction: string | null = null;
-    let subscriptionFrequency: any = null;
+    let subscriptionFrequency: FlexibleFrequency | null = null;
     let subscriptionPeriodicity: string | null = null;
     if (goal.sourceId && goal.sourceType === "subscription") {
       const [sub] = await db
@@ -556,8 +556,8 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
         if (sub.activeSeason) seasonRestriction = sub.activeSeason;
         subscriptionPeriodicity = sub.periodicity;
         if (sub.flexibleFrequency) {
-          subscriptionFrequency = sub.flexibleFrequency;
-          const freq = sub.flexibleFrequency as { season?: string };
+          subscriptionFrequency = sub.flexibleFrequency as FlexibleFrequency;
+          const freq = sub.flexibleFrequency as FlexibleFrequency & { season?: string };
           if (freq.season) seasonRestriction = freq.season;
         }
       }
@@ -815,6 +815,8 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
             aiDistributed: true,
             aiDistributedAt: new Date().toISOString(),
             annualGoalId: goal.id,
+            approvedBy: (req as any).user?.id || (req as any).userId || "unknown",
+            approvedAt: new Date().toISOString(),
           },
         };
 

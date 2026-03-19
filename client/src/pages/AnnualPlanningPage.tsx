@@ -122,6 +122,26 @@ const ARTICLE_TYPE_LABELS: Record<string, string> = {
   beroende: "Beroende",
 };
 
+interface MonthlyDistribution {
+  month: number;
+  count: number;
+}
+
+interface AIProposal {
+  goalId: string;
+  customerName: string | null;
+  objectName: string | null;
+  clusterName: string | null;
+  articleType: string;
+  targetCount: number;
+  completedCount: number;
+  remainingCount: number;
+  currentDistribution: MonthlyDistribution[];
+  proposedDistribution: MonthlyDistribution[];
+  seasonRestriction: string | null;
+  reasoning: string;
+}
+
 function ForecastIcon({ forecast }: { forecast: string }) {
   if (forecast === "on_track") return <CheckCircle2 className="h-5 w-5 text-green-500" data-testid="icon-forecast-on-track" />;
   if (forecast === "at_risk") return <AlertTriangle className="h-5 w-5 text-yellow-500" data-testid="icon-forecast-at-risk" />;
@@ -152,7 +172,7 @@ export default function AnnualPlanningPage() {
   const [aiScope, setAiScope] = useState<string>("all");
   const [aiStartMonth, setAiStartMonth] = useState(1);
   const [aiEndMonth, setAiEndMonth] = useState(12);
-  const [aiProposals, setAiProposals] = useState<any[] | null>(null);
+  const [aiProposals, setAiProposals] = useState<AIProposal[] | null>(null);
   const [aiSummary, setAiSummary] = useState("");
   const [aiApplyDialogOpen, setAiApplyDialogOpen] = useState(false);
   const [selectedProposalIndex, setSelectedProposalIndex] = useState(0);
@@ -316,7 +336,7 @@ export default function AnnualPlanningPage() {
       const res = await apiRequest("POST", "/api/annual-planning/ai-distribute", body);
       return res.json();
     },
-    onSuccess: (data: { proposals: any[]; summary: string; year: number }) => {
+    onSuccess: (data: { proposals: AIProposal[]; summary: string; year: number }) => {
       setAiProposals(data.proposals);
       setAiSummary(data.summary);
       setAiProposalYear(data.year || selectedYear);
@@ -333,7 +353,7 @@ export default function AnnualPlanningPage() {
     mutationFn: async () => {
       if (!aiProposals) throw new Error("Inga förslag");
       const res = await apiRequest("POST", "/api/annual-planning/apply-distribution", {
-        proposals: aiProposals.map((p: any) => ({
+        proposals: aiProposals.map((p) => ({
           goalId: p.goalId,
           proposedDistribution: p.proposedDistribution,
         })),
