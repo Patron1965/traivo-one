@@ -153,6 +153,19 @@ app.post("/api/annual-goals", asyncHandler(async (req, res) => {
     throw new ValidationError("Målantal måste vara minst 1");
   }
 
+  if (data.customerId) {
+    const [cust] = await db.select({ id: customers.id }).from(customers).where(and(eq(customers.id, data.customerId), eq(customers.tenantId, tenantId)));
+    if (!cust) throw new NotFoundError("Kund hittades inte i din organisation");
+  }
+  if (data.objectId) {
+    const [obj] = await db.select({ id: objects.id }).from(objects).where(and(eq(objects.id, data.objectId), eq(objects.tenantId, tenantId)));
+    if (!obj) throw new NotFoundError("Objekt hittades inte i din organisation");
+  }
+  if (data.clusterId) {
+    const [cl] = await db.select({ id: clusters.id }).from(clusters).where(and(eq(clusters.id, data.clusterId), eq(clusters.tenantId, tenantId)));
+    if (!cl) throw new NotFoundError("Kluster hittades inte i din organisation");
+  }
+
   const [goal] = await db.insert(annualGoals).values(data).returning();
   res.status(201).json(goal);
 }));
@@ -188,6 +201,19 @@ app.put("/api/annual-goals/:id", asyncHandler(async (req, res) => {
   }
   if (scopeCount > 1) {
     throw new ValidationError("Välj exakt en av kund, objekt eller kluster — inte flera samtidigt");
+  }
+
+  if (mergedCustomerId) {
+    const [cust] = await db.select({ id: customers.id }).from(customers).where(and(eq(customers.id, mergedCustomerId), eq(customers.tenantId, tenantId)));
+    if (!cust) throw new NotFoundError("Kund hittades inte i din organisation");
+  }
+  if (mergedObjectId) {
+    const [obj] = await db.select({ id: objects.id }).from(objects).where(and(eq(objects.id, mergedObjectId), eq(objects.tenantId, tenantId)));
+    if (!obj) throw new NotFoundError("Objekt hittades inte i din organisation");
+  }
+  if (mergedClusterId) {
+    const [cl] = await db.select({ id: clusters.id }).from(clusters).where(and(eq(clusters.id, mergedClusterId), eq(clusters.tenantId, tenantId)));
+    if (!cl) throw new NotFoundError("Kluster hittades inte i din organisation");
   }
 
   const [updated] = await db
