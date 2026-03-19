@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X } from "lucide-react";
+import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X, MessageSquare, Receipt } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Customer, ServiceObject, Resource, Article, Team, TeamMember } from "@shared/schema";
+import type { Customer, ServiceObject, Resource, Article, Team, TeamMember, PriceList } from "@shared/schema";
 import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
 
 interface JobModalProps {
@@ -30,6 +30,7 @@ interface JobModalProps {
 interface JobFormData {
   title: string;
   description: string;
+  plannedNotes: string;
   customerId: string;
   objectId: string;
   orderType: string;
@@ -38,6 +39,7 @@ interface JobFormData {
   resourceId: string;
   scheduledDate: Date | undefined;
   teamResourceIds: string[];
+  priceListId: string;
 }
 
 export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
@@ -45,6 +47,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [formData, setFormData] = useState<JobFormData>({
     title: "",
     description: "",
+    plannedNotes: "",
     customerId: "",
     objectId: "",
     orderType: "service",
@@ -53,6 +56,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     resourceId: "",
     scheduledDate: undefined,
     teamResourceIds: [],
+    priceListId: "",
   });
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
@@ -110,6 +114,10 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     queryKey: ["/api/team-members"],
   });
 
+  const { data: priceLists = [] } = useQuery<PriceList[]>({
+    queryKey: ["/api/price-lists"],
+  });
+
   const [selectedTeamId, setSelectedTeamId] = useState<string>("");
 
   const selectTeam = (teamId: string) => {
@@ -151,6 +159,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     mutationFn: async (data: {
       title: string;
       description: string;
+      plannedNotes: string;
       customerId: string;
       objectId: string;
       orderType: string;
@@ -160,21 +169,26 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       scheduledDate: Date | null;
       status: string;
       articlesToAdd: Array<{ id: string; name: string; price: number | null }>;
+      priceListId: string;
       metadata?: Record<string, any>;
     }) => {
-      const { articlesToAdd, ...orderData } = data;
-      const response = await apiRequest("POST", "/api/work-orders", orderData);
+      const { articlesToAdd, priceListId, ...orderData } = data;
+      const response = await apiRequest("POST", "/api/work-orders", {
+        ...orderData,
+        plannedNotes: orderData.plannedNotes || null,
+      });
       const workOrder = response as unknown as { id: string };
       
       if (articlesToAdd.length > 0 && workOrder.id) {
         for (const article of articlesToAdd) {
-          await apiRequest("POST", "/api/work-order-lines", {
-            workOrderId: workOrder.id,
+          const linePayload: Record<string, unknown> = {
             articleId: article.id,
             quantity: 1,
-            unitPrice: article.price || 0,
-            description: article.name,
-          });
+          };
+          if (priceListId) {
+            linePayload.priceListId = priceListId;
+          }
+          await apiRequest("POST", `/api/work-orders/${workOrder.id}/lines`, linePayload);
         }
       }
       
@@ -216,6 +230,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     setFormData({
       title: "",
       description: "",
+      plannedNotes: "",
       customerId: "",
       objectId: "",
       orderType: "service",
@@ -224,6 +239,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       resourceId: "",
       scheduledDate: undefined,
       teamResourceIds: [],
+      priceListId: "",
     });
     setObjectSearch("");
     setSelectedObjectName("");
@@ -249,6 +265,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     createWorkOrderMutation.mutate({
       title: formData.title,
       description: formData.description,
+      plannedNotes: formData.plannedNotes,
       customerId: formData.customerId,
       objectId: formData.objectId,
       orderType: formData.orderType,
@@ -258,6 +275,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       scheduledDate: formData.scheduledDate || null,
       status: formData.resourceId && formData.scheduledDate ? "scheduled" : "draft",
       articlesToAdd,
+      priceListId: formData.priceListId,
       metadata: (selectedTeamId || formData.teamResourceIds.length > 1) ? {
         teamId: selectedTeamId || undefined,
         teamName: selectedTeamId ? teams.find(t => t.id === selectedTeamId)?.name : undefined,
@@ -607,6 +625,54 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               )}
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label className="flex items-center gap-1.5">
+              <Receipt className="h-3.5 w-3.5" />
+              Prislista
+            </Label>
+            <Select
+              value={formData.priceListId || "auto"}
+              onValueChange={(v) => setFormData({...formData, priceListId: v === "auto" ? "" : v})}
+            >
+              <SelectTrigger data-testid="select-price-list">
+                <SelectValue placeholder="Automatisk (standard)" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="auto">Automatisk (standard)</SelectItem>
+                {priceLists
+                  .filter(pl => pl.status === "active" && !pl.deletedAt)
+                  .map(pl => (
+                    <SelectItem key={pl.id} value={pl.id}>
+                      <span className="flex items-center gap-2">
+                        {pl.name}
+                        <Badge variant="outline" className="text-[10px] ml-1">
+                          {pl.priceListType === "generell" ? "Generell" : pl.priceListType === "kundunik" ? "Kundunik" : "Rabattbrev"}
+                        </Badge>
+                      </span>
+                    </SelectItem>
+                  ))}
+              </SelectContent>
+            </Select>
+            {!formData.priceListId && (
+              <p className="text-xs text-muted-foreground">Pris löses automatiskt via prislisthierarkin (rabattbrev → kundunik → generell → listpris)</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="planned-notes" className="flex items-center gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5" />
+              Meddelande till utförare
+            </Label>
+            <Textarea
+              id="planned-notes"
+              placeholder="Info som visas för chauffören i fältappen..."
+              value={formData.plannedNotes}
+              onChange={(e) => setFormData({...formData, plannedNotes: e.target.value})}
+              rows={2}
+              data-testid="input-planned-notes"
+            />
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor="description">Beskrivning</Label>

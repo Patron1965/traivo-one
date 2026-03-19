@@ -286,6 +286,14 @@ export interface IStorage {
     priceListId: string | null;
     source: 'rabattbrev' | 'kundunik' | 'generell' | 'listprice';
   }>;
+
+  resolveArticlePriceFromList(tenantId: string, articleId: string, priceListId: string): Promise<{
+    price: number;
+    cost: number;
+    productionMinutes: number;
+    priceListId: string | null;
+    source: string;
+  }>;
   
   // Update work order status
   updateWorkOrderStatus(id: string, newStatus: OrderStatus): Promise<WorkOrder | undefined>;
@@ -2260,6 +2268,62 @@ export class DatabaseStorage implements IStorage {
     }
     
     // 4. Fallback to article list price
+    return {
+      price: article.listPrice || 0,
+      cost: article.cost || 0,
+      productionMinutes: article.productionTime || 0,
+      priceListId: null,
+      source: 'listprice'
+    };
+  }
+
+  async resolveArticlePriceFromList(tenantId: string, articleId: string, priceListIdParam: string): Promise<{
+    price: number;
+    cost: number;
+    productionMinutes: number;
+    priceListId: string | null;
+    source: string;
+  }> {
+    const article = await this.getArticle(articleId);
+    if (!article) {
+      return { price: 0, cost: 0, productionMinutes: 0, priceListId: null, source: 'listprice' };
+    }
+
+    const pl = await this.getPriceList(priceListIdParam);
+    if (!pl || pl.tenantId !== tenantId || pl.status !== 'active' || pl.deletedAt) {
+      return {
+        price: article.listPrice || 0,
+        cost: article.cost || 0,
+        productionMinutes: article.productionTime || 0,
+        priceListId: null,
+        source: 'listprice'
+      };
+    }
+
+    const [pla] = await db.select().from(priceListArticles)
+      .where(and(eq(priceListArticles.priceListId, priceListIdParam), eq(priceListArticles.articleId, articleId)));
+
+    if (pla) {
+      return {
+        price: pla.price,
+        cost: article.cost || 0,
+        productionMinutes: pla.productionTime || article.productionTime || 0,
+        priceListId: priceListIdParam,
+        source: 'prislista'
+      };
+    }
+
+    if (pl.discountPercent) {
+      const discountedPrice = Math.round((article.listPrice || 0) * (100 - pl.discountPercent) / 100);
+      return {
+        price: discountedPrice,
+        cost: article.cost || 0,
+        productionMinutes: article.productionTime || 0,
+        priceListId: priceListIdParam,
+        source: 'rabattbrev'
+      };
+    }
+
     return {
       price: article.listPrice || 0,
       cost: article.cost || 0,

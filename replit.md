@@ -70,6 +70,8 @@ The user interface includes a sticky TopNav, global search, user utilities, a mo
 - **Interim Objects & Object Verification:** `isInterimObject` flag on objects table for public issue reports, with admin UI for verification/rejection.
 - **IoT API & Automatic Order Generation:** Management of IoT devices, API keys, and signals. Auto-generates work orders based on sensor signals (e.g., `full`, `damaged`, `overflow`).
 - **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields, UI for visualization, and aggregated preferences for order placement.
+- **Job Creation Price List Override:** Optional price list selector in JobModal allowing manual override of automatic price resolution hierarchy. Uses `resolveArticlePriceFromList` with tenant validation. Work order lines created via proper `/api/work-orders/:id/lines` endpoint.
+- **Planned Notes (Meddelande till utförare):** Planner can write messages to field workers when creating jobs. Stored in `work_orders.plannedNotes`. Displayed prominently in SimpleFieldApp job list (blue preview card) and job detail view (full message card).
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

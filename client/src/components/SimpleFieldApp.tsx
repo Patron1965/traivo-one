@@ -761,6 +761,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             </CardContent>
           </Card>
 
+          {selectedJob.plannedNotes && (
+            <Card className="border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/30" data-testid="card-planned-notes">
+              <CardContent className="py-3">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  <span className="text-xs font-medium text-blue-800 dark:text-blue-400">Meddelande från planerare</span>
+                </div>
+                <p className="text-sm text-blue-900 dark:text-blue-200">{selectedJob.plannedNotes}</p>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Åtkomstinformation - stort och tydligt */}
           {(selectedJob.objectAccessCode || selectedJob.objectKeyNumber || accessInfo.gateCode) && (
             <Card className="border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30">
@@ -1631,6 +1643,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       <MapPin className="h-3.5 w-3.5 shrink-0" />
                       <span className="truncate">{job.objectAddress || job.objectName}</span>
                     </div>
+                    {job.plannedNotes && (
+                      <div className="flex items-start gap-1.5 mt-1.5 p-1.5 rounded bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" data-testid={`planned-notes-preview-${job.id}`}>
+                        <MessageSquare className="h-3 w-3 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                        <span className="text-xs text-blue-700 dark:text-blue-300 line-clamp-2">{job.plannedNotes}</span>
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                       {job.estimatedDuration && (
                         <span className="text-xs text-muted-foreground">

@@ -327,12 +327,18 @@ app.post("/api/work-orders/:workOrderId/lines", asyncHandler(async (req, res) =>
     throw new NotFoundError("Arbetsorder");
   }
 
-  const { articleId, quantity = 1, isOptional = false, notes } = req.body;
+  const { articleId, quantity = 1, isOptional = false, notes, priceListId } = req.body;
   if (!articleId) {
     throw new ValidationError("articleId is required");
   }
 
-  const priceInfo = await storage.resolveArticlePrice(tenantId, articleId, workOrder.customerId);
+  let priceInfo: { price: number; cost: number; productionMinutes: number; priceListId: string | null; source: string };
+
+  if (priceListId) {
+    priceInfo = await storage.resolveArticlePriceFromList(tenantId, articleId, priceListId);
+  } else {
+    priceInfo = await storage.resolveArticlePrice(tenantId, articleId, workOrder.customerId);
+  }
 
   const lineData = insertWorkOrderLineSchema.parse({
     tenantId,
