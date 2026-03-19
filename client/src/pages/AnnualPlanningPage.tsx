@@ -92,6 +92,7 @@ type AnnualGoalWithProgress = {
   progressPercent: number;
   expectedAtThisPoint: number;
   delta: number;
+  projectedCompletion: number;
   forecast: "on_track" | "at_risk" | "behind";
 };
 
@@ -542,7 +543,7 @@ export default function AnnualPlanningPage() {
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-red-600">
                     <XCircle className="h-5 w-5" />
-                    Kritiska — mer än 20% efter ({behindGoals.length})
+                    Kritiska — &gt;20% efter förväntat ({behindGoals.length})
                   </h3>
                   <div className="grid gap-3">
                     {behindGoals.map(goal => (

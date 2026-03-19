@@ -1,4 +1,5 @@
 import type { Express } from "express";
+import type { SQL } from "drizzle-orm";
 import { db } from "../db";
 import { eq, and, gte, lte, isNull, sql, desc } from "drizzle-orm";
 import { z } from "zod";
@@ -6,6 +7,29 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, insertAnnualGoalSchema } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
+
+function buildGoalScopeConditions(
+  tenantId: string,
+  yearStart: Date,
+  yearEnd: Date,
+  objectId: string | null,
+  customerId: string | null,
+): SQL[] {
+  const conditions: SQL[] = [
+    eq(workOrders.tenantId, tenantId),
+    isNull(workOrders.deletedAt),
+    gte(workOrders.scheduledDate, yearStart),
+    lte(workOrders.scheduledDate, yearEnd),
+  ];
+
+  if (objectId) {
+    conditions.push(eq(workOrders.objectId, objectId));
+  } else if (customerId) {
+    conditions.push(eq(workOrders.customerId, customerId));
+  }
+
+  return conditions;
+}
 
 export async function registerAnnualGoalRoutes(app: Express) {
 
@@ -50,48 +74,44 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
   const yearProgress = Math.max(0, Math.min(dayOfYear / totalDaysInYear, 1));
 
   const enriched = await Promise.all(goals.map(async (goal) => {
-    const conditions: any[] = [
-      eq(workOrders.tenantId, tenantId),
-      isNull(workOrders.deletedAt),
-      gte(workOrders.scheduledDate, yearStart),
-      lte(workOrders.scheduledDate, yearEnd),
-    ];
-
-    if (goal.objectId) {
-      conditions.push(eq(workOrders.objectId, goal.objectId));
-    } else if (goal.customerId) {
-      conditions.push(eq(workOrders.customerId, goal.customerId));
-    }
-
-    const completedConditions = [...conditions, eq(workOrders.executionStatus, "completed")];
-    const plannedConditions = [...conditions];
+    const baseConditions = buildGoalScopeConditions(tenantId, yearStart, yearEnd, goal.objectId, goal.customerId);
 
     const [completedResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(distinct ${workOrders.id})::int` })
       .from(workOrders)
       .innerJoin(workOrderLines, eq(workOrders.id, workOrderLines.workOrderId))
       .innerJoin(articles, eq(workOrderLines.articleId, articles.id))
-      .where(and(...completedConditions, eq(articles.articleType, goal.articleType)));
+      .where(and(
+        ...baseConditions,
+        eq(workOrders.executionStatus, "completed"),
+        eq(articles.articleType, goal.articleType),
+      ));
 
     const [plannedResult] = await db
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<number>`count(distinct ${workOrders.id})::int` })
       .from(workOrders)
       .innerJoin(workOrderLines, eq(workOrders.id, workOrderLines.workOrderId))
       .innerJoin(articles, eq(workOrderLines.articleId, articles.id))
-      .where(and(...plannedConditions, eq(articles.articleType, goal.articleType)));
+      .where(and(
+        ...baseConditions,
+        eq(articles.articleType, goal.articleType),
+      ));
 
     const completedCount = completedResult?.count || 0;
     const plannedCount = plannedResult?.count || 0;
     const progressPercent = goal.targetCount > 0 ? Math.round((completedCount / goal.targetCount) * 100) : 0;
     const expectedAtThisPoint = Math.round(goal.targetCount * yearProgress);
     const delta = completedCount - expectedAtThisPoint;
+    const projectedCompletion = yearProgress > 0 ? Math.round(completedCount / yearProgress) : 0;
 
     let forecast: "on_track" | "at_risk" | "behind" = "on_track";
     if (yearProgress > 0.1) {
-      const projectedCompletion = yearProgress > 0 ? Math.round(completedCount / yearProgress) : 0;
-      if (projectedCompletion < goal.targetCount * 0.8) {
+      const behindPercent = expectedAtThisPoint > 0
+        ? (expectedAtThisPoint - completedCount) / expectedAtThisPoint
+        : 0;
+      if (behindPercent > 0.2) {
         forecast = "behind";
-      } else if (projectedCompletion < goal.targetCount) {
+      } else if (behindPercent > 0) {
         forecast = "at_risk";
       }
     }
@@ -103,6 +123,7 @@ app.get("/api/annual-goals", asyncHandler(async (req, res) => {
       progressPercent,
       expectedAtThisPoint,
       delta,
+      projectedCompletion,
       forecast,
     };
   }));
@@ -209,7 +230,16 @@ app.post("/api/annual-goals/generate-from-subscriptions", asyncHandler(async (re
     const articleIds = Array.isArray(sub.articleIds) ? sub.articleIds : [];
     let articleType = "tjanst";
     if (articleIds.length > 0) {
-      const firstArticleId = typeof articleIds[0] === 'object' ? (articleIds[0] as any).articleId : articleIds[0];
+      const firstEntry = articleIds[0];
+      let firstArticleId: string | null = null;
+      if (typeof firstEntry === "string") {
+        firstArticleId = firstEntry;
+      } else if (firstEntry && typeof firstEntry === "object") {
+        const entryRecord = firstEntry as Record<string, unknown>;
+        if (typeof entryRecord.articleId === "string") {
+          firstArticleId = entryRecord.articleId;
+        }
+      }
       if (firstArticleId) {
         const [art] = await db.select({ articleType: articles.articleType }).from(articles).where(eq(articles.id, firstArticleId));
         if (art) articleType = art.articleType;
