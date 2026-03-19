@@ -791,10 +791,11 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
   }
 
   const tenantResources = await db
-    .select({ id: resources.id })
+    .select({ id: resources.id, weeklyHours: resources.weeklyHours })
     .from(resources)
-    .where(and(eq(resources.tenantId, tenantId), eq(resources.isActive, true)));
-  const monthlyCapacity = Math.ceil((tenantResources.length || 1) * 160);
+    .where(and(eq(resources.tenantId, tenantId), eq(resources.status, "active"), isNull(resources.deletedAt)));
+  const totalWeeklyCapacity = tenantResources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
+  const monthlyCapacity = Math.ceil((totalWeeklyCapacity * 52) / 12);
   for (let mi = 0; mi < 12; mi++) {
     if (globalMonthTotals[mi] > monthlyCapacity) {
       throw new ValidationError(`Månad ${mi + 1} överskrider kapaciteten (${globalMonthTotals[mi]} > ${monthlyCapacity}). Justera förslaget.`);
@@ -839,16 +840,62 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       if (!objectId || !customerIdForOrder) continue;
     }
 
-    const existingOrders = await db
+    const [matchingArticle] = await db
+      .select({ id: articles.id, name: articles.name })
+      .from(articles)
+      .where(and(eq(articles.tenantId, tenantId), eq(articles.articleType, goal.articleType)))
+      .limit(1);
+
+    let targetObjectIds: string[] = [];
+    if (goal.objectId) {
+      targetObjectIds = [goal.objectId];
+    } else if (customerIdForOrder) {
+      const custObjects = await db
+        .select({ id: objects.id })
+        .from(objects)
+        .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, customerIdForOrder), isNull(objects.deletedAt)));
+      targetObjectIds = custObjects.map(o => o.id);
+    } else if (clusterId) {
+      const clusterObjects = await db
+        .select({ id: objects.id })
+        .from(objects)
+        .where(and(eq(objects.tenantId, tenantId), sql`${objects.clusterId} = ${clusterId}`, isNull(objects.deletedAt)));
+      targetObjectIds = clusterObjects.map(o => o.id);
+    }
+    if (targetObjectIds.length === 0 && objectId) {
+      targetObjectIds = [objectId];
+    }
+    if (targetObjectIds.length === 0) continue;
+
+    let existingOrdersRaw = await db
       .select()
       .from(workOrders)
       .where(and(
         eq(workOrders.tenantId, tenantId),
-        eq(workOrders.objectId, objectId!),
+        inArray(workOrders.objectId, targetObjectIds),
         gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
         lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
       ));
 
+    if (matchingArticle) {
+      const goalOrderIds = new Set<string>();
+      const orderLines = await db
+        .select({ workOrderId: workOrderLines.workOrderId })
+        .from(workOrderLines)
+        .where(and(
+          eq(workOrderLines.tenantId, tenantId),
+          eq(workOrderLines.articleId, matchingArticle.id),
+          inArray(workOrderLines.workOrderId, existingOrdersRaw.map(o => o.id)),
+        ));
+      for (const line of orderLines) goalOrderIds.add(line.workOrderId);
+      const goalMetadataIds = existingOrdersRaw
+        .filter(o => (o.metadata as Record<string, unknown>)?.annualGoalId === goal.id)
+        .map(o => o.id);
+      for (const id of goalMetadataIds) goalOrderIds.add(id);
+      existingOrdersRaw = existingOrdersRaw.filter(o => goalOrderIds.has(o.id));
+    }
+
+    const existingOrders = existingOrdersRaw;
     const completedOrders = existingOrders.filter(o => o.executionStatus === "completed");
     const movableOrders = existingOrders.filter(o => o.executionStatus !== "completed");
 
@@ -860,12 +907,6 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
         eq(objectTimeRestrictions.objectId, goal.objectId),
         eq(objectTimeRestrictions.isActive, true),
       )) : [];
-
-    const [matchingArticle] = await db
-      .select({ id: articles.id, name: articles.name })
-      .from(articles)
-      .where(and(eq(articles.tenantId, tenantId), eq(articles.articleType, goal.articleType)))
-      .limit(1);
 
     const completedByMonth = new Array(12).fill(0);
     for (const o of completedOrders) {
@@ -969,10 +1010,11 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
         }
         if (blocked) continue;
 
+        const assignedObjectId = targetObjectIds[i % targetObjectIds.length];
         const orderData = {
           tenantId,
           customerId: customerIdForOrder!,
-          objectId: objectId!,
+          objectId: assignedObjectId,
           clusterId: clusterId || undefined,
           title: `${goal.articleType} — AI-planerad (${targetYear}-${String(mi + 1).padStart(2, "0")})`,
           orderType: "service",
