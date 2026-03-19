@@ -632,30 +632,58 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       }
     }
 
+    let goalObjectIds: string[] = [];
     if (goal.objectId) {
+      goalObjectIds = [goal.objectId];
+    } else if (goal.customerId) {
+      const custObjs = await db.select({ id: objects.id }).from(objects)
+        .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, goal.customerId), isNull(objects.deletedAt)));
+      goalObjectIds = custObjs.map(o => o.id);
+    } else if (goal.clusterId) {
+      const clusterObjs = await db.select({ id: objects.id }).from(objects)
+        .where(and(eq(objects.tenantId, tenantId), sql`${objects.clusterId} = ${goal.clusterId}`, isNull(objects.deletedAt)));
+      goalObjectIds = clusterObjs.map(o => o.id);
+    }
+
+    if (goalObjectIds.length > 0) {
       const restrictions = await db
         .select()
         .from(objectTimeRestrictions)
         .where(and(
           eq(objectTimeRestrictions.tenantId, tenantId),
-          eq(objectTimeRestrictions.objectId, goal.objectId),
+          inArray(objectTimeRestrictions.objectId, goalObjectIds),
           eq(objectTimeRestrictions.isActive, true),
         ));
       if (restrictions.length > 0) {
+        const blockedMonths = new Set<number>();
         for (let mi = 0; mi < 12; mi++) {
           if (proposedDistribution[mi].count === 0) continue;
           const testDate = new Date(targetYear, mi, 15);
           for (const r of restrictions) {
-            if (r.isBlockingAllDay) {
-              if (r.validFromDate && r.validToDate) {
-                if (testDate >= r.validFromDate && testDate <= r.validToDate) {
-                  proposedDistribution[mi].count = 0;
-                }
+            if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
+              if (testDate >= r.validFromDate && testDate <= r.validToDate) {
+                blockedMonths.add(mi);
+                proposedDistribution[mi].count = 0;
               }
             }
             if (r.weekdays && r.weekdays.length > 0 && r.weekdays.length <= 2) {
               proposedDistribution[mi].count = Math.max(0, Math.floor(proposedDistribution[mi].count * 0.5));
             }
+          }
+        }
+
+        const lostCount = remainingCount - proposedDistribution.reduce((s, d) => s + d.count, 0);
+        if (lostCount > 0) {
+          const redistributableMonths = proposedDistribution
+            .map((d, i) => ({ idx: i, count: d.count }))
+            .filter(d => !blockedMonths.has(d.idx) && d.count >= 0)
+            .sort((a, b) => a.count - b.count);
+          let toAdd = lostCount;
+          for (const rm of redistributableMonths) {
+            if (toAdd <= 0) break;
+            const addHere = Math.ceil(toAdd / redistributableMonths.length);
+            proposedDistribution[rm.idx].count += addHere;
+            toAdd -= addHere;
           }
         }
       }
@@ -677,6 +705,21 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
     });
   }
 
+  const existingWorkload = new Array(12).fill(0);
+  const allExistingOrders = await db
+    .select({ scheduledDate: workOrders.scheduledDate, estimatedDuration: workOrders.estimatedDuration })
+    .from(workOrders)
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
+      lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
+    ));
+  for (const o of allExistingOrders) {
+    if (!o.scheduledDate) continue;
+    const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+    existingWorkload[d.getMonth()] += (o.estimatedDuration || 60) / 60;
+  }
+
   const globalMonthTotals = new Array(12).fill(0);
   for (const p of proposals) {
     for (let i = 0; i < 12; i++) {
@@ -684,10 +727,11 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
     }
   }
 
-  const maxOrdersPerMonth = Math.ceil(monthlyCapacityHours / 1);
   for (let mi = 0; mi < 12; mi++) {
-    if (globalMonthTotals[mi] > maxOrdersPerMonth && globalMonthTotals[mi] > 0) {
-      const scale = maxOrdersPerMonth / globalMonthTotals[mi];
+    const proposedHours = globalMonthTotals[mi];
+    const availableHours = Math.max(0, monthlyCapacityHours - existingWorkload[mi]);
+    if (proposedHours > availableHours && proposedHours > 0) {
+      const scale = availableHours / proposedHours;
       for (const p of proposals) {
         p.proposedDistribution[mi].count = Math.floor(p.proposedDistribution[mi].count * scale);
       }
@@ -781,6 +825,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
   const { proposals, year: targetYear } = parsed.data;
   let totalCreated = 0;
   let totalMoved = 0;
+  let totalDeficit = 0;
   const appliedGoals: string[] = [];
 
   const globalMonthTotals = new Array(12).fill(0);
@@ -899,12 +944,12 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     const completedOrders = existingOrders.filter(o => o.executionStatus === "completed");
     const movableOrders = existingOrders.filter(o => o.executionStatus !== "completed");
 
-    const objectRestrictions = goal.objectId ? await db
+    const objectRestrictions = targetObjectIds.length > 0 ? await db
       .select()
       .from(objectTimeRestrictions)
       .where(and(
         eq(objectTimeRestrictions.tenantId, tenantId),
-        eq(objectTimeRestrictions.objectId, goal.objectId),
+        inArray(objectTimeRestrictions.objectId, targetObjectIds),
         eq(objectTimeRestrictions.isActive, true),
       )) : [];
 
@@ -988,27 +1033,49 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       }
     }
 
+    let goalDeficit = 0;
+
+    function isDateBlocked(date: Date): boolean {
+      for (const r of objectRestrictions) {
+        if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
+          if (date >= r.validFromDate && date <= r.validToDate) return true;
+        }
+      }
+      return false;
+    }
+
+    function findValidDate(year: number, month: number, attempt: number, total: number): Date | null {
+      const dayInMonth = Math.min(28, Math.floor(((attempt + 1) / (total + 1)) * 28) + 1);
+      let candidate = new Date(year, month, dayInMonth, 12, 0, 0);
+      const dow = candidate.getDay();
+      if (dow === 0) candidate = new Date(candidate.getTime() + 86400000);
+      if (dow === 6) candidate = new Date(candidate.getTime() + 2 * 86400000);
+
+      if (!isDateBlocked(candidate)) return candidate;
+
+      for (let offset = 1; offset <= 5; offset++) {
+        const alt = new Date(candidate.getTime() + offset * 86400000);
+        if (alt.getMonth() === month && !isDateBlocked(alt) && alt.getDay() !== 0 && alt.getDay() !== 6) {
+          return alt;
+        }
+        const alt2 = new Date(candidate.getTime() - offset * 86400000);
+        if (alt2.getMonth() === month && !isDateBlocked(alt2) && alt2.getDay() !== 0 && alt2.getDay() !== 6) {
+          return alt2;
+        }
+      }
+      return null;
+    }
+
     for (let mi = 0; mi < 12; mi++) {
       const toCreate = neededByMonth[mi];
       if (toCreate <= 0) continue;
 
       for (let i = 0; i < toCreate; i++) {
-        const dayInMonth = Math.min(28, Math.floor(((i + 1) / (toCreate + 1)) * 28) + 1);
-        let scheduledDate = new Date(targetYear, mi, dayInMonth, 12, 0, 0);
-        const dow = scheduledDate.getDay();
-        if (dow === 0) scheduledDate = new Date(scheduledDate.getTime() + 86400000);
-        if (dow === 6) scheduledDate = new Date(scheduledDate.getTime() + 2 * 86400000);
-
-        let blocked = false;
-        for (const r of objectRestrictions) {
-          if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
-            if (scheduledDate >= r.validFromDate && scheduledDate <= r.validToDate) {
-              blocked = true;
-              break;
-            }
-          }
+        const scheduledDate = findValidDate(targetYear, mi, i, toCreate);
+        if (!scheduledDate) {
+          goalDeficit++;
+          continue;
         }
-        if (blocked) continue;
 
         const assignedObjectId = targetObjectIds[i % targetObjectIds.length];
         const orderData = {
@@ -1053,12 +1120,16 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       }
     }
 
+    if (goalDeficit > 0) {
+      totalDeficit += goalDeficit;
+    }
     appliedGoals.push(goalId);
   }
 
   res.json({
     created: totalCreated,
     moved: totalMoved,
+    deficit: totalDeficit,
     goalsProcessed: appliedGoals.length,
     appliedGoalIds: appliedGoals,
   });
