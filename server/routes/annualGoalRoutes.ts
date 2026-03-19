@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, and, gte, lte, isNull, sql, desc, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
+import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, objectTimeRestrictions, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { generateScheduleDates, isDateInSeason, convertLegacyPeriodicity } from "../scheduling-utils";
@@ -632,9 +632,33 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       }
     }
 
-    const maxOrdersPerMonth = Math.ceil(monthlyCapacityHours / 1);
-    for (let i = 0; i < 12; i++) {
-      proposedDistribution[i].count = Math.min(proposedDistribution[i].count, maxOrdersPerMonth);
+    if (goal.objectId) {
+      const restrictions = await db
+        .select()
+        .from(objectTimeRestrictions)
+        .where(and(
+          eq(objectTimeRestrictions.tenantId, tenantId),
+          eq(objectTimeRestrictions.objectId, goal.objectId),
+          eq(objectTimeRestrictions.isActive, true),
+        ));
+      if (restrictions.length > 0) {
+        for (let mi = 0; mi < 12; mi++) {
+          if (proposedDistribution[mi].count === 0) continue;
+          const testDate = new Date(targetYear, mi, 15);
+          for (const r of restrictions) {
+            if (r.isBlockingAllDay) {
+              if (r.validFromDate && r.validToDate) {
+                if (testDate >= r.validFromDate && testDate <= r.validToDate) {
+                  proposedDistribution[mi].count = 0;
+                }
+              }
+            }
+            if (r.weekdays && r.weekdays.length > 0 && r.weekdays.length <= 2) {
+              proposedDistribution[mi].count = Math.max(0, Math.floor(proposedDistribution[mi].count * 0.5));
+            }
+          }
+        }
+      }
     }
 
     proposals.push({
@@ -651,6 +675,23 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       seasonRestriction,
       reasoning: "",
     });
+  }
+
+  const globalMonthTotals = new Array(12).fill(0);
+  for (const p of proposals) {
+    for (let i = 0; i < 12; i++) {
+      globalMonthTotals[i] += p.proposedDistribution[i].count;
+    }
+  }
+
+  const maxOrdersPerMonth = Math.ceil(monthlyCapacityHours / 1);
+  for (let mi = 0; mi < 12; mi++) {
+    if (globalMonthTotals[mi] > maxOrdersPerMonth && globalMonthTotals[mi] > 0) {
+      const scale = maxOrdersPerMonth / globalMonthTotals[mi];
+      for (const p of proposals) {
+        p.proposedDistribution[mi].count = Math.floor(p.proposedDistribution[mi].count * scale);
+      }
+    }
   }
 
   let aiSummary = "";
@@ -731,6 +772,7 @@ const applyDistributionSchema = z.object({
 
 app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
+  const approverUserId: string = (req as Express.Request & { userId?: string }).userId || "unknown";
   const parsed = applyDistributionSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError("Ogiltigt förslag: " + parsed.error.issues.map(i => i.message).join(", "));
@@ -738,7 +780,26 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
 
   const { proposals, year: targetYear } = parsed.data;
   let totalCreated = 0;
+  let totalMoved = 0;
   const appliedGoals: string[] = [];
+
+  const globalMonthTotals = new Array(12).fill(0);
+  for (const p of proposals) {
+    for (const d of p.proposedDistribution) {
+      globalMonthTotals[d.month - 1] += d.count;
+    }
+  }
+
+  const tenantResources = await db
+    .select({ id: resources.id })
+    .from(resources)
+    .where(and(eq(resources.tenantId, tenantId), eq(resources.isActive, true)));
+  const monthlyCapacity = Math.ceil((tenantResources.length || 1) * 160);
+  for (let mi = 0; mi < 12; mi++) {
+    if (globalMonthTotals[mi] > monthlyCapacity) {
+      throw new ValidationError(`Månad ${mi + 1} överskrider kapaciteten (${globalMonthTotals[mi]} > ${monthlyCapacity}). Justera förslaget.`);
+    }
+  }
 
   for (const proposal of proposals) {
     const { goalId, proposedDistribution } = proposal;
@@ -778,30 +839,142 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       if (!objectId || !customerIdForOrder) continue;
     }
 
+    const existingOrders = await db
+      .select()
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        eq(workOrders.objectId, objectId!),
+        gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
+        lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
+      ));
+
+    const completedOrders = existingOrders.filter(o => o.executionStatus === "completed");
+    const movableOrders = existingOrders.filter(o => o.executionStatus !== "completed");
+
+    const objectRestrictions = goal.objectId ? await db
+      .select()
+      .from(objectTimeRestrictions)
+      .where(and(
+        eq(objectTimeRestrictions.tenantId, tenantId),
+        eq(objectTimeRestrictions.objectId, goal.objectId),
+        eq(objectTimeRestrictions.isActive, true),
+      )) : [];
+
     const [matchingArticle] = await db
       .select({ id: articles.id, name: articles.name })
       .from(articles)
       .where(and(eq(articles.tenantId, tenantId), eq(articles.articleType, goal.articleType)))
       .limit(1);
 
-    for (const dist of proposedDistribution) {
-      const m = dist.month - 1;
-      const toCreate = dist.count;
+    const completedByMonth = new Array(12).fill(0);
+    for (const o of completedOrders) {
+      if (!o.scheduledDate) continue;
+      const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+      completedByMonth[d.getMonth()]++;
+    }
+
+    const targetByMonth = new Array(12).fill(0);
+    for (const d of proposedDistribution) {
+      targetByMonth[d.month - 1] = d.count + completedByMonth[d.month - 1];
+    }
+
+    const movablePool = [...movableOrders];
+    const neededByMonth: number[] = new Array(12).fill(0);
+
+    for (let mi = 0; mi < 12; mi++) {
+      const existingInMonth = movableOrders.filter(o => {
+        if (!o.scheduledDate) return false;
+        const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+        return d.getMonth() === mi;
+      }).length + completedByMonth[mi];
+
+      const diff = targetByMonth[mi] - existingInMonth;
+      if (diff > 0) {
+        neededByMonth[mi] = diff;
+      }
+    }
+
+    const excessOrders: typeof movableOrders = [];
+    for (let mi = 0; mi < 12; mi++) {
+      const ordersInMonth = movablePool.filter(o => {
+        if (!o.scheduledDate) return false;
+        const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+        return d.getMonth() === mi;
+      });
+      const currentMovable = ordersInMonth.length;
+      const targetMovable = targetByMonth[mi] - completedByMonth[mi];
+      if (currentMovable > targetMovable) {
+        const toRemove = currentMovable - targetMovable;
+        excessOrders.push(...ordersInMonth.slice(0, toRemove));
+      }
+    }
+
+    for (let mi = 0; mi < 12; mi++) {
+      while (neededByMonth[mi] > 0 && excessOrders.length > 0) {
+        const orderToMove = excessOrders.shift()!;
+        const dayInMonth = Math.min(28, Math.floor(Math.random() * 20) + 5);
+        let newDate = new Date(targetYear, mi, dayInMonth, 12, 0, 0);
+        const dow = newDate.getDay();
+        if (dow === 0) newDate = new Date(newDate.getTime() + 86400000);
+        if (dow === 6) newDate = new Date(newDate.getTime() + 2 * 86400000);
+
+        let blocked = false;
+        for (const r of objectRestrictions) {
+          if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
+            if (newDate >= r.validFromDate && newDate <= r.validToDate) {
+              blocked = true;
+              break;
+            }
+          }
+        }
+        if (blocked) continue;
+
+        await db.update(workOrders)
+          .set({
+            scheduledDate: newDate,
+            metadata: {
+              ...(orderToMove.metadata as Record<string, unknown> || {}),
+              aiMoved: true,
+              aiMovedAt: new Date().toISOString(),
+              aiMovedBy: approverUserId,
+              previousMonth: orderToMove.scheduledDate ? (orderToMove.scheduledDate instanceof Date ? orderToMove.scheduledDate.getMonth() + 1 : new Date(orderToMove.scheduledDate).getMonth() + 1) : null,
+            },
+          })
+          .where(eq(workOrders.id, orderToMove.id));
+        totalMoved++;
+        neededByMonth[mi]--;
+      }
+    }
+
+    for (let mi = 0; mi < 12; mi++) {
+      const toCreate = neededByMonth[mi];
       if (toCreate <= 0) continue;
 
       for (let i = 0; i < toCreate; i++) {
         const dayInMonth = Math.min(28, Math.floor(((i + 1) / (toCreate + 1)) * 28) + 1);
-        let scheduledDate = new Date(targetYear, m, dayInMonth, 12, 0, 0);
+        let scheduledDate = new Date(targetYear, mi, dayInMonth, 12, 0, 0);
         const dow = scheduledDate.getDay();
         if (dow === 0) scheduledDate = new Date(scheduledDate.getTime() + 86400000);
         if (dow === 6) scheduledDate = new Date(scheduledDate.getTime() + 2 * 86400000);
+
+        let blocked = false;
+        for (const r of objectRestrictions) {
+          if (r.isBlockingAllDay && r.validFromDate && r.validToDate) {
+            if (scheduledDate >= r.validFromDate && scheduledDate <= r.validToDate) {
+              blocked = true;
+              break;
+            }
+          }
+        }
+        if (blocked) continue;
 
         const orderData = {
           tenantId,
           customerId: customerIdForOrder!,
           objectId: objectId!,
           clusterId: clusterId || undefined,
-          title: `${goal.articleType} — AI-planerad (${targetYear}-${String(m + 1).padStart(2, "0")})`,
+          title: `${goal.articleType} — AI-planerad (${targetYear}-${String(mi + 1).padStart(2, "0")})`,
           orderType: "service",
           priority: "normal",
           status: "draft",
@@ -815,7 +988,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
             aiDistributed: true,
             aiDistributedAt: new Date().toISOString(),
             annualGoalId: goal.id,
-            approvedBy: (req as any).user?.id || (req as any).userId || "unknown",
+            approvedBy: approverUserId,
             approvedAt: new Date().toISOString(),
           },
         };
@@ -843,6 +1016,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
 
   res.json({
     created: totalCreated,
+    moved: totalMoved,
     goalsProcessed: appliedGoals.length,
     appliedGoalIds: appliedGoals,
   });

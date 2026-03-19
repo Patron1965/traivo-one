@@ -361,12 +361,14 @@ export default function AnnualPlanningPage() {
       });
       return res.json();
     },
-    onSuccess: (data: { created: number; goalsProcessed: number }) => {
+    onSuccess: (data: { created: number; moved: number; goalsProcessed: number }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/annual-goals"] });
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       setAiApplyDialogOpen(false);
       setAiProposals(null);
-      toast({ title: "Fördelning tillämpad", description: `${data.created} arbetsordrar skapade för ${data.goalsProcessed} mål.` });
+      const parts = [`${data.created} skapade`];
+      if (data.moved > 0) parts.push(`${data.moved} flyttade`);
+      toast({ title: "Fördelning tillämpad", description: `${parts.join(", ")} arbetsordrar för ${data.goalsProcessed} mål.` });
     },
     onError: () => toast({ title: "Fel", description: "Kunde inte tillämpa fördelning.", variant: "destructive" }),
   });
