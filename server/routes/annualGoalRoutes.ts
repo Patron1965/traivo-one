@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, and, gte, lte, isNull, sql, desc, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, insertAnnualGoalSchema, insertWorkOrderSchema } from "@shared/schema";
+import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { generateScheduleDates, isDateInSeason, convertLegacyPeriodicity } from "../scheduling-utils";
@@ -541,48 +541,100 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
     const remainingCount = Math.max(0, goal.targetCount - completedCount);
 
     let seasonRestriction: string | null = null;
+    let subscriptionFrequency: any = null;
+    let subscriptionPeriodicity: string | null = null;
     if (goal.sourceId && goal.sourceType === "subscription") {
       const [sub] = await db
-        .select({ activeSeason: subscriptions.activeSeason, flexibleFrequency: subscriptions.flexibleFrequency })
+        .select({
+          activeSeason: subscriptions.activeSeason,
+          flexibleFrequency: subscriptions.flexibleFrequency,
+          periodicity: subscriptions.periodicity,
+        })
         .from(subscriptions)
-        .where(eq(subscriptions.id, goal.sourceId));
-      if (sub?.activeSeason) seasonRestriction = sub.activeSeason as string;
-      if (sub?.flexibleFrequency) {
-        const freq = sub.flexibleFrequency as { season?: string };
-        if (freq.season) seasonRestriction = freq.season;
-      }
-    }
-
-    const allowedMonths: number[] = [];
-    for (let m = periodStart; m <= periodEnd; m++) {
-      const testDate = new Date(targetYear, m - 1, 15);
-      if (!seasonRestriction || isDateInSeason(testDate, seasonRestriction as any)) {
-        allowedMonths.push(m);
+        .where(and(eq(subscriptions.id, goal.sourceId), eq(subscriptions.tenantId, tenantId)));
+      if (sub) {
+        if (sub.activeSeason) seasonRestriction = sub.activeSeason;
+        subscriptionPeriodicity = sub.periodicity;
+        if (sub.flexibleFrequency) {
+          subscriptionFrequency = sub.flexibleFrequency;
+          const freq = sub.flexibleFrequency as { season?: string };
+          if (freq.season) seasonRestriction = freq.season;
+        }
       }
     }
 
     const proposedDistribution: MonthlyDistribution[] = Array.from({ length: 12 }, (_, i) => ({ month: i + 1, count: 0 }));
 
-    if (remainingCount > 0 && allowedMonths.length > 0) {
-      const pendingPlannedInPeriod = allowedMonths.reduce((sum, m) => {
-        return sum + existingOrders.filter(o => {
-          if (!o.scheduledDate) return false;
-          const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
-          return d.getMonth() === m - 1 && o.executionStatus !== "completed";
-        }).length;
-      }, 0);
+    if (remainingCount > 0) {
+      const periodStartDate = new Date(targetYear, periodStart - 1, 1);
+      const periodEndDate = new Date(targetYear, periodEnd - 1 + 1, 0, 23, 59, 59);
 
-      const actualRemaining = Math.max(0, remainingCount - pendingPlannedInPeriod);
+      let frequency = subscriptionFrequency;
+      if (!frequency && subscriptionPeriodicity) {
+        frequency = convertLegacyPeriodicity(subscriptionPeriodicity);
+      }
+      if (frequency && seasonRestriction && !frequency.season) {
+        frequency = { ...frequency, season: seasonRestriction };
+      }
 
-      if (actualRemaining > 0) {
-        const perMonth = Math.floor(actualRemaining / allowedMonths.length);
-        const remainder = actualRemaining % allowedMonths.length;
+      if (frequency) {
+        const scheduledDates = generateScheduleDates(frequency, periodStartDate, periodEndDate);
+        for (const d of scheduledDates) {
+          const m = d.getMonth();
+          proposedDistribution[m].count++;
+        }
 
-        for (let i = 0; i < allowedMonths.length; i++) {
-          const m = allowedMonths[i];
-          proposedDistribution[m - 1].count = perMonth + (i < remainder ? 1 : 0);
+        const totalScheduled = proposedDistribution.reduce((s, d) => s + d.count, 0);
+        if (totalScheduled > remainingCount) {
+          const scale = remainingCount / totalScheduled;
+          let distributed = 0;
+          for (let i = 0; i < 12; i++) {
+            if (i === 11) {
+              proposedDistribution[i].count = Math.max(0, remainingCount - distributed);
+            } else {
+              proposedDistribution[i].count = Math.round(proposedDistribution[i].count * scale);
+              distributed += proposedDistribution[i].count;
+            }
+          }
+        }
+      } else {
+        const allowedMonths: number[] = [];
+        for (let m = periodStart; m <= periodEnd; m++) {
+          const testDate = new Date(targetYear, m - 1, 15);
+          if (!seasonRestriction || isDateInSeason(testDate, seasonRestriction as Season)) {
+            allowedMonths.push(m);
+          }
+        }
+
+        if (allowedMonths.length > 0) {
+          const perMonth = Math.floor(remainingCount / allowedMonths.length);
+          const remainder = remainingCount % allowedMonths.length;
+          for (let i = 0; i < allowedMonths.length; i++) {
+            proposedDistribution[allowedMonths[i] - 1].count = perMonth + (i < remainder ? 1 : 0);
+          }
         }
       }
+
+      const pendingPlannedInPeriod = existingOrders.filter(o => {
+        if (!o.scheduledDate) return false;
+        const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+        const m = d.getMonth() + 1;
+        return m >= periodStart && m <= periodEnd && o.executionStatus !== "completed";
+      }).length;
+
+      if (pendingPlannedInPeriod > 0) {
+        let toSubtract = pendingPlannedInPeriod;
+        for (let i = 11; i >= 0 && toSubtract > 0; i--) {
+          const sub = Math.min(proposedDistribution[i].count, toSubtract);
+          proposedDistribution[i].count -= sub;
+          toSubtract -= sub;
+        }
+      }
+    }
+
+    const maxOrdersPerMonth = Math.ceil(monthlyCapacityHours / 1);
+    for (let i = 0; i < 12; i++) {
+      proposedDistribution[i].count = Math.min(proposedDistribution[i].count, maxOrdersPerMonth);
     }
 
     proposals.push({
