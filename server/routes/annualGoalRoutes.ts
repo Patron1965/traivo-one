@@ -841,9 +841,26 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     .where(and(eq(resources.tenantId, tenantId), eq(resources.status, "active"), isNull(resources.deletedAt)));
   const totalWeeklyCapacity = tenantResources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
   const monthlyCapacity = Math.ceil((totalWeeklyCapacity * 52) / 12);
+
+  const existingWorkloadApply = new Array(12).fill(0);
+  const existingOrdersForCapacity = await db
+    .select({ scheduledDate: workOrders.scheduledDate, estimatedDuration: workOrders.estimatedDuration })
+    .from(workOrders)
+    .where(and(
+      eq(workOrders.tenantId, tenantId),
+      gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
+      lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
+    ));
+  for (const o of existingOrdersForCapacity) {
+    if (!o.scheduledDate) continue;
+    const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
+    existingWorkloadApply[d.getMonth()] += (o.estimatedDuration || 60) / 60;
+  }
+
   for (let mi = 0; mi < 12; mi++) {
-    if (globalMonthTotals[mi] > monthlyCapacity) {
-      throw new ValidationError(`Månad ${mi + 1} överskrider kapaciteten (${globalMonthTotals[mi]} > ${monthlyCapacity}). Justera förslaget.`);
+    const available = Math.max(0, monthlyCapacity - existingWorkloadApply[mi]);
+    if (globalMonthTotals[mi] > available) {
+      throw new ValidationError(`Månad ${mi + 1} överskrider kapaciteten (${globalMonthTotals[mi]} nya + ${Math.round(existingWorkloadApply[mi])}h existerande > ${monthlyCapacity}h). Justera förslaget.`);
     }
   }
 
@@ -885,11 +902,11 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       if (!objectId || !customerIdForOrder) continue;
     }
 
-    const [matchingArticle] = await db
+    const matchingArticles = await db
       .select({ id: articles.id, name: articles.name })
       .from(articles)
-      .where(and(eq(articles.tenantId, tenantId), eq(articles.articleType, goal.articleType)))
-      .limit(1);
+      .where(and(eq(articles.tenantId, tenantId), eq(articles.articleType, goal.articleType)));
+    const matchingArticleIds = matchingArticles.map(a => a.id);
 
     let targetObjectIds: string[] = [];
     if (goal.objectId) {
@@ -912,7 +929,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     }
     if (targetObjectIds.length === 0) continue;
 
-    let existingOrdersRaw = await db
+    const allOrdersInScope = await db
       .select()
       .from(workOrders)
       .where(and(
@@ -922,25 +939,24 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
         lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
       ));
 
-    if (matchingArticle) {
-      const goalOrderIds = new Set<string>();
+    const goalOrderIds = new Set<string>();
+    if (matchingArticleIds.length > 0 && allOrdersInScope.length > 0) {
       const orderLines = await db
         .select({ workOrderId: workOrderLines.workOrderId })
         .from(workOrderLines)
         .where(and(
           eq(workOrderLines.tenantId, tenantId),
-          eq(workOrderLines.articleId, matchingArticle.id),
-          inArray(workOrderLines.workOrderId, existingOrdersRaw.map(o => o.id)),
+          inArray(workOrderLines.articleId, matchingArticleIds),
+          inArray(workOrderLines.workOrderId, allOrdersInScope.map(o => o.id)),
         ));
       for (const line of orderLines) goalOrderIds.add(line.workOrderId);
-      const goalMetadataIds = existingOrdersRaw
-        .filter(o => (o.metadata as Record<string, unknown>)?.annualGoalId === goal.id)
-        .map(o => o.id);
-      for (const id of goalMetadataIds) goalOrderIds.add(id);
-      existingOrdersRaw = existingOrdersRaw.filter(o => goalOrderIds.has(o.id));
     }
+    const goalMetadataIds = allOrdersInScope
+      .filter(o => (o.metadata as Record<string, unknown>)?.annualGoalId === goal.id)
+      .map(o => o.id);
+    for (const id of goalMetadataIds) goalOrderIds.add(id);
 
-    const existingOrders = existingOrdersRaw;
+    const existingOrders = allOrdersInScope.filter(o => goalOrderIds.has(o.id));
     const completedOrders = existingOrders.filter(o => o.executionStatus === "completed");
     const movableOrders = existingOrders.filter(o => o.executionStatus !== "completed");
 
@@ -1105,11 +1121,11 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
         const [created] = await db.insert(workOrders).values(orderData).returning();
         totalCreated++;
 
-        if (matchingArticle) {
+        if (matchingArticles.length > 0) {
           await db.insert(workOrderLines).values({
             tenantId,
             workOrderId: created.id,
-            articleId: matchingArticle.id,
+            articleId: matchingArticles[0].id,
             quantity: 1,
             resolvedPrice: 0,
             resolvedCost: 0,
