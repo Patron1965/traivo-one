@@ -251,11 +251,18 @@ function TenantLogo() {
   const { logoUrl, companyName } = useTenantBranding();
   const displayLogo = logoUrl || traivoLogo;
   const displayName = companyName || "Traivo";
+  const isDefaultLogo = !logoUrl;
 
   return (
     <Link href="/">
       <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5" data-testid="link-home-logo">
-        <img src={displayLogo} alt={displayName} className="h-14 w-auto object-contain" style={{ maxWidth: "180px" }} data-testid="img-tenant-logo" />
+        <img
+          src={displayLogo}
+          alt={displayName}
+          className={`h-14 w-auto object-contain ${isDefaultLogo ? "dark:invert dark:hue-rotate-180 dark:brightness-90 dark:contrast-200" : ""}`}
+          style={{ maxWidth: "180px" }}
+          data-testid="img-tenant-logo"
+        />
       </div>
     </Link>
   );
