@@ -176,6 +176,14 @@ app.put("/api/annual-goals/:id", asyncHandler(async (req, res) => {
 
   const updateData = updateSchema.parse(req.body);
 
+  const mergedCustomerId = updateData.customerId !== undefined ? updateData.customerId : existing.customerId;
+  const mergedObjectId = updateData.objectId !== undefined ? updateData.objectId : existing.objectId;
+  const mergedClusterId = updateData.clusterId !== undefined ? updateData.clusterId : existing.clusterId;
+  const scopeCount = [mergedCustomerId, mergedObjectId, mergedClusterId].filter(Boolean).length;
+  if (scopeCount === 0) {
+    throw new ValidationError("Minst en av kund, objekt eller kluster måste anges");
+  }
+
   const [updated] = await db
     .update(annualGoals)
     .set(updateData)

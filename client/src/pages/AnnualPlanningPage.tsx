@@ -312,10 +312,16 @@ export default function AnnualPlanningPage() {
   };
 
   const onSubmit = (data: GoalFormValues) => {
+    const normalized = {
+      ...data,
+      customerId: data.customerId || null,
+      objectId: data.objectId || null,
+      clusterId: data.clusterId || null,
+    };
     if (editing) {
-      updateMutation.mutate({ id: editing.id, data });
+      updateMutation.mutate({ id: editing.id, data: normalized });
     } else {
-      createMutation.mutate(data);
+      createMutation.mutate(normalized);
     }
   };
 
