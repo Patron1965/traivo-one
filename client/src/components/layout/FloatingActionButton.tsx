@@ -17,9 +17,11 @@ import {
   Target,
   Calendar,
   Truck,
+  Package,
 } from "lucide-react";
 
 const allQuickActions = [
+  { title: "Nytt kärl", url: "/objects", href: "/objects?create=true", icon: Package },
   { title: "Ny order", url: "/order-stock", icon: ClipboardList },
   { title: "Ny kund", url: "/objects", icon: Users },
   { title: "Nytt kluster", url: "/clusters", icon: Target },
@@ -58,9 +60,9 @@ export function FloatingActionButton() {
           </div>
           <DropdownMenuSeparator />
           {quickActions.map((action) => (
-            <DropdownMenuItem key={action.url} asChild>
+            <DropdownMenuItem key={action.title} asChild>
               <Link
-                href={action.url}
+                href={action.href || action.url}
                 className="flex items-center gap-2 cursor-pointer"
                 data-testid={`fab-action-${action.title.toLowerCase().replace(/\s+/g, "-")}`}
               >

@@ -19,7 +19,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
@@ -150,7 +150,14 @@ export default function ObjectsPage() {
     addressDescriptor: "",
   });
 
-  // Debounce search for server-side filtering
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("create") === "true") {
+      setCreateDialogOpen(true);
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchQuery);
@@ -869,9 +876,9 @@ export default function ObjectsPage() {
             <Download className="h-4 w-4 mr-2" />
             Exportera
           </Button>
-          <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
+          <Button size="lg" onClick={() => setCreateDialogOpen(true)} data-testid="button-add-object">
             <Plus className="h-4 w-4 mr-2" />
-            Lägg till objekt
+            Skapa {t("object_singular").toLowerCase()}
           </Button>
         </div>
       </div>
@@ -1125,9 +1132,29 @@ export default function ObjectsPage() {
           <div className="border rounded-md bg-card">
             {filteredTopLevel.length > 0 ? (
               filteredTopLevel.map(obj => renderObjectTree(obj))
+            ) : totalObjects === 0 && !debouncedSearch && typeFilter === "all" && accessFilter === "all" && customerFilter.length === 0 && hierarchyFilter === "all" && !interimFilter ? (
+              <div className="text-center py-16 px-6">
+                <div className="mx-auto w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4">
+                  <Package className="h-8 w-8 text-primary" />
+                </div>
+                <h3 className="text-lg font-semibold mb-2">Inga {t("object_plural").toLowerCase()} ännu</h3>
+                <p className="text-muted-foreground mb-6 max-w-md mx-auto">
+                  Kom igång genom att skapa ditt första {t("object_singular").toLowerCase()} eller importera befintlig data via CSV.
+                </p>
+                <div className="flex items-center justify-center gap-3">
+                  <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-empty-create-object">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Skapa {t("object_singular").toLowerCase()}
+                  </Button>
+                  <Button variant="outline" onClick={() => setImportDialogOpen(true)} data-testid="button-empty-import">
+                    <Upload className="h-4 w-4 mr-2" />
+                    Importera CSV
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="text-center py-12">
-                <p className="text-muted-foreground">Inga objekt hittades</p>
+                <p className="text-muted-foreground">Inga {t("object_plural").toLowerCase()} hittades med aktuella filter</p>
               </div>
             )}
           </div>
