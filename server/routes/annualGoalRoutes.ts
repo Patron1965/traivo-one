@@ -860,7 +860,7 @@ const applyDistributionSchema = z.object({
 
 app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const approverUserId: string = (req as Express.Request & { userId?: string }).userId || "unknown";
+  const approverUserId: string = (req.user as any)?.claims?.sub || "unknown";
   const parsed = applyDistributionSchema.safeParse(req.body);
   if (!parsed.success) {
     throw new ValidationError("Ogiltigt förslag: " + parsed.error.issues.map(i => i.message).join(", "));
@@ -886,25 +886,10 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
   const totalWeeklyCapacity = tenantResources.reduce((sum, r) => sum + (r.weeklyHours || 40), 0);
   const monthlyCapacity = Math.ceil((totalWeeklyCapacity * 52) / 12);
 
-  const existingWorkloadApply = new Array(12).fill(0);
-  const existingOrdersForCapacity = await db
-    .select({ scheduledDate: workOrders.scheduledDate, estimatedDuration: workOrders.estimatedDuration })
-    .from(workOrders)
-    .where(and(
-      eq(workOrders.tenantId, tenantId),
-      gte(workOrders.scheduledDate, new Date(targetYear, 0, 1)),
-      lte(workOrders.scheduledDate, new Date(targetYear, 11, 31, 23, 59, 59)),
-    ));
-  for (const o of existingOrdersForCapacity) {
-    if (!o.scheduledDate) continue;
-    const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
-    existingWorkloadApply[d.getMonth()] += (o.estimatedDuration || 60) / 60;
-  }
-
+  const capacityWarnings: string[] = [];
   for (let mi = 0; mi < 12; mi++) {
-    const available = Math.max(0, monthlyCapacity - existingWorkloadApply[mi]);
-    if (globalMonthTotals[mi] > available) {
-      throw new ValidationError(`Månad ${mi + 1} överskrider kapaciteten (${globalMonthTotals[mi]} nya + ${Math.round(existingWorkloadApply[mi])}h existerande > ${monthlyCapacity}h). Justera förslaget.`);
+    if (globalMonthTotals[mi] > monthlyCapacity) {
+      capacityWarnings.push(`Månad ${mi + 1}: ${globalMonthTotals[mi]} nya ordrar kan vara nära kapacitetsgränsen (${monthlyCapacity}h).`);
     }
   }
 
@@ -916,6 +901,31 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
       .from(annualGoals)
       .where(and(eq(annualGoals.id, goalId), eq(annualGoals.tenantId, tenantId), isNull(annualGoals.deletedAt)));
     if (!goal) continue;
+
+    let goalSeasonRestriction: string | null = null;
+    if (goal.sourceId && goal.sourceType === "subscription") {
+      const [sub] = await db
+        .select({ activeSeason: subscriptions.activeSeason, flexibleFrequency: subscriptions.flexibleFrequency })
+        .from(subscriptions)
+        .where(and(eq(subscriptions.id, goal.sourceId), eq(subscriptions.tenantId, tenantId)));
+      if (sub) {
+        if (sub.activeSeason) goalSeasonRestriction = sub.activeSeason;
+        if (sub.flexibleFrequency) {
+          const freq = sub.flexibleFrequency as { season?: string };
+          if (freq.season) goalSeasonRestriction = freq.season;
+        }
+      }
+    }
+
+    const validatedDistribution = proposedDistribution.map(d => {
+      if (goalSeasonRestriction && d.count > 0) {
+        const testDate = new Date(targetYear, d.month - 1, 15);
+        if (!isDateInSeason(testDate, goalSeasonRestriction as Season)) {
+          return { ...d, count: 0 };
+        }
+      }
+      return d;
+    });
 
     let objectId = goal.objectId;
     let customerIdForOrder = goal.customerId;
@@ -1021,7 +1031,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     }
 
     const targetByMonth = new Array(12).fill(0);
-    for (const d of proposedDistribution) {
+    for (const d of validatedDistribution) {
       targetByMonth[d.month - 1] = d.count + completedByMonth[d.month - 1];
     }
 
@@ -1177,6 +1187,7 @@ app.post("/api/annual-planning/apply-distribution", asyncHandler(async (req, res
     deficit: totalDeficit,
     goalsProcessed: appliedGoals.length,
     appliedGoalIds: appliedGoals,
+    capacityWarnings,
   });
 }));
 
