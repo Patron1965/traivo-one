@@ -97,6 +97,18 @@ class AuthStorage implements IAuthStorage {
         .set({ status: "used", usedBy: userId, usedAt: new Date() })
         .where(eq(invitations.id, invite.id));
 
+      if (invite.tenantId !== "default-tenant") {
+        await db
+          .delete(userTenantRoles)
+          .where(
+            and(
+              eq(userTenantRoles.userId, userId),
+              eq(userTenantRoles.tenantId, "default-tenant"),
+              eq(userTenantRoles.role, "user")
+            )
+          );
+      }
+
       console.log(`[auth] Auto-assigned user ${userId} (${email}) to tenant ${invite.tenantId} with role ${invite.role} via invitation`);
     }
   }

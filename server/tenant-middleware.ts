@@ -25,20 +25,25 @@ async function getUserTenantRole(userId: string): Promise<TenantContext | null> 
       tenantId: userTenantRoles.tenantId,
       role: userTenantRoles.role,
       tenantName: tenants.name,
+      assignedBy: userTenantRoles.assignedBy,
     })
     .from(userTenantRoles)
     .innerJoin(tenants, eq(userTenantRoles.tenantId, tenants.id))
-    .where(eq(userTenantRoles.userId, userId))
-    .limit(1);
+    .where(eq(userTenantRoles.userId, userId));
 
   if (result.length === 0) {
     return null;
   }
 
+  const preferred = result.find(r => r.tenantId !== "default-tenant")
+    || result.find(r => r.assignedBy !== null)
+    || result.find(r => r.role !== "user")
+    || result[0];
+
   return {
-    tenantId: result[0].tenantId,
-    role: result[0].role as UserRole,
-    tenantName: result[0].tenantName,
+    tenantId: preferred.tenantId,
+    role: preferred.role as UserRole,
+    tenantName: preferred.tenantName,
   };
 }
 
