@@ -1139,7 +1139,7 @@ export default function ObjectsPage() {
                 </div>
                 <h3 className="text-lg font-semibold mb-2">Inga {t("object_plural").toLowerCase()} ännu</h3>
                 <p className="text-muted-foreground mb-6 max-w-md mx-auto">
-                  Kom igång genom att skapa ditt första {t("object_singular").toLowerCase()} eller importera befintlig data via CSV.
+                  Skapa ditt första {t("object_singular").toLowerCase()} för att komma igång, eller importera befintlig data via CSV.
                 </p>
                 <div className="flex items-center justify-center gap-3">
                   <Button onClick={() => setCreateDialogOpen(true)} data-testid="button-empty-create-object">
