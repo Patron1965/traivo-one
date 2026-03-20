@@ -2,6 +2,7 @@ import { memo } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound } from "lucide-react";
 import type { WorkOrderWithObject } from "@shared/schema";
@@ -28,11 +29,14 @@ interface JobCardProps {
   onUnschedule: (e: { stopPropagation: () => void }, jobId: string) => void;
   onToggleSubStep: (jobId: string) => void;
   onOpenDepChain: (jobId: string) => void;
+  selectedJobIds?: Set<string>;
+  onToggleSelection?: (jobId: string, shiftKey?: boolean) => void;
 }
 
 export const JobCard = memo(function JobCard({
   job, compact = false, selectedJob, jobConflicts, dependenciesData,
   timewindowMap, expandedSubSteps, onJobClick, onUnschedule, onToggleSubStep, onOpenDepChain,
+  selectedJobIds, onToggleSelection,
 }: JobCardProps) {
   const execStatus = (job as { executionStatus?: string }).executionStatus || "not_planned";
   const execIndex = executionStatusOrder.indexOf(execStatus);
@@ -44,15 +48,29 @@ export const JobCard = memo(function JobCard({
   const hasDependents = jobDependents.length > 0;
   const category = getJobCategory(job);
   const hasConflict = job.scheduledDate && jobConflicts[job.id];
+  const isMultiSelected = selectedJobIds && selectedJobIds.has(job.id);
 
   return (
     <DraggableJobCard key={job.id} id={job.id}>
       <Card
-        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-4 overflow-hidden ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-950/30" : ""} group touch-none`}
+        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-4 overflow-hidden ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-950/30" : ""} ${isMultiSelected ? "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-950/20" : ""} group touch-none`}
         onClick={() => onJobClick(job.id)}
         data-testid={`job-card-${job.id}`}
       >
         <div className="flex items-start justify-between gap-1">
+          {onToggleSelection && (
+            <div
+              className="shrink-0 pt-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+              style={isMultiSelected ? { opacity: 1 } : undefined}
+              onClick={(e) => { e.stopPropagation(); onToggleSelection(job.id, e.shiftKey); }}
+            >
+              <Checkbox
+                checked={!!isMultiSelected}
+                className="h-3.5 w-3.5 pointer-events-none"
+                data-testid={`checkbox-select-job-${job.id}`}
+              />
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <Tooltip>

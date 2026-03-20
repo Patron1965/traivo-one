@@ -2533,4 +2533,157 @@ app.post("/api/notifications/token", isAuthenticated, asyncHandler(async (req: a
     });
 }));
 
+app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+    const guard = await aiBudgetGuard(req, res, "planning");
+    if (guard.blocked) return;
+
+    const schema = z.object({
+      workOrderId: z.string(),
+      weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "weekStart måste vara YYYY-MM-DD"),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+    const { workOrderId, weekStart } = parsed.data;
+    const tenantId = guard.tenantId;
+
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!workOrder) throw new NotFoundError("Arbetsorder hittades inte");
+    await verifyTenantOwnership(workOrder.tenantId, tenantId, "work_order");
+
+    const allResources = await storage.getResources(tenantId);
+    const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
+
+    const weekStartDate = new Date(weekStart + "T00:00:00Z");
+    const weekDays: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(weekStartDate);
+      d.setUTCDate(d.getUTCDate() + i);
+      weekDays.push(d.toISOString().split("T")[0]);
+    }
+
+    const allOrders = await storage.getWorkOrders(tenantId);
+    const scheduledOrders = allOrders.filter(o => o.scheduledDate && o.resourceId).map(o => ({
+      ...o,
+      scheduledDate: typeof o.scheduledDate === "string" ? o.scheduledDate.split("T")[0] : o.scheduledDate,
+    }));
+
+    const objectLat = workOrder.objectLatitude || (workOrder as any).taskLatitude;
+    const objectLng = workOrder.objectLongitude || (workOrder as any).taskLongitude;
+
+    const HOURS_IN_DAY = 8;
+    const jobDuration = (workOrder.estimatedDuration || 60) / 60;
+
+    type Suggestion = {
+      resourceId: string;
+      resourceName: string;
+      date: string;
+      startTime: string;
+      score: number;
+      reasons: string[];
+    };
+
+    const suggestions: Suggestion[] = [];
+
+    for (const resource of activeResources) {
+      for (const day of weekDays) {
+        const dayOrders = scheduledOrders.filter(o => o.resourceId === resource.id && o.scheduledDate === day);
+        const dayHours = dayOrders.reduce((sum, o) => sum + ((o.estimatedDuration || 0) / 60), 0);
+        const remainingCapacity = HOURS_IN_DAY - dayHours;
+
+        if (remainingCapacity < jobDuration) continue;
+
+        let score = 50;
+        const reasons: string[] = [];
+
+        const capacityPct = dayHours / HOURS_IN_DAY;
+        if (capacityPct < 0.3) {
+          score += 5;
+          reasons.push("Låg beläggning denna dag");
+        } else if (capacityPct < 0.7) {
+          score += 10;
+          reasons.push("Bra kapacitetsutnyttjande");
+        } else {
+          score -= 5;
+          reasons.push("Hög beläggning denna dag");
+        }
+
+        if (objectLat && objectLng) {
+          let minDist = Infinity;
+          for (const o of dayOrders) {
+            const oLat = o.objectLatitude || (o as any).taskLatitude;
+            const oLng = o.objectLongitude || (o as any).taskLongitude;
+            if (oLat && oLng) {
+              const dist = haversineDist(objectLat, objectLng, oLat, oLng);
+              if (dist < minDist) minDist = dist;
+            }
+          }
+          if (minDist < 5) {
+            score += 25;
+            reasons.push(`Nära befintligt jobb (${minDist.toFixed(1)} km)`);
+          } else if (minDist < 15) {
+            score += 15;
+            reasons.push(`Relativt nära befintligt jobb (${minDist.toFixed(1)} km)`);
+          } else if (minDist < 50) {
+            score += 5;
+            reasons.push(`Inom rimligt avstånd (${minDist.toFixed(1)} km)`);
+          }
+
+          if (resource.homeLatitude && resource.homeLongitude) {
+            const homeDist = haversineDist(objectLat, objectLng, resource.homeLatitude, resource.homeLongitude);
+            if (homeDist < 10) {
+              score += 10;
+              reasons.push(`Nära resursens utgångsplats (${homeDist.toFixed(1)} km)`);
+            }
+          }
+        }
+
+        if (resource.serviceArea && resource.serviceArea.length > 0 && workOrder.clusterId) {
+          if (resource.serviceArea.includes(workOrder.clusterId)) {
+            score += 15;
+            reasons.push("Resurs tilldelad detta område");
+          }
+        }
+
+        let startTime = "07:00";
+        const sortedExisting = dayOrders
+          .filter(o => o.scheduledStartTime)
+          .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+        if (sortedExisting.length > 0) {
+          const last = sortedExisting[sortedExisting.length - 1];
+          const [h, m] = (last.scheduledStartTime || "07:00").split(":").map(Number);
+          const endMin = h * 60 + m + (last.estimatedDuration || 60);
+          if (endMin >= 17 * 60) continue;
+          startTime = `${Math.floor(endMin / 60).toString().padStart(2, "0")}:${(endMin % 60).toString().padStart(2, "0")}`;
+        }
+
+        suggestions.push({
+          resourceId: resource.id,
+          resourceName: resource.name,
+          date: day,
+          startTime,
+          score,
+          reasons,
+        });
+      }
+    }
+
+    suggestions.sort((a, b) => b.score - a.score);
+    const topSuggestions = suggestions.slice(0, 3);
+
+    res.json({
+      workOrderId,
+      workOrderTitle: workOrder.title,
+      suggestions: topSuggestions,
+    });
+}));
+
+}
+
+function haversineDist(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }

@@ -20,6 +20,7 @@ interface DayTimelineViewProps {
   travelTimesForDay: Record<string, Array<{ fromJobId: string; toJobId: string; minutes: number; distanceKm: number; startTime: string; endTime: string }>>;
   zoom: { dayH: number; weekH: number; monthH: number; scale: number };
   jobCardProps: Omit<React.ComponentProps<typeof JobCard>, 'job' | 'compact'>;
+  dragOverConflicts?: Record<string, string[]>;
 }
 
 export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineViewProps) {
@@ -27,6 +28,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
     currentDate, visibleResources, timeRestrictions,
     getJobsForResourceAndDay, getResourceDayHours, getCapacityPercentage,
     getDropFitClass, activeDragJob, travelTimesForDay, zoom, jobCardProps,
+    dragOverConflicts,
   } = props;
 
   const hours = Array.from({ length: DAY_END_HOUR - DAY_START_HOUR + 1 }, (_, i) => DAY_START_HOUR + i);
@@ -107,6 +109,7 @@ export const DayTimelineView = memo(function DayTimelineView(props: DayTimelineV
                   className={`${zoomPadClass} border-r last:border-r-0 transition-colors ${cellBg}`}
                   dropFitInfo={dayCellDropFit}
                   style={{ minHeight: `${zoom.dayH}px` }}
+                  dragOverConflicts={dragOverConflicts?.[droppableId]}
                 >
                   <div className={zoomGapClass} data-testid={`drop-zone-${resource.id}-${hour}`}>
                     {jobs.map((job) => {

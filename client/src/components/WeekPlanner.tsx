@@ -40,6 +40,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     setConflictDialogOpen: d.setConflictDialogOpen,
     executeSchedule: d.executeSchedule,
     toast: d.toast,
+    selectedJobIds: d.selectedJobIds,
+    clearSelection: d.clearSelection,
   });
 
   const handleJobClickWithCallback = useCallback((jobId: string) => {
@@ -57,13 +59,15 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     onUnschedule: d.handleUnschedule,
     onToggleSubStep: d.handleToggleSubStep,
     onOpenDepChain: d.handleOpenDepChain,
-  }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain]);
+    selectedJobIds: d.selectedJobIds,
+    onToggleSelection: d.toggleJobSelection,
+  }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain, d.selectedJobIds, d.toggleJobSelection]);
 
   const isLoading = d.resourcesLoading || d.workOrdersLoading;
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;
 
   return (
-    <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragEnd={dnd.handleDragEnd}>
+    <DndContext sensors={dnd.sensors} collisionDetection={dnd.collisionDetection} onDragStart={dnd.handleDragStart} onDragOver={dnd.handleDragOver} onDragEnd={dnd.handleDragEnd}>
       <div className="flex h-full">
         <UnscheduledSidebar
           showUnscheduled={d.showUnscheduled} setShowUnscheduled={d.setShowUnscheduled}
@@ -82,6 +86,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
           customerMap={d.customerMap} clusterMap={d.clusterMap}
           selectedJob={d.selectedJob} onJobClick={handleJobClickWithCallback} onOpenAssignDialog={d.handleOpenAssignDialog}
           timewindowMap={d.timewindowMap}
+          currentWeekStart={d.currentWeekStart}
         />
 
         <div className="flex-1 flex flex-col overflow-hidden">
@@ -111,6 +116,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               getDropFitClass={d.getDropFitClass} activeDragJob={d.activeDragJob}
               travelTimesForDay={d.travelTimesForDay} zoom={zoom}
               jobCardProps={jobCardProps}
+              dragOverConflicts={dnd.dragOverConflicts}
             />
           )}
           {d.viewMode === "week" && (
@@ -124,6 +130,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
               zoom={zoom} weatherByDate={d.weatherByDate}
               onResourceClick={d.handleResourceClick} onSendSchedule={d.handleSendSchedule}
               jobCardProps={jobCardProps}
+              dragOverConflicts={dnd.dragOverConflicts}
             />
           )}
           {d.viewMode === "month" && (

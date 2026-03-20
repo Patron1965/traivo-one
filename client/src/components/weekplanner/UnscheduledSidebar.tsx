@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState, useCallback } from "react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -6,14 +6,17 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Filter, XCircle, Loader2 } from "lucide-react";
-import { format, addDays } from "date-fns";
+import { Inbox, AlertTriangle, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, MapPin, X, UserPlus, Key, DoorOpen, Filter, XCircle, Loader2, Sparkles, CheckCircle2 } from "lucide-react";
+import { format, addDays, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { WorkOrderWithObject, Customer, Cluster } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import { priorityDotColors, priorityLabels } from "./types";
 import { DraggableJobCard } from "./DndComponents";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface UnscheduledSidebarProps {
   showUnscheduled: boolean;
@@ -50,6 +53,81 @@ interface UnscheduledSidebarProps {
   onJobClick: (jobId: string) => void;
   onOpenAssignDialog: (job: WorkOrderWithObject, e: React.MouseEvent) => void;
   timewindowMap: Map<string, Array<{ workOrderId: string; dayOfWeek: string | null; startTime: string | null; endTime: string | null; weekNumber: number | null }>>;
+  currentWeekStart?: Date;
+}
+
+function SuggestPlacementButton({ job, currentWeekStart }: { job: WorkOrderWithObject; currentWeekStart?: Date }) {
+  const [loading, setLoading] = useState(false);
+  const [suggestions, setSuggestions] = useState<Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }> | null>(null);
+  const { toast } = useToast();
+
+  const handleSuggest = useCallback(async () => {
+    setLoading(true);
+    setSuggestions(null);
+    try {
+      const weekStart = format(currentWeekStart || startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd");
+      const res = await apiRequest("POST", "/api/ai/suggest-placement", {
+        workOrderId: job.id,
+        weekStart,
+      });
+      const data = await res.json();
+      setSuggestions(data.suggestions || []);
+    } catch {
+      toast({ title: "Kunde inte hämta förslag", description: "Försök igen senare" });
+    } finally {
+      setLoading(false);
+    }
+  }, [job.id, toast]);
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          size="sm"
+          variant="outline"
+          className="w-full mt-1"
+          onClick={handleSuggest}
+          data-testid={`button-suggest-placement-${job.id}`}
+        >
+          {loading ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Sparkles className="h-3.5 w-3.5 mr-1" />}
+          Föreslå optimal tid
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-72 p-3" side="right" align="start">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">AI-förslag för placering</p>
+          {loading && (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+            </div>
+          )}
+          {suggestions && suggestions.length === 0 && (
+            <p className="text-xs text-muted-foreground py-2">Inga lämpliga platser hittades denna vecka.</p>
+          )}
+          {suggestions && suggestions.map((s, i) => (
+            <div key={i} className={`p-2 rounded-md border text-xs space-y-1 ${i === 0 ? "border-green-300 bg-green-50/50 dark:bg-green-950/20 dark:border-green-800" : "border-border"}`} data-testid={`suggestion-${job.id}-${i}`}>
+              <div className="flex items-center justify-between">
+                <span className="font-medium">{s.resourceName}</span>
+                {i === 0 && <Badge className="text-[9px] h-4 bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200">Bäst</Badge>}
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                <span>{format(new Date(s.date + "T12:00:00Z"), "EEE d MMM", { locale: sv })} kl {s.startTime}</span>
+              </div>
+              <div className="space-y-0.5">
+                {s.reasons.map((r, ri) => (
+                  <div key={ri} className="flex items-start gap-1 text-[10px] text-muted-foreground">
+                    <CheckCircle2 className="h-2.5 w-2.5 mt-0.5 text-green-500 shrink-0" />
+                    <span>{r}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: UnscheduledSidebarProps) {
@@ -62,7 +140,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
     filterCluster, setFilterCluster, filterTeam, setFilterTeam,
     filterExecutionCode, setFilterExecutionCode,
     customers, clusters, teamsData, customerMap, clusterMap,
-    selectedJob, onJobClick, onOpenAssignDialog, timewindowMap,
+    selectedJob, onJobClick, onOpenAssignDialog, timewindowMap, currentWeekStart,
   } = props;
 
   return (
@@ -368,6 +446,7 @@ export const UnscheduledSidebar = memo(function UnscheduledSidebar(props: Unsche
                           </TooltipTrigger>
                           <TooltipContent>Tilldela resurs och datum</TooltipContent>
                         </Tooltip>
+                        <SuggestPlacementButton job={job} currentWeekStart={currentWeekStart} />
                       </div>
                     </Card>
                   </DraggableJobCard>

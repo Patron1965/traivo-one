@@ -380,6 +380,20 @@ export function usePlannerData() {
   const handleOpenDepChain = useCallback((jobId: string) => { setDepChainJobId(jobId); setDepChainDialogOpen(true); }, []);
   const handleToggleSubStep = useCallback((jobId: string) => setExpandedSubSteps(prev => ({ ...prev, [jobId]: !prev[jobId] })), []);
 
+  const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
+  const toggleJobSelection = useCallback((jobId: string, shiftKey = false) => {
+    setSelectedJobIds(prev => {
+      const next = new Set(prev);
+      if (next.has(jobId)) { next.delete(jobId); } else { next.add(jobId); }
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelectedJobIds(new Set()), []);
+  const selectAllVisible = useCallback(() => {
+    const ids = new Set(filteredScheduledJobs.map(j => j.id));
+    setSelectedJobIds(ids);
+  }, [filteredScheduledJobs]);
+
   return {
     viewMode, currentDate, currentWeekStart, selectedJob, showUnscheduled, setShowUnscheduled,
     filterCustomer, setFilterCustomer, filterPriority, setFilterPriority,
@@ -419,6 +433,7 @@ export function usePlannerData() {
     handleOptimizeRoute, handleClearAllScheduled, handleAutoFillPreview, handleAutoFillApply,
     handleOpenDepChain, handleToggleSubStep,
     executeSchedule, detectConflictsForJob,
+    selectedJobIds, toggleJobSelection, clearSelection, selectAllVisible,
     toast,
   };
 }

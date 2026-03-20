@@ -27,6 +27,7 @@ interface WeekGridViewProps {
   onResourceClick: (resourceId: string) => void;
   onSendSchedule: (resource: Resource) => void;
   jobCardProps: Omit<React.ComponentProps<typeof JobCard>, 'job' | 'compact'>;
+  dragOverConflicts?: Record<string, string[]>;
 }
 
 function getWeatherIcon(code: number) {
@@ -48,7 +49,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
     visibleDates, visibleResources, getJobsForResourceAndDay, getResourceDayHours,
     getCapacityPercentage, getCapacityColor, getCapacityBgColor, getDropFitClass,
     activeDragJob, restrictionsByObject, resourceWeekSummary, zoom, weatherByDate,
-    onResourceClick, onSendSchedule, jobCardProps,
+    onResourceClick, onSendSchedule, jobCardProps, dragOverConflicts,
   } = props;
 
   const zoomPadClass = zoom.scale <= 0.5 ? "p-0.5" : zoom.scale >= 2 ? "p-4" : "p-2";
@@ -144,6 +145,7 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
                     className={`${zoomPadClass} border-r last:border-r-0 transition-colors overflow-hidden min-w-0 ${getCapacityBgColor(capacityPct)} ${restrictedJobs.length > 0 ? "bg-red-50/50 dark:bg-red-950/20" : ""}`}
                     dropFitInfo={cellDropFit}
                     style={{ minHeight: `${zoom.weekH}px` }}
+                    dragOverConflicts={dragOverConflicts?.[droppableId]}
                   >
                     <div className="min-w-0 overflow-hidden" data-testid={`drop-zone-${resource.id}-${dayStr}`}>
                       <div className="flex items-center gap-1 mb-2">
