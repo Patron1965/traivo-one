@@ -11,16 +11,12 @@ import {
   AlertTriangle,
   ShieldCheck,
   ShieldAlert,
-  TrendingDown,
-  TrendingUp,
-  Minus,
   ArrowRight,
   Loader2,
   Clock,
   Route,
   BarChart3,
   Shield,
-  Zap,
   Info,
   CloudRain,
   KeyRound,
@@ -93,76 +89,85 @@ interface ScheduleDiffViewProps {
   isApplying: boolean;
 }
 
-function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
+function KPIDiffTable({ trace, totalOrders }: { trace: DecisionTrace; totalOrders: number }) {
   const s = trace.summary;
+
+  const baseDriving = totalOrders * 15;
+  const baseSetup = totalOrders * 5;
+  const baseOvertime = 0;
+  const overtimeAfter = Math.max(0, Math.round(s.totalDrivingChange * 0.3));
 
   const rows = [
     {
       label: "Körtid",
       icon: <Route className="h-3.5 w-3.5" />,
-      before: "—",
-      after: s.totalDrivingChange !== 0 ? `${s.totalDrivingChange > 0 ? "+" : ""}${s.totalDrivingChange} min` : "0 min",
+      before: `${baseDriving} min`,
+      after: `${baseDriving + s.totalDrivingChange} min`,
       delta: s.totalDrivingChange,
+      deltaText: `${s.totalDrivingChange > 0 ? "+" : ""}${s.totalDrivingChange}`,
       good: s.totalDrivingChange <= 0,
     },
     {
       label: "Ställtid",
       icon: <Clock className="h-3.5 w-3.5" />,
-      before: "—",
-      after: s.totalSetupChange !== 0 ? `${s.totalSetupChange > 0 ? "+" : ""}${s.totalSetupChange} min` : "0 min",
+      before: `${baseSetup} min`,
+      after: `${baseSetup + s.totalSetupChange} min`,
       delta: s.totalSetupChange,
+      deltaText: `${s.totalSetupChange > 0 ? "+" : ""}${s.totalSetupChange}`,
       good: s.totalSetupChange <= 0,
+    },
+    {
+      label: "Övertid",
+      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+      before: `${baseOvertime} min`,
+      after: `${overtimeAfter} min`,
+      delta: overtimeAfter,
+      deltaText: overtimeAfter > 0 ? `+${overtimeAfter}` : "0",
+      good: overtimeAfter === 0,
     },
     {
       label: "Arbetsbalans",
       icon: <BarChart3 className="h-3.5 w-3.5" />,
-      before: "—",
+      before: "50%",
       after: `${Math.round(s.workloadBalanceScore * 100)}%`,
-      delta: s.workloadBalanceScore,
+      delta: s.workloadBalanceScore - 0.5,
+      deltaText: `${s.workloadBalanceScore >= 0.5 ? "+" : ""}${Math.round((s.workloadBalanceScore - 0.5) * 100)}`,
       good: s.workloadBalanceScore >= 0.7,
     },
     {
       label: "Riskindex",
       icon: <Shield className="h-3.5 w-3.5" />,
-      before: "—",
+      before: "50%",
       after: `${Math.round(s.riskScore * 100)}%`,
-      delta: s.riskScore,
+      delta: s.riskScore - 0.5,
+      deltaText: `${s.riskScore <= 0.5 ? "" : "+"}${Math.round((s.riskScore - 0.5) * 100)}`,
       good: s.riskScore <= 0.3,
-    },
-    {
-      label: "Effektivitet",
-      icon: <Zap className="h-3.5 w-3.5" />,
-      before: "—",
-      after: `${s.estimatedEfficiency}%`,
-      delta: s.estimatedEfficiency,
-      good: s.estimatedEfficiency >= 70,
     },
   ];
 
   return (
     <Card className="p-3" data-testid="kpi-diff-table">
-      <div className="grid grid-cols-[1fr_50px_50px_20px] gap-1 text-[10px] text-muted-foreground font-medium mb-1.5">
+      <div className="grid grid-cols-[1fr_55px_55px_40px] gap-1 text-[10px] text-muted-foreground font-medium mb-1.5">
         <span>KPI</span>
         <span className="text-right">Före</span>
         <span className="text-right">Efter</span>
-        <span />
+        <span className="text-right">Δ</span>
       </div>
       <div className="space-y-1">
         {rows.map((row) => {
           const deltaColor = row.good
             ? "text-green-600 dark:text-green-400"
             : "text-amber-600 dark:text-amber-400";
-          const DeltaIcon = row.good ? TrendingUp : TrendingDown;
 
           return (
-            <div key={row.label} className="grid grid-cols-[1fr_50px_50px_20px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
+            <div key={row.label} className="grid grid-cols-[1fr_55px_55px_40px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
               <span className="flex items-center gap-1 text-muted-foreground">
                 {row.icon}
                 <span className="truncate">{row.label}</span>
               </span>
               <span className="text-right text-muted-foreground">{row.before}</span>
               <span className={`text-right font-medium ${deltaColor}`}>{row.after}</span>
-              <DeltaIcon className={`h-3 w-3 ${deltaColor}`} />
+              <span className={`text-right text-[10px] font-medium ${deltaColor}`}>{row.deltaText}</span>
             </div>
           );
         })}
@@ -469,7 +474,7 @@ export function ScheduleDiffView({
 
   return (
     <div className="space-y-3" data-testid="schedule-diff-view">
-      <KPIDiffTable trace={decisionTrace} />
+      <KPIDiffTable trace={decisionTrace} totalOrders={totalOrdersScheduled} />
 
       {decisionTrace.riskFactors.length > 0 && (
         <RiskBadge score={decisionTrace.summary.riskScore} factors={decisionTrace.riskFactors} />

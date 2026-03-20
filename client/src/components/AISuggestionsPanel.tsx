@@ -251,7 +251,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
     },
   });
 
-  const applyScheduleMutation = useMutation({
+  const applyScheduleAllMutation = useMutation({
     mutationFn: async (assignments: ScheduleAssignment[]) => {
       const response = await apiRequest("POST", "/api/ai/auto-schedule/apply", {
         assignments: assignments.map(a => ({
@@ -275,6 +275,44 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
       toast({
         title: "Fel",
         description: "Kunde inte tillämpa schemaläggningen.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const applySingleMoveMutation = useMutation({
+    mutationFn: async (assignment: ScheduleAssignment) => {
+      const response = await apiRequest("POST", "/api/ai/auto-schedule/apply", {
+        assignments: [{
+          workOrderId: assignment.workOrderId,
+          resourceId: assignment.resourceId,
+          scheduledDate: assignment.scheduledDate,
+        }],
+      });
+      const data = await response.json();
+      return { ...data, appliedWorkOrderId: assignment.workOrderId };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({
+        title: "Order schemalagd",
+        description: `1 order tillämpad.`,
+      });
+      setAutoScheduleResult(prev => {
+        if (!prev) return null;
+        const newAssignments = prev.assignments.filter(a => a.workOrderId !== data.appliedWorkOrderId);
+        const newTrace = prev.decisionTrace ? {
+          ...prev.decisionTrace,
+          moves: prev.decisionTrace.moves.filter(m => m.workOrderId !== data.appliedWorkOrderId),
+        } : undefined;
+        if (newAssignments.length === 0) return null;
+        return { ...prev, assignments: newAssignments, decisionTrace: newTrace };
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Fel",
+        description: "Kunde inte tillämpa ordern.",
         variant: "destructive",
       });
     },
@@ -575,15 +613,17 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                 totalOrdersScheduled={autoScheduleResult.totalOrdersScheduled}
                 estimatedEfficiency={autoScheduleResult.estimatedEfficiency}
                 decisionTrace={autoScheduleResult.decisionTrace}
-                onApplyAll={(assignments) => applyScheduleMutation.mutate(assignments)}
-                onApplySingle={(assignment) => applyScheduleMutation.mutate([assignment])}
+                onApplyAll={(assignments) => applyScheduleAllMutation.mutate(assignments)}
+                onApplySingle={(assignment) => applySingleMoveMutation.mutate(assignment)}
                 onRejectSingle={(workOrderId) => {
                   setAutoScheduleResult(prev => {
                     if (!prev) return prev;
+                    const newAssignments = prev.assignments.filter(a => a.workOrderId !== workOrderId);
+                    if (newAssignments.length === 0) return null;
                     return {
                       ...prev,
-                      assignments: prev.assignments.filter(a => a.workOrderId !== workOrderId),
-                      totalOrdersScheduled: prev.assignments.filter(a => a.workOrderId !== workOrderId).length,
+                      assignments: newAssignments,
+                      totalOrdersScheduled: newAssignments.length,
                       decisionTrace: prev.decisionTrace ? {
                         ...prev.decisionTrace,
                         moves: prev.decisionTrace.moves.filter(m => m.workOrderId !== workOrderId),
@@ -592,7 +632,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                   });
                 }}
                 onCancel={() => setAutoScheduleResult(null)}
-                isApplying={applyScheduleMutation.isPending}
+                isApplying={applyScheduleAllMutation.isPending || applySingleMoveMutation.isPending}
               />
             )}
           </>
