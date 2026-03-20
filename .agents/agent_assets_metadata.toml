@@ -6,3 +6,9 @@ id = "Xv0HtBKAwfHpr8TFw45jj"
 uri = "file://Arsplanering_Funktionsoversikt_2026.pdf"
 type = "pdf"
 title = "Årsplanering — Funktionsöversikt (PDF-rapport)"
+
+[[outputs]]
+id = "tNFkAWibCR3jn8xHjAlqH"
+uri = "file://TRAIVO_GO_PROMPT.md"
+type = "text"
+title = "Traivo Go — Komplett projektprompt"
