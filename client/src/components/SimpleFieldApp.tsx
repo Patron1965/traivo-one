@@ -840,7 +840,26 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <Button
                 variant="outline"
                 className="h-auto py-3 flex-col gap-1"
-                onClick={() => window.open(`https://maps.google.com?q=${encodeURIComponent(selectedJob.objectAddress + ", " + (selectedObject?.city || ""))}`)}
+                onClick={() => {
+                  window.open(`https://maps.google.com?q=${encodeURIComponent(selectedJob.objectAddress + ", " + (selectedObject?.city || ""))}`);
+                  if (selectedJobId) {
+                    const pos = lastPositionRef.current;
+                    fetch(`/api/work-orders/${selectedJobId}/auto-eta-sms`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        technicianLat: pos?.lat || null,
+                        technicianLng: pos?.lng || null,
+                      }),
+                    }).then(r => r.json()).then(data => {
+                      if (data.success && !data.skipped) {
+                        toast({ title: "Kund-SMS skickat", description: `ETA: ca ${data.etaMinutes} min` });
+                      }
+                    }).catch((err) => {
+                      console.error("[auto-eta-sms] Error:", err);
+                    });
+                  }
+                }}
                 data-testid="button-navigate"
               >
                 <Navigation className="h-5 w-5 text-blue-500" />

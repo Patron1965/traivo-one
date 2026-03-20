@@ -294,6 +294,7 @@ export const workOrders = pgTable("work_orders", {
   notes: text("notes"),
   metadata: jsonb("metadata").default({}),
   importBatchId: text("import_batch_id"),
+  etaSmsSent: boolean("eta_sms_sent").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
 }, (table) => [

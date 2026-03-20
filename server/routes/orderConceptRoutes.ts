@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { objects, workOrders } from "@shared/schema";
+import { objects, workOrders, customerCommunications, objectContacts } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 
 export async function registerOrderConceptRoutes(app: Express) {
@@ -1155,6 +1155,235 @@ app.post("/api/notifications/send-schedule/:resourceId", asyncHandler(async (req
     );
     
     res.json(result);
+}));
+
+app.post("/api/work-orders/:workOrderId/send-sms", asyncHandler(async (req, res) => {
+    const { sendSms, isTwilioConfigured } = await import("../replit_integrations/twilio");
+    const tenantId = getTenantIdWithFallback(req);
+    const { workOrderId } = req.params;
+    const { message, recipientPhone } = req.body;
+
+    if (!message || typeof message !== "string" || !recipientPhone || typeof recipientPhone !== "string") {
+      throw new ValidationError("Meddelande och telefonnummer krävs");
+    }
+
+    if (message.length > 320) {
+      throw new ValidationError("Meddelandet får inte vara längre än 320 tecken");
+    }
+
+    const phoneRegex = /^[\d\s\-+()]{7,20}$/;
+    if (!phoneRegex.test(recipientPhone.trim())) {
+      throw new ValidationError("Ogiltigt telefonnummerformat");
+    }
+
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!verifyTenantOwnership(workOrder, tenantId)) {
+      throw new NotFoundError("Arbetsorder hittades inte");
+    }
+
+    const twilioConfigured = await isTwilioConfigured();
+    if (!twilioConfigured) {
+      throw new ValidationError("SMS-tjänsten (Twilio) är inte konfigurerad");
+    }
+
+    let cleaned = recipientPhone.replace(/[\s\-()]/g, "");
+    if (cleaned.startsWith("07") || cleaned.startsWith("08") || cleaned.startsWith("0")) {
+      cleaned = "+46" + cleaned.substring(1);
+    } else if (!cleaned.startsWith("+")) {
+      cleaned = "+46" + cleaned;
+    }
+
+    const smsResult = await sendSms({ to: cleaned, body: message });
+
+    const customer = await storage.getCustomer(workOrder.customerId);
+
+    await db.insert(customerCommunications).values({
+      tenantId,
+      workOrderId,
+      customerId: workOrder.customerId,
+      objectId: workOrder.objectId,
+      channel: "sms",
+      notificationType: "manual_sms",
+      recipientName: customer?.contactPerson || customer?.name || null,
+      recipientEmail: null,
+      recipientPhone: recipientPhone,
+      subject: null,
+      message,
+      aiGenerated: false,
+      status: smsResult.success ? "sent" : "failed",
+      errorMessage: smsResult.error || null,
+      sentAt: smsResult.success ? new Date() : null,
+    });
+
+    res.json({
+      success: smsResult.success,
+      messageId: smsResult.messageId,
+      error: smsResult.error,
+    });
+}));
+
+app.get("/api/work-orders/:workOrderId/communications", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { workOrderId } = req.params;
+
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!verifyTenantOwnership(workOrder, tenantId)) {
+      throw new NotFoundError("Arbetsorder hittades inte");
+    }
+
+    const logs = await db.select()
+      .from(customerCommunications)
+      .where(and(
+        eq(customerCommunications.tenantId, tenantId),
+        eq(customerCommunications.workOrderId, workOrderId)
+      ))
+      .orderBy(desc(customerCommunications.createdAt));
+
+    res.json(logs);
+}));
+
+app.post("/api/work-orders/:workOrderId/auto-eta-sms", asyncHandler(async (req, res) => {
+    const { sendSms, isTwilioConfigured } = await import("../replit_integrations/twilio");
+    const { trackApiUsage } = await import("../api-usage-tracker");
+    const tenantId = getTenantIdWithFallback(req);
+    const { workOrderId } = req.params;
+    const { technicianLat, technicianLng } = req.body;
+
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!verifyTenantOwnership(workOrder, tenantId)) {
+      throw new NotFoundError("Arbetsorder hittades inte");
+    }
+
+    if (workOrder.etaSmsSent) {
+      res.json({ success: true, skipped: true, reason: "ETA SMS redan skickat för denna order" });
+      return;
+    }
+
+    const tenant = await storage.getTenant(tenantId);
+    if (!tenant?.smsEnabled) {
+      res.json({ success: false, reason: "SMS inte aktiverat" });
+      return;
+    }
+
+    const twilioConfigured = await isTwilioConfigured();
+    if (!twilioConfigured) {
+      res.json({ success: false, reason: "Twilio inte konfigurerat" });
+      return;
+    }
+
+    const obj = await storage.getObject(workOrder.objectId);
+    if (!obj) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+
+    const customer = await storage.getCustomer(workOrder.customerId);
+    const contacts = await db.select().from(objectContacts)
+      .where(and(
+        eq(objectContacts.objectId, workOrder.objectId),
+        eq(objectContacts.tenantId, tenantId)
+      ));
+
+    const primaryContacts = contacts.filter(c => c.contactType === "primary");
+    const recipientContacts = primaryContacts.length > 0 ? primaryContacts : contacts;
+    const phoneRecipients: { name: string; phone: string }[] = [];
+
+    for (const contact of recipientContacts) {
+      if (contact.phone) {
+        phoneRecipients.push({ name: contact.name || "", phone: contact.phone });
+      }
+    }
+
+    if (phoneRecipients.length === 0 && customer?.phone) {
+      phoneRecipients.push({ name: customer.contactPerson || customer.name, phone: customer.phone });
+    }
+
+    if (phoneRecipients.length === 0) {
+      res.json({ success: false, reason: "Inget telefonnummer för mottagare" });
+      return;
+    }
+
+    let etaMinutes: number | null = null;
+    const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+    if (GEOAPIFY_API_KEY && technicianLat && technicianLng && obj.latitude && obj.longitude) {
+      try {
+        const waypoints = `${technicianLat},${technicianLng}|${obj.latitude},${obj.longitude}`;
+        const startTime = Date.now();
+        const geoRes = await fetch(
+          `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${GEOAPIFY_API_KEY}`
+        );
+        trackApiUsage({
+          service: "geoapify",
+          method: "routing",
+          endpoint: "/v1/routing",
+          units: 1,
+          statusCode: geoRes.status,
+          durationMs: Date.now() - startTime,
+        });
+        if (geoRes.ok) {
+          const geoData = await geoRes.json();
+          const props = geoData.features?.[0]?.properties;
+          if (props?.time) {
+            etaMinutes = Math.round(props.time / 60);
+          }
+        }
+      } catch (err) {
+        console.error("[auto-eta-sms] Geoapify routing error:", err);
+      }
+    }
+
+    if (!etaMinutes) {
+      etaMinutes = 30;
+    }
+
+    const resource = workOrder.resourceId ? await storage.getResource(workOrder.resourceId) : null;
+    const companyName = tenant?.smsFromName || tenant?.name || "Traivo";
+    const resourceName = resource?.name || "Vår tekniker";
+
+    let sentCount = 0;
+    for (const recipient of phoneRecipients) {
+      let cleaned = recipient.phone.replace(/[\s\-()]/g, "");
+      if (cleaned.startsWith("0")) {
+        cleaned = "+46" + cleaned.substring(1);
+      } else if (!cleaned.startsWith("+")) {
+        cleaned = "+46" + cleaned;
+      }
+
+      const smsBody = `${companyName}: ${resourceName} är på väg till ${obj.address || obj.name}. Beräknad ankomst: ca ${etaMinutes} min.`;
+      const smsResult = await sendSms({ to: cleaned, body: smsBody });
+
+      await db.insert(customerCommunications).values({
+        tenantId,
+        workOrderId,
+        customerId: workOrder.customerId,
+        objectId: workOrder.objectId,
+        channel: "sms",
+        notificationType: "technician_on_way",
+        recipientName: recipient.name || null,
+        recipientEmail: null,
+        recipientPhone: recipient.phone,
+        subject: null,
+        message: smsBody,
+        aiGenerated: false,
+        status: smsResult.success ? "sent" : "failed",
+        errorMessage: smsResult.error || null,
+        sentAt: smsResult.success ? new Date() : null,
+      });
+
+      if (smsResult.success) sentCount++;
+    }
+
+    if (sentCount > 0) {
+      await db.update(workOrders)
+        .set({ etaSmsSent: true })
+        .where(eq(workOrders.id, workOrderId));
+    }
+
+    res.json({
+      success: sentCount > 0,
+      sent: sentCount,
+      total: phoneRecipients.length,
+      etaMinutes,
+    });
 }));
 
 }

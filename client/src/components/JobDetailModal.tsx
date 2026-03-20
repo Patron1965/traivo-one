@@ -8,14 +8,15 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign } from "lucide-react";
+import { Loader2, Plus, Trash2, MapPin, User, Calendar, Clock, Package, Check, ChevronsUpDown, Tag, ShoppingCart, DollarSign, MessageSquare, Send, CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine } from "@shared/schema";
+import type { WorkOrder, ServiceObject, Customer, Resource, WorkOrderObject, MetadataKatalog, WorkOrderLine, CustomerCommunication } from "@shared/schema";
 
 interface JobDetailModalProps {
   open: boolean;
@@ -73,6 +74,9 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
   const [articleSearch, setArticleSearch] = useState("");
   const [selectedArticleId, setSelectedArticleId] = useState<string>("");
   const [articleQuantity, setArticleQuantity] = useState(1);
+  const [showSmsDialog, setShowSmsDialog] = useState(false);
+  const [smsMessage, setSmsMessage] = useState("");
+  const [smsPhone, setSmsPhone] = useState("");
 
   const { data: workOrder, isLoading: workOrderLoading } = useQuery<WorkOrderWithDetails>({
     queryKey: ["/api/work-orders", workOrderId],
@@ -212,6 +216,55 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
       default: return '';
     }
   };
+
+  const { data: communications = [], isLoading: communicationsLoading } = useQuery<CustomerCommunication[]>({
+    queryKey: ["/api/work-orders", workOrderId, "communications"],
+    queryFn: async () => {
+      const res = await fetch(`/api/work-orders/${workOrderId}/communications`);
+      if (!res.ok) throw new Error("Failed to fetch communications");
+      return res.json();
+    },
+    enabled: !!workOrderId && open,
+  });
+
+  const { data: customer } = useQuery<Customer>({
+    queryKey: ["/api/customers", workOrder?.customerId],
+    queryFn: async () => {
+      const res = await fetch(`/api/customers/${workOrder!.customerId}`);
+      if (!res.ok) throw new Error("Failed to fetch customer");
+      return res.json();
+    },
+    enabled: !!workOrder?.customerId && open,
+  });
+
+  const handleOpenSmsDialog = () => {
+    const resource = workOrder?.resourceName || "Tekniker";
+    const address = workOrder?.objectAddress || workOrder?.objectName || "";
+    const orderNum = workOrder?.id?.slice(0, 8) || "";
+    const defaultMsg = `Hej! Order ${orderNum}: ${resource} kommer till ${address}. Kontakta oss vid frågor.`;
+    setSmsMessage(defaultMsg);
+    setSmsPhone(customer?.phone || "");
+    setShowSmsDialog(true);
+  };
+
+  const sendSmsMutation = useMutation({
+    mutationFn: async ({ message, recipientPhone }: { message: string; recipientPhone: string }) => {
+      const res = await apiRequest("POST", `/api/work-orders/${workOrderId}/send-sms`, { message, recipientPhone });
+      return res.json();
+    },
+    onSuccess: (data: { success: boolean; error?: string }) => {
+      if (data.success) {
+        toast({ title: "SMS skickat", description: "Meddelandet har skickats." });
+        setShowSmsDialog(false);
+        queryClient.invalidateQueries({ queryKey: ["/api/work-orders", workOrderId, "communications"] });
+      } else {
+        toast({ title: "SMS misslyckades", description: data.error || "Kunde inte skicka SMS.", variant: "destructive" });
+      }
+    },
+    onError: (error: any) => {
+      toast({ title: "Fel", description: error.message || "Kunde inte skicka SMS.", variant: "destructive" });
+    },
+  });
 
   const addObjectMutation = useMutation({
     mutationFn: async (objectId: string) => {
@@ -711,6 +764,81 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
                 </ScrollArea>
               )}
             </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  SMS & Kommunikation
+                </h4>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOpenSmsDialog}
+                  data-testid="button-send-sms"
+                >
+                  <Send className="h-4 w-4 mr-1" />
+                  Skicka SMS
+                </Button>
+              </div>
+
+              {communicationsLoading ? (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </div>
+              ) : communications.length === 0 ? (
+                <div className="text-sm text-muted-foreground py-4 text-center border rounded-md">
+                  Ingen kommunikation skickad för detta jobb ännu.
+                </div>
+              ) : (
+                <ScrollArea className="h-[200px]">
+                  <div className="space-y-2">
+                    {communications.map((comm) => (
+                      <div
+                        key={comm.id}
+                        className="p-3 border rounded-md space-y-1"
+                        data-testid={`comm-entry-${comm.id}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {comm.status === "sent" ? (
+                              <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                            ) : comm.status === "failed" ? (
+                              <XCircle className="h-3.5 w-3.5 text-red-500" />
+                            ) : (
+                              <AlertCircle className="h-3.5 w-3.5 text-yellow-500" />
+                            )}
+                            <Badge variant="outline" className="text-xs">
+                              {comm.channel === "sms" ? "SMS" : comm.channel === "email" ? "E-post" : comm.channel}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {comm.notificationType === "manual_sms" ? "Manuellt" :
+                               comm.notificationType === "technician_on_way" ? "Tekniker på väg" :
+                               comm.notificationType === "on_route" ? "På väg" :
+                               comm.notificationType === "completed" ? "Slutfört" :
+                               comm.notificationType === "eta_update" ? "ETA-uppdatering" :
+                               comm.notificationType}
+                            </span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {comm.createdAt ? format(new Date(comm.createdAt), "d MMM HH:mm", { locale: sv }) : ""}
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2">{comm.message}</p>
+                        {comm.recipientPhone && (
+                          <span className="text-xs text-muted-foreground">Till: {comm.recipientPhone}</span>
+                        )}
+                        {comm.errorMessage && (
+                          <p className="text-xs text-red-500">{comm.errorMessage}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
           </div>
         ) : (
           <div className="py-8 text-center text-muted-foreground">
@@ -718,6 +846,65 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
           </div>
         )}
       </DialogContent>
+
+      <Dialog open={showSmsDialog} onOpenChange={setShowSmsDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MessageSquare className="h-5 w-5" />
+              Skicka SMS
+            </DialogTitle>
+            <DialogDescription>
+              Skicka ett SMS till kunden för denna order.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Telefonnummer</label>
+              <Input
+                value={smsPhone}
+                onChange={(e) => setSmsPhone(e.target.value)}
+                placeholder="+46701234567"
+                data-testid="input-sms-phone"
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Meddelande</label>
+              <Textarea
+                value={smsMessage}
+                onChange={(e) => setSmsMessage(e.target.value)}
+                rows={4}
+                maxLength={320}
+                data-testid="input-sms-message"
+              />
+              <p className="text-xs text-muted-foreground text-right">{smsMessage.length}/320 tecken</p>
+            </div>
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowSmsDialog(false)}
+                data-testid="button-cancel-sms"
+              >
+                Avbryt
+              </Button>
+              <Button
+                className="flex-1"
+                onClick={() => sendSmsMutation.mutate({ message: smsMessage, recipientPhone: smsPhone })}
+                disabled={sendSmsMutation.isPending || !smsPhone.trim() || !smsMessage.trim()}
+                data-testid="button-confirm-send-sms"
+              >
+                {sendSmsMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Send className="h-4 w-4 mr-2" />
+                )}
+                Skicka
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showAddArticleDialog} onOpenChange={setShowAddArticleDialog}>
         <DialogContent className="sm:max-w-lg">
