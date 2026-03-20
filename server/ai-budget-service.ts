@@ -285,18 +285,18 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   options: { maxRetries?: number; label?: string } = {}
 ): Promise<T> {
-  const maxRetries = options.maxRetries ?? 3;
+  const maxAttempts = options.maxRetries ?? 3;
   const label = options.label ?? "AI call";
   let lastError: Error | undefined;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     try {
       return await fn();
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       lastError = err;
 
-      if (attempt === maxRetries) break;
+      if (attempt === maxAttempts - 1) break;
 
       const errRecord = error as Record<string, unknown>;
       const isRetryable =

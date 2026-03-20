@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_budget_alert_dedup" ON "budget_alert_log" USING btree ("tenant_id","month_key","threshold_percent");

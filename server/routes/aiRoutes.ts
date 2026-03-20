@@ -990,7 +990,10 @@ app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
     const guard = await aiBudgetGuard(req, res);
     if (guard.blocked) return;
     
-    const explanation = await explainAnomaly(anomalyType, context || {});
+    const { runWithAIContext } = await import("../ai-planner");
+    const explanation = await runWithAIContext({ tenantId: guard.tenantId, model: guard.model }, () =>
+      explainAnomaly(anomalyType, context || {})
+    );
     res.json(explanation);
 }));
 
