@@ -26,7 +26,7 @@ import {
 } from "../ai-budget-service";
 import { getTenantFeatures } from "../feature-flags";
 
-async function aiBudgetGuard(req: Request, res: Response): Promise<{ tenantId: string; tier: string; model: string; blocked: boolean }> {
+async function aiBudgetGuard(req: Request, res: Response, useCase: "planning" | "chat" | "analysis" = "chat"): Promise<{ tenantId: string; tier: string; model: string; blocked: boolean }> {
   const tenantId = getTenantIdWithFallback(req);
   const { tier } = await getTenantFeatures(tenantId);
 
@@ -43,7 +43,9 @@ async function aiBudgetGuard(req: Request, res: Response): Promise<{ tenantId: s
     return { tenantId, tier, model: "gpt-4o-mini", blocked: true };
   }
 
-  const model = resolveAIModel(tier, "chat");
+  const model = resolveAIModel(tier, useCase);
+  const { setAIModel } = await import("../ai-planner");
+  setAIModel(model);
   return { tenantId, tier, model, blocked: false };
 }
 
@@ -768,7 +770,7 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
     const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
-    const guard = await aiBudgetGuard(req, res);
+    const guard = await aiBudgetGuard(req, res, "planning");
     if (guard.blocked) return;
     const tenantId = guard.tenantId;
     const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
@@ -1001,7 +1003,7 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
     const { aiEnhancedSchedule } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
-    const guard = await aiBudgetGuard(req, res);
+    const guard = await aiBudgetGuard(req, res, "planning");
     if (guard.blocked) return;
     const { tenantId } = guard;
 

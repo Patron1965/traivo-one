@@ -17,6 +17,16 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
+let currentAIModel = "gpt-4o-mini";
+
+export function setAIModel(model: string): void {
+  currentAIModel = model;
+}
+
+export function getAIModel(): string {
+  return currentAIModel;
+}
+
 // ============================================
 // KPI CALCULATIONS FOR AI CONTEXT
 // ============================================
@@ -387,13 +397,14 @@ Svara ENDAST med JSON i detta format:
 }
 
 export async function generatePlanningSuggestions(
-  context: PlanningContext
+  context: PlanningContext,
+  options?: { model?: string; tenantId?: string }
 ): Promise<PlanningSuggestion[]> {
   try {
     const prompt = buildContextPrompt(context);
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // Upgraded for complex planning decisions
+      model: options?.model || currentAIModel,
       messages: [
         {
           role: "system",
@@ -409,7 +420,7 @@ export async function generatePlanningSuggestions(
       response_format: { type: "json_object" }
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, options?.tenantId);
     const content = response.choices[0]?.message?.content || "{}";
     const parsed = JSON.parse(content);
     
@@ -433,7 +444,7 @@ export async function explainSuggestion(
 ): Promise<string> {
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: currentAIModel,
       messages: [
         {
           role: "system",
@@ -1240,7 +1251,7 @@ Svara ENDAST med JSON:
     const plannerSystemPrompt = buildSystemPrompt({ role: "planner" }) + "\n" + PLANNING_PERSONA_ADDITIONS + "\nSvara ENDAST med valid JSON.";
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: currentAIModel,
       messages: [
         { role: "system", content: plannerSystemPrompt },
         { role: "user", content: prompt }
@@ -2215,7 +2226,7 @@ Svara i JSON-format:
     const anomalySystemPrompt = buildSystemPrompt({ role: "planner", additionalContext: "Du analyserar avvikelser och ger förklaringar." }) + "\nSvara alltid i valid JSON-format.";
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: currentAIModel,
       messages: [
         { role: "system", content: anomalySystemPrompt },
         { role: "user", content: prompt }
@@ -2549,7 +2560,7 @@ export async function optimizeRoute(
   if (useAI && process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: currentAIModel,
         messages: [
           {
             role: "system",
@@ -2841,7 +2852,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
 
   try {
     let response = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: currentAIModel,
       messages,
       tools,
       tool_choice: "auto",
@@ -2861,7 +2872,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
       }
       response = await openai.chat.completions.create({
-        model: "gpt-4o",
+        model: currentAIModel,
         messages,
         tools,
         tool_choice: "auto",
@@ -2979,7 +2990,7 @@ Fyll bara i de fält som är relevanta för frågan. "data" kan vara null om det
 
   try {
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: currentAIModel,
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: query }
@@ -3115,7 +3126,7 @@ export async function parseNaturalLanguageConstraints(
     const clusterList = clusters.map(c => c.name).join(", ");
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: currentAIModel,
       messages: [
         {
           role: "system",
@@ -3195,7 +3206,7 @@ ${constraints.areaFocus?.length ? `Fokusområden: ${constraints.areaFocus.join("
 ${constraints.balanceStrategy ? `Balanseringsstrategi: ${constraints.balanceStrategy}` : ""}`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: currentAIModel,
       messages: [
         {
           role: "system",

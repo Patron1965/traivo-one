@@ -4486,6 +4486,12 @@ export const budgetAlertLog = pgTable("budget_alert_log", {
 
 export type BudgetAlertLog = typeof budgetAlertLog.$inferSelect;
 
+export const schedulingLocks = pgTable("scheduling_locks", {
+  tenantId: varchar("tenant_id").primaryKey(),
+  acquiredAt: timestamp("acquired_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
 export const roiShareTokens = pgTable("roi_share_tokens", {
   token: varchar("token", { length: 64 }).primaryKey(),
   tenantId: varchar("tenant_id", { length: 255 }).notNull(),

@@ -1,7 +1,6 @@
 import { db } from "./db";
-import { apiUsageLogs, apiBudgets, budgetAlertLog } from "@shared/schema";
+import { apiUsageLogs, apiBudgets, budgetAlertLog, schedulingLocks } from "@shared/schema";
 import { eq, sql, and, gte } from "drizzle-orm";
-import { notificationService } from "./notifications";
 
 interface BudgetCacheEntry {
   usage: number;
@@ -194,26 +193,7 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
       ? `AI-budgeten har överskridits (${status.percentUsed.toFixed(1)}%). AI-funktioner är nu blockerade. Aktuell förbrukning: $${status.currentUsageUsd.toFixed(2)} av $${status.monthlyBudgetUsd.toFixed(2)}.`
       : `AI-budgeten har nått ${status.percentUsed.toFixed(1)}%. Aktuell förbrukning: $${status.currentUsageUsd.toFixed(2)} av $${status.monthlyBudgetUsd.toFixed(2)}. Prognostiserad månadskostnad: $${status.projectedMonthEndUsd.toFixed(2)}.`;
 
-    try {
-      notificationService.broadcastSystemAlert({
-        type: "anomaly_alert",
-        title,
-        message,
-        data: {
-          alertType: "budget_warning",
-          tenantId,
-          threshold,
-          percentUsed: status.percentUsed,
-          currentUsageUsd: status.currentUsageUsd,
-          monthlyBudgetUsd: status.monthlyBudgetUsd,
-          projectedMonthEndUsd: status.projectedMonthEndUsd,
-          severity,
-        },
-      });
-      console.log(`[ai-budget] Alert sent for tenant ${tenantId}: ${threshold}% threshold (${status.percentUsed.toFixed(1)}% used)`);
-    } catch (err) {
-      console.error(`[ai-budget] Failed to send budget alert:`, err);
-    }
+    console.log(`[ai-budget] Alert recorded for tenant ${tenantId}: ${threshold}% threshold (${status.percentUsed.toFixed(1)}% used) - ${title}: ${message}`);
   }
 }
 
@@ -253,33 +233,27 @@ export function resolveAIModel(tier: string, useCase: "planning" | "chat" | "ana
 }
 
 export async function acquireSchedulingLock(tenantId: string): Promise<boolean> {
+  const LOCK_TTL_MS = 10 * 60 * 1000;
   try {
-    const lockKey = `scheduling_lock:${tenantId}`;
-    const [existing] = await db
-      .select({ id: budgetAlertLog.id })
-      .from(budgetAlertLog)
+    await db
+      .delete(schedulingLocks)
       .where(
         and(
-          eq(budgetAlertLog.tenantId, lockKey),
-          eq(budgetAlertLog.monthKey, "SCHEDULING_LOCK"),
-          gte(budgetAlertLog.createdAt, new Date(Date.now() - 10 * 60 * 1000))
+          eq(schedulingLocks.tenantId, tenantId),
+          sql`${schedulingLocks.expiresAt} < NOW()`
         )
-      )
-      .limit(1);
+      );
 
-    if (existing) return false;
-
-    await db.insert(budgetAlertLog).values({
-      tenantId: lockKey,
-      thresholdPercent: 0,
-      currentUsageUsd: 0,
-      monthlyBudgetUsd: 0,
-      percentUsed: 0,
-      monthKey: "SCHEDULING_LOCK",
+    await db.insert(schedulingLocks).values({
+      tenantId,
+      expiresAt: new Date(Date.now() + LOCK_TTL_MS),
     });
 
     return true;
-  } catch (err) {
+  } catch (err: unknown) {
+    if (err instanceof Error && (err.message?.includes("unique") || err.message?.includes("duplicate"))) {
+      return false;
+    }
     console.error("[ai-budget] Lock acquisition failed:", err);
     return false;
   }
@@ -287,15 +261,9 @@ export async function acquireSchedulingLock(tenantId: string): Promise<boolean> 
 
 export async function releaseSchedulingLock(tenantId: string): Promise<void> {
   try {
-    const lockKey = `scheduling_lock:${tenantId}`;
     await db
-      .delete(budgetAlertLog)
-      .where(
-        and(
-          eq(budgetAlertLog.tenantId, lockKey),
-          eq(budgetAlertLog.monthKey, "SCHEDULING_LOCK")
-        )
-      );
+      .delete(schedulingLocks)
+      .where(eq(schedulingLocks.tenantId, tenantId));
   } catch (err) {
     console.error("[ai-budget] Lock release failed:", err);
   }
