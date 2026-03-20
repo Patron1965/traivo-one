@@ -1,5 +1,5 @@
 import { sql, relations } from "drizzle-orm";
-import { pgTable, text, varchar, integer, timestamp, jsonb, boolean, real, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, integer, serial, timestamp, jsonb, boolean, real, index, unique, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -4441,6 +4441,18 @@ export const tenantFeatures = pgTable("tenant_features", {
   customOverrides: jsonb("custom_overrides").default({}),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   updatedBy: varchar("updated_by", { length: 255 }),
+});
+
+export const featureAuditLog = pgTable("feature_audit_log", {
+  id: serial("id").primaryKey(),
+  tenantId: varchar("tenant_id", { length: 255 }).notNull(),
+  action: varchar("action", { length: 50 }).notNull(),
+  previousTier: varchar("previous_tier", { length: 50 }),
+  newTier: varchar("new_tier", { length: 50 }).notNull(),
+  previousModules: text("previous_modules").array(),
+  newModules: text("new_modules").array().notNull(),
+  changedBy: varchar("changed_by", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const roiShareTokens = pgTable("roi_share_tokens", {

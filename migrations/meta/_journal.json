@@ -127,6 +127,13 @@
       "when": 1774006998583,
       "tag": "0017_late_carnage",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1774008086094,
+      "tag": "0018_equal_dragon_lord",
+      "breakpoints": true
     }
   ]
 }

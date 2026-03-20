@@ -119,7 +119,8 @@ import {
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData,
-  visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings
+  visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
+  tenantFeatures
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
@@ -806,6 +807,18 @@ export class DatabaseStorage implements IStorage {
 
   async createTenant(insertTenant: InsertTenant): Promise<Tenant> {
     const [tenant] = await db.insert(tenants).values(insertTenant).returning();
+
+    try {
+      await db.insert(tenantFeatures).values({
+        tenantId: tenant.id,
+        packageTier: "basic",
+        enabledModules: ["core", "work_sessions"],
+        updatedBy: "system",
+      }).onConflictDoNothing();
+    } catch (e) {
+      console.error("[tenant-features] Failed to create default features for tenant:", tenant.id, e);
+    }
+
     return tenant;
   }
 
