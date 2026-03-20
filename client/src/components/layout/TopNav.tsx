@@ -100,6 +100,7 @@ function useNavItems() {
       { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
       { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
       { title: "Prediktivt Underh\u00e5ll", url: "/predictive-maintenance", icon: Activity, description: "IoT-baserad serviceprognos" },
+      { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp, description: "Avkastningsanalys per kund" },
     ],
   }), [t]);
 }

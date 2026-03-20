@@ -79,6 +79,7 @@ import PublicReportPage from "@/pages/public-report";
 import SmsSettingsPage from "@/pages/SmsSettingsPage";
 import EnvironmentalCertificatePage from "@/pages/EnvironmentalCertificatePage";
 import LundstamsROIPage from "@/pages/LundstamsROIPage";
+import ROIReportPage from "@/pages/ROIReportPage";
 import InspectionSearchPage from "@/pages/InspectionSearchPage";
 import InvoicingPage from "@/pages/InvoicingPage";
 import FleetManagementPage from "@/pages/FleetManagementPage";
@@ -158,6 +159,7 @@ function Router() {
       <Route path="/ai-planning">{() => <ProtectedRoute component={AIPlanningPage} path="/ai-planning" />}</Route>
       <Route path="/ai-command-center">{() => <ProtectedRoute component={AICommandCenterPage} path="/ai-command-center" />}</Route>
       <Route path="/lundstams-roi">{() => <ProtectedRoute component={LundstamsROIPage} path="/lundstams-roi" />}</Route>
+      <Route path="/roi-report">{() => <ProtectedRoute component={ROIReportPage} path="/roi-report" />}</Route>
       <Route path="/inspections">{() => <ProtectedRoute component={InspectionSearchPage} path="/inspections" />}</Route>
       <Route path="/planner-map">{() => <ProtectedRoute component={PlannerMapPage} path="/planner-map" />}</Route>
       <Route path="/historical-map">{() => <ProtectedRoute component={HistoricalMapPage} path="/historical-map" />}</Route>

@@ -60,6 +60,7 @@ const analysItems = [
   { title: "Ekonomi", url: "/economics", icon: DollarSign },
   { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
   { title: "Prediktivt Underh\u00e5ll", url: "/predictive-maintenance", icon: Activity },
+  { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp },
 ];
 
 const adminItems = [
