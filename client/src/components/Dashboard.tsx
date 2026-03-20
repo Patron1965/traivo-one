@@ -1,4 +1,4 @@
-import { useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,9 +48,33 @@ export function Dashboard() {
     navigate(`/order-stock?search=${encodeURIComponent(customerName)}`);
   }, [navigate]);
 
+  const [historyDays, setHistoryDays] = useState(30);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  const historyParams = useMemo(() => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - historyDays);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(now);
+    end.setDate(end.getDate() + 30);
+    return { startDate: start.toISOString().split("T")[0], endDate: end.toISOString().split("T")[0] };
+  }, [historyDays]);
+
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
-    queryKey: ["/api/work-orders"],
+    queryKey: ["/api/work-orders", { historyDays }],
+    queryFn: async () => {
+      const res = await fetch(`/api/work-orders?startDate=${historyParams.startDate}&endDate=${historyParams.endDate}&includeUnscheduled=true`);
+      if (!res.ok) throw new Error("Failed to fetch");
+      return res.json();
+    },
   });
+
+  const handleLoadMore = useCallback(() => {
+    setLoadingMore(true);
+    setHistoryDays(prev => prev + 60);
+    setTimeout(() => setLoadingMore(false), 500);
+  }, []);
 
   const { data: resources = [], isLoading: resourcesLoading } = useQuery<Resource[]>({
     queryKey: ["/api/resources"],
@@ -1503,6 +1527,22 @@ export function Dashboard() {
           </div>
         </CardContent>
       </Card>
+
+      <div className="flex items-center justify-center gap-3 pt-2 pb-4">
+        <span className="text-sm text-muted-foreground">
+          Visar data från senaste {historyDays} dagarna ({workOrders.length} order)
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleLoadMore}
+          disabled={loadingMore || workOrdersLoading}
+          data-testid="button-load-more-history"
+        >
+          {loadingMore ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Clock className="h-4 w-4 mr-2" />}
+          Ladda mer historik
+        </Button>
+      </div>
     </div>
   );
 }
