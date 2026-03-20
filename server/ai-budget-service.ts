@@ -164,7 +164,12 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
   const status = await getTenantBudgetStatus(tenantId);
   const monthKey = getMonthKey(tenantId);
 
-  const thresholds = [50, 80, 95, 100];
+  const budgetRows = await db.select({ alertThresholdPercent: apiBudgets.alertThresholdPercent })
+    .from(apiBudgets)
+    .where(eq(apiBudgets.tenantId, tenantId));
+  const configuredThreshold = budgetRows[0]?.alertThresholdPercent ?? 80;
+  const defaultThresholds = [50, 80, 95, 100];
+  const thresholds = Array.from(new Set([...defaultThresholds, configuredThreshold])).sort((a, b) => a - b);
 
   for (const threshold of thresholds) {
     if (status.percentUsed < threshold) continue;
@@ -382,7 +387,13 @@ export async function withRetry<T>(
     }
   }
 
-  throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
+  console.error(`[ai-retry] ${label} permanently failed after ${maxRetries + 1} attempts:`, lastError?.message);
+  const userMessage = `AI-tjänsten är tillfälligt otillgänglig efter ${maxRetries + 1} försök. Försök igen om en stund.`;
+  const terminalError = new Error(userMessage);
+  (terminalError as any).statusCode = 503;
+  (terminalError as any).userFacing = true;
+  (terminalError as any).originalError = lastError;
+  throw terminalError;
 }
 
 export function getCachedAIResponse(cacheKey: string): string | null {

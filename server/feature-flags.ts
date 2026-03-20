@@ -18,9 +18,9 @@ export async function getTenantFeatures(tenantId: string): Promise<{ tier: strin
   const [row] = await db.select().from(tenantFeatures).where(eq(tenantFeatures.tenantId, tenantId));
 
   if (!row) {
-    const defaultModules = PACKAGE_DEFINITIONS.premium.modules;
-    featureCache.set(tenantId, { modules: defaultModules, tier: "premium", expiresAt: Date.now() + CACHE_TTL_MS });
-    return { tier: "premium", modules: defaultModules };
+    const defaultModules = PACKAGE_DEFINITIONS.standard.modules;
+    featureCache.set(tenantId, { modules: defaultModules, tier: "standard", expiresAt: Date.now() + CACHE_TTL_MS });
+    return { tier: "standard", modules: defaultModules };
   }
 
   const modules = (row.enabledModules || []) as ModuleKey[];

@@ -59,7 +59,12 @@ async function callOpenAI(
       await new Promise(r => setTimeout(r, delay));
     }
   }
-  throw lastError!;
+  const userMessage = `AI-tjänsten är tillfälligt otillgänglig efter ${maxRetries + 1} försök. Försök igen om en stund.`;
+  const terminalError = new Error(userMessage);
+  (terminalError as any).statusCode = 503;
+  (terminalError as any).userFacing = true;
+  (terminalError as any).originalError = lastError;
+  throw terminalError;
 }
 
 // ============================================
