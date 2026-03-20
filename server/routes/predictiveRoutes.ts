@@ -215,14 +215,13 @@ export async function registerPredictiveRoutes(app: Express) {
     let aiSummary = "";
     if (useAI && aiInputs.length > 0) {
       try {
-        const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+        const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("../ai-budget-service");
         const budgetCheck = await checkBudgetAndBlock(tenantId);
         if (!budgetCheck.allowed) {
           aiSummary = "AI-budget överskriden. Kan ej generera AI-analys.";
         } else {
-        const tenantRow = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-        const tier = (tenantRow[0] as any)?.subscriptionTier || "standard";
-        const aiModel = resolveAIModel(tier, "analysis");
+        const predTier = await getTenantTier(tenantId);
+        const aiModel = resolveAIModel(predTier, "analysis");
         const response = await openai.chat.completions.create({
           model: aiModel,
           messages: [

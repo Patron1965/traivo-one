@@ -774,12 +774,9 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
     }
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
-    const { tenants } = await import("@shared/schema");
-    const { eq } = await import("drizzle-orm");
-    const { db } = await import("../db");
-    const tenantRow = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-    const chatTier = (tenantRow[0] as any)?.subscriptionTier || "standard";
-    const chatModel = resolveAIModel(chatTier, "chat");
+    const { getTenantTier } = await import("../ai-budget-service");
+    const mobileChatTier = await getTenantTier(tenantId);
+    const chatModel = resolveAIModel(mobileChatTier, "chat");
 
     const completion = await openai.chat.completions.create({
       model: chatModel,
@@ -832,16 +829,12 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
     if (!image) throw new ValidationError("Image data required");
 
     const imgTenantId = req.tenantId || "default-tenant";
-    const { checkBudgetAndBlock: budgetCheck2, resolveAIModel: resolveImgModel } = await import("../ai-budget-service");
+    const { checkBudgetAndBlock: budgetCheck2, resolveAIModel: resolveImgModel, getTenantTier: getImgTier } = await import("../ai-budget-service");
     const bc2 = await budgetCheck2(imgTenantId);
     if (!bc2.allowed) {
       return res.status(429).json({ error: "AI-budget överskriden" });
     }
-    const { tenants: imgTenants } = await import("@shared/schema");
-    const { eq: imgEq } = await import("drizzle-orm");
-    const { db: imgDb } = await import("../db");
-    const imgTRow = await imgDb.select().from(imgTenants).where(imgEq(imgTenants.id, imgTenantId)).limit(1);
-    const imgTier = (imgTRow[0] as any)?.subscriptionTier || "standard";
+    const imgTier = await getImgTier(imgTenantId);
     const imgModel = resolveImgModel(imgTier, "analysis");
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();

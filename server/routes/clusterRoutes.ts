@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { insertClusterSchema, objects, workOrders, tenants } from "@shared/schema";
+import { insertClusterSchema, objects, workOrders } from "@shared/schema";
 
 export async function registerClusterRoutes(app: Express) {
 // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
@@ -158,21 +158,20 @@ app.post("/api/ai/chat", asyncHandler(async (req, res) => {
       throw new ValidationError("Fråga krävs");
     }
 
+    const tenantId = getTenantIdWithFallback(req);
+
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI({
       apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
       baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
     });
     
-    // Use shared persona module
     const { buildSystemPrompt } = await import("../ai/persona");
 
-    // Fetch contextual data based on current module
     let moduleData = "";
     const moduleName = context?.module || "Generell";
     const modulePath = context?.path || "/";
     
-    // Determine role based on module path
     let role: "field_worker" | "planner" | "admin" | "general" = "general";
     if (modulePath.startsWith("/mobile") || modulePath === "/") {
       role = "field_worker";
@@ -183,7 +182,6 @@ app.post("/api/ai/chat", asyncHandler(async (req, res) => {
     }
 
     try {
-      const tenantId = getTenantIdWithFallback(req);
       if (modulePath.startsWith("/economics")) {
         const workOrders = await storage.getWorkOrders(tenantId);
         const completed = workOrders.filter(wo => wo.status === "completed" || wo.orderStatus === "utford").length;
@@ -235,14 +233,13 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
     
     chatMessages.push({ role: "user", content: question });
 
-    const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("../ai-budget-service");
     const budgetCheck = await checkBudgetAndBlock(tenantId);
     if (!budgetCheck.allowed) {
       return res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
     }
-    const tenantRow2 = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-    const tier2 = (tenantRow2[0] as any)?.subscriptionTier || "standard";
-    const aiModel = resolveAIModel(tier2, "chat");
+    const chatTier = await getTenantTier(tenantId);
+    const aiModel = resolveAIModel(chatTier, "chat");
 
     const response = await openai.chat.completions.create({
       model: aiModel,

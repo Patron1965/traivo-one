@@ -1294,14 +1294,12 @@ app.post("/api/route/optimize", asyncHandler(async (req, res) => {
     }
 
     const tenantId = getTenantIdWithFallback(req);
-    const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("../ai-budget-service");
     const budgetCheck = await checkBudgetAndBlock(tenantId);
     if (!budgetCheck.allowed) {
       return res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
     }
-    const { tenants: routeTenants } = await import("@shared/schema");
-    const rtRow = await db.select().from(routeTenants).where(eq(routeTenants.id, tenantId)).limit(1);
-    const rtTier = (rtRow[0] as any)?.subscriptionTier || "standard";
+    const rtTier = await getTenantTier(tenantId);
     const rtModel = resolveAIModel(rtTier, "planning");
     
     const { optimizeRoute, runWithAIContext } = await import("../ai-planner");

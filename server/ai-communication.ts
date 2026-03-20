@@ -58,7 +58,7 @@ export async function generateAICompletionSummary(
   tenantId: string = "default-tenant"
 ): Promise<AICompletionSummary> {
   try {
-    const { checkBudgetAndBlock, resolveAIModel } = await import("./ai-budget-service");
+    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("./ai-budget-service");
     const budgetCheck = await checkBudgetAndBlock(tenantId);
     if (!budgetCheck.allowed) {
       return {
@@ -82,11 +82,7 @@ Svara ENDAST med JSON:
   "email": "Längre kundvänlig sammanfattning på svenska (2-4 meningar)"
 }`;
 
-    const { db: commDb } = await import("./db");
-    const { tenants: commTenants } = await import("@shared/schema");
-    const { eq: commEq } = await import("drizzle-orm");
-    const cRow = await commDb.select().from(commTenants).where(commEq(commTenants.id, tenantId)).limit(1);
-    const commTier = (cRow[0] as any)?.subscriptionTier || "standard";
+    const commTier = await getTenantTier(tenantId);
     const commModel = resolveAIModel(commTier, "chat");
     const response = await openai.chat.completions.create({
       model: commModel,

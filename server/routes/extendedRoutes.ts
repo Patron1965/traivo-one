@@ -1254,10 +1254,8 @@ app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
     const { aiAssistedSchedule, runWithAIContext } = await import("../ai-planner");
     const { weekStart, weekEnd, instruction } = req.body;
 
-    const { resolveAIModel: resolveAPModel } = await import("../ai-budget-service");
-    const { tenants: apTenants } = await import("@shared/schema");
-    const apTenantRow = await db.select().from(apTenants).where(eq(apTenants.id, tenantId)).limit(1);
-    const apTier = (apTenantRow[0] as any)?.subscriptionTier || "standard";
+    const { resolveAIModel: resolveAPModel, getTenantTier: getAPTier } = await import("../ai-budget-service");
+    const apTier = await getAPTier(tenantId);
     const apModel = resolveAPModel(apTier, "planning");
 
     const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([

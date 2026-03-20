@@ -1,6 +1,14 @@
 import { db } from "./db";
-import { apiUsageLogs, apiBudgets, budgetAlertLog, schedulingLocks } from "@shared/schema";
+import { apiUsageLogs, apiBudgets, budgetAlertLog, schedulingLocks, tenantFeatures } from "@shared/schema";
 import { eq, sql, and, gte } from "drizzle-orm";
+
+export async function getTenantTier(tenantId: string): Promise<string> {
+  const rows = await db.select({ packageTier: tenantFeatures.packageTier })
+    .from(tenantFeatures)
+    .where(eq(tenantFeatures.tenantId, tenantId))
+    .limit(1);
+  return rows[0]?.packageTier || "standard";
+}
 
 interface BudgetCacheEntry {
   usage: number;

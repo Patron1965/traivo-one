@@ -72,16 +72,12 @@ ANOMALIER:
 `;
 
   try {
-    const { checkBudgetAndBlock, resolveAIModel } = await import("./ai-budget-service");
+    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("./ai-budget-service");
     const budgetCheck = await checkBudgetAndBlock(tenantId);
     if (!budgetCheck.allowed) {
       return [];
     }
-    const { db: insightDb } = await import("./db");
-    const { tenants: insightTenants } = await import("@shared/schema");
-    const { eq: insightEq } = await import("drizzle-orm");
-    const tRow = await insightDb.select().from(insightTenants).where(insightEq(insightTenants.id, tenantId)).limit(1);
-    const insightTier = (tRow[0] as any)?.subscriptionTier || "standard";
+    const insightTier = await getTenantTier(tenantId);
     const insightModel = resolveAIModel(insightTier, "analysis");
     const response = await openai.chat.completions.create({
       model: insightModel,
