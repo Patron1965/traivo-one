@@ -286,7 +286,7 @@ export function TopNav() {
     { label: "Planering & Karta", items: filterByModule(navItems.planering), icon: Calendar, group: "planering", colorClass: "text-green-500" },
     { label: "Fält & Utförande", items: filterByModule(navItems.falt), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
     { label: "Analys", items: filterByModule(navItems.analys), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
-    { label: "Administration", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
+    { label: "Administration", items: filterByModule(adminItems), icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 
   return (

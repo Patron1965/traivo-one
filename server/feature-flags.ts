@@ -49,6 +49,8 @@ const API_MODULE_PREFIXES: [string, ModuleKey][] = [
   ["/api/fleet", "fleet"],
   ["/api/vehicles", "fleet"],
   ["/api/environmental", "environmental"],
+  ["/api/portal-booking", "customer_portal"],
+  ["/api/staff/portal", "customer_portal"],
   ["/api/invoic", "invoicing"],
   ["/api/fortnox", "invoicing"],
   ["/api/predictive", "predictive"],
