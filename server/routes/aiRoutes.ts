@@ -987,7 +987,7 @@ app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
       throw new ValidationError("Ogiltig anomalityp");
     }
 
-    const guard = await aiBudgetGuard(req, res);
+    const guard = await aiBudgetGuard(req, res, "analysis");
     if (guard.blocked) return;
     
     const { runWithAIContext } = await import("../ai-planner");
@@ -1420,7 +1420,7 @@ app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
       throw new ValidationError("Fråga krävs");
     }
     
-    const guard = await aiBudgetGuard(req, res);
+    const guard = await aiBudgetGuard(req, res, "planning");
     if (guard.blocked) return;
     const tenantId = guard.tenantId;
     const [workOrders, resources, clusters] = await Promise.all([
