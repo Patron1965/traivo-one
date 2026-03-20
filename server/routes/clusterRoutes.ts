@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
-import { insertClusterSchema, objects, workOrders } from "@shared/schema";
+import { insertClusterSchema, objects, workOrders, tenants } from "@shared/schema";
 
 export async function registerClusterRoutes(app: Express) {
 // ============== CLUSTERS - NAVET I VERKSAMHETEN ==============
@@ -235,15 +235,24 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
     
     chatMessages.push({ role: "user", content: question });
 
+    const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+    const budgetCheck = await checkBudgetAndBlock(tenantId);
+    if (!budgetCheck.allowed) {
+      return res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
+    }
+    const tenantRow2 = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    const tier2 = (tenantRow2[0] as any)?.subscriptionTier || "standard";
+    const aiModel = resolveAIModel(tier2, "chat");
+
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: aiModel,
       messages: chatMessages,
       max_tokens: 500,
       temperature: 0.7,
     });
 
     const { trackOpenAIResponse } = await import("../api-usage-tracker");
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, tenantId);
 
     let rawAnswer = response.choices[0]?.message?.content || "Kunde inte generera ett svar.";
     

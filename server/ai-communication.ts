@@ -54,9 +54,18 @@ interface AICompletionSummary {
 export async function generateAICompletionSummary(
   workOrder: { title: string; description?: string | null; notes?: string | null },
   object: { name: string; address?: string | null },
-  notes?: string | null
+  notes?: string | null,
+  tenantId: string = "default-tenant"
 ): Promise<AICompletionSummary> {
   try {
+    const { checkBudgetAndBlock, resolveAIModel } = await import("./ai-budget-service");
+    const budgetCheck = await checkBudgetAndBlock(tenantId);
+    if (!budgetCheck.allowed) {
+      return {
+        sms: `Arbetet "${workOrder.title}" på ${object.name} är slutfört.`.substring(0, 160),
+        email: `Arbetet "${workOrder.title}" på ${object.name} har slutförts av vår tekniker.`,
+      };
+    }
     const prompt = `Du är en kundkommunikationsassistent för ett fältserviceföretag i Sverige.
 Skriv en kundvänlig sammanfattning av utfört arbete.
 
@@ -73,8 +82,14 @@ Svara ENDAST med JSON:
   "email": "Längre kundvänlig sammanfattning på svenska (2-4 meningar)"
 }`;
 
+    const { db: commDb } = await import("./db");
+    const { tenants: commTenants } = await import("@shared/schema");
+    const { eq: commEq } = await import("drizzle-orm");
+    const cRow = await commDb.select().from(commTenants).where(commEq(commTenants.id, tenantId)).limit(1);
+    const commTier = (cRow[0] as any)?.subscriptionTier || "standard";
+    const commModel = resolveAIModel(commTier, "chat");
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: commModel,
       messages: [
         { role: "system", content: "Du skriver kundvänliga sammanfattningar av utfört fältservicearbete på svenska. Svara alltid med JSON." },
         { role: "user", content: prompt }
@@ -84,7 +99,7 @@ Svara ENDAST med JSON:
       response_format: { type: "json_object" },
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, tenantId);
 
     const content = response.choices[0]?.message?.content || "{}";
     const parsed = JSON.parse(content);
@@ -162,7 +177,7 @@ export async function handleWorkOrderStatusChange(
     let aiGenerated = false;
 
     if (notificationType === "completed") {
-      const summary = await generateAICompletionSummary(workOrder, object, workOrder.notes);
+      const summary = await generateAICompletionSummary(workOrder, object, workOrder.notes, tenantId);
       message = summary.email;
       subject = "Arbete slutfört";
       aiGenerated = true;

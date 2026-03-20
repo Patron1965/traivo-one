@@ -72,8 +72,19 @@ ANOMALIER:
 `;
 
   try {
+    const { checkBudgetAndBlock, resolveAIModel } = await import("./ai-budget-service");
+    const budgetCheck = await checkBudgetAndBlock(tenantId);
+    if (!budgetCheck.allowed) {
+      return [];
+    }
+    const { db: insightDb } = await import("./db");
+    const { tenants: insightTenants } = await import("@shared/schema");
+    const { eq: insightEq } = await import("drizzle-orm");
+    const tRow = await insightDb.select().from(insightTenants).where(insightEq(insightTenants.id, tenantId)).limit(1);
+    const insightTier = (tRow[0] as any)?.subscriptionTier || "standard";
+    const insightModel = resolveAIModel(insightTier, "analysis");
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: insightModel,
       messages: [
         {
           role: "system",
@@ -90,7 +101,7 @@ Returnera JSON: {"cards": [{"type": "...", "title": "...", "description": "...",
       response_format: { type: "json_object" }
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, tenantId);
     const parsed = JSON.parse(response.choices[0]?.message?.content || '{"cards":[]}');
     const cards: InsightCard[] = (parsed.cards || []).map((c: any, i: number) => ({
       id: `insight-${Date.now()}-${i}`,

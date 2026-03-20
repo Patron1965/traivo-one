@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, and, gte, lte, isNull, sql, desc, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
-import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, objectTimeRestrictions, insertAnnualGoalSchema, insertWorkOrderSchema, type FlexibleFrequency, type Season } from "@shared/schema";
+import { annualGoals, workOrders, workOrderLines, subscriptions, orderConcepts, customers, objects, articles, clusters, resources, objectTimeRestrictions, insertAnnualGoalSchema, insertWorkOrderSchema, tenants, type FlexibleFrequency, type Season } from "@shared/schema";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError } from "../errors";
 import { generateScheduleDates, isDateInSeason, convertLegacyPeriodicity } from "../scheduling-utils";
@@ -749,8 +749,16 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       proposed: p.proposedDistribution.filter(d => d.count > 0).map(d => `M${d.month}:${d.count}`).join(","),
     }));
 
+    const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+    const budgetCheck = await checkBudgetAndBlock(tenantId);
+    if (!budgetCheck.allowed) {
+      aiSummary = "AI-budget överskriden. Manuell fördelning används.";
+    } else {
+    const tenantRow3 = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    const tier3 = (tenantRow3[0] as any)?.subscriptionTier || "standard";
+    const aiModel = resolveAIModel(tier3, "analysis");
     const aiResponse = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: aiModel,
       messages: [
         {
           role: "system",
@@ -766,7 +774,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       response_format: { type: "json_object" },
     });
 
-    trackOpenAIResponse(aiResponse);
+    trackOpenAIResponse(aiResponse, tenantId);
     const aiContent = JSON.parse(aiResponse.choices[0]?.message?.content || "{}");
 
     aiSummary = aiContent.summary || "";
@@ -785,6 +793,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
           }
         }
       }
+    }
     }
   } catch (aiErr) {
     console.error("[ai-distribute] AI analysis failed, using balanced distribution:", aiErr);

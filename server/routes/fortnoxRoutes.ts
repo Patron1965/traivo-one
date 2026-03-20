@@ -1292,10 +1292,23 @@ app.post("/api/route/optimize", asyncHandler(async (req, res) => {
     if (!stops || !Array.isArray(stops)) {
       throw new ValidationError("Stops array krävs");
     }
+
+    const tenantId = getTenantIdWithFallback(req);
+    const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+    const budgetCheck = await checkBudgetAndBlock(tenantId);
+    if (!budgetCheck.allowed) {
+      return res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
+    }
+    const { tenants: routeTenants } = await import("@shared/schema");
+    const rtRow = await db.select().from(routeTenants).where(eq(routeTenants.id, tenantId)).limit(1);
+    const rtTier = (rtRow[0] as any)?.subscriptionTier || "standard";
+    const rtModel = resolveAIModel(rtTier, "planning");
     
-    const { optimizeRoute } = await import("../ai-planner");
+    const { optimizeRoute, runWithAIContext } = await import("../ai-planner");
     
-    const result = await optimizeRoute(stops);
+    const result = await runWithAIContext({ tenantId, model: rtModel }, () =>
+      optimizeRoute(stops)
+    );
     
     res.json(result);
 }));

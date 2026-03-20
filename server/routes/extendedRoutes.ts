@@ -1228,8 +1228,13 @@ app.post("/api/ai/eta-check-delays", asyncHandler(async (req, res) => {
 // ============================================
 
 app.get("/api/ai/insights", asyncHandler(async (req, res) => {
-    const { generateInsightCards } = await import("../ai-insights");
     const tenantId = getTenantIdWithFallback(req);
+    const { checkBudgetAndBlock } = await import("../ai-budget-service");
+    const budgetCheck = await checkBudgetAndBlock(tenantId);
+    if (!budgetCheck.allowed) {
+      return res.json([]);
+    }
+    const { generateInsightCards } = await import("../ai-insights");
     const cards = await generateInsightCards(tenantId);
     res.json(cards);
 }));
@@ -1239,10 +1244,22 @@ app.get("/api/ai/insights", asyncHandler(async (req, res) => {
 // ============================================
 
 app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
-    const { aiAssistedSchedule } = await import("../ai-planner");
+    const tenantId = getTenantIdWithFallback(req);
+    const { checkBudgetAndBlock: checkAPBudget } = await import("../ai-budget-service");
+    const apBudget = await checkAPBudget(tenantId);
+    if (!apBudget.allowed) {
+      return res.status(429).json({ error: "AI-budget överskriden", message: apBudget.message });
+    }
+
+    const { aiAssistedSchedule, runWithAIContext } = await import("../ai-planner");
     const { weekStart, weekEnd, instruction } = req.body;
 
-    const tenantId = getTenantIdWithFallback(req);
+    const { resolveAIModel: resolveAPModel } = await import("../ai-budget-service");
+    const { tenants: apTenants } = await import("@shared/schema");
+    const apTenantRow = await db.select().from(apTenants).where(eq(apTenants.id, tenantId)).limit(1);
+    const apTier = (apTenantRow[0] as any)?.subscriptionTier || "standard";
+    const apModel = resolveAPModel(apTier, "planning");
+
     const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
@@ -1255,15 +1272,17 @@ app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
       .map(o => o.id);
     const timeWindows = await storage.getTaskTimewindowsBatch(unscheduledOrderIds);
 
-    const result = await aiAssistedSchedule({
-      workOrders,
-      resources,
-      clusters,
-      weekStart: weekStart || new Date().toISOString().split("T")[0],
-      weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-      setupTimeLogs,
-      timeWindows,
-    }, instruction);
+    const result = await runWithAIContext({ tenantId, model: apModel }, () =>
+      aiAssistedSchedule({
+        workOrders,
+        resources,
+        clusters,
+        weekStart: weekStart || new Date().toISOString().split("T")[0],
+        weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+        setupTimeLogs,
+        timeWindows,
+      }, instruction)
+    );
 
     res.json(result);
 }));

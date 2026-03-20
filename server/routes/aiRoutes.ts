@@ -708,6 +708,8 @@ app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, r
         temperature: 0.3,
       }), { label: "service-patterns" });
 
+      const { trackOpenAIResponse: trackSPResponse } = await import("../api-usage-tracker");
+      trackSPResponse(completion, guard.tenantId);
       summary = completion.choices[0]?.message?.content || "";
     } catch (aiError) {
       const totalOrders = Object.values(typeStats).reduce((sum, s) => sum + s.totalOrders, 0);

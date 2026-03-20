@@ -38,6 +38,9 @@ async function callOpenAI(
   params: Parameters<typeof openai.chat.completions.create>[0],
   label = "ai-call"
 ): ReturnType<typeof openai.chat.completions.create> {
+  if (!aiContext.getStore()) {
+    console.warn(`[${label}] WARNING: callOpenAI invoked without AI context (no tenantId/model). Using defaults.`);
+  }
   const maxAttempts = 3;
   let lastError: Error | undefined;
   for (let attempt = 0; attempt < maxAttempts; attempt++) {

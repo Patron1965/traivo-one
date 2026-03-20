@@ -215,8 +215,16 @@ export async function registerPredictiveRoutes(app: Express) {
     let aiSummary = "";
     if (useAI && aiInputs.length > 0) {
       try {
+        const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+        const budgetCheck = await checkBudgetAndBlock(tenantId);
+        if (!budgetCheck.allowed) {
+          aiSummary = "AI-budget överskriden. Kan ej generera AI-analys.";
+        } else {
+        const tenantRow = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+        const tier = (tenantRow[0] as any)?.subscriptionTier || "standard";
+        const aiModel = resolveAIModel(tier, "analysis");
         const response = await openai.chat.completions.create({
-          model: "gpt-4o-mini",
+          model: aiModel,
           messages: [
             {
               role: "system",
@@ -231,7 +239,7 @@ export async function registerPredictiveRoutes(app: Express) {
           max_tokens: 500,
         });
         aiSummary = response.choices[0]?.message?.content || "";
-        await trackOpenAIResponse("predictive-maintenance", response);
+        await trackOpenAIResponse(response, tenantId);
 
         if (aiSummary) {
           for (const f of forecasts) {
@@ -240,6 +248,7 @@ export async function registerPredictiveRoutes(app: Express) {
               f.reasoning = `AI-analys baserad p\u00e5 ${f.signalCount} signaler. Snittintervall: ${f.avgIntervalDays} dagar.`;
             }
           }
+        }
         }
       } catch (err) {
         console.error("[predictive] AI analysis failed, using baseline only:", err);

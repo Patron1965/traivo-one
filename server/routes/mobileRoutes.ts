@@ -766,10 +766,23 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
     const { message, context } = req.body;
     if (!message) throw new ValidationError("Meddelande krävs");
 
+    const tenantId = req.tenantId || "default-tenant";
+    const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
+    const budgetCheck = await checkBudgetAndBlock(tenantId);
+    if (!budgetCheck.allowed) {
+      return res.status(429).json({ error: "AI-budget överskriden", response: "AI-tjänsten är tillfälligt otillgänglig." });
+    }
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
+    const { tenants } = await import("@shared/schema");
+    const { eq } = await import("drizzle-orm");
+    const { db } = await import("../db");
+    const tenantRow = await db.select().from(tenants).where(eq(tenants.id, tenantId)).limit(1);
+    const chatTier = (tenantRow[0] as any)?.subscriptionTier || "standard";
+    const chatModel = resolveAIModel(chatTier, "chat");
+
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: chatModel,
       messages: [
         {
           role: "system",
@@ -781,12 +794,21 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
       max_tokens: 500,
     });
 
+    const { trackOpenAIResponse } = await import("../api-usage-tracker");
+    trackOpenAIResponse(completion, tenantId);
     res.json({ response: completion.choices[0]?.message?.content || "Inget svar" });
 }));
 
 app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const { audio } = req.body;
     if (!audio) throw new ValidationError("Ljuddata krävs");
+
+    const transcribeTenantId = req.tenantId || "default-tenant";
+    const { checkBudgetAndBlock: checkBudget3 } = await import("../ai-budget-service");
+    const bc3 = await checkBudget3(transcribeTenantId);
+    if (!bc3.allowed) {
+      return res.status(429).json({ error: "AI-budget överskriden" });
+    }
 
     const buffer = Buffer.from(audio, "base64");
     const blob = new Blob([buffer], { type: "audio/webm" });
@@ -800,6 +822,8 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
       language: "sv",
     });
 
+    const { trackApiUsage } = await import("../api-usage-tracker");
+    trackApiUsage({ tenantId: transcribeTenantId, service: "openai", method: "audio.transcriptions", endpoint: "/v1/audio/transcriptions", model: "whisper-1", inputTokens: 0, outputTokens: 0, totalTokens: 0 });
     res.json({ text: transcription.text });
 }));
 
@@ -807,10 +831,22 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
     const { image, context } = req.body;
     if (!image) throw new ValidationError("Image data required");
 
+    const imgTenantId = req.tenantId || "default-tenant";
+    const { checkBudgetAndBlock: budgetCheck2, resolveAIModel: resolveImgModel } = await import("../ai-budget-service");
+    const bc2 = await budgetCheck2(imgTenantId);
+    if (!bc2.allowed) {
+      return res.status(429).json({ error: "AI-budget överskriden" });
+    }
+    const { tenants: imgTenants } = await import("@shared/schema");
+    const { eq: imgEq } = await import("drizzle-orm");
+    const { db: imgDb } = await import("../db");
+    const imgTRow = await imgDb.select().from(imgTenants).where(imgEq(imgTenants.id, imgTenantId)).limit(1);
+    const imgTier = (imgTRow[0] as any)?.subscriptionTier || "standard";
+    const imgModel = resolveImgModel(imgTier, "analysis");
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: imgModel,
       messages: [
         {
           role: "system",
@@ -828,6 +864,8 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
       max_tokens: 300,
     });
 
+    const { trackOpenAIResponse: trackImg } = await import("../api-usage-tracker");
+    trackImg(completion, imgTenantId);
     const responseText = completion.choices[0]?.message?.content || "";
     try {
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
