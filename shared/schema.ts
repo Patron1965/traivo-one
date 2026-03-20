@@ -4501,3 +4501,49 @@ export const roiShareTokens = pgTable("roi_share_tokens", {
   expiresAt: timestamp("expires_at").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const orderChecklistItems = pgTable("order_checklist_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  stepText: text("step_text").notNull(),
+  isAiGenerated: boolean("is_ai_generated").default(false).notNull(),
+  isCompleted: boolean("is_completed").default(false).notNull(),
+  completedAt: timestamp("completed_at"),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_order_checklist_work_order").on(table.workOrderId),
+]);
+
+export const insertOrderChecklistItemSchema = createInsertSchema(orderChecklistItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type OrderChecklistItem = typeof orderChecklistItems.$inferSelect;
+export type InsertOrderChecklistItem = z.infer<typeof insertOrderChecklistItemSchema>;
+
+export const REQUIRED_FIELDS_BY_ORDER_TYPE: Record<string, { field: string; label: string }[]> = {
+  service: [
+    { field: "description", label: "Beskrivning" },
+  ],
+  installation: [
+    { field: "description", label: "Beskrivning" },
+    { field: "photos", label: "Foton (minst 1)" },
+    { field: "signature", label: "Kundsignatur" },
+  ],
+  inspection: [
+    { field: "description", label: "Beskrivning" },
+    { field: "inspection", label: "Besiktningsprotokoll" },
+    { field: "photos", label: "Foton (minst 1)" },
+  ],
+  repair: [
+    { field: "description", label: "Beskrivning" },
+    { field: "photos", label: "Foton (minst 1)" },
+    { field: "materials", label: "Materiallogg" },
+  ],
+  delivery: [
+    { field: "signature", label: "Kundsignatur" },
+  ],
+  default: [],
+};

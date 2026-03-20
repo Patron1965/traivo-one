@@ -8,8 +8,9 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders } from "@shared/schema";
 import { notificationService } from "../notifications";
+import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
 
 export async function registerMobileRoutes(app: Express) {
@@ -1341,5 +1342,175 @@ app.get("/api/mobile/terminology", isMobileAuthenticated, asyncHandler(async (re
     }
     res.json(merged);
 }));
+
+app.get("/api/checklist/:workOrderId", asyncHandler(async (req, res) => {
+    const { workOrderId } = req.params;
+    const items = await db.select().from(orderChecklistItems)
+      .where(eq(orderChecklistItems.workOrderId, workOrderId))
+      .orderBy(orderChecklistItems.sortOrder);
+    res.json(items);
+}));
+
+app.post("/api/checklist/:workOrderId/items", asyncHandler(async (req, res) => {
+    const { workOrderId } = req.params;
+    const { stepText, isAiGenerated, sortOrder } = req.body;
+    if (!stepText || typeof stepText !== "string" || !stepText.trim()) {
+      return res.status(400).json({ error: "stepText krävs" });
+    }
+    const existingItems = await db.select().from(orderChecklistItems)
+      .where(eq(orderChecklistItems.workOrderId, workOrderId));
+    const newSortOrder = sortOrder ?? existingItems.length;
+    const [item] = await db.insert(orderChecklistItems).values({
+      workOrderId,
+      stepText: stepText.trim(),
+      isAiGenerated: isAiGenerated || false,
+      isCompleted: false,
+      sortOrder: newSortOrder,
+    }).returning();
+    res.status(201).json(item);
+}));
+
+app.patch("/api/checklist/items/:itemId", asyncHandler(async (req, res) => {
+    const { itemId } = req.params;
+    const { isCompleted } = req.body;
+    if (typeof isCompleted !== "boolean") {
+      return res.status(400).json({ error: "isCompleted (boolean) krävs" });
+    }
+    const [updated] = await db.update(orderChecklistItems)
+      .set({
+        isCompleted,
+        completedAt: isCompleted ? new Date() : null,
+      })
+      .where(eq(orderChecklistItems.id, itemId))
+      .returning();
+    if (!updated) {
+      return res.status(404).json({ error: "Checklista-objekt hittades inte" });
+    }
+    res.json(updated);
+}));
+
+app.delete("/api/checklist/items/:itemId", asyncHandler(async (req, res) => {
+    const { itemId } = req.params;
+    await db.delete(orderChecklistItems)
+      .where(eq(orderChecklistItems.id, itemId));
+    res.json({ success: true });
+}));
+
+app.post("/api/checklist/:workOrderId/generate", asyncHandler(async (req, res) => {
+    const { workOrderId } = req.params;
+
+    const workOrder = await storage.getWorkOrder(workOrderId);
+    if (!workOrder) {
+      return res.status(404).json({ error: "Arbetsorder hittades inte" });
+    }
+
+    const similarOrders = await db.select({
+      title: workOrders.title,
+      orderType: workOrders.orderType,
+      description: workOrders.description,
+      notes: workOrders.notes,
+    }).from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, workOrder.tenantId),
+        eq(workOrders.orderType, workOrder.orderType),
+        eq(workOrders.status, "completed"),
+      ))
+      .orderBy(desc(workOrders.completedAt))
+      .limit(10);
+
+    const existingChecklist = await db.select().from(orderChecklistItems)
+      .where(eq(orderChecklistItems.workOrderId, workOrderId));
+    const existingSteps = existingChecklist.map(i => i.stepText);
+
+    try {
+      const openai = new OpenAI({
+        apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+        baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+      });
+
+      const prompt = `Du är en fältserviceassistent. Föreslå en checklista med 4-7 konkreta arbetsmoment för en tekniker som ska utföra ett jobb.
+
+Ordertyp: ${workOrder.orderType}
+Titel: ${workOrder.title}
+${workOrder.description ? `Beskrivning: ${workOrder.description}` : ""}
+Status: ${workOrder.status}
+
+${similarOrders.length > 0 ? `Historik från ${similarOrders.length} liknande jobb:
+${similarOrders.map((o, i) => `${i + 1}. ${o.title}${o.notes ? ` — ${o.notes}` : ""}`).join("\n")}` : ""}
+
+${existingSteps.length > 0 ? `Redan tillagda steg (lägg INTE till dessa igen): ${existingSteps.join(", ")}` : ""}
+
+Svara ENBART med JSON-array av strängar, t.ex. ["Steg 1", "Steg 2"]. Skriv på svenska. Var konkret och praktisk.`;
+
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          { role: "system", content: "Du genererar checklistor för fältservicetekniker. Svara alltid med en JSON-array av strängar." },
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.6,
+        max_tokens: 500,
+        response_format: { type: "json_object" },
+      });
+
+      const { trackOpenAIResponse } = await import("../api-usage-tracker");
+      trackOpenAIResponse(response);
+
+      const content = response.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(content);
+      const steps: string[] = Array.isArray(parsed) ? parsed : (parsed.steps || parsed.checklist || parsed.steg || []);
+
+      const filteredSteps = steps.filter(s => typeof s === "string" && s.trim() && !existingSteps.includes(s.trim()));
+
+      const insertedItems = [];
+      for (let i = 0; i < filteredSteps.length; i++) {
+        const [item] = await db.insert(orderChecklistItems).values({
+          workOrderId,
+          stepText: filteredSteps[i].trim(),
+          isAiGenerated: true,
+          isCompleted: false,
+          sortOrder: existingChecklist.length + i,
+        }).returning();
+        insertedItems.push(item);
+      }
+
+      res.json({ steps: insertedItems, generated: insertedItems.length });
+    } catch (error) {
+      console.error("[checklist] AI generation failed:", error);
+      const fallbackSteps = getFallbackChecklist(workOrder.orderType);
+      const filteredFallback = fallbackSteps.filter(s => !existingSteps.includes(s));
+
+      const insertedItems = [];
+      for (let i = 0; i < filteredFallback.length; i++) {
+        const [item] = await db.insert(orderChecklistItems).values({
+          workOrderId,
+          stepText: filteredFallback[i],
+          isAiGenerated: true,
+          isCompleted: false,
+          sortOrder: existingChecklist.length + i,
+        }).returning();
+        insertedItems.push(item);
+      }
+      res.json({ steps: insertedItems, generated: insertedItems.length, fallback: true });
+    }
+}));
+
+function getFallbackChecklist(orderType: string): string[] {
+  const common = [
+    "Kontrollera åtkomst och nycklar",
+    "Dokumentera med foto före arbete",
+    "Utför arbetet enligt order",
+    "Kontrollera resultatet",
+    "Dokumentera med foto efter arbete",
+    "Städa arbetsplatsen",
+  ];
+  const typeSpecific: Record<string, string[]> = {
+    installation: ["Verifiera leverans av material", "Montera enligt specifikation", "Testa funktion", "Instruera kunden"],
+    inspection: ["Genomför visuell inspektion", "Fyll i besiktningsprotokoll", "Notera avvikelser"],
+    repair: ["Identifiera felet", "Byt ut defekta delar", "Testa funktion efter reparation"],
+    delivery: ["Verifiera leveransinnehåll", "Placera enligt kundens önskemål", "Inhämta kundsignatur"],
+  };
+  return typeSpecific[orderType] || common;
+}
 
 }

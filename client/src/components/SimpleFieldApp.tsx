@@ -27,8 +27,10 @@ import { PhotoCapture } from "@/components/PhotoCapture";
 import { SignatureCapture } from "@/components/SignatureCapture";
 import { generateJobProtocol, downloadBlob } from "@/components/JobProtocolGenerator";
 import { MaterialLog, type MaterialItem } from "@/components/MaterialLog";
+import { OrderChecklist } from "@/components/OrderChecklist";
+import { SigningValidationModal } from "@/components/SigningValidationModal";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
-import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
+import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS, REQUIRED_FIELDS_BY_ORDER_TYPE } from "@shared/schema";
 import { Textarea } from "@/components/ui/textarea";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { VoiceInput } from "@/components/VoiceInput";
@@ -84,6 +86,9 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const breakTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showNotificationsPanel, setShowNotificationsPanel] = useState(false);
   const [showCompletedDialog, setShowCompletedDialog] = useState(false);
+  const [showValidationModal, setShowValidationModal] = useState(false);
+  const [validationMissingFields, setValidationMissingFields] = useState<{ field: string; label: string }[]>([]);
+
   const [dismissedInstallBanner, setDismissedInstallBanner] = useState(() => {
     try {
       return localStorage.getItem("traivo_pwa_install_dismissed") === "true";
@@ -645,6 +650,60 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const getNextJob = () => {
     const currentIndex = allTodayJobs.findIndex(j => j.id === selectedJobId);
     return allTodayJobs.slice(currentIndex + 1).find(j => j.status !== "completed") || null;
+  };
+
+  const validateBeforeSigning = (job: WorkOrderWithObject, hasSignature: boolean): { field: string; label: string }[] => {
+    const orderType = job.orderType || "service";
+    const requiredFields = REQUIRED_FIELDS_BY_ORDER_TYPE[orderType] || REQUIRED_FIELDS_BY_ORDER_TYPE.default || [];
+    const metadata = (job.metadata as Record<string, unknown>) || {};
+    const photos = (metadata.photos as string[]) || [];
+    const missing: { field: string; label: string }[] = [];
+
+    for (const req of requiredFields) {
+      switch (req.field) {
+        case "description":
+          if (!job.description && !job.notes && !(metadata.fieldNotes as unknown[])?.length) {
+            missing.push(req);
+          }
+          break;
+        case "photos":
+          if (photos.length === 0) {
+            missing.push(req);
+          }
+          break;
+        case "signature":
+          if (!hasSignature && !(metadata.signaturePath as string)) {
+            missing.push(req);
+          }
+          break;
+        case "materials":
+          if (materials.length === 0 && !(metadata.materials as unknown[])?.length) {
+            missing.push(req);
+          }
+          break;
+        case "inspection":
+          if (!Object.values(inspectionItems).some(i => i.status)) {
+            missing.push(req);
+          }
+          break;
+      }
+    }
+    return missing;
+  };
+
+  const handleCompleteWithValidation = (signaturePath?: string) => {
+    if (!selectedJob) return;
+    const sigPath = signaturePath || currentSignature || existingSignaturePath;
+    const missing = validateBeforeSigning(selectedJob, !!sigPath);
+    if (missing.length > 0) {
+      setValidationMissingFields(missing);
+      setShowValidationModal(true);
+      return;
+    }
+    completeJobMutation.mutate({
+      id: selectedJob.id,
+      signaturePath: sigPath || undefined,
+    });
   };
 
   const getPriorityBadge = (priority?: string) => {
@@ -1335,6 +1394,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           </Card>
 
           {jobStarted && (
+            <OrderChecklist
+              workOrderId={selectedJob.id}
+              orderType={selectedJob.orderType}
+            />
+          )}
+
+          {jobStarted && (
             <MaterialLog
               materials={materials}
               onMaterialsChange={setMaterials}
@@ -1371,12 +1437,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               onSignatureSaved={(path) => {
                 setCurrentSignature(path);
                 setShowSignaturePanel(false);
-                completeJobMutation.mutate({ id: selectedJob.id, signaturePath: path });
+                handleCompleteWithValidation(path);
               }}
               onCancel={() => setShowSignaturePanel(false)}
             />
           </div>
         )}
+
+        <SigningValidationModal
+          open={showValidationModal}
+          onOpenChange={setShowValidationModal}
+          missingFields={validationMissingFields}
+        />
 
         <div className="p-4 border-t bg-card">
           {!jobStarted ? (
@@ -1395,10 +1467,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 size="mobile"
                 variant="outline"
                 className="gap-2"
-                onClick={() => completeJobMutation.mutate({ 
-                  id: selectedJob.id, 
-                  signaturePath: currentSignature || existingSignaturePath || undefined 
-                })}
+                onClick={() => handleCompleteWithValidation()}
                 disabled={completeJobMutation.isPending}
                 data-testid="button-complete-without-signature"
               >

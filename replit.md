@@ -52,6 +52,7 @@ The user interface features a sticky TopNav, global search, mobile-friendly hamb
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.
 - **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.
 - **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard for building delivery schedules and subscription calculations.
+- **Smart AI Checklist & Field Validation:** AI-driven checklist for field workers suggesting steps based on order type and history from similar jobs. Technicians can check off steps, add custom steps, and the system auto-saves. Before signing/completing, mandatory field validation per order type blocks completion if required fields (photos, signature, inspection, materials, description) are missing, showing a modal with the list of missing items.
 - **Field Worker Task Dependency View & Photo Upload:** Mobile app displays task dependencies and supports two-step presigned URL photo uploads.
 - **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
 - **Team Management & User Administration:** User management with admin CRUD, team system, bulk actions, and invitation system.
