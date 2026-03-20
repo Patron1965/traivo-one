@@ -767,19 +767,19 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
     if (!message) throw new ValidationError("Meddelande krävs");
 
     const tenantId = req.tenantId || "default-tenant";
-    const { checkBudgetAndBlock, resolveAIModel } = await import("../ai-budget-service");
-    const budgetCheck = await checkBudgetAndBlock(tenantId);
-    if (!budgetCheck.allowed) {
-      return res.status(429).json({ error: "AI-budget överskriden", response: "AI-tjänsten är tillfälligt otillgänglig." });
+    const { enforceBudgetAndRateLimit, withRetry } = await import("../ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "chat");
+    if (!enforcement.allowed) {
+      if (enforcement.errorType === "ratelimit") {
+        res.set("Retry-After", String(enforcement.retryAfterSeconds || 60));
+      }
+      return res.status(429).json({ error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden", response: "AI-tjänsten är tillfälligt otillgänglig." });
     }
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
-    const { getTenantTier } = await import("../ai-budget-service");
-    const mobileChatTier = await getTenantTier(tenantId);
-    const chatModel = resolveAIModel(mobileChatTier, "chat");
 
-    const completion = await openai.chat.completions.create({
-      model: chatModel,
+    const completion = await withRetry(() => openai.chat.completions.create({
+      model: enforcement.model,
       messages: [
         {
           role: "system",
@@ -789,7 +789,7 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
         { role: "user", content: message },
       ],
       max_tokens: 500,
-    });
+    }), { label: "mobile-chat" });
 
     const { trackOpenAIResponse } = await import("../api-usage-tracker");
     trackOpenAIResponse(completion, tenantId);
@@ -801,10 +801,13 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
     if (!audio) throw new ValidationError("Ljuddata krävs");
 
     const transcribeTenantId = req.tenantId || "default-tenant";
-    const { checkBudgetAndBlock: checkBudget3 } = await import("../ai-budget-service");
-    const bc3 = await checkBudget3(transcribeTenantId);
-    if (!bc3.allowed) {
-      return res.status(429).json({ error: "AI-budget överskriden" });
+    const { enforceBudgetAndRateLimit: transcribeEnforce, withRetry: transcribeRetry } = await import("../ai-budget-service");
+    const transcribeCheck = await transcribeEnforce(transcribeTenantId, "chat");
+    if (!transcribeCheck.allowed) {
+      if (transcribeCheck.errorType === "ratelimit") {
+        res.set("Retry-After", String(transcribeCheck.retryAfterSeconds || 60));
+      }
+      return res.status(429).json({ error: transcribeCheck.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden" });
     }
 
     const buffer = Buffer.from(audio, "base64");
@@ -813,11 +816,11 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
 
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
-    const transcription = await openai.audio.transcriptions.create({
+    const transcription = await transcribeRetry(() => openai.audio.transcriptions.create({
       file,
       model: "whisper-1",
       language: "sv",
-    });
+    }), { label: "mobile-transcribe" });
 
     const { trackApiUsage } = await import("../api-usage-tracker");
     trackApiUsage({ tenantId: transcribeTenantId, service: "openai", method: "audio.transcriptions", endpoint: "/v1/audio/transcriptions", model: "whisper-1", inputTokens: 0, outputTokens: 0, totalTokens: 0 });
@@ -829,17 +832,18 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
     if (!image) throw new ValidationError("Image data required");
 
     const imgTenantId = req.tenantId || "default-tenant";
-    const { checkBudgetAndBlock: budgetCheck2, resolveAIModel: resolveImgModel, getTenantTier: getImgTier } = await import("../ai-budget-service");
-    const bc2 = await budgetCheck2(imgTenantId);
-    if (!bc2.allowed) {
-      return res.status(429).json({ error: "AI-budget överskriden" });
+    const { enforceBudgetAndRateLimit: imgEnforce, withRetry: imgRetry } = await import("../ai-budget-service");
+    const imgCheck = await imgEnforce(imgTenantId, "analysis");
+    if (!imgCheck.allowed) {
+      if (imgCheck.errorType === "ratelimit") {
+        res.set("Retry-After", String(imgCheck.retryAfterSeconds || 60));
+      }
+      return res.status(429).json({ error: imgCheck.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden" });
     }
-    const imgTier = await getImgTier(imgTenantId);
-    const imgModel = resolveImgModel(imgTier, "analysis");
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
-    const completion = await openai.chat.completions.create({
-      model: imgModel,
+    const completion = await imgRetry(() => openai.chat.completions.create({
+      model: imgCheck.model,
       messages: [
         {
           role: "system",
@@ -855,7 +859,7 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
         },
       ],
       max_tokens: 300,
-    });
+    }), { label: "mobile-analyze-image" });
 
     const { trackOpenAIResponse: trackImg } = await import("../api-usage-tracker");
     trackImg(completion, imgTenantId);

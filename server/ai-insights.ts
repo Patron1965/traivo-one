@@ -72,15 +72,13 @@ ANOMALIER:
 `;
 
   try {
-    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("./ai-budget-service");
-    const budgetCheck = await checkBudgetAndBlock(tenantId);
-    if (!budgetCheck.allowed) {
+    const { enforceBudgetAndRateLimit, withRetry } = await import("./ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "analysis");
+    if (!enforcement.allowed) {
       return [];
     }
-    const insightTier = await getTenantTier(tenantId);
-    const insightModel = resolveAIModel(insightTier, "analysis");
-    const response = await openai.chat.completions.create({
-      model: insightModel,
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: enforcement.model,
       messages: [
         {
           role: "system",
@@ -95,7 +93,7 @@ Returnera JSON: {"cards": [{"type": "...", "title": "...", "description": "...",
       temperature: 0.6,
       max_tokens: 1200,
       response_format: { type: "json_object" }
-    });
+    }), { label: "ai-insights" });
 
     trackOpenAIResponse(response, tenantId);
     const parsed = JSON.parse(response.choices[0]?.message?.content || '{"cards":[]}');

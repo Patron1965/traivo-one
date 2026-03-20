@@ -233,20 +233,21 @@ Formatera dem på en ny rad efter ditt svar, med prefixet "FÖLJDFRÅGOR:" följ
     
     chatMessages.push({ role: "user", content: question });
 
-    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("../ai-budget-service");
-    const budgetCheck = await checkBudgetAndBlock(tenantId);
-    if (!budgetCheck.allowed) {
-      return res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
+    const { enforceBudgetAndRateLimit, withRetry } = await import("../ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "chat");
+    if (!enforcement.allowed) {
+      if (enforcement.errorType === "ratelimit") {
+        res.set("Retry-After", String(enforcement.retryAfterSeconds || 60));
+      }
+      return res.status(429).json({ error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden", message: enforcement.errorMessage });
     }
-    const chatTier = await getTenantTier(tenantId);
-    const aiModel = resolveAIModel(chatTier, "chat");
 
-    const response = await openai.chat.completions.create({
-      model: aiModel,
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: enforcement.model,
       messages: chatMessages,
       max_tokens: 500,
       temperature: 0.7,
-    });
+    }), { label: "cluster-chat" });
 
     const { trackOpenAIResponse } = await import("../api-usage-tracker");
     trackOpenAIResponse(response, tenantId);

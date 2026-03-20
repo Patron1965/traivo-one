@@ -215,15 +215,13 @@ export async function registerPredictiveRoutes(app: Express) {
     let aiSummary = "";
     if (useAI && aiInputs.length > 0) {
       try {
-        const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("../ai-budget-service");
-        const budgetCheck = await checkBudgetAndBlock(tenantId);
-        if (!budgetCheck.allowed) {
+        const { enforceBudgetAndRateLimit, withRetry } = await import("../ai-budget-service");
+        const enforcement = await enforceBudgetAndRateLimit(tenantId, "analysis");
+        if (!enforcement.allowed) {
           aiSummary = "AI-budget överskriden. Kan ej generera AI-analys.";
         } else {
-        const predTier = await getTenantTier(tenantId);
-        const aiModel = resolveAIModel(predTier, "analysis");
-        const response = await openai.chat.completions.create({
-          model: aiModel,
+        const response = await withRetry(() => openai.chat.completions.create({
+          model: enforcement.model,
           messages: [
             {
               role: "system",
@@ -236,7 +234,7 @@ export async function registerPredictiveRoutes(app: Express) {
           ],
           temperature: 0.3,
           max_tokens: 500,
-        });
+        }), { label: "predictive-maintenance" });
         aiSummary = response.choices[0]?.message?.content || "";
         await trackOpenAIResponse(response, tenantId);
 

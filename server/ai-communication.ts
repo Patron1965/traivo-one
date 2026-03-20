@@ -58,9 +58,9 @@ export async function generateAICompletionSummary(
   tenantId: string = "default-tenant"
 ): Promise<AICompletionSummary> {
   try {
-    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("./ai-budget-service");
-    const budgetCheck = await checkBudgetAndBlock(tenantId);
-    if (!budgetCheck.allowed) {
+    const { enforceBudgetAndRateLimit, withRetry } = await import("./ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "chat");
+    if (!enforcement.allowed) {
       return {
         sms: `Arbetet "${workOrder.title}" på ${object.name} är slutfört.`.substring(0, 160),
         email: `Arbetet "${workOrder.title}" på ${object.name} har slutförts av vår tekniker.`,
@@ -82,10 +82,8 @@ Svara ENDAST med JSON:
   "email": "Längre kundvänlig sammanfattning på svenska (2-4 meningar)"
 }`;
 
-    const commTier = await getTenantTier(tenantId);
-    const commModel = resolveAIModel(commTier, "chat");
-    const response = await openai.chat.completions.create({
-      model: commModel,
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: enforcement.model,
       messages: [
         { role: "system", content: "Du skriver kundvänliga sammanfattningar av utfört fältservicearbete på svenska. Svara alltid med JSON." },
         { role: "user", content: prompt }
@@ -93,7 +91,7 @@ Svara ENDAST med JSON:
       temperature: 0.5,
       max_tokens: 400,
       response_format: { type: "json_object" },
-    });
+    }), { label: "ai-communication-summary" });
 
     trackOpenAIResponse(response, tenantId);
 

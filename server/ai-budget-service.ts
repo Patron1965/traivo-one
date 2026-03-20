@@ -227,7 +227,11 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
       const adminResourceIds = resources
         .filter(r => r.userId && adminUserIds.includes(r.userId))
         .map(r => r.id);
-      const targetResources = adminResourceIds.length > 0 ? adminResourceIds : resources.slice(0, 1).map(r => r.id);
+      if (adminResourceIds.length === 0) {
+        console.warn(`[ai-budget] No admin resources found for tenant ${tenantId}, skipping alert notification`);
+        return;
+      }
+      const targetResources = adminResourceIds;
 
       for (const resourceId of targetResources) {
         await notificationService.sendToResource(resourceId, {
@@ -276,6 +280,26 @@ export function resolveAIModel(tier: string, useCase: "planning" | "chat" | "ana
     return "gpt-4o";
   }
   return "gpt-4o-mini";
+}
+
+export async function enforceBudgetAndRateLimit(
+  tenantId: string,
+  useCase: "planning" | "chat" | "analysis" = "chat"
+): Promise<{ allowed: boolean; tier: string; model: string; errorMessage?: string; retryAfterSeconds?: number; errorType?: "budget" | "ratelimit" }> {
+  const tier = await getTenantTier(tenantId);
+
+  const budgetCheck = await checkBudgetAndBlock(tenantId);
+  if (!budgetCheck.allowed) {
+    return { allowed: false, tier, model: "gpt-4o-mini", errorMessage: budgetCheck.message || "AI-budget överskriden", errorType: "budget" };
+  }
+
+  const rateLimitCheck = checkRateLimit(tenantId, tier);
+  if (!rateLimitCheck.allowed) {
+    return { allowed: false, tier, model: "gpt-4o-mini", errorMessage: `Maxgräns nådd. Försök igen om ${rateLimitCheck.retryAfterSeconds} sekunder.`, retryAfterSeconds: rateLimitCheck.retryAfterSeconds, errorType: "ratelimit" };
+  }
+
+  const model = resolveAIModel(tier, useCase);
+  return { allowed: true, tier, model };
 }
 
 export async function acquireSchedulingLock(tenantId: string): Promise<boolean> {

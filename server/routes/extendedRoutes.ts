@@ -853,8 +853,33 @@ app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, r
     });
 }));
 
-app.get("/api/system/api-costs/by-tenant", requireAdmin, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
+const requireSystemOwner = async (req: any, res: any, next: any) => {
+  const replitUser = req.user as any;
+  const sessionUserId = (req.session as any)?.userId;
+  const userId = replitUser?.claims?.sub || sessionUserId;
+  if (!userId) {
+    return res.status(401).json({ error: "Ej autentiserad" });
+  }
+  try {
+    const { userTenantRoles } = await import("@shared/schema");
+    const ownerRoles = await db.select({ tenantId: userTenantRoles.tenantId })
+      .from(userTenantRoles)
+      .where(and(
+        eq(userTenantRoles.userId, userId),
+        eq(userTenantRoles.role, "owner"),
+        eq(userTenantRoles.isActive, true)
+      ));
+    if (ownerRoles.length === 0) {
+      return res.status(403).json({ error: "Ej behörig", message: "Systemägarbehörighet krävs för att se alla tenants." });
+    }
+    req.userId = userId;
+    return next();
+  } catch {
+    return res.status(500).json({ error: "Kunde inte verifiera behörighet" });
+  }
+};
+
+app.get("/api/system/api-costs/by-tenant", requireSystemOwner, asyncHandler(async (req, res) => {
     const period = (req.query.period as string) || "month";
     let startDate: Date;
     
@@ -873,10 +898,7 @@ app.get("/api/system/api-costs/by-tenant", requireAdmin, asyncHandler(async (req
         totalCalls: sql<number>`COUNT(*)`,
       })
       .from(apiUsageLogs)
-      .where(and(
-        gte(apiUsageLogs.createdAt, startDate),
-        eq(apiUsageLogs.tenantId, tenantId)
-      ))
+      .where(gte(apiUsageLogs.createdAt, startDate))
       .groupBy(apiUsageLogs.tenantId, apiUsageLogs.service);
     
     res.json(results.map(r => ({
@@ -943,14 +965,17 @@ app.get("/api/system/budget-status", requireAdmin, asyncHandler(async (req, res)
   res.json(status);
 }));
 
-app.get("/api/system/budget-status/all-tenants", requireAdmin, asyncHandler(async (req, res) => {
-  const tenantId = getTenantIdWithFallback(req);
+app.get("/api/system/budget-status/all-tenants", requireSystemOwner, asyncHandler(async (req, res) => {
   const { getTenantBudgetStatus } = await import("../ai-budget-service");
   const { tenants } = await import("@shared/schema");
-  const tenantRow = await db.select({ id: tenants.id, name: tenants.name }).from(tenants).where(eq(tenants.id, tenantId)).limit(1);
-  if (!tenantRow.length) return res.json([]);
-  const status = await getTenantBudgetStatus(tenantId);
-  res.json([{ tenantId, tenantName: tenantRow[0].name, ...status }]);
+  const allTenants = await db.select({ id: tenants.id, name: tenants.name }).from(tenants);
+  const statuses = await Promise.all(
+    allTenants.map(async (t) => {
+      const status = await getTenantBudgetStatus(t.id);
+      return { tenantId: t.id, tenantName: t.name, ...status };
+    })
+  );
+  res.json(statuses);
 }));
 
 // ============================================
@@ -1231,9 +1256,9 @@ app.post("/api/ai/eta-check-delays", asyncHandler(async (req, res) => {
 
 app.get("/api/ai/insights", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { checkBudgetAndBlock } = await import("../ai-budget-service");
-    const budgetCheck = await checkBudgetAndBlock(tenantId);
-    if (!budgetCheck.allowed) {
+    const { enforceBudgetAndRateLimit } = await import("../ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "analysis");
+    if (!enforcement.allowed) {
       return res.json([]);
     }
     const { generateInsightCards } = await import("../ai-insights");
@@ -1247,18 +1272,17 @@ app.get("/api/ai/insights", asyncHandler(async (req, res) => {
 
 app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { checkBudgetAndBlock: checkAPBudget } = await import("../ai-budget-service");
-    const apBudget = await checkAPBudget(tenantId);
-    if (!apBudget.allowed) {
-      return res.status(429).json({ error: "AI-budget överskriden", message: apBudget.message });
+    const { enforceBudgetAndRateLimit: enforcePlan } = await import("../ai-budget-service");
+    const apEnforcement = await enforcePlan(tenantId, "planning");
+    if (!apEnforcement.allowed) {
+      if (apEnforcement.errorType === "ratelimit") {
+        res.set("Retry-After", String(apEnforcement.retryAfterSeconds || 60));
+      }
+      return res.status(429).json({ error: apEnforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden", message: apEnforcement.errorMessage });
     }
 
     const { aiAssistedSchedule, runWithAIContext } = await import("../ai-planner");
     const { weekStart, weekEnd, instruction } = req.body;
-
-    const { resolveAIModel: resolveAPModel, getTenantTier: getAPTier } = await import("../ai-budget-service");
-    const apTier = await getAPTier(tenantId);
-    const apModel = resolveAPModel(apTier, "planning");
 
     const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
       storage.getWorkOrders(tenantId),
@@ -1272,7 +1296,7 @@ app.post("/api/ai/assisted-plan", asyncHandler(async (req, res) => {
       .map(o => o.id);
     const timeWindows = await storage.getTaskTimewindowsBatch(unscheduledOrderIds);
 
-    const result = await runWithAIContext({ tenantId, model: apModel }, () =>
+    const result = await runWithAIContext({ tenantId, model: apEnforcement.model }, () =>
       aiAssistedSchedule({
         workOrders,
         resources,

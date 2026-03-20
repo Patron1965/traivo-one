@@ -749,15 +749,13 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       proposed: p.proposedDistribution.filter(d => d.count > 0).map(d => `M${d.month}:${d.count}`).join(","),
     }));
 
-    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("../ai-budget-service");
-    const budgetCheck = await checkBudgetAndBlock(tenantId);
-    if (!budgetCheck.allowed) {
+    const { enforceBudgetAndRateLimit, withRetry } = await import("../ai-budget-service");
+    const enforcement = await enforceBudgetAndRateLimit(tenantId, "analysis");
+    if (!enforcement.allowed) {
       aiSummary = "AI-budget överskriden. Manuell fördelning används.";
     } else {
-    const annualTier = await getTenantTier(tenantId);
-    const aiModel = resolveAIModel(annualTier, "analysis");
-    const aiResponse = await openai.chat.completions.create({
-      model: aiModel,
+    const aiResponse = await withRetry(() => openai.chat.completions.create({
+      model: enforcement.model,
       messages: [
         {
           role: "system",
@@ -771,7 +769,7 @@ app.post("/api/annual-planning/ai-distribute", asyncHandler(async (req, res) => 
       temperature: 0.5,
       max_tokens: 800,
       response_format: { type: "json_object" },
-    });
+    }), { label: "annual-goal-distribution" });
 
     trackOpenAIResponse(aiResponse, tenantId);
     const aiContent = JSON.parse(aiResponse.choices[0]?.message?.content || "{}");

@@ -1294,17 +1294,18 @@ app.post("/api/route/optimize", asyncHandler(async (req, res) => {
     }
 
     const tenantId = getTenantIdWithFallback(req);
-    const { checkBudgetAndBlock, resolveAIModel, getTenantTier } = await import("../ai-budget-service");
-    const budgetCheck = await checkBudgetAndBlock(tenantId);
-    if (!budgetCheck.allowed) {
-      return res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
+    const { enforceBudgetAndRateLimit } = await import("../ai-budget-service");
+    const rtEnforcement = await enforceBudgetAndRateLimit(tenantId, "planning");
+    if (!rtEnforcement.allowed) {
+      if (rtEnforcement.errorType === "ratelimit") {
+        res.set("Retry-After", String(rtEnforcement.retryAfterSeconds || 60));
+      }
+      return res.status(429).json({ error: rtEnforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden", message: rtEnforcement.errorMessage });
     }
-    const rtTier = await getTenantTier(tenantId);
-    const rtModel = resolveAIModel(rtTier, "planning");
     
     const { optimizeRoute, runWithAIContext } = await import("../ai-planner");
     
-    const result = await runWithAIContext({ tenantId, model: rtModel }, () =>
+    const result = await runWithAIContext({ tenantId, model: rtEnforcement.model }, () =>
       optimizeRoute(stops)
     );
     
