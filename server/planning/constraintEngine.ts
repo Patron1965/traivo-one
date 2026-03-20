@@ -1,8 +1,8 @@
-import type { WorkOrder, Resource, ResourceAvailability, VehicleSchedule, TaskDependencyInstance, ObjectTimeRestriction, ResourceArticle, ResourceVehicle, WorkOrderLine } from "@shared/schema";
+import type { WorkOrder, Resource, ResourceAvailability, VehicleSchedule, TaskDependencyInstance, ObjectTimeRestriction, ResourceArticle, ResourceVehicle, WorkOrderLine, TeamMember } from "@shared/schema";
 
 export interface ConstraintViolation {
   type: "hard" | "soft";
-  category: "locked_order" | "dependency_chain" | "time_window" | "resource_availability" | "vehicle_schedule" | "competency" | "capacity" | "planned_window";
+  category: "locked_order" | "dependency_chain" | "time_window" | "resource_availability" | "vehicle_schedule" | "competency" | "capacity" | "planned_window" | "team_membership";
   severity: "critical" | "warning";
   workOrderId: string;
   resourceId?: string;
@@ -25,6 +25,7 @@ export interface ConstraintContext {
   timeRestrictions: ObjectTimeRestriction[];
   resourceArticles: ResourceArticle[];
   workOrderLines?: WorkOrderLine[];
+  teamMembers?: TeamMember[];
 }
 
 export function validateSchedule(
@@ -42,6 +43,7 @@ export function validateSchedule(
     violations.push(...checkVehicleSchedule(move, ctx));
     violations.push(...checkTimeRestrictions(order, move, ctx));
     violations.push(...checkPlannedWindow(order, move));
+    violations.push(...checkTeamMembership(order, move, ctx));
     violations.push(...checkCompetency(order, move, ctx));
   }
 
@@ -181,6 +183,28 @@ function checkTimeRestrictions(order: WorkOrder, move: ScheduleMove, ctx: Constr
   return violations;
 }
 
+function checkTeamMembership(order: WorkOrder, move: ScheduleMove, ctx: ConstraintContext): ConstraintViolation[] {
+  if (!order.teamId || !ctx.teamMembers || ctx.teamMembers.length === 0) return [];
+
+  const isMember = ctx.teamMembers.some(
+    tm => tm.teamId === order.teamId && tm.resourceId === move.resourceId
+  );
+
+  if (!isMember) {
+    const resource = ctx.resources.find(r => r.id === move.resourceId);
+    return [{
+      type: "hard",
+      category: "team_membership",
+      severity: "critical",
+      workOrderId: move.workOrderId,
+      resourceId: move.resourceId,
+      description: `${resource?.name || "Resurs"} tillhör inte teamet som är tilldelat denna order`
+    }];
+  }
+
+  return [];
+}
+
 function checkPlannedWindow(order: WorkOrder, move: ScheduleMove): ConstraintViolation[] {
   const violations: ConstraintViolation[] = [];
   const moveDate = new Date(move.scheduledDate);
@@ -236,9 +260,9 @@ function checkCompetency(order: WorkOrder, move: ScheduleMove, ctx: ConstraintCo
 
   if (unmatchedArticles.length > 0) {
     return [{
-      type: "soft",
+      type: "hard",
       category: "competency",
-      severity: "warning",
+      severity: "critical",
       workOrderId: move.workOrderId,
       resourceId: move.resourceId,
       description: `${resource.name || "Resurs"} saknar registrerad kompetens för ${unmatchedArticles.length} artikel(ar) på denna order`

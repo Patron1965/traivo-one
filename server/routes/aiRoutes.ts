@@ -971,6 +971,12 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
     );
     const allWorkOrderLines = workOrderLineResults.flat();
 
+    const teamIds = [...new Set(workOrders.map(o => o.teamId).filter(Boolean))] as string[];
+    const teamMemberResults = await Promise.all(
+      teamIds.map(id => storage.getTeamMembers(id))
+    );
+    const allTeamMembers = teamMemberResults.flat();
+
     const constraintContext = {
       allOrders: workOrders,
       resources,
@@ -981,6 +987,7 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
       timeRestrictions,
       resourceArticles: resourceArticlesData,
       workOrderLines: allWorkOrderLines,
+      teamMembers: allTeamMembers,
     };
     
     const result = await aiEnhancedSchedule({

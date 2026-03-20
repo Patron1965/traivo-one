@@ -1121,8 +1121,26 @@ export async function aiEnhancedSchedule(
     };
   });
 
+  let totalDrivingChange = 0;
+  const assignmentsByResource: Record<string, typeof baseResult.assignments> = {};
+  baseResult.assignments.forEach(a => {
+    if (!assignmentsByResource[a.resourceId]) assignmentsByResource[a.resourceId] = [];
+    assignmentsByResource[a.resourceId].push(a);
+  });
+  for (const [, resourceAssignments] of Object.entries(assignmentsByResource)) {
+    const byDate: Record<string, number> = {};
+    for (const a of resourceAssignments) {
+      byDate[a.scheduledDate] = (byDate[a.scheduledDate] || 0) + 1;
+    }
+    for (const [, count] of Object.entries(byDate)) {
+      if (count > 1) {
+        totalDrivingChange -= Math.round((count - 1) * 8);
+      }
+    }
+  }
+
   const traceSummary: DecisionTraceSummary = {
-    totalDrivingChange: 0,
+    totalDrivingChange,
     totalSetupChange: setupChange,
     workloadBalanceScore,
     riskScore,
