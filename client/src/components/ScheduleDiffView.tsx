@@ -22,6 +22,9 @@ import {
   Shield,
   Zap,
   Info,
+  CloudRain,
+  KeyRound,
+  UserX,
 } from "lucide-react";
 
 interface DecisionTraceSummary {
@@ -97,73 +100,69 @@ function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
     {
       label: "Körtid",
       icon: <Route className="h-3.5 w-3.5" />,
+      before: "—",
+      after: s.totalDrivingChange !== 0 ? `${s.totalDrivingChange > 0 ? "+" : ""}${s.totalDrivingChange} min` : "0 min",
       delta: s.totalDrivingChange,
-      unit: "min",
-      format: (v: number) => `${v > 0 ? "+" : ""}${v} min`,
+      good: s.totalDrivingChange <= 0,
     },
     {
       label: "Ställtid",
       icon: <Clock className="h-3.5 w-3.5" />,
+      before: "—",
+      after: s.totalSetupChange !== 0 ? `${s.totalSetupChange > 0 ? "+" : ""}${s.totalSetupChange} min` : "0 min",
       delta: s.totalSetupChange,
-      unit: "min",
-      format: (v: number) => `${v > 0 ? "+" : ""}${v} min`,
+      good: s.totalSetupChange <= 0,
     },
     {
       label: "Arbetsbalans",
       icon: <BarChart3 className="h-3.5 w-3.5" />,
+      before: "—",
+      after: `${Math.round(s.workloadBalanceScore * 100)}%`,
       delta: s.workloadBalanceScore,
-      unit: "score",
-      format: (v: number) => `${Math.round(v * 100)}%`,
+      good: s.workloadBalanceScore >= 0.7,
     },
     {
       label: "Riskindex",
       icon: <Shield className="h-3.5 w-3.5" />,
+      before: "—",
+      after: `${Math.round(s.riskScore * 100)}%`,
       delta: s.riskScore,
-      unit: "risk",
-      format: (v: number) => `${Math.round(v * 100)}%`,
+      good: s.riskScore <= 0.3,
     },
     {
       label: "Effektivitet",
       icon: <Zap className="h-3.5 w-3.5" />,
+      before: "—",
+      after: `${s.estimatedEfficiency}%`,
       delta: s.estimatedEfficiency,
-      unit: "pct",
-      format: (v: number) => `${v}%`,
+      good: s.estimatedEfficiency >= 70,
     },
   ];
 
   return (
     <Card className="p-3" data-testid="kpi-diff-table">
-      <div className="text-xs font-medium text-muted-foreground mb-2">KPI-sammanfattning</div>
-      <div className="space-y-1.5">
+      <div className="grid grid-cols-[1fr_50px_50px_20px] gap-1 text-[10px] text-muted-foreground font-medium mb-1.5">
+        <span>KPI</span>
+        <span className="text-right">Före</span>
+        <span className="text-right">Efter</span>
+        <span />
+      </div>
+      <div className="space-y-1">
         {rows.map((row) => {
-          let color = "text-muted-foreground";
-          let DeltaIcon = Minus;
-
-          if (row.unit === "min") {
-            if (row.delta < 0) { color = "text-green-600 dark:text-green-400"; DeltaIcon = TrendingDown; }
-            else if (row.delta > 0) { color = "text-amber-600 dark:text-amber-400"; DeltaIcon = TrendingUp; }
-          } else if (row.unit === "score") {
-            if (row.delta >= 0.8) { color = "text-green-600 dark:text-green-400"; DeltaIcon = TrendingUp; }
-            else if (row.delta < 0.5) { color = "text-amber-600 dark:text-amber-400"; DeltaIcon = TrendingDown; }
-          } else if (row.unit === "risk") {
-            if (row.delta <= 0.2) { color = "text-green-600 dark:text-green-400"; DeltaIcon = TrendingDown; }
-            else if (row.delta >= 0.5) { color = "text-red-600 dark:text-red-400"; DeltaIcon = TrendingUp; }
-            else { color = "text-amber-600 dark:text-amber-400"; DeltaIcon = Minus; }
-          } else if (row.unit === "pct") {
-            if (row.delta >= 80) { color = "text-green-600 dark:text-green-400"; DeltaIcon = TrendingUp; }
-            else if (row.delta < 60) { color = "text-amber-600 dark:text-amber-400"; DeltaIcon = TrendingDown; }
-          }
+          const deltaColor = row.good
+            ? "text-green-600 dark:text-green-400"
+            : "text-amber-600 dark:text-amber-400";
+          const DeltaIcon = row.good ? TrendingUp : TrendingDown;
 
           return (
-            <div key={row.label} className="flex items-center justify-between text-xs" data-testid={`kpi-row-${row.label}`}>
-              <span className="flex items-center gap-1.5 text-muted-foreground">
+            <div key={row.label} className="grid grid-cols-[1fr_50px_50px_20px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
+              <span className="flex items-center gap-1 text-muted-foreground">
                 {row.icon}
-                {row.label}
+                <span className="truncate">{row.label}</span>
               </span>
-              <span className={`flex items-center gap-1 font-medium ${color}`}>
-                <DeltaIcon className="h-3 w-3" />
-                {row.format(row.delta)}
-              </span>
+              <span className="text-right text-muted-foreground">{row.before}</span>
+              <span className={`text-right font-medium ${deltaColor}`}>{row.after}</span>
+              <DeltaIcon className={`h-3 w-3 ${deltaColor}`} />
             </div>
           );
         })}
@@ -201,12 +200,30 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
       </button>
       {expanded && factors.length > 0 && (
         <div className="mt-1.5 space-y-1 pl-1" data-testid="risk-factors-list">
-          {factors.map((factor, i) => (
-            <div key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Info className="h-3 w-3 mt-0.5 shrink-0 text-amber-500" />
-              <span>{factor}</span>
-            </div>
-          ))}
+          {factors.map((factor, i) => {
+            const lf = factor.toLowerCase();
+            let FactorIcon = Info;
+            let iconColor = "text-amber-500";
+            if (lf.includes("väder") || lf.includes("prognos")) {
+              FactorIcon = CloudRain;
+              iconColor = "text-blue-500";
+            } else if (lf.includes("portkod") || lf.includes("åtkomst")) {
+              FactorIcon = KeyRound;
+              iconColor = "text-orange-500";
+            } else if (lf.includes("historik") || lf.includes("resurs")) {
+              FactorIcon = UserX;
+              iconColor = "text-purple-500";
+            } else if (lf.includes("tidsdata") || lf.includes("standardtid")) {
+              FactorIcon = Clock;
+              iconColor = "text-red-500";
+            }
+            return (
+              <div key={i} className="flex items-start gap-1.5 text-xs text-muted-foreground">
+                <FactorIcon className={`h-3 w-3 mt-0.5 shrink-0 ${iconColor}`} />
+                <span>{factor}</span>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -299,15 +316,17 @@ function MoveCard({
           <div className="flex items-center gap-1 mt-1 text-[11px] text-muted-foreground">
             {move.from.resourceName ? (
               <>
-                <span className="truncate max-w-[80px]">{move.from.resourceName}</span>
+                <span className="truncate max-w-[70px]">{move.from.resourceName}</span>
                 {move.from.day && <span className="shrink-0">{formatShortDate(move.from.day)}</span>}
+                {move.from.startTime && <span className="shrink-0 text-[10px]">{move.from.startTime}</span>}
               </>
             ) : (
               <span className="italic">Ej schemalagd</span>
             )}
             <ArrowRight className="h-3 w-3 shrink-0 text-primary" />
-            <span className="truncate max-w-[80px] font-medium">{move.to.resourceName}</span>
+            <span className="truncate max-w-[70px] font-medium">{move.to.resourceName}</span>
             <span className="shrink-0">{formatShortDate(move.to.day)}</span>
+            {move.to.startTime && <span className="shrink-0 text-[10px]">{move.to.startTime}</span>}
           </div>
         </div>
       </div>
@@ -429,7 +448,12 @@ export function ScheduleDiffView({
   }
 
   const filteredMoves = showOnlyChanges
-    ? decisionTrace.moves.filter(m => m.from.resourceId !== m.to.resourceId || m.from.day !== m.to.day)
+    ? decisionTrace.moves.filter(m =>
+        m.from.resourceId !== m.to.resourceId ||
+        m.from.day !== m.to.day ||
+        m.from.startTime !== m.to.startTime ||
+        !m.from.resourceId
+      )
     : decisionTrace.moves;
 
   const handleReject = (workOrderId: string) => {
