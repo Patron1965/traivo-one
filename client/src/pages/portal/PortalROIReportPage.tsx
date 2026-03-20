@@ -25,9 +25,9 @@ export default function PortalROIReportPage() {
   const token = params.get("token") || "";
 
   const { data, isLoading, error } = useQuery<SharedROIData>({
-    queryKey: ["/api/reports/roi-shared", token],
+    queryKey: ["/api/portal/roi-shared", token],
     queryFn: async () => {
-      const res = await fetch(`/api/reports/roi-shared?token=${token}`);
+      const res = await fetch(`/api/portal/roi-shared?token=${token}`);
       if (!res.ok) {
         const err = await res.json().catch(() => ({ error: "Kunde inte ladda rapport" }));
         throw new Error(err.error || "Kunde inte ladda rapport");

@@ -278,7 +278,7 @@ export async function registerRoiRoutes(app: Express) {
     res.json({ shareUrl, expiresAt: expiresAt.toISOString(), token });
   }));
 
-  app.get("/api/reports/roi-shared", asyncHandler(async (req, res) => {
+  app.get("/api/portal/roi-shared", asyncHandler(async (req, res) => {
     const token = req.query.token as string;
     if (!token) throw new ValidationError("Token saknas");
 
