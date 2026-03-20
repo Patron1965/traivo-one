@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -11,6 +11,41 @@ import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, type WorkOrderLine } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
+import {
+  checkBudgetAndBlock,
+  checkAndSendBudgetAlerts,
+  checkRateLimit,
+  resolveAIModel,
+  acquireSchedulingLock,
+  releaseSchedulingLock,
+  withRetry,
+  getCachedAIResponse,
+  setCachedAIResponse,
+  createAICacheKey,
+  invalidateBudgetCache,
+} from "../ai-budget-service";
+import { getTenantFeatures } from "../feature-flags";
+
+async function aiBudgetGuard(req: Request, res: Response): Promise<{ tenantId: string; tier: string; model: string; blocked: boolean }> {
+  const tenantId = getTenantIdWithFallback(req);
+  const { tier } = await getTenantFeatures(tenantId);
+
+  const budgetCheck = await checkBudgetAndBlock(tenantId);
+  if (!budgetCheck.allowed) {
+    res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
+    return { tenantId, tier, model: "gpt-4o-mini", blocked: true };
+  }
+
+  const rateLimitCheck = checkRateLimit(tenantId, tier);
+  if (!rateLimitCheck.allowed) {
+    res.set("Retry-After", String(rateLimitCheck.retryAfterSeconds || 60));
+    res.status(429).json({ error: "AI-anropsgräns nådd", message: `Maxgräns nådd. Försök igen om ${rateLimitCheck.retryAfterSeconds} sekunder.` });
+    return { tenantId, tier, model: "gpt-4o-mini", blocked: true };
+  }
+
+  const model = resolveAIModel(tier, "chat");
+  return { tenantId, tier, model, blocked: false };
+}
 
 export async function registerAIRoutes(app: Express) {
 // ============================================
@@ -39,6 +74,10 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
     if (!question || typeof question !== "string") {
       throw new ValidationError("Fråga krävs");
     }
+
+    const guard = await aiBudgetGuard(req, res);
+    if (guard.blocked) return;
+    const { tenantId, model: aiModel } = guard;
 
     const OpenAI = (await import("openai")).default;
     const openai = new OpenAI({
@@ -151,7 +190,6 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
     ];
 
     // Tool execution helper
-    const tenantId = getTenantIdWithFallback(req);
     const executeTool = async (name: string, args: Record<string, unknown>): Promise<string> => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -385,27 +423,28 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
 
     const { trackOpenAIResponse: trackOAIResponse } = await import("../api-usage-tracker");
 
-    // First API call with tools
-    let response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages,
-      tools,
-      tool_choice: "auto",
-      max_tokens: 500,
-      temperature: 0.5
-    });
+    let response = await withRetry(
+      () => openai.chat.completions.create({
+        model: aiModel,
+        messages,
+        tools,
+        tool_choice: "auto",
+        max_tokens: 500,
+        temperature: 0.5
+      }),
+      { label: "field-assistant" }
+    );
 
-    trackOAIResponse(response);
+    trackOAIResponse(response, tenantId);
+    checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
     let assistantMessage = response.choices[0]?.message;
 
-    // Handle tool calls (up to 3 iterations)
     let iterations = 0;
     while (assistantMessage?.tool_calls && iterations < 3) {
       iterations++;
       messages.push(assistantMessage);
 
-      // Execute all tool calls
       for (const toolCall of assistantMessage.tool_calls) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const tc = toolCall as any;
@@ -419,17 +458,20 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
         });
       }
 
-      // Get next response
-      response = await openai.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages,
-        tools,
-        tool_choice: "auto",
-        max_tokens: 500,
-        temperature: 0.5
-      });
+      response = await withRetry(
+        () => openai.chat.completions.create({
+          model: aiModel,
+          messages,
+          tools,
+          tool_choice: "auto",
+          max_tokens: 500,
+          temperature: 0.5
+        }),
+        { label: "field-assistant-tool" }
+      );
 
-      trackOAIResponse(response);
+      trackOAIResponse(response, tenantId);
+      checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
       assistantMessage = response.choices[0]?.message;
     }
@@ -555,7 +597,9 @@ app.get("/api/ai/predictive-maintenance", isAuthenticated, asyncHandler(handlePr
 app.post("/api/ai/predictive-maintenance", isAuthenticated, asyncHandler(handlePredictiveMaintenance));
 
 app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, res) => {
-    const tenantId = getTenantIdWithFallback(req);
+    const guard = await aiBudgetGuard(req, res);
+    if (guard.blocked) return;
+    const tenantId = guard.tenantId;
     const { objectIds } = req.body as { objectIds?: string[] };
 
     if (objectIds && (!Array.isArray(objectIds) || objectIds.length > 500)) {
@@ -722,7 +766,9 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
     const { generatePlanningSuggestions, calculatePlanningKPIs } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
-    const tenantId = getTenantIdWithFallback(req);
+    const guard = await aiBudgetGuard(req, res);
+    if (guard.blocked) return;
+    const tenantId = guard.tenantId;
     const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
@@ -929,6 +975,9 @@ app.post("/api/ai/explain-anomaly", asyncHandler(async (req, res) => {
     if (!anomalyType || !["setup_time", "cost"].includes(anomalyType)) {
       throw new ValidationError("Ogiltig anomalityp");
     }
+
+    const guard = await aiBudgetGuard(req, res);
+    if (guard.blocked) return;
     
     const explanation = await explainAnomaly(anomalyType, context || {});
     res.json(explanation);
@@ -939,7 +988,15 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
     const { aiEnhancedSchedule } = await import("../ai-planner");
     const { weekStart, weekEnd } = req.body;
     
-    const tenantId = getTenantIdWithFallback(req);
+    const guard = await aiBudgetGuard(req, res);
+    if (guard.blocked) return;
+    const { tenantId } = guard;
+
+    if (!acquireSchedulingLock(tenantId)) {
+      return res.status(409).json({ error: "Auto-scheduling pågår redan", message: "En annan auto-scheduling-körning pågår för er organisation. Vänta tills den är klar." });
+    }
+
+    try {
     const resolvedWeekStart = weekStart || new Date().toISOString().split("T")[0];
     const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
@@ -996,38 +1053,43 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
       teamMembers: allTeamMembers,
     };
     
-    const result = await aiEnhancedSchedule({
-      workOrders,
-      resources,
-      clusters,
-      weekStart: resolvedWeekStart,
-      weekEnd: resolvedWeekEnd,
-      setupTimeLogs,
-      timeWindows,
-      constraintContext,
-      objects,
-    });
-
-    const userWithClaims = req.user as { claims?: { sub?: string } } | undefined;
-    const userId = userWithClaims?.claims?.sub || "unknown";
-
-    try {
-      await storage.createPlanningDecisionLog({
-        tenantId,
-        userId,
+      const result = await aiEnhancedSchedule({
+        workOrders,
+        resources,
+        clusters,
         weekStart: resolvedWeekStart,
         weekEnd: resolvedWeekEnd,
-        summary: result.decisionTrace.summary,
-        moveCount: result.decisionTrace.moves.length,
-        violationCount: result.decisionTrace.constraintViolations.length,
-        riskScore: result.decisionTrace.summary.riskScore,
-        totalOrdersScheduled: result.totalOrdersScheduled,
+        setupTimeLogs,
+        timeWindows,
+        constraintContext,
+        objects,
       });
-    } catch (e) {
-      console.error("[planning-audit] Failed to log decision trace:", e);
+
+      checkAndSendBudgetAlerts(tenantId).catch(() => {});
+
+      const userWithClaims = req.user as { claims?: { sub?: string } } | undefined;
+      const userId = userWithClaims?.claims?.sub || "unknown";
+
+      try {
+        await storage.createPlanningDecisionLog({
+          tenantId,
+          userId,
+          weekStart: resolvedWeekStart,
+          weekEnd: resolvedWeekEnd,
+          summary: result.decisionTrace.summary,
+          moveCount: result.decisionTrace.moves.length,
+          violationCount: result.decisionTrace.constraintViolations.length,
+          riskScore: result.decisionTrace.summary.riskScore,
+          totalOrdersScheduled: result.totalOrdersScheduled,
+        });
+      } catch (e) {
+        console.error("[planning-audit] Failed to log decision trace:", e);
+      }
+      
+      res.json(result);
+    } finally {
+      releaseSchedulingLock(tenantId);
     }
-    
-    res.json(result);
 }));
 
 // Route optimization per day
@@ -1341,7 +1403,9 @@ app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
       throw new ValidationError("Fråga krävs");
     }
     
-    const tenantId = getTenantIdWithFallback(req);
+    const guard = await aiBudgetGuard(req, res);
+    if (guard.blocked) return;
+    const tenantId = guard.tenantId;
     const [workOrders, resources, clusters] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),

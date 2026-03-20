@@ -4471,6 +4471,21 @@ export const planningDecisionLog = pgTable("planning_decision_log", {
 
 export type PlanningDecisionLog = typeof planningDecisionLog.$inferSelect;
 
+export const budgetAlertLog = pgTable("budget_alert_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").notNull(),
+  thresholdPercent: integer("threshold_percent").notNull(),
+  currentUsageUsd: real("current_usage_usd").notNull(),
+  monthlyBudgetUsd: real("monthly_budget_usd").notNull(),
+  percentUsed: real("percent_used").notNull(),
+  monthKey: varchar("month_key", { length: 20 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_budget_alert_tenant_month").on(table.tenantId, table.monthKey),
+]);
+
+export type BudgetAlertLog = typeof budgetAlertLog.$inferSelect;
+
 export const roiShareTokens = pgTable("roi_share_tokens", {
   token: varchar("token", { length: 64 }).primaryKey(),
   tenantId: varchar("tenant_id", { length: 255 }).notNull(),

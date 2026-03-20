@@ -7,7 +7,7 @@ import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./help
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
-import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema } from "@shared/schema";
+import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek, getDateFromWeekdayInMonth } from "./helpers";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
@@ -922,6 +922,30 @@ app.get("/api/system/api-costs/pricing", requireAdmin, async (_req, res) => {
   const { PRICING } = await import("../api-usage-tracker");
   res.json(PRICING);
 });
+
+app.get("/api/system/budget-status", asyncHandler(async (req, res) => {
+  const { getTenantBudgetStatus } = await import("../ai-budget-service");
+  const tenantId = getTenantIdWithFallback(req);
+  const status = await getTenantBudgetStatus(tenantId);
+  res.json(status);
+}));
+
+app.get("/api/system/budget-status/all-tenants", requireAdmin, asyncHandler(async (req, res) => {
+  const { getTenantBudgetStatus } = await import("../ai-budget-service");
+
+  const tenantRows = await db.select({ tenantId: apiUsageLogs.tenantId })
+    .from(apiUsageLogs)
+    .groupBy(apiUsageLogs.tenantId);
+
+  const results = [];
+  for (const row of tenantRows) {
+    if (!row.tenantId) continue;
+    const status = await getTenantBudgetStatus(row.tenantId);
+    results.push({ tenantId: row.tenantId, ...status });
+  }
+
+  res.json(results);
+}));
 
 // ============================================
 // FIELD WORKER TASK ENDPOINTS

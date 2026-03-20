@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Loader2, DollarSign, Activity, Zap, AlertTriangle,
   TrendingUp, Server, Mail, MessageSquare, MapPin, Cloud, Brain,
-  Settings
+  Settings, Shield, Gauge
 } from "lucide-react";
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer,
@@ -47,6 +47,15 @@ const PIE_COLORS = [
   "hsl(var(--chart-4))",
   "hsl(var(--chart-5))",
 ];
+
+interface BudgetStatus {
+  currentUsageUsd: number;
+  monthlyBudgetUsd: number;
+  percentUsed: number;
+  projectedMonthEndUsd: number;
+  status: "ok" | "warning" | "critical" | "exceeded";
+  daysRemaining: number;
+}
 
 interface ServiceSummary {
   service: string;
@@ -117,6 +126,10 @@ export default function ApiCostsDashboardPage() {
   const [period, setPeriod] = useState("month");
   const [trendDays, setTrendDays] = useState(30);
   const { toast } = useToast();
+
+  const { data: budgetStatus } = useQuery<BudgetStatus>({
+    queryKey: ["/api/system/budget-status"],
+  });
 
   const { data: summary, isLoading: summaryLoading } = useQuery<CostSummary>({
     queryKey: [`/api/system/api-costs/summary?period=${period}`],
@@ -247,6 +260,77 @@ export default function ApiCostsDashboardPage() {
           </SelectContent>
         </Select>
       </div>
+
+      {budgetStatus && (
+        <Card data-testid="card-budget-status" className={
+          budgetStatus.status === "exceeded" ? "border-red-500 bg-red-50 dark:bg-red-950/20" :
+          budgetStatus.status === "critical" ? "border-orange-500 bg-orange-50 dark:bg-orange-950/20" :
+          budgetStatus.status === "warning" ? "border-yellow-500 bg-yellow-50 dark:bg-yellow-950/20" :
+          "border-green-500/30"
+        }>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield className={`h-5 w-5 ${
+                  budgetStatus.status === "exceeded" ? "text-red-500" :
+                  budgetStatus.status === "critical" ? "text-orange-500" :
+                  budgetStatus.status === "warning" ? "text-yellow-500" :
+                  "text-green-500"
+                }`} />
+                <CardTitle className="text-base">AI-budgetstatus</CardTitle>
+              </div>
+              <Badge data-testid="badge-budget-status" variant={
+                budgetStatus.status === "exceeded" ? "destructive" :
+                budgetStatus.status === "critical" ? "destructive" :
+                budgetStatus.status === "warning" ? "secondary" :
+                "outline"
+              }>
+                {budgetStatus.status === "exceeded" ? "Överskriden" :
+                 budgetStatus.status === "critical" ? "Kritisk" :
+                 budgetStatus.status === "warning" ? "Varning" :
+                 "OK"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Förbrukat denna månad</p>
+                <p className="text-lg font-bold" data-testid="text-budget-current">{formatCostSEK(budgetStatus.currentUsageUsd)}</p>
+                <p className="text-xs text-muted-foreground">{formatCostUSD(budgetStatus.currentUsageUsd)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Månadsbudget</p>
+                <p className="text-lg font-bold" data-testid="text-budget-limit">{formatCostSEK(budgetStatus.monthlyBudgetUsd)}</p>
+                <p className="text-xs text-muted-foreground">{formatCostUSD(budgetStatus.monthlyBudgetUsd)}</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Prognos månadsslut</p>
+                <p className={`text-lg font-bold ${budgetStatus.projectedMonthEndUsd > budgetStatus.monthlyBudgetUsd ? "text-red-500" : ""}`} data-testid="text-budget-forecast">
+                  {formatCostSEK(budgetStatus.projectedMonthEndUsd)}
+                </p>
+                <p className="text-xs text-muted-foreground">{budgetStatus.daysRemaining} dagar kvar</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground mb-1">Utnyttjat</p>
+                <div className="flex items-center gap-2">
+                  <Gauge className="h-4 w-4 text-muted-foreground" />
+                  <span className={`text-lg font-bold ${
+                    budgetStatus.percentUsed >= 100 ? "text-red-500" :
+                    budgetStatus.percentUsed >= 80 ? "text-orange-500" :
+                    ""
+                  }`} data-testid="text-budget-percent">{budgetStatus.percentUsed}%</span>
+                </div>
+                <Progress 
+                  value={Math.min(budgetStatus.percentUsed, 100)} 
+                  className="h-2 mt-1"
+                  data-testid="progress-budget"
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card data-testid="card-total-cost">
