@@ -21,7 +21,12 @@ import {
   Truck,
   ArrowUpRight,
   ArrowDownRight,
+  Share2,
+  Copy,
+  Check,
 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "@/lib/queryClient";
 import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
@@ -199,6 +204,9 @@ function generatePDF(data: ROIData) {
 export default function ROIReportPage() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string>("");
   const [monthsBack, setMonthsBack] = useState("12");
+  const [shareUrl, setShareUrl] = useState<string>("");
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
 
   const { data: customerList, isLoading: loadingCustomers } = useQuery<CustomerOption[]>({
     queryKey: ["/api/reports/roi-customers"],
@@ -254,13 +262,52 @@ export default function ROIReportPage() {
             </SelectContent>
           </Select>
           {roiData && (
-            <Button variant="outline" onClick={() => generatePDF(roiData)} data-testid="button-export-pdf">
-              <Download className="h-4 w-4 mr-2" />
-              Exportera PDF
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => generatePDF(roiData)} data-testid="button-export-pdf">
+                <Download className="h-4 w-4 mr-2" />
+                Exportera PDF
+              </Button>
+              <Button
+                variant="outline"
+                data-testid="button-share"
+                onClick={async () => {
+                  try {
+                    const res = await apiRequest("POST", `/api/reports/roi/${selectedCustomerId}/share`);
+                    const data = await res.json();
+                    setShareUrl(data.shareUrl);
+                    toast({ title: "Delningsl\u00e4nk skapad", description: "L\u00e4nken \u00e4r giltig i 30 dagar." });
+                  } catch {
+                    toast({ title: "Kunde inte skapa delningsl\u00e4nk", variant: "destructive" });
+                  }
+                }}
+              >
+                <Share2 className="h-4 w-4 mr-2" />
+                Dela med kund
+              </Button>
+            </>
           )}
         </div>
       </div>
+
+      {shareUrl && (
+        <Card>
+          <CardContent className="p-4 flex items-center gap-3">
+            <code className="flex-1 text-xs bg-muted p-2 rounded truncate" data-testid="text-share-url">{shareUrl}</code>
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid="button-copy-share-url"
+              onClick={() => {
+                navigator.clipboard.writeText(shareUrl);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+            >
+              {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {!selectedCustomerId && (
         <Card>
@@ -323,9 +370,9 @@ export default function ROIReportPage() {
               icon={Truck}
             />
             <KPICard
-              title="CO2-besparing"
+              title="CO2-utsl\u00e4pp"
               value={`${s.totalCo2Kg} kg`}
-              subtitle="Total CO2-p\u00e5verkan"
+              subtitle={`${s.totalDistanceKm > 0 ? (s.totalCo2Kg / s.totalDistanceKm * 100).toFixed(1) : 0} kg/100km`}
               icon={Leaf}
               color="#16a34a"
             />

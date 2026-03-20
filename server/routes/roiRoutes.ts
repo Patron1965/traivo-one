@@ -1,10 +1,13 @@
 import type { Express } from "express";
 import { db } from "../db";
-import { eq, and, gte, lte, sql, count, sum, avg, desc } from "drizzle-orm";
+import { eq, and, gte, lte, sql, count, sum, avg, desc, inArray, or } from "drizzle-orm";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { ValidationError } from "../errors";
-import { workOrders, environmentalData, deviationReports, resources, customers, routeFeedback } from "@shared/schema";
+import { workOrders, environmentalData, deviationReports, resources, customers, routeFeedback, objects } from "@shared/schema";
+import crypto from "crypto";
+
+const shareTokens = new Map<string, { tenantId: string; customerId: string; expiresAt: Date }>();
 
 interface MonthlyMetrics {
   month: string;
@@ -74,25 +77,33 @@ export async function registerRoiRoutes(app: Express) {
       ));
 
     const orderIds = new Set(orders.map(o => o.id));
+    const orderIdList = [...orderIds];
     const customerEnvData = envData.filter(e => orderIds.has(e.workOrderId));
 
-    const deviations = await db
-      .select({
-        id: deviationReports.id,
-        reportedAt: deviationReports.reportedAt,
-        category: deviationReports.category,
-        severityLevel: deviationReports.severityLevel,
-      })
-      .from(deviationReports)
-      .where(and(
-        eq(deviationReports.tenantId, tenantId),
-        gte(deviationReports.reportedAt, cutoff),
-      ));
+    const customerObjects = await db
+      .select({ id: objects.id })
+      .from(objects)
+      .where(and(eq(objects.tenantId, tenantId), eq(objects.customerId, customerId)));
+    const customerObjectIds = customerObjects.map(o => o.id);
 
-    const customerObjectOrders = orders.map(o => o.id);
-    const orderDeviations = deviations.filter(d => {
-      return true;
-    });
+    const customerDeviations = (customerObjectIds.length > 0 || orderIdList.length > 0)
+      ? await db
+        .select({
+          id: deviationReports.id,
+          reportedAt: deviationReports.reportedAt,
+          category: deviationReports.category,
+          severityLevel: deviationReports.severityLevel,
+        })
+        .from(deviationReports)
+        .where(and(
+          eq(deviationReports.tenantId, tenantId),
+          gte(deviationReports.reportedAt, cutoff),
+          or(
+            customerObjectIds.length > 0 ? inArray(deviationReports.objectId, customerObjectIds) : undefined,
+            orderIdList.length > 0 ? inArray(deviationReports.workOrderId, orderIdList) : undefined,
+          ),
+        ))
+      : [];
 
     const resourceIds = [...new Set(orders.filter(o => o.resourceId).map(o => o.resourceId!))];
     const activeResources = resourceIds.length;
@@ -151,7 +162,7 @@ export async function registerRoiRoutes(app: Express) {
       }
     }
 
-    for (const d of orderDeviations) {
+    for (const d of customerDeviations) {
       if (!d.reportedAt) continue;
       const monthKey = d.reportedAt.toISOString().substring(0, 7);
       const m = monthlyMap.get(monthKey);
@@ -216,7 +227,7 @@ export async function registerRoiRoutes(app: Express) {
         totalCost,
         activeResources,
         productivityPerResource,
-        deviationCount: orderDeviations.length,
+        deviationCount: customerDeviations.length,
         deviationTrend,
       },
       monthly,
@@ -242,6 +253,84 @@ export async function registerRoiRoutes(app: Express) {
       .orderBy(desc(sql`count(${workOrders.id})`));
 
     res.json(customerList);
+  }));
+
+  app.post("/api/reports/roi/:customerId/share", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { customerId } = req.params;
+
+    const [customer] = await db.select({ id: customers.id, name: customers.name })
+      .from(customers)
+      .where(and(eq(customers.id, customerId), eq(customers.tenantId, tenantId)));
+    if (!customer) throw new ValidationError("Kund hittades inte");
+
+    const token = crypto.randomBytes(32).toString("hex");
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + 30);
+
+    shareTokens.set(token, { tenantId, customerId, expiresAt });
+
+    const baseUrl = process.env.REPLIT_DEV_DOMAIN
+      ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+      : `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
+    const shareUrl = `${baseUrl}/portal/roi-report?token=${token}`;
+
+    res.json({ shareUrl, expiresAt: expiresAt.toISOString(), token });
+  }));
+
+  app.get("/api/reports/roi-shared", asyncHandler(async (req, res) => {
+    const token = req.query.token as string;
+    if (!token) throw new ValidationError("Token saknas");
+
+    const shareData = shareTokens.get(token);
+    if (!shareData) throw new ValidationError("Ogiltig eller utgången delningslänk");
+    if (new Date() > shareData.expiresAt) {
+      shareTokens.delete(token);
+      throw new ValidationError("Delningslänken har utgått");
+    }
+
+    const { tenantId, customerId } = shareData;
+    const months = parseInt(req.query.months as string) || 12;
+
+    const [customer] = await db.select({ id: customers.id, name: customers.name })
+      .from(customers)
+      .where(and(eq(customers.id, customerId), eq(customers.tenantId, tenantId)));
+    if (!customer) throw new ValidationError("Kund hittades inte");
+
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+
+    const orders = await db
+      .select({
+        scheduledDate: workOrders.scheduledDate,
+        completedAt: workOrders.completedAt,
+        actualDuration: workOrders.actualDuration,
+        estimatedDuration: workOrders.estimatedDuration,
+        cachedValue: workOrders.cachedValue,
+        executionStatus: workOrders.executionStatus,
+      })
+      .from(workOrders)
+      .where(and(
+        eq(workOrders.tenantId, tenantId),
+        eq(workOrders.customerId, customerId),
+        gte(workOrders.scheduledDate, cutoff),
+      ));
+
+    const completedOrders = orders.filter(o => o.executionStatus === "completed" || o.executionStatus === "inspected" || o.executionStatus === "invoiced");
+    const completionRate = orders.length > 0 ? Math.round((completedOrders.length / orders.length) * 100) : 0;
+    const avgDuration = completedOrders.length > 0
+      ? Math.round(completedOrders.reduce((s, o) => s + (o.actualDuration || o.estimatedDuration || 60), 0) / completedOrders.length)
+      : 0;
+
+    res.json({
+      customer: { name: customer.name },
+      summary: {
+        totalOrders: orders.length,
+        completedOrders: completedOrders.length,
+        completionRate,
+        avgDurationMinutes: avgDuration,
+      },
+    });
   }));
 
 }
