@@ -1,0 +1,141 @@
+🎯 Målbild: “AI-planering med förtroende”
+När en planerare trycker på “AI-planera vecka” ska de:
+
+Se vad som ändras
+Förstå varför det ändras
+Se konsekvenser
+Känna att de har kontroll
+Det här är skillnaden mellan magi och enterprise-grade system.
+
+🧠 Arkitekturförslag – 3 lager
+1️⃣ Constraint Engine (Deterministiskt lager)
+AI får ALDRIG bryta:
+
+lockedAt ordrar
+beroendemallar
+planerade tidsfönster
+resurs availability
+vehicle schedule
+SLA i planningParameters
+Ny modul:
+server/planning/constraintEngine.ts
+Funktioner:
+validateSchedule(schedule)
+listViolations()
+autoRepair(schedule)
+AI får föreslå.
+Constraint engine godkänner / flaggar / reparerar.
+
+Detta skapar trygghet.
+
+2️⃣ Decision Trace (Explain Engine)
+Utöka /api/ai/auto-schedule response.
+
+Nytt svarformat:
+ts
+Copy
+{
+  summary: {
+    totalDrivingChange: -84,
+    totalSetupChange: -52,
+    workloadBalanceScore: 0.91,
+    riskScore: 0.12
+  },
+  moves: [
+    {
+      workOrderId: "wo_123",
+      from: {
+        resourceId: "res_a",
+        day: "2026-03-23",
+        startTime: "09:00"
+      },
+      to: {
+        resourceId: "res_b",
+        day: "2026-03-24",
+        startTime: "10:30"
+      },
+      reasons: [
+        "Kompetensmatch 0.92 → 0.99",
+        "Körsträcka -18 min",
+        "Bättre väderfaktor (0.6 → 0.9)",
+        "Jämnare arbetsbelastning"
+      ],
+      constraintStatus: "valid",
+      confidence: 0.87
+    }
+  ],
+  constraintViolations: []
+}
+Detta kan byggas utan att byta arkitektur.
+
+3️⃣ Diff View i WeekPlanner
+UI-idé
+I AISuggestionsPanel.tsx:
+
+Visa:
+✅ Förbättringar
+⚠️ Risker
+🔒 Constraint-varningar
+Toggle:
+“Visa endast förändringar”
+“Visa påverkan på KPI”
+Ny komponent:
+components/planning/ScheduleDiffView.tsx
+Visar:
+
+KPI	Före	Efter	Förändring
+Körminuter	620	536	-84 ✅
+Ställtid	340	288	-52 ✅
+Övertid	95	40	-55 ✅
+Riskindex	0.04	0.12	+0.08 ⚠️
+Det här är enterprise.
+
+🔒 Constraint Types – konkret lista
+Hard Constraints
+locked orders
+dependency chains
+plannedWindowStart/End
+availability JSON
+vehicleSchedule
+team membership integrity
+Soft Constraints
+minimize driving
+minimize setup
+balance workload
+weather factor
+efficiencyFactor
+serviceArea preference
+AI ska optimera soft.
+Constraint engine ska skydda hard.
+
+📊 Risk Score (viktig detalj)
+För att bli bäst behöver ni visa osäkerhet.
+
+Exempel på riskkomponenter:
+
+Saknar historisk faktisk duration
+Objekt utan accessCode
+Ny resurs utan historik
+Lågt confidence i setup prediction
+Väderprognos med hög varians
+Returnera:
+
+riskScore: 0.12
+riskFactors: [
+  "3 ordrar saknar historik",
+  "1 objekt saknar accesskod",
+  "Regnprognos osäker tisdag"
+]
+Planerare älskar detta.
+
+🚀 Sprint 1 – Realistisk 1–2 veckors plan
+Backend
+ Skapa constraintEngine.ts
+ Wrapper runt auto-schedule → validate
+ Utöka AI response med moves + summary
+ Logga decisionTrace i auditLogs
+Frontend
+ Bygg ScheduleDiffView
+ Utöka AISuggestionsPanel
+ Lägg in “Explain” per move
+ Lägg in riskScore visualisering
