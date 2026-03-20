@@ -21,6 +21,7 @@ import {
   getCachedAIResponse,
   setCachedAIResponse,
   createAICacheKey,
+  invalidateAICache,
 } from "../ai-budget-service";
 import { getTenantFeatures } from "../feature-flags";
 
@@ -1098,6 +1099,7 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
         console.error("[planning-audit] Failed to log decision trace:", e);
       }
       
+      invalidateAICache();
       res.json(result);
     } finally {
       await releaseSchedulingLock(tenantId);
@@ -1474,6 +1476,7 @@ app.post("/api/ai/planner-chat/execute", asyncHandler(async (req, res) => {
           console.error(`Failed to update order ${orderId}:`, e);
         }
       }
+      invalidateAICache();
       return res.json({ 
         success: true, 
         message: `${successCount} av ${workOrderIds.length} ordrar har omtilldelats.`,
@@ -1491,6 +1494,7 @@ app.post("/api/ai/planner-chat/execute", asyncHandler(async (req, res) => {
           console.error(`Failed to update order ${orderId}:`, e);
         }
       }
+      invalidateAICache();
       return res.json({ 
         success: true, 
         message: `${successCount} av ${workOrderIds.length} ordrar har flyttats till ${toDate}.`,

@@ -34,6 +34,30 @@ const openai = new OpenAI({
 
 const DEFAULT_AI_MODEL = "gpt-4o-mini";
 
+async function callOpenAI(
+  params: Parameters<typeof openai.chat.completions.create>[0],
+  label = "ai-call"
+): ReturnType<typeof openai.chat.completions.create> {
+  const maxRetries = 3;
+  let lastError: Error | undefined;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await callOpenAI(params);
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      lastError = err;
+      if (attempt === maxRetries) break;
+      const errRecord = error as Record<string, unknown>;
+      const isRetryable = errRecord?.status === 429 || errRecord?.status === 500 || errRecord?.status === 503 || errRecord?.code === "ECONNRESET" || errRecord?.code === "ETIMEDOUT" || err.message?.includes("timeout");
+      if (!isRetryable) break;
+      const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+      console.warn(`[${label}] Attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  throw lastError!;
+}
+
 // ============================================
 // KPI CALCULATIONS FOR AI CONTEXT
 // ============================================
@@ -410,7 +434,7 @@ export async function generatePlanningSuggestions(
   try {
     const prompt = buildContextPrompt(context);
     
-    const response = await openai.chat.completions.create({
+    const response = await callOpenAI({
       model: options?.model || getContextModel(),
       messages: [
         {
@@ -450,7 +474,7 @@ export async function explainSuggestion(
   context: PlanningContext
 ): Promise<string> {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await callOpenAI({
       model: getContextModel(),
       messages: [
         {
@@ -1257,7 +1281,7 @@ Svara ENDAST med JSON:
     
     const plannerSystemPrompt = buildSystemPrompt({ role: "planner" }) + "\n" + PLANNING_PERSONA_ADDITIONS + "\nSvara ENDAST med valid JSON.";
     
-    const response = await openai.chat.completions.create({
+    const response = await callOpenAI({
       model: getContextModel(),
       messages: [
         { role: "system", content: plannerSystemPrompt },
@@ -2232,7 +2256,7 @@ Svara i JSON-format:
     // Use shared persona for anomaly analysis
     const anomalySystemPrompt = buildSystemPrompt({ role: "planner", additionalContext: "Du analyserar avvikelser och ger förklaringar." }) + "\nSvara alltid i valid JSON-format.";
     
-    const response = await openai.chat.completions.create({
+    const response = await callOpenAI({
       model: getContextModel(),
       messages: [
         { role: "system", content: anomalySystemPrompt },
@@ -2566,7 +2590,7 @@ export async function optimizeRoute(
   // If AI is enabled and we have OpenAI, try to get additional insights
   if (useAI && process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
     try {
-      const response = await openai.chat.completions.create({
+      const response = await callOpenAI({
         model: getContextModel(),
         messages: [
           {
@@ -2858,7 +2882,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
   ];
 
   try {
-    let response = await openai.chat.completions.create({
+    let response = await callOpenAI({
       model: getContextModel(),
       messages,
       tools,
@@ -2878,7 +2902,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
         const result = executeTool(tc.function.name, args);
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
       }
-      response = await openai.chat.completions.create({
+      response = await callOpenAI({
         model: getContextModel(),
         messages,
         tools,
@@ -2996,7 +3020,7 @@ VIKTIGT: Returnera ALLTID ett JSON-objekt med denna struktur:
 Fyll bara i de fält som är relevanta för frågan. "data" kan vara null om det inte finns specifik data att visa.`;
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await callOpenAI({
       model: getContextModel(),
       messages: [
         { role: "system", content: systemPrompt },
@@ -3132,7 +3156,7 @@ export async function parseNaturalLanguageConstraints(
     const resourceList = resources.map(r => `${r.name} (${r.id.slice(0, 8)})`).join(", ");
     const clusterList = clusters.map(c => c.name).join(", ");
 
-    const response = await openai.chat.completions.create({
+    const response = await callOpenAI({
       model: getContextModel(),
       messages: [
         {
@@ -3212,7 +3236,7 @@ ${constraints.customInstructions ? `\nAnvändarens instruktioner: "${constraints
 ${constraints.areaFocus?.length ? `Fokusområden: ${constraints.areaFocus.join(", ")}` : ""}
 ${constraints.balanceStrategy ? `Balanseringsstrategi: ${constraints.balanceStrategy}` : ""}`;
 
-    const response = await openai.chat.completions.create({
+    const response = await callOpenAI({
       model: getContextModel(),
       messages: [
         {

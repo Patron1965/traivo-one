@@ -739,6 +739,7 @@ app.get("/api/environmental-certificates/:customerId", asyncHandler(async (req, 
 }));
 
 app.get("/api/system/api-costs/summary", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
     const period = (req.query.period as string) || "month";
     let startDate: Date;
     const endDate = new Date();
@@ -764,7 +765,7 @@ app.get("/api/system/api-costs/summary", requireAdmin, asyncHandler(async (req, 
         errorCount: sql<number>`SUM(CASE WHEN ${apiUsageLogs.statusCode} >= 400 THEN 1 ELSE 0 END)`,
       })
       .from(apiUsageLogs)
-      .where(gte(apiUsageLogs.createdAt, startDate))
+      .where(and(gte(apiUsageLogs.createdAt, startDate), eq(apiUsageLogs.tenantId, tenantId)))
       .groupBy(apiUsageLogs.service);
     
     const totalCost = results.reduce((sum, r) => sum + Number(r.totalCost), 0);
@@ -789,11 +790,12 @@ app.get("/api/system/api-costs/summary", requireAdmin, asyncHandler(async (req, 
 }));
 
 app.get("/api/system/api-costs/trends", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
     const days = parseInt(req.query.days as string) || 30;
     const serviceFilter = req.query.service as string;
     const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
     
-    const conditions = [gte(apiUsageLogs.createdAt, startDate)];
+    const conditions = [gte(apiUsageLogs.createdAt, startDate), eq(apiUsageLogs.tenantId, tenantId)];
     if (serviceFilter) conditions.push(eq(apiUsageLogs.service, serviceFilter));
     
     const results = await db
@@ -819,11 +821,12 @@ app.get("/api/system/api-costs/trends", requireAdmin, asyncHandler(async (req, r
 }));
 
 app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset = parseInt(req.query.offset as string) || 0;
     const serviceFilter = req.query.service as string;
     
-    const conditions = [];
+    const conditions = [eq(apiUsageLogs.tenantId, tenantId)];
     if (serviceFilter) conditions.push(eq(apiUsageLogs.service, serviceFilter));
     
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;

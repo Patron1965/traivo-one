@@ -1,0 +1,81 @@
+Din analys är excellent och visar djup förståelse för vår arkitektur. 
+Jag vill gå vidare med följande prioritering:
+
+## SKAPA UPPGIFTER FÖR DESSA (i prioritetsordning):
+
+### 1. KOMMUNIKATION (Punkt 8) - Quick Win
+**Uppgift A: SMS från orderkortet**
+- Lägg till "Skicka SMS"-knapp i OrderDetailView
+- Använd befintlig Twilio-integration
+- Pre-fyll meddelande med ordernummer och tekniker
+- Logga SMS i order_communications-tabellen
+
+**Uppgift B: Auto-notis "Tekniker på väg"**
+- Trigga SMS till kund när tekniker startar navigation till order
+- Beräkna ETA med Geoapify
+- Meddelande: "Din tekniker [Namn] är på väg och beräknas anlända om [X] minuter"
+- Skicka endast en gång per order (flagga i databasen)
+
+### 2. DASHBOARD INSIGHTS (Punkt 6)
+**Uppgift C: "Kräver uppmärksamhet"-widget**
+Skapa ny DashboardAlerts-komponent som visar:
+- Försenade order (status !== 'completed' && scheduledEnd < now)
+- Tekniker utan jobb idag (0 assignade order)
+- Dubbelbokning (samma tekniker, överlappande tider)
+- Varje alert klickbar → navigera till relevant vy
+
+**Uppgift D: Kapacitetsöversikt**
+- Visa % utnyttjande per tekniker för vald dag
+- Beräkning: (bokad tid / arbetstid) * 100
+- Färgkodning: <60% grön, 60-90% gul, >90% röd
+- Visa i befintlig Dashboard-layout
+
+### 3. SMART CHECKLISTA (Punkt 1)
+**Uppgift E: AI-förslag för nästa steg**
+- När tekniker öppnar order, anropa OpenAI med:
+  - Ordertyp
+  - Historik från liknande order (senaste 10)
+  - Nuvarande status
+- Visa föreslagna steg som klickbara checkboxes
+- Spara valda steg i order_checklist-tabell
+
+**Uppgift F: Varning om glömda fält**
+- Innan signering, validera obligatoriska fält per ordertyp
+- Visa modal med lista över saknade fält
+- Blockera signering tills alla fält är ifyllda
+
+### 4. VOICE-TO-TEXT (Punkt 3)
+**Uppgift G: Röstanteckningar**
+- Lägg till mikrofon-ikon i anteckningsfältet (OrderExecutionView)
+- Använd Web Speech API (browser.SpeechRecognition)
+- Append transkriberad text till befintlig anteckning
+- Fallback: Visa "Röstinput stöds ej i denna webbläsare"
+
+## TEKNISKA BESLUT SOM BEHÖVS:
+
+**Mobilstrategi:**
+Innan vi bygger mer mobilfunktioner, behöver vi besluta:
+- Fortsätt med React Native-appen (Traivo Go) OCH PWA?
+- Eller konsolidera till ENDAST PWA?
+
+Min rekommendation: Fokusera på PWA om ni inte behöver:
+- NFC/Bluetooth-integration
+- App Store-närvaro
+- Stöd för mycket gamla Android-enheter
+
+Vad är ert beslut här?
+
+## FÖRÄNDRINGAR FRÅN URSPRUNGLIG LISTA:
+
+- **Punkt 5 (Bulk-flytt):** Skippa drag-and-drop-varianten. 
+  Bygg istället en "Bulk-redigera"-modal där man markerar flera order 
+  och väljer ny tekniker/tid från dropdown. Enklare och lika effektivt.
+
+- **Punkt 7 (Auto-fördela):** Konsolidera med befintlig auto-fill. 
+  Döp om till "AI-föreslår planering" så det blir EN tydlig funktion.
+
+## NÄSTA STEG:
+
+1. Bekräfta mobilstrategin (React Native vs PWA)
+2. Skapa tasks för Uppgift A-G ovan
+3. Börja med Uppgift A och B (SMS) — snabbast ROI
