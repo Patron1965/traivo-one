@@ -2327,7 +2327,11 @@ function ModulesTab() {
   };
 
   const selectPackage = (tier: string) => {
-    updateFeatures.mutate({ packageTier: tier });
+    if (tier === "custom") {
+      updateFeatures.mutate({ enabledModules: localModules });
+    } else {
+      updateFeatures.mutate({ packageTier: tier });
+    }
   };
 
   const saveCustomModules = () => {
