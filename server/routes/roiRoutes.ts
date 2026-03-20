@@ -326,6 +326,7 @@ export async function registerRoiRoutes(app: Express) {
 
     const orders = await db
       .select({
+        id: workOrders.id,
         scheduledDate: workOrders.scheduledDate,
         actualDuration: workOrders.actualDuration,
         estimatedDuration: workOrders.estimatedDuration,
@@ -340,17 +341,19 @@ export async function registerRoiRoutes(app: Express) {
         gte(workOrders.scheduledDate, cutoff),
       ));
 
-    const envData = await db
-      .select({
-        distanceKm: environmentalData.distanceKm,
-        co2Kg: environmentalData.co2Kg,
-        workOrderId: environmentalData.workOrderId,
-      })
-      .from(environmentalData)
-      .where(and(
-        eq(environmentalData.tenantId, tenantId),
-        gte(environmentalData.recordedAt, cutoff),
-      ));
+    const customerOrderIds = orders.map(o => o.id);
+    const envData = customerOrderIds.length > 0
+      ? await db
+        .select({
+          distanceKm: environmentalData.distanceKm,
+          co2Kg: environmentalData.co2Kg,
+        })
+        .from(environmentalData)
+        .where(and(
+          eq(environmentalData.tenantId, tenantId),
+          inArray(environmentalData.workOrderId, customerOrderIds),
+        ))
+      : [];
 
     const completedOrders = orders.filter(o => o.executionStatus === "completed" || o.executionStatus === "inspected" || o.executionStatus === "invoiced");
     const completionRate = orders.length > 0 ? Math.round((completedOrders.length / orders.length) * 100) : 0;
