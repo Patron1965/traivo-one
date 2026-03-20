@@ -227,19 +227,27 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
       const adminResourceIds = resources
         .filter(r => r.userId && adminUserIds.includes(r.userId))
         .map(r => r.id);
-      if (adminResourceIds.length === 0) {
-        console.warn(`[ai-budget] No admin resources found for tenant ${tenantId}, skipping alert notification`);
-        return;
-      }
-      const targetResources = adminResourceIds;
 
-      for (const resourceId of targetResources) {
-        await notificationService.sendToResource(resourceId, {
-          type: severity === "critical" ? "alert" : "info",
-          title,
-          message,
-          data: { tenantId, threshold, percentUsed: status.percentUsed },
-        });
+      const notification = {
+        type: severity === "critical" ? "alert" as const : "info" as const,
+        title,
+        message,
+        data: { tenantId, threshold, percentUsed: status.percentUsed },
+      };
+
+      if (adminResourceIds.length > 0) {
+        for (const resourceId of adminResourceIds) {
+          await notificationService.sendToResource(resourceId, notification);
+        }
+      } else if (adminUserIds.length > 0) {
+        for (const userId of adminUserIds) {
+          await notificationService.sendToUser?.(userId, notification);
+        }
+        if (!notificationService.sendToUser) {
+          console.warn(`[ai-budget] Admin users for tenant ${tenantId} are not linked to resources; alert logged but WebSocket delivery skipped`);
+        }
+      } else {
+        console.warn(`[ai-budget] No admin users found for tenant ${tenantId}, alert logged but not delivered`);
       }
     } catch (notifErr) {
       console.error("[ai-budget] Failed to send alert notification:", notifErr);
@@ -343,18 +351,19 @@ export async function withRetry<T>(
   fn: () => Promise<T>,
   options: { maxRetries?: number; label?: string } = {}
 ): Promise<T> {
-  const maxAttempts = options.maxRetries ?? 3;
+  const maxRetries = options.maxRetries ?? 3;
   const label = options.label ?? "AI call";
+  const BACKOFF_DELAYS = [1000, 2000, 4000];
   let lastError: Error | undefined;
 
-  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       lastError = err;
 
-      if (attempt === maxAttempts - 1) break;
+      if (attempt === maxRetries) break;
 
       const errRecord = error as Record<string, unknown>;
       const isRetryable =
@@ -367,14 +376,13 @@ export async function withRetry<T>(
 
       if (!isRetryable) throw err;
 
-      const BACKOFF_DELAYS = [1000, 2000, 4000];
       const delayMs = BACKOFF_DELAYS[attempt] ?? 4000;
-      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxAttempts} failed (${err.message}). Retrying in ${delayMs}ms...`);
+      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxRetries + 1} failed (${err.message}). Retrying in ${delayMs}ms...`);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
 
-  throw lastError || new Error(`${label} failed after ${maxAttempts} attempts`);
+  throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
 }
 
 export function getCachedAIResponse(cacheKey: string): string | null {

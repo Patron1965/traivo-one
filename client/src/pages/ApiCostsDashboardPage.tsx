@@ -149,6 +149,8 @@ export default function ApiCostsDashboardPage() {
 
   const { data: tenantCosts = [], isLoading: tenantsLoading } = useQuery<{ tenantId: string; service: string; totalCostUsd: number; totalCalls: number }[]>({
     queryKey: [`/api/system/api-costs/by-tenant?period=${period}`],
+    retry: false,
+    meta: { suppressError: true },
   });
 
   const budgetMutation = useMutation({
