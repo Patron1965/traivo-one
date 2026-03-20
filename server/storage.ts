@@ -742,7 +742,7 @@ export interface IStorage {
   getVehicleSchedulesByTenant(tenantId: string): Promise<VehicleSchedule[]>;
   getResourceVehiclesByResourceIds(resourceIds: string[]): Promise<ResourceVehicle[]>;
   getResourceArticlesByResourceIds(resourceIds: string[]): Promise<ResourceArticle[]>;
-  createPlanningDecisionLog(log: { tenantId: string; userId: string; weekStart: string; weekEnd: string; decisionTrace: any; constraintViolations: any; riskScore: number }): Promise<any>;
+  createPlanningDecisionLog(log: { tenantId: string; userId?: string; weekStart: string; weekEnd: string; summary: unknown; moveCount: number; violationCount: number; riskScore: number; totalOrdersScheduled: number }): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {

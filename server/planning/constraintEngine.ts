@@ -1,8 +1,8 @@
-import type { WorkOrder, Resource, ResourceAvailability, VehicleSchedule, TaskDependencyInstance, ObjectTimeRestriction, ResourceArticle, ResourceVehicle } from "@shared/schema";
+import type { WorkOrder, Resource, ResourceAvailability, VehicleSchedule, TaskDependencyInstance, ObjectTimeRestriction, ResourceArticle, ResourceVehicle, WorkOrderLine } from "@shared/schema";
 
 export interface ConstraintViolation {
   type: "hard" | "soft";
-  category: "locked_order" | "dependency_chain" | "time_window" | "resource_availability" | "vehicle_schedule" | "competency" | "capacity";
+  category: "locked_order" | "dependency_chain" | "time_window" | "resource_availability" | "vehicle_schedule" | "competency" | "capacity" | "planned_window";
   severity: "critical" | "warning";
   workOrderId: string;
   resourceId?: string;
@@ -24,6 +24,7 @@ export interface ConstraintContext {
   dependencyInstances: TaskDependencyInstance[];
   timeRestrictions: ObjectTimeRestriction[];
   resourceArticles: ResourceArticle[];
+  workOrderLines?: WorkOrderLine[];
 }
 
 export function validateSchedule(
@@ -40,6 +41,7 @@ export function validateSchedule(
     violations.push(...checkResourceAvailability(move, ctx));
     violations.push(...checkVehicleSchedule(move, ctx));
     violations.push(...checkTimeRestrictions(order, move, ctx));
+    violations.push(...checkPlannedWindow(order, move));
     violations.push(...checkCompetency(order, move, ctx));
   }
 
@@ -179,13 +181,69 @@ function checkTimeRestrictions(order: WorkOrder, move: ScheduleMove, ctx: Constr
   return violations;
 }
 
-function checkCompetency(_order: WorkOrder, move: ScheduleMove, ctx: ConstraintContext): ConstraintViolation[] {
+function checkPlannedWindow(order: WorkOrder, move: ScheduleMove): ConstraintViolation[] {
+  const violations: ConstraintViolation[] = [];
+  const moveDate = new Date(move.scheduledDate);
+  moveDate.setHours(0, 0, 0, 0);
+
+  if (order.plannedWindowStart) {
+    const windowStart = new Date(order.plannedWindowStart);
+    windowStart.setHours(0, 0, 0, 0);
+    if (moveDate < windowStart) {
+      violations.push({
+        type: "hard",
+        category: "planned_window",
+        severity: "critical",
+        workOrderId: move.workOrderId,
+        resourceId: move.resourceId,
+        description: `Order "${order.title || order.id.slice(0, 8)}" schemalagd ${move.scheduledDate} men fönstret öppnar ${formatDate(windowStart)}`
+      });
+    }
+  }
+
+  if (order.plannedWindowEnd) {
+    const windowEnd = new Date(order.plannedWindowEnd);
+    windowEnd.setHours(0, 0, 0, 0);
+    if (moveDate > windowEnd) {
+      violations.push({
+        type: "hard",
+        category: "planned_window",
+        severity: "critical",
+        workOrderId: move.workOrderId,
+        resourceId: move.resourceId,
+        description: `Order "${order.title || order.id.slice(0, 8)}" schemalagd ${move.scheduledDate} men fönstret stänger ${formatDate(windowEnd)}`
+      });
+    }
+  }
+
+  return violations;
+}
+
+function checkCompetency(order: WorkOrder, move: ScheduleMove, ctx: ConstraintContext): ConstraintViolation[] {
+  const resource = ctx.resources.find(r => r.id === move.resourceId);
+  if (!resource || resource.resourceType === "vehicle") return [];
+
   const resourceCompetencies = ctx.resourceArticles.filter(ra => ra.resourceId === move.resourceId);
   if (resourceCompetencies.length === 0) return [];
 
-  const resource = ctx.resources.find(r => r.id === move.resourceId);
-  const resourceType = resource?.resourceType;
-  if (resourceType === "vehicle") return [];
+  if (!ctx.workOrderLines || ctx.workOrderLines.length === 0) return [];
+
+  const orderLines = ctx.workOrderLines.filter(wol => wol.workOrderId === order.id && wol.articleId);
+  if (orderLines.length === 0) return [];
+
+  const resourceArticleIds = new Set(resourceCompetencies.map(ra => ra.articleId));
+  const unmatchedArticles = orderLines.filter(line => !resourceArticleIds.has(line.articleId));
+
+  if (unmatchedArticles.length > 0) {
+    return [{
+      type: "soft",
+      category: "competency",
+      severity: "warning",
+      workOrderId: move.workOrderId,
+      resourceId: move.resourceId,
+      description: `${resource.name || "Resurs"} saknar registrerad kompetens för ${unmatchedArticles.length} artikel(ar) på denna order`
+    }];
+  }
 
   return [];
 }

@@ -966,6 +966,11 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
       storage.getResourceArticlesByResourceIds(resourceIds),
     ]);
 
+    const workOrderLineResults = await Promise.all(
+      unscheduledOrderIds.slice(0, 200).map(id => storage.getWorkOrderLines(id))
+    );
+    const allWorkOrderLines = workOrderLineResults.flat();
+
     const constraintContext = {
       allOrders: workOrders,
       resources,
@@ -975,6 +980,7 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
       dependencyInstances,
       timeRestrictions,
       resourceArticles: resourceArticlesData,
+      workOrderLines: allWorkOrderLines,
     };
     
     const result = await aiEnhancedSchedule({
