@@ -177,7 +177,7 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
 
   const budgetRows = await db.select({ alertThresholdPercent: apiBudgets.alertThresholdPercent })
     .from(apiBudgets)
-    .where(eq(apiBudgets.tenantId, tenantId));
+    .where(and(eq(apiBudgets.tenantId, tenantId), eq(apiBudgets.service, "openai")));
   const configuredThreshold = budgetRows[0]?.alertThresholdPercent ?? 80;
   const defaultThresholds = [50, 80, 95, 100];
   const thresholds = Array.from(new Set([...defaultThresholds, configuredThreshold])).sort((a, b) => a - b);

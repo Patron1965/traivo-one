@@ -773,7 +773,9 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
     const resolvedWeekStart = weekStart || new Date().toISOString().split("T")[0];
     const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-    const cacheKey = createAICacheKey({ tenantId, weekStart: resolvedWeekStart, weekEnd: resolvedWeekEnd, orderCount: String(workOrders.length), resourceCount: String(resources.length) });
+    const orderStateHash = workOrders.map(o => `${o.id}:${o.status}:${o.scheduledDate || ''}:${o.resourceId || ''}`).join('|');
+    const resourceStateHash = resources.map(r => `${r.id}:${r.isActive}`).join('|');
+    const cacheKey = createAICacheKey({ tenantId, weekStart: resolvedWeekStart, weekEnd: resolvedWeekEnd, orderState: orderStateHash, resourceState: resourceStateHash });
     const cachedResult = getCachedAIResponse(cacheKey);
     if (cachedResult) {
       return res.json(JSON.parse(cachedResult));
