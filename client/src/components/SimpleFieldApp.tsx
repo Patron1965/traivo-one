@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -287,6 +287,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     sendPositionUpdate();
   }, [isOnBreak, jobStarted, selectedJobId, sendPositionUpdate]);
 
+  const notifiedOrdersRef = useRef<Set<string>>(new Set());
+
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
@@ -366,6 +368,34 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     enabled: todayJobs.length > 0,
     refetchInterval: 30000,
   });
+
+  useEffect(() => {
+    if (todayJobs.length === 0) return;
+    const checkUpcoming = () => {
+      const now = new Date();
+      for (const job of todayJobs) {
+        if (!job.scheduledStartTime || ["completed", "cancelled", "deferred", "omojlig", "in_progress"].includes(job.status)) continue;
+        if (notifiedOrdersRef.current.has(job.id)) continue;
+        const [h, m] = job.scheduledStartTime.split(":").map(Number);
+        const scheduled = new Date(now);
+        scheduled.setHours(h, m, 0, 0);
+        const diffMs = scheduled.getTime() - now.getTime();
+        const diffMin = diffMs / 60000;
+        if (diffMin > 0 && diffMin <= 10) {
+          notifiedOrdersRef.current.add(job.id);
+          toast({
+            title: `${job.title} börjar snart`,
+            description: `Schemalagd kl ${job.scheduledStartTime} — om ${Math.ceil(diffMin)} min`,
+          });
+          if ("vibrate" in navigator) navigator.vibrate([200, 100, 200]);
+        }
+      }
+    };
+    checkUpcoming();
+    const interval = setInterval(checkUpcoming, 30000);
+    return () => clearInterval(interval);
+  }, [todayJobs, toast]);
+
 
   const completedCount = workOrders.filter(wo => {
     if (!wo.scheduledDate) return false;
@@ -722,15 +752,24 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   const [travelDistances, setTravelDistances] = useState<Record<string, { distanceKm: number | null; travelMinutes: number | null }>>({});
   const lastDistanceFetchRef = useRef<number>(0);
-  const nextJobWarningShownRef = useRef<string | null>(null);
+  const lastFetchPositionRef = useRef<{ lat: number; lng: number } | null>(null);
 
   useEffect(() => {
-    if (!lastPositionRef.current || todayJobs.length === 0) return;
+    if (!lastPositionRef.current || !gpsActive || todayJobs.length === 0) return;
     const now = Date.now();
     if (now - lastDistanceFetchRef.current < 60_000) return;
-    lastDistanceFetchRef.current = now;
 
     const pos = lastPositionRef.current;
+    const prevPos = lastFetchPositionRef.current;
+    if (prevPos && Object.keys(travelDistances).length > 0) {
+      const dLat = Math.abs(pos.lat - prevPos.lat);
+      const dLng = Math.abs(pos.lng - prevPos.lng);
+      if (dLat < 0.001 && dLng < 0.001) return;
+    }
+
+    lastDistanceFetchRef.current = now;
+    lastFetchPositionRef.current = { lat: pos.lat, lng: pos.lng };
+
     const destinations = todayJobs
       .filter(j => j.status !== "completed")
       .map(j => {
@@ -745,65 +784,33 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
     if (destinations.length === 0) return;
 
-    fetch("/api/travel-distances", {
+    fetch("/api/mobile/travel-times", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ originLat: pos.lat, originLng: pos.lng, destinations }),
+      body: JSON.stringify({ latitude: pos.lat, longitude: pos.lng, destinations }),
     })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.distances) {
+        if (data?.results) {
           const map: Record<string, { distanceKm: number | null; travelMinutes: number | null }> = {};
-          for (const d of data.distances) {
-            map[d.id] = { distanceKm: d.distanceKm, travelMinutes: d.travelMinutes };
+          for (const r of data.results) {
+            map[r.id] = { distanceKm: r.distanceKm, travelMinutes: r.durationMinutes };
           }
           setTravelDistances(map);
         }
       })
       .catch(() => {});
-  }, [todayJobs, objectMap, gpsActive]);
-
-  const todayJobsRef = useRef(todayJobs);
-  todayJobsRef.current = todayJobs;
-
-  useEffect(() => {
-    const checkWarning = () => {
-      const now = new Date();
-      let closestJob: typeof todayJobs[0] | null = null;
-      let closestMinutes = Infinity;
-
-      for (const job of todayJobsRef.current) {
-        if (!job.scheduledStartTime) continue;
-        const [h, m] = job.scheduledStartTime.split(":").map(Number);
-        const jobTime = new Date(now);
-        jobTime.setHours(h, m, 0, 0);
-        const minutesUntil = (jobTime.getTime() - now.getTime()) / 60_000;
-        if (minutesUntil > 0 && minutesUntil < closestMinutes) {
-          closestMinutes = minutesUntil;
-          closestJob = job;
-        }
-      }
-
-      if (closestJob && closestMinutes <= 10 && nextJobWarningShownRef.current !== closestJob.id) {
-        nextJobWarningShownRef.current = closestJob.id;
-        toast({
-          title: `Nästa jobb om ${Math.ceil(closestMinutes)} min`,
-          description: `${closestJob.title} — ${closestJob.objectAddress || closestJob.objectName || ""}`,
-        });
-      }
-    };
-
-    checkWarning();
-    const checkInterval = setInterval(checkWarning, 30_000);
-    return () => clearInterval(checkInterval);
-  }, [toast]);
+  }, [todayJobs, objectMap, gpsActive, travelDistances]);
 
   const openNavigation = useCallback((lat: number, lng: number) => {
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     if (isIOS) {
       window.open(`maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`, "_blank");
     } else {
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`, "_blank");
+      window.location.href = `google.navigation:q=${lat},${lng}`;
+      setTimeout(() => {
+        window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`, "_blank");
+      }, 500);
     }
   }, []);
 
@@ -1758,35 +1765,46 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         />
 
         {(() => {
-          const nextJob = getNextPendingJob();
-          if (!nextJob) return null;
-          const obj = objectMap.get(nextJob.objectId);
-          const lat = obj?.latitude ?? nextJob.taskLatitude;
-          const lng = obj?.longitude ?? nextJob.taskLongitude;
-          const dist = travelDistances[nextJob.id];
+          const nextPendingJob = getNextPendingJob();
+          if (!nextPendingJob) return null;
+          const obj = objectMap.get(nextPendingJob.objectId);
+          const lat = obj?.latitude ?? nextPendingJob.taskLatitude;
+          const lng = obj?.longitude ?? nextPendingJob.taskLongitude;
+          const dist = travelDistances[nextPendingJob.id];
           if (lat == null || lng == null) return null;
           return (
-            <Card className="bg-primary/5 border-primary/20">
+            <Card className="bg-gradient-to-r from-blue-500 to-blue-600 dark:from-blue-700 dark:to-blue-800 text-white border-0">
               <CardContent className="py-3 px-4">
                 <div className="flex items-center gap-3">
-                  <div className="flex-shrink-0 w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
-                    <Navigation className="h-5 w-5 text-primary-foreground" />
-                  </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-sm truncate">{nextJob.title}</p>
-                    <p className="text-xs text-muted-foreground truncate">{nextJob.objectAddress || nextJob.objectName}</p>
-                    {dist && dist.distanceKm != null && (
-                      <p className="text-xs text-muted-foreground">{dist.distanceKm} km · ca {dist.travelMinutes} min restid</p>
-                    )}
+                    <p className="text-[10px] uppercase tracking-wider opacity-80">Nästa stopp</p>
+                    <p className="font-semibold text-sm truncate">{nextPendingJob.objectAddress || nextPendingJob.title}</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      {nextPendingJob.scheduledStartTime && (
+                        <span className="text-xs opacity-90 flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          {nextPendingJob.scheduledStartTime}
+                        </span>
+                      )}
+                      {dist && dist.distanceKm != null && (
+                        <span className="text-xs opacity-90 flex items-center gap-1" data-testid="text-next-stop-travel">
+                          <Car className="h-3 w-3" />
+                          {dist.distanceKm} km — {dist.travelMinutes} min
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <Button
                     size="sm"
-                    onClick={() => openNavigation(lat, lng)}
-                    className="shrink-0 gap-1"
+                    className="bg-white text-blue-600 hover:bg-blue-50 shrink-0 gap-1.5 font-semibold"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openNavigation(Number(lat), Number(lng));
+                    }}
                     data-testid="button-next-stop-navigate"
                   >
                     <Navigation className="h-4 w-4" />
-                    Nästa stopp
+                    Navigera
                   </Button>
                 </div>
               </CardContent>

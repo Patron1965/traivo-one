@@ -1639,6 +1639,80 @@ app.post("/api/quick-action", isAuthenticated, asyncHandler(async (req: any, res
     res.json(result);
 }));
 
+app.post("/api/mobile/travel-times", isAuthenticated, asyncHandler(async (req: any, res) => {
+    const { latitude, longitude, destinations } = req.body;
+
+    if (latitude == null || longitude == null || !Array.isArray(destinations) || destinations.length === 0) {
+      throw new ValidationError("latitude, longitude och destinations krävs");
+    }
+    if (typeof latitude !== "number" || typeof longitude !== "number" || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+      throw new ValidationError("Ogiltiga koordinater");
+    }
+
+    const validDestinations = destinations.filter((dest: any) =>
+      dest && typeof dest.id === "string" &&
+      typeof dest.lat === "number" && typeof dest.lng === "number" &&
+      dest.lat >= -90 && dest.lat <= 90 && dest.lng >= -180 && dest.lng <= 180
+    );
+    if (validDestinations.length === 0) {
+      return res.json({ results: [], source: "none" });
+    }
+
+    const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+    if (!GEOAPIFY_API_KEY) {
+      const results = validDestinations.map((dest: { id: string; lat: number; lng: number }) => {
+        const R = 6371;
+        const dLat = (dest.lat - latitude) * Math.PI / 180;
+        const dLon = (dest.lng - longitude) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 +
+          Math.cos(latitude * Math.PI / 180) * Math.cos(dest.lat * Math.PI / 180) *
+          Math.sin(dLon / 2) ** 2;
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distKm = R * c;
+        const estMinutes = Math.round(distKm * 1.4);
+        return { id: dest.id, distanceKm: Math.round(distKm * 10) / 10, durationMinutes: Math.max(1, estMinutes) };
+      });
+      return res.json({ results, source: "haversine" });
+    }
+
+    try {
+      const results = await Promise.all(
+        validDestinations.slice(0, 20).map(async (dest: { id: string; lat: number; lng: number }) => {
+          try {
+            const waypoints = `${latitude},${longitude}|${dest.lat},${dest.lng}`;
+            const url = `https://api.geoapify.com/v1/routing?waypoints=${waypoints}&mode=drive&apiKey=${GEOAPIFY_API_KEY}`;
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Geoapify request failed");
+            const data = await response.json();
+            const route = data.features?.[0]?.properties;
+            if (route) {
+              return {
+                id: dest.id,
+                distanceKm: Math.round((route.distance / 1000) * 10) / 10,
+                durationMinutes: Math.round(route.time / 60),
+              };
+            }
+            throw new Error("No route data");
+          } catch {
+            const R = 6371;
+            const dLat = (dest.lat - latitude) * Math.PI / 180;
+            const dLon = (dest.lng - longitude) * Math.PI / 180;
+            const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos(latitude * Math.PI / 180) * Math.cos(dest.lat * Math.PI / 180) *
+              Math.sin(dLon / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            const distKm = R * c;
+            return { id: dest.id, distanceKm: Math.round(distKm * 10) / 10, durationMinutes: Math.max(1, Math.round(distKm * 1.4)) };
+          }
+        })
+      );
+      res.json({ results, source: "geoapify" });
+    } catch (error) {
+      console.error("[mobile] Travel times error:", error);
+      res.status(500).json({ error: "Kunde inte beräkna restider" });
+    }
+}));
+
 function getFallbackChecklist(orderType: string): string[] {
   const common = [
     "Kontrollera åtkomst och nycklar",
