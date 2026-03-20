@@ -11,6 +11,7 @@ import { requireAdmin } from "../tenant-middleware";
 import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject } from "@shared/schema";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
+import { isModuleEnabled } from "../feature-flags";
 
 export async function registerPortalRoutes(app: Express) {
 // ============================================
@@ -60,6 +61,17 @@ async function requirePortalAuth(req: ExpressRequest, res: ExpressResponse): Pro
 
   if (!session.valid || !session.customerId || !session.tenantId) {
     res.status(401).json({ error: "Ogiltig session" });
+    return null;
+  }
+
+  try {
+    const portalEnabled = await isModuleEnabled(session.tenantId, "customer_portal");
+    if (!portalEnabled) {
+      res.status(403).json({ error: "Kundportalen är inte aktiverad för denna organisation" });
+      return null;
+    }
+  } catch {
+    res.status(500).json({ error: "Kunde inte verifiera modulbehörighet" });
     return null;
   }
 

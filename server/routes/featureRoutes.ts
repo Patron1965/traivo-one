@@ -90,8 +90,8 @@ export async function registerFeatureRoutes(app: Express) {
     if (role !== "owner" && role !== "admin") {
       return res.status(403).json({ error: "Otillräcklig behörighet — kräver admin eller ägare" });
     }
-    if (adminTenantId !== tenantId) {
-      return res.status(403).json({ error: "Du kan bara ändra din egen organisations moduler" });
+    if (adminTenantId !== tenantId && role !== "owner") {
+      return res.status(403).json({ error: "Bara ägare kan ändra andra organisationers moduler" });
     }
 
     const { packageTier, enabledModules } = req.body;
