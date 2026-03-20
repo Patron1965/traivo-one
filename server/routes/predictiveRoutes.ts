@@ -1,11 +1,11 @@
 import type { Express } from "express";
 import { db } from "../db";
-import { eq, and, gte, lte, isNull, sql, desc, asc, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, isNull, sql, desc, asc, inArray, ne } from "drizzle-orm";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { ValidationError } from "../errors";
-import { predictiveForecasts, iotSignals, iotDevices, objects, customers, workOrders } from "@shared/schema";
+import { predictiveForecasts, iotSignals, iotDevices, objects, customers, workOrders, tenants } from "@shared/schema";
 import OpenAI from "openai";
 import { trackOpenAIResponse } from "../api-usage-tracker";
 
@@ -24,15 +24,26 @@ interface SignalHistory {
   completedOrders: { scheduledDate: Date }[];
 }
 
-function computeBaselineForecast(signals: { createdAt: Date }[], now: Date): { avgIntervalDays: number; predictedDate: Date; confidence: number } | null {
-  if (signals.length < 2) return null;
+function computeBaselineForecast(
+  signals: { createdAt: Date }[],
+  completedOrders: { scheduledDate: Date }[],
+  now: Date,
+): { avgIntervalDays: number; predictedDate: Date; confidence: number } | null {
+  const signalDates = signals.map(s => s.createdAt.getTime());
+  const orderDates = completedOrders
+    .filter(o => o.scheduledDate)
+    .map(o => o.scheduledDate.getTime());
 
-  const sorted = [...signals].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const allEvents = [...new Set([...signalDates, ...orderDates])].sort((a, b) => a - b);
+
+  if (allEvents.length < 2) return null;
+
   const intervals: number[] = [];
-  for (let i = 1; i < sorted.length; i++) {
-    const diffMs = sorted[i].createdAt.getTime() - sorted[i - 1].createdAt.getTime();
-    intervals.push(diffMs / (1000 * 60 * 60 * 24));
+  for (let i = 1; i < allEvents.length; i++) {
+    const diffDays = (allEvents[i] - allEvents[i - 1]) / (1000 * 60 * 60 * 24);
+    if (diffDays >= 0.5) intervals.push(diffDays);
   }
+  if (intervals.length === 0) return null;
 
   const avgInterval = intervals.reduce((s, v) => s + v, 0) / intervals.length;
   const variance = intervals.reduce((s, v) => s + Math.pow(v - avgInterval, 2), 0) / intervals.length;
@@ -40,14 +51,15 @@ function computeBaselineForecast(signals: { createdAt: Date }[], now: Date): { a
   const cv = avgInterval > 0 ? stdDev / avgInterval : 1;
 
   let confidence = 0.9;
-  if (signals.length < 5) confidence -= 0.2;
-  if (signals.length < 3) confidence -= 0.2;
+  if (allEvents.length < 5) confidence -= 0.15;
+  if (allEvents.length < 3) confidence -= 0.15;
   if (cv > 0.5) confidence -= 0.2;
   if (cv > 1.0) confidence -= 0.2;
+  if (orderDates.length > 0) confidence += 0.05;
   confidence = Math.max(0.1, Math.min(1.0, confidence));
 
-  const lastSignal = sorted[sorted.length - 1];
-  const daysSinceLast = (now.getTime() - lastSignal.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+  const lastEvent = allEvents[allEvents.length - 1];
+  const daysSinceLast = (now.getTime() - lastEvent) / (1000 * 60 * 60 * 24);
   const daysUntilNext = Math.max(0, avgInterval - daysSinceLast);
   const predictedDate = new Date(now.getTime() + daysUntilNext * 24 * 60 * 60 * 1000);
 
@@ -166,7 +178,7 @@ export async function registerPredictiveRoutes(app: Express) {
     for (const h of histories) {
       if (h.signals.length < 2) continue;
 
-      const baseline = computeBaselineForecast(h.signals, now);
+      const baseline = computeBaselineForecast(h.signals, h.completedOrders, now);
       if (!baseline) continue;
 
       const daysUntil = Math.round((baseline.predictedDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
@@ -323,20 +335,23 @@ export async function registerPredictiveRoutes(app: Express) {
 
     const { objectId, scheduledDate, description } = parsed.data;
 
-    const [obj] = await db.select({ name: objects.name, customerId: objects.customerId, address: objects.address })
+    const [obj] = await db.select({ name: objects.name, customerId: objects.customerId })
       .from(objects).where(and(eq(objects.id, objectId), eq(objects.tenantId, tenantId)));
     if (!obj) throw new ValidationError("Objekt hittades inte");
+
+    const title = `Prediktivt underh\u00e5ll \u2014 ${obj.name}`;
 
     const [order] = await db.insert(workOrders).values({
       tenantId,
       objectId,
       customerId: obj.customerId,
-      address: obj.address,
+      title,
       scheduledDate: new Date(scheduledDate),
-      description: description || `Prediktivt underh\u00e5ll \u2014 ${obj.name}`,
-      status: "scheduled",
-      executionStatus: "pending",
-      source: "predictive",
+      description: description || title,
+      status: "draft",
+      orderStatus: "skapad",
+      executionStatus: "not_planned",
+      creationMethod: "automatic",
       metadata: { generatedBy: "predictive-maintenance", analyzedAt: new Date().toISOString() },
     }).returning({ id: workOrders.id });
 
@@ -344,3 +359,129 @@ export async function registerPredictiveRoutes(app: Express) {
   }));
 
 }
+
+async function runPredictiveAnalysisForAllTenants() {
+  try {
+    const allTenants = await db.select({ id: tenants.id }).from(tenants);
+    const cutoffDate = new Date();
+    cutoffDate.setMonth(cutoffDate.getMonth() - 12);
+    const now = new Date();
+    const actionableSignalTypes = ["full", "damaged", "overflow", "tilt", "fire"];
+
+    for (const tenant of allTenants) {
+      try {
+        const devices = await db
+          .select({
+            deviceId: iotDevices.id,
+            objectId: iotDevices.objectId,
+            deviceType: iotDevices.deviceType,
+          })
+          .from(iotDevices)
+          .where(and(eq(iotDevices.tenantId, tenant.id), eq(iotDevices.status, "active")));
+
+        if (devices.length === 0) continue;
+
+        const deviceIds = devices.map(d => d.deviceId);
+        const objectIds = [...new Set(devices.map(d => d.objectId))];
+
+        const allSignals = await db
+          .select({ deviceId: iotSignals.deviceId, signalType: iotSignals.signalType, createdAt: iotSignals.createdAt })
+          .from(iotSignals)
+          .where(and(
+            eq(iotSignals.tenantId, tenant.id),
+            inArray(iotSignals.deviceId, deviceIds),
+            gte(iotSignals.createdAt, cutoffDate),
+            inArray(iotSignals.signalType, actionableSignalTypes),
+          ))
+          .orderBy(asc(iotSignals.createdAt));
+
+        const completedOrders = objectIds.length > 0 ? await db
+          .select({ objectId: workOrders.objectId, scheduledDate: workOrders.scheduledDate })
+          .from(workOrders)
+          .where(and(
+            eq(workOrders.tenantId, tenant.id),
+            inArray(workOrders.objectId, objectIds),
+            eq(workOrders.executionStatus, "completed"),
+            gte(workOrders.scheduledDate, cutoffDate),
+          )) : [];
+
+        const signalsByDevice = new Map<string, { signalType: string; createdAt: Date }[]>();
+        for (const s of allSignals) {
+          if (!signalsByDevice.has(s.deviceId)) signalsByDevice.set(s.deviceId, []);
+          signalsByDevice.get(s.deviceId)!.push({ signalType: s.signalType, createdAt: s.createdAt });
+        }
+
+        const ordersByObject = new Map<string, { scheduledDate: Date }[]>();
+        for (const o of completedOrders) {
+          if (!o.objectId || !o.scheduledDate) continue;
+          if (!ordersByObject.has(o.objectId)) ordersByObject.set(o.objectId, []);
+          ordersByObject.get(o.objectId)!.push({ scheduledDate: o.scheduledDate });
+        }
+
+        const forecastValues: Array<{
+          tenantId: string; objectId: string; deviceId: string;
+          predictedDate: Date; confidence: number; avgIntervalDays: number;
+          signalCount: number; lastSignalAt: Date | null; reasoning: string; status: "active";
+        }> = [];
+
+        for (const d of devices) {
+          const signals = signalsByDevice.get(d.deviceId) || [];
+          if (signals.length < 2) continue;
+          const orders = ordersByObject.get(d.objectId) || [];
+          const baseline = computeBaselineForecast(signals, orders, now);
+          if (!baseline) continue;
+
+          const lastSig = signals[signals.length - 1];
+          forecastValues.push({
+            tenantId: tenant.id,
+            objectId: d.objectId,
+            deviceId: d.deviceId,
+            predictedDate: baseline.predictedDate,
+            confidence: baseline.confidence,
+            avgIntervalDays: baseline.avgIntervalDays,
+            signalCount: signals.length,
+            lastSignalAt: lastSig?.createdAt || null,
+            reasoning: `Automatisk analys: ${signals.length} signaler, ${orders.length} ordrar. Snittintervall: ${baseline.avgIntervalDays} dagar.`,
+            status: "active" as const,
+          });
+        }
+
+        await db.delete(predictiveForecasts).where(eq(predictiveForecasts.tenantId, tenant.id));
+        if (forecastValues.length > 0) {
+          await db.insert(predictiveForecasts).values(forecastValues);
+        }
+
+        console.log(`[predictive-scheduler] Tenant ${tenant.id}: ${forecastValues.length} forecasts updated`);
+      } catch (err) {
+        console.error(`[predictive-scheduler] Error for tenant ${tenant.id}:`, err);
+      }
+    }
+  } catch (err) {
+    console.error("[predictive-scheduler] Fatal error:", err);
+  }
+}
+
+class PredictiveScheduler {
+  private intervalId: NodeJS.Timeout | null = null;
+  private intervalMs = 6 * 60 * 60 * 1000;
+
+  start() {
+    if (this.intervalId) return;
+    console.log("[predictive-scheduler] Started (runs every 6 hours)");
+    this.intervalId = setInterval(() => {
+      runPredictiveAnalysisForAllTenants();
+    }, this.intervalMs);
+
+    setTimeout(() => runPredictiveAnalysisForAllTenants(), 60 * 1000);
+  }
+
+  stop() {
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+      console.log("[predictive-scheduler] Stopped");
+    }
+  }
+}
+
+export const predictiveScheduler = new PredictiveScheduler();

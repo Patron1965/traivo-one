@@ -10,6 +10,7 @@ import { notificationService } from "./notifications";
 import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
 import { anomalyMonitor } from "./anomaly-monitor";
+import { predictiveScheduler } from "./routes/predictiveRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
 import { formatZodError, DEFAULT_TENANT_ID } from "./routes/helpers";
@@ -51,6 +52,7 @@ export async function registerRoutes(
   notificationService.initialize(httpServer);
   anomalyMonitor.start();
   startWeeklyReportScheduler();
+  predictiveScheduler.start();
   
   await setupAuth(app);
   registerAuthRoutes(app);
