@@ -213,14 +213,19 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
     try {
       const { storage } = await import("./storage");
       const { notificationService } = await import("./notifications");
-      const { users } = await import("@shared/schema");
-      const { eq: budgetEq } = await import("drizzle-orm");
-      const adminUsers = await db.select({ id: users.id })
-        .from(users)
-        .where(budgetEq(users.role, "admin"));
+      const { userTenantRoles } = await import("@shared/schema");
+      const { eq: budgetEq, and: budgetAnd, inArray: budgetIn } = await import("drizzle-orm");
+      const tenantAdmins = await db.select({ userId: userTenantRoles.userId })
+        .from(userTenantRoles)
+        .where(budgetAnd(
+          budgetEq(userTenantRoles.tenantId, tenantId),
+          budgetIn(userTenantRoles.role, ["admin", "owner"]),
+          budgetEq(userTenantRoles.isActive, true)
+        ));
+      const adminUserIds = tenantAdmins.map(a => a.userId);
       const resources = await storage.getResources(tenantId);
       const adminResourceIds = resources
-        .filter(r => r.userId && adminUsers.some(u => u.id === r.userId))
+        .filter(r => r.userId && adminUserIds.includes(r.userId))
         .map(r => r.id);
       const targetResources = adminResourceIds.length > 0 ? adminResourceIds : resources.slice(0, 1).map(r => r.id);
 
@@ -338,7 +343,8 @@ export async function withRetry<T>(
 
       if (!isRetryable) throw err;
 
-      const delayMs = Math.pow(2, attempt) * 1000;
+      const BACKOFF_DELAYS = [1000, 2000, 4000];
+      const delayMs = BACKOFF_DELAYS[attempt] ?? 4000;
       console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxAttempts} failed (${err.message}). Retrying in ${delayMs}ms...`);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }

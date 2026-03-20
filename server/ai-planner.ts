@@ -53,7 +53,8 @@ async function callOpenAI(
       const errRecord = error as Record<string, unknown>;
       const isRetryable = errRecord?.status === 429 || errRecord?.status === 500 || errRecord?.status === 503 || errRecord?.code === "ECONNRESET" || errRecord?.code === "ETIMEDOUT" || err.message?.includes("timeout");
       if (!isRetryable) break;
-      const delay = Math.min(1000 * Math.pow(2, attempt), 8000);
+      const BACKOFF_DELAYS = [1000, 2000, 4000];
+      const delay = BACKOFF_DELAYS[attempt] ?? 4000;
       console.warn(`[${label}] Attempt ${attempt + 1} failed, retrying in ${delay}ms...`);
       await new Promise(r => setTimeout(r, delay));
     }
