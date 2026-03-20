@@ -1503,6 +1503,34 @@ function broadcastPlannerEvent(event: { type: string; data: any }) {
   });
 }
 
+app.post("/api/travel-distances", isAuthenticated, asyncHandler(async (req: any, res) => {
+    const { originLat, originLng, destinations } = req.body;
+    if (originLat == null || originLng == null || !Array.isArray(destinations)) {
+      throw new ValidationError("originLat, originLng och destinations krävs");
+    }
+
+    const haversine = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
+      const R = 6371;
+      const dLat = (lat2 - lat1) * Math.PI / 180;
+      const dLon = (lon2 - lon1) * Math.PI / 180;
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    };
+
+    const results = destinations.map((dest: { id: string; lat: number; lng: number }) => {
+      if (dest.lat == null || dest.lng == null) {
+        return { id: dest.id, distanceKm: null, travelMinutes: null };
+      }
+      const distKm = haversine(originLat, originLng, dest.lat, dest.lng);
+      const roadFactor = 1.3;
+      const avgSpeedKmh = 40;
+      const travelMinutes = Math.round((distKm * roadFactor / avgSpeedKmh) * 60);
+      return { id: dest.id, distanceKm: Math.round(distKm * 10) / 10, travelMinutes };
+    });
+
+    res.json({ distances: results });
+}));
+
 async function handleQuickAction(orderId: string, actionType: string) {
     if (!orderId || !actionType) {
       throw new ValidationError("orderId och actionType krävs");

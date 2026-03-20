@@ -720,6 +720,97 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     });
   };
 
+  const [travelDistances, setTravelDistances] = useState<Record<string, { distanceKm: number | null; travelMinutes: number | null }>>({});
+  const lastDistanceFetchRef = useRef<number>(0);
+  const nextJobWarningShownRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!lastPositionRef.current || todayJobs.length === 0) return;
+    const now = Date.now();
+    if (now - lastDistanceFetchRef.current < 60_000) return;
+    lastDistanceFetchRef.current = now;
+
+    const pos = lastPositionRef.current;
+    const destinations = todayJobs
+      .filter(j => j.status !== "completed")
+      .map(j => {
+        const obj = objectMap.get(j.objectId);
+        return {
+          id: j.id,
+          lat: obj?.latitude ?? j.taskLatitude,
+          lng: obj?.longitude ?? j.taskLongitude,
+        };
+      })
+      .filter(d => d.lat != null && d.lng != null);
+
+    if (destinations.length === 0) return;
+
+    fetch("/api/travel-distances", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ originLat: pos.lat, originLng: pos.lng, destinations }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.distances) {
+          const map: Record<string, { distanceKm: number | null; travelMinutes: number | null }> = {};
+          for (const d of data.distances) {
+            map[d.id] = { distanceKm: d.distanceKm, travelMinutes: d.travelMinutes };
+          }
+          setTravelDistances(map);
+        }
+      })
+      .catch(() => {});
+  }, [todayJobs, objectMap, gpsActive]);
+
+  const todayJobsRef = useRef(todayJobs);
+  todayJobsRef.current = todayJobs;
+
+  useEffect(() => {
+    const checkWarning = () => {
+      const now = new Date();
+      let closestJob: typeof todayJobs[0] | null = null;
+      let closestMinutes = Infinity;
+
+      for (const job of todayJobsRef.current) {
+        if (!job.scheduledStartTime) continue;
+        const [h, m] = job.scheduledStartTime.split(":").map(Number);
+        const jobTime = new Date(now);
+        jobTime.setHours(h, m, 0, 0);
+        const minutesUntil = (jobTime.getTime() - now.getTime()) / 60_000;
+        if (minutesUntil > 0 && minutesUntil < closestMinutes) {
+          closestMinutes = minutesUntil;
+          closestJob = job;
+        }
+      }
+
+      if (closestJob && closestMinutes <= 10 && nextJobWarningShownRef.current !== closestJob.id) {
+        nextJobWarningShownRef.current = closestJob.id;
+        toast({
+          title: `Nästa jobb om ${Math.ceil(closestMinutes)} min`,
+          description: `${closestJob.title} — ${closestJob.objectAddress || closestJob.objectName || ""}`,
+        });
+      }
+    };
+
+    checkWarning();
+    const checkInterval = setInterval(checkWarning, 30_000);
+    return () => clearInterval(checkInterval);
+  }, [toast]);
+
+  const openNavigation = useCallback((lat: number, lng: number) => {
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    if (isIOS) {
+      window.open(`maps://maps.apple.com/?daddr=${lat},${lng}&dirflg=d`, "_blank");
+    } else {
+      window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}&travelmode=driving`, "_blank");
+    }
+  }, []);
+
+  const getNextPendingJob = useCallback(() => {
+    return todayJobs.find(j => j.status !== "completed") || null;
+  }, [todayJobs]);
+
   const getPriorityBadge = (priority?: string) => {
     switch (priority) {
       case "urgent":
@@ -1666,6 +1757,43 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           compact 
         />
 
+        {(() => {
+          const nextJob = getNextPendingJob();
+          if (!nextJob) return null;
+          const obj = objectMap.get(nextJob.objectId);
+          const lat = obj?.latitude ?? nextJob.taskLatitude;
+          const lng = obj?.longitude ?? nextJob.taskLongitude;
+          const dist = travelDistances[nextJob.id];
+          if (lat == null || lng == null) return null;
+          return (
+            <Card className="bg-primary/5 border-primary/20">
+              <CardContent className="py-3 px-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
+                    <Navigation className="h-5 w-5 text-primary-foreground" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-sm truncate">{nextJob.title}</p>
+                    <p className="text-xs text-muted-foreground truncate">{nextJob.objectAddress || nextJob.objectName}</p>
+                    {dist && dist.distanceKm != null && (
+                      <p className="text-xs text-muted-foreground">{dist.distanceKm} km · ca {dist.travelMinutes} min restid</p>
+                    )}
+                  </div>
+                  <Button
+                    size="sm"
+                    onClick={() => openNavigation(lat, lng)}
+                    className="shrink-0 gap-1"
+                    data-testid="button-next-stop-navigate"
+                  >
+                    <Navigation className="h-4 w-4" />
+                    Nästa stopp
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })()}
+
         {/* PWA Install Banner */}
         {!isInstalled && !dismissedInstallBanner && (canInstall || isIOS) && (
           <Card className="bg-primary/10 border-primary/20">
@@ -1821,6 +1949,12 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       {job.estimatedDuration && (
                         <span className="text-xs text-muted-foreground">
                           {job.estimatedDuration} min
+                        </span>
+                      )}
+                      {travelDistances[job.id] && travelDistances[job.id].distanceKm != null && (
+                        <span className="text-xs text-muted-foreground flex items-center gap-0.5" data-testid={`travel-info-${job.id}`}>
+                          <Navigation className="h-2.5 w-2.5" />
+                          {travelDistances[job.id].distanceKm} km · {travelDistances[job.id].travelMinutes} min
                         </span>
                       )}
                       {(job.objectAccessCode || job.objectKeyNumber) && (
