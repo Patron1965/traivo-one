@@ -45,12 +45,23 @@ const BUDGET_CACHE_TTL = 30_000;
 
 const rateLimitWindows = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
-const RATE_LIMITS: Record<string, number> = {
+const DEFAULT_RATE_LIMITS: Record<string, number> = {
   basic: 0,
   standard: 50,
   premium: 200,
   custom: 200,
 };
+const tenantRateLimitOverrides = new Map<string, number>();
+
+export function setTenantRateLimit(tenantId: string, maxPerHour: number): void {
+  tenantRateLimitOverrides.set(tenantId, maxPerHour);
+}
+
+export function getTenantRateLimit(tenantId: string, tier: string): number {
+  const override = tenantRateLimitOverrides.get(tenantId);
+  if (override !== undefined) return override;
+  return DEFAULT_RATE_LIMITS[tier] || DEFAULT_RATE_LIMITS.standard;
+}
 
 const aiResponseCache = new Map<string, AICacheEntry>();
 const AI_CACHE_TTL = 15 * 60 * 1000;
@@ -261,7 +272,7 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
 }
 
 export function checkRateLimit(tenantId: string, tier: string): RateLimitResult {
-  const maxRequests = RATE_LIMITS[tier] || RATE_LIMITS.standard;
+  const maxRequests = getTenantRateLimit(tenantId, tier);
   if (maxRequests === 0) {
     return { allowed: false, retryAfterSeconds: 0 };
   }

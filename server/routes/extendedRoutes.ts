@@ -853,7 +853,7 @@ app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, r
     });
 }));
 
-const requireSystemOwner = async (req: any, res: any, next: any) => {
+const requireSystemAdmin = async (req: any, res: any, next: any) => {
   const replitUser = req.user as any;
   const sessionUserId = (req.session as any)?.userId;
   const userId = replitUser?.claims?.sub || sessionUserId;
@@ -861,16 +861,17 @@ const requireSystemOwner = async (req: any, res: any, next: any) => {
     return res.status(401).json({ error: "Ej autentiserad" });
   }
   try {
-    const { userTenantRoles } = await import("@shared/schema");
-    const ownerRoles = await db.select({ tenantId: userTenantRoles.tenantId })
-      .from(userTenantRoles)
-      .where(and(
-        eq(userTenantRoles.userId, userId),
-        eq(userTenantRoles.role, "owner"),
-        eq(userTenantRoles.isActive, true)
-      ));
-    if (ownerRoles.length === 0) {
-      return res.status(403).json({ error: "Ej behörig", message: "Systemägarbehörighet krävs för att se alla tenants." });
+    const dbUser = await storage.getUser(userId);
+    if (!dbUser || dbUser.role !== "admin") {
+      return res.status(403).json({ error: "Ej behörig", message: "Systemadministratörsbehörighet krävs." });
+    }
+    const { users } = await import("@shared/schema");
+    const isGlobalAdmin = await db.select({ id: users.id })
+      .from(users)
+      .where(and(eq(users.id, userId), eq(users.role, "admin")))
+      .limit(1);
+    if (isGlobalAdmin.length === 0) {
+      return res.status(403).json({ error: "Ej behörig", message: "Systemadministratörsbehörighet krävs." });
     }
     req.userId = userId;
     return next();
@@ -879,7 +880,7 @@ const requireSystemOwner = async (req: any, res: any, next: any) => {
   }
 };
 
-app.get("/api/system/api-costs/by-tenant", requireSystemOwner, asyncHandler(async (req, res) => {
+app.get("/api/system/api-costs/by-tenant", requireSystemAdmin, asyncHandler(async (req, res) => {
     const period = (req.query.period as string) || "month";
     let startDate: Date;
     
@@ -965,7 +966,7 @@ app.get("/api/system/budget-status", requireAdmin, asyncHandler(async (req, res)
   res.json(status);
 }));
 
-app.get("/api/system/budget-status/all-tenants", requireSystemOwner, asyncHandler(async (req, res) => {
+app.get("/api/system/budget-status/all-tenants", requireSystemAdmin, asyncHandler(async (req, res) => {
   const { getTenantBudgetStatus } = await import("../ai-budget-service");
   const { tenants } = await import("@shared/schema");
   const allTenants = await db.select({ id: tenants.id, name: tenants.name }).from(tenants);
