@@ -1028,6 +1028,10 @@ export async function aiEnhancedSchedule(
         a => !hardViolationOrderIds.has(a.workOrderId)
       );
       baseResult.totalOrdersScheduled = baseResult.assignments.length;
+
+      constraintViolations = constraintViolations.filter(
+        v => v.type === "hard" || !hardViolationOrderIds.has(v.workOrderId)
+      );
     }
   }
 

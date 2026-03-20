@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject } from "@shared/schema";
+import { type ServiceObject, type WorkOrderLine } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 
@@ -966,10 +966,16 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
       storage.getResourceArticlesByResourceIds(resourceIds),
     ]);
 
-    const workOrderLineResults = await Promise.all(
-      unscheduledOrderIds.slice(0, 200).map(id => storage.getWorkOrderLines(id))
-    );
-    const allWorkOrderLines = workOrderLineResults.flat();
+    const workOrderLineBatches: WorkOrderLine[][] = [];
+    const batchSize = 50;
+    for (let i = 0; i < unscheduledOrderIds.length; i += batchSize) {
+      const batch = unscheduledOrderIds.slice(i, i + batchSize);
+      const batchResults = await Promise.all(
+        batch.map(id => storage.getWorkOrderLines(id))
+      );
+      workOrderLineBatches.push(...batchResults);
+    }
+    const allWorkOrderLines = workOrderLineBatches.flat();
 
     const teamIds = [...new Set(workOrders.map(o => o.teamId).filter(Boolean))] as string[];
     const teamMemberResults = await Promise.all(

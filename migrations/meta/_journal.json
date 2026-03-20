@@ -134,6 +134,13 @@
       "when": 1774008086094,
       "tag": "0018_equal_dragon_lord",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1774010750297,
+      "tag": "0019_short_satana",
+      "breakpoints": true
     }
   ]
 }
