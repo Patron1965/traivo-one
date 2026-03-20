@@ -482,6 +482,12 @@ export interface DecisionTraceSummary {
   riskScore: number;
   totalOrdersScheduled: number;
   estimatedEfficiency: number;
+  baselineDrivingMinutes: number;
+  baselineSetupMinutes: number;
+  baselineOvertimeMinutes: number;
+  proposedOvertimeMinutes: number;
+  baselineWorkloadBalance: number;
+  baselineRiskScore: number;
 }
 
 export interface DecisionTraceMove {
@@ -996,6 +1002,12 @@ export async function aiEnhancedSchedule(
       riskScore: 0,
       totalOrdersScheduled: 0,
       estimatedEfficiency: 100,
+      baselineDrivingMinutes: 0,
+      baselineSetupMinutes: 0,
+      baselineOvertimeMinutes: 0,
+      proposedOvertimeMinutes: 0,
+      baselineWorkloadBalance: 1.0,
+      baselineRiskScore: 0,
     },
     moves: [] as DecisionTraceMove[],
     constraintViolations: [] as import("./planning/constraintEngine").ConstraintViolation[],
@@ -1143,6 +1155,31 @@ export async function aiEnhancedSchedule(
     }
   }
 
+  const baselineDrivingMinutes = Math.round(scheduledOrders.length * 15);
+  const baselineSetupMinutes = totalExistingSetup || Math.round(scheduledOrders.length * avgSetupPerOrder);
+
+  const hoursPerDay = 8;
+  const existingHoursPerResource = Object.values(existingLoadPerResource).map(m => m / 60);
+  const baselineOvertimeMinutes = Math.round(
+    existingHoursPerResource.reduce((sum, h) => sum + Math.max(0, h - hoursPerDay) * 60, 0)
+  );
+  const proposedHoursPerResource = context.resources.map(r => {
+    const existing = existingLoadPerResource[r.id] || 0;
+    const added = newLoadPerResource[r.id] || 0;
+    return (existing + added) / 60;
+  }).filter(h => h > 0);
+  const proposedOvertimeMinutes = Math.round(
+    proposedHoursPerResource.reduce((sum, h) => sum + Math.max(0, h - hoursPerDay) * 60, 0)
+  );
+
+  let baselineWorkloadBalance = 1.0;
+  if (existingHoursPerResource.length > 1) {
+    const bAvg = existingHoursPerResource.reduce((s, h) => s + h, 0) / existingHoursPerResource.length;
+    const bVar = existingHoursPerResource.reduce((s, h) => s + Math.pow(h - bAvg, 2), 0) / existingHoursPerResource.length;
+    baselineWorkloadBalance = Math.max(0, Math.min(1, 1 - (Math.sqrt(bVar) / (bAvg || 1))));
+  }
+  baselineWorkloadBalance = Math.round(baselineWorkloadBalance * 100) / 100;
+
   const traceSummary: DecisionTraceSummary = {
     totalDrivingChange,
     totalSetupChange: setupChange,
@@ -1150,6 +1187,12 @@ export async function aiEnhancedSchedule(
     riskScore,
     totalOrdersScheduled: baseResult.totalOrdersScheduled,
     estimatedEfficiency: baseResult.estimatedEfficiency,
+    baselineDrivingMinutes,
+    baselineSetupMinutes,
+    baselineOvertimeMinutes,
+    proposedOvertimeMinutes,
+    baselineWorkloadBalance,
+    baselineRiskScore: 0.5,
   };
 
   let enhancedSummary = baseResult.summary;

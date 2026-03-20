@@ -42,6 +42,12 @@ interface DecisionTraceSummary {
   riskScore: number;
   totalOrdersScheduled: number;
   estimatedEfficiency: number;
+  baselineDrivingMinutes: number;
+  baselineSetupMinutes: number;
+  baselineOvertimeMinutes: number;
+  proposedOvertimeMinutes: number;
+  baselineWorkloadBalance: number;
+  baselineRiskScore: number;
 }
 
 interface DecisionTraceMove {

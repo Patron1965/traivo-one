@@ -30,6 +30,12 @@ interface DecisionTraceSummary {
   riskScore: number;
   totalOrdersScheduled: number;
   estimatedEfficiency: number;
+  baselineDrivingMinutes: number;
+  baselineSetupMinutes: number;
+  baselineOvertimeMinutes: number;
+  proposedOvertimeMinutes: number;
+  baselineWorkloadBalance: number;
+  baselineRiskScore: number;
 }
 
 interface DecisionTraceMove {
@@ -92,66 +98,83 @@ interface ScheduleDiffViewProps {
 function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
   const s = trace.summary;
 
-  const deltaRows: Array<{
-    label: string;
-    icon: React.ReactNode;
-    value: string;
-    good: boolean;
-    type: "delta" | "score";
-  }> = [
+  const proposedDriving = s.baselineDrivingMinutes + s.totalDrivingChange;
+  const proposedSetup = s.baselineSetupMinutes + s.totalSetupChange;
+  const overtimeDelta = s.proposedOvertimeMinutes - s.baselineOvertimeMinutes;
+  const balanceDelta = Math.round((s.workloadBalanceScore - s.baselineWorkloadBalance) * 100);
+  const riskDelta = Math.round((s.riskScore - s.baselineRiskScore) * 100);
+
+  const rows = [
     {
       label: "Körtid",
       icon: <Route className="h-3.5 w-3.5" />,
-      value: `${s.totalDrivingChange > 0 ? "+" : ""}${s.totalDrivingChange} min`,
+      before: `${s.baselineDrivingMinutes} min`,
+      after: `${proposedDriving} min`,
+      delta: s.totalDrivingChange,
+      deltaText: `${s.totalDrivingChange > 0 ? "+" : ""}${s.totalDrivingChange}`,
       good: s.totalDrivingChange <= 0,
-      type: "delta",
     },
     {
       label: "Ställtid",
       icon: <Clock className="h-3.5 w-3.5" />,
-      value: `${s.totalSetupChange > 0 ? "+" : ""}${s.totalSetupChange} min`,
+      before: `${s.baselineSetupMinutes} min`,
+      after: `${proposedSetup} min`,
+      delta: s.totalSetupChange,
+      deltaText: `${s.totalSetupChange > 0 ? "+" : ""}${s.totalSetupChange}`,
       good: s.totalSetupChange <= 0,
-      type: "delta",
+    },
+    {
+      label: "Övertid",
+      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+      before: `${s.baselineOvertimeMinutes} min`,
+      after: `${s.proposedOvertimeMinutes} min`,
+      delta: overtimeDelta,
+      deltaText: `${overtimeDelta > 0 ? "+" : ""}${overtimeDelta}`,
+      good: overtimeDelta <= 0,
     },
     {
       label: "Arbetsbalans",
       icon: <BarChart3 className="h-3.5 w-3.5" />,
-      value: `${Math.round(s.workloadBalanceScore * 100)}%`,
-      good: s.workloadBalanceScore >= 0.7,
-      type: "score",
+      before: `${Math.round(s.baselineWorkloadBalance * 100)}%`,
+      after: `${Math.round(s.workloadBalanceScore * 100)}%`,
+      delta: balanceDelta,
+      deltaText: `${balanceDelta > 0 ? "+" : ""}${balanceDelta}%`,
+      good: s.workloadBalanceScore >= s.baselineWorkloadBalance,
     },
     {
       label: "Riskindex",
       icon: <Shield className="h-3.5 w-3.5" />,
-      value: `${Math.round(s.riskScore * 100)}%`,
-      good: s.riskScore <= 0.3,
-      type: "score",
+      before: `${Math.round(s.baselineRiskScore * 100)}%`,
+      after: `${Math.round(s.riskScore * 100)}%`,
+      delta: riskDelta,
+      deltaText: `${riskDelta > 0 ? "+" : ""}${riskDelta}%`,
+      good: s.riskScore <= s.baselineRiskScore,
     },
   ];
 
   return (
     <Card className="p-3" data-testid="kpi-diff-table">
-      <div className="grid grid-cols-[1fr_60px_50px] gap-1 text-[10px] text-muted-foreground font-medium mb-1.5">
+      <div className="grid grid-cols-[1fr_55px_55px_40px] gap-1 text-[10px] text-muted-foreground font-medium mb-1.5">
         <span>KPI</span>
-        <span className="text-right">Typ</span>
-        <span className="text-right">Värde</span>
+        <span className="text-right">Före</span>
+        <span className="text-right">Efter</span>
+        <span className="text-right">Δ</span>
       </div>
       <div className="space-y-1">
-        {deltaRows.map((row) => {
-          const color = row.good
+        {rows.map((row) => {
+          const deltaColor = row.good
             ? "text-green-600 dark:text-green-400"
             : "text-amber-600 dark:text-amber-400";
 
           return (
-            <div key={row.label} className="grid grid-cols-[1fr_60px_50px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
+            <div key={row.label} className="grid grid-cols-[1fr_55px_55px_40px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
               <span className="flex items-center gap-1 text-muted-foreground">
                 {row.icon}
                 <span className="truncate">{row.label}</span>
               </span>
-              <span className="text-right text-[10px] text-muted-foreground">
-                {row.type === "delta" ? "Δ förändring" : "Beräknad"}
-              </span>
-              <span className={`text-right font-medium ${color}`}>{row.value}</span>
+              <span className="text-right text-muted-foreground">{row.before}</span>
+              <span className={`text-right font-medium ${deltaColor}`}>{row.after}</span>
+              <span className={`text-right text-[10px] font-medium ${deltaColor}`}>{row.deltaText}</span>
             </div>
           );
         })}
