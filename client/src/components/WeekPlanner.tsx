@@ -193,7 +193,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
                             <div className={`text-sm font-medium ${isSameDay(day, new Date()) ? "text-primary" : ""}`}>{format(day, "EEEE d MMM", { locale: sv })}</div>
                             <Badge variant="secondary" className="text-xs">{dayHours.toFixed(1)}h</Badge>
                           </div>
-                          <DroppableCell id={droppableId} className="min-h-[80px] border border-dashed rounded-md p-2 transition-colors">
+                          <DroppableCell id={droppableId} className="min-h-[80px] border border-dashed rounded-md p-2 transition-colors" dragOverConflicts={dnd.dragOverConflicts?.[droppableId]}>
                             <div data-testid={`panel-drop-zone-${dayKey}`}>
                               {dayJobs.length === 0 ? (
                                 <div className="text-xs text-muted-foreground text-center py-4">Dra jobb hit för att schemalägga</div>

@@ -2568,8 +2568,8 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
       scheduledDate: typeof o.scheduledDate === "string" ? o.scheduledDate.split("T")[0] : o.scheduledDate,
     }));
 
-    const objectLat = workOrder.objectLatitude || (workOrder as any).taskLatitude;
-    const objectLng = workOrder.objectLongitude || (workOrder as any).taskLongitude;
+    const objectLat = workOrder.taskLatitude;
+    const objectLng = workOrder.taskLongitude;
 
     const HOURS_IN_DAY = 8;
     const jobDuration = (workOrder.estimatedDuration || 60) / 60;
@@ -2611,8 +2611,8 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
         if (objectLat && objectLng) {
           let minDist = Infinity;
           for (const o of dayOrders) {
-            const oLat = o.objectLatitude || (o as any).taskLatitude;
-            const oLng = o.objectLongitude || (o as any).taskLongitude;
+            const oLat = o.taskLatitude;
+            const oLng = o.taskLongitude;
             if (oLat && oLng) {
               const dist = haversineDist(objectLat, objectLng, oLat, oLng);
               if (dist < minDist) minDist = dist;

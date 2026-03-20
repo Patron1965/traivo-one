@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useEffect } from "react";
+import { useState, useMemo, useCallback, useEffect, useRef } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { format, addDays, startOfWeek, startOfMonth, isSameDay, getDaysInMonth, addMonths } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -381,13 +381,29 @@ export function usePlannerData() {
   const handleToggleSubStep = useCallback((jobId: string) => setExpandedSubSteps(prev => ({ ...prev, [jobId]: !prev[jobId] })), []);
 
   const [selectedJobIds, setSelectedJobIds] = useState<Set<string>>(new Set());
+  const lastSelectedRef = useRef<string | null>(null);
   const toggleJobSelection = useCallback((jobId: string, shiftKey = false) => {
     setSelectedJobIds(prev => {
       const next = new Set(prev);
+      if (shiftKey && lastSelectedRef.current && lastSelectedRef.current !== jobId) {
+        const allIds = filteredScheduledJobs.map(j => j.id);
+        const lastIdx = allIds.indexOf(lastSelectedRef.current);
+        const curIdx = allIds.indexOf(jobId);
+        if (lastIdx !== -1 && curIdx !== -1) {
+          const start = Math.min(lastIdx, curIdx);
+          const end = Math.max(lastIdx, curIdx);
+          for (let i = start; i <= end; i++) {
+            next.add(allIds[i]);
+          }
+          lastSelectedRef.current = jobId;
+          return next;
+        }
+      }
       if (next.has(jobId)) { next.delete(jobId); } else { next.add(jobId); }
+      lastSelectedRef.current = jobId;
       return next;
     });
-  }, []);
+  }, [filteredScheduledJobs]);
   const clearSelection = useCallback(() => setSelectedJobIds(new Set()), []);
   const selectAllVisible = useCallback(() => {
     const ids = new Set(filteredScheduledJobs.map(j => j.id));
