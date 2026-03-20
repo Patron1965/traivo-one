@@ -93,7 +93,8 @@ export function requireModule(moduleKey: ModuleKey) {
 export async function moduleGuardMiddleware(req: Request, res: Response, next: NextFunction) {
   if (req.method === "OPTIONS") return next();
 
-  const moduleKey = getModuleForApiPath(req.path);
+  const fullPath = req.originalUrl || req.path;
+  const moduleKey = getModuleForApiPath(fullPath);
   if (!moduleKey || moduleKey === "core") return next();
 
   try {
