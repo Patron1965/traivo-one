@@ -38,8 +38,12 @@ export async function registerFeatureRoutes(app: Express) {
     const adminTenantId = getTenantIdWithFallback(req);
     const { tenantId } = req.params;
 
-    if (adminTenantId !== tenantId && req.tenantRole !== "owner") {
-      return res.status(403).json({ error: "Otillräcklig behörighet" });
+    const role = req.tenantRole;
+    if (role !== "owner" && role !== "admin") {
+      return res.status(403).json({ error: "Otillräcklig behörighet — kräver admin eller ägare" });
+    }
+    if (adminTenantId !== tenantId) {
+      return res.status(403).json({ error: "Du kan bara ändra din egen organisations moduler" });
     }
 
     const { packageTier, enabledModules } = req.body;

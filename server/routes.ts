@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 import { requireTenantWithFallback, getTenantIdWithFallback, getUserTenants } from "./tenant-middleware";
+import { moduleGuardMiddleware } from "./feature-flags";
 import { notificationService } from "./notifications";
 import { handleMcpSse, handleMcpMessage } from "./mcp";
 import { registerObjectStorageRoutes } from "./replit_integrations/object_storage";
@@ -98,6 +99,8 @@ export async function registerRoutes(
     }
     return requireTenantWithFallback(req, res, next);
   });
+
+  app.use("/api", moduleGuardMiddleware);
 
   const CUSTOMER_ALLOWED_PATHS = new Set([
     "/my-objects", "/my-reports", "/portal-booking-config",
