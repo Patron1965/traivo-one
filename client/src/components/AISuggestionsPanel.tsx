@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { OptimizedRouteMap } from "./OptimizedRouteMap";
+import { ScheduleDiffView } from "./ScheduleDiffView";
 
 interface PlanningSuggestion {
   id: string;
@@ -34,11 +35,45 @@ interface ScheduleAssignment {
   confidence: number;
 }
 
+interface DecisionTraceSummary {
+  totalDrivingChange: number;
+  totalSetupChange: number;
+  workloadBalanceScore: number;
+  riskScore: number;
+  totalOrdersScheduled: number;
+  estimatedEfficiency: number;
+}
+
+interface DecisionTraceMove {
+  workOrderId: string;
+  workOrderTitle: string;
+  from: { resourceId: string | null; resourceName: string | null; day: string | null; startTime: string | null };
+  to: { resourceId: string; resourceName: string; day: string; startTime: string | null };
+  reasons: string[];
+  constraintStatus: "valid" | "warning" | "violation";
+  confidence: number;
+}
+
+interface ConstraintViolation {
+  type: "hard" | "soft";
+  category: string;
+  severity: "critical" | "warning";
+  workOrderId: string;
+  resourceId?: string;
+  description: string;
+}
+
 interface AutoScheduleResult {
   assignments: ScheduleAssignment[];
   summary: string;
   totalOrdersScheduled: number;
   estimatedEfficiency: number;
+  decisionTrace?: {
+    summary: DecisionTraceSummary;
+    moves: DecisionTraceMove[];
+    constraintViolations: ConstraintViolation[];
+    riskFactors: string[];
+  };
 }
 
 interface RouteStop {
@@ -534,73 +569,31 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
             )}
 
             {autoScheduleResult && (
-              <div className="space-y-4">
-                <Card className="p-3 bg-muted/50">
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Effektivitet</span>
-                      <span className="text-sm text-muted-foreground">{autoScheduleResult.estimatedEfficiency}%</span>
-                    </div>
-                    <Progress value={autoScheduleResult.estimatedEfficiency} className="h-2" />
-                    <p className="text-xs text-muted-foreground">{autoScheduleResult.summary}</p>
-                  </div>
-                </Card>
-
-                {autoScheduleResult.assignments.length > 0 && (
-                  <>
-                    <div className="text-sm font-medium">
-                      {autoScheduleResult.assignments.length} ordrar att schemalägga:
-                    </div>
-                    <div className="space-y-2 max-h-48 overflow-auto">
-                      {autoScheduleResult.assignments.map((assignment) => (
-                        <Card key={assignment.workOrderId} className="p-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-mono truncate">{assignment.workOrderId.slice(0, 8)}...</p>
-                              <p className="text-xs text-muted-foreground truncate">{assignment.reason}</p>
-                            </div>
-                            <div className="flex items-center gap-1 shrink-0">
-                              <Badge variant="outline" className="text-xs">
-                                {assignment.scheduledDate}
-                              </Badge>
-                              <Badge 
-                                variant="secondary" 
-                                className={`text-xs ${assignment.confidence >= 80 ? "bg-green-500/20" : assignment.confidence >= 60 ? "bg-yellow-500/20" : "bg-orange-500/20"}`}
-                              >
-                                {assignment.confidence}%
-                              </Badge>
-                            </div>
-                          </div>
-                        </Card>
-                      ))}
-                    </div>
-
-                    <div className="flex gap-2">
-                      <Button
-                        variant="secondary"
-                        onClick={() => applyScheduleMutation.mutate(autoScheduleResult.assignments)}
-                        disabled={applyScheduleMutation.isPending}
-                        data-testid="button-apply-auto-schedule"
-                      >
-                        {applyScheduleMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Check className="h-4 w-4 mr-2" />
-                        )}
-                        Tillämpa alla ({autoScheduleResult.assignments.length})
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={() => setAutoScheduleResult(null)}
-                        disabled={applyScheduleMutation.isPending}
-                        data-testid="button-cancel-auto-schedule"
-                      >
-                        Avbryt
-                      </Button>
-                    </div>
-                  </>
-                )}
-              </div>
+              <ScheduleDiffView
+                assignments={autoScheduleResult.assignments}
+                summary={autoScheduleResult.summary}
+                totalOrdersScheduled={autoScheduleResult.totalOrdersScheduled}
+                estimatedEfficiency={autoScheduleResult.estimatedEfficiency}
+                decisionTrace={autoScheduleResult.decisionTrace}
+                onApplyAll={(assignments) => applyScheduleMutation.mutate(assignments)}
+                onApplySingle={(assignment) => applyScheduleMutation.mutate([assignment])}
+                onRejectSingle={(workOrderId) => {
+                  setAutoScheduleResult(prev => {
+                    if (!prev) return prev;
+                    return {
+                      ...prev,
+                      assignments: prev.assignments.filter(a => a.workOrderId !== workOrderId),
+                      totalOrdersScheduled: prev.assignments.filter(a => a.workOrderId !== workOrderId).length,
+                      decisionTrace: prev.decisionTrace ? {
+                        ...prev.decisionTrace,
+                        moves: prev.decisionTrace.moves.filter(m => m.workOrderId !== workOrderId),
+                      } : undefined,
+                    };
+                  });
+                }}
+                onCancel={() => setAutoScheduleResult(null)}
+                isApplying={applyScheduleMutation.isPending}
+              />
             )}
           </>
         )}
