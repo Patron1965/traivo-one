@@ -888,12 +888,16 @@ app.get("/api/system/api-costs/by-tenant", requireAdmin, asyncHandler(async (req
 }));
 
 app.get("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) => {
-    const budgets = await db.select().from(apiBudgets).orderBy(apiBudgets.service);
+    const tenantId = getTenantIdWithFallback(req);
+    const budgets = await db.select().from(apiBudgets)
+      .where(eq(apiBudgets.tenantId, tenantId))
+      .orderBy(apiBudgets.service);
     res.json(budgets);
 }));
 
 app.put("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) => {
-    const { service, monthlyBudgetUsd, alertThresholdPercent, tenantId } = req.body;
+    const currentTenantId = getTenantIdWithFallback(req);
+    const { service, monthlyBudgetUsd, alertThresholdPercent } = req.body;
     if (!service || monthlyBudgetUsd === undefined) {
       throw new ValidationError("Service och budget krävs");
     }
@@ -901,7 +905,7 @@ app.put("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) =
     const existing = await db.select().from(apiBudgets)
       .where(and(
         eq(apiBudgets.service, service),
-        tenantId ? eq(apiBudgets.tenantId, tenantId) : sql`${apiBudgets.tenantId} IS NULL`
+        eq(apiBudgets.tenantId, currentTenantId)
       ));
     
     if (existing.length > 0) {
@@ -915,13 +919,15 @@ app.put("/api/system/api-budgets", requireAdmin, asyncHandler(async (req, res) =
     } else {
       await db.insert(apiBudgets).values({
         service,
-        tenantId: tenantId || null,
+        tenantId: currentTenantId,
         monthlyBudgetUsd,
         alertThresholdPercent: alertThresholdPercent || 80,
       });
     }
     
-    const budgets = await db.select().from(apiBudgets).orderBy(apiBudgets.service);
+    const budgets = await db.select().from(apiBudgets)
+      .where(eq(apiBudgets.tenantId, currentTenantId))
+      .orderBy(apiBudgets.service);
     res.json(budgets);
 }));
 
