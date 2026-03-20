@@ -213,10 +213,19 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
     try {
       const { storage } = await import("./storage");
       const { notificationService } = await import("./notifications");
+      const { users } = await import("@shared/schema");
+      const { eq: budgetEq } = await import("drizzle-orm");
+      const adminUsers = await db.select({ id: users.id })
+        .from(users)
+        .where(budgetEq(users.role, "admin"));
       const resources = await storage.getResources(tenantId);
+      const adminResourceIds = resources
+        .filter(r => r.userId && adminUsers.some(u => u.id === r.userId))
+        .map(r => r.id);
+      const targetResources = adminResourceIds.length > 0 ? adminResourceIds : resources.slice(0, 1).map(r => r.id);
 
-      for (const resource of resources) {
-        await notificationService.sendToResource(resource.id, {
+      for (const resourceId of targetResources) {
+        await notificationService.sendToResource(resourceId, {
           type: severity === "critical" ? "alert" : "info",
           title,
           message,
