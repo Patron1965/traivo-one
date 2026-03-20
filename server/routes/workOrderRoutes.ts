@@ -17,7 +17,6 @@ export async function registerWorkOrderRoutes(app: Express) {
 app.get("/api/work-orders", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
   const allDates = req.query.allDates === 'true';
-  const hasExplicitDates = !!(req.query.startDate || req.query.endDate);
   let startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
   let endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
   const includeUnscheduled = req.query.includeUnscheduled === 'true';
@@ -34,11 +33,10 @@ app.get("/api/work-orders", asyncHandler(async (req, res) => {
       startDate.setDate(startDate.getDate() - 30);
       startDate.setHours(0, 0, 0, 0);
       endDate = new Date(now);
-      endDate.setDate(endDate.getDate() + 30);
       endDate.setHours(23, 59, 59, 999);
     } else if (startDate && !endDate) {
       endDate = new Date();
-      endDate.setFullYear(endDate.getFullYear() + 1);
+      endDate.setHours(23, 59, 59, 999);
     } else if (!startDate && endDate) {
       startDate = new Date(0);
     }

@@ -56,9 +56,7 @@ export function Dashboard() {
     const start = new Date(now);
     start.setDate(start.getDate() - historyDays);
     start.setHours(0, 0, 0, 0);
-    const end = new Date(now);
-    end.setDate(end.getDate() + 30);
-    return { startDate: start.toISOString().split("T")[0], endDate: end.toISOString().split("T")[0] };
+    return { startDate: start.toISOString().split("T")[0], endDate: now.toISOString().split("T")[0] };
   }, [historyDays]);
 
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrderWithObject[]>({
