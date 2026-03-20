@@ -89,85 +89,69 @@ interface ScheduleDiffViewProps {
   isApplying: boolean;
 }
 
-function KPIDiffTable({ trace, totalOrders }: { trace: DecisionTrace; totalOrders: number }) {
+function KPIDiffTable({ trace }: { trace: DecisionTrace }) {
   const s = trace.summary;
 
-  const baseDriving = totalOrders * 15;
-  const baseSetup = totalOrders * 5;
-  const baseOvertime = 0;
-  const overtimeAfter = Math.max(0, Math.round(s.totalDrivingChange * 0.3));
-
-  const rows = [
+  const deltaRows: Array<{
+    label: string;
+    icon: React.ReactNode;
+    value: string;
+    good: boolean;
+    type: "delta" | "score";
+  }> = [
     {
       label: "Körtid",
       icon: <Route className="h-3.5 w-3.5" />,
-      before: `${baseDriving} min`,
-      after: `${baseDriving + s.totalDrivingChange} min`,
-      delta: s.totalDrivingChange,
-      deltaText: `${s.totalDrivingChange > 0 ? "+" : ""}${s.totalDrivingChange}`,
+      value: `${s.totalDrivingChange > 0 ? "+" : ""}${s.totalDrivingChange} min`,
       good: s.totalDrivingChange <= 0,
+      type: "delta",
     },
     {
       label: "Ställtid",
       icon: <Clock className="h-3.5 w-3.5" />,
-      before: `${baseSetup} min`,
-      after: `${baseSetup + s.totalSetupChange} min`,
-      delta: s.totalSetupChange,
-      deltaText: `${s.totalSetupChange > 0 ? "+" : ""}${s.totalSetupChange}`,
+      value: `${s.totalSetupChange > 0 ? "+" : ""}${s.totalSetupChange} min`,
       good: s.totalSetupChange <= 0,
-    },
-    {
-      label: "Övertid",
-      icon: <AlertTriangle className="h-3.5 w-3.5" />,
-      before: `${baseOvertime} min`,
-      after: `${overtimeAfter} min`,
-      delta: overtimeAfter,
-      deltaText: overtimeAfter > 0 ? `+${overtimeAfter}` : "0",
-      good: overtimeAfter === 0,
+      type: "delta",
     },
     {
       label: "Arbetsbalans",
       icon: <BarChart3 className="h-3.5 w-3.5" />,
-      before: "50%",
-      after: `${Math.round(s.workloadBalanceScore * 100)}%`,
-      delta: s.workloadBalanceScore - 0.5,
-      deltaText: `${s.workloadBalanceScore >= 0.5 ? "+" : ""}${Math.round((s.workloadBalanceScore - 0.5) * 100)}`,
+      value: `${Math.round(s.workloadBalanceScore * 100)}%`,
       good: s.workloadBalanceScore >= 0.7,
+      type: "score",
     },
     {
       label: "Riskindex",
       icon: <Shield className="h-3.5 w-3.5" />,
-      before: "50%",
-      after: `${Math.round(s.riskScore * 100)}%`,
-      delta: s.riskScore - 0.5,
-      deltaText: `${s.riskScore <= 0.5 ? "" : "+"}${Math.round((s.riskScore - 0.5) * 100)}`,
+      value: `${Math.round(s.riskScore * 100)}%`,
       good: s.riskScore <= 0.3,
+      type: "score",
     },
   ];
 
   return (
     <Card className="p-3" data-testid="kpi-diff-table">
-      <div className="grid grid-cols-[1fr_55px_55px_40px] gap-1 text-[10px] text-muted-foreground font-medium mb-1.5">
+      <div className="grid grid-cols-[1fr_60px_50px] gap-1 text-[10px] text-muted-foreground font-medium mb-1.5">
         <span>KPI</span>
-        <span className="text-right">Före</span>
-        <span className="text-right">Efter</span>
-        <span className="text-right">Δ</span>
+        <span className="text-right">Typ</span>
+        <span className="text-right">Värde</span>
       </div>
       <div className="space-y-1">
-        {rows.map((row) => {
-          const deltaColor = row.good
+        {deltaRows.map((row) => {
+          const color = row.good
             ? "text-green-600 dark:text-green-400"
             : "text-amber-600 dark:text-amber-400";
 
           return (
-            <div key={row.label} className="grid grid-cols-[1fr_55px_55px_40px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
+            <div key={row.label} className="grid grid-cols-[1fr_60px_50px] gap-1 items-center text-xs" data-testid={`kpi-row-${row.label}`}>
               <span className="flex items-center gap-1 text-muted-foreground">
                 {row.icon}
                 <span className="truncate">{row.label}</span>
               </span>
-              <span className="text-right text-muted-foreground">{row.before}</span>
-              <span className={`text-right font-medium ${deltaColor}`}>{row.after}</span>
-              <span className={`text-right text-[10px] font-medium ${deltaColor}`}>{row.deltaText}</span>
+              <span className="text-right text-[10px] text-muted-foreground">
+                {row.type === "delta" ? "Δ förändring" : "Beräknad"}
+              </span>
+              <span className={`text-right font-medium ${color}`}>{row.value}</span>
             </div>
           );
         })}
@@ -199,13 +183,11 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
       >
         <Shield className="h-3 w-3" />
         {label} ({pct}%)
-        {factors.length > 0 && (
-          expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-        )}
+        {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
       </button>
-      {expanded && factors.length > 0 && (
+      {expanded && (
         <div className="mt-1.5 space-y-1 pl-1" data-testid="risk-factors-list">
-          {factors.map((factor, i) => {
+          {factors.length > 0 ? factors.map((factor, i) => {
             const lf = factor.toLowerCase();
             let FactorIcon = Info;
             let iconColor = "text-amber-500";
@@ -228,7 +210,9 @@ function RiskBadge({ score, factors }: { score: number; factors: string[] }) {
                 <span>{factor}</span>
               </div>
             );
-          })}
+          }) : (
+            <div className="text-xs text-muted-foreground italic">Inga specifika riskfaktorer rapporterade.</div>
+          )}
         </div>
       )}
     </div>
@@ -474,11 +458,9 @@ export function ScheduleDiffView({
 
   return (
     <div className="space-y-3" data-testid="schedule-diff-view">
-      <KPIDiffTable trace={decisionTrace} totalOrders={totalOrdersScheduled} />
+      <KPIDiffTable trace={decisionTrace} />
 
-      {decisionTrace.riskFactors.length > 0 && (
-        <RiskBadge score={decisionTrace.summary.riskScore} factors={decisionTrace.riskFactors} />
-      )}
+      <RiskBadge score={decisionTrace.summary.riskScore} factors={decisionTrace.riskFactors} />
 
       <ConstraintViolationsAlert violations={decisionTrace.constraintViolations} />
 
