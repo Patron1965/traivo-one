@@ -16,14 +16,33 @@ export async function registerWorkOrderRoutes(app: Express) {
 
 app.get("/api/work-orders", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
-  const endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
+  const allDates = req.query.allDates === 'true';
+  const hasExplicitDates = !!(req.query.startDate || req.query.endDate);
+  let startDate = req.query.startDate ? new Date(req.query.startDate as string) : undefined;
+  let endDate = req.query.endDate ? new Date(req.query.endDate as string) : undefined;
   const includeUnscheduled = req.query.includeUnscheduled === 'true';
   const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : undefined;
   const offset = req.query.offset ? parseInt(req.query.offset as string, 10) : undefined;
   const status = req.query.status as string || undefined;
   const paginated = req.query.paginated === 'true';
   const search = req.query.search as string || undefined;
+
+  if (!allDates && status !== 'unscheduled') {
+    if (!startDate && !endDate) {
+      const now = new Date();
+      startDate = new Date(now);
+      startDate.setDate(startDate.getDate() - 30);
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date(now);
+      endDate.setDate(endDate.getDate() + 30);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (startDate && !endDate) {
+      endDate = new Date();
+      endDate.setFullYear(endDate.getFullYear() + 1);
+    } else if (!startDate && endDate) {
+      startDate = new Date(0);
+    }
+  }
 
   if (status === 'unscheduled') {
     if (search || offset !== undefined) {

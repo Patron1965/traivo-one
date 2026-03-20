@@ -15,7 +15,12 @@ import type { WorkOrder, Customer, Cluster } from "@shared/schema";
 
 export default function EconomicsDashboardPage() {
   const { data: workOrders = [], isLoading: workOrdersLoading } = useQuery<WorkOrder[]>({
-    queryKey: ["/api/work-orders"],
+    queryKey: ["/api/work-orders", { allDates: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/work-orders?allDates=true");
+      if (!res.ok) throw new Error("Failed to fetch work orders");
+      return res.json();
+    },
   });
 
   const { data: customers = [] } = useQuery<Customer[]>({

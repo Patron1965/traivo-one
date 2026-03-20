@@ -59,6 +59,9 @@ class NotificationService {
   private validatedResources: Set<string> = new Set();
   private authTokens: Map<string, AuthToken> = new Map();
   private tokenExpiryMs = 5 * 60 * 1000; // 5 minutes
+  private lastPositionBroadcast: Map<string, { timestamp: number; pending: PositionUpdate | null }> = new Map();
+  private positionBroadcastTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+  private positionBroadcastIntervalMs = 30_000;
 
   generateAuthToken(resourceId: string): string {
     const token = crypto.randomBytes(32).toString("hex");
@@ -399,8 +402,33 @@ class NotificationService {
     }
   }
 
-  // Broadcast position update to all connected planners
   private broadcastPositionUpdate(position: PositionUpdate) {
+    const now = Date.now();
+    const entry = this.lastPositionBroadcast.get(position.resourceId);
+
+    if (entry && (now - entry.timestamp) < this.positionBroadcastIntervalMs) {
+      entry.pending = position;
+      if (!this.positionBroadcastTimers.has(position.resourceId)) {
+        const delay = this.positionBroadcastIntervalMs - (now - entry.timestamp);
+        const timerId = setTimeout(() => {
+          const current = this.lastPositionBroadcast.get(position.resourceId);
+          if (current?.pending) {
+            this.doBroadcastPosition(current.pending);
+            current.timestamp = Date.now();
+            current.pending = null;
+          }
+          this.positionBroadcastTimers.delete(position.resourceId);
+        }, delay);
+        this.positionBroadcastTimers.set(position.resourceId, timerId);
+      }
+      return;
+    }
+
+    this.doBroadcastPosition(position);
+    this.lastPositionBroadcast.set(position.resourceId, { timestamp: now, pending: null });
+  }
+
+  private doBroadcastPosition(position: PositionUpdate) {
     const message = JSON.stringify({
       type: "position_update",
       resourceId: position.resourceId,
@@ -413,7 +441,6 @@ class NotificationService {
       timestamp: new Date().toISOString()
     });
 
-    // Broadcast to all connected clients except the sender
     this.clients.forEach((clients, resourceId) => {
       if (resourceId !== position.resourceId) {
         clients.forEach(client => {

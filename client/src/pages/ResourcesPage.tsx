@@ -270,7 +270,12 @@ export default function ResourcesPage() {
   });
 
   const { data: allWorkOrders = [] } = useQuery<WorkOrder[]>({
-    queryKey: ["/api/work-orders"],
+    queryKey: ["/api/work-orders", { allDates: true }],
+    queryFn: async () => {
+      const res = await fetch("/api/work-orders?allDates=true");
+      if (!res.ok) throw new Error("Failed to fetch work orders");
+      return res.json();
+    },
   });
 
   const { data: objects = [] } = useQuery<{ id: string; name: string }[]>({
