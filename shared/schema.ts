@@ -4455,6 +4455,22 @@ export const featureAuditLog = pgTable("feature_audit_log", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+export const planningDecisionLog = pgTable("planning_decision_log", {
+  id: serial("id").primaryKey(),
+  tenantId: varchar("tenant_id", { length: 255 }).notNull(),
+  userId: varchar("user_id", { length: 255 }),
+  weekStart: varchar("week_start", { length: 10 }).notNull(),
+  weekEnd: varchar("week_end", { length: 10 }).notNull(),
+  summary: jsonb("summary").notNull(),
+  moveCount: integer("move_count").notNull().default(0),
+  violationCount: integer("violation_count").notNull().default(0),
+  riskScore: real("risk_score").default(0),
+  totalOrdersScheduled: integer("total_orders_scheduled").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type PlanningDecisionLog = typeof planningDecisionLog.$inferSelect;
+
 export const roiShareTokens = pgTable("roi_share_tokens", {
   token: varchar("token", { length: 64 }).primaryKey(),
   tenantId: varchar("tenant_id", { length: 255 }).notNull(),

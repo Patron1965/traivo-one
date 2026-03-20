@@ -120,7 +120,8 @@ import {
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
   protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData,
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
-  tenantFeatures
+  tenantFeatures,
+  planningDecisionLog
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, or, isNull, isNotNull, desc, gte, lte, lt, sql, inArray, notInArray } from "drizzle-orm";
@@ -736,6 +737,12 @@ export interface IStorage {
   getRouteFeedback(tenantId: string, options?: { resourceId?: string; startDate?: string; endDate?: string; limit?: number }): Promise<RouteFeedback[]>;
   createRouteFeedback(feedback: InsertRouteFeedback): Promise<RouteFeedback>;
   getRouteFeedbackSummary(tenantId: string, options?: { startDate?: string; endDate?: string; resourceIds?: string[] }): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number>; byResource: { resourceId: string; avgRating: number; count: number }[]; ratingDistribution: Record<number, number>; byDay: { date: string; avgRating: number; count: number }[] }>;
+
+  getResourceAvailabilityByTenant(tenantId: string): Promise<ResourceAvailability[]>;
+  getVehicleSchedulesByTenant(tenantId: string): Promise<VehicleSchedule[]>;
+  getResourceVehiclesByResourceIds(resourceIds: string[]): Promise<ResourceVehicle[]>;
+  getResourceArticlesByResourceIds(resourceIds: string[]): Promise<ResourceArticle[]>;
+  createPlanningDecisionLog(log: { tenantId: string; userId: string; weekStart: string; weekEnd: string; decisionTrace: any; constraintViolations: any; riskScore: number }): Promise<any>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -1951,6 +1958,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(resourceArticles).where(eq(resourceArticles.resourceId, resourceId));
   }
 
+  async getResourceArticlesByResourceIds(resourceIds: string[]): Promise<ResourceArticle[]> {
+    if (resourceIds.length === 0) return [];
+    return db.select().from(resourceArticles).where(inArray(resourceArticles.resourceId, resourceIds));
+  }
+
   async getResourceArticle(id: string): Promise<ResourceArticle | undefined> {
     const [ra] = await db.select().from(resourceArticles).where(eq(resourceArticles.id, id));
     return ra || undefined;
@@ -2461,6 +2473,11 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(resourceVehicles).where(eq(resourceVehicles.resourceId, resourceId));
   }
 
+  async getResourceVehiclesByResourceIds(resourceIds: string[]): Promise<ResourceVehicle[]> {
+    if (resourceIds.length === 0) return [];
+    return db.select().from(resourceVehicles).where(inArray(resourceVehicles.resourceId, resourceIds));
+  }
+
   async getResourceVehicle(id: string): Promise<ResourceVehicle | undefined> {
     const [rv] = await db.select().from(resourceVehicles).where(eq(resourceVehicles.id, id));
     return rv || undefined;
@@ -2528,6 +2545,10 @@ export class DatabaseStorage implements IStorage {
     await db.delete(resourceAvailability).where(eq(resourceAvailability.id, id));
   }
 
+  async getResourceAvailabilityByTenant(tenantId: string): Promise<ResourceAvailability[]> {
+    return db.select().from(resourceAvailability).where(eq(resourceAvailability.tenantId, tenantId));
+  }
+
   // ============== VEHICLE SCHEDULE ==============
   async getVehicleSchedule(vehicleId: string): Promise<VehicleSchedule[]> {
     return db.select().from(vehicleSchedule).where(eq(vehicleSchedule.vehicleId, vehicleId));
@@ -2550,6 +2571,25 @@ export class DatabaseStorage implements IStorage {
 
   async deleteVehicleSchedule(id: string): Promise<void> {
     await db.delete(vehicleSchedule).where(eq(vehicleSchedule.id, id));
+  }
+
+  async getVehicleSchedulesByTenant(tenantId: string): Promise<VehicleSchedule[]> {
+    return db.select().from(vehicleSchedule).where(eq(vehicleSchedule.tenantId, tenantId));
+  }
+
+  // ============== PLANNING DECISION LOG ==============
+  async createPlanningDecisionLog(log: {
+    tenantId: string;
+    userId?: string;
+    weekStart: string;
+    weekEnd: string;
+    summary: unknown;
+    moveCount: number;
+    violationCount: number;
+    riskScore: number;
+    totalOrdersScheduled: number;
+  }): Promise<void> {
+    await db.insert(planningDecisionLog).values(log);
   }
 
   // ============== SUBSCRIPTIONS ==============

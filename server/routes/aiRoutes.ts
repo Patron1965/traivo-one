@@ -940,28 +940,73 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
     const { weekStart, weekEnd } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
-    const [workOrders, resources, clusters, setupTimeLogs] = await Promise.all([
+    const resolvedWeekStart = weekStart || new Date().toISOString().split("T")[0];
+    const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const [workOrders, resources, clusters, setupTimeLogs, objects] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
       storage.getClusters(tenantId),
       storage.getSetupTimeLogs(tenantId),
+      storage.getObjects(tenantId),
     ]);
     
-    // Hämta tidsfönster för alla oschemalagda ordrar
     const unscheduledOrderIds = workOrders
       .filter(o => !o.scheduledDate || !o.resourceId)
       .map(o => o.id);
-    const timeWindows = await storage.getTaskTimewindowsBatch(unscheduledOrderIds);
+    const resourceIds = resources.map(r => r.id);
+
+    const [timeWindows, resourceAvailability, vehicleSchedules, resourceVehicles, dependencyInstances, timeRestrictions, resourceArticlesData] = await Promise.all([
+      storage.getTaskTimewindowsBatch(unscheduledOrderIds),
+      storage.getResourceAvailabilityByTenant(tenantId),
+      storage.getVehicleSchedulesByTenant(tenantId),
+      storage.getResourceVehiclesByResourceIds(resourceIds),
+      storage.getTaskDependencyInstances(tenantId),
+      storage.getObjectTimeRestrictionsByTenant(tenantId),
+      storage.getResourceArticlesByResourceIds(resourceIds),
+    ]);
+
+    const constraintContext = {
+      allOrders: workOrders,
+      resources,
+      resourceAvailability,
+      vehicleSchedules,
+      resourceVehicles,
+      dependencyInstances,
+      timeRestrictions,
+      resourceArticles: resourceArticlesData,
+    };
     
     const result = await aiEnhancedSchedule({
       workOrders,
       resources,
       clusters,
-      weekStart: weekStart || new Date().toISOString().split("T")[0],
-      weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      weekStart: resolvedWeekStart,
+      weekEnd: resolvedWeekEnd,
       setupTimeLogs,
       timeWindows,
+      constraintContext,
+      objects,
     });
+
+    const userWithClaims = req.user as { claims?: { sub?: string } } | undefined;
+    const userId = userWithClaims?.claims?.sub || "unknown";
+
+    try {
+      await storage.createPlanningDecisionLog({
+        tenantId,
+        userId,
+        weekStart: resolvedWeekStart,
+        weekEnd: resolvedWeekEnd,
+        summary: result.decisionTrace.summary,
+        moveCount: result.decisionTrace.moves.length,
+        violationCount: result.decisionTrace.constraintViolations.length,
+        riskScore: result.decisionTrace.summary.riskScore,
+        totalOrdersScheduled: result.totalOrdersScheduled,
+      });
+    } catch (e) {
+      console.error("[planning-audit] Failed to log decision trace:", e);
+    }
     
     res.json(result);
 }));

@@ -272,6 +272,8 @@ export interface PlanningContext {
   setupTimeLogs?: SetupTimeLog[];
   kpis?: PlanningKPIs;
   timeWindows?: Record<string, TaskDesiredTimewindow[]>;
+  constraintContext?: import("./planning/constraintEngine").ConstraintContext;
+  objects?: ServiceObject[];
 }
 
 function getOrderTitle(order: WorkOrder): string {
@@ -470,7 +472,45 @@ export interface AutoScheduleResult {
   assignments: ScheduleAssignment[];
   summary: string;
   totalOrdersScheduled: number;
-  estimatedEfficiency: number; // Procent av optimal
+  estimatedEfficiency: number;
+}
+
+export interface DecisionTraceSummary {
+  totalDrivingChange: number;
+  totalSetupChange: number;
+  workloadBalanceScore: number;
+  riskScore: number;
+  totalOrdersScheduled: number;
+  estimatedEfficiency: number;
+}
+
+export interface DecisionTraceMove {
+  workOrderId: string;
+  workOrderTitle: string;
+  from: {
+    resourceId: string | null;
+    resourceName: string | null;
+    day: string | null;
+    startTime: string | null;
+  };
+  to: {
+    resourceId: string;
+    resourceName: string;
+    day: string;
+    startTime: string | null;
+  };
+  reasons: string[];
+  constraintStatus: "valid" | "warning" | "violation";
+  confidence: number;
+}
+
+export interface EnhancedAutoScheduleResult extends AutoScheduleResult {
+  decisionTrace: {
+    summary: DecisionTraceSummary;
+    moves: DecisionTraceMove[];
+    constraintViolations: import("./planning/constraintEngine").ConstraintViolation[];
+    riskFactors: string[];
+  };
 }
 
 interface ResourceCapacity {
@@ -924,8 +964,7 @@ export function analyzeWorkloadImbalances(context: PlanningContext): WorkloadAna
 // AI-förstärkt schemaläggning - använder GPT för att optimera ytterligare
 export async function aiEnhancedSchedule(
   context: PlanningContext
-): Promise<AutoScheduleResult> {
-  // Hämta väderprognos för Umeå (huvudort)
+): Promise<EnhancedAutoScheduleResult> {
   const UMEA_LAT = 63.82;
   const UMEA_LON = 20.26;
   let weatherInfo = "";
@@ -947,16 +986,152 @@ export async function aiEnhancedSchedule(
     console.error("Weather fetch failed:", e);
   }
   
-  // Först: Använd algoritm-baserad schemaläggning (med väderdata)
   const baseResult = await autoScheduleOrdersWithWeather(context, weatherImpacts);
   
+  const emptyTrace = {
+    summary: {
+      totalDrivingChange: 0,
+      totalSetupChange: 0,
+      workloadBalanceScore: 1.0,
+      riskScore: 0,
+      totalOrdersScheduled: 0,
+      estimatedEfficiency: 100,
+    },
+    moves: [] as DecisionTraceMove[],
+    constraintViolations: [] as import("./planning/constraintEngine").ConstraintViolation[],
+    riskFactors: [] as string[],
+  };
+
   if (baseResult.assignments.length === 0) {
-    return baseResult;
+    return { ...baseResult, decisionTrace: emptyTrace };
   }
   
-  // Sedan: Be AI:n optimera/validera fördelningen
+  const { validateSchedule } = await import("./planning/constraintEngine");
+  const { calculateRiskScore } = await import("./planning/riskCalculator");
+
+  let constraintViolations: import("./planning/constraintEngine").ConstraintViolation[] = [];
+  if (context.constraintContext) {
+    const movesForValidation = baseResult.assignments.map(a => ({
+      workOrderId: a.workOrderId,
+      resourceId: a.resourceId,
+      scheduledDate: a.scheduledDate,
+    }));
+    constraintViolations = validateSchedule(movesForValidation, context.constraintContext);
+
+    const hardViolationOrderIds = new Set(
+      constraintViolations
+        .filter(v => v.type === "hard")
+        .map(v => v.workOrderId)
+    );
+    if (hardViolationOrderIds.size > 0) {
+      baseResult.assignments = baseResult.assignments.filter(
+        a => !hardViolationOrderIds.has(a.workOrderId)
+      );
+      baseResult.totalOrdersScheduled = baseResult.assignments.length;
+    }
+  }
+
+  let riskScore = 0;
+  let riskFactors: string[] = [];
+  if (context.objects) {
+    const riskResult = calculateRiskScore(
+      baseResult.assignments,
+      context.workOrders,
+      context.resources,
+      context.objects,
+      weatherImpacts
+    );
+    riskScore = riskResult.riskScore;
+    riskFactors = riskResult.riskFactors;
+  }
+
+  const validOrders = context.workOrders.filter(
+    o => o.status !== "fakturerad" && o.status !== "utford"
+  );
+  const scheduledOrders = validOrders.filter(o => o.scheduledDate && o.resourceId);
+
+  const existingLoadPerResource: Record<string, number> = {};
+  scheduledOrders.forEach(o => {
+    if (o.resourceId) {
+      existingLoadPerResource[o.resourceId] = (existingLoadPerResource[o.resourceId] || 0) + (o.estimatedDuration || 60);
+    }
+  });
+
+  const newLoadPerResource: Record<string, number> = {};
+  baseResult.assignments.forEach(a => {
+    const order = context.workOrders.find(o => o.id === a.workOrderId);
+    newLoadPerResource[a.resourceId] = (newLoadPerResource[a.resourceId] || 0) + (order?.estimatedDuration || 60);
+  });
+
+  const totalExistingSetup = scheduledOrders.reduce((s, o) => s + (o.setupTime || 0), 0);
+  const avgSetupPerOrder = scheduledOrders.length > 0 ? totalExistingSetup / scheduledOrders.length : 5;
+  const estimatedNewSetup = Math.round(baseResult.assignments.length * avgSetupPerOrder * 0.85);
+  const setupChange = estimatedNewSetup - Math.round(baseResult.assignments.length * avgSetupPerOrder);
+
+  const allResourceLoads = context.resources.map(r => {
+    const existing = existingLoadPerResource[r.id] || 0;
+    const added = newLoadPerResource[r.id] || 0;
+    return (existing + added) / 60;
+  }).filter(h => h > 0);
+
+  let workloadBalanceScore = 1.0;
+  if (allResourceLoads.length > 1) {
+    const avg = allResourceLoads.reduce((s, h) => s + h, 0) / allResourceLoads.length;
+    const variance = allResourceLoads.reduce((s, h) => s + Math.pow(h - avg, 2), 0) / allResourceLoads.length;
+    const stdDev = Math.sqrt(variance);
+    workloadBalanceScore = Math.max(0, Math.min(1, 1 - (stdDev / (avg || 1))));
+  }
+  workloadBalanceScore = Math.round(workloadBalanceScore * 100) / 100;
+
+  const violationSet = new Set(constraintViolations.map(v => v.workOrderId));
+  const moves: DecisionTraceMove[] = baseResult.assignments.map(a => {
+    const order = context.workOrders.find(o => o.id === a.workOrderId);
+    const toResource = context.resources.find(r => r.id === a.resourceId);
+    const fromResource = order?.resourceId ? context.resources.find(r => r.id === order.resourceId) : null;
+
+    const reasons = a.reason.split(/[,;]/).map(r => r.trim()).filter(Boolean);
+
+    const orderViolations = constraintViolations.filter(v => v.workOrderId === a.workOrderId);
+    let constraintStatus: "valid" | "warning" | "violation" = "valid";
+    if (orderViolations.some(v => v.type === "hard")) constraintStatus = "violation";
+    else if (orderViolations.some(v => v.type === "soft")) constraintStatus = "warning";
+
+    return {
+      workOrderId: a.workOrderId,
+      workOrderTitle: order?.title || `Order ${a.workOrderId.slice(0, 8)}`,
+      from: {
+        resourceId: order?.resourceId || null,
+        resourceName: fromResource?.name || null,
+        day: order?.scheduledDate
+          ? (order.scheduledDate instanceof Date
+            ? order.scheduledDate.toISOString().split("T")[0]
+            : String(order.scheduledDate))
+          : null,
+        startTime: order?.scheduledStartTime || null,
+      },
+      to: {
+        resourceId: a.resourceId,
+        resourceName: toResource?.name || "Okänd resurs",
+        day: a.scheduledDate,
+        startTime: null,
+      },
+      reasons,
+      constraintStatus,
+      confidence: a.confidence,
+    };
+  });
+
+  const traceSummary: DecisionTraceSummary = {
+    totalDrivingChange: 0,
+    totalSetupChange: setupChange,
+    workloadBalanceScore,
+    riskScore,
+    totalOrdersScheduled: baseResult.totalOrdersScheduled,
+    estimatedEfficiency: baseResult.estimatedEfficiency,
+  };
+
+  let enhancedSummary = baseResult.summary;
   try {
-    // Räkna ordrar per kluster för att visa AI:n klusterdistribution
     const clusterCounts: Record<string, number> = {};
     baseResult.assignments.forEach(a => {
       const order = context.workOrders.find(o => o.id === a.workOrderId);
@@ -997,11 +1172,10 @@ Svara ENDAST med JSON:
 }
 `;
     
-    // Use shared persona with planning focus
     const plannerSystemPrompt = buildSystemPrompt({ role: "planner" }) + "\n" + PLANNING_PERSONA_ADDITIONS + "\nSvara ENDAST med valid JSON.";
     
     const response = await openai.chat.completions.create({
-      model: "gpt-4o", // Upgraded for complex optimization analysis
+      model: "gpt-4o",
       messages: [
         { role: "system", content: plannerSystemPrompt },
         { role: "user", content: prompt }
@@ -1015,9 +1189,7 @@ Svara ENDAST med JSON:
     const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
     const tips = aiResponse.optimizationTips || [];
     const weatherTips = aiResponse.weatherConsiderations || [];
-    const clusterTips = aiResponse.clusterOptimizations || [];
     
-    let enhancedSummary = baseResult.summary;
     if (tips.length > 0) {
       enhancedSummary += ` AI-tips: ${tips[0]}`;
     }
@@ -1025,15 +1197,22 @@ Svara ENDAST med JSON:
       enhancedSummary += ` Väder: ${weatherTips[0]}`;
     }
     
-    return {
-      ...baseResult,
-      summary: enhancedSummary,
-      estimatedEfficiency: Math.min(100, baseResult.estimatedEfficiency + (aiResponse.efficiencyBoost || 0))
-    };
+    traceSummary.estimatedEfficiency = Math.min(100, baseResult.estimatedEfficiency + (aiResponse.efficiencyBoost || 0));
   } catch (error) {
     console.error("AI enhancement failed:", error);
-    return baseResult;
   }
+
+  return {
+    ...baseResult,
+    summary: enhancedSummary,
+    estimatedEfficiency: traceSummary.estimatedEfficiency,
+    decisionTrace: {
+      summary: traceSummary,
+      moves,
+      constraintViolations,
+      riskFactors,
+    },
+  };
 }
 
 // Wrapper för autoScheduleOrders med väderdata
