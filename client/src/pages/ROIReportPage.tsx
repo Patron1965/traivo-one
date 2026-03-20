@@ -45,6 +45,12 @@ interface ROISummary {
   totalDistanceKm: number;
   totalCo2Kg: number;
   totalFuelLiters: number;
+  distanceBaseline: { firstHalfAvgKm: number; secondHalfAvgKm: number };
+  distanceReductionPercent: number;
+  distanceSavedKm: number;
+  co2Baseline: { firstHalfAvgKg: number; secondHalfAvgKg: number };
+  co2ReductionPercent: number;
+  co2SavedKg: number;
   totalValue: number;
   totalCost: number;
   activeResources: number;
@@ -369,17 +375,19 @@ export default function ROIReportPage() {
               icon={Users}
             />
             <KPICard
-              title="Total k\u00f6rstr\u00e4cka"
-              value={`${s.totalDistanceKm} km`}
-              subtitle={`${s.totalFuelLiters} L br\u00e4nsle`}
+              title="Ruttoptimering"
+              value={`${s.distanceReductionPercent}%`}
+              subtitle={`F\u00f6re: ${s.distanceBaseline.firstHalfAvgKm} km/m\u00e5n \u2192 Efter: ${s.distanceBaseline.secondHalfAvgKm} km/m\u00e5n (${s.distanceSavedKm > 0 ? "-" : ""}${Math.abs(s.distanceSavedKm)} km)`}
               icon={Truck}
+              trend={s.distanceReductionPercent > 0 ? "up" : "neutral"}
             />
             <KPICard
-              title="CO2-utsl\u00e4pp"
-              value={`${s.totalCo2Kg} kg`}
-              subtitle={`${s.totalDistanceKm > 0 ? (s.totalCo2Kg / s.totalDistanceKm * 100).toFixed(1) : 0} kg/100km`}
+              title="CO2-besparing"
+              value={`${s.co2ReductionPercent}%`}
+              subtitle={`F\u00f6re: ${s.co2Baseline.firstHalfAvgKg} kg/m\u00e5n \u2192 Efter: ${s.co2Baseline.secondHalfAvgKg} kg/m\u00e5n (${s.co2SavedKg > 0 ? "-" : ""}${Math.abs(s.co2SavedKg)} kg)`}
               icon={Leaf}
               color="#16a34a"
+              trend={s.co2ReductionPercent > 0 ? "up" : "neutral"}
             />
             <KPICard
               title="Avvikelser"

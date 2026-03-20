@@ -195,6 +195,16 @@ export async function registerRoiRoutes(app: Express) {
     const avgSetupSecond = secondHalf.length > 0 ? secondHalf.reduce((s, m) => s + m.avgSetupTimeMinutes, 0) / secondHalf.length : 0;
     const setupTimeReduction = avgSetupFirst > 0 ? Math.round(((avgSetupFirst - avgSetupSecond) / avgSetupFirst) * 100) : 0;
 
+    const avgDistFirst = firstHalf.length > 0 ? firstHalf.reduce((s, m) => s + m.totalDistanceKm, 0) / firstHalf.length : 0;
+    const avgDistSecond = secondHalf.length > 0 ? secondHalf.reduce((s, m) => s + m.totalDistanceKm, 0) / secondHalf.length : 0;
+    const distanceReductionPercent = avgDistFirst > 0 ? Math.round(((avgDistFirst - avgDistSecond) / avgDistFirst) * 100) : 0;
+    const distanceSavedKm = Math.round((avgDistFirst - avgDistSecond) * secondHalf.length * 10) / 10;
+
+    const avgCo2First = firstHalf.length > 0 ? firstHalf.reduce((s, m) => s + m.totalCo2Kg, 0) / firstHalf.length : 0;
+    const avgCo2Second = secondHalf.length > 0 ? secondHalf.reduce((s, m) => s + m.totalCo2Kg, 0) / secondHalf.length : 0;
+    const co2ReductionPercent = avgCo2First > 0 ? Math.round(((avgCo2First - avgCo2Second) / avgCo2First) * 100) : 0;
+    const co2SavedKg = Math.round((avgCo2First - avgCo2Second) * secondHalf.length * 10) / 10;
+
     const productivityPerResource = activeResources > 0
       ? Math.round((completedOrders.length / activeResources) * 10) / 10
       : 0;
@@ -226,6 +236,12 @@ export async function registerRoiRoutes(app: Express) {
         totalDistanceKm,
         totalCo2Kg,
         totalFuelLiters,
+        distanceBaseline: { firstHalfAvgKm: Math.round(avgDistFirst * 10) / 10, secondHalfAvgKm: Math.round(avgDistSecond * 10) / 10 },
+        distanceReductionPercent,
+        distanceSavedKm,
+        co2Baseline: { firstHalfAvgKg: Math.round(avgCo2First * 10) / 10, secondHalfAvgKg: Math.round(avgCo2Second * 10) / 10 },
+        co2ReductionPercent,
+        co2SavedKg,
         totalValue,
         totalCost,
         activeResources,
@@ -311,9 +327,9 @@ export async function registerRoiRoutes(app: Express) {
     const orders = await db
       .select({
         scheduledDate: workOrders.scheduledDate,
-        completedAt: workOrders.completedAt,
         actualDuration: workOrders.actualDuration,
         estimatedDuration: workOrders.estimatedDuration,
+        setupTime: workOrders.setupTime,
         cachedValue: workOrders.cachedValue,
         executionStatus: workOrders.executionStatus,
       })
@@ -324,11 +340,31 @@ export async function registerRoiRoutes(app: Express) {
         gte(workOrders.scheduledDate, cutoff),
       ));
 
+    const envData = await db
+      .select({
+        distanceKm: environmentalData.distanceKm,
+        co2Kg: environmentalData.co2Kg,
+        workOrderId: environmentalData.workOrderId,
+      })
+      .from(environmentalData)
+      .where(and(
+        eq(environmentalData.tenantId, tenantId),
+        gte(environmentalData.recordedAt, cutoff),
+      ));
+
     const completedOrders = orders.filter(o => o.executionStatus === "completed" || o.executionStatus === "inspected" || o.executionStatus === "invoiced");
     const completionRate = orders.length > 0 ? Math.round((completedOrders.length / orders.length) * 100) : 0;
     const avgDuration = completedOrders.length > 0
       ? Math.round(completedOrders.reduce((s, o) => s + (o.actualDuration || o.estimatedDuration || 60), 0) / completedOrders.length)
       : 0;
+    const avgEstimatedDuration = completedOrders.length > 0
+      ? Math.round(completedOrders.reduce((s, o) => s + (o.estimatedDuration || 60), 0) / completedOrders.length)
+      : 0;
+    const efficiencyGain = avgEstimatedDuration > 0 && avgDuration > 0
+      ? Math.round(((avgEstimatedDuration - avgDuration) / avgEstimatedDuration) * 100)
+      : 0;
+    const totalDistanceKm = Math.round(envData.reduce((s, e) => s + (e.distanceKm || 0), 0) * 10) / 10;
+    const totalCo2Kg = Math.round(envData.reduce((s, e) => s + (e.co2Kg || 0), 0) * 10) / 10;
 
     res.json({
       customer: { name: customer.name },
@@ -337,6 +373,9 @@ export async function registerRoiRoutes(app: Express) {
         completedOrders: completedOrders.length,
         completionRate,
         avgDurationMinutes: avgDuration,
+        efficiencyGainPercent: efficiencyGain,
+        totalDistanceKm,
+        totalCo2Kg,
       },
     });
   }));

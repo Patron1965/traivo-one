@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   CheckCircle2,
   Clock,
   BarChart3,
   AlertCircle,
+  TrendingUp,
+  Truck,
+  Leaf,
 } from "lucide-react";
 
 interface SharedROIData {
@@ -17,6 +19,9 @@ interface SharedROIData {
     completedOrders: number;
     completionRate: number;
     avgDurationMinutes: number;
+    efficiencyGainPercent: number;
+    totalDistanceKm: number;
+    totalCo2Kg: number;
   };
 }
 
@@ -119,11 +124,35 @@ export default function PortalROIReportPage() {
             </CardContent>
           </Card>
 
+          <Card data-testid="kpi-efficiency">
+            <CardContent className="p-5 text-center">
+              <TrendingUp className="h-6 w-6 mx-auto mb-2 text-[#4A9B9B]" />
+              <p className="text-3xl font-bold">{data.summary.efficiencyGainPercent}%</p>
+              <p className="text-xs text-muted-foreground">Effektivitetsvinst</p>
+            </CardContent>
+          </Card>
+
           <Card data-testid="kpi-avg-duration">
             <CardContent className="p-5 text-center">
               <Clock className="h-6 w-6 mx-auto mb-2 text-[#6B7C8C]" />
               <p className="text-3xl font-bold">{data.summary.avgDurationMinutes}</p>
               <p className="text-xs text-muted-foreground">Snitt uppdragstid (min)</p>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="kpi-distance">
+            <CardContent className="p-5 text-center">
+              <Truck className="h-6 w-6 mx-auto mb-2 text-[#1B4B6B]" />
+              <p className="text-3xl font-bold">{data.summary.totalDistanceKm}</p>
+              <p className="text-xs text-muted-foreground">Total k\u00f6rstr\u00e4cka (km)</p>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="kpi-co2">
+            <CardContent className="p-5 text-center">
+              <Leaf className="h-6 w-6 mx-auto mb-2 text-green-600" />
+              <p className="text-3xl font-bold">{data.summary.totalCo2Kg}</p>
+              <p className="text-xs text-muted-foreground">CO2-utsl\u00e4pp (kg)</p>
             </CardContent>
           </Card>
         </div>
