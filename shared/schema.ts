@@ -4434,6 +4434,15 @@ export type TimeSummaryResponse = {
   weeklyRestViolations: Array<{ resourceId: string; resourceName: string; totalRestHours: number }>;
 };
 
+export const tenantFeatures = pgTable("tenant_features", {
+  tenantId: varchar("tenant_id", { length: 255 }).primaryKey().references(() => tenants.id),
+  packageTier: varchar("package_tier", { length: 50 }).notNull().default("premium"),
+  enabledModules: text("enabled_modules").array().notNull().default(sql`ARRAY['core','iot','annual_planning','ai_planning','fleet','environmental','customer_portal','invoicing','predictive','work_sessions','order_concepts','inspections','sms','route_feedback','equipment_sharing','roi_reports']::text[]`),
+  customOverrides: jsonb("custom_overrides").default({}),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: varchar("updated_by", { length: 255 }),
+});
+
 export const roiShareTokens = pgTable("roi_share_tokens", {
   token: varchar("token", { length: 64 }).primaryKey(),
   tenantId: varchar("tenant_id", { length: 255 }).notNull(),

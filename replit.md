@@ -67,6 +67,7 @@ The user interface features a sticky TopNav, global search, mobile-friendly hamb
 - **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields, UI for visualization, and aggregated preferences for order placement.
 - **Job Creation Price List Override:** Optional price list selector in JobModal allowing manual override of automatic price resolution hierarchy.
 - **Planned Notes (Meddelande till utförare):** Planner can write messages to field workers when creating jobs, displayed prominently in the SimpleFieldApp.
+- **Tenant Feature Flags (Funktionsflaggor per tenant):** Module-based feature packaging system with 4 tiers (Bas/Standard/Premium/Anpassad). `tenantFeatures` DB table stores per-tenant enabled modules. Backend cache with 60s TTL in `server/feature-flags.ts`. Frontend `FeatureProvider` context filters navigation and gates routes via `ProtectedRoute`. "Moduler" tab in TenantConfigPage for package selection and per-module toggles. Shared definitions in `shared/modules.ts`.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

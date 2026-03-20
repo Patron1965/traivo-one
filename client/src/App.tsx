@@ -93,6 +93,9 @@ import WorkSessionsPage from "@/pages/WorkSessionsPage";
 import AnnualPlanningPage from "@/pages/AnnualPlanningPage";
 import PredictiveMaintenancePage from "@/pages/PredictiveMaintenancePage";
 import { TenantBrandingProvider } from "@/components/TenantBrandingProvider";
+import { FeatureProvider, useFeatures } from "@/lib/feature-context";
+import ModuleUpgradePage from "@/pages/ModuleUpgradePage";
+import { getModuleForRoute } from "@shared/modules";
 import { TourProvider } from "@/hooks/use-tour";
 import { TourGuide } from "@/components/TourGuide";
 import { TourAutoStart } from "@/components/TourAutoStart";
@@ -364,12 +367,14 @@ function AuthenticatedApp() {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <ThemeProvider>
-        <TooltipProvider>
-          <AppContent />
-          <Toaster />
-        </TooltipProvider>
-      </ThemeProvider>
+      <FeatureProvider>
+        <ThemeProvider>
+          <TooltipProvider>
+            <AppContent />
+            <Toaster />
+          </TooltipProvider>
+        </ThemeProvider>
+      </FeatureProvider>
     </QueryClientProvider>
   );
 }

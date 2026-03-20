@@ -5,6 +5,7 @@ import { useTerminology } from "@/hooks/use-terminology";
 import { useTenantBranding } from "@/components/TenantBrandingProvider";
 import traivoLogo from "@assets/traivo_logo_transparent.png";
 import { canAccessMenu, getRoleLabel, type NavMenuGroup } from "@/lib/role-config";
+import { useFeatures } from "@/lib/feature-context";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { GlobalAIButton } from "@/components/GlobalAIButton";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -275,13 +276,16 @@ export function TopNav() {
   const { user } = useAuth();
   const userRole = user?.role || "user";
   const navItems = useNavItems();
+  const { isNavItemEnabled } = useFeatures();
+
+  const filterByModule = (items: NavItem[]) => items.filter(item => isNavItemEnabled(item.url));
 
   const menuGroups: { label: string; items: NavItem[]; icon: React.ElementType; colorClass: string; group: NavMenuGroup }[] = [
-    { label: "Grunddata", items: navItems.grunddata, icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { label: "Ordrar", items: navItems.ordrar, icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
-    { label: "Planering & Karta", items: navItems.planering, icon: Calendar, group: "planering", colorClass: "text-green-500" },
-    { label: "Fält & Utförande", items: navItems.falt, icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
-    { label: "Analys", items: navItems.analys, icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
+    { label: "Grunddata", items: filterByModule(navItems.grunddata), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
+    { label: "Ordrar", items: filterByModule(navItems.ordrar), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
+    { label: "Planering & Karta", items: filterByModule(navItems.planering), icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { label: "Fält & Utförande", items: filterByModule(navItems.falt), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
+    { label: "Analys", items: filterByModule(navItems.analys), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
     { label: "Administration", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 
