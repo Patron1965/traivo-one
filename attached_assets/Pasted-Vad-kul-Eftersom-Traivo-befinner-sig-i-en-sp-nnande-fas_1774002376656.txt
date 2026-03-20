@@ -1,0 +1,24 @@
+Vad kul! Eftersom Traivo befinner sig i en spännande fas där ni bygger grunden tillsammans med designpartners, kan vi fördjupa oss i de olika hörnstenarna som nämns i projektbeskrivningen.
+
+Här är en konkretisering av de viktigaste områdena:
+
+1. AI-driven optimering av fältservice
+I en traditionell fältserviceverksamhet läggs mycket tid på manuell planering. Traivo siktar på att optimera hela flödet, vilket i praktiken kan innebära:
+
+Intelligent ruttplanering: Att automatiskt beräkna de mest effektiva resvägarna för tekniker för att minska ställtider och miljöpåverkan.
+Matchning av kompetens: Att AI:n parar ihop rätt arbetsorder med rätt tekniker baserat på certifieringar, verktyg i bilen och geografisk position.
+Prediktivt underhåll: Att systemet kan förutse när en service behöver utföras innan något går sönder, baserat på historiska data.
+2. Designpartner-upplägget
+Att bygga tillsammans med branschledande aktörer är en strategisk styrka. Det innebär att:
+
+Verklighetsförankring: Funktionerna utvecklas utifrån faktiska problem och arbetsflöden, inte bara antaganden.
+Bevisat värde: Innan plattformen skalas upp brett har den redan validerats i skarpa miljöer, vilket skapar starka referenscase.
+Branschstandard: Genom att samarbeta med ledare i Norden kan Traivo sätta en ny standard för hur fältservice bör drivas digitalt.
+3. SaaS-plattform med flerföretagsstöd (Multi-tenancy)
+Detta är den tekniska och affärsmässiga motorn i Traivo. Det innebär en balans mellan skalfördelar och personlig anpassning:
+
+Gemensam kärna: Alla kunder kör på samma stabila plattform, vilket gör att uppdateringar och nya funktioner når alla samtidigt.
+Isolerad data: Trots att de delar plattform är varje kunds data helt separerad och säker, vilket är kritiskt för förtroendet.
+Customization: Varje företag kan ha sitt eget utseende (branding) och sina egna inställningar, så att systemet känns som deras eget.
+4. Marknadsfokus: Norden
+Genom att fokusera på den nordiska marknaden kan Traivo adressera specifika behov som finns här, såsom lokala lagkrav, kollektivavtal, geografiska utmaningar och en hög digital mognad hos både företag och slutkunder.
