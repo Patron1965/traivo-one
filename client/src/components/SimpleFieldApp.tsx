@@ -31,6 +31,7 @@ import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS } from "@shared/schema";
 import { Textarea } from "@/components/ui/textarea";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
+import { VoiceInput } from "@/components/VoiceInput";
 import {
   Dialog,
   DialogContent,
@@ -937,13 +938,21 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
-                <Textarea
-                  value={jobNote}
-                  onChange={(e) => setJobNote(e.target.value)}
-                  placeholder="Skriv din anteckning här..."
-                  className="min-h-[80px]"
-                  data-testid="input-job-note"
-                />
+                <div className="flex gap-2">
+                  <Textarea
+                    value={jobNote}
+                    onChange={(e) => setJobNote(e.target.value)}
+                    placeholder="Skriv din anteckning här..."
+                    className="min-h-[80px] flex-1"
+                    data-testid="input-job-note"
+                  />
+                  <VoiceInput
+                    onTranscript={(text) => {
+                      setJobNote((prev) => prev ? `${prev} ${text}` : text);
+                    }}
+                    className="shrink-0 self-start mt-1"
+                  />
+                </div>
                 <Button
                   className="w-full gap-2"
                   onClick={() => {
