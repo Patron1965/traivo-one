@@ -44,6 +44,18 @@ export function usePlannerDnd({
     lastOverIdRef.current = null;
   }, [workOrders, setActiveDragJob]);
 
+  const computeStartTime = useCallback((resourceId: string, dateStr: string, hour?: number): string | undefined => {
+    let scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
+    if (!scheduledStartTime && viewMode === "week") {
+      const existing = (resourceDayJobMap.jobs[resourceId]?.[dateStr] || []).filter(j => j.scheduledStartTime).sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+      let nextSlot = DAY_START_HOUR * 60;
+      for (const e of existing) { const [eH, eM] = (e.scheduledStartTime || "07:00").split(":").map(Number); const end = eH * 60 + eM + (e.estimatedDuration || 60); if (end > nextSlot) nextSlot = end; }
+      const h = Math.floor(nextSlot / 60);
+      if (h < DAY_END_HOUR) scheduledStartTime = `${h.toString().padStart(2, "0")}:${(nextSlot % 60).toString().padStart(2, "0")}`;
+    }
+    return scheduledStartTime;
+  }, [viewMode, resourceDayJobMap]);
+
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) {
@@ -64,26 +76,34 @@ export function usePlannerDnd({
     const resourceId = parts[0];
     const dateStr = parts[1];
     const hour = parts[2] ? parseInt(parts[2], 10) : undefined;
-    const startTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : null;
-    const conflicts = detectConflictsForJob(job, resourceId, dateStr, startTime);
-    if (conflicts.length > 0) {
-      setDragOverConflicts({ [dropId]: conflicts });
+    const provisionalStartTime = hour !== undefined
+      ? `${hour.toString().padStart(2, "0")}:00`
+      : computeStartTime(resourceId, dateStr) || null;
+
+    const jobsToCheck = (selectedJobIds && selectedJobIds.size > 1 && selectedJobIds.has(job.id))
+      ? workOrders.filter(j => selectedJobIds.has(j.id))
+      : [job];
+
+    const allConflicts: string[] = [];
+    let accMin = 0;
+    const baseMinutes = provisionalStartTime
+      ? parseInt(provisionalStartTime.split(":")[0]) * 60 + parseInt(provisionalStartTime.split(":")[1])
+      : DAY_START_HOUR * 60;
+
+    for (const j of jobsToCheck) {
+      const slotMin = baseMinutes + accMin;
+      const slotTime = `${Math.floor(slotMin / 60).toString().padStart(2, "0")}:${(slotMin % 60).toString().padStart(2, "0")}`;
+      const conflicts = detectConflictsForJob(j, resourceId, dateStr, slotTime);
+      if (conflicts.length > 0) allConflicts.push(...conflicts);
+      accMin += (j.estimatedDuration || 60);
+    }
+
+    if (allConflicts.length > 0) {
+      setDragOverConflicts({ [dropId]: allConflicts });
     } else {
       setDragOverConflicts({});
     }
-  }, [workOrders, detectConflictsForJob]);
-
-  const computeStartTime = useCallback((resourceId: string, dateStr: string, hour?: number): string | undefined => {
-    let scheduledStartTime = hour !== undefined ? `${hour.toString().padStart(2, "0")}:00` : undefined;
-    if (!scheduledStartTime && viewMode === "week") {
-      const existing = (resourceDayJobMap.jobs[resourceId]?.[dateStr] || []).filter(j => j.scheduledStartTime).sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
-      let nextSlot = DAY_START_HOUR * 60;
-      for (const e of existing) { const [eH, eM] = (e.scheduledStartTime || "07:00").split(":").map(Number); const end = eH * 60 + eM + (e.estimatedDuration || 60); if (end > nextSlot) nextSlot = end; }
-      const h = Math.floor(nextSlot / 60);
-      if (h < DAY_END_HOUR) scheduledStartTime = `${h.toString().padStart(2, "0")}:${(nextSlot % 60).toString().padStart(2, "0")}`;
-    }
-    return scheduledStartTime;
-  }, [viewMode, resourceDayJobMap]);
+  }, [workOrders, detectConflictsForJob, computeStartTime, selectedJobIds]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveDragJob(null);
