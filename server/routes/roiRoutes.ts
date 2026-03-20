@@ -4,10 +4,8 @@ import { eq, and, gte, lte, sql, count, sum, avg, desc, inArray, or } from "driz
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { ValidationError } from "../errors";
-import { workOrders, environmentalData, deviationReports, customers, objects } from "@shared/schema";
+import { workOrders, environmentalData, deviationReports, customers, objects, roiShareTokens } from "@shared/schema";
 import crypto from "crypto";
-
-const shareTokens = new Map<string, { tenantId: string; customerId: string; expiresAt: Date }>();
 
 interface MonthlyMetrics {
   month: string;
@@ -201,6 +199,11 @@ export async function registerRoiRoutes(app: Express) {
       ? Math.round((completedOrders.length / activeResources) * 10) / 10
       : 0;
 
+    const uniqueWorkDays = new Set(completedOrders.filter(o => o.scheduledDate).map(o => o.scheduledDate!.toISOString().substring(0, 10))).size;
+    const weeks = monthsBack * 4.33;
+    const productivityPerDay = uniqueWorkDays > 0 ? Math.round((completedOrders.length / uniqueWorkDays) * 10) / 10 : 0;
+    const productivityPerWeek = weeks > 0 ? Math.round((completedOrders.length / weeks) * 10) / 10 : 0;
+
     const deviationTrend = firstHalf.length > 0 && secondHalf.length > 0
       ? {
         firstPeriodAvg: Math.round(firstHalf.reduce((s, m) => s + m.deviationCount, 0) / firstHalf.length * 10) / 10,
@@ -227,8 +230,11 @@ export async function registerRoiRoutes(app: Express) {
         totalCost,
         activeResources,
         productivityPerResource,
+        productivityPerDay,
+        productivityPerWeek,
         deviationCount: customerDeviations.length,
         deviationTrend,
+        setupTimeBaseline: { firstHalfAvgMinutes: Math.round(avgSetupFirst * 10) / 10, secondHalfAvgMinutes: Math.round(avgSetupSecond * 10) / 10 },
       },
       monthly,
     });
@@ -268,7 +274,7 @@ export async function registerRoiRoutes(app: Express) {
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + 30);
 
-    shareTokens.set(token, { tenantId, customerId, expiresAt });
+    await db.insert(roiShareTokens).values({ token, tenantId, customerId, expiresAt });
 
     const baseUrl = process.env.REPLIT_DEV_DOMAIN
       ? `https://${process.env.REPLIT_DEV_DOMAIN}`
@@ -282,10 +288,12 @@ export async function registerRoiRoutes(app: Express) {
     const token = req.query.token as string;
     if (!token) throw new ValidationError("Token saknas");
 
-    const shareData = shareTokens.get(token);
+    const [shareData] = await db.select()
+      .from(roiShareTokens)
+      .where(eq(roiShareTokens.token, token));
     if (!shareData) throw new ValidationError("Ogiltig eller utgången delningslänk");
     if (new Date() > shareData.expiresAt) {
-      shareTokens.delete(token);
+      await db.delete(roiShareTokens).where(eq(roiShareTokens.token, token));
       throw new ValidationError("Delningslänken har utgått");
     }
 

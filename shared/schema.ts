@@ -4433,3 +4433,11 @@ export type TimeSummaryResponse = {
   nightRestViolations: Array<{ resourceId: string; resourceName: string; date: string; restHours: number }>;
   weeklyRestViolations: Array<{ resourceId: string; resourceName: string; totalRestHours: number }>;
 };
+
+export const roiShareTokens = pgTable("roi_share_tokens", {
+  token: varchar("token", { length: 64 }).primaryKey(),
+  tenantId: varchar("tenant_id", { length: 255 }).notNull(),
+  customerId: varchar("customer_id", { length: 255 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

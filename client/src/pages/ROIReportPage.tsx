@@ -49,8 +49,11 @@ interface ROISummary {
   totalCost: number;
   activeResources: number;
   productivityPerResource: number;
+  productivityPerDay: number;
+  productivityPerWeek: number;
   deviationCount: number;
   deviationTrend: { firstPeriodAvg: number; secondPeriodAvg: number } | null;
+  setupTimeBaseline: { firstHalfAvgMinutes: number; secondHalfAvgMinutes: number };
 }
 
 interface MonthlyMetrics {
@@ -355,14 +358,14 @@ export default function ROIReportPage() {
             <KPICard
               title="St\u00e4lltidsreduktion"
               value={`${s.setupTimeReductionPercent}%`}
-              subtitle={`Snitt ${s.avgSetupTimeMinutes} min`}
+              subtitle={`F\u00f6re: ${s.setupTimeBaseline.firstHalfAvgMinutes} min \u2192 Efter: ${s.setupTimeBaseline.secondHalfAvgMinutes} min`}
               icon={Clock}
               trend={s.setupTimeReductionPercent > 0 ? "up" : "neutral"}
             />
             <KPICard
               title="Produktivitet"
-              value={s.productivityPerResource}
-              subtitle={`ordrar per resurs (${s.activeResources} aktiva)`}
+              value={s.productivityPerDay}
+              subtitle={`ordrar/dag \u00b7 ${s.productivityPerWeek}/vecka \u00b7 ${s.productivityPerResource}/resurs`}
               icon={Users}
             />
             <KPICard
