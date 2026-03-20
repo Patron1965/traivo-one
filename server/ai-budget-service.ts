@@ -194,6 +194,18 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
       : `AI-budgeten har nått ${status.percentUsed.toFixed(1)}%. Aktuell förbrukning: $${status.currentUsageUsd.toFixed(2)} av $${status.monthlyBudgetUsd.toFixed(2)}. Prognostiserad månadskostnad: $${status.projectedMonthEndUsd.toFixed(2)}.`;
 
     console.log(`[ai-budget] Alert recorded for tenant ${tenantId}: ${threshold}% threshold (${status.percentUsed.toFixed(1)}% used) - ${title}: ${message}`);
+
+    try {
+      const { broadcastSystemAlert } = await import("./notifications");
+      broadcastSystemAlert({
+        type: severity === "critical" ? "alert" : "info",
+        title,
+        message,
+        data: { tenantId, threshold, percentUsed: status.percentUsed },
+      });
+    } catch (notifErr) {
+      console.error("[ai-budget] Failed to broadcast alert notification:", notifErr);
+    }
   }
 }
 

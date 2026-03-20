@@ -71,6 +71,13 @@ export async function trackApiUsage(params: {
       durationMs: params.durationMs || null,
       metadata: params.metadata || {},
     });
+
+    if (params.tenantId && params.service === "openai") {
+      import("./ai-budget-service").then(({ checkAndSendBudgetAlerts, invalidateBudgetCache }) => {
+        invalidateBudgetCache(params.tenantId!);
+        checkAndSendBudgetAlerts(params.tenantId!).catch(() => {});
+      }).catch(() => {});
+    }
   } catch (error) {
     console.error("[api-usage-tracker] Failed to log API usage:", error);
   }

@@ -1,0 +1,53 @@
+## FÖR TEKNIKER I FÄLT (Traivo Go)
+
+1. **Smart Checklista med AI-förslag**
+   - Föreslå nästa steg baserat på ordertyp och historik
+   - Auto-komplettera vanliga åtgärder för liknande jobb
+   - Varning om glömda obligatoriska fält innan signering
+
+2. **Offline-läge förbättring**
+   - Tydligare indikator för vad som är synkat vs. väntar på sync
+   - Möjlighet att se vilka order som är nedladdade för offline-arbete
+   - Pre-cache kartor för dagens rutt automatiskt
+
+3. **Snabbåtgärder**
+   - Swipe-gester för vanliga actions (starta/pausa/avsluta order)
+   - Snabbknappar för "Behöver reservdel", "Kund ej hemma", "Tar längre tid"
+   - Voice-to-text för anteckningar (händer ofta smutsiga)
+
+4. **Smart navigation**
+   - "Nästa stopp"-knapp som öppnar GPS direkt
+   - Visa restid och avstånd till nästa order i listan
+   - Notis 10 min innan nästa bokad tid
+
+## FÖR PLANERARE PÅ KONTORET (Traivo One)
+
+5. **Drag-and-drop förbättring i WeekPlanner**
+   - Visa konfliktvarningar INNAN släpp (röd outline om ogiltig)
+   - Bulk-flytt: markera flera order och dra samtidigt
+   - "Föreslå optimal tid" för oplanerade order baserat på rutt
+
+6. **Dashboard med actionable insights**
+   - "Kräver uppmärksamhet"-widget: försenade order, tekniker utan jobb, dubbelbokning
+   - Kapacitetsöversikt: % utnyttjande per tekniker/dag
+   - Snabbfilter: "Visa bara akuta", "Visa bara oplanerade"
+
+7. **Smart resursallokering**
+   - AI-förslag: "Tekniker X är närmast och har rätt kompetens"
+   - Varning om tekniker saknar nödvändig utrustning/certifikat för order
+   - "Auto-fördela"-knapp för dagens oplanerade order
+
+8. **Kommunikation**
+   - Snabb-SMS till tekniker direkt från orderkortet
+   - Broadcast-meddelande till alla tekniker på en viss rutt
+   - Kund-notis: "Tekniker 15 min bort" (auto-skickas)
+
+## TEKNISKA FÖRBÄTTRINGAR
+
+9. **Performance**
+   - Lazy loading av orderhistorik (ladda bara senaste 30 dagarna default)
+   - Optimera WebSocket-events (batcha position_update var 30:e sekund istället för realtid)
+
+10. **Felhantering**
+    - Retry-logik för misslyckade API-anrop (3 försök med exponential backoff)
+    - Tydliga felmeddelanden på svenska (inte tekniska error codes)

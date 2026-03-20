@@ -13,7 +13,6 @@ import { getISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 import {
   checkBudgetAndBlock,
-  checkAndSendBudgetAlerts,
   checkRateLimit,
   resolveAIModel,
   acquireSchedulingLock,
@@ -22,7 +21,6 @@ import {
   getCachedAIResponse,
   setCachedAIResponse,
   createAICacheKey,
-  invalidateBudgetCache,
 } from "../ai-budget-service";
 import { getTenantFeatures } from "../feature-flags";
 
@@ -436,8 +434,6 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     );
 
     trackOAIResponse(response, tenantId);
-    invalidateBudgetCache(tenantId);
-    checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
     let assistantMessage = response.choices[0]?.message;
 
@@ -472,8 +468,6 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       );
 
       trackOAIResponse(response, tenantId);
-      invalidateBudgetCache(tenantId);
-      checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
       assistantMessage = response.choices[0]?.message;
     }
@@ -1084,8 +1078,6 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
           objects,
         })
       );
-
-      checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
       const userWithClaims = req.user as { claims?: { sub?: string } } | undefined;
       const userId = userWithClaims?.claims?.sub || "unknown";

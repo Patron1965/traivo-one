@@ -851,6 +851,7 @@ app.get("/api/system/api-costs/recent", requireAdmin, asyncHandler(async (req, r
 }));
 
 app.get("/api/system/api-costs/by-tenant", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
     const period = (req.query.period as string) || "month";
     let startDate: Date;
     
@@ -869,7 +870,10 @@ app.get("/api/system/api-costs/by-tenant", requireAdmin, asyncHandler(async (req
         totalCalls: sql<number>`COUNT(*)`,
       })
       .from(apiUsageLogs)
-      .where(gte(apiUsageLogs.createdAt, startDate))
+      .where(and(
+        gte(apiUsageLogs.createdAt, startDate),
+        eq(apiUsageLogs.tenantId, tenantId)
+      ))
       .groupBy(apiUsageLogs.tenantId, apiUsageLogs.service);
     
     res.json(results.map(r => ({
@@ -931,20 +935,11 @@ app.get("/api/system/budget-status", requireAdmin, asyncHandler(async (req, res)
 }));
 
 app.get("/api/system/budget-status/all-tenants", requireAdmin, asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
   const { getTenantBudgetStatus } = await import("../ai-budget-service");
 
-  const tenantRows = await db.select({ tenantId: apiUsageLogs.tenantId })
-    .from(apiUsageLogs)
-    .groupBy(apiUsageLogs.tenantId);
-
-  const results = [];
-  for (const row of tenantRows) {
-    if (!row.tenantId) continue;
-    const status = await getTenantBudgetStatus(row.tenantId);
-    results.push({ tenantId: row.tenantId, ...status });
-  }
-
-  res.json(results);
+  const status = await getTenantBudgetStatus(tenantId);
+  res.json([{ tenantId, ...status }]);
 }));
 
 // ============================================
