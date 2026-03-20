@@ -163,7 +163,15 @@ export function usePlannerDnd({
       }
 
       if (hasConflicts) {
-        setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime: baseStartTime, conflicts: ["Bulk-flytt: en eller flera order har konflikter med denna cell"] });
+        const bulkEntries: Array<{ jobId: string; startTime: string }> = [];
+        let bulkAcc = 0;
+        for (const j of jobsToMove) {
+          const slotMinutes = baseMinutes + bulkAcc;
+          const slotTime = `${Math.floor(slotMinutes / 60).toString().padStart(2, "0")}:${(slotMinutes % 60).toString().padStart(2, "0")}`;
+          bulkEntries.push({ jobId: j.id, startTime: slotTime });
+          bulkAcc += (j.estimatedDuration || 60);
+        }
+        setPendingSchedule({ jobId, resourceId, scheduledDate: dateStr, scheduledStartTime: baseStartTime, conflicts: ["Bulk-flytt: en eller flera order har konflikter med denna cell"], bulkJobs: bulkEntries });
         setConflictDialogOpen(true);
         return;
       }

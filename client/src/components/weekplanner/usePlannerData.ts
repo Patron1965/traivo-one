@@ -67,7 +67,7 @@ export function usePlannerData() {
   const [sendScheduleResource, setSendScheduleResource] = useState<Resource | null>(null);
   const [sendScheduleCopied, setSendScheduleCopied] = useState(false);
   const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
-  const [pendingSchedule, setPendingSchedule] = useState<{ jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null>(null);
+  const [pendingSchedule, setPendingSchedule] = useState<{ jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[]; bulkJobs?: Array<{ jobId: string; startTime: string }> } | null>(null);
   const [autoFillDialogOpen, setAutoFillDialogOpen] = useState(false);
   const [depChainDialogOpen, setDepChainDialogOpen] = useState(false);
   const [depChainJobId, setDepChainJobId] = useState<string | null>(null);
@@ -339,7 +339,20 @@ export function usePlannerData() {
   const handleOpenAssignDialog = useCallback((job: WorkOrderWithObject, e: React.MouseEvent) => { e.stopPropagation(); setJobToAssign(job); setAssignDate(format(currentDate, "yyyy-MM-dd")); setAssignResourceId(null); setAssignDialogOpen(true); }, [currentDate]);
   const handleQuickAssign = useCallback(() => { if (!jobToAssign || !assignResourceId || !assignDate) return; updateWorkOrderMutation.mutate({ id: jobToAssign.id, resourceId: assignResourceId, scheduledDate: assignDate }); setAssignDialogOpen(false); setJobToAssign(null); setAssignResourceId(null); }, [jobToAssign, assignResourceId, assignDate, updateWorkOrderMutation]);
 
-  const handleAcceptConflict = useCallback(() => { if (!pendingSchedule) return; executeSchedule(pendingSchedule.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, pendingSchedule.scheduledStartTime); setConflictDialogOpen(false); setPendingSchedule(null); toast({ title: "Schemalagt trots varning", description: "Jobbet har schemalagts trots identifierade konflikter." }); }, [pendingSchedule, executeSchedule, toast]);
+  const handleAcceptConflict = useCallback(() => {
+    if (!pendingSchedule) return;
+    if (pendingSchedule.bulkJobs && pendingSchedule.bulkJobs.length > 0) {
+      for (const bj of pendingSchedule.bulkJobs) {
+        executeSchedule(bj.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, bj.startTime);
+      }
+      toast({ title: "Bulk-flytt klar trots varning", description: `${pendingSchedule.bulkJobs.length} order schemalagda trots konflikter.` });
+    } else {
+      executeSchedule(pendingSchedule.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, pendingSchedule.scheduledStartTime);
+      toast({ title: "Schemalagt trots varning", description: "Jobbet har schemalagts trots identifierade konflikter." });
+    }
+    setConflictDialogOpen(false);
+    setPendingSchedule(null);
+  }, [pendingSchedule, executeSchedule, toast]);
 
   const handleUnschedule = useCallback((e: { stopPropagation: () => void }, jobId: string) => { e.stopPropagation(); const job = workOrders.find(j => j.id === jobId); if (job) addToUndoStack({ type: "unschedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, status: job.status, orderStatus: job.orderStatus }, newState: { resourceId: null, scheduledDate: null, scheduledStartTime: null, status: "draft", orderStatus: "skapad" } }); unscheduleWorkOrderMutation.mutate(jobId); }, [workOrders, addToUndoStack, unscheduleWorkOrderMutation]);
 

@@ -77,7 +77,7 @@ function SuggestPlacementButton({ job, currentWeekStart }: { job: WorkOrderWithO
     } finally {
       setLoading(false);
     }
-  }, [job.id, toast]);
+  }, [job.id, toast, currentWeekStart]);
 
   return (
     <Popover>
