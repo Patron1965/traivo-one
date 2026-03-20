@@ -923,7 +923,7 @@ app.get("/api/system/api-costs/pricing", requireAdmin, async (_req, res) => {
   res.json(PRICING);
 });
 
-app.get("/api/system/budget-status", asyncHandler(async (req, res) => {
+app.get("/api/system/budget-status", requireAdmin, asyncHandler(async (req, res) => {
   const { getTenantBudgetStatus } = await import("../ai-budget-service");
   const tenantId = getTenantIdWithFallback(req);
   const status = await getTenantBudgetStatus(tenantId);

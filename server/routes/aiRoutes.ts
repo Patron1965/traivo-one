@@ -436,6 +436,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
     );
 
     trackOAIResponse(response, tenantId);
+    invalidateBudgetCache(tenantId);
     checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
     let assistantMessage = response.choices[0]?.message;
@@ -471,6 +472,7 @@ Exempel: FÖLJDFRÅGOR:Visa mina ordrar idag|Vilka fordon är tillgängliga|Hur 
       );
 
       trackOAIResponse(response, tenantId);
+      invalidateBudgetCache(tenantId);
       checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
       assistantMessage = response.choices[0]?.message;
@@ -701,15 +703,15 @@ app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, r
 
       const dataContext = JSON.stringify({ objectCount: allObjects.length, typeStats: Object.fromEntries(Object.entries(typeStats).map(([k, v]) => [k, { count: v.count, totalOrders: v.totalOrders, avgInterval: v.avgInterval }])), anomalyCount: anomalies.length, topAnomalies: anomalies.slice(0, 5) });
 
-      const completion = await aiClient.chat.completions.create({
-        model: "gpt-4o-mini",
+      const completion = await withRetry(() => aiClient.chat.completions.create({
+        model: guard.model,
         messages: [
           { role: "system", content: "Du är en AI-assistent för fältservice-planering i Sverige. Analysera servicemönster och ge en kort sammanfattning på svenska (max 3-4 meningar). Var konkret med siffror." },
           { role: "user", content: `Analysera dessa servicemönster:\n${dataContext}` }
         ],
         max_tokens: 300,
         temperature: 0.3,
-      });
+      }), { label: "service-patterns" });
 
       summary = completion.choices[0]?.message?.content || "";
     } catch (aiError) {
@@ -779,15 +781,26 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
     // Pre-calculate KPIs so they can be reused
     const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
     
+    const resolvedWeekStart = weekStart || new Date().toISOString().split("T")[0];
+    const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+
+    const cacheKey = createAICacheKey({ tenantId, weekStart: resolvedWeekStart, weekEnd: resolvedWeekEnd, orderCount: String(workOrders.length), resourceCount: String(resources.length) });
+    const cachedResult = getCachedAIResponse(cacheKey);
+    if (cachedResult) {
+      return res.json(JSON.parse(cachedResult));
+    }
+
     const suggestions = await generatePlanningSuggestions({
       workOrders,
       resources,
       clusters,
-      weekStart: weekStart || new Date().toISOString().split("T")[0],
-      weekEnd: weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      weekStart: resolvedWeekStart,
+      weekEnd: resolvedWeekEnd,
       setupTimeLogs,
       kpis,
     });
+
+    setCachedAIResponse(cacheKey, JSON.stringify(suggestions));
     
     res.json(suggestions);
 }));
@@ -992,7 +1005,8 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
     if (guard.blocked) return;
     const { tenantId } = guard;
 
-    if (!acquireSchedulingLock(tenantId)) {
+    const lockAcquired = await acquireSchedulingLock(tenantId);
+    if (!lockAcquired) {
       return res.status(409).json({ error: "Auto-scheduling pågår redan", message: "En annan auto-scheduling-körning pågår för er organisation. Vänta tills den är klar." });
     }
 
@@ -1088,7 +1102,7 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
       
       res.json(result);
     } finally {
-      releaseSchedulingLock(tenantId);
+      await releaseSchedulingLock(tenantId);
     }
 }));
 

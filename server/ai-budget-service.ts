@@ -1,16 +1,42 @@
 import { db } from "./db";
-import { apiUsageLogs, apiBudgets } from "@shared/schema";
+import { apiUsageLogs, apiBudgets, budgetAlertLog } from "@shared/schema";
 import { eq, sql, and, gte } from "drizzle-orm";
-import { getTenantFeatures } from "./feature-flags";
-import type { PackageTier } from "@shared/modules";
 import { notificationService } from "./notifications";
 
-const budgetStatusCache = new Map<string, { usage: number; budget: number; percent: number; expiresAt: number }>();
+interface BudgetCacheEntry {
+  usage: number;
+  budget: number;
+  percent: number;
+  expiresAt: number;
+}
+
+interface BudgetStatusResult {
+  currentUsageUsd: number;
+  monthlyBudgetUsd: number;
+  percentUsed: number;
+  projectedMonthEndUsd: number;
+  status: "ok" | "warning" | "critical" | "exceeded";
+  daysRemaining: number;
+}
+
+interface RateLimitResult {
+  allowed: boolean;
+  retryAfterSeconds?: number;
+}
+
+interface RateLimitEntry {
+  timestamps: number[];
+}
+
+interface AICacheEntry {
+  response: string;
+  expiresAt: number;
+}
+
+const budgetStatusCache = new Map<string, BudgetCacheEntry>();
 const BUDGET_CACHE_TTL = 30_000;
 
-const alertsSentCache = new Map<string, Set<number>>();
-
-const rateLimitWindows = new Map<string, { count: number; windowStart: number }>();
+const rateLimitWindows = new Map<string, RateLimitEntry>();
 const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMITS: Record<string, number> = {
   basic: 0,
@@ -19,9 +45,7 @@ const RATE_LIMITS: Record<string, number> = {
   custom: 200,
 };
 
-const schedulingLocks = new Set<string>();
-
-const aiResponseCache = new Map<string, { response: any; expiresAt: number }>();
+const aiResponseCache = new Map<string, AICacheEntry>();
 const AI_CACHE_TTL = 15 * 60 * 1000;
 
 function getMonthStart(): Date {
@@ -31,44 +55,16 @@ function getMonthStart(): Date {
 
 function getMonthKey(tenantId: string): string {
   const now = new Date();
-  return `${tenantId}:${now.getFullYear()}-${now.getMonth() + 1}`;
+  return `${tenantId}:${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 }
 
-export async function getTenantBudgetStatus(tenantId: string): Promise<{
-  currentUsageUsd: number;
-  monthlyBudgetUsd: number;
-  percentUsed: number;
-  projectedMonthEndUsd: number;
-  status: "ok" | "warning" | "critical" | "exceeded";
-  daysRemaining: number;
-}> {
+export async function getTenantBudgetStatus(tenantId: string): Promise<BudgetStatusResult> {
   const cached = budgetStatusCache.get(tenantId);
   if (cached && Date.now() < cached.expiresAt) {
-    const now = new Date();
-    const monthStart = getMonthStart();
-    const daysElapsed = Math.max(1, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
-    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const daysRemaining = daysInMonth - daysElapsed;
-    const dailyRate = cached.usage / daysElapsed;
-    const projectedMonthEndUsd = dailyRate * daysInMonth;
-
-    let status: "ok" | "warning" | "critical" | "exceeded" = "ok";
-    if (cached.percent >= 100) status = "exceeded";
-    else if (cached.percent >= 95) status = "critical";
-    else if (cached.percent >= 80) status = "warning";
-
-    return {
-      currentUsageUsd: cached.usage,
-      monthlyBudgetUsd: cached.budget,
-      percentUsed: cached.percent,
-      projectedMonthEndUsd: Math.round(projectedMonthEndUsd * 100) / 100,
-      status,
-      daysRemaining,
-    };
+    return computeStatusFromUsage(cached.usage, cached.budget);
   }
 
   const monthStart = getMonthStart();
-  const now = new Date();
 
   const [usageResult] = await db
     .select({
@@ -85,9 +81,7 @@ export async function getTenantBudgetStatus(tenantId: string): Promise<{
   const budgetRows = await db
     .select()
     .from(apiBudgets)
-    .where(
-      eq(apiBudgets.tenantId, tenantId)
-    );
+    .where(eq(apiBudgets.tenantId, tenantId));
 
   let totalBudget = 0;
   if (budgetRows.length > 0) {
@@ -103,29 +97,35 @@ export async function getTenantBudgetStatus(tenantId: string): Promise<{
   if (totalBudget === 0) totalBudget = 50;
 
   const currentUsage = Number(usageResult.totalCost) || 0;
-  const percentUsed = totalBudget > 0 ? Math.round((currentUsage / totalBudget) * 10000) / 100 : 0;
 
   budgetStatusCache.set(tenantId, {
     usage: currentUsage,
     budget: totalBudget,
-    percent: percentUsed,
+    percent: totalBudget > 0 ? Math.round((currentUsage / totalBudget) * 10000) / 100 : 0,
     expiresAt: Date.now() + BUDGET_CACHE_TTL,
   });
 
+  return computeStatusFromUsage(currentUsage, totalBudget);
+}
+
+function computeStatusFromUsage(usage: number, budget: number): BudgetStatusResult {
+  const now = new Date();
+  const monthStart = getMonthStart();
   const daysElapsed = Math.max(1, Math.floor((now.getTime() - monthStart.getTime()) / (1000 * 60 * 60 * 24)));
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const daysRemaining = daysInMonth - daysElapsed;
-  const dailyRate = currentUsage / daysElapsed;
+  const dailyRate = usage / daysElapsed;
   const projectedMonthEndUsd = dailyRate * daysInMonth;
+  const percentUsed = budget > 0 ? Math.round((usage / budget) * 10000) / 100 : 0;
 
-  let status: "ok" | "warning" | "critical" | "exceeded" = "ok";
+  let status: BudgetStatusResult["status"] = "ok";
   if (percentUsed >= 100) status = "exceeded";
   else if (percentUsed >= 95) status = "critical";
   else if (percentUsed >= 80) status = "warning";
 
   return {
-    currentUsageUsd: Math.round(currentUsage * 10000) / 10000,
-    monthlyBudgetUsd: totalBudget,
+    currentUsageUsd: Math.round(usage * 10000) / 10000,
+    monthlyBudgetUsd: budget,
     percentUsed,
     projectedMonthEndUsd: Math.round(projectedMonthEndUsd * 100) / 100,
     status,
@@ -150,54 +150,74 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
   const status = await getTenantBudgetStatus(tenantId);
   const monthKey = getMonthKey(tenantId);
 
-  if (!alertsSentCache.has(monthKey)) {
-    alertsSentCache.set(monthKey, new Set());
-  }
-  const sentThresholds = alertsSentCache.get(monthKey)!;
-
   const thresholds = [50, 80, 95, 100];
 
   for (const threshold of thresholds) {
-    if (status.percentUsed >= threshold && !sentThresholds.has(threshold)) {
-      sentThresholds.add(threshold);
+    if (status.percentUsed < threshold) continue;
 
-      const severity = threshold >= 100 ? "critical" : threshold >= 95 ? "critical" : threshold >= 80 ? "warning" : "info";
+    const existingAlert = await db
+      .select({ id: budgetAlertLog.id })
+      .from(budgetAlertLog)
+      .where(
+        and(
+          eq(budgetAlertLog.tenantId, tenantId),
+          eq(budgetAlertLog.monthKey, monthKey),
+          eq(budgetAlertLog.thresholdPercent, threshold)
+        )
+      )
+      .limit(1);
 
-      let title: string;
-      let message: string;
-      if (threshold >= 100) {
-        title = "AI-budget överskriden";
-        message = `AI-budgeten har överskridits (${status.percentUsed.toFixed(1)}%). AI-funktioner är nu blockerade. Aktuell förbrukning: $${status.currentUsageUsd.toFixed(2)} av $${status.monthlyBudgetUsd.toFixed(2)}.`;
-      } else {
-        title = `AI-budget ${threshold}% förbrukad`;
-        message = `AI-budgeten har nått ${status.percentUsed.toFixed(1)}%. Aktuell förbrukning: $${status.currentUsageUsd.toFixed(2)} av $${status.monthlyBudgetUsd.toFixed(2)}. Prognostiserad månadskostnad: $${status.projectedMonthEndUsd.toFixed(2)}.`;
-      }
+    if (existingAlert.length > 0) continue;
 
-      try {
-        notificationService.broadcastSystemAlert({
-          type: "anomaly_alert",
-          title,
-          message,
-          data: {
-            alertType: "budget_warning",
-            tenantId,
-            threshold,
-            percentUsed: status.percentUsed,
-            currentUsageUsd: status.currentUsageUsd,
-            monthlyBudgetUsd: status.monthlyBudgetUsd,
-            projectedMonthEndUsd: status.projectedMonthEndUsd,
-            severity,
-          },
-        });
-        console.log(`[ai-budget] Alert sent for tenant ${tenantId}: ${threshold}% threshold (${status.percentUsed.toFixed(1)}% used)`);
-      } catch (err) {
-        console.error(`[ai-budget] Failed to send budget alert:`, err);
-      }
+    try {
+      await db.insert(budgetAlertLog).values({
+        tenantId,
+        thresholdPercent: threshold,
+        currentUsageUsd: status.currentUsageUsd,
+        monthlyBudgetUsd: status.monthlyBudgetUsd,
+        percentUsed: status.percentUsed,
+        monthKey,
+      });
+    } catch (insertErr: unknown) {
+      if (insertErr instanceof Error && insertErr.message?.includes("unique")) continue;
+      console.error(`[ai-budget] Failed to log alert:`, insertErr);
+      continue;
+    }
+
+    const severity = threshold >= 95 ? "critical" : threshold >= 80 ? "warning" : "info";
+
+    const title = threshold >= 100
+      ? "AI-budget överskriden"
+      : `AI-budget ${threshold}% förbrukad`;
+
+    const message = threshold >= 100
+      ? `AI-budgeten har överskridits (${status.percentUsed.toFixed(1)}%). AI-funktioner är nu blockerade. Aktuell förbrukning: $${status.currentUsageUsd.toFixed(2)} av $${status.monthlyBudgetUsd.toFixed(2)}.`
+      : `AI-budgeten har nått ${status.percentUsed.toFixed(1)}%. Aktuell förbrukning: $${status.currentUsageUsd.toFixed(2)} av $${status.monthlyBudgetUsd.toFixed(2)}. Prognostiserad månadskostnad: $${status.projectedMonthEndUsd.toFixed(2)}.`;
+
+    try {
+      notificationService.broadcastSystemAlert({
+        type: "anomaly_alert",
+        title,
+        message,
+        data: {
+          alertType: "budget_warning",
+          tenantId,
+          threshold,
+          percentUsed: status.percentUsed,
+          currentUsageUsd: status.currentUsageUsd,
+          monthlyBudgetUsd: status.monthlyBudgetUsd,
+          projectedMonthEndUsd: status.projectedMonthEndUsd,
+          severity,
+        },
+      });
+      console.log(`[ai-budget] Alert sent for tenant ${tenantId}: ${threshold}% threshold (${status.percentUsed.toFixed(1)}% used)`);
+    } catch (err) {
+      console.error(`[ai-budget] Failed to send budget alert:`, err);
     }
   }
 }
 
-export function checkRateLimit(tenantId: string, tier: string): { allowed: boolean; retryAfterSeconds?: number } {
+export function checkRateLimit(tenantId: string, tier: string): RateLimitResult {
   const maxRequests = RATE_LIMITS[tier] || RATE_LIMITS.standard;
   if (maxRequests === 0) {
     return { allowed: false, retryAfterSeconds: 0 };
@@ -205,19 +225,23 @@ export function checkRateLimit(tenantId: string, tier: string): { allowed: boole
 
   const now = Date.now();
   const key = `ai:${tenantId}`;
-  const window = rateLimitWindows.get(key);
+  const entry = rateLimitWindows.get(key);
+  const windowStart = now - RATE_LIMIT_WINDOW_MS;
 
-  if (!window || now - window.windowStart >= RATE_LIMIT_WINDOW_MS) {
-    rateLimitWindows.set(key, { count: 1, windowStart: now });
+  if (!entry) {
+    rateLimitWindows.set(key, { timestamps: [now] });
     return { allowed: true };
   }
 
-  if (window.count >= maxRequests) {
-    const retryAfterSeconds = Math.ceil((window.windowStart + RATE_LIMIT_WINDOW_MS - now) / 1000);
-    return { allowed: false, retryAfterSeconds };
+  entry.timestamps = entry.timestamps.filter(ts => ts > windowStart);
+
+  if (entry.timestamps.length >= maxRequests) {
+    const oldestInWindow = entry.timestamps[0];
+    const retryAfterSeconds = Math.ceil((oldestInWindow + RATE_LIMIT_WINDOW_MS - now) / 1000);
+    return { allowed: false, retryAfterSeconds: Math.max(1, retryAfterSeconds) };
   }
 
-  window.count++;
+  entry.timestamps.push(now);
   return { allowed: true };
 }
 
@@ -228,16 +252,53 @@ export function resolveAIModel(tier: string, useCase: "planning" | "chat" | "ana
   return "gpt-4o-mini";
 }
 
-export function acquireSchedulingLock(tenantId: string): boolean {
-  if (schedulingLocks.has(tenantId)) {
+export async function acquireSchedulingLock(tenantId: string): Promise<boolean> {
+  try {
+    const lockKey = `scheduling_lock:${tenantId}`;
+    const [existing] = await db
+      .select({ id: budgetAlertLog.id })
+      .from(budgetAlertLog)
+      .where(
+        and(
+          eq(budgetAlertLog.tenantId, lockKey),
+          eq(budgetAlertLog.monthKey, "SCHEDULING_LOCK"),
+          gte(budgetAlertLog.createdAt, new Date(Date.now() - 10 * 60 * 1000))
+        )
+      )
+      .limit(1);
+
+    if (existing) return false;
+
+    await db.insert(budgetAlertLog).values({
+      tenantId: lockKey,
+      thresholdPercent: 0,
+      currentUsageUsd: 0,
+      monthlyBudgetUsd: 0,
+      percentUsed: 0,
+      monthKey: "SCHEDULING_LOCK",
+    });
+
+    return true;
+  } catch (err) {
+    console.error("[ai-budget] Lock acquisition failed:", err);
     return false;
   }
-  schedulingLocks.add(tenantId);
-  return true;
 }
 
-export function releaseSchedulingLock(tenantId: string): void {
-  schedulingLocks.delete(tenantId);
+export async function releaseSchedulingLock(tenantId: string): Promise<void> {
+  try {
+    const lockKey = `scheduling_lock:${tenantId}`;
+    await db
+      .delete(budgetAlertLog)
+      .where(
+        and(
+          eq(budgetAlertLog.tenantId, lockKey),
+          eq(budgetAlertLog.monthKey, "SCHEDULING_LOCK")
+        )
+      );
+  } catch (err) {
+    console.error("[ai-budget] Lock release failed:", err);
+  }
 }
 
 export async function withRetry<T>(
@@ -246,28 +307,30 @@ export async function withRetry<T>(
 ): Promise<T> {
   const maxRetries = options.maxRetries ?? 3;
   const label = options.label ?? "AI call";
-  let lastError: Error | null = null;
+  let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
-    } catch (error: any) {
-      lastError = error;
+    } catch (error: unknown) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      lastError = err;
 
       if (attempt === maxRetries) break;
 
+      const errRecord = error as Record<string, unknown>;
       const isRetryable =
-        error?.status === 429 ||
-        error?.status === 500 ||
-        error?.status === 503 ||
-        error?.code === "ECONNRESET" ||
-        error?.code === "ETIMEDOUT" ||
-        error?.message?.includes("timeout");
+        errRecord?.status === 429 ||
+        errRecord?.status === 500 ||
+        errRecord?.status === 503 ||
+        errRecord?.code === "ECONNRESET" ||
+        errRecord?.code === "ETIMEDOUT" ||
+        err.message?.includes("timeout");
 
-      if (!isRetryable) throw error;
+      if (!isRetryable) throw err;
 
       const delayMs = Math.pow(2, attempt) * 1000;
-      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxRetries + 1} failed (${error.message}). Retrying in ${delayMs}ms...`);
+      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxRetries + 1} failed (${err.message}). Retrying in ${delayMs}ms...`);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
@@ -275,7 +338,7 @@ export async function withRetry<T>(
   throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
 }
 
-export function getCachedAIResponse(cacheKey: string): any | null {
+export function getCachedAIResponse(cacheKey: string): string | null {
   const cached = aiResponseCache.get(cacheKey);
   if (cached && Date.now() < cached.expiresAt) {
     return cached.response;
@@ -286,7 +349,7 @@ export function getCachedAIResponse(cacheKey: string): any | null {
   return null;
 }
 
-export function setCachedAIResponse(cacheKey: string, response: any): void {
+export function setCachedAIResponse(cacheKey: string, response: string): void {
   aiResponseCache.set(cacheKey, {
     response,
     expiresAt: Date.now() + AI_CACHE_TTL,
@@ -308,11 +371,11 @@ export function invalidateBudgetCache(tenantId: string): void {
   budgetStatusCache.delete(tenantId);
 }
 
-export function createAICacheKey(params: Record<string, any>): string {
+export function createAICacheKey(params: Record<string, string | number | boolean | null>): string {
   const sorted = Object.keys(params).sort().reduce((acc, key) => {
     acc[key] = params[key];
     return acc;
-  }, {} as Record<string, any>);
+  }, {} as Record<string, string | number | boolean | null>);
   return `ai:${simpleHash(JSON.stringify(sorted))}`;
 }
 
