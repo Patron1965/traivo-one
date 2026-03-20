@@ -196,15 +196,20 @@ export async function checkAndSendBudgetAlerts(tenantId: string): Promise<void> 
     console.log(`[ai-budget] Alert recorded for tenant ${tenantId}: ${threshold}% threshold (${status.percentUsed.toFixed(1)}% used) - ${title}: ${message}`);
 
     try {
-      const { broadcastSystemAlert } = await import("./notifications");
-      broadcastSystemAlert({
-        type: severity === "critical" ? "alert" : "info",
-        title,
-        message,
-        data: { tenantId, threshold, percentUsed: status.percentUsed },
-      });
+      const { storage } = await import("./storage");
+      const { notificationService } = await import("./notifications");
+      const resources = await storage.getResources(tenantId);
+
+      for (const resource of resources) {
+        await notificationService.sendToResource(resource.id, {
+          type: severity === "critical" ? "alert" : "info",
+          title,
+          message,
+          data: { tenantId, threshold, percentUsed: status.percentUsed },
+        });
+      }
     } catch (notifErr) {
-      console.error("[ai-budget] Failed to broadcast alert notification:", notifErr);
+      console.error("[ai-budget] Failed to send alert notification:", notifErr);
     }
   }
 }
@@ -310,12 +315,12 @@ export async function withRetry<T>(
       if (!isRetryable) throw err;
 
       const delayMs = Math.pow(2, attempt) * 1000;
-      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxRetries + 1} failed (${err.message}). Retrying in ${delayMs}ms...`);
+      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxAttempts} failed (${err.message}). Retrying in ${delayMs}ms...`);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
 
-  throw lastError || new Error(`${label} failed after ${maxRetries + 1} attempts`);
+  throw lastError || new Error(`${label} failed after ${maxAttempts} attempts`);
 }
 
 export function getCachedAIResponse(cacheKey: string): string | null {
