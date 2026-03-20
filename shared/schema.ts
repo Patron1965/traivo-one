@@ -4392,6 +4392,30 @@ export const insertAnnualGoalSchema = createInsertSchema(annualGoals).omit({ id:
 export type AnnualGoal = typeof annualGoals.$inferSelect;
 export type InsertAnnualGoal = z.infer<typeof insertAnnualGoalSchema>;
 
+export const predictiveForecasts = pgTable("predictive_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  deviceId: varchar("device_id").references(() => iotDevices.id),
+  predictedDate: timestamp("predicted_date").notNull(),
+  confidence: real("confidence").notNull(),
+  avgIntervalDays: real("avg_interval_days"),
+  signalCount: integer("signal_count").default(0),
+  lastSignalAt: timestamp("last_signal_at"),
+  reasoning: text("reasoning"),
+  status: text("status").default("active").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_predictive_forecasts_tenant").on(table.tenantId),
+  index("idx_predictive_forecasts_object").on(table.objectId),
+  index("idx_predictive_forecasts_date").on(table.predictedDate),
+]);
+
+export const insertPredictiveForecastSchema = createInsertSchema(predictiveForecasts).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertPredictiveForecast = z.infer<typeof insertPredictiveForecastSchema>;
+export type PredictiveForecast = typeof predictiveForecasts.$inferSelect;
+
 export type TimeSummaryResponse = {
   week: number;
   year: number;

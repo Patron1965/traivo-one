@@ -31,6 +31,7 @@ import { registerPortalRoutes } from "./routes/portalRoutes";
 import { registerExtendedRoutes } from "./routes/extendedRoutes";
 import { registerIoTRoutes } from "./routes/iotRoutes";
 import { registerAnnualGoalRoutes } from "./routes/annualGoalRoutes";
+import { registerPredictiveRoutes } from "./routes/predictiveRoutes";
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
@@ -198,6 +199,7 @@ export async function registerRoutes(
   registerExtendedRoutes(app);
   registerIoTRoutes(app);
   registerAnnualGoalRoutes(app);
+  registerPredictiveRoutes(app);
 
   app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
     if (err instanceof z.ZodError) {

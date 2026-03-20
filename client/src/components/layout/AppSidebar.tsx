@@ -1,4 +1,4 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, Brain, Database, ClipboardCheck, MapPin, History } from "lucide-react";
+import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, Brain, Database, ClipboardCheck, MapPin, History, Activity } from "lucide-react";
 import traivoLogo from "@assets/traivo_logo_transparent.png";
 import { Link, useLocation } from "wouter";
 import {
@@ -59,6 +59,7 @@ const analysItems = [
   { title: "Rapportering", url: "/reporting", icon: BarChart3 },
   { title: "Ekonomi", url: "/economics", icon: DollarSign },
   { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
+  { title: "Prediktivt Underh\u00e5ll", url: "/predictive-maintenance", icon: Activity },
 ];
 
 const adminItems = [

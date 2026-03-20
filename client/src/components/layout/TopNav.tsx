@@ -99,6 +99,7 @@ function useNavItems() {
       { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
       { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
       { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
+      { title: "Prediktivt Underh\u00e5ll", url: "/predictive-maintenance", icon: Activity, description: "IoT-baserad serviceprognos" },
     ],
   }), [t]);
 }
