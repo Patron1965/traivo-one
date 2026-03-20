@@ -1495,6 +1495,122 @@ Svara ENBART med JSON-array av strängar, t.ex. ["Steg 1", "Steg 2"]. Skriv på 
     }
 }));
 
+function broadcastPlannerEvent(event: { type: string; data: any }) {
+  const clients: Map<string, any> = (global as any).__plannerEventClients || new Map();
+  const msg = `data: ${JSON.stringify(event)}\n\n`;
+  clients.forEach((res: any, id: string) => {
+    try { res.write(msg); } catch(e) { clients.delete(id); }
+  });
+}
+
+async function handleQuickAction(orderId: string, actionType: string) {
+    if (!orderId || !actionType) {
+      throw new ValidationError("orderId och actionType krävs");
+    }
+
+    const validActions = ["needs_part", "customer_absent", "takes_longer"];
+    if (!validActions.includes(actionType)) {
+      throw new ValidationError("Ogiltig actionType");
+    }
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) {
+      throw new NotFoundError("Order hittades inte");
+    }
+
+    const timestamp = new Date().toLocaleString("sv-SE");
+    const actionLabels: Record<string, string> = {
+      needs_part: "Behöver reservdel",
+      customer_absent: "Kund ej hemma",
+      takes_longer: "Tar längre tid",
+    };
+    const label = actionLabels[actionType];
+    const noteText = `[${timestamp}] Snabbåtgärd: ${label}`;
+    const updatedNotes = order.notes
+      ? `${order.notes}\n${noteText}`
+      : noteText;
+
+    const updateData: any = { notes: updatedNotes };
+
+    if (actionType === "customer_absent") {
+      updateData.status = "deferred";
+    }
+
+    if (actionType === "takes_longer") {
+      const currentDuration = order.estimatedDuration || 60;
+      updateData.estimatedDuration = Math.round(currentDuration * 1.5);
+    }
+
+    const existingMetadata = (order.metadata as Record<string, unknown>) || {};
+    const existingFieldNotes = (existingMetadata.fieldNotes as Array<{ text: string; timestamp: string }>) || [];
+    updateData.metadata = {
+      ...existingMetadata,
+      fieldNotes: [
+        ...existingFieldNotes,
+        { text: `Snabbåtgärd: ${label}`, timestamp: new Date().toISOString() },
+      ],
+    };
+
+    if (actionType === "needs_part") {
+      const existingMaterialNeeds = (existingMetadata.materialNeeds as string[]) || [];
+      updateData.metadata.materialNeeds = [
+        ...existingMaterialNeeds,
+        `Reservdel behövs (rapporterad ${timestamp})`,
+      ];
+    }
+
+    const updatedOrder = await storage.updateWorkOrder(orderId, updateData);
+
+    console.log(`[mobile] Quick action '${actionType}' on order ${orderId}`);
+
+    if (order.resourceId) {
+      await notificationService.sendToResource(order.resourceId, {
+        type: "job_updated",
+        title: `Snabbåtgärd: ${label}`,
+        message: `${label} har registrerats för ${order.title}`,
+        orderId: order.id,
+        data: { actionType, quickAction: true },
+      });
+    }
+
+    broadcastPlannerEvent({
+      type: "quick_action",
+      data: {
+        orderId,
+        orderNumber: order.title || `WO-${orderId.substring(0, 8)}`,
+        actionType,
+        actionLabel: label,
+        timestamp: new Date().toISOString(),
+      },
+    });
+
+    return {
+      success: true,
+      actionType,
+      actionLabel: label,
+      order: updatedOrder,
+    };
+}
+
+app.post("/api/mobile/quick-action", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const { orderId, actionType } = req.body;
+
+    const order = await storage.getWorkOrder(orderId);
+    if (order && order.resourceId !== resourceId) {
+      throw new ForbiddenError("Ej behörig");
+    }
+
+    const result = await handleQuickAction(orderId, actionType);
+    res.json(result);
+}));
+
+app.post("/api/quick-action", isAuthenticated, asyncHandler(async (req: any, res) => {
+    const { orderId, actionType } = req.body;
+    const result = await handleQuickAction(orderId, actionType);
+    res.json(result);
+}));
+
 function getFallbackChecklist(orderType: string): string[] {
   const common = [
     "Kontrollera åtkomst och nycklar",

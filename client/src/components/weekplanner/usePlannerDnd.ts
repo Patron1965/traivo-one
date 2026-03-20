@@ -56,6 +56,7 @@ export function usePlannerDnd({
     return scheduledStartTime;
   }, [viewMode, resourceDayJobMap]);
 
+
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
     if (!over) {

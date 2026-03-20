@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -453,6 +453,20 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       toast({ title: "Anteckning sparad" });
       setJobNote("");
       setShowNotesPanel(false);
+    },
+  });
+
+  const quickActionMutation = useMutation({
+    mutationFn: async ({ orderId, actionType }: { orderId: string; actionType: string }) => {
+      const response = await apiRequest("POST", "/api/quick-action", { orderId, actionType });
+      return response.json();
+    },
+    onSuccess: (data: { success: boolean; actionLabel: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      toast({ title: data.actionLabel, description: "Snabbåtgärd registrerad och planerare notifierad." });
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte utföra snabbåtgärden.", variant: "destructive" });
     },
   });
 
@@ -1006,6 +1020,63 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               </Button>
             )}
           </div>
+
+          {jobStarted && selectedJobId && (
+            <Card className="border-emerald-200 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Wrench className="h-4 w-4 text-emerald-600" />
+                  Snabbåtgärder
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="grid grid-cols-3 gap-2">
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex-col gap-2 border-2 text-sm font-medium"
+                    onClick={() => quickActionMutation.mutate({ orderId: selectedJobId, actionType: "needs_part" })}
+                    disabled={quickActionMutation.isPending}
+                    data-testid="button-quick-needs-part"
+                  >
+                    {quickActionMutation.isPending ? (
+                      <Loader2 className="h-7 w-7 animate-spin" />
+                    ) : (
+                      <Wrench className="h-7 w-7 text-blue-500" />
+                    )}
+                    <span className="text-xs leading-tight text-center">Behöver reservdel</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex-col gap-2 border-2 text-sm font-medium"
+                    onClick={() => quickActionMutation.mutate({ orderId: selectedJobId, actionType: "customer_absent" })}
+                    disabled={quickActionMutation.isPending}
+                    data-testid="button-quick-customer-absent"
+                  >
+                    {quickActionMutation.isPending ? (
+                      <Loader2 className="h-7 w-7 animate-spin" />
+                    ) : (
+                      <UserX className="h-7 w-7 text-orange-500" />
+                    )}
+                    <span className="text-xs leading-tight text-center">Kund ej hemma</span>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="h-auto py-4 flex-col gap-2 border-2 text-sm font-medium"
+                    onClick={() => quickActionMutation.mutate({ orderId: selectedJobId, actionType: "takes_longer" })}
+                    disabled={quickActionMutation.isPending}
+                    data-testid="button-quick-takes-longer"
+                  >
+                    {quickActionMutation.isPending ? (
+                      <Loader2 className="h-7 w-7 animate-spin" />
+                    ) : (
+                      <AlarmClock className="h-7 w-7 text-amber-500" />
+                    )}
+                    <span className="text-xs leading-tight text-center">Tar längre tid</span>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {showNotesPanel && (
             <Card className="border-indigo-200 dark:border-indigo-800">
