@@ -18,6 +18,7 @@ import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useTeam } from '../hooks/useTeam';
 import { useOfflinePendingCount } from '../hooks/useOfflineSync';
+import { SyncStatusDot } from '../components/OfflineIndicator';
 import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
 
 interface TimeSummary {
@@ -802,14 +803,17 @@ export function HomeScreen({ navigation }: any) {
         </View>
       ) : null}
 
-      {pendingCount > 0 ? (
-        <Animated.View style={[styles.syncBadge, { opacity: syncBadgeOpacity }]}>
-          <Feather name="upload-cloud" size={14} color={Colors.warning} />
-          <ThemedText variant="caption" color={Colors.warning} style={styles.syncBadgeText}>
-            {pendingCount} väntande {pendingCount === 1 ? 'åtgärd' : 'åtgärder'}
-          </ThemedText>
-        </Animated.View>
-      ) : null}
+      <View style={styles.syncStatusRow}>
+        <SyncStatusDot />
+        {pendingCount > 0 ? (
+          <Animated.View style={[styles.syncBadge, { opacity: syncBadgeOpacity }]}>
+            <Feather name="upload-cloud" size={14} color={Colors.warning} />
+            <ThemedText variant="caption" color={Colors.warning} style={styles.syncBadgeText}>
+              {pendingCount} väntande {pendingCount === 1 ? 'åtgärd' : 'åtgärder'}
+            </ThemedText>
+          </Animated.View>
+        ) : null}
+      </View>
 
       <Card style={styles.progressCard}>
         <View style={styles.progressHeader}>
@@ -1535,6 +1539,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
+  },
+  syncStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: Spacing.sm,
   },
   syncBadge: {
     flexDirection: 'row',

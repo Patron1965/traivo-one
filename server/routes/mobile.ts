@@ -2354,4 +2354,91 @@ router.delete('/push-token', async (req, res) => {
   }
 });
 
+router.get('/route-feedback/mine', async (req, res) => {
+  const driverId = MOCK_RESOURCE.id;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM route_feedback WHERE driver_id = $1 ORDER BY created_at DESC LIMIT 30`,
+      [driverId]
+    );
+    res.json({ success: true, feedback: result.rows });
+  } catch (err: any) {
+    console.error('Route feedback fetch error:', err.message);
+    res.json({ success: true, feedback: [] });
+  }
+});
+
+router.post('/route-feedback', async (req, res) => {
+  const driverId = MOCK_RESOURCE.id;
+  const { rating, reasons, comment, date } = req.body;
+  if (!rating || rating < 1 || rating > 5) {
+    return res.status(400).json({ error: 'Betyg (1-5) krävs' });
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO route_feedback (driver_id, rating, reasons, comment, feedback_date, created_at)
+       VALUES ($1, $2, $3, $4, $5, NOW())
+       RETURNING *`,
+      [driverId, rating, JSON.stringify(reasons || []), comment || '', date || new Date().toISOString().split('T')[0]]
+    );
+    res.json({ success: true, feedback: result.rows[0] });
+  } catch (err: any) {
+    console.error('Route feedback save error:', err.message);
+    res.status(500).json({ error: 'Kunde inte spara ruttbetyg' });
+  }
+});
+
+router.get('/terminology', async (req, res) => {
+  const terminology: Record<string, string> = {
+    order: 'Order',
+    work_order: 'Arbetsorder',
+    deviation: 'Avvikelse',
+    material: 'Material',
+    inspection: 'Inspektion',
+    checklist: 'Checklista',
+    signature: 'Signatur',
+    driver: 'Chaufför',
+    technician: 'Tekniker',
+    planner: 'Planerare',
+    customer: 'Kund',
+    object: 'Objekt',
+    article: 'Artikel',
+    route: 'Rutt',
+    work_session: 'Arbetspass',
+    check_in: 'Incheckning',
+    check_out: 'Utcheckning',
+    pause: 'Paus',
+    status_not_started: 'Ej påbörjad',
+    status_in_progress: 'Pågående',
+    status_completed: 'Utförd',
+    status_failed: 'Misslyckad',
+    status_cancelled: 'Inställd',
+    status_on_site: 'På plats',
+    status_travel: 'Under resa',
+    status_signed_off: 'Kvitterad',
+    priority_low: 'Låg',
+    priority_medium: 'Medium',
+    priority_high: 'Hög',
+    priority_urgent: 'Brådskande',
+    photo_before: 'Före',
+    photo_after: 'Efter',
+    route_feedback: 'Ruttbetyg',
+    notification: 'Notifiering',
+    team: 'Team',
+  };
+
+  if (!IS_MOCK_MODE) {
+    try {
+      const { data } = await traivoFetch('/api/mobile/terminology', {
+        headers: getAuthHeader(req),
+      });
+      if (data && typeof data === 'object') {
+        return res.json({ success: true, terminology: data.terminology || data });
+      }
+    } catch {
+    }
+  }
+  res.json({ success: true, terminology });
+});
+
 export { router as mobileRoutes, MOCK_ORDERS };

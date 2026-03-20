@@ -1,11 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react';
-import { Platform } from 'react-native';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
+import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import type { Resource, GpsPosition } from '../types';
 import { FIELD_APP_ALLOWED_ROLES } from '../types';
 
 const PROFILES_CACHE_KEY = '@resource_profiles';
+const LAST_ACTIVITY_KEY = '@last_activity_timestamp';
+const AUTO_LOGOUT_MS = 24 * 60 * 60 * 1000;
 
 async function fetchAndCacheProfiles(authToken: string): Promise<void> {
   try {
@@ -124,6 +126,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isOnline, setIsOnlineState] = useState(false);
   const [startPosition, setStartPosition] = useState<StartPosition | null>(null);
   const initialLoadCompleteRef = useRef(false);
+  const activityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const setIsOnline = async (online: boolean) => {
     const previousOnline = isOnline;
@@ -155,9 +158,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const recordActivity = useCallback(async () => {
+    await AsyncStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
+  }, []);
+
+  const checkInactivityLogout = useCallback(async () => {
+    if (!token || !user) return;
+    try {
+      const stored = await AsyncStorage.getItem(LAST_ACTIVITY_KEY);
+      if (stored) {
+        const elapsed = Date.now() - Number(stored);
+        if (elapsed >= AUTO_LOGOUT_MS) {
+          console.log('Auto-logout: 24h inactivity exceeded');
+          await logout();
+        }
+      }
+    } catch {}
+  }, [token, user]);
+
   useEffect(() => {
     loadStoredAuth();
   }, []);
+
+  useEffect(() => {
+    if (!token) return;
+    recordActivity();
+    activityTimerRef.current = setInterval(() => {
+      checkInactivityLogout();
+    }, 5 * 60 * 1000);
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        checkInactivityLogout();
+        recordActivity();
+      }
+    });
+
+    return () => {
+      if (activityTimerRef.current) clearInterval(activityTimerRef.current);
+      subscription.remove();
+    };
+  }, [token, checkInactivityLogout, recordActivity]);
 
   async function loadStoredAuth() {
     try {
@@ -238,6 +279,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(resource);
     setToken(data.token);
     await AsyncStorage.setItem('auth', JSON.stringify({ resource, token: data.token }));
+    await AsyncStorage.setItem(LAST_ACTIVITY_KEY, String(Date.now()));
     registerPushToken(data.token);
     fetchAndCacheProfiles(data.token);
   }

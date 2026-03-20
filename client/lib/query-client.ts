@@ -51,6 +51,7 @@ export async function apiRequest(
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
+  AsyncStorage.setItem('@last_activity_timestamp', String(Date.now())).catch(() => {});
   const res = await fetch(url, {
     method,
     headers,

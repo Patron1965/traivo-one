@@ -300,12 +300,22 @@ export function ProfileScreen() {
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
         <View style={styles.divider} />
+        <Pressable style={styles.menuItem} onPress={() => navigation.navigate('RouteFeedback')} testID="button-route-feedback">
+          <View style={styles.menuLeft}>
+            <View style={[styles.menuIcon, { backgroundColor: '#FFF8E1' }]}>
+              <Feather name="star" size={16} color={Colors.warning} />
+            </View>
+            <ThemedText variant="body">Ruttbetyg</ThemedText>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
+        <View style={styles.divider} />
         <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Settings')} testID="button-about">
           <View style={styles.menuLeft}>
             <View style={[styles.menuIcon, { backgroundColor: Colors.infoLight }]}>
               <Feather name="info" size={16} color={Colors.info} />
             </View>
-            <ThemedText variant="body">Om Nordnav Go</ThemedText>
+            <ThemedText variant="body">Om Traivo Go</ThemedText>
           </View>
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
