@@ -44,6 +44,7 @@ export function clearFeatureCache() {
 const API_MODULE_PREFIXES: [string, ModuleKey][] = [
   ["/api/iot", "iot"],
   ["/api/annual-planning", "annual_planning"],
+  ["/api/annual-goals", "annual_planning"],
   ["/api/ai", "ai_planning"],
   ["/api/fleet", "fleet"],
   ["/api/vehicles", "fleet"],
@@ -82,8 +83,9 @@ export function requireModule(moduleKey: ModuleKey) {
         });
       }
       next();
-    } catch {
-      next();
+    } catch (err) {
+      console.error(`[module-guard] Error checking module ${moduleKey}:`, err);
+      return res.status(500).json({ error: "Kunde inte verifiera modulbehörighet" });
     }
   };
 }
@@ -104,7 +106,9 @@ export async function moduleGuardMiddleware(req: Request, res: Response, next: N
         message: "Denna funktion ingår inte i ert nuvarande paket.",
       });
     }
-  } catch {
+    next();
+  } catch (err) {
+    console.error(`[module-guard] Error checking module ${moduleKey}:`, err);
+    return res.status(500).json({ error: "Kunde inte verifiera modulbehörighet" });
   }
-  next();
 }

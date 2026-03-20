@@ -34,7 +34,7 @@ export async function registerFeatureRoutes(app: Express) {
     });
   }));
 
-  app.patch("/api/admin/tenant-features/:tenantId", asyncHandler(async (req, res) => {
+  app.patch("/api/tenant/features/:tenantId", asyncHandler(async (req, res) => {
     const adminTenantId = getTenantIdWithFallback(req);
     const { tenantId } = req.params;
 
