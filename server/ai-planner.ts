@@ -3,6 +3,21 @@ import type { WorkOrder, Resource, Cluster, SetupTimeLog, ServiceObject, TaskDes
 import { fetchWeatherForecast, type WeatherImpact } from "./weather-service";
 import { buildSystemPrompt, PLANNING_PERSONA_ADDITIONS } from "./ai/persona";
 import { trackOpenAIResponse } from "./api-usage-tracker";
+import { AsyncLocalStorage } from "node:async_hooks";
+
+const aiContext = new AsyncLocalStorage<{ tenantId: string; model: string }>();
+
+export function runWithAIContext<T>(ctx: { tenantId: string; model: string }, fn: () => T): T {
+  return aiContext.run(ctx, fn);
+}
+
+function getContextTenantId(): string | undefined {
+  return aiContext.getStore()?.tenantId;
+}
+
+function getContextModel(): string {
+  return aiContext.getStore()?.model || DEFAULT_AI_MODEL;
+}
 
 // ============================================
 // AI PLANNING SERVICE - MODELLKONFIGURATION
@@ -17,15 +32,7 @@ const openai = new OpenAI({
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
 });
 
-let currentAIModel = "gpt-4o-mini";
-
-export function setAIModel(model: string): void {
-  currentAIModel = model;
-}
-
-export function getAIModel(): string {
-  return currentAIModel;
-}
+const DEFAULT_AI_MODEL = "gpt-4o-mini";
 
 // ============================================
 // KPI CALCULATIONS FOR AI CONTEXT
@@ -404,7 +411,7 @@ export async function generatePlanningSuggestions(
     const prompt = buildContextPrompt(context);
     
     const response = await openai.chat.completions.create({
-      model: options?.model || currentAIModel,
+      model: options?.model || getContextModel(),
       messages: [
         {
           role: "system",
@@ -444,7 +451,7 @@ export async function explainSuggestion(
 ): Promise<string> {
   try {
     const response = await openai.chat.completions.create({
-      model: currentAIModel,
+      model: getContextModel(),
       messages: [
         {
           role: "system",
@@ -459,7 +466,7 @@ export async function explainSuggestion(
       max_tokens: 300
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, getContextTenantId());
     return response.choices[0]?.message?.content || "Ingen förklaring tillgänglig.";
   } catch (error) {
     return "Kunde inte generera förklaring.";
@@ -1251,7 +1258,7 @@ Svara ENDAST med JSON:
     const plannerSystemPrompt = buildSystemPrompt({ role: "planner" }) + "\n" + PLANNING_PERSONA_ADDITIONS + "\nSvara ENDAST med valid JSON.";
     
     const response = await openai.chat.completions.create({
-      model: currentAIModel,
+      model: getContextModel(),
       messages: [
         { role: "system", content: plannerSystemPrompt },
         { role: "user", content: prompt }
@@ -1261,7 +1268,7 @@ Svara ENDAST med JSON:
       response_format: { type: "json_object" }
     });
     
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, getContextTenantId());
     const aiResponse = JSON.parse(response.choices[0]?.message?.content || "{}");
     const tips = aiResponse.optimizationTips || [];
     const weatherTips = aiResponse.weatherConsiderations || [];
@@ -2226,7 +2233,7 @@ Svara i JSON-format:
     const anomalySystemPrompt = buildSystemPrompt({ role: "planner", additionalContext: "Du analyserar avvikelser och ger förklaringar." }) + "\nSvara alltid i valid JSON-format.";
     
     const response = await openai.chat.completions.create({
-      model: currentAIModel,
+      model: getContextModel(),
       messages: [
         { role: "system", content: anomalySystemPrompt },
         { role: "user", content: prompt }
@@ -2235,7 +2242,7 @@ Svara i JSON-format:
       max_tokens: 500
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, getContextTenantId());
     const content = response.choices[0]?.message?.content || "";
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     
@@ -2560,7 +2567,7 @@ export async function optimizeRoute(
   if (useAI && process.env.AI_INTEGRATIONS_OPENAI_API_KEY) {
     try {
       const response = await openai.chat.completions.create({
-        model: currentAIModel,
+        model: getContextModel(),
         messages: [
           {
             role: "system",
@@ -2583,7 +2590,7 @@ Ge kort feedback om optimeringen är bra eller om det finns ytterligare att tän
         max_completion_tokens: 200
       });
       
-      trackOpenAIResponse(response);
+      trackOpenAIResponse(response, getContextTenantId());
       console.log("AI route feedback:", response.choices[0]?.message?.content);
     } catch (error) {
       console.log("AI feedback skipped:", error);
@@ -2852,7 +2859,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
 
   try {
     let response = await openai.chat.completions.create({
-      model: currentAIModel,
+      model: getContextModel(),
       messages,
       tools,
       tool_choice: "auto",
@@ -2860,7 +2867,7 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
       max_tokens: 2000,
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, getContextTenantId());
     let msg = response.choices[0]?.message;
 
     let toolCallRounds = 0;
@@ -2872,14 +2879,14 @@ Om användaren vill göra en ändring (flytta, omplanera), använd suggest_resch
         messages.push({ role: "tool", tool_call_id: tc.id, content: result });
       }
       response = await openai.chat.completions.create({
-        model: currentAIModel,
+        model: getContextModel(),
         messages,
         tools,
         tool_choice: "auto",
         temperature: 0.5,
         max_tokens: 2000,
       });
-      trackOpenAIResponse(response);
+      trackOpenAIResponse(response, getContextTenantId());
       msg = response.choices[0]?.message;
       toolCallRounds++;
     }
@@ -2990,7 +2997,7 @@ Fyll bara i de fält som är relevanta för frågan. "data" kan vara null om det
 
   try {
     const response = await openai.chat.completions.create({
-      model: currentAIModel,
+      model: getContextModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: query }
@@ -3000,7 +3007,7 @@ Fyll bara i de fält som är relevanta för frågan. "data" kan vara null om det
       response_format: { type: "json_object" }
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, getContextTenantId());
     const content = response.choices[0]?.message?.content;
     if (!content) {
       return {
@@ -3126,7 +3133,7 @@ export async function parseNaturalLanguageConstraints(
     const clusterList = clusters.map(c => c.name).join(", ");
 
     const response = await openai.chat.completions.create({
-      model: currentAIModel,
+      model: getContextModel(),
       messages: [
         {
           role: "system",
@@ -3153,7 +3160,7 @@ Returnera ALLTID JSON med denna struktur:
       response_format: { type: "json_object" }
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, getContextTenantId());
     const content = response.choices[0]?.message?.content || "{}";
     return JSON.parse(content) as PlanningConstraints;
   } catch (error) {
@@ -3206,7 +3213,7 @@ ${constraints.areaFocus?.length ? `Fokusområden: ${constraints.areaFocus.join("
 ${constraints.balanceStrategy ? `Balanseringsstrategi: ${constraints.balanceStrategy}` : ""}`;
 
     const response = await openai.chat.completions.create({
-      model: currentAIModel,
+      model: getContextModel(),
       messages: [
         {
           role: "system",
@@ -3220,7 +3227,7 @@ Returnera JSON: {"explanation": "2-3 meningar om planen", "warnings": ["eventuel
       response_format: { type: "json_object" }
     });
 
-    trackOpenAIResponse(response);
+    trackOpenAIResponse(response, getContextTenantId());
     const parsed = JSON.parse(response.choices[0]?.message?.content || "{}");
     return {
       explanation: parsed.explanation || "Planen har genererats framgångsrikt.",

@@ -44,8 +44,6 @@ async function aiBudgetGuard(req: Request, res: Response, useCase: "planning" | 
   }
 
   const model = resolveAIModel(tier, useCase);
-  const { setAIModel } = await import("../ai-planner");
-  setAIModel(model);
   return { tenantId, tier, model, blocked: false };
 }
 
@@ -792,15 +790,18 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
       return res.json(JSON.parse(cachedResult));
     }
 
-    const suggestions = await generatePlanningSuggestions({
-      workOrders,
-      resources,
-      clusters,
-      weekStart: resolvedWeekStart,
-      weekEnd: resolvedWeekEnd,
-      setupTimeLogs,
-      kpis,
-    });
+    const { runWithAIContext } = await import("../ai-planner");
+    const suggestions = await runWithAIContext({ tenantId, model: guard.model }, () =>
+      generatePlanningSuggestions({
+        workOrders,
+        resources,
+        clusters,
+        weekStart: resolvedWeekStart,
+        weekEnd: resolvedWeekEnd,
+        setupTimeLogs,
+        kpis,
+      }, { model: guard.model, tenantId })
+    );
 
     setCachedAIResponse(cacheKey, JSON.stringify(suggestions));
     
@@ -1069,17 +1070,20 @@ app.post("/api/ai/auto-schedule", asyncHandler(async (req, res) => {
       teamMembers: allTeamMembers,
     };
     
-      const result = await aiEnhancedSchedule({
-        workOrders,
-        resources,
-        clusters,
-        weekStart: resolvedWeekStart,
-        weekEnd: resolvedWeekEnd,
-        setupTimeLogs,
-        timeWindows,
-        constraintContext,
-        objects,
-      });
+      const { runWithAIContext } = await import("../ai-planner");
+      const result = await runWithAIContext({ tenantId, model: guard.model }, () =>
+        aiEnhancedSchedule({
+          workOrders,
+          resources,
+          clusters,
+          weekStart: resolvedWeekStart,
+          weekEnd: resolvedWeekEnd,
+          setupTimeLogs,
+          timeWindows,
+          constraintContext,
+          objects,
+        })
+      );
 
       checkAndSendBudgetAlerts(tenantId).catch(() => {});
 
@@ -1431,13 +1435,16 @@ app.post("/api/ai/planner-chat", asyncHandler(async (req, res) => {
     const today = new Date().toISOString().split("T")[0];
     const weekEndDefault = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     
-    const response = await processConversationalPlannerQueryV2(query, {
-      workOrders,
-      resources,
-      clusters,
-      weekStart: weekStart || today,
-      weekEnd: weekEnd || weekEndDefault,
-    }, conversationHistory || []);
+    const { runWithAIContext } = await import("../ai-planner");
+    const response = await runWithAIContext({ tenantId, model: guard.model }, () =>
+      processConversationalPlannerQueryV2(query, {
+        workOrders,
+        resources,
+        clusters,
+        weekStart: weekStart || today,
+        weekEnd: weekEnd || weekEndDefault,
+      }, conversationHistory || [])
+    );
     
     res.json(response);
 }));
