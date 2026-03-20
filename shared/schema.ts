@@ -4482,6 +4482,7 @@ export const budgetAlertLog = pgTable("budget_alert_log", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_budget_alert_tenant_month").on(table.tenantId, table.monthKey),
+  uniqueIndex("uq_budget_alert_dedup").on(table.tenantId, table.monthKey, table.thresholdPercent),
 ]);
 
 export type BudgetAlertLog = typeof budgetAlertLog.$inferSelect;

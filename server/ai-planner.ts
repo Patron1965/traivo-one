@@ -42,7 +42,7 @@ async function callOpenAI(
   let lastError: Error | undefined;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      return await callOpenAI(params);
+      return await openai.chat.completions.create(params);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       lastError = err;
