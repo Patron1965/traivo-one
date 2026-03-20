@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Traivo — Systemarkitektur</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', 'Segoe UI', sans-serif; background: #f8fafc; color: #1e293b; }
+  .page { width: 1400px; margin: 0 auto; padding: 40px; }
+  h1 { font-size: 28px; color: #1B4B6B; margin-bottom: 4px; }
+  .subtitle { font-size: 14px; color: #6B7C8C; margin-bottom: 32px; }
+  .diagram { position: relative; width: 1320px; min-height: 2600px; }
+
+  .box {
+    position: absolute;
+    border-radius: 12px;
+    padding: 16px;
+    font-size: 12px;
+    line-height: 1.5;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+  }
+  .box h3 { font-size: 14px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .box ul { list-style: none; padding: 0; }
+  .box ul li { padding: 2px 0; }
+  .box ul li::before { content: "›"; margin-right: 6px; font-weight: bold; }
+
+  .section-label {
+    position: absolute;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #94a3b8;
+  }
+
+  .layer {
+    position: absolute;
+    border: 2px dashed;
+    border-radius: 16px;
+    padding: 12px;
+  }
+  .layer-label {
+    position: absolute;
+    top: -10px;
+    left: 20px;
+    background: #f8fafc;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .primary { background: #1B4B6B; color: white; }
+  .primary h3 { color: white; }
+  .teal { background: #E8F9F6; border: 2px solid #4A9B9B; }
+  .teal h3 { color: #2d6b6b; }
+  .blue { background: #EBF5FF; border: 2px solid #3b82f6; }
+  .blue h3 { color: #1d4ed8; }
+  .green { background: #ECFDF5; border: 2px solid #10b981; }
+  .green h3 { color: #047857; }
+  .orange { background: #FFF7ED; border: 2px solid #f97316; }
+  .orange h3 { color: #c2410c; }
+  .purple { background: #F5F3FF; border: 2px solid #8b5cf6; }
+  .purple h3 { color: #6d28d9; }
+  .gray { background: #F1F5F9; border: 2px solid #94a3b8; }
+  .gray h3 { color: #475569; }
+  .navy { background: #2C3E50; color: #E8F4F8; }
+  .navy h3 { color: #7DBFB0; }
+  .red { background: #FEF2F2; border: 2px solid #ef4444; }
+  .red h3 { color: #b91c1c; }
+  .ice { background: #E8F4F8; border: 2px solid #1B4B6B; }
+  .ice h3 { color: #1B4B6B; }
+
+  .arrow {
+    position: absolute;
+    background: #94a3b8;
+    z-index: 0;
+  }
+  .arrow-v { width: 2px; }
+  .arrow-h { height: 2px; }
+  .arrow-label {
+    position: absolute;
+    font-size: 9px;
+    color: #64748b;
+    white-space: nowrap;
+    background: #f8fafc;
+    padding: 0 4px;
+  }
+
+  .stats-bar {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 28px;
+    padding: 16px 24px;
+    background: #1B4B6B;
+    border-radius: 12px;
+    color: white;
+  }
+  .stat { text-align: center; }
+  .stat .num { font-size: 24px; font-weight: 700; color: #7DBFB0; }
+  .stat .label { font-size: 11px; opacity: 0.8; }
+
+  .connector {
+    position: absolute;
+    border: 2px solid #cbd5e1;
+    border-radius: 0;
+    z-index: 0;
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>🏗 Traivo — Systemarkitektur</h1>
+  <p class="subtitle">AI-driven fältserviceplattform för nordiska företag · Mars 2026</p>
+
+  <div class="stats-bar">
+    <div class="stat"><div class="num">137 854</div><div class="label">Rader kod</div></div>
+    <div class="stat"><div class="num">117</div><div class="label">DB-tabeller</div></div>
+    <div class="stat"><div class="num">446</div><div class="label">API-endpoints</div></div>
+    <div class="stat"><div class="num">72</div><div class="label">Frontend-sidor</div></div>
+    <div class="stat"><div class="num">62</div><div class="label">Komponenter</div></div>
+    <div class="stat"><div class="num">21</div><div class="label">Backend-moduler</div></div>
+    <div class="stat"><div class="num">20</div><div class="label">DB-migreringar</div></div>
+    <div class="stat"><div class="num">42+</div><div class="label">Tasks genomförda</div></div>
+  </div>
+
+  <div class="diagram">
+
+    <!-- ==================== KLIENTER ==================== -->
+    <div class="section-label" style="top:0; left:0;">Klienter</div>
+
+    <div class="box primary" style="top:20px; left:0; width:300px;">
+      <h3>🖥 Traivo Web (Planerare)</h3>
+      <ul>
+        <li>React 18 + TypeScript + Vite</li>
+        <li>shadcn/ui + Tailwind CSS</li>
+        <li>72 sidor, 62 komponenter</li>
+        <li>Dark/light mode</li>
+        <li>Realtids-WebSocket</li>
+        <li>Rollbaserad navigation</li>
+      </ul>
+    </div>
+
+    <div class="box primary" style="top:20px; left:320px; width:300px;">
+      <h3>📱 Traivo Go (Fältapp)</h3>
+      <ul>
+        <li>React Native / Expo (planerad)</li>
+        <li>Offline-first (IndexedDB/WatermelonDB)</li>
+        <li>GPS-bakgrundsspårning</li>
+        <li>Kamera, signatur, röstinmatning</li>
+        <li>Push-notifikationer</li>
+        <li>PIN-inloggning</li>
+      </ul>
+    </div>
+
+    <div class="box ice" style="top:20px; left:640px; width:300px;">
+      <h3>🌐 Kundportal 2.0</h3>
+      <ul>
+        <li>Token-baserad autentisering</li>
+        <li>Självbokning med tidsslots</li>
+        <li>Orderhistorik & kommande besök</li>
+        <li>Realtids-chatt med planerare</li>
+        <li>Kartvy (hämtningsställen)</li>
+        <li>QR-baserad felanmälan</li>
+      </ul>
+    </div>
+
+    <div class="box ice" style="top:20px; left:960px; width:300px;">
+      <h3>🔌 IoT-enheter</h3>
+      <ul>
+        <li>Sensorer & nivåmätare</li>
+        <li>API-nyckelautentisering</li>
+        <li>Signalrapportering</li>
+        <li>Tröskelvärden → auto-ordrar</li>
+        <li>Prediktiv underhållsdata</li>
+      </ul>
+    </div>
+
+    <!-- ==================== BACKEND LAYER ==================== -->
+    <div class="layer" style="top:220px; left:0; width:1260px; height:520px; border-color:#1B4B6B;">
+      <div class="layer-label" style="color:#1B4B6B;">Backend — Express.js + TypeScript</div>
+    </div>
+
+    <!-- API Gateway -->
+    <div class="box teal" style="top:250px; left:20px; width:1220px; height:60px;">
+      <h3 style="margin:0;">🔐 API Gateway & Middleware</h3>
+      <div style="display:flex; gap:24px; margin-top:4px;">
+        <span>Replit Auth</span>
+        <span>·</span>
+        <span>Tenant Isolation</span>
+        <span>·</span>
+        <span>Mobile Token Auth</span>
+        <span>·</span>
+        <span>Portal Token Auth</span>
+        <span>·</span>
+        <span>IoT API-key Auth</span>
+        <span>·</span>
+        <span>Rate Limiting</span>
+        <span>·</span>
+        <span>RBAC (rollbaserad åtkomst)</span>
+        <span>·</span>
+        <span>Feature Flags</span>
+      </div>
+    </div>
+
+    <!-- Backend moduler -->
+    <div class="section-label" style="top:330px; left:20px;">Backend-moduler (21 routerfiler, 446 endpoints)</div>
+
+    <div class="box blue" style="top:355px; left:20px; width:190px;">
+      <h3>📋 Ordrar</h3>
+      <ul>
+        <li>Arbetsordrar (CRUD)</li>
+        <li>Orderrader & artiklar</li>
+        <li>Statusflöde</li>
+        <li>Låsning/upplåsning</li>
+        <li>Uppgiftsberoenden</li>
+        <li>Strukturella uppgifter</li>
+      </ul>
+    </div>
+
+    <div class="box blue" style="top:355px; left:220px; width:190px;">
+      <h3>👥 Resurser</h3>
+      <ul>
+        <li>Personal & team</li>
+        <li>Resursprofiler</li>
+        <li>Kompetenskoder</li>
+        <li>Tillgänglighet</li>
+        <li>GPS-positioner</li>
+        <li>Fordonstilldelning</li>
+      </ul>
+    </div>
+
+    <div class="box blue" style="top:355px; left:420px; width:190px;">
+      <h3>🏢 Kunder & Objekt</h3>
+      <ul>
+        <li>Kundregister</li>
+        <li>Hierarkiska objekt</li>
+        <li>EAV-metadata</li>
+        <li>Tidsrestriktioner</li>
+        <li>Artikelmappning</li>
+        <li>QR-felanmälan</li>
+      </ul>
+    </div>
+
+    <div class="box purple" style="top:355px; left:620px; width:190px;">
+      <h3>🤖 AI & Planering</h3>
+      <ul>
+        <li>AI Auto-Scheduling</li>
+        <li>Constraint Engine</li>
+        <li>Decision Trace</li>
+        <li>Riskberäkning</li>
+        <li>Konversationell AI</li>
+        <li>Prediktivt underhåll</li>
+      </ul>
+    </div>
+
+    <div class="box green" style="top:355px; left:820px; width:190px;">
+      <h3>💰 Ekonomi</h3>
+      <ul>
+        <li>Fakturering</li>
+        <li>Prislistor</li>
+        <li>Fortnox-export</li>
+        <li>ROI-rapporter</li>
+        <li>Abonnemang</li>
+        <li>Miljöcertifikat</li>
+      </ul>
+    </div>
+
+    <div class="box orange" style="top:355px; left:1020px; width:220px;">
+      <h3>⚙️ Konfiguration</h3>
+      <ul>
+        <li>Multi-tenant hantering</li>
+        <li>Funktionsflaggor (4 nivåer)</li>
+        <li>Branschpaket</li>
+        <li>Terminologi per tenant</li>
+        <li>Branding & demo</li>
+        <li>Onboarding-wizard</li>
+      </ul>
+    </div>
+
+    <!-- Rad 2 av backend-moduler -->
+    <div class="box blue" style="top:540px; left:20px; width:190px;">
+      <h3>📱 Mobil-API</h3>
+      <ul>
+        <li>37 endpoints</li>
+        <li>PIN-autentisering</li>
+        <li>Offline-synk (batch)</li>
+        <li>GPS-spårning</li>
+        <li>Arbetspass (Snöret)</li>
+        <li>Ruttbetyg</li>
+      </ul>
+    </div>
+
+    <div class="box blue" style="top:540px; left:220px; width:190px;">
+      <h3>🗺 Kartor & Rutter</h3>
+      <ul>
+        <li>Planner Map (realtid)</li>
+        <li>Historisk GPS-replay</li>
+        <li>Ruttgeometri</li>
+        <li>Klusterhantering (5 alg.)</li>
+        <li>Geocoding</li>
+        <li>Restidsberäkning</li>
+      </ul>
+    </div>
+
+    <div class="box green" style="top:540px; left:420px; width:190px;">
+      <h3>📊 Rapportering</h3>
+      <ul>
+        <li>KPI-dashboard (7 flikar)</li>
+        <li>Miljöstatistik & CO2</li>
+        <li>API-kostnadsövervakning</li>
+        <li>Data Health Scorecard</li>
+        <li>Protokoll & avvikelser</li>
+        <li>Produktivitetsrapporter</li>
+      </ul>
+    </div>
+
+    <div class="box orange" style="top:540px; left:620px; width:190px;">
+      <h3>🔔 Notifieringar</h3>
+      <ul>
+        <li>WebSocket (realtid)</li>
+        <li>E-post (Resend)</li>
+        <li>SMS (Twilio)</li>
+        <li>Anomalidetektering</li>
+        <li>Push-notifikationer</li>
+        <li>Planerade meddelanden</li>
+      </ul>
+    </div>
+
+    <div class="box purple" style="top:540px; left:820px; width:190px;">
+      <h3>📅 Schemaläggning</h3>
+      <ul>
+        <li>WeekPlanner (drag&drop)</li>
+        <li>Årsplanering + AI</li>
+        <li>Auto-Fill Week</li>
+        <li>Orderkoncept-wizard</li>
+        <li>Frekvensschemaläggning</li>
+        <li>Veckomål & progress</li>
+      </ul>
+    </div>
+
+    <div class="box green" style="top:540px; left:1020px; width:220px;">
+      <h3>🔧 Import & Integration</h3>
+      <ul>
+        <li>Modus 2.0 CSV-import</li>
+        <li>Fortnox entitetsimport</li>
+        <li>Fortnox faktura-export</li>
+        <li>IoT-signalmottagning</li>
+        <li>DataClean-validering</li>
+        <li>Löne-CSV-export</li>
+      </ul>
+    </div>
+
+    <!-- ==================== AI ENGINE ==================== -->
+    <div class="layer" style="top:760px; left:0; width:620px; height:200px; border-color:#8b5cf6;">
+      <div class="layer-label" style="color:#8b5cf6;">AI Engine</div>
+    </div>
+
+    <div class="box purple" style="top:790px; left:20px; width:280px;">
+      <h3>🧠 AI Planning Core</h3>
+      <ul>
+        <li>Auto-Scheduling (heuristik + OpenAI)</li>
+        <li>Constraint Engine (7 hårda + 1 mjuk)</li>
+        <li>Risk Calculator (0–1 score)</li>
+        <li>Decision Trace & Audit Log</li>
+        <li>Schedule Diff View (Före/Efter/Δ)</li>
+        <li>AI-driven årsplaneringsfördelning</li>
+      </ul>
+    </div>
+
+    <div class="box purple" style="top:790px; left:320px; width:280px;">
+      <h3>💬 AI Assistenter</h3>
+      <ul>
+        <li>Konversationell AI-planerare</li>
+        <li>AI Field Assistant (mobilapp)</li>
+        <li>Röst-till-text (Whisper)</li>
+        <li>Bildanalys (GPT-4 Vision)</li>
+        <li>Proaktiva AI-tips</li>
+        <li>Prediktivt underhåll (IoT → AI)</li>
+      </ul>
+    </div>
+
+    <!-- ==================== DATABAS ==================== -->
+    <div class="layer" style="top:760px; left:640px; width:620px; height:200px; border-color:#10b981;">
+      <div class="layer-label" style="color:#10b981;">Datalager</div>
+    </div>
+
+    <div class="box navy" style="top:790px; left:660px; width:280px;">
+      <h3>🗄 PostgreSQL (117 tabeller)</h3>
+      <ul>
+        <li><b>Kärna:</b> orders, objects, customers, resources</li>
+        <li><b>Planering:</b> clusters, assignments, schedules</li>
+        <li><b>Ekonomi:</b> invoices, price_lists, subscriptions</li>
+        <li><b>IoT:</b> devices, signals, forecasts</li>
+        <li><b>Tenant:</b> tenants, features, branding</li>
+        <li><b>Audit:</b> decision_log, audit_logs</li>
+      </ul>
+    </div>
+
+    <div class="box navy" style="top:790px; left:960px; width:280px;">
+      <h3>📦 Lagring & Cache</h3>
+      <ul>
+        <li>Replit Object Storage (foton, filer)</li>
+        <li>Drizzle ORM (databasaccess)</li>
+        <li>Feature Flag Cache (60s TTL)</li>
+        <li>Mobile Token Store (in-memory)</li>
+        <li>Offline Sync Log (databas)</li>
+        <li>20 SQL-migreringar</li>
+      </ul>
+    </div>
+
+    <!-- ==================== EXTERNA TJÄNSTER ==================== -->
+    <div class="section-label" style="top:990px; left:0;">Externa tjänster & integrationer</div>
+
+    <div class="box gray" style="top:1010px; left:0px; width:180px;">
+      <h3>🤖 OpenAI</h3>
+      <ul>
+        <li>GPT-4 (planering)</li>
+        <li>Whisper (tal→text)</li>
+        <li>Vision (bildanalys)</li>
+      </ul>
+    </div>
+
+    <div class="box gray" style="top:1010px; left:190px; width:180px;">
+      <h3>🗺 Geoapify</h3>
+      <ul>
+        <li>Routing API</li>
+        <li>VRP-optimering</li>
+        <li>Geocoding</li>
+      </ul>
+    </div>
+
+    <div class="box gray" style="top:1010px; left:380px; width:180px;">
+      <h3>💼 Fortnox</h3>
+      <ul>
+        <li>Fakturaexport</li>
+        <li>Entitetsimport</li>
+        <li>Artikelsynk</li>
+      </ul>
+    </div>
+
+    <div class="box gray" style="top:1010px; left:570px; width:180px;">
+      <h3>📧 Kommunikation</h3>
+      <ul>
+        <li>Resend (e-post)</li>
+        <li>Twilio (SMS)</li>
+        <li>WebSocket (realtid)</li>
+      </ul>
+    </div>
+
+    <div class="box gray" style="top:1010px; left:760px; width:180px;">
+      <h3>🌤 Data</h3>
+      <ul>
+        <li>Open-Meteo (väder)</li>
+        <li>Nominatim (geocoding)</li>
+        <li>DataClean (validering)</li>
+      </ul>
+    </div>
+
+    <div class="box gray" style="top:1010px; left:950px; width:180px;">
+      <h3>🔧 Infrastruktur</h3>
+      <ul>
+        <li>Replit (hosting)</li>
+        <li>Object Storage (filer)</li>
+        <li>Replit Auth</li>
+      </ul>
+    </div>
+
+    <!-- ==================== MULTI-TENANCY ==================== -->
+    <div class="section-label" style="top:1160px; left:0;">Multi-tenancy & SaaS-arkitektur</div>
+
+    <div class="layer" style="top:1180px; left:0; width:1260px; height:180px; border-color:#f97316;">
+      <div class="layer-label" style="color:#f97316;">Multi-Tenant SaaS</div>
+    </div>
+
+    <div class="box orange" style="top:1210px; left:20px; width:230px;">
+      <h3>🏢 Tenant-isolering</h3>
+      <ul>
+        <li>DB-level isolation per tenant</li>
+        <li>API middleware-validering</li>
+        <li>Rollbaserad åtkomstkontroll</li>
+        <li>Tenant-specifik konfiguration</li>
+      </ul>
+    </div>
+
+    <div class="box orange" style="top:1210px; left:270px; width:230px;">
+      <h3>📦 Modulpaket</h3>
+      <ul>
+        <li><b>Bas:</b> Ordrar, resurser, kunder</li>
+        <li><b>Standard:</b> + Rapporter, import</li>
+        <li><b>Premium:</b> + AI, IoT, prediktivt</li>
+        <li><b>Anpassad:</b> Valfria moduler</li>
+      </ul>
+    </div>
+
+    <div class="box orange" style="top:1210px; left:520px; width:230px;">
+      <h3>🎨 White-label</h3>
+      <ul>
+        <li>Anpassad branding per tenant</li>
+        <li>Auto-scrape från kundwebb</li>
+        <li>Branschpaket (mallar)</li>
+        <li>Terminologi per bransch</li>
+      </ul>
+    </div>
+
+    <div class="box orange" style="top:1210px; left:770px; width:230px;">
+      <h3>🚀 Onboarding</h3>
+      <ul>
+        <li>Tenant-skapande wizard</li>
+        <li>Branschpaket-val</li>
+        <li>Automatisk seed-data</li>
+        <li>Guidad tour</li>
+      </ul>
+    </div>
+
+    <div class="box orange" style="top:1210px; left:1020px; width:220px;">
+      <h3>👤 Användare</h3>
+      <ul>
+        <li>Admin, planerare, fältarbetare</li>
+        <li>Inbjudningssystem</li>
+        <li>Teamhantering</li>
+        <li>Rollbaserad navigation</li>
+      </ul>
+    </div>
+
+    <!-- ==================== DATAFLÖDEN ==================== -->
+    <div class="section-label" style="top:1400px; left:0;">Centrala dataflöden</div>
+
+    <div class="layer" style="top:1420px; left:0; width:1260px; height:580px; border-color:#1B4B6B;">
+      <div class="layer-label" style="color:#1B4B6B;">Dataflöden & Arbetsprocesser</div>
+    </div>
+
+    <div class="box teal" style="top:1450px; left:20px; width:390px;">
+      <h3>📋 Orderflöde</h3>
+      <div style="font-size:11px; line-height:1.8;">
+        <b>1.</b> Planerare skapar order (manuellt eller via orderkoncept-wizard)<br>
+        <b>2.</b> AI Auto-Scheduler föreslår tilldelning + Decision Trace<br>
+        <b>3.</b> Constraint Engine validerar (7 hårda + 1 mjuk regel)<br>
+        <b>4.</b> Schedule Diff View visar Före/Efter/Delta för KPI:er<br>
+        <b>5.</b> Planerare accepterar/avvisar per flytt<br>
+        <b>6.</b> Order tilldelas resurs → push till Traivo Go<br>
+        <b>7.</b> Fältarbetare utför → statusuppdatering<br>
+        <b>8.</b> Avvikelser, material, signatur rapporteras<br>
+        <b>9.</b> Faktura genereras → Fortnox-export<br>
+        <b>10.</b> Protokoll och rapporter skapas
+      </div>
+    </div>
+
+    <div class="box teal" style="top:1450px; left:430px; width:390px;">
+      <h3>🤖 AI-planeringsflöde</h3>
+      <div style="font-size:11px; line-height:1.8;">
+        <b>1.</b> Hämta oschemalagda ordrar + resurser + kluster<br>
+        <b>2.</b> Beräkna kluster-matchning (postnummer)<br>
+        <b>3.</b> Heuristisk tilldelning (kapacitet + geografi)<br>
+        <b>4.</b> OpenAI förbättrar fördelning (effektivitet)<br>
+        <b>5.</b> Constraint Engine validerar alla tilldelningar<br>
+        <b>6.</b> Hårda överträdelser → order tas bort<br>
+        <b>7.</b> Risk Calculator → score per tilldelning<br>
+        <b>8.</b> Decision Trace byggs (KPI baseline vs proposed)<br>
+        <b>9.</b> Resultat med moves, violations, riskfactors<br>
+        <b>10.</b> Loggas till planning_decision_log
+      </div>
+    </div>
+
+    <div class="box teal" style="top:1450px; left:840px; width:390px;">
+      <h3>📱 Mobilflöde (Traivo Go)</h3>
+      <div style="font-size:11px; line-height:1.8;">
+        <b>1.</b> Chaufför loggar in med PIN<br>
+        <b>2.</b> Check-in → arbetspass startar<br>
+        <b>3.</b> Synka ner dagens ordrar + artiklar<br>
+        <b>4.</b> GPS-bakgrundsspårning startar (var 30s)<br>
+        <b>5.</b> Navigera till första order<br>
+        <b>6.</b> Utför order → status, material, foto, signatur<br>
+        <b>7.</b> Avvikelse? → rapport med foto + GPS<br>
+        <b>8.</b> Offline-kö samlar alla händelser<br>
+        <b>9.</b> Batch-synk vid nätverksåterkoppling<br>
+        <b>10.</b> Check-out → ruttbetyg → löneunderlag
+      </div>
+    </div>
+
+    <div class="box teal" style="top:1730px; left:20px; width:390px;">
+      <h3>🔌 IoT → Automatisk order</h3>
+      <div style="font-size:11px; line-height:1.8;">
+        <b>1.</b> IoT-enhet skickar signal (nivå, temperatur, etc)<br>
+        <b>2.</b> API validerar API-nyckel<br>
+        <b>3.</b> Signal sparas + tröskelvärde kontrolleras<br>
+        <b>4.</b> Tröskel överskriden → arbetsorder skapas automatiskt<br>
+        <b>5.</b> AI Prediktivt underhåll analyserar historik<br>
+        <b>6.</b> Prognos: nästa servicedatum + konfidensbetyg
+      </div>
+    </div>
+
+    <div class="box teal" style="top:1730px; left:430px; width:390px;">
+      <h3>🌐 Kundportalflöde</h3>
+      <div style="font-size:11px; line-height:1.8;">
+        <b>1.</b> Kund loggar in via token-länk (e-post/SMS)<br>
+        <b>2.</b> Ser kommande besök + orderhistorik<br>
+        <b>3.</b> Kartvy visar alla hämtningsställen<br>
+        <b>4.</b> Kan boka egna besök (självbokning)<br>
+        <b>5.</b> Realtids-chatt med planerare<br>
+        <b>6.</b> QR-scan → anonym felanmälan (interimobjekt)
+      </div>
+    </div>
+
+    <div class="box teal" style="top:1730px; left:840px; width:390px;">
+      <h3>💰 Ekonomiflöde</h3>
+      <div style="font-size:11px; line-height:1.8;">
+        <b>1.</b> Utförd order med artiklar + material<br>
+        <b>2.</b> Prisupplösning: objektartikel → prislista → standard<br>
+        <b>3.</b> Fakturaförhandsgranskning<br>
+        <b>4.</b> Batch-val och godkännande<br>
+        <b>5.</b> Export till Fortnox<br>
+        <b>6.</b> Exporthistorik + statusspårning
+      </div>
+    </div>
+
+  </div>
+</div>
+</body>
+</html>
