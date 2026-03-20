@@ -352,23 +352,38 @@ export async function releaseSchedulingLock(tenantId: string): Promise<void> {
   }
 }
 
+export class AIRetryError extends Error {
+  statusCode: number;
+  userFacing: boolean;
+  originalError: Error | undefined;
+
+  constructor(label: string, totalAttempts: number, originalError?: Error) {
+    const userMessage = `AI-tjänsten är tillfälligt otillgänglig efter ${totalAttempts} försök. Försök igen om en stund.`;
+    super(userMessage);
+    this.name = "AIRetryError";
+    this.statusCode = 503;
+    this.userFacing = true;
+    this.originalError = originalError;
+  }
+}
+
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  options: { maxRetries?: number; label?: string } = {}
+  options: { totalAttempts?: number; label?: string } = {}
 ): Promise<T> {
-  const maxRetries = options.maxRetries ?? 3;
+  const totalAttempts = options.totalAttempts ?? 3;
   const label = options.label ?? "AI call";
   const BACKOFF_DELAYS = [1000, 2000, 4000];
   let lastError: Error | undefined;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt < totalAttempts; attempt++) {
     try {
       return await fn();
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       lastError = err;
 
-      if (attempt === maxRetries) break;
+      if (attempt === totalAttempts - 1) break;
 
       const errRecord = error as Record<string, unknown>;
       const isRetryable =
@@ -382,18 +397,13 @@ export async function withRetry<T>(
       if (!isRetryable) throw err;
 
       const delayMs = BACKOFF_DELAYS[attempt] ?? 4000;
-      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${maxRetries + 1} failed (${err.message}). Retrying in ${delayMs}ms...`);
+      console.warn(`[ai-retry] ${label} attempt ${attempt + 1}/${totalAttempts} failed (${err.message}). Retrying in ${delayMs}ms...`);
       await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
 
-  console.error(`[ai-retry] ${label} permanently failed after ${maxRetries + 1} attempts:`, lastError?.message);
-  const userMessage = `AI-tjänsten är tillfälligt otillgänglig efter ${maxRetries + 1} försök. Försök igen om en stund.`;
-  const terminalError = new Error(userMessage);
-  (terminalError as any).statusCode = 503;
-  (terminalError as any).userFacing = true;
-  (terminalError as any).originalError = lastError;
-  throw terminalError;
+  console.error(`[ai-retry] ${label} permanently failed after ${totalAttempts} attempts:`, lastError?.message);
+  throw new AIRetryError(label, totalAttempts, lastError);
 }
 
 export function getCachedAIResponse(cacheKey: string): string | null {

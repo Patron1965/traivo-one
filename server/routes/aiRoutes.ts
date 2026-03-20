@@ -12,9 +12,7 @@ import { type ServiceObject, type WorkOrderLine } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
 import {
-  checkBudgetAndBlock,
-  checkRateLimit,
-  resolveAIModel,
+  enforceBudgetAndRateLimit,
   acquireSchedulingLock,
   releaseSchedulingLock,
   withRetry,
@@ -23,27 +21,21 @@ import {
   createAICacheKey,
   invalidateAICache,
 } from "../ai-budget-service";
-import { getTenantFeatures } from "../feature-flags";
 
 async function aiBudgetGuard(req: Request, res: Response, useCase: "planning" | "chat" | "analysis" = "chat"): Promise<{ tenantId: string; tier: string; model: string; blocked: boolean }> {
   const tenantId = getTenantIdWithFallback(req);
-  const { tier } = await getTenantFeatures(tenantId);
-
-  const budgetCheck = await checkBudgetAndBlock(tenantId);
-  if (!budgetCheck.allowed) {
-    res.status(429).json({ error: "AI-budget överskriden", message: budgetCheck.message });
-    return { tenantId, tier, model: "gpt-4o-mini", blocked: true };
+  const enforcement = await enforceBudgetAndRateLimit(tenantId, useCase);
+  if (!enforcement.allowed) {
+    if (enforcement.errorType === "ratelimit") {
+      res.set("Retry-After", String(enforcement.retryAfterSeconds || 60));
+    }
+    res.status(429).json({
+      error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden",
+      message: enforcement.errorMessage,
+    });
+    return { tenantId, tier: enforcement.tier, model: "gpt-4o-mini", blocked: true };
   }
-
-  const rateLimitCheck = checkRateLimit(tenantId, tier);
-  if (!rateLimitCheck.allowed) {
-    res.set("Retry-After", String(rateLimitCheck.retryAfterSeconds || 60));
-    res.status(429).json({ error: "AI-anropsgräns nådd", message: `Maxgräns nådd. Försök igen om ${rateLimitCheck.retryAfterSeconds} sekunder.` });
-    return { tenantId, tier, model: "gpt-4o-mini", blocked: true };
-  }
-
-  const model = resolveAIModel(tier, useCase);
-  return { tenantId, tier, model, blocked: false };
+  return { tenantId, tier: enforcement.tier, model: enforcement.model, blocked: false };
 }
 
 export async function registerAIRoutes(app: Express) {

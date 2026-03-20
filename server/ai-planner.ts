@@ -41,30 +41,26 @@ async function callOpenAI(
   if (!aiContext.getStore()) {
     console.warn(`[${label}] WARNING: callOpenAI invoked without AI context (no tenantId/model). Using defaults.`);
   }
-  const maxRetries = 3;
+  const { AIRetryError } = await import("./ai-budget-service");
+  const totalAttempts = 3;
   const BACKOFF_DELAYS = [1000, 2000, 4000];
   let lastError: Error | undefined;
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+  for (let attempt = 0; attempt < totalAttempts; attempt++) {
     try {
       return await openai.chat.completions.create(params);
     } catch (error: unknown) {
       const err = error instanceof Error ? error : new Error(String(error));
       lastError = err;
-      if (attempt === maxRetries) break;
+      if (attempt === totalAttempts - 1) break;
       const errRecord = error as Record<string, unknown>;
       const isRetryable = errRecord?.status === 429 || errRecord?.status === 500 || errRecord?.status === 503 || errRecord?.code === "ECONNRESET" || errRecord?.code === "ETIMEDOUT" || err.message?.includes("timeout");
       if (!isRetryable) break;
       const delay = BACKOFF_DELAYS[attempt] ?? 4000;
-      console.warn(`[${label}] Attempt ${attempt + 1}/${maxRetries + 1} failed, retrying in ${delay}ms...`);
+      console.warn(`[${label}] Attempt ${attempt + 1}/${totalAttempts} failed, retrying in ${delay}ms...`);
       await new Promise(r => setTimeout(r, delay));
     }
   }
-  const userMessage = `AI-tjänsten är tillfälligt otillgänglig efter ${maxRetries + 1} försök. Försök igen om en stund.`;
-  const terminalError = new Error(userMessage);
-  (terminalError as any).statusCode = 503;
-  (terminalError as any).userFacing = true;
-  (terminalError as any).originalError = lastError;
-  throw terminalError;
+  throw new AIRetryError(label, totalAttempts, lastError);
 }
 
 // ============================================
