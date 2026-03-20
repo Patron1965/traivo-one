@@ -72,6 +72,7 @@ import PortalContractsPage from "@/pages/portal/PortalContractsPage";
 import PortalSettingsPage from "@/pages/portal/PortalSettingsPage";
 import PortalIssuesPage from "@/pages/portal/PortalIssuesPage";
 import PortalDemoPage from "@/pages/portal/PortalDemoPage";
+import PortalROIReportPage from "@/pages/portal/PortalROIReportPage";
 import AIPlanningPage from "@/pages/AIPlanningPage";
 import AICommandCenterPage from "@/pages/AICommandCenterPage";
 import FieldLoginPage from "@/pages/FieldLoginPage";
@@ -187,6 +188,7 @@ function PortalRouter() {
       <Route path="/portal/contracts" component={PortalContractsPage} />
       <Route path="/portal/settings" component={PortalSettingsPage} />
       <Route path="/portal/issues" component={PortalIssuesPage} />
+      <Route path="/portal/roi-report" component={PortalROIReportPage} />
       <Route component={NotFound} />
     </Switch>
   );

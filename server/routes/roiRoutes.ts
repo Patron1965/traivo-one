@@ -4,7 +4,7 @@ import { eq, and, gte, lte, sql, count, sum, avg, desc, inArray, or } from "driz
 import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { ValidationError } from "../errors";
-import { workOrders, environmentalData, deviationReports, resources, customers, routeFeedback, objects } from "@shared/schema";
+import { workOrders, environmentalData, deviationReports, customers, objects } from "@shared/schema";
 import crypto from "crypto";
 
 const shareTokens = new Map<string, { tenantId: string; customerId: string; expiresAt: Date }>();

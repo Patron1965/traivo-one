@@ -88,9 +88,11 @@ function formatMonth(month: string): string {
   return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
 }
 
+import type { LucideIcon } from "lucide-react";
+
 function KPICard({ title, value, subtitle, icon: Icon, trend, color }: {
   title: string; value: string | number; subtitle?: string;
-  icon: any; trend?: "up" | "down" | "neutral"; color?: string;
+  icon: LucideIcon; trend?: "up" | "down" | "neutral"; color?: string;
 }) {
   return (
     <Card data-testid={`kpi-${title.toLowerCase().replace(/\s/g, "-")}`}>
