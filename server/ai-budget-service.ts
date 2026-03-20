@@ -73,6 +73,7 @@ export async function getTenantBudgetStatus(tenantId: string): Promise<BudgetSta
     .where(
       and(
         eq(apiUsageLogs.tenantId, tenantId),
+        eq(apiUsageLogs.service, "openai"),
         gte(apiUsageLogs.createdAt, monthStart)
       )
     );
@@ -80,7 +81,10 @@ export async function getTenantBudgetStatus(tenantId: string): Promise<BudgetSta
   const budgetRows = await db
     .select()
     .from(apiBudgets)
-    .where(eq(apiBudgets.tenantId, tenantId));
+    .where(and(
+      eq(apiBudgets.tenantId, tenantId),
+      eq(apiBudgets.service, "openai")
+    ));
 
   let totalBudget = 0;
   if (budgetRows.length > 0) {
@@ -89,7 +93,10 @@ export async function getTenantBudgetStatus(tenantId: string): Promise<BudgetSta
     const globalBudgets = await db
       .select()
       .from(apiBudgets)
-      .where(sql`${apiBudgets.tenantId} IS NULL`);
+      .where(and(
+        sql`${apiBudgets.tenantId} IS NULL`,
+        eq(apiBudgets.service, "openai")
+      ));
     totalBudget = globalBudgets.reduce((sum, b) => sum + b.monthlyBudgetUsd, 0);
   }
 
