@@ -60,23 +60,23 @@ export async function registerRoiRoutes(app: Express) {
         gte(workOrders.scheduledDate, cutoff),
       ));
 
-    const envData = await db
-      .select({
-        distanceKm: environmentalData.distanceKm,
-        co2Kg: environmentalData.co2Kg,
-        fuelLiters: environmentalData.fuelLiters,
-        recordedAt: environmentalData.recordedAt,
-        workOrderId: environmentalData.workOrderId,
-      })
-      .from(environmentalData)
-      .where(and(
-        eq(environmentalData.tenantId, tenantId),
-        gte(environmentalData.recordedAt, cutoff),
-      ));
-
     const orderIds = new Set(orders.map(o => o.id));
     const orderIdList = [...orderIds];
-    const customerEnvData = envData.filter(e => orderIds.has(e.workOrderId));
+
+    const customerEnvData = orderIdList.length > 0
+      ? await db
+        .select({
+          distanceKm: environmentalData.distanceKm,
+          co2Kg: environmentalData.co2Kg,
+          fuelLiters: environmentalData.fuelLiters,
+          recordedAt: environmentalData.recordedAt,
+        })
+        .from(environmentalData)
+        .where(and(
+          eq(environmentalData.tenantId, tenantId),
+          inArray(environmentalData.workOrderId, orderIdList),
+        ))
+      : [];
 
     const customerObjects = await db
       .select({ id: objects.id })
