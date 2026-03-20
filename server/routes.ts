@@ -189,6 +189,180 @@ export async function registerRoutes(
     }
   });
 
+  app.get("/api/dashboard/alerts", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const today = new Date();
+      const todayStr = today.toISOString().split("T")[0];
+      const startOfToday = new Date(todayStr + "T00:00:00.000Z");
+      const endOfToday = new Date(todayStr + "T23:59:59.999Z");
+
+      const [overdueRows] = await db.execute(sql`
+        SELECT id, title, scheduled_date, resource_id, object_id, order_status
+        FROM work_orders
+        WHERE tenant_id = ${tenantId}
+          AND order_status NOT IN ('utford', 'fakturerad', 'omojlig')
+          AND scheduled_date IS NOT NULL
+          AND scheduled_date < ${startOfToday}
+          AND deleted_at IS NULL
+        ORDER BY scheduled_date ASC
+        LIMIT 20
+      `);
+
+      const activeResources = await storage.getResources(tenantId);
+      const activeResourceIds = activeResources.filter(r => r.status === "active").map(r => r.id);
+
+      let idleResources: { id: string; name: string }[] = [];
+      if (activeResourceIds.length > 0) {
+        const [busyRows] = await db.execute(sql`
+          SELECT DISTINCT resource_id
+          FROM work_orders
+          WHERE tenant_id = ${tenantId}
+            AND resource_id IS NOT NULL
+            AND scheduled_date >= ${startOfToday}
+            AND scheduled_date <= ${endOfToday}
+            AND order_status NOT IN ('utford', 'fakturerad', 'omojlig')
+            AND deleted_at IS NULL
+        `);
+        const busyIds = new Set(
+          Array.isArray(busyRows)
+            ? (busyRows as any[]).map((r: any) => r.resource_id)
+            : [(busyRows as any)?.resource_id].filter(Boolean)
+        );
+        idleResources = activeResources
+          .filter(r => r.status === "active" && !busyIds.has(r.id))
+          .map(r => ({ id: r.id, name: r.name }));
+      }
+
+      const [collisionRows] = await db.execute(sql`
+        SELECT a.id AS order_a_id, a.title AS order_a_title,
+               a.scheduled_start_time AS start_a, a.estimated_duration AS duration_a,
+               b.id AS order_b_id, b.title AS order_b_title,
+               b.scheduled_start_time AS start_b, b.estimated_duration AS duration_b,
+               a.resource_id, a.scheduled_date
+        FROM work_orders a
+        JOIN work_orders b ON a.resource_id = b.resource_id
+          AND a.tenant_id = b.tenant_id
+          AND DATE(a.scheduled_date) = DATE(b.scheduled_date)
+          AND a.id < b.id
+        WHERE a.tenant_id = ${tenantId}
+          AND a.scheduled_date >= ${startOfToday}
+          AND a.scheduled_date <= ${endOfToday}
+          AND a.scheduled_start_time IS NOT NULL
+          AND b.scheduled_start_time IS NOT NULL
+          AND a.order_status NOT IN ('utford', 'fakturerad', 'omojlig')
+          AND b.order_status NOT IN ('utford', 'fakturerad', 'omojlig')
+          AND a.deleted_at IS NULL
+          AND b.deleted_at IS NULL
+        LIMIT 50
+      `);
+
+      const parseTime = (t: string) => {
+        const [h, m] = t.split(":").map(Number);
+        return h * 60 + (m || 0);
+      };
+      const collisionList = Array.isArray(collisionRows) ? collisionRows as any[] : collisionRows ? [collisionRows] : [];
+      const doubleBookings: any[] = [];
+      for (const row of collisionList) {
+        if (!row.start_a || !row.start_b) continue;
+        const startA = parseTime(row.start_a);
+        const endA = startA + (row.duration_a || 60);
+        const startB = parseTime(row.start_b);
+        const endB = startB + (row.duration_b || 60);
+        if (startA < endB && endA > startB) {
+          const resource = activeResources.find(r => r.id === row.resource_id);
+          doubleBookings.push({
+            resourceId: row.resource_id,
+            resourceName: resource?.name || "Okänd resurs",
+            orderA: { id: row.order_a_id, title: row.order_a_title, startTime: row.start_a },
+            orderB: { id: row.order_b_id, title: row.order_b_title, startTime: row.start_b },
+          });
+        }
+      }
+
+      const overdueList = Array.isArray(overdueRows) ? overdueRows as any[] : overdueRows ? [overdueRows] : [];
+      const overdueAlerts = overdueList.map((r: any) => ({
+        id: r.id,
+        title: r.title || `Order ${(r.id || "").slice(0, 8)}`,
+        scheduledDate: r.scheduled_date,
+        resourceId: r.resource_id,
+      }));
+
+      res.json({
+        overdue: overdueAlerts,
+        idleResources,
+        doubleBookings,
+        totalAlerts: overdueAlerts.length + idleResources.length + doubleBookings.length,
+      });
+    } catch (error) {
+      console.error("Failed to fetch dashboard alerts:", error);
+      res.status(500).json({ error: "Failed to fetch alerts" });
+    }
+  });
+
+  app.get("/api/dashboard/capacity", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const dateParam = req.query.date as string;
+      const date = dateParam ? new Date(dateParam) : new Date();
+      const dateStr = date.toISOString().split("T")[0];
+      const startOfDay = new Date(dateStr + "T00:00:00.000Z");
+      const endOfDay = new Date(dateStr + "T23:59:59.999Z");
+
+      const activeResources = await storage.getResources(tenantId);
+      const active = activeResources.filter(r => r.status === "active");
+
+      const [orderRows] = await db.execute(sql`
+        SELECT resource_id, 
+               COALESCE(SUM(estimated_duration), 0) AS booked_minutes
+        FROM work_orders
+        WHERE tenant_id = ${tenantId}
+          AND scheduled_date >= ${startOfDay}
+          AND scheduled_date <= ${endOfDay}
+          AND resource_id IS NOT NULL
+          AND order_status NOT IN ('omojlig')
+          AND deleted_at IS NULL
+        GROUP BY resource_id
+      `);
+
+      const bookedMap = new Map<string, number>();
+      const rowList = Array.isArray(orderRows) ? orderRows as any[] : orderRows ? [orderRows] : [];
+      for (const row of rowList) {
+        if (row.resource_id) {
+          bookedMap.set(row.resource_id, Number(row.booked_minutes || 0));
+        }
+      }
+
+      const defaultDailyMinutes = 8 * 60;
+
+      const capacity = active.map(r => {
+        const dailyMinutes = r.weeklyHours
+          ? Math.round((r.weeklyHours / 5) * 60)
+          : defaultDailyMinutes;
+        const bookedMinutes = bookedMap.get(r.id) || 0;
+        const utilization = dailyMinutes > 0
+          ? Math.round((bookedMinutes / dailyMinutes) * 100)
+          : 0;
+
+        return {
+          resourceId: r.id,
+          resourceName: r.name,
+          bookedMinutes,
+          availableMinutes: dailyMinutes,
+          utilization,
+        };
+      });
+
+      res.json({
+        date: dateStr,
+        resources: capacity,
+      });
+    } catch (error) {
+      console.error("Failed to fetch capacity:", error);
+      res.status(500).json({ error: "Failed to fetch capacity" });
+    }
+  });
+
   registerCustomerRoutes(app);
   registerObjectRoutes(app);
   registerResourceRoutes(app);

@@ -4,6 +4,8 @@ import { AnomalyAlerts } from "@/components/AnomalyAlerts";
 import { PredictiveInsights } from "@/components/PredictiveInsights";
 import { TodayOverview } from "@/components/dashboard/TodayOverview";
 import { QuickActions } from "@/components/dashboard/QuickActions";
+import { DashboardAlerts } from "@/components/dashboard/DashboardAlerts";
+import { CapacityOverview } from "@/components/dashboard/CapacityOverview";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -39,6 +41,8 @@ export default function DashboardPage() {
           <Dashboard />
         </div>
         <div className="space-y-6">
+          <DashboardAlerts />
+          <CapacityOverview />
           <TodayOverview />
           <PredictiveInsights />
           <AnomalyAlerts />
