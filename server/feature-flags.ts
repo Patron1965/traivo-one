@@ -49,7 +49,6 @@ const API_MODULE_PREFIXES: [string, ModuleKey][] = [
   ["/api/fleet", "fleet"],
   ["/api/vehicles", "fleet"],
   ["/api/environmental", "environmental"],
-  ["/api/portal", "customer_portal"],
   ["/api/invoic", "invoicing"],
   ["/api/fortnox", "invoicing"],
   ["/api/predictive", "predictive"],
@@ -90,10 +89,18 @@ export function requireModule(moduleKey: ModuleKey) {
   };
 }
 
+const GUARD_SKIP_PREFIXES = ["/api/portal", "/api/mobile", "/api/planner", "/api/admin", "/api/auth"];
+
 export async function moduleGuardMiddleware(req: Request, res: Response, next: NextFunction) {
   if (req.method === "OPTIONS") return next();
 
   const fullPath = req.originalUrl || req.path;
+
+  for (const skip of GUARD_SKIP_PREFIXES) {
+    if (fullPath.startsWith(skip)) return next();
+  }
+  if (fullPath === "/api/iot/signals" && req.method === "POST") return next();
+
   const moduleKey = getModuleForApiPath(fullPath);
   if (!moduleKey || moduleKey === "core") return next();
 
