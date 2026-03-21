@@ -169,7 +169,7 @@ export default function LandingPage() {
                   <div className="h-12 w-12 rounded-lg bg-rose-500/10 flex items-center justify-center mb-4 group-hover:bg-rose-500/20 transition-colors">
                     <Smartphone className="h-6 w-6 text-rose-600" />
                   </div>
-                  <h3 className="font-semibold text-lg mb-2">Mobil fältapp</h3>
+                  <h3 className="font-semibold text-lg mb-2">Traivo Go</h3>
                   <p className="text-muted-foreground">
                     Dedikerade API:er för mobil inloggning, statusuppdatering och anteckningar.
                   </p>

@@ -116,7 +116,7 @@ export const SendScheduleDialog = memo(function SendScheduleDialog(props: SendSc
                 <Button className="w-full justify-start gap-3" variant="outline" onClick={onCopyLink} data-testid="button-copy-field-link">
                   {copied ? <Check className="h-4 w-4 text-green-500" /> : <Copy className="h-4 w-4" />}
                   <div className="text-left flex-1">
-                    <div>Kopiera länk till fältappen</div>
+                    <div>Kopiera länk till Traivo Go</div>
                     <div className="text-xs text-muted-foreground">Klistra in i SMS eller meddelande</div>
                   </div>
                 </Button>

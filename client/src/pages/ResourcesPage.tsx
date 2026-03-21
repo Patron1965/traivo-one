@@ -93,8 +93,8 @@ function ShareFieldAppButton() {
   
   const handleShare = async () => {
     const shareData = {
-      title: "Traivo Fältapp",
-      text: "Öppna Traivo Fältapp",
+      title: "Traivo Go",
+      text: "Öppna Traivo Go",
       url: fieldAppUrl,
     };
     
@@ -125,7 +125,7 @@ function ShareFieldAppButton() {
             data-testid="button-share-field-app"
           >
             <Smartphone className="h-4 w-4 mr-2" />
-            Dela fältappen
+            Dela Traivo Go
           </Button>
         </TooltipTrigger>
         <TooltipContent>
@@ -138,10 +138,10 @@ function ShareFieldAppButton() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Smartphone className="h-5 w-5" />
-              Dela fältappen
+              Dela Traivo Go
             </DialogTitle>
             <DialogDescription>
-              Skicka denna länk till chaufförer och tekniker så de kan använda fältappen på sin mobil
+              Skicka denna länk till chaufförer och tekniker så de kan använda Traivo Go på sin mobil
             </DialogDescription>
           </DialogHeader>
           

@@ -111,13 +111,13 @@ const systemFeatures: FeatureSection[] = [
     icon: BarChart3,
     features: [
       { name: "Dashboard", description: "KPI:er och analys från verklig ställtidsdata" },
-      { name: "Ställtidsloggning", description: "Automatisk loggning från fältappen" },
+      { name: "Ställtidsloggning", description: "Automatisk loggning från Traivo Go" },
       { name: "Objektstatistik", description: "Historik och trender per objekt" },
       { name: "Effektivitetsanalys", description: "Identifiera förbättringsområden" },
     ]
   },
   {
-    title: "Fältapp",
+    title: "Traivo Go",
     icon: Smartphone,
     features: [
       { name: "Dagens jobb", description: "Översikt över planerade uppdrag" },

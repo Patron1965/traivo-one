@@ -58,7 +58,7 @@ const slides = [
     features: [
       { icon: Brain, title: "AI-optimering", desc: "Automatisk ruttplanering med maskininlärning" },
       { icon: MapPin, title: "Realtidsspårning", desc: "GPS-positioner och statusuppdateringar live" },
-      { icon: Smartphone, title: "Mobilapp", desc: "Komplett fältapp för chaufförer" },
+      { icon: Smartphone, title: "Traivo Go", desc: "Komplett mobilapp för chaufförer" },
       { icon: Shield, title: "Kundportal", desc: "Self-service för kunder med magic link-inloggning" },
     ]
   },
@@ -83,7 +83,7 @@ const slides = [
     modules: [
       { name: "Planeringsmodul", desc: "AI-driven vecko- och dagsplanering med Conversational AI", status: "Live" },
       { name: "Ruttoptimering", desc: "VRP-algoritmer med väderbaserad kapacitet", status: "Live" },
-      { name: "Fältapp", desc: "Komplett offline-arkitektur med IndexedDB", status: "Live" },
+      { name: "Traivo Go", desc: "Komplett offline-arkitektur med IndexedDB", status: "Live" },
       { name: "Kundportal 2.0", desc: "Magic link, betyg, chatt, självbokning", status: "Live" },
       { name: "White-label", desc: "Flerföretagsstöd med varumärkesanpassning", status: "Live" },
       { name: "Branschpaket", desc: "Färdiga mallar för avfall, städ, fastighet", status: "Live" },
@@ -141,7 +141,7 @@ const slides = [
       { icon: Brain, title: "Conversational AI", desc: "Naturligt språk i planeraren - unikt för branschen" },
       { icon: Globe, title: "Nordiskt fokus", desc: "Svensk UI, svenska adresser, lokal marknad" },
       { icon: Leaf, title: "Hållbarhetsspårning", desc: "CO2-certifikat och miljörapporter - ESG-ready" },
-      { icon: Smartphone, title: "Offline-first", desc: "Fältapp fungerar utan uppkoppling" },
+      { icon: Smartphone, title: "Offline-first", desc: "Traivo Go fungerar utan uppkoppling" },
       { icon: Shield, title: "White-label SaaS", desc: "Varumärkesanpassning per kund" },
       { icon: Zap, title: "Branschpaket", desc: "Snabb onboarding med färdiga mallar" },
     ],

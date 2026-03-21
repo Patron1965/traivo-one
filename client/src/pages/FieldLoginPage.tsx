@@ -16,7 +16,7 @@ export default function FieldLoginPage() {
             <Truck className="h-8 w-8 text-primary-foreground" />
           </div>
           <div>
-            <CardTitle className="text-2xl">Traivo Fältapp</CardTitle>
+            <CardTitle className="text-2xl">Traivo Go</CardTitle>
             <CardDescription>Logga in för att se dagens jobb</CardDescription>
           </div>
         </CardHeader>
@@ -30,7 +30,7 @@ export default function FieldLoginPage() {
             Logga in
           </Button>
           <p className="text-xs text-center text-muted-foreground">
-            Fältapp för chaufförer och tekniker
+            Traivo Go — för chaufförer och tekniker
           </p>
         </CardContent>
       </Card>

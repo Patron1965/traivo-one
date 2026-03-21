@@ -795,7 +795,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
             </Label>
             <Textarea
               id="planned-notes"
-              placeholder="Info som visas för chauffören i fältappen..."
+              placeholder="Info som visas för chauffören i Traivo Go..."
               value={formData.plannedNotes}
               onChange={(e) => setFormData({...formData, plannedNotes: e.target.value})}
               rows={2}

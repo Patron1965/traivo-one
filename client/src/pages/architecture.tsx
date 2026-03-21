@@ -174,7 +174,7 @@ export default function ArchitecturePage() {
                 <FeatureItem>Artikelhantering på jobb</FeatureItem>
               </ArchitectureBox>
               
-              <ArchitectureBox title="Mobil Fältapp" icon={Smartphone} color="bg-green-50 dark:bg-green-950/30" borderColor="border-green-200 dark:border-green-800">
+              <ArchitectureBox title="Traivo Go" icon={Smartphone} color="bg-green-50 dark:bg-green-950/30" borderColor="border-green-200 dark:border-green-800">
                 <FeatureItem>Touch-optimerat gränssnitt</FeatureItem>
                 <FeatureItem>Digital signaturinsamling</FeatureItem>
                 <FeatureItem>Kategoriserad fotodokumentation</FeatureItem>
@@ -220,7 +220,7 @@ export default function ArchitecturePage() {
                 <FeatureItem>RESTful API (200+ endpoints)</FeatureItem>
                 <FeatureItem>WebSocket realtidsnotiser</FeatureItem>
                 <FeatureItem>MCP Server för AI-assistenter</FeatureItem>
-                <FeatureItem>Mobil API för fältapp</FeatureItem>
+                <FeatureItem>Mobil API för Traivo Go</FeatureItem>
               </ArchitectureBox>
               
               <ArchitectureBox title="Säkerhetslager" icon={Shield} color="bg-red-50 dark:bg-red-950/30" borderColor="border-red-200 dark:border-red-800">

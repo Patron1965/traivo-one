@@ -317,7 +317,7 @@ export default function InspectionSearchPage() {
             <div className="p-12 text-center">
               <ClipboardCheck className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-lg font-medium">Inga besiktningsresultat</p>
-              <p className="text-sm text-muted-foreground">Ändra filtren eller utför besiktningar i fältappen.</p>
+              <p className="text-sm text-muted-foreground">Ändra filtren eller utför besiktningar i Traivo Go.</p>
             </div>
           ) : (
             <Table>

@@ -1821,7 +1821,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                   <Download className="h-5 w-5 text-primary-foreground" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm">Installera fältappen</p>
+                  <p className="font-medium text-sm">Installera Traivo Go</p>
                   <p className="text-xs text-muted-foreground">
                     {isIOS ? "Tryck dela → Lägg till på hemskärmen" : "Snabbare åtkomst från hemskärmen"}
                   </p>

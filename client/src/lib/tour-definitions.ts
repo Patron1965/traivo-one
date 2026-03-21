@@ -224,19 +224,19 @@ export const teamManagementTour: TourDefinition = {
     {
       target: '[data-testid="tab-users"], [data-testid="text-page-title"]',
       title: "Användare",
-      description: "Under fliken Användare ser du alla konton med roll, kopplad resurs och status. Skapa nya användare med lösenord för fältappen.",
+      description: "Under fliken Användare ser du alla konton med roll, kopplad resurs och status. Skapa nya användare med lösenord för Traivo Go.",
       placement: "bottom",
     },
     {
       target: '[data-testid="tab-teams"], [data-testid="text-page-title"]',
       title: "Team",
-      description: "Team grupperar resurser i arbetsgrupper (vanligtvis 2 personer). Tilldela ordrar till ett team så ser alla medlemmar jobben i fältappen.",
+      description: "Team grupperar resurser i arbetsgrupper (vanligtvis 2 personer). Tilldela ordrar till ett team så ser alla medlemmar jobben i Traivo Go.",
       placement: "bottom",
     },
     {
       target: '[data-testid="button-create-user"], [data-testid="text-page-title"]',
       title: "Skapa användare",
-      description: "Klicka Ny användare för att skapa ett konto. Ange namn, e-post, lösenord och roll. Koppla till en resurs för att aktivera fältappen.",
+      description: "Klicka Ny användare för att skapa ett konto. Ange namn, e-post, lösenord och roll. Koppla till en resurs för att aktivera Traivo Go.",
       placement: "bottom",
     },
     {
@@ -326,13 +326,13 @@ export const customerPortalTour: TourDefinition = {
 
 export const fieldAppTour: TourDefinition = {
   id: "field-app-guide",
-  name: "Fältappen",
+  name: "Traivo Go",
   description: "Översikt av mobilappen för fältarbetare",
   steps: [
     {
       target: '[data-testid="nav-dropdown-planering"]',
-      title: "Fältappen (Driver Core)",
-      description: "Fältarbetare använder en mobilapp för att se sina jobb, rapportera och kommunicera. Allt som planeras här syns direkt i appen.",
+      title: "Traivo Go",
+      description: "Fältarbetare använder Traivo Go för att se sina jobb, rapportera och kommunicera. Allt som planeras här syns direkt i appen.",
       placement: "bottom",
     },
     {
