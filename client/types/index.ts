@@ -219,6 +219,7 @@ export interface Order {
   impossibleBy?: string;
   isTeamOrder?: boolean;
   teamName?: string;
+  assigneeName?: string;
   executionStatus?: ExecutionStatus;
 }
 

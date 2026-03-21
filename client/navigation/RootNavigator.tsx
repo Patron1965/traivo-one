@@ -16,6 +16,7 @@ import { InspectionScreen } from '../screens/InspectionScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import StatisticsScreen from '../screens/StatisticsScreen';
 import { RouteFeedbackScreen } from '../screens/RouteFeedbackScreen';
+import { TeamScreen } from '../screens/TeamScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 import { FIELD_APP_ALLOWED_ROLES } from '../types';
@@ -133,6 +134,11 @@ export function RootNavigator() {
               name="RouteFeedback"
               component={RouteFeedbackScreen}
               options={{ headerTitle: 'Ruttbetyg' }}
+            />
+            <Stack.Screen
+              name="Team"
+              component={TeamScreen}
+              options={{ headerTitle: 'Mitt team' }}
             />
           </>
         ) : (

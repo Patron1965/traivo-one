@@ -219,65 +219,74 @@ export function ProfileScreen() {
         </Card>
       ) : null}
 
-      {team ? (
+      <Pressable onPress={() => navigation.navigate('Team')} testID="button-team-section">
         <Card style={styles.profilesCard}>
           <View style={styles.profilesHeader}>
             <Feather name="users" size={16} color={Colors.secondary} />
             <ThemedText variant="label" style={styles.profilesTitle}>Mitt team</ThemedText>
+            <Feather name="chevron-right" size={16} color={Colors.textMuted} />
           </View>
-          <View style={styles.teamHeaderRow}>
-            <View style={[styles.teamColorDot, { backgroundColor: team.color }]} />
-            <View style={styles.teamHeaderInfo}>
-              <ThemedText variant="body" style={styles.profileName}>{team.name}</ThemedText>
-              {team.description ? (
-                <ThemedText variant="caption" color={Colors.textSecondary}>{team.description}</ThemedText>
-              ) : null}
-            </View>
-            {isLeader ? (
-              <View style={styles.teamLeaderBadge}>
-                <Feather name="star" size={10} color={Colors.warning} />
-                <ThemedText variant="caption" color={Colors.warning}>Ledare</ThemedText>
-              </View>
-            ) : null}
-          </View>
-          {team.members.map((member: TeamMember, idx: number) => (
-            <View key={String(member.id)} style={[styles.teamMemberRow, idx > 0 ? styles.profileItemBorder : null]}>
-              <View style={styles.teamMemberInfo}>
-                <View style={styles.teamMemberNameRow}>
-                  <View style={[styles.teamOnlineDot, { backgroundColor: member.isOnline ? Colors.success : Colors.textMuted }]} />
-                  <ThemedText variant="body">{member.name}</ThemedText>
-                  {member.role === 'leader' ? (
-                    <Feather name="star" size={12} color={Colors.warning} style={styles.teamStarIcon} />
-                  ) : member.role === 'substitute' ? (
-                    <View style={styles.teamSubBadge}>
-                      <ThemedText variant="caption" color={Colors.info}>Vikarie</ThemedText>
-                    </View>
+          {team ? (
+            <>
+              <View style={styles.teamHeaderRow}>
+                <View style={[styles.teamColorDot, { backgroundColor: team.color }]} />
+                <View style={styles.teamHeaderInfo}>
+                  <ThemedText variant="body" style={styles.profileName}>{team.name}</ThemedText>
+                  {team.description ? (
+                    <ThemedText variant="caption" color={Colors.textSecondary}>{team.description}</ThemedText>
                   ) : null}
                 </View>
-                {member.phone ? (
-                  <ThemedText variant="caption" color={Colors.textSecondary}>{member.phone}</ThemedText>
+                {isLeader ? (
+                  <View style={styles.teamLeaderBadge}>
+                    <Feather name="star" size={10} color={Colors.warning} />
+                    <ThemedText variant="caption" color={Colors.warning}>Ledare</ThemedText>
+                  </View>
                 ) : null}
               </View>
-              {member.phone ? (
-                <Pressable
-                  onPress={() => Linking.openURL(`tel:${member.phone}`)}
-                  hitSlop={8}
-                  style={styles.teamCallButton}
-                >
-                  <Feather name="phone" size={16} color={Colors.primary} />
-                </Pressable>
+              {team.members.map((member: TeamMember, idx: number) => (
+                <View key={String(member.id)} style={[styles.teamMemberRow, idx > 0 ? styles.profileItemBorder : null]}>
+                  <View style={styles.teamMemberInfo}>
+                    <View style={styles.teamMemberNameRow}>
+                      <View style={[styles.teamOnlineDot, { backgroundColor: member.isOnline ? Colors.success : Colors.textMuted }]} />
+                      <ThemedText variant="body">{member.name}</ThemedText>
+                      {member.role === 'leader' ? (
+                        <Feather name="star" size={12} color={Colors.warning} style={styles.teamStarIcon} />
+                      ) : member.role === 'substitute' ? (
+                        <View style={styles.teamSubBadge}>
+                          <ThemedText variant="caption" color={Colors.info}>Vikarie</ThemedText>
+                        </View>
+                      ) : null}
+                    </View>
+                    {member.phone ? (
+                      <ThemedText variant="caption" color={Colors.textSecondary}>{member.phone}</ThemedText>
+                    ) : null}
+                  </View>
+                  {member.phone ? (
+                    <Pressable
+                      onPress={() => Linking.openURL(`tel:${member.phone}`)}
+                      hitSlop={8}
+                      style={styles.teamCallButton}
+                    >
+                      <Feather name="phone" size={16} color={Colors.primary} />
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))}
+              {team.projectCode ? (
+                <View style={styles.teamFooter}>
+                  <ThemedText variant="caption" color={Colors.textSecondary}>
+                    Projektkod: {team.projectCode}
+                  </ThemedText>
+                </View>
               ) : null}
-            </View>
-          ))}
-          {team.projectCode ? (
-            <View style={styles.teamFooter}>
-              <ThemedText variant="caption" color={Colors.textSecondary}>
-                Projektkod: {team.projectCode}
-              </ThemedText>
-            </View>
-          ) : null}
+            </>
+          ) : (
+            <ThemedText variant="caption" color={Colors.textSecondary} style={{ marginTop: Spacing.sm }}>
+              Inget team. Tryck för att skapa eller gå med.
+            </ThemedText>
+          )}
         </Card>
-      ) : null}
+      </Pressable>
 
       <Card style={styles.menuCard}>
         <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Settings')} testID="button-settings">

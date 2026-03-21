@@ -1046,6 +1046,39 @@ router.get("/team-invites", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta inbjudningar." });
   }
 });
+router.get("/team-orders", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    if (MOCK_TEAM.status !== "active" || MOCK_TEAM.members.length === 0) {
+      res.json([]);
+      return;
+    }
+    const date = req.query.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    const teamMemberIds = MOCK_TEAM.members.map((m) => m.resourceId);
+    const orders = MOCK_ORDERS.filter((o) => o.scheduledDate === date && teamMemberIds.includes(o.resourceId));
+    const assigneeLookup = {};
+    MOCK_TEAM.members.forEach((m) => {
+      assigneeLookup[String(m.resourceId)] = m.name;
+    });
+    const tagged = orders.map((o) => ({
+      ...o,
+      isTeamOrder: true,
+      teamName: MOCK_TEAM.name,
+      assigneeName: assigneeLookup[String(o.resourceId)] || "Ok\xE4nd"
+    }));
+    res.json(tagged);
+    return;
+  }
+  try {
+    const queryString = req.query.date ? `?date=${req.query.date}` : "";
+    const { status, data } = await traivoFetch(`/api/mobile/team-orders${queryString}`, {
+      method: "GET",
+      headers: getAuthHeader(req)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte h\xE4mta teamordrar." });
+  }
+});
 router.get("/my-orders", async (req, res) => {
   if (IS_MOCK_MODE) {
     const date = req.query.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
