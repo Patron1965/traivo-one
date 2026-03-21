@@ -12,3 +12,9 @@ id = "tNFkAWibCR3jn8xHjAlqH"
 uri = "file://TRAIVO_GO_PROMPT.md"
 type = "text"
 title = "Traivo Go — Komplett projektprompt"
+
+[[outputs]]
+id = "MPXLlb5-9QxgeNKLS_bsD"
+uri = "file://.local/traivo-go-integration-instructions.md"
+type = "text"
+title = "Traivo GO — Integrationsinstruktioner (senaste 24h)"
