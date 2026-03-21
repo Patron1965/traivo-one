@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, assignUserToTenant } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { objects, workOrders, articles , insertDeviationReportSchema, insertProtocolSchema, apiUsageLogs } from "@shared/schema";
