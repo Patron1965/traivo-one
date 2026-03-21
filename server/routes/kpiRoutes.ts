@@ -1487,6 +1487,32 @@ app.post("/api/invitations", requireAdmin, asyncHandler(async (req, res) => {
       })
       .returning();
 
+    try {
+      const appUrl = process.env.REPLIT_DEV_DOMAIN
+        ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+        : process.env.REPLIT_DEPLOYMENT_URL || "https://traivo.replit.app";
+      const roleLabel: Record<string, string> = {
+        owner: "Ägare", admin: "Admin", planner: "Planerare",
+        technician: "Tekniker", user: "Användare", viewer: "Läsare",
+      };
+      await sendEmail({
+        to: email.toLowerCase(),
+        subject: "Du har bjudits in till Traivo",
+        html: `
+          <div style="font-family: Inter, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px;">
+            <h2 style="color: #1B4B6B;">Välkommen till Traivo!</h2>
+            <p>Du har bjudits in med rollen <strong>${roleLabel[role] || role || "Användare"}</strong>.</p>
+            <p>Klicka på knappen nedan för att komma igång:</p>
+            <a href="${appUrl}" style="display: inline-block; padding: 12px 24px; background: #1B4B6B; color: white; text-decoration: none; border-radius: 8px; font-weight: 600; margin: 16px 0;">Logga in på Traivo</a>
+            <p style="color: #6B7C8C; font-size: 13px; margin-top: 24px;">Om du inte förväntat dig denna inbjudan kan du ignorera detta meddelande.</p>
+          </div>
+        `,
+      });
+      console.log(`[invitation] Email sent to ${email.toLowerCase()}`);
+    } catch (err) {
+      console.error("[invitation] Failed to send email:", err);
+    }
+
     res.json(invitation);
 }));
 
