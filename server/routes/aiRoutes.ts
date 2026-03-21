@@ -2668,6 +2668,39 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
       }
     }
 
+    const resourceIds = activeResources.map(r => r.id);
+    const allResourceArticles = await storage.getResourceArticlesByResourceIds(resourceIds);
+    const orderLines = await storage.getWorkOrderLines(workOrderId);
+    const orderArticleIds = new Set(orderLines.filter(l => l.articleId).map(l => l.articleId));
+
+    for (const suggestion of suggestions) {
+      if (orderArticleIds.size > 0) {
+        const resArticleIds = new Set(
+          allResourceArticles.filter(ra => ra.resourceId === suggestion.resourceId).map(ra => ra.articleId)
+        );
+        if (resArticleIds.size === 0) {
+          suggestion.score -= 10;
+          suggestion.reasons.push("Saknar registrerad kompetens");
+        } else {
+          let matched = 0;
+          for (const aid of orderArticleIds) {
+            if (resArticleIds.has(aid)) matched++;
+          }
+          const matchRatio = matched / orderArticleIds.size;
+          if (matchRatio === 1) {
+            suggestion.score += 20;
+            suggestion.reasons.push("Full kompetens-match för alla artiklar");
+          } else if (matchRatio > 0) {
+            suggestion.score += Math.round(matchRatio * 15);
+            suggestion.reasons.push(`Kompetens-match för ${matched}/${orderArticleIds.size} artiklar`);
+          } else {
+            suggestion.score -= 10;
+            suggestion.reasons.push("Saknar kompetens för orderns artiklar");
+          }
+        }
+      }
+    }
+
     suggestions.sort((a, b) => b.score - a.score);
     const topSuggestions = suggestions.slice(0, 3);
 
@@ -2675,6 +2708,535 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
       workOrderId,
       workOrderTitle: workOrder.title,
       suggestions: topSuggestions,
+    });
+}));
+
+app.post("/api/ai/resource-competency-check", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      resourceId: z.string(),
+      articleIds: z.array(z.string()),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+    const { resourceId, articleIds } = parsed.data;
+    const tenantId = getTenantIdWithFallback(req);
+
+    const tenantResources = await storage.getResources(tenantId);
+    const validResource = tenantResources.find(r => r.id === resourceId);
+    if (!validResource) {
+      throw new ForbiddenError("Resursen tillhör inte din organisation");
+    }
+
+    if (articleIds.length === 0) {
+      return res.json({ hasWarning: false, missingArticles: [] });
+    }
+
+    const resourceArticlesData = await storage.getResourceArticles(resourceId);
+    const allArticles = await storage.getArticles(tenantId);
+    const articleMap = new Map(allArticles.map(a => [a.id, a]));
+
+    if (resourceArticlesData.length === 0) {
+      const missingArticles = articleIds.map(id => ({
+        id,
+        name: articleMap.get(id)?.name || id,
+      }));
+      return res.json({
+        hasWarning: true,
+        missingArticles,
+        message: `Resursen saknar registrerad kompetens för ${missingArticles.length} artikel(ar): ${missingArticles.map(a => a.name).join(", ")}`,
+      });
+    }
+
+    const resourceArticleIds = new Set(resourceArticlesData.map(ra => ra.articleId));
+    const missingArticleIds = articleIds.filter(id => !resourceArticleIds.has(id));
+
+    if (missingArticleIds.length === 0) {
+      return res.json({ hasWarning: false, missingArticles: [] });
+    }
+
+    const missingArticles = missingArticleIds.map(id => ({
+      id,
+      name: articleMap.get(id)?.name || id,
+    }));
+
+    res.json({
+      hasWarning: true,
+      missingArticles,
+      message: `Resursen saknar kompetens för ${missingArticles.length} artikel(ar): ${missingArticles.map(a => a.name).join(", ")}`,
+    });
+}));
+
+app.post("/api/ai/suggest-resource-for-new-order", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      objectId: z.string(),
+      articleIds: z.array(z.string()).optional().default([]),
+      estimatedDuration: z.number().optional().default(60),
+      priority: z.string().optional().default("normal"),
+      weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+    const { objectId, articleIds, estimatedDuration, priority, weekStart } = parsed.data;
+    const tenantId = getTenantIdWithFallback(req);
+
+    const obj = await storage.getObject(objectId);
+    if (!obj) throw new NotFoundError("Objekt hittades inte");
+
+    const [allResources, allOrders, clusters, resourceAvailability, vehicleSchedules, timeRestrictions] = await Promise.all([
+      storage.getResources(tenantId),
+      storage.getWorkOrders(tenantId),
+      storage.getClusters(tenantId),
+      storage.getResourceAvailabilityByTenant(tenantId),
+      storage.getVehicleSchedulesByTenant(tenantId),
+      storage.getObjectTimeRestrictionsByTenant(tenantId),
+    ]);
+
+    const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
+    const resourceIds = activeResources.map(r => r.id);
+
+    const [allResourceArticles, resourceVehicles] = await Promise.all([
+      storage.getResourceArticlesByResourceIds(resourceIds),
+      storage.getResourceVehiclesByResourceIds(resourceIds),
+    ]);
+
+    const weekStartDate = new Date(weekStart + "T00:00:00Z");
+    const weekDays: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const d = new Date(weekStartDate);
+      d.setUTCDate(d.getUTCDate() + i);
+      weekDays.push(d.toISOString().split("T")[0]);
+    }
+
+    const scheduledOrders = allOrders.filter(o => o.scheduledDate && o.resourceId);
+
+    const objectLat = obj.latitude;
+    const objectLng = obj.longitude;
+    const HOURS_IN_DAY = 8;
+    const jobDuration = estimatedDuration / 60;
+
+    type Suggestion = {
+      resourceId: string;
+      resourceName: string;
+      date: string;
+      startTime: string;
+      score: number;
+      reasons: string[];
+    };
+    const suggestions: Suggestion[] = [];
+
+    const { validateSchedule } = await import("../planning/constraintEngine");
+
+    for (const resource of activeResources) {
+      for (const day of weekDays) {
+        const dayOrders = scheduledOrders.filter(o => {
+          const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate).split("T")[0];
+          return o.resourceId === resource.id && d === day;
+        });
+        const dayHours = dayOrders.reduce((sum, o) => sum + ((o.estimatedDuration || 0) / 60), 0);
+        const remainingCapacity = HOURS_IN_DAY - dayHours;
+        if (remainingCapacity < jobDuration) continue;
+
+        const constraintViolations = validateSchedule(
+          [{ workOrderId: "__preview__", resourceId: resource.id, scheduledDate: day }],
+          {
+            allOrders,
+            resources: allResources,
+            resourceAvailability,
+            vehicleSchedules,
+            resourceVehicles,
+            dependencyInstances: [],
+            timeRestrictions,
+            resourceArticles: allResourceArticles,
+            workOrderLines: [],
+            teamMembers: [],
+          }
+        );
+        const hardViolations = constraintViolations.filter(v => v.type === "hard" && v.category !== "competency");
+        if (hardViolations.length > 0) continue;
+
+        let score = 50;
+        const reasons: string[] = [];
+
+        const capacityPct = dayHours / HOURS_IN_DAY;
+        if (capacityPct < 0.3) { score += 5; reasons.push("Låg beläggning"); }
+        else if (capacityPct < 0.7) { score += 10; reasons.push("Bra kapacitet"); }
+        else { score -= 5; reasons.push("Hög beläggning"); }
+
+        if (objectLat && objectLng) {
+          let minDist = Infinity;
+          for (const o of dayOrders) {
+            const oLat = o.taskLatitude;
+            const oLng = o.taskLongitude;
+            if (oLat && oLng) {
+              const dist = haversineDist(objectLat, objectLng, oLat, oLng);
+              if (dist < minDist) minDist = dist;
+            }
+          }
+          if (minDist < 5) { score += 25; reasons.push(`Nära befintligt jobb (${minDist.toFixed(1)} km)`); }
+          else if (minDist < 15) { score += 15; reasons.push(`Relativt nära (${minDist.toFixed(1)} km)`); }
+          else if (minDist < 50) { score += 5; reasons.push(`Inom rimligt avstånd (${minDist.toFixed(1)} km)`); }
+
+          if (resource.homeLatitude && resource.homeLongitude) {
+            const homeDist = haversineDist(objectLat, objectLng, resource.homeLatitude, resource.homeLongitude);
+            if (homeDist < 10) { score += 10; reasons.push(`Nära utgångsplats (${homeDist.toFixed(1)} km)`); }
+          }
+        }
+
+        if (resource.serviceArea && resource.serviceArea.length > 0 && obj.clusterId) {
+          const cluster = clusters.find(c => c.id === obj.clusterId);
+          if (cluster) {
+            const clusterPostals = cluster.postalCodes || [];
+            if (resource.serviceArea.some(p => clusterPostals.includes(p))) {
+              score += 15;
+              reasons.push("Rätt serviceområde");
+            }
+          }
+        }
+
+        if (priority === "urgent" || priority === "high") {
+          const dayIndex = weekDays.indexOf(day);
+          score += Math.max(0, 10 - dayIndex * 2);
+          if (dayIndex === 0) reasons.push("Tidigast möjliga dag");
+        }
+
+        if (articleIds.length > 0) {
+          const resArticleIds = new Set(
+            allResourceArticles.filter(ra => ra.resourceId === resource.id).map(ra => ra.articleId)
+          );
+          if (resArticleIds.size === 0) {
+            score -= 10;
+            reasons.push("Saknar registrerad kompetens");
+          } else {
+            let matched = 0;
+            for (const aid of articleIds) { if (resArticleIds.has(aid)) matched++; }
+            const matchRatio = matched / articleIds.length;
+            if (matchRatio === 1) { score += 20; reasons.push("Full kompetens-match"); }
+            else if (matchRatio > 0) { score += Math.round(matchRatio * 15); reasons.push(`Kompetens ${matched}/${articleIds.length}`); }
+            else { score -= 10; reasons.push("Saknar kompetens för artiklarna"); }
+          }
+        }
+
+        let startTime = "07:00";
+        const sortedExisting = dayOrders
+          .filter(o => o.scheduledStartTime)
+          .sort((a, b) => (a.scheduledStartTime || "").localeCompare(b.scheduledStartTime || ""));
+        if (sortedExisting.length > 0) {
+          const last = sortedExisting[sortedExisting.length - 1];
+          const [h, m] = (last.scheduledStartTime || "07:00").split(":").map(Number);
+          const endMin = h * 60 + m + (last.estimatedDuration || 60);
+          if (endMin >= 17 * 60) continue;
+          startTime = `${Math.floor(endMin / 60).toString().padStart(2, "0")}:${(endMin % 60).toString().padStart(2, "0")}`;
+        }
+
+        suggestions.push({ resourceId: resource.id, resourceName: resource.name, date: day, startTime, score, reasons });
+      }
+    }
+
+    suggestions.sort((a, b) => b.score - a.score);
+    res.json({ suggestions: suggestions.slice(0, 3) });
+}));
+
+app.post("/api/ai/auto-distribute-today", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const today = new Date().toISOString().split("T")[0];
+
+    const [allOrders, allResources, clusters, objects] = await Promise.all([
+      storage.getWorkOrders(tenantId),
+      storage.getResources(tenantId),
+      storage.getClusters(tenantId),
+      storage.getObjects(tenantId),
+    ]);
+
+    const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
+
+    const unplannedToday = allOrders.filter(o => {
+      if (o.status === "completed" || o.status === "cancelled" || o.status === "utford" || o.status === "fakturerad") return false;
+      if (o.resourceId) return false;
+      if (!o.scheduledDate) return true;
+      const dateStr = o.scheduledDate instanceof Date
+        ? o.scheduledDate.toISOString().split("T")[0]
+        : String(o.scheduledDate).split("T")[0];
+      return dateStr === today || !o.scheduledDate;
+    });
+
+    if (unplannedToday.length === 0) {
+      return res.json({ assignments: [], summary: "Inga oplanerade ordrar att fördela idag.", totalAssigned: 0 });
+    }
+
+    const resourceIds = allResources.map(r => r.id);
+    const unscheduledOrderIds = unplannedToday.map(o => o.id);
+
+    const [resourceAvailability, vehicleSchedules, resourceVehicles, dependencyInstances, timeRestrictions, allResourceArticles] = await Promise.all([
+      storage.getResourceAvailabilityByTenant(tenantId),
+      storage.getVehicleSchedulesByTenant(tenantId),
+      storage.getResourceVehiclesByResourceIds(resourceIds),
+      storage.getTaskDependencyInstances(tenantId),
+      storage.getObjectTimeRestrictionsByTenant(tenantId),
+      storage.getResourceArticlesByResourceIds(resourceIds),
+    ]);
+
+    const workOrderLineBatches: WorkOrderLine[][] = [];
+    const batchSize = 50;
+    for (let i = 0; i < unscheduledOrderIds.length; i += batchSize) {
+      const batch = unscheduledOrderIds.slice(i, i + batchSize);
+      const batchResults = await Promise.all(batch.map(id => storage.getWorkOrderLines(id)));
+      workOrderLineBatches.push(...batchResults);
+    }
+    const allWorkOrderLines = workOrderLineBatches.flat();
+
+    const teamIds = [...new Set(allOrders.map(o => o.teamId).filter(Boolean))] as string[];
+    const teamMemberResults = await Promise.all(teamIds.map(id => storage.getTeamMembers(id)));
+    const allTeamMembers = teamMemberResults.flat();
+
+    const constraintCtx = {
+      allOrders,
+      resources: allResources,
+      resourceAvailability,
+      vehicleSchedules,
+      resourceVehicles,
+      dependencyInstances,
+      timeRestrictions,
+      resourceArticles: allResourceArticles,
+      workOrderLines: allWorkOrderLines,
+      teamMembers: allTeamMembers,
+    };
+
+    const { validateSchedule } = await import("../planning/constraintEngine");
+
+    const objectMap = new Map(objects.map(o => [o.id, o]));
+    const resourceArticleMap: Record<string, Set<string>> = {};
+    for (const ra of allResourceArticles) {
+      if (!resourceArticleMap[ra.resourceId]) resourceArticleMap[ra.resourceId] = new Set();
+      resourceArticleMap[ra.resourceId].add(ra.articleId);
+    }
+
+    const scheduledToday = allOrders.filter(o => {
+      if (!o.scheduledDate || !o.resourceId) return false;
+      const dateStr = o.scheduledDate instanceof Date
+        ? o.scheduledDate.toISOString().split("T")[0]
+        : String(o.scheduledDate).split("T")[0];
+      return dateStr === today;
+    });
+
+    const HOURS_IN_DAY = 8;
+    const resourceLoad: Record<string, number> = {};
+    for (const r of activeResources) { resourceLoad[r.id] = 0; }
+    for (const o of scheduledToday) {
+      if (o.resourceId && resourceLoad[o.resourceId] !== undefined) {
+        resourceLoad[o.resourceId] += (o.estimatedDuration || 60) / 60;
+      }
+    }
+
+    const sortedOrders = [...unplannedToday].sort((a, b) => {
+      const priorityOrder: Record<string, number> = { urgent: 0, high: 1, normal: 2, low: 3 };
+      return (priorityOrder[a.priority || "normal"] ?? 2) - (priorityOrder[b.priority || "normal"] ?? 2);
+    });
+
+    type Assignment = {
+      workOrderId: string;
+      workOrderTitle: string;
+      resourceId: string;
+      resourceName: string;
+      scheduledDate: string;
+      score: number;
+      reasons: string[];
+      constraintWarnings: string[];
+    };
+
+    const assignments: Assignment[] = [];
+
+    for (const order of sortedOrders) {
+      const jobDuration = (order.estimatedDuration || 60) / 60;
+      let bestResource: { id: string; name: string; score: number; reasons: string[]; constraintWarnings: string[] } | null = null;
+
+      const orderArticleIds = new Set(
+        allWorkOrderLines.filter(l => l.workOrderId === order.id && l.articleId).map(l => l.articleId)
+      );
+      const obj = order.objectId ? objectMap.get(order.objectId) : null;
+
+      for (const resource of activeResources) {
+        const remaining = HOURS_IN_DAY - (resourceLoad[resource.id] || 0);
+        if (remaining < jobDuration) continue;
+
+        const violations = validateSchedule(
+          [{ workOrderId: order.id, resourceId: resource.id, scheduledDate: today }],
+          constraintCtx
+        );
+        const hardViolations = violations.filter(v => v.type === "hard");
+        if (hardViolations.length > 0) continue;
+
+        const softWarnings = violations.filter(v => v.type === "soft").map(v => v.description);
+
+        let score = 50;
+        const reasons: string[] = [];
+
+        const loadPct = (resourceLoad[resource.id] || 0) / HOURS_IN_DAY;
+        if (loadPct < 0.3) { score += 5; reasons.push("Låg beläggning"); }
+        else if (loadPct < 0.7) { score += 10; reasons.push("Bra kapacitet"); }
+        else { score -= 5; reasons.push("Hög beläggning"); }
+
+        if (obj?.latitude && obj?.longitude && resource.homeLatitude && resource.homeLongitude) {
+          const dist = haversineDist(obj.latitude, obj.longitude, resource.homeLatitude, resource.homeLongitude);
+          if (dist < 10) { score += 20; reasons.push(`Nära (${dist.toFixed(1)} km)`); }
+          else if (dist < 30) { score += 10; reasons.push(`Rimligt avstånd (${dist.toFixed(1)} km)`); }
+        }
+
+        if (resource.serviceArea && resource.serviceArea.length > 0 && order.clusterId) {
+          const cluster = clusters.find(c => c.id === order.clusterId);
+          if (cluster) {
+            const clusterPostals = cluster.postalCodes || [];
+            if (resource.serviceArea.some(p => clusterPostals.includes(p))) {
+              score += 15;
+              reasons.push("Rätt område");
+            }
+          }
+        }
+
+        if (orderArticleIds.size > 0) {
+          if (!resourceArticleMap[resource.id]?.size) {
+            score -= 10;
+            reasons.push("Saknar registrerad kompetens");
+          } else {
+            let matched = 0;
+            for (const aid of orderArticleIds) {
+              if (resourceArticleMap[resource.id].has(aid)) matched++;
+            }
+            const ratio = matched / orderArticleIds.size;
+            if (ratio === 1) { score += 20; reasons.push("Full kompetens-match"); }
+            else if (ratio > 0) { score += Math.round(ratio * 15); reasons.push(`Delvis kompetens (${matched}/${orderArticleIds.size})`); }
+            else { score -= 10; reasons.push("Saknar kompetens"); }
+          }
+        }
+
+        if (softWarnings.length > 0) {
+          score -= softWarnings.length * 5;
+        }
+
+        if (!bestResource || score > bestResource.score) {
+          bestResource = { id: resource.id, name: resource.name, score, reasons, constraintWarnings: softWarnings };
+        }
+      }
+
+      if (bestResource) {
+        resourceLoad[bestResource.id] = (resourceLoad[bestResource.id] || 0) + jobDuration;
+        assignments.push({
+          workOrderId: order.id,
+          workOrderTitle: order.title || `Order ${order.id.slice(0, 8)}`,
+          resourceId: bestResource.id,
+          resourceName: bestResource.name,
+          scheduledDate: today,
+          score: bestResource.score,
+          reasons: bestResource.reasons,
+          constraintWarnings: bestResource.constraintWarnings,
+        });
+      }
+    }
+
+    res.json({
+      assignments,
+      summary: `Fördelade ${assignments.length} av ${unplannedToday.length} oplanerade ordrar till ${new Set(assignments.map(a => a.resourceId)).size} resurser.`,
+      totalAssigned: assignments.length,
+      totalUnplanned: unplannedToday.length,
+    });
+}));
+
+app.post("/api/ai/auto-distribute-today/apply", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
+    const schema = z.object({
+      assignments: z.array(z.object({
+        workOrderId: z.string(),
+        resourceId: z.string(),
+        scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+
+    const { assignments } = parsed.data;
+    const tenantId = getTenantIdWithFallback(req);
+
+    const [tenantOrders, tenantResources] = await Promise.all([
+      storage.getWorkOrders(tenantId),
+      storage.getResources(tenantId),
+    ]);
+    const tenantOrderIds = new Set(tenantOrders.map(o => o.id));
+    const tenantResourceIds = new Set(tenantResources.map(r => r.id));
+
+    for (const a of assignments) {
+      if (!tenantOrderIds.has(a.workOrderId)) {
+        throw new ForbiddenError(`Arbetsorder ${a.workOrderId} tillhör inte din organisation`);
+      }
+      if (!tenantResourceIds.has(a.resourceId)) {
+        throw new ForbiddenError(`Resurs ${a.resourceId} tillhör inte din organisation`);
+      }
+    }
+
+    const resourceIds = tenantResources.map(r => r.id);
+    const [resourceAvailability, vehicleSchedules, resourceVehicles, dependencyInstances, timeRestrictions, allResourceArticles] = await Promise.all([
+      storage.getResourceAvailabilityByTenant(tenantId),
+      storage.getVehicleSchedulesByTenant(tenantId),
+      storage.getResourceVehiclesByResourceIds(resourceIds),
+      storage.getTaskDependencyInstances(tenantId),
+      storage.getObjectTimeRestrictionsByTenant(tenantId),
+      storage.getResourceArticlesByResourceIds(resourceIds),
+    ]);
+
+    const orderIds = [...new Set(assignments.map(a => a.workOrderId))];
+    const workOrderLineResults = await Promise.all(orderIds.map(id => storage.getWorkOrderLines(id)));
+    const allWorkOrderLines = workOrderLineResults.flat();
+
+    const teamIds = [...new Set(tenantOrders.map(o => o.teamId).filter(Boolean))] as string[];
+    const teamMemberResults = await Promise.all(teamIds.map(id => storage.getTeamMembers(id)));
+    const allTeamMembers = teamMemberResults.flat();
+
+    const { validateSchedule } = await import("../planning/constraintEngine");
+
+    const constraintCtx = {
+      allOrders: tenantOrders,
+      resources: tenantResources,
+      resourceAvailability,
+      vehicleSchedules,
+      resourceVehicles,
+      dependencyInstances,
+      timeRestrictions,
+      resourceArticles: allResourceArticles,
+      workOrderLines: allWorkOrderLines,
+      teamMembers: allTeamMembers,
+    };
+
+    const results = await Promise.all(
+      assignments.map(async (a) => {
+        const violations = validateSchedule(
+          [{ workOrderId: a.workOrderId, resourceId: a.resourceId, scheduledDate: a.scheduledDate }],
+          constraintCtx
+        );
+        const hardViolations = violations.filter(v => v.type === "hard");
+        if (hardViolations.length > 0) {
+          return {
+            workOrderId: a.workOrderId,
+            success: false,
+            error: `Hårda restriktioner: ${hardViolations.map(v => v.description).join("; ")}`,
+          };
+        }
+
+        try {
+          const updated = await storage.updateWorkOrder(a.workOrderId, {
+            resourceId: a.resourceId,
+            scheduledDate: new Date(a.scheduledDate + "T12:00:00Z"),
+          });
+          return { workOrderId: a.workOrderId, success: !!updated };
+        } catch (err) {
+          return { workOrderId: a.workOrderId, success: false, error: String(err) };
+        }
+      })
+    );
+
+    const successCount = results.filter(r => r.success).length;
+    res.json({
+      applied: successCount,
+      total: assignments.length,
+      results,
     });
 }));
 

@@ -6,6 +6,7 @@ import { TodayOverview } from "@/components/dashboard/TodayOverview";
 import { QuickActions } from "@/components/dashboard/QuickActions";
 import { DashboardAlerts } from "@/components/dashboard/DashboardAlerts";
 import { CapacityOverview } from "@/components/dashboard/CapacityOverview";
+import { AutoDistributeToday } from "@/components/dashboard/AutoDistributeToday";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 
@@ -29,6 +30,9 @@ export default function DashboardPage() {
           <p className="text-muted-foreground">
             {format(today, "EEEE d MMMM yyyy", { locale: sv })} - Traivo Dashboard
           </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <AutoDistributeToday />
         </div>
       </div>
 

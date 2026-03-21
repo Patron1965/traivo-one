@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X, MessageSquare, Receipt } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { CalendarIcon, Loader2, ChevronsUpDown, Check, Package, Anchor, Users, X, MessageSquare, Receipt, Sparkles, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { sv } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -63,6 +64,10 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [selectedObjectName, setSelectedObjectName] = useState("");
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [teamPopoverOpen, setTeamPopoverOpen] = useState(false);
+  const [competencyWarning, setCompetencyWarning] = useState<{ hasWarning: boolean; message?: string; missingArticles?: Array<{ id: string; name: string }> } | null>(null);
+  const [checkingCompetency, setCheckingCompetency] = useState(false);
+  const [aiSuggestions, setAiSuggestions] = useState<Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }>>([]);
+  const [loadingAiSuggestions, setLoadingAiSuggestions] = useState(false);
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -226,6 +231,34 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     });
   };
 
+  const checkCompetency = async (resourceId: string, articleIds: string[]) => {
+    if (!resourceId || articleIds.length === 0) {
+      setCompetencyWarning(null);
+      return;
+    }
+    setCheckingCompetency(true);
+    try {
+      const res = await apiRequest("POST", "/api/ai/resource-competency-check", { resourceId, articleIds });
+      const data = res as unknown as { hasWarning: boolean; message?: string; missingArticles?: Array<{ id: string; name: string }> };
+      setCompetencyWarning(data);
+    } catch {
+      setCompetencyWarning(null);
+    } finally {
+      setCheckingCompetency(false);
+    }
+  };
+
+  const primaryResourceId = formData.teamResourceIds[0] || formData.resourceId;
+  const selectedArticleArray = Array.from(selectedArticleIds);
+
+  useEffect(() => {
+    if (primaryResourceId && selectedArticleArray.length > 0) {
+      checkCompetency(primaryResourceId, selectedArticleArray);
+    } else {
+      setCompetencyWarning(null);
+    }
+  }, [primaryResourceId, selectedArticleArray.join(",")]);
+
   const handleClose = () => {
     setFormData({
       title: "",
@@ -246,6 +279,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
     setSelectedArticleIds(new Set());
     setTeamPopoverOpen(false);
     setSelectedTeamId("");
+    setCompetencyWarning(null);
+    setAiSuggestions([]);
     onClose();
   };
 
@@ -549,6 +584,100 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
               </Popover>
             </div>
           </div>
+
+          {resources.length > 0 && formData.objectId && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    setLoadingAiSuggestions(true);
+                    setAiSuggestions([]);
+                    try {
+                      const today = new Date();
+                      const dayOfWeek = today.getDay();
+                      const monday = new Date(today);
+                      monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+                      const weekStart = monday.toISOString().split("T")[0];
+
+                      const res = await apiRequest("POST", "/api/ai/suggest-resource-for-new-order", {
+                        objectId: formData.objectId,
+                        articleIds: selectedArticleArray,
+                        estimatedDuration: parseInt(formData.estimatedDuration) || 60,
+                        priority: formData.priority,
+                        weekStart,
+                      });
+                      const data = res as unknown as { suggestions: Array<{ resourceId: string; resourceName: string; date: string; startTime: string; score: number; reasons: string[] }> };
+                      setAiSuggestions(data.suggestions || []);
+                      if (!data.suggestions || data.suggestions.length === 0) {
+                        toast({ title: "AI-förslag", description: "Inga lämpliga resurser hittades.", variant: "destructive" });
+                      }
+                    } catch {
+                      toast({ title: "Fel", description: "Kunde inte hämta AI-förslag.", variant: "destructive" });
+                    } finally {
+                      setLoadingAiSuggestions(false);
+                    }
+                  }}
+                  disabled={loadingAiSuggestions}
+                  data-testid="button-ai-suggest"
+                >
+                  {loadingAiSuggestions ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Sparkles className="mr-1.5 h-3.5 w-3.5" />}
+                  AI-förslag
+                </Button>
+                {aiSuggestions.length > 0 && (
+                  <span className="text-xs text-muted-foreground">Top {aiSuggestions.length} förslag</span>
+                )}
+              </div>
+              {aiSuggestions.length > 0 && (
+                <div className="space-y-1.5">
+                  {aiSuggestions.map((s, i) => (
+                    <div
+                      key={s.resourceId + s.date}
+                      className={cn(
+                        "flex items-center justify-between p-2 rounded-md border text-sm cursor-pointer transition-colors",
+                        formData.teamResourceIds.includes(s.resourceId) ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                      )}
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          resourceId: s.resourceId,
+                          teamResourceIds: [s.resourceId],
+                          scheduledDate: new Date(s.date),
+                        }));
+                        setAiSuggestions([]);
+                        toast({ title: "Resurs vald", description: `${s.resourceName} tilldelad via AI-förslag.` });
+                      }}
+                      data-testid={`ai-suggestion-${i}`}
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={i === 0 ? "default" : "secondary"} className="text-xs">
+                            #{i + 1}
+                          </Badge>
+                          <span className="font-medium">{s.resourceName}</span>
+                          <span className="text-muted-foreground text-xs">Poäng: {s.score}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground mt-0.5">
+                          {s.reasons.join(" · ")}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {competencyWarning?.hasWarning && (
+            <Alert variant="destructive" data-testid="alert-competency-warning">
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription className="text-sm">
+                {competencyWarning.message}
+              </AlertDescription>
+            </Alert>
+          )}
 
           <div className="space-y-2">
             <Label>Planerat datum</Label>
