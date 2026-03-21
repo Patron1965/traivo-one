@@ -15,6 +15,7 @@ import { predictiveScheduler } from "./routes/predictiveRoutes";
 import { startWeeklyReportScheduler } from "./weekly-report";
 import { metadataRouter } from "./metadata-routes";
 import { formatZodError, DEFAULT_TENANT_ID } from "./routes/helpers";
+import { AppError } from "./errors";
 
 import { registerCustomerRoutes } from "./routes/customerRoutes";
 import { registerObjectRoutes } from "./routes/objectRoutes";
@@ -389,7 +390,6 @@ export async function registerRoutes(
       return res.status(400).json(formatZodError(err));
     }
 
-    const { AppError } = require("./errors");
     if (err instanceof AppError) {
       return res.status(err.statusCode).json({ error: err.message });
     }
