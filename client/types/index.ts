@@ -12,7 +12,8 @@ export type OrderStatus =
   | 'in_progress'
   | 'completed'
   | 'failed'
-  | 'cancelled';
+  | 'cancelled'
+  | 'deferred';
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   skapad: 'Skapad',
@@ -29,6 +30,7 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
   completed: 'Slutförd',
   failed: 'Misslyckad',
   cancelled: 'Avbokad',
+  deferred: 'Uppskjuten',
 };
 
 export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
@@ -204,6 +206,11 @@ export interface Order {
   metadata?: Record<string, any>;
   resourceId?: string | number;
   tenantId?: string;
+  plannedNotes?: string | null;
+  taskLatitude?: number | null;
+  taskLongitude?: number | null;
+  objectAccessCode?: string | null;
+  objectKeyNumber?: string | null;
   articleId?: string | number;
   quantity?: number;
   unit?: string;

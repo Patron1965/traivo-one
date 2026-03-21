@@ -19,6 +19,7 @@ const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
   completed: { bg: Colors.successLight, text: Colors.statusCompleted },
   failed: { bg: Colors.dangerLight, text: Colors.statusFailed },
   cancelled: { bg: '#F2F3F4', text: Colors.statusCancelled },
+  deferred: { bg: '#FFF3E0', text: '#E65100' },
 };
 
 interface StatusBadgeProps {

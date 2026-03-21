@@ -202,6 +202,12 @@ const MOCK_ORDERS: any[] = [
     creationMethod: 'schema',
     resourceId: 101,
     tenantId: 'traivo-demo',
+    plannedNotes: 'Porten har ny kod sedan 15 mars. Ring kunden om den inte fungerar.',
+    taskLatitude: 57.7089,
+    taskLongitude: 11.9746,
+    objectAccessCode: '1234',
+    objectKeyNumber: null,
+    metadata: { fieldNotes: [], materialNeeds: [] },
   },
   {
     id: 2,
@@ -251,6 +257,12 @@ const MOCK_ORDERS: any[] = [
     creationMethod: 'avrop',
     resourceId: 101,
     tenantId: 'traivo-demo',
+    plannedNotes: null,
+    taskLatitude: 57.7045,
+    taskLongitude: 11.9664,
+    objectAccessCode: null,
+    objectKeyNumber: 'N-42',
+    metadata: { fieldNotes: [], materialNeeds: [] },
   },
   {
     id: 3,
@@ -311,6 +323,12 @@ const MOCK_ORDERS: any[] = [
     creationMethod: 'manual',
     resourceId: 101,
     tenantId: 'traivo-demo',
+    plannedNotes: 'Ny parkeringsplats vid leveransentrén från mars. Använd södra infarten.',
+    taskLatitude: 57.6896,
+    taskLongitude: 11.9770,
+    objectAccessCode: null,
+    objectKeyNumber: null,
+    metadata: { fieldNotes: [], materialNeeds: [] },
   },
   {
     id: 4,
@@ -359,6 +377,12 @@ const MOCK_ORDERS: any[] = [
     creationMethod: 'schema',
     resourceId: 101,
     tenantId: 'traivo-demo',
+    plannedNotes: null,
+    taskLatitude: null,
+    taskLongitude: null,
+    objectAccessCode: '5678',
+    objectKeyNumber: null,
+    metadata: { fieldNotes: [], materialNeeds: [] },
   },
   {
     id: 5,
@@ -414,6 +438,12 @@ const MOCK_ORDERS: any[] = [
     creationMethod: 'avrop',
     resourceId: 101,
     tenantId: 'traivo-demo',
+    plannedNotes: 'ADR-certifikat krävs. Kontakta hamnchef Karin Holm 30 min innan ankomst.',
+    taskLatitude: 57.6836,
+    taskLongitude: 11.9078,
+    objectAccessCode: null,
+    objectKeyNumber: 'H-99',
+    metadata: { fieldNotes: [], materialNeeds: [] },
   },
 ];
 
@@ -950,7 +980,8 @@ router.get('/orders/:id', async (req, res) => {
 
 router.get('/orders/:id/checklist', async (req, res) => {
   if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    const idParam = req.params.id;
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(idParam) || o.orderNumber === idParam || o.id.toString() === idParam);
     if (!order) {
       res.status(404).json({ error: 'Order hittades inte' });
       return;
@@ -1015,9 +1046,112 @@ async function handleTimeEntries(orderId: string, driverId: string, newStatus: s
   }
 }
 
+router.post('/quick-action', async (req, res) => {
+  const { orderId, actionType } = req.body;
+  const validActions = ['needs_part', 'customer_absent', 'takes_longer'];
+  if (!orderId || !actionType || !validActions.includes(actionType)) {
+    return res.status(400).json({ error: 'orderId och giltig actionType krävs (needs_part, customer_absent, takes_longer)' });
+  }
+
+  const actionLabels: Record<string, string> = {
+    needs_part: 'Behöver reservdel',
+    customer_absent: 'Kund ej hemma',
+    takes_longer: 'Tar längre tid',
+  };
+
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find(o => o.id === parseInt(orderId) || o.orderNumber === orderId);
+    if (!order) return res.status(404).json({ error: 'Order hittades inte' });
+
+    const note = { text: actionLabels[actionType], timestamp: new Date().toISOString() };
+    if (!order.metadata) order.metadata = { fieldNotes: [], materialNeeds: [] };
+    order.metadata.fieldNotes = [...(order.metadata.fieldNotes || []), note];
+
+    if (actionType === 'customer_absent') {
+      order.status = 'deferred';
+    } else if (actionType === 'takes_longer') {
+      order.estimatedDuration = Math.round(order.estimatedDuration * 1.5);
+    } else if (actionType === 'needs_part') {
+      order.metadata.materialNeeds = [...(order.metadata.materialNeeds || []), 'Reservdel behövs'];
+    }
+
+    return res.json({
+      success: true,
+      actionType,
+      actionLabel: actionLabels[actionType],
+      order,
+    });
+  }
+
+  try {
+    const { status, data } = await traivoFetch('/api/mobile/quick-action', {
+      method: 'POST',
+      headers: getAuthHeader(req),
+      body: JSON.stringify({ orderId, actionType }),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    res.status(503).json({ error: 'Kunde inte utföra snabbåtgärd' });
+  }
+});
+
+router.post('/travel-times', async (req, res) => {
+  const { latitude, longitude, destinations } = req.body;
+  if (!latitude || !longitude || !Array.isArray(destinations) || destinations.length === 0) {
+    return res.status(400).json({ error: 'latitude, longitude och destinations[] krävs' });
+  }
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ error: 'Ogiltiga koordinater' });
+  }
+
+  const validDests = destinations
+    .filter((d: any) => d.id && typeof d.lat === 'number' && typeof d.lng === 'number')
+    .slice(0, 20);
+
+  const GEOAPIFY_KEY = process.env.GEOAPIFY_API_KEY;
+  if (GEOAPIFY_KEY && validDests.length > 0) {
+    try {
+      const results = await Promise.all(validDests.map(async (dest: any) => {
+        try {
+          const routeUrl = `https://api.geoapify.com/v1/routing?waypoints=${latitude},${longitude}|${dest.lat},${dest.lng}&mode=drive&traffic=approximated&apiKey=${GEOAPIFY_KEY}`;
+          const resp = await fetch(routeUrl);
+          if (resp.ok) {
+            const data = await resp.json();
+            const leg = data.features?.[0]?.properties;
+            if (leg) {
+              return {
+                id: dest.id,
+                distanceKm: Math.round((leg.distance / 1000) * 10) / 10,
+                durationMinutes: Math.round(leg.time / 60),
+              };
+            }
+          }
+        } catch {}
+        const R = 6371;
+        const dLat = (dest.lat - latitude) * Math.PI / 180;
+        const dLng = (dest.lng - longitude) * Math.PI / 180;
+        const a = Math.sin(dLat / 2) ** 2 + Math.cos(latitude * Math.PI / 180) * Math.cos(dest.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+        const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return { id: dest.id, distanceKm: Math.round(km * 10) / 10, durationMinutes: Math.round(km * 2) };
+      }));
+      return res.json({ results, source: 'geoapify' });
+    } catch {}
+  }
+
+  const results = validDests.map((dest: any) => {
+    const R = 6371;
+    const dLat = (dest.lat - latitude) * Math.PI / 180;
+    const dLng = (dest.lng - longitude) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(latitude * Math.PI / 180) * Math.cos(dest.lat * Math.PI / 180) * Math.sin(dLng / 2) ** 2;
+    const km = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return { id: dest.id, distanceKm: Math.round(km * 10) / 10, durationMinutes: Math.round(km * 2) };
+  });
+  res.json({ results, source: 'haversine' });
+});
+
 router.patch('/orders/:id/status', async (req, res) => {
   const { status: newStatus } = req.body;
-  const allowedStatuses = ['planned', 'dispatched', 'on_site', 'in_progress', 'completed', 'failed', 'cancelled', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'impossible'];
+  const allowedStatuses = ['planned', 'dispatched', 'on_site', 'in_progress', 'completed', 'failed', 'cancelled', 'deferred', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'impossible'];
   if (!newStatus || typeof newStatus !== 'string') {
     return res.status(400).json({ error: 'Status krävs' });
   }

@@ -1,0 +1,252 @@
+Traivo GO — Integrationsinstruktioner för senaste ändringar i Traivo One
+Datum: 2026-03-21
+Berör: Traivo GO (Chaufförsappen)
+Källa: Traivo One backend (Tasks #48–#52, mergade senaste 24h)
+
+1. Nya API-endpoints som Traivo GO bör implementera
+1.1 Snabbåtgärder (Quick Actions)
+POST /api/mobile/quick-action
+Auth: isMobileAuthenticated (Bearer-token)
+
+Tillåter chauffören att snabbt rapportera vanliga situationer utan att behöva öppna full redigering.
+
+Request:
+
+{
+  "orderId": "uuid-string",
+  "actionType": "needs_part" | "customer_absent" | "takes_longer"
+}
+Response:
+
+{
+  "success": true,
+  "actionType": "customer_absent",
+  "actionLabel": "Kund ej hemma",
+  "order": { /* uppdaterad work order */ }
+}
+Beteende per actionType:
+
+actionType	Effekt
+needs_part	Lägger till fältanteckning + registrerar materialbehov i metadata
+customer_absent	Sätter status till deferred + fältanteckning
+takes_longer	Ökar estimatedDuration med 50% + fältanteckning
+Alla åtgärder skickar även en WebSocket-notifikation till resursen och en planner-broadcast.
+
+1.2 Restider & avstånd (Travel Times)
+POST /api/mobile/travel-times
+Auth: isAuthenticated (Bearer-token)
+
+Beräknar köravstånd och restid från teknikerns GPS-position till en lista destinationer. Använder Geoapify Routing API om tillgänglig, annars Haversine-fallback.
+
+Request:
+
+{
+  "latitude": 59.3293,
+  "longitude": 18.0686,
+  "destinations": [
+    { "id": "order-uuid-1", "lat": 59.3400, "lng": 18.0500 },
+    { "id": "order-uuid-2", "lat": 59.3100, "lng": 18.1000 }
+  ]
+}
+Validering:
+
+latitude måste vara mellan -90 och 90
+longitude måste vara mellan -180 och 180
+destinations max 20 st beräknas (resten ignoreras)
+Ogiltiga destinationer filtreras bort
+Response:
+
+{
+  "results": [
+    { "id": "order-uuid-1", "distanceKm": 2.3, "durationMinutes": 7 },
+    { "id": "order-uuid-2", "distanceKm": 5.1, "durationMinutes": 12 }
+  ],
+  "source": "geoapify" | "haversine"
+}
+Alternativt endpoint (äldre, enklare):
+
+POST /api/travel-distances
+Auth: isAuthenticated
+
+{
+  "originLat": 59.3293,
+  "originLng": 18.0686,
+  "destinations": [
+    { "id": "order-uuid-1", "lat": 59.34, "lng": 18.05 }
+  ]
+}
+Response: { "distances": [{ "id": "...", "distanceKm": 2.3, "travelMinutes": 7 }] }
+
+Rekommendation: Använd /api/mobile/travel-times — den har Geoapify-stöd och bättre validering.
+
+1.3 Checklistor per order
+GET /api/mobile/orders/:id/checklist
+Auth: isMobileAuthenticated
+
+Hämtar checklistmallar matchade mot orderns artikeltyper.
+
+Response:
+
+{
+  "orderId": "uuid",
+  "articleTypes": ["tjanst", "material"],
+  "checklists": [
+    {
+      "templateId": "uuid",
+      "name": "Standard servicechecklista",
+      "articleType": "tjanst",
+      "questions": ["Kontrollera åtkomst", "Utför arbete", "Dokumentera"]
+    }
+  ]
+}
+1.4 Notifikationer
+GET /api/mobile/notifications
+Auth: isMobileAuthenticated
+Query params: ?unread=true&limit=50
+
+Response:
+
+{
+  "notifications": [
+    {
+      "id": "uuid",
+      "type": "job_updated",
+      "title": "Order ändrad",
+      "message": "...",
+      "read": false,
+      "createdAt": "2026-03-21T10:00:00Z"
+    }
+  ],
+  "unreadCount": 3,
+  "total": 10
+}
+PATCH /api/mobile/notifications/:id/read — Markera en som läst
+PATCH /api/mobile/notifications/read-all — Markera alla som lästa
+GET /api/mobile/notifications/count — Bara antal olästa
+
+1.5 Ruttfeedback
+POST /api/mobile/route-feedback
+Auth: isMobileAuthenticated
+
+Chauffören betygsätter dagens rutt efter avslutat pass.
+
+Request:
+
+{
+  "date": "2026-03-21",
+  "rating": 4,
+  "reasonCategory": "bra_ordning" | "felaktig_ordning" | "trafik" | "kundproblem" | "fordonsproblem" | "annat",
+  "freeText": "Fungerade bra idag, men sista stoppet var svårt att hitta"
+}
+GET /api/mobile/route-feedback/mine — Hämta historik
+
+1.6 Terminologi
+GET /api/mobile/terminology
+Auth: isMobileAuthenticated
+
+Hämtar tenantens anpassade terminologi (t.ex. "Kärl" istället för "Objekt").
+
+Response:
+
+{
+  "labels": {
+    "object_singular": "Kärl",
+    "object_plural": "Kärl",
+    "work_order_singular": "Uppgift",
+    "resource_singular": "Resurs"
+  }
+}
+2. Ändringar i befintliga endpoints
+2.1 Work Order-modellen — nya fält
+Följande fält kan nu finnas på work orders och bör visas i Traivo GO:
+
+Fält	Typ	Beskrivning
+plannedNotes	string | null	Meddelande från planerare till fältarbetare. Visa tydligt i orderdetalj.
+taskLatitude	number | null	GPS-latitud för uppdraget (om objektet saknar koordinat)
+taskLongitude	number | null	GPS-longitud för uppdraget
+objectAccessCode	string | null	Portkod (redan befintligt men kontrollera att det visas)
+objectKeyNumber	string | null	Nyckelnummer
+2.2 Orderstatusar
+Ny status tillagd:
+
+deferred — Ordern har skjutits upp (t.ex. "kund ej hemma"). Visa med gul/orange färg i appen.
+2.3 Work Order metadata — nya nycklar
+metadata: {
+  fieldNotes?: Array<{ text: string; timestamp: string }>;
+  materialNeeds?: string[];
+  // ... övriga befintliga nycklar
+}
+3. Funktioner att implementera i Traivo GO
+3.1 Restids-display per jobbkort
+Hämta restider via POST /api/mobile/travel-times med GPS-position + alla dagens ordrar
+Throttla till max 1 anrop per 60 sekunder
+Visa avstånd (km) och restid (min) på varje jobbkort
+Uppdatera när chauffören rör sig
+3.2 "Nästa stopp"-knapp
+Visa ett framträdande kort/knapp högst upp i jobblistan med nästa väntande order
+Visa adress + avstånd + restid
+Knappen öppnar extern GPS-navigation:
+Android: https://www.google.com/maps/dir/?api=1&destination={lat},{lng}&travelmode=driving
+iOS: maps://maps.apple.com/?daddr={lat},{lng}&dirflg=d
+3.3 Tidsvarning 10 minuter
+Kontrollera var 30:e sekund om nästa schemalagda jobb börjar inom 10 minuter
+Välj det närmaste framtida jobbet (inte bara första i listan)
+Visa push-notis/toast med jobbnamn och adress
+Undvik dubbletter — spara vilken order som redan visats
+3.4 Snabbåtgärder (3 knappar)
+Visa tre snabbknappar i ordervy:
+
+"Behöver reservdel" → actionType: "needs_part"
+"Kund ej hemma" → actionType: "customer_absent"
+"Tar längre tid" → actionType: "takes_longer"
+Anropa POST /api/mobile/quick-action och uppdatera lokalt UI efter svar.
+
+3.5 Planerat meddelande från planerare
+Om order.plannedNotes finns, visa det framträdande (t.ex. blå banner/kort) i orderdetalj
+Rubrik: "Meddelande från planerare"
+Visa innan arbete påbörjas
+3.6 Smart checklista
+Hämta via GET /api/mobile/orders/:id/checklist när order öppnas
+Visa checkliststeg som checkboxar
+Steg kan bockas av under arbetets gång
+3.7 Notifikations-badge
+Polla GET /api/mobile/notifications/count med rimligt intervall (30-60s)
+Visa badge med antal olästa på notification-ikon
+Lista notifikationer i en panel/modal
+4. Databastabeller (för referens, hanteras av backend)
+Nya tabeller som skapats:
+
+order_checklist_items — Checkliststeg per order
+checklist_templates — Checklistmallar per artikeltyp/tenant
+route_feedback — Chaufförsfeedback per dag
+budget_alert_log — AI-budgetvarningar (ej relevant för GO)
+5. WebSocket-events att lyssna på
+Via existerande WebSocket /ws/notifications:
+
+Event type	Beskrivning	Data
+quick_action	En snabbåtgärd registrerades	{ orderId, actionType, actionLabel, timestamp }
+job_updated	En order uppdaterades	{ orderId, ... }
+schedule_change	Schema ändrades av planerare	{ ... }
+6. Valideringsregler före signering
+Innan en order kan slutföras (status → completed) validerar One-backend obligatoriska fält per ordertyp:
+
+const REQUIRED_FIELDS_BY_ORDER_TYPE = {
+  installation: ["description", "photos", "signature", "materials"],
+  inspection: ["description", "photos", "signature"],
+  repair: ["description", "photos", "signature"],
+  delivery: ["signature"],
+  default: ["description"]
+};
+Traivo GO bör implementera samma validering lokalt och visa en modal med saknade fält om chauffören försöker slutföra utan att fylla i allt.
+
+7. Sammanfattning — prioritetsordning
+Prio	Funktion	Endpoint
+1	Snabbåtgärder	POST /api/mobile/quick-action
+2	Restider per order	POST /api/mobile/travel-times
+3	Nästa stopp-navigation	Lokal logik + deep links
+4	Planerat meddelande	Fältet plannedNotes på work order
+5	10-min tidsvarning	Lokal logik (30s interval)
+6	Checklistor	GET /api/mobile/orders/:id/checklist
+7	Notifikationer	GET/PATCH /api/mobile/notifications/*
+8	Ruttfeedback	POST /api/mobile/route-feedback
+9	Terminologi	GET /api/mobile/terminology
