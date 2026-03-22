@@ -63,7 +63,7 @@ export function ResourceProfilesTab() {
       toast({ title: "Profil skapad" });
       closeDialog();
     },
-    onError: () => toast({ title: "Kunde inte skapa profil", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte skapa profil", description: error.message, variant: "destructive" }),
   });
 
   const updateMutation = useMutation({
@@ -76,7 +76,7 @@ export function ResourceProfilesTab() {
       toast({ title: "Profil uppdaterad" });
       closeDialog();
     },
-    onError: () => toast({ title: "Kunde inte uppdatera profil", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte uppdatera profil", description: error.message, variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -87,7 +87,7 @@ export function ResourceProfilesTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/resource-profiles"] });
       toast({ title: "Profil borttagen" });
     },
-    onError: () => toast({ title: "Kunde inte ta bort profil", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte ta bort profil", description: error.message, variant: "destructive" }),
   });
 
   const assignMutation = useMutation({
@@ -99,7 +99,7 @@ export function ResourceProfilesTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/resource-profiles"] });
       toast({ title: "Resurs kopplad" });
     },
-    onError: () => toast({ title: "Kunde inte koppla resurs", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte koppla resurs", description: error.message, variant: "destructive" }),
   });
 
   const unassignMutation = useMutation({
@@ -110,7 +110,7 @@ export function ResourceProfilesTab() {
       queryClient.invalidateQueries({ queryKey: ["/api/resource-profiles"] });
       toast({ title: "Resurs bortkopplad" });
     },
-    onError: () => toast({ title: "Kunde inte koppla bort resurs", variant: "destructive" }),
+    onError: (error: Error) => toast({ title: "Kunde inte koppla bort resurs", description: error.message, variant: "destructive" }),
   });
 
   function closeDialog() {

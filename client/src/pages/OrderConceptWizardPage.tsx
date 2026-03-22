@@ -1,6 +1,9 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useParams, useLocation } from "wouter";
+import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -10,6 +13,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, ArrowRight, Save, Check, Loader2, AlertTriangle, PlayCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Skeleton } from "@/components/ui/skeleton";
 import type {
   OrderConcept, Customer, Article,
   InvoiceLevel, InvoiceModel, InvoicePeriod,
@@ -55,6 +59,21 @@ interface ScheduleEntry {
   endDate?: string;
 }
 
+const wizardFormSchema = z.object({
+  conceptName: z.string().min(1, "Ange ett namn för orderkonceptet."),
+  invoiceLevel: z.string().min(1, "Välj en faktureringsnivå."),
+  invoiceModel: z.string().min(1, "Välj en faktureringsmodell."),
+  deliveryModel: z.string().min(1, "Välj en leveransmodell."),
+});
+
+type WizardFormValues = z.infer<typeof wizardFormSchema>;
+
+const stepFieldsToValidate: Partial<Record<number, (keyof WizardFormValues)[]>> = {
+  1: ["conceptName"],
+  3: ["invoiceLevel", "invoiceModel"],
+  9: ["deliveryModel"],
+};
+
 export default function OrderConceptWizardPage() {
   const params = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
@@ -67,13 +86,31 @@ export default function OrderConceptWizardPage() {
   const [resumeStep, setResumeStep] = useState<number | null>(null);
   const [showResumeBanner, setShowResumeBanner] = useState(false);
   const [conceptId, setConceptId] = useState<string | null>(params.id || null);
-  const [conceptName, setConceptNameRaw] = useState("");
-  const setConceptName = (v: string) => { setConceptNameRaw(v); setHasUnsavedWork(true); };
+
+  const form = useForm<WizardFormValues>({
+    resolver: zodResolver(wizardFormSchema),
+    defaultValues: {
+      conceptName: "",
+      invoiceLevel: "",
+      invoiceModel: "",
+      deliveryModel: "",
+    },
+    mode: "onTouched",
+  });
+
+  const conceptName = form.watch("conceptName");
+  const invoiceLevel = form.watch("invoiceLevel") as InvoiceLevel | "";
+  const invoiceModel = form.watch("invoiceModel") as InvoiceModel | "";
+  const deliveryModel = form.watch("deliveryModel") as DeliveryModel | "";
+
+  const setConceptName = useCallback((v: string) => {
+    form.setValue("conceptName", v, { shouldValidate: true, shouldDirty: true });
+    setHasUnsavedWork(true);
+  }, [form]);
+
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | null>(null);
   const [customerMode, setCustomerMode] = useState<CustomerMode>("HARDCODED");
   const [selectedObjectIds, setSelectedObjectIds] = useState<Set<string>>(new Set());
-  const [invoiceLevel, setInvoiceLevel] = useState<InvoiceLevel | null>(null);
-  const [invoiceModel, setInvoiceModel] = useState<InvoiceModel | null>(null);
   const [invoicePeriod, setInvoicePeriod] = useState<InvoicePeriod | null>(null);
   const [invoiceLock, setInvoiceLock] = useState(false);
   const [headerMetadata, setHeaderMetadata] = useState<string[]>([]);
@@ -88,7 +125,6 @@ export default function OrderConceptWizardPage() {
   ]);
   const [conceptArticles, setConceptArticles] = useState<any[]>([]);
   const [mappings, setMappings] = useState<any[]>([]);
-  const [deliveryModel, setDeliveryModel] = useState<DeliveryModel | null>(null);
   const [schedules, setSchedules] = useState<ScheduleEntry[]>([]);
   const [minDaysBetween, setMinDaysBetween] = useState(60);
   const [rollingExtension, setRollingExtension] = useState(true);
@@ -99,7 +135,7 @@ export default function OrderConceptWizardPage() {
   const { data: articles = [] } = useQuery<Article[]>({ queryKey: ["/api/articles"] });
   
 
-  const { data: wizardData } = useQuery({
+  const { data: wizardData, isLoading: wizardLoading } = useQuery({
     queryKey: ["/api/order-concepts", conceptId, "wizard"],
     queryFn: async () => {
       if (!conceptId) return null;
@@ -112,7 +148,7 @@ export default function OrderConceptWizardPage() {
 
   useEffect(() => {
     if (wizardData && isEditing) {
-      setConceptName(wizardData.name || "");
+      form.setValue("conceptName", wizardData.name || "");
       setCustomerMode(wizardData.customerMode || "HARDCODED");
       setSelectedCustomerId(wizardData.customerId || null);
       const savedStep = wizardData.currentStep || 1;
@@ -121,11 +157,11 @@ export default function OrderConceptWizardPage() {
         setResumeStep(savedStep);
         setShowResumeBanner(true);
       }
-      setInvoiceLevel(wizardData.invoiceLevel || null);
-      setInvoiceModel(wizardData.invoiceModel || null);
+      form.setValue("invoiceLevel", wizardData.invoiceLevel || "");
+      form.setValue("invoiceModel", wizardData.invoiceModel || "");
       setInvoicePeriod(wizardData.invoicePeriod || null);
       setInvoiceLock(wizardData.invoiceLock || false);
-      setDeliveryModel(wizardData.deliveryModel || null);
+      form.setValue("deliveryModel", wizardData.deliveryModel || "");
       if (wizardData.conceptObjects) {
         setSelectedObjectIds(new Set(wizardData.conceptObjects.map((o: any) => o.objectId)));
       }
@@ -226,38 +262,45 @@ export default function OrderConceptWizardPage() {
     }
   }, [currentStep, conceptName, selectedObjectIds, invoiceLevel, invoiceModel, conceptArticles, mappings, deliveryModel]);
 
-  const validateCurrentStep = useCallback((): string | null => {
+  const validateCurrentStep = useCallback(async (): Promise<string | null> => {
+    const fields = stepFieldsToValidate[currentStep];
+    if (fields) {
+      const valid = await form.trigger(fields);
+      if (!valid) {
+        const firstError = fields
+          .map(f => form.formState.errors[f]?.message)
+          .filter(Boolean)[0];
+        if (firstError) return firstError;
+      }
+    }
+
     switch (currentStep) {
       case 1:
-        if (!conceptName) return "Ange ett namn för orderkonceptet.";
-        if (selectedObjectIds.size === 0) return "Välj minst ett objekt.";
-        return null;
       case 2:
-        if (selectedObjectIds.size === 0) return "Inga objekt valda. Gå tillbaka och välj objekt.";
-        return null;
-      case 3:
-        if (!invoiceLevel) return "Välj en faktureringsnivå.";
-        if (!invoiceModel) return "Välj en faktureringsmodell.";
-        return null;
+        if (selectedObjectIds.size === 0) {
+          return currentStep === 1
+            ? "Välj minst ett objekt."
+            : "Inga objekt valda. Gå tillbaka och välj objekt.";
+        }
+        break;
       case 6:
         if (conceptArticles.length === 0) return "Lägg till minst en artikel.";
-        return null;
+        break;
       case 7: {
-        if (conceptArticles.length > 0 && mappings.length === 0) return "Koppla artiklar till objekt innan du fortsätter.";
-        if (mappings.length > 0 && selectedObjectIds.size > 0) {
-          const mappedObjectIds = new Set(mappings.map((m: any) => m.objectId));
-          const unmappedCount = Array.from(selectedObjectIds).filter(id => !mappedObjectIds.has(id)).length;
-          if (unmappedCount > 0) return `${unmappedCount} objekt saknar artikelkoppling. Alla valda objekt måste ha minst en artikel.`;
+        if (conceptArticles.length > 0 && mappings.length === 0) {
+          return "Koppla artiklar till objekt innan du fortsätter.";
         }
-        return null;
+        const mappedObjectIds = new Set(mappings.map((m: any) => m.objectId));
+        const unmappedCount = Array.from(selectedObjectIds).filter(id => !mappedObjectIds.has(id)).length;
+        if (unmappedCount > 0) {
+          return `${unmappedCount} objekt saknar artikelkoppling. Alla valda objekt måste ha minst en artikel.`;
+        }
+        break;
       }
-      case 9:
-        if (!deliveryModel) return "Välj en leveransmodell.";
-        return null;
-      default:
-        return null;
     }
-  }, [currentStep, conceptName, selectedObjectIds, invoiceLevel, invoiceModel, conceptArticles, mappings, deliveryModel]);
+
+    return null;
+  }, [currentStep, form, selectedObjectIds, conceptArticles, mappings]);
 
   const createConceptMutation = useMutation({
     mutationFn: async () => {
@@ -287,11 +330,11 @@ export default function OrderConceptWizardPage() {
         name: conceptName,
         customerMode,
         customerId: customerMode === "HARDCODED" ? selectedCustomerId : null,
-        invoiceLevel,
-        invoiceModel,
+        invoiceLevel: invoiceLevel || null,
+        invoiceModel: invoiceModel || null,
         invoicePeriod,
         invoiceLock,
-        deliveryModel,
+        deliveryModel: deliveryModel || null,
         contractLengthMonths: deliveryModel === "subscription" ? contractLengthMonths : undefined,
         totalObjects: selectedObjectIds.size,
         totalArticles: conceptArticles.length,
@@ -350,7 +393,7 @@ export default function OrderConceptWizardPage() {
   });
 
   const handleNext = useCallback(async () => {
-    const validationError = validateCurrentStep();
+    const validationError = await validateCurrentStep();
     if (validationError) {
       toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
       return;
@@ -489,6 +532,38 @@ export default function OrderConceptWizardPage() {
 
   const isSaving = createConceptMutation.isPending || saveStepMutation.isPending;
 
+  if (isEditing && wizardLoading) {
+    return (
+      <div className="flex flex-col h-full" data-testid="order-concept-wizard-loading">
+        <div className="border-b bg-background p-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <Skeleton className="h-8 w-24" />
+              <Skeleton className="h-6 w-48" />
+            </div>
+            <Skeleton className="h-9 w-64" />
+          </div>
+          <div className="flex items-center justify-center gap-1">
+            {Array.from({ length: 9 }).map((_, i) => (
+              <div key={i} className="flex items-center">
+                <Skeleton className="h-7 w-16 rounded" />
+                {i < 8 && <div className="w-4 h-px mx-0.5 bg-muted-foreground/30" />}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-1 overflow-hidden p-6">
+          <div className="flex-1 max-w-4xl mx-auto space-y-4">
+            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-24 w-full" />
+            <Skeleton className="h-24 w-3/4" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col h-full" data-testid="order-concept-wizard">
       <div className="border-b bg-background p-4">
@@ -523,7 +598,7 @@ export default function OrderConceptWizardPage() {
                   onClick={async () => {
                     if (!conceptId || step.num > currentStep + 1) return;
                     if (step.num > currentStep) {
-                      const validationError = validateCurrentStep();
+                      const validationError = await validateCurrentStep();
                       if (validationError) {
                         toast({ title: "Ofullständigt steg", description: validationError, variant: "destructive" });
                         return;
@@ -646,14 +721,14 @@ export default function OrderConceptWizardPage() {
 
             {currentStep === 3 && (
               <Step3InvoiceModel
-                invoiceLevel={invoiceLevel}
-                invoiceModel={invoiceModel}
+                invoiceLevel={invoiceLevel || null}
+                invoiceModel={invoiceModel || null}
                 invoicePeriod={invoicePeriod}
                 invoiceLock={invoiceLock}
                 objectCount={selectedObjectIds.size}
                 onUpdate={(data) => {
-                  if (data.invoiceLevel !== undefined) setInvoiceLevel(data.invoiceLevel);
-                  if (data.invoiceModel !== undefined) setInvoiceModel(data.invoiceModel);
+                  if (data.invoiceLevel !== undefined) form.setValue("invoiceLevel", data.invoiceLevel || "", { shouldValidate: true });
+                  if (data.invoiceModel !== undefined) form.setValue("invoiceModel", data.invoiceModel || "", { shouldValidate: true });
                   if (data.invoicePeriod !== undefined) setInvoicePeriod(data.invoicePeriod);
                   if (data.invoiceLock !== undefined) setInvoiceLock(data.invoiceLock);
                 }}
@@ -713,24 +788,24 @@ export default function OrderConceptWizardPage() {
                 totalValue={totalValue}
                 totalCost={totalCost}
                 estimatedHours={estimatedHours}
-                invoiceLevel={invoiceLevel}
-                invoiceModel={invoiceModel}
+                invoiceLevel={invoiceLevel || null}
+                invoiceModel={invoiceModel || null}
                 invoicePeriod={invoicePeriod}
-                deliveryModel={deliveryModel}
+                deliveryModel={deliveryModel || null}
                 mappingCount={mappings.length}
               />
             )}
 
             {currentStep === 9 && (
               <Step9DeliveryModel
-                deliveryModel={deliveryModel}
+                deliveryModel={deliveryModel || null}
                 schedules={schedules}
                 minDaysBetween={minDaysBetween}
                 rollingExtension={rollingExtension}
                 rollingMonths={rollingMonths}
                 contractLengthMonths={contractLengthMonths}
                 onUpdate={(data) => {
-                  if (data.deliveryModel !== undefined) setDeliveryModel(data.deliveryModel);
+                  if (data.deliveryModel !== undefined) form.setValue("deliveryModel", data.deliveryModel || "", { shouldValidate: true });
                   if (data.schedules !== undefined) setSchedules(data.schedules);
                   if (data.minDaysBetween !== undefined) setMinDaysBetween(data.minDaysBetween);
                   if (data.rollingExtension !== undefined) setRollingExtension(data.rollingExtension);

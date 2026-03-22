@@ -506,16 +506,23 @@ export default function ImportPage() {
       setUndoBatchId(null);
       toast({ title: "Import ångrad", description: "All data från denna import har tagits bort." });
     },
-    onError: () => {
-      toast({ title: "Fel", description: "Kunde inte ångra importen.", variant: "destructive" });
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ångra importen", description: error.message || "Ett oväntat fel uppstod. Försök igen.", variant: "destructive" });
       setUndoBatchId(null);
     },
   });
+
+  const sseRetryCountRef = useRef(0);
+  const sseRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sseJobIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     return () => {
       if (eventSourceRef.current) {
         eventSourceRef.current.close();
+      }
+      if (sseRetryTimerRef.current) {
+        clearTimeout(sseRetryTimerRef.current);
       }
     };
   }, []);
@@ -524,8 +531,16 @@ export default function ImportPage() {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
     }
+    if (sseRetryTimerRef.current) {
+      clearTimeout(sseRetryTimerRef.current);
+      sseRetryTimerRef.current = null;
+    }
+    sseJobIdRef.current = jobId;
     const es = new EventSource(`/api/import/progress/${jobId}`);
     eventSourceRef.current = es;
+    es.onopen = () => {
+      sseRetryCountRef.current = 0;
+    };
     es.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data) as SSEProgress;
@@ -533,6 +548,7 @@ export default function ImportPage() {
         if (data.status === "completed") {
           es.close();
           eventSourceRef.current = null;
+          sseJobIdRef.current = null;
           if (data.result) {
             setModusResults(prev => ({ ...prev, objects: data.result as ModusObjectResult }));
           }
@@ -545,6 +561,7 @@ export default function ImportPage() {
         } else if (data.status === "failed" || data.status === "not_found") {
           es.close();
           eventSourceRef.current = null;
+          sseJobIdRef.current = null;
           setModusUploading(null);
         }
       } catch {}
@@ -552,6 +569,26 @@ export default function ImportPage() {
     es.onerror = () => {
       es.close();
       eventSourceRef.current = null;
+      const currentJobId = sseJobIdRef.current;
+      if (!currentJobId) return;
+      const maxRetries = 5;
+      if (sseRetryCountRef.current < maxRetries) {
+        const delay = Math.min(1000 * Math.pow(2, sseRetryCountRef.current), 30000);
+        sseRetryCountRef.current += 1;
+        sseRetryTimerRef.current = setTimeout(() => {
+          if (sseJobIdRef.current === currentJobId) {
+            connectSSE(currentJobId);
+          }
+        }, delay);
+      } else {
+        sseJobIdRef.current = null;
+        setModusUploading(null);
+        toast({
+          title: "Anslutningen till servern tappades",
+          description: "Importstatusen kunde inte uppdateras. Kontrollera din nätverksanslutning och försök igen.",
+          variant: "destructive",
+        });
+      }
     };
   }, []);
 
@@ -624,10 +661,10 @@ export default function ImportPage() {
         description: "All data av vald typ har tagits bort.",
       });
     },
-    onError: () => {
+    onError: (error: Error) => {
       toast({
-        title: "Fel",
-        description: "Kunde inte rensa data.",
+        title: "Kunde inte rensa data",
+        description: error.message || "Ett oväntat fel uppstod. Försök igen.",
         variant: "destructive",
       });
     },

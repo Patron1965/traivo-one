@@ -48,7 +48,7 @@ export function TerminologyTab() {
       toast({ title: "Sparat", description: "Terminologin har uppdaterats." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte spara terminologi", description: error.message, variant: "destructive" });
     },
   });
 

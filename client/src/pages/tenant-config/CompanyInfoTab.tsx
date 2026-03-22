@@ -47,7 +47,7 @@ export function CompanyInfoTab() {
       toast({ title: "Sparat", description: "Företagsinformation uppdaterad." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte spara företagsinformation", description: error.message, variant: "destructive" });
     },
   });
 

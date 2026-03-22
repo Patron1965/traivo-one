@@ -29,7 +29,7 @@ export function ArticlesExecutionTab() {
       toast({ title: "Sparat", description: "Exekveringskod uppdaterad." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera exekveringskod", description: error.message, variant: "destructive" });
     },
   });
 

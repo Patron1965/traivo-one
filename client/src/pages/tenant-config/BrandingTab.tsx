@@ -88,7 +88,7 @@ export function BrandingTab() {
       toast({ title: "Sparat", description: "Varumärkesprofilen har uppdaterats. Ändringarna syns direkt." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte spara varumärkesprofil", description: error.message, variant: "destructive" });
     },
   });
 
@@ -116,7 +116,7 @@ export function BrandingTab() {
       toast({ title: "Återställt", description: "Varumärkesprofilen har återställts till Traivo-standard." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte återställa varumärkesprofil", description: error.message, variant: "destructive" });
     },
   });
 

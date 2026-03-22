@@ -38,7 +38,7 @@ export function IoTTab() {
       setNewDeviceOpen(false);
       setDeviceForm({ objectId: "", deviceType: "fill_sensor", externalDeviceId: "" });
     },
-    onError: (e: Error) => toast({ title: "Fel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Kunde inte registrera IoT-enhet", description: e.message, variant: "destructive" }),
   });
 
   const deleteDeviceMutation = useMutation({
@@ -61,7 +61,7 @@ export function IoTTab() {
       setNewKeyName("");
       toast({ title: "Skapad", description: "API-nyckel skapad. Kopiera den nu — den visas bara en gång." });
     },
-    onError: (e: Error) => toast({ title: "Fel", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Kunde inte skapa API-nyckel", description: e.message, variant: "destructive" }),
   });
 
   const deleteKeyMutation = useMutation({

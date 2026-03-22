@@ -38,7 +38,7 @@ export function ResourcesExecutionTab() {
       toast({ title: "Sparat", description: "Behörigheter uppdaterade." });
     },
     onError: (error: Error) => {
-      toast({ title: "Fel", description: error.message, variant: "destructive" });
+      toast({ title: "Kunde inte uppdatera behörigheter", description: error.message, variant: "destructive" });
     },
   });
 
