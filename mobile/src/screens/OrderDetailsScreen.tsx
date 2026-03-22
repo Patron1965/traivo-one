@@ -138,8 +138,8 @@ export function OrderDetailsScreen() {
 
   const status = order.orderStatus;
   const execStatus = order.executionStatus;
-  const canStart = (status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad') && execStatus !== 'started' && execStatus !== 'completed';
-  const canComplete = execStatus === 'started' || status === 'planerad_resurs' || status === 'planerad_las';
+  const canStart = (status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad') && !['on_way', 'on_site', 'completed'].includes(execStatus || '');
+  const canComplete = ['on_way', 'on_site'].includes(execStatus || '');
   const isCompleted = status === 'utford' || execStatus === 'completed';
   const isCancelled = status === 'avbruten';
 

@@ -1489,7 +1489,7 @@ export class DatabaseStorage implements IStorage {
         isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, overdueFloor),
         lt(workOrders.scheduledDate, today),
-        notInArray(workOrders.orderStatus, ['utford', 'fakturerad'])
+        notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig'])
       ));
 
     // Count today's pending orders
@@ -1501,7 +1501,7 @@ export class DatabaseStorage implements IStorage {
         isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, today),
         lt(workOrders.scheduledDate, tomorrow),
-        notInArray(workOrders.orderStatus, ['utford', 'fakturerad'])
+        notInArray(workOrders.orderStatus, ['utford', 'fakturerad', 'avbruten', 'omojlig'])
       ));
 
     // Count total non-deleted orders
