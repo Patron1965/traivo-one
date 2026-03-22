@@ -145,22 +145,24 @@ app.post("/api/order-concepts/:id/article-mappings/auto", asyncHandler(async (re
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
 
-    await storage.deleteArticleObjectMappings(req.params.id);
     const conceptObjects = await storage.getOrderConceptObjects(req.params.id);
     const conceptArticles = await storage.getOrderConceptArticles(req.params.id);
 
     let mappingsCreated = 0;
-    for (const article of conceptArticles) {
-      for (const obj of conceptObjects) {
-        if (!obj.included) continue;
-        await storage.createArticleObjectMapping({
-          orderConceptArticleId: article.id,
-          orderConceptObjectId: obj.id,
-          quantity: article.quantity || 1,
-        });
-        mappingsCreated++;
+    await db.transaction(async () => {
+      await storage.deleteArticleObjectMappings(req.params.id);
+      for (const article of conceptArticles) {
+        for (const obj of conceptObjects) {
+          if (!obj.included) continue;
+          await storage.createArticleObjectMapping({
+            orderConceptArticleId: article.id,
+            orderConceptObjectId: obj.id,
+            quantity: article.quantity || 1,
+          });
+          mappingsCreated++;
+        }
       }
-    }
+    });
 
     res.json({ mappingsCreated });
 }));

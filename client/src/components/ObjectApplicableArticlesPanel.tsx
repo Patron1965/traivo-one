@@ -39,7 +39,7 @@ const hookLevelLabels: Record<string, string> = {
   brf: "BRF",
   fastighet: "Fastighet",
   rum: "Rum",
-  karl: "Alla kärl",
+  karl: "Alla objekt",
   karl_mat: "Matavfallskärl",
   karl_rest: "Restavfallskärl",
   karl_plast: "Plastkärl",

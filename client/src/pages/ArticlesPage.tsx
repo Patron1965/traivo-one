@@ -121,7 +121,7 @@ const hookLevelOptions = [
   { value: "brf", label: "BRF" },
   { value: "fastighet", label: "Fastighet" },
   { value: "rum", label: "Rum" },
-  { value: "karl", label: "Alla kärl (T100 Kärltvätt)" },
+  { value: "karl", label: "Alla objekt (T100)" },
   { value: "karl_mat", label: "Matavfallskärl (K100 Dekal)" },
   { value: "karl_rest", label: "Restavfallskärl" },
   { value: "karl_plast", label: "Plastkärl" },
@@ -593,7 +593,7 @@ export default function ArticlesPage() {
               { level: "brf", label: "BRF", icon: Building, description: "Artiklar för bostadsrättsföreningar" },
               { level: "fastighet", label: "Fastighet", icon: Home, description: "Artiklar på fastighetsnivå" },
               { level: "rum", label: "Rum", icon: Box, description: "Artiklar för rum (soprum, kök, etc.)" },
-              { level: "karl", label: "Alla kärl", icon: Trash, description: "Gäller alla kärltyper (T100 Kärltvätt)" },
+              { level: "karl", label: "Alla objekt", icon: Trash, description: "Gäller alla objekttyper (T100)" },
               { level: "karl_mat", label: "Matavfall", icon: Trash, description: "Endast matavfallskärl (K100 Dekal)" },
               { level: "karl_rest", label: "Restavfall", icon: Trash, description: "Endast restavfallskärl" },
               { level: "karl_plast", label: "Plast", icon: Trash, description: "Endast plastkärl" },
@@ -894,7 +894,7 @@ export default function ArticlesPage() {
               <div className="space-y-2">
                 <Label htmlFor="hookLevel" className="flex items-center gap-1">
                   Fasthakning
-                  <HelpTooltip content="Fasthakning bestämmer på vilken nivå artikeln automatiskt föreslås. Välj t.ex. 'Kärl' för att artikeln ska föreslås på alla kärl." />
+                  <HelpTooltip content="Fasthakning bestämmer på vilken nivå artikeln automatiskt föreslås. Välj t.ex. 'Objekt' för att artikeln ska föreslås på alla objekt." />
                 </Label>
                 <Select
                   value={formData.hookLevel}
@@ -921,7 +921,7 @@ export default function ArticlesPage() {
                   <Label className="text-sm font-medium">Villkor för fasthakning</Label>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="containerType" className="text-sm">Kärltyp</Label>
+                      <Label htmlFor="containerType" className="text-sm">Objekttyp</Label>
                       <Select
                         value={formData.hookConditions.container_type || "all"}
                         onValueChange={(value) => setFormData({

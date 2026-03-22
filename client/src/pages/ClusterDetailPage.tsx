@@ -90,7 +90,7 @@ const HIERARCHY_LEVELS: Record<string, { label: string; icon: typeof Building2; 
   brf: { label: "BRF", icon: Users, color: "text-blue-600 dark:text-blue-400" },
   fastighet: { label: "Fastighet", icon: Home, color: "text-green-600 dark:text-green-400" },
   rum: { label: "Rum", icon: Container, color: "text-yellow-600 dark:text-yellow-400" },
-  karl: { label: "Kärl", icon: Trash2, color: "text-orange-600 dark:text-orange-400" },
+  karl: { label: "Objekt", icon: Trash2, color: "text-orange-600 dark:text-orange-400" },
 };
 
 interface TreeNode {

@@ -163,6 +163,8 @@ export const objects = pgTable("objects", {
   index("idx_objects_object_number").on(table.objectNumber),
   index("idx_objects_tenant_customer").on(table.tenantId, table.customerId),
   index("idx_objects_interim").on(table.tenantId, table.isInterimObject),
+  index("idx_objects_tenant_deleted").on(table.tenantId, table.deletedAt),
+  index("idx_objects_tenant_objnumber").on(table.tenantId, table.objectNumber),
 ]);
 
 export const resources = pgTable("resources", {
@@ -307,6 +309,8 @@ export const workOrders = pgTable("work_orders", {
   index("idx_work_orders_cluster").on(table.clusterId),
   index("idx_work_orders_tenant_status").on(table.tenantId, table.orderStatus),
   index("idx_work_orders_tenant_date").on(table.tenantId, table.scheduledDate),
+  index("idx_work_orders_resource_date").on(table.resourceId, table.scheduledDate),
+  index("idx_work_orders_tenant_deleted").on(table.tenantId, table.deletedAt),
 ]);
 
 // Orderrader - artiklar kopplade till en order med beräknade priser
@@ -385,7 +389,7 @@ export const ARTICLE_HOOK_LEVEL_LABELS: Record<ArticleHookLevel, string> = {
   brf: "BRF",
   fastighet: "Fastighet",
   rum: "Rum",
-  karl: "Kärl",
+  karl: "Objekt",
   karl_mat: "Matavfall",
   karl_rest: "Restavfall",
   karl_plast: "Plast",

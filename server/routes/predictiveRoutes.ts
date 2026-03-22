@@ -254,23 +254,25 @@ export async function registerPredictiveRoutes(app: Express) {
 
     forecasts.sort((a, b) => a.daysUntilService - b.daysUntilService);
 
-    await db.delete(predictiveForecasts).where(eq(predictiveForecasts.tenantId, tenantId));
-    if (forecasts.length > 0) {
-      await db.insert(predictiveForecasts).values(
-        forecasts.map(f => ({
-          tenantId,
-          objectId: f.objectId,
-          deviceId: f.deviceId,
-          predictedDate: new Date(f.predictedDate),
-          confidence: f.confidence,
-          avgIntervalDays: f.avgIntervalDays,
-          signalCount: f.signalCount,
-          lastSignalAt: f.lastSignalAt ? new Date(f.lastSignalAt) : null,
-          reasoning: f.reasoning,
-          status: "active" as const,
-        }))
-      );
-    }
+    await db.transaction(async (tx) => {
+      await tx.delete(predictiveForecasts).where(eq(predictiveForecasts.tenantId, tenantId));
+      if (forecasts.length > 0) {
+        await tx.insert(predictiveForecasts).values(
+          forecasts.map(f => ({
+            tenantId,
+            objectId: f.objectId,
+            deviceId: f.deviceId,
+            predictedDate: new Date(f.predictedDate),
+            confidence: f.confidence,
+            avgIntervalDays: f.avgIntervalDays,
+            signalCount: f.signalCount,
+            lastSignalAt: f.lastSignalAt ? new Date(f.lastSignalAt) : null,
+            reasoning: f.reasoning,
+            status: "active" as const,
+          }))
+        );
+      }
+    });
 
     const urgent = forecasts.filter(f => f.daysUntilService <= 7).length;
     const upcoming = forecasts.filter(f => f.daysUntilService > 7 && f.daysUntilService <= 30).length;

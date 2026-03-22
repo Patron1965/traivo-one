@@ -115,7 +115,7 @@ app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHa
 // PLANNER VIEW API ENDPOINTS (Driver Core)
 // ============================================
 
-app.get("/api/planner/drivers/locations", asyncHandler(async (req, res) => {
+app.get("/api/planner/drivers/locations", isAuthenticated, asyncHandler(async (req, res) => {
     const resources = await storage.getActiveResourcePositions();
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
@@ -194,7 +194,7 @@ function broadcastPlannerEvent(event: { type: string; data: any }) {
 }
 
 // SSE endpoint for real-time planner events
-app.get("/api/planner/events", (req, res) => {
+app.get("/api/planner/events", isAuthenticated, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');

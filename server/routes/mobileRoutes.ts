@@ -18,8 +18,21 @@ export async function registerMobileRoutes(app: Express) {
 // MOBILE APP API ENDPOINTS
 // ========================================
 
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+
 // Mobile login - authenticate with email and PIN
 app.post("/api/mobile/login", asyncHandler(async (req, res) => {
+    const clientIp = req.ip || req.socket.remoteAddress || "unknown";
+    const now = Date.now();
+    const attempt = loginAttempts.get(clientIp);
+    if (attempt) {
+      if (now > attempt.resetAt) {
+        loginAttempts.delete(clientIp);
+      } else if (attempt.count >= 10) {
+        return res.status(429).json({ error: "För många inloggningsförsök. Försök igen om 15 minuter." });
+      }
+    }
+
     const { email, pin, username, password } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -53,9 +66,16 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
     }
 
     if (!resource) {
+      const existing = loginAttempts.get(clientIp);
+      if (existing) {
+        existing.count++;
+      } else {
+        loginAttempts.set(clientIp, { count: 1, resetAt: Date.now() + 15 * 60 * 1000 });
+      }
       return res.status(401).json({ error: "Ogiltiga inloggningsuppgifter" });
     }
     
+    loginAttempts.delete(clientIp);
     const token = generateMobileToken();
     const expiresAt = Date.now() + (24 * 60 * 60 * 1000);
     

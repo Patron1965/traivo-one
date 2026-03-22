@@ -315,7 +315,7 @@ export class InheritanceProcessor {
       brf: "BRF",
       fastighet: "Fastighet",
       rum: "Rum",
-      karl: "Kärl",
+      karl: "Objekt",
     };
     return labels[level] || level;
   }

@@ -1671,7 +1671,7 @@ export default function ImportPage() {
                   <ul className="text-sm text-muted-foreground space-y-1">
                     <li>Gå till <a href="/planner" className="text-blue-600 underline">Veckoplanering</a> och kontrollera att objekt och resurser syns</li>
                     <li>Kontrollera att kundlistan under <a href="/customers" className="text-blue-600 underline">Kunder</a> ser korrekt ut</li>
-                    <li>Verifiera att hierarkin (Fastighet → Rum → Kärl) stämmer under <a href="/objects" className="text-blue-600 underline">Objekt</a></li>
+                    <li>Verifiera att hierarkin (Fastighet → Rum → Objekt) stämmer under <a href="/objects" className="text-blue-600 underline">Objekt</a></li>
                   </ul>
                 </div>
               </div>

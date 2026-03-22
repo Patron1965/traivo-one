@@ -731,7 +731,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
                           
                           {totalContainers > 0 && (
                             <div className="text-sm pt-1 border-t border-gray-200 mt-1">
-                              <span className="font-medium">Kärl:</span>{" "}
+                              <span className="font-medium">Objekt:</span>{" "}
                               {obj.containerCount ? `K1: ${obj.containerCount}` : ""}
                               {obj.containerCountK2 ? ` K2: ${obj.containerCountK2}` : ""}
                               {obj.containerCountK3 ? ` K3: ${obj.containerCountK3}` : ""}

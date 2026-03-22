@@ -67,7 +67,7 @@ const hierarchyLevelLabels: Record<string, string> = {
   brf: "BRF",
   fastighet: "Fastighet",
   rum: "Rum",
-  karl: "Kärl",
+  karl: "Objekt",
   omrade: "Område",
 };
 
