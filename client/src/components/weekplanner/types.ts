@@ -19,14 +19,12 @@ export interface PlannerAction {
     resourceId: string | null;
     scheduledDate: string | null;
     scheduledStartTime: string | null;
-    status: string;
     orderStatus: string;
   };
   newState: {
     resourceId: string | null;
     scheduledDate: string | null;
     scheduledStartTime: string | null;
-    status: string;
     orderStatus: string;
   };
 }

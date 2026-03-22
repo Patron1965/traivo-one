@@ -425,7 +425,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       };
       
       await apiRequest("PATCH", `/api/work-orders/${id}`, {
-        status: "completed",
+        orderStatus: "utford",
         completedAt: new Date().toISOString(),
         actualDuration: elapsed,
         metadata: updatedMetadata,
@@ -444,7 +444,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           photos,
           signaturePath: finalSignature,
           materials: materials.length > 0 ? materials : (existingMetadata.materials as MaterialItem[]) || [],
-          status: "completed",
+          orderStatus: "utford",
         });
         downloadBlob(pdfBlob, `protokoll-${job.id.slice(0, 8)}.pdf`);
       }
@@ -676,7 +676,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const handleNextJob = () => {
     setShowCompletedDialog(false);
     const currentIndex = allTodayJobs.findIndex(j => j.id === selectedJobId);
-    const nextPendingJob = allTodayJobs.slice(currentIndex + 1).find(j => j.status !== "completed");
+    const nextPendingJob = allTodayJobs.slice(currentIndex + 1).find(j => j.orderStatus !== "utford");
     if (nextPendingJob) {
       handleSelectJob(nextPendingJob.id);
     } else {
@@ -693,7 +693,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
 
   const getNextJob = () => {
     const currentIndex = allTodayJobs.findIndex(j => j.id === selectedJobId);
-    return allTodayJobs.slice(currentIndex + 1).find(j => j.status !== "completed") || null;
+    return allTodayJobs.slice(currentIndex + 1).find(j => j.orderStatus !== "utford") || null;
   };
 
   const validateBeforeSigning = (job: WorkOrderWithObject, hasSignature: boolean): { field: string; label: string }[] => {
@@ -771,7 +771,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     lastFetchPositionRef.current = { lat: pos.lat, lng: pos.lng };
 
     const destinations = todayJobs
-      .filter(j => j.status !== "completed")
+      .filter(j => j.orderStatus !== "utford")
       .map(j => {
         const obj = objectMap.get(j.objectId);
         return {
@@ -815,7 +815,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   }, []);
 
   const getNextPendingJob = useCallback(() => {
-    return todayJobs.find(j => j.status !== "completed") || null;
+    return todayJobs.find(j => j.orderStatus !== "utford") || null;
   }, [todayJobs]);
 
   const getPriorityBadge = (priority?: string) => {

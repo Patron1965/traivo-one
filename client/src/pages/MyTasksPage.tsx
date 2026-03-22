@@ -84,7 +84,7 @@ function AIAssistantPanel({
         jobContext: {
           todaysOrderCount: todaysOrders.length,
           thisWeekOrderCount: thisWeekOrders.length,
-          pendingOrders: todaysOrders.filter(o => o.status !== "completed").length,
+          pendingOrders: todaysOrders.filter(o => o.orderStatus !== "utford").length,
         },
       });
       return response.json();
@@ -403,7 +403,7 @@ function DailyProgress({ orders }: { orders: WorkOrder[] }) {
     return isToday(new Date(order.scheduledDate));
   });
 
-  const completedToday = todaysOrders.filter((o) => o.status === "completed").length;
+  const completedToday = todaysOrders.filter((o) => o.orderStatus === "utford").length;
   const total = todaysOrders.length;
   const percentage = total > 0 ? Math.round((completedToday / total) * 100) : 0;
 
@@ -550,7 +550,7 @@ export default function MyTasksPage() {
     return orderDate >= weekStart && orderDate <= weekEnd;
   });
 
-  const completedThisWeek = thisWeekOrders.filter(o => o.status === "completed").length;
+  const completedThisWeek = thisWeekOrders.filter(o => o.orderStatus === "utford").length;
   const activeResources = resources.filter(r => r.status === "active").length;
 
   const handleViewObject = (obj: ServiceObject) => {
@@ -581,7 +581,7 @@ export default function MyTasksPage() {
                 </h1>
                 <p className="text-muted-foreground mt-2">
                   {todaysOrders.length > 0 
-                    ? `${todaysOrders.filter(o => o.status === "completed").length} slutförda, ${todaysOrders.filter(o => o.status !== "completed").length} kvar`
+                    ? `${todaysOrders.filter(o => o.orderStatus === "utford").length} slutförda, ${todaysOrders.filter(o => o.orderStatus !== "utford").length} kvar`
                     : 'Planera nya jobb eller se veckans överblick'
                   }
                 </p>
@@ -613,7 +613,7 @@ export default function MyTasksPage() {
             <StatCard
               title="Dagens ordrar"
               value={todaysOrders.length}
-              description={`${todaysOrders.filter(o => o.status === "completed").length} slutförda`}
+              description={`${todaysOrders.filter(o => o.orderStatus === "utford").length} slutförda`}
               icon={Calendar}
               href="/planner"
             />
@@ -683,7 +683,7 @@ export default function MyTasksPage() {
               </CardTitle>
               <CardDescription>
                 {todaysOrders.length > 0 
-                  ? `${todaysOrders.filter(o => o.status !== "completed").length} jobb kvar att utföra`
+                  ? `${todaysOrders.filter(o => o.orderStatus !== "utford").length} jobb kvar att utföra`
                   : 'Inga jobb schemalagda för idag'
                 }
               </CardDescription>

@@ -843,7 +843,7 @@ app.get("/api/work-orders/:workOrderId/dependency-chain", asyncHandler(async (re
           workOrder: {
             id: depOrder.id,
             title: depOrder.title,
-            status: depOrder.status,
+            orderStatus: depOrder.orderStatus,
             executionStatus: depOrder.executionStatus,
             scheduledDate: depOrder.scheduledDate,
             scheduledStartTime: depOrder.scheduledStartTime,
@@ -862,7 +862,7 @@ app.get("/api/work-orders/:workOrderId/dependency-chain", asyncHandler(async (re
           workOrder: {
             id: depOrder.id,
             title: depOrder.title,
-            status: depOrder.status,
+            orderStatus: depOrder.orderStatus,
             executionStatus: depOrder.executionStatus,
             scheduledDate: depOrder.scheduledDate,
             scheduledStartTime: depOrder.scheduledStartTime,

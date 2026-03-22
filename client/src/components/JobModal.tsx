@@ -308,7 +308,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
       estimatedDuration: parseInt(formData.estimatedDuration) || 60,
       resourceId: formData.resourceId || null,
       scheduledDate: formData.scheduledDate || null,
-      status: formData.resourceId && formData.scheduledDate ? "scheduled" : "draft",
+      orderStatus: formData.resourceId && formData.scheduledDate ? "planerad_resurs" : "skapad",
       articlesToAdd,
       priceListId: formData.priceListId,
       metadata: (selectedTeamId || formData.teamResourceIds.length > 1) ? {

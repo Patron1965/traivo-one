@@ -151,7 +151,7 @@ export function usePlannerData() {
     enabled: workOrderIds.length > 0, staleTime: 120000,
   });
 
-  const { data: depChainData } = useQuery<{ chain: Array<{ type: string; dependencyType: string; workOrder: { id: string; title: string; status: string; executionStatus: string; scheduledDate: string | null; scheduledStartTime: string | null; creationMethod: string | null } }> }>({
+  const { data: depChainData } = useQuery<{ chain: Array<{ type: string; dependencyType: string; workOrder: { id: string; title: string; orderStatus: string; executionStatus: string; scheduledDate: string | null; scheduledStartTime: string | null; creationMethod: string | null } }> }>({
     queryKey: ["/api/work-orders", depChainJobId, "dependency-chain"],
     queryFn: async () => { if (!depChainJobId) return { chain: [] }; const res = await apiRequest("GET", `/api/work-orders/${depChainJobId}/dependency-chain`); return res.json(); },
     enabled: !!depChainJobId && depChainDialogOpen,
@@ -167,21 +167,21 @@ export function usePlannerData() {
   const workOrdersQueryKey = ["/api/work-orders", dateRange.startDate, dateRange.endDate];
 
   const updateWorkOrderMutation = useMutation({
-    mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => { const payload: Record<string, unknown> = { resourceId, scheduledDate, status: "scheduled", orderStatus: "planerad_resurs" }; if (scheduledStartTime) payload.scheduledStartTime = scheduledStartTime; return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>; },
-    onMutate: async ({ id, resourceId, scheduledDate }) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), status: "scheduled" as const, orderStatus: "planerad_resurs" as const } : j)); return { previousData: prev }; },
+    mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => { const payload: Record<string, unknown> = { resourceId, scheduledDate, orderStatus: "planerad_resurs" }; if (scheduledStartTime) payload.scheduledStartTime = scheduledStartTime; return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>; },
+    onMutate: async ({ id, resourceId, scheduledDate }) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId, scheduledDate: new Date(scheduledDate + "T12:00:00Z"), orderStatus: "planerad_resurs" as const } : j)); return { previousData: prev }; },
     onSuccess: (updated, vars) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === vars.id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
     onError: (_err, _vars, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Fel", description: "Kunde inte uppdatera jobbet.", variant: "destructive" }); },
   });
 
   const unscheduleWorkOrderMutation = useMutation({
-    mutationFn: async (id: string) => (await apiRequest("PATCH", `/api/work-orders/${id}`, { resourceId: null, scheduledDate: null, scheduledStartTime: null, status: "draft", orderStatus: "skapad" })).json() as Promise<WorkOrderWithObject>,
-    onMutate: async (id) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId: null, scheduledDate: null, scheduledStartTime: null, status: "draft" as const, orderStatus: "skapad" as const } : j)); return { previousData: prev }; },
+    mutationFn: async (id: string) => (await apiRequest("PATCH", `/api/work-orders/${id}`, { resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" })).json() as Promise<WorkOrderWithObject>,
+    onMutate: async (id) => { await queryClient.cancelQueries({ queryKey: workOrdersQueryKey }); const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey); queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" as const } : j)); return { previousData: prev }; },
     onSuccess: (updated, id) => { queryClient.setQueryData<WorkOrderWithObject[]>(workOrdersQueryKey, old => old?.map(j => j.id === id ? { ...j, ...updated } : j)); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); toast({ title: "Avschemalagt", description: "Jobbet flyttades tillbaka till oschemalagda." }); },
     onError: (_err, _id, ctx) => { if (ctx?.previousData) queryClient.setQueryData(workOrdersQueryKey, ctx.previousData); toast({ title: "Fel", description: "Kunde inte avschemalägg jobbet.", variant: "destructive" }); },
   });
 
   const applyActionMutation = useMutation({
-    mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => (await apiRequest("PATCH", `/api/work-orders/${jobId}`, { resourceId: state.resourceId, scheduledDate: state.scheduledDate, scheduledStartTime: state.scheduledStartTime, status: state.status, orderStatus: state.orderStatus })).json() as Promise<WorkOrderWithObject>,
+    mutationFn: async ({ jobId, state }: { jobId: string; state: PlannerAction["previousState"] }) => (await apiRequest("PATCH", `/api/work-orders/${jobId}`, { resourceId: state.resourceId, scheduledDate: state.scheduledDate, scheduledStartTime: state.scheduledStartTime, orderStatus: state.orderStatus })).json() as Promise<WorkOrderWithObject>,
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: workOrdersQueryKey }); queryClient.invalidateQueries({ queryKey: ["/api/work-orders", "unscheduled-paginated"] }); setUnscheduledPage(0); },
     onError: () => { toast({ title: "Fel", description: "Kunde inte ångra/göra om ändringen.", variant: "destructive" }); },
   });
@@ -321,7 +321,7 @@ export function usePlannerData() {
   const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string) => {
     const job = workOrders.find(j => j.id === jobId);
     if (!job) return;
-    addToUndoStack({ type: "schedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, status: job.status, orderStatus: job.orderStatus }, newState: { resourceId, scheduledDate, scheduledStartTime: scheduledStartTime || null, status: "scheduled", orderStatus: "planerad_resurs" } });
+    addToUndoStack({ type: "schedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId, scheduledDate, scheduledStartTime: scheduledStartTime || null, orderStatus: "planerad_resurs" } });
     updateWorkOrderMutation.mutate({ id: jobId, resourceId, scheduledDate, scheduledStartTime });
   }, [workOrders, addToUndoStack, updateWorkOrderMutation]);
 
@@ -354,7 +354,7 @@ export function usePlannerData() {
     setPendingSchedule(null);
   }, [pendingSchedule, executeSchedule, toast]);
 
-  const handleUnschedule = useCallback((e: { stopPropagation: () => void }, jobId: string) => { e.stopPropagation(); const job = workOrders.find(j => j.id === jobId); if (job) addToUndoStack({ type: "unschedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, status: job.status, orderStatus: job.orderStatus }, newState: { resourceId: null, scheduledDate: null, scheduledStartTime: null, status: "draft", orderStatus: "skapad" } }); unscheduleWorkOrderMutation.mutate(jobId); }, [workOrders, addToUndoStack, unscheduleWorkOrderMutation]);
+  const handleUnschedule = useCallback((e: { stopPropagation: () => void }, jobId: string) => { e.stopPropagation(); const job = workOrders.find(j => j.id === jobId); if (job) addToUndoStack({ type: "unschedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId: null, scheduledDate: null, scheduledStartTime: null, orderStatus: "skapad" } }); unscheduleWorkOrderMutation.mutate(jobId); }, [workOrders, addToUndoStack, unscheduleWorkOrderMutation]);
 
   const handleUndo = useCallback(() => { if (undoStack.length === 0) return; const last = undoStack[undoStack.length - 1]; setUndoStack(prev => prev.slice(0, -1)); setRedoStack(prev => [...prev, last]); applyActionMutation.mutate({ jobId: last.jobId, state: last.previousState }); toast({ title: "Ändring ångrad" }); }, [undoStack, applyActionMutation, toast]);
   const handleRedo = useCallback(() => { if (redoStack.length === 0) return; const last = redoStack[redoStack.length - 1]; setRedoStack(prev => prev.slice(0, -1)); setUndoStack(prev => [...prev, last]); applyActionMutation.mutate({ jobId: last.jobId, state: last.newState }); toast({ title: "Ändring återställd" }); }, [redoStack, applyActionMutation, toast]);

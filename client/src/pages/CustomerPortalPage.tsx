@@ -145,7 +145,7 @@ export default function CustomerPortalPage() {
     .slice(0, 10);
 
   const recentOrders = customerOrders
-    .filter(o => o.status === "completed" || o.status === "invoiced")
+    .filter(o => o.orderStatus === "utford" || o.orderStatus === "fakturerad")
     .sort((a, b) => {
       const dateA = a.completedAt?.toString() || a.scheduledDate?.toString() || "";
       const dateB = b.completedAt?.toString() || b.scheduledDate?.toString() || "";
@@ -158,7 +158,7 @@ export default function CustomerPortalPage() {
       return apiRequest("POST", "/api/orders", {
         objectId: data.objectId,
         scheduledDate: data.preferredDate,
-        status: "pending",
+        orderStatus: "skapad",
         orderType: data.serviceType === "extra_pickup" ? "extra" : "service",
         notes: data.notes,
         priority: "normal",

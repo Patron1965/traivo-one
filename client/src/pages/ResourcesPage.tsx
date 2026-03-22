@@ -1069,14 +1069,14 @@ export default function ResourcesPage() {
                               </span>
                               <Badge
                                 variant={
-                                  job.status === "completed" ? "secondary" :
-                                    job.status === "in_progress" ? "default" : "outline"
+                                  job.orderStatus === "utford" ? "secondary" :
+                                    job.orderStatus === "paborjad" ? "default" : "outline"
                                 }
                                 className="text-xs"
                               >
-                                {job.status === "completed" ? "Klar" :
-                                  job.status === "in_progress" ? "Pågår" :
-                                    job.status === "scheduled" ? "Schemalagt" : job.status}
+                                {job.orderStatus === "utford" ? "Klar" :
+                                  job.orderStatus === "paborjad" ? "Pågår" :
+                                    job.orderStatus === "planerad_resurs" ? "Schemalagt" : job.orderStatus}
                               </Badge>
                             </div>
                           ))}
