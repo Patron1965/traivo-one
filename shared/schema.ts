@@ -4323,11 +4323,11 @@ export const DEFAULT_TERMINOLOGY: Record<string, string> = {
 
 export const INDUSTRY_TERMINOLOGY: Record<string, Record<string, string>> = {
   waste_management: {
-    object_singular: "Kärl",
-    object_plural: "Kärl",
+    object_singular: "Objekt",
+    object_plural: "Objekt",
     container_singular: "Kärl",
     container_plural: "Kärl",
-    asset_type: "Kärltyp",
+    asset_type: "Objekttyp",
     service_area: "Hämtområde",
     inspection_singular: "Kontroll",
     inspection_plural: "Kontroller",
