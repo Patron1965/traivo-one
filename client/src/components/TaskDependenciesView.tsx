@@ -78,7 +78,7 @@ export function TaskDependenciesView({ workOrderId, className }: TaskDependencie
   };
 
   const isOrderComplete = (order?: WorkOrder) => {
-    const status = order?.executionStatus || order?.status;
+    const status = order?.executionStatus || order?.orderStatus;
     return ["completed", "inspected", "invoiced", "utford", "fakturerad"].includes(status || "");
   };
 
@@ -149,7 +149,7 @@ export function TaskDependenciesView({ workOrderId, className }: TaskDependencie
                   )}
                   data-testid={`dependency-item-${dep.id}`}
                 >
-                  {getOrderStatusIcon(dep.dependsOnOrder?.executionStatus || dep.dependsOnOrder?.status)}
+                  {getOrderStatusIcon(dep.dependsOnOrder?.executionStatus || dep.dependsOnOrder?.orderStatus)}
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">
                       {dep.dependsOnOrder?.title || "Uppgift #" + dep.dependsOnWorkOrderId.slice(-6)}

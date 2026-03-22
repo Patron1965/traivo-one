@@ -374,7 +374,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     const checkUpcoming = () => {
       const now = new Date();
       for (const job of todayJobs) {
-        if (!job.scheduledStartTime || ["completed", "cancelled", "deferred", "omojlig", "in_progress"].includes(job.status)) continue;
+        if (!job.scheduledStartTime || ["utford", "avbruten", "omojlig", "paborjad", "fakturerad"].includes(job.orderStatus)) continue;
         if (notifiedOrdersRef.current.has(job.id)) continue;
         const [h, m] = job.scheduledStartTime.split(":").map(Number);
         const scheduled = new Date(now);
