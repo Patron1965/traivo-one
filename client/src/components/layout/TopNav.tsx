@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useMemo } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTerminology } from "@/hooks/use-terminology";
@@ -19,108 +19,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TourMenu } from "@/components/TourMenu";
+import { getNavGroups, type NavItem } from "@/lib/navItems";
 import {
-  Calendar,
-  Map,
-  Building2,
-  LayoutDashboard,
-  Users,
   Settings,
   LogOut,
-  Upload,
-  FileText,
-  Brain,
-  Package,
-  Receipt,
-  ClipboardList,
-  Truck,
-  RefreshCw,
-  Settings2,
-  Target,
-  DollarSign,
-  TrendingUp,
-  Smartphone,
-  Layers,
-  Cloud,
-  Building,
   Search,
   Bell,
   ChevronDown,
-  Database,
-  BarChart3,
-  History,
   Home,
-  MessageSquare,
-  MapPin,
-  Fuel,
-  UserCheck,
-  ListChecks,
-  Activity,
-  Clock,
   ArrowLeft,
 } from "lucide-react";
-
-function useNavItems() {
-  const { t } = useTerminology();
-  return useMemo(() => ({
-    grunddata: [
-      { title: t("cluster_plural", "Kluster"), url: "/clusters", icon: Target, description: "Arbetsområden" },
-      { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
-      { title: t("object_plural", "Objekt"), url: "/objects", icon: Building2, description: "Fastigheter och platser" },
-      { title: t("resource_plural", "Resurser"), url: "/resources", icon: Users, description: "Personal" },
-      { title: "Arbetspass", url: "/work-sessions", icon: Clock, description: "Tidloggning och löneunderlag" },
-      { title: t("vehicle_plural", "Fordon"), url: "/vehicles", icon: Truck, description: t("vehicle_plural", "Fordon") },
-      { title: t("article_plural", "Artiklar"), url: "/articles", icon: Package, description: "Produkter och tjänster" },
-      { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
-    ],
-    ordrar: [
-      { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
-      { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks, description: "Intelligenta ordergeneratorer" },
-      { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: `Alla ${t("work_order_plural", "uppgifter").toLowerCase()}` },
-      { title: "Uppdrag", url: "/assignments", icon: UserCheck, description: "Genererade uppgifter" },
-    ],
-    planering: [
-      { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
-      { title: "Ruttplanering", url: "/routes", icon: Map, description: "Optimera körvägar" },
-      { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
-      { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
-      { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
-      { title: "Årsplanering", url: "/annual-planning", icon: Target, description: "Årsmål & uppföljning" },
-    ],
-    falt: [
-      { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },
-      { title: t("inspection_singular", "Besiktning"), url: "/inspections", icon: ClipboardList, description: "Inspektionsprotokoll" },
-      { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardList, description: "Inspektionsfrågor per artikeltyp" },
-      { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
-    ],
-    analys: [
-      { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
-      { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
-      { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
-      { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
-      { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
-      { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
-      { title: "Prediktivt Underh\u00e5ll", url: "/predictive-maintenance", icon: Activity, description: "IoT-baserad serviceprognos" },
-      { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp, description: "Avkastningsanalys per kund" },
-    ],
-  }), [t]);
-}
-
-const adminItems = [
-  { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2, description: "SLA och tider" },
-  { title: "Användarhantering", url: "/user-management", icon: Users, description: "Hantera användare och roller" },
-  { title: "Företagsinställningar", url: "/tenant-config", icon: Settings2, description: "Företag, artiklar, koder" },
-  { title: "Ny kund", url: "/onboarding", icon: Building2, description: "Skapa ny kund/företag" },
-  { title: "SMS-inställningar", url: "/sms-settings", icon: MessageSquare, description: "SMS-notifikationer" },
-  { title: "Fortnox", url: "/fortnox", icon: Receipt, description: "Fakturaexport" },
-  { title: "Importera data", url: "/import", icon: Upload, description: "Importera från fil" },
-  { title: "Metadatainställningar", url: "/metadata-settings", icon: Database, description: "Metadatakatalog" },
-  { title: "API-kostnader", url: "/api-costs", icon: Activity, description: "Övervaka API-användning" },
-  { title: "Systemöversikt", url: "/system-overview", icon: FileText, description: "Datastatistik" },
-  { title: "Inställningar", url: "/settings", icon: Settings, description: "Systeminställningar" },
-];
-
-type NavItem = { title: string; url: string; icon: React.ElementType; description: string };
 
 interface NavDropdownProps {
   label: string;
@@ -275,19 +183,16 @@ function TenantLogo() {
 export function TopNav() {
   const { user } = useAuth();
   const userRole = user?.role || "user";
-  const navItems = useNavItems();
+  const { t } = useTerminology();
   const { isNavItemEnabled } = useFeatures();
 
-  const filterByModule = (items: NavItem[]) => items.filter(item => isNavItemEnabled(item.url));
-
-  const menuGroups: { label: string; items: NavItem[]; icon: React.ElementType; colorClass: string; group: NavMenuGroup }[] = [
-    { label: "Grunddata", items: filterByModule(navItems.grunddata), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { label: "Ordrar", items: filterByModule(navItems.ordrar), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
-    { label: "Planering & Karta", items: filterByModule(navItems.planering), icon: Calendar, group: "planering", colorClass: "text-green-500" },
-    { label: "Fält & Utförande", items: filterByModule(navItems.falt), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
-    { label: "Analys", items: filterByModule(navItems.analys), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
-    { label: "Administration", items: filterByModule(adminItems), icon: Settings, group: "admin", colorClass: "text-orange-500" },
-  ];
+  const menuGroups = useMemo(() => {
+    const groups = getNavGroups(t);
+    return groups.map(g => ({
+      ...g,
+      items: g.items.filter(item => isNavItemEnabled(item.url)),
+    }));
+  }, [t, isNavItemEnabled]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -317,9 +222,9 @@ export function TopNav() {
               </Button>
             </Link>
             {menuGroups.map((menu) =>
-              canAccessMenu(userRole, menu.group) ? (
+              canAccessMenu(userRole, menu.group as NavMenuGroup) ? (
                 <NavDropdown
-                  key={menu.label}
+                  key={menu.key}
                   label={menu.label}
                   items={menu.items}
                   icon={menu.icon}

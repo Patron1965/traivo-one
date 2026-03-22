@@ -183,7 +183,6 @@ export default function SubscriptionsPage() {
         startDate: new Date(data.startDate).toISOString(),
         endDate: data.endDate ? new Date(data.endDate).toISOString() : null,
         nextGenerationDate: new Date(data.startDate).toISOString(),
-        tenantId: "default-tenant",
       };
       return apiRequest("POST", "/api/subscriptions", payload);
     },

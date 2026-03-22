@@ -1,6 +1,5 @@
-import { Calendar, Map, Building2, LayoutDashboard, Users, Settings, LogOut, Upload, FileText, Sparkles, Package, Receipt, ClipboardList, Truck, RefreshCw, Settings2, Target, DollarSign, TrendingUp, Smartphone, Layers, Cloud, Building, BarChart3, Home, ListChecks, UserCheck, Brain, Database, ClipboardCheck, MapPin, History, Activity } from "lucide-react";
-import traivoLogo from "@assets/traivo_logo_transparent.png";
 import { Link, useLocation } from "wouter";
+import traivoLogo from "@assets/traivo_logo_transparent.png";
 import {
   Sidebar,
   SidebarContent,
@@ -16,62 +15,11 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
-
-const startItems = [
-  { title: "Dagens arbete", url: "/", icon: Calendar },
-  { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
-];
-
-const grunddataItems = [
-  { title: "Kluster", url: "/clusters", icon: Target },
-  { title: "Auto-klustring", url: "/auto-cluster", icon: Layers },
-  { title: "Objekt", url: "/objects", icon: Building2 },
-  { title: "Resurser", url: "/resources", icon: Users },
-  { title: "Fordon", url: "/vehicles", icon: Truck },
-  { title: "Artiklar", url: "/articles", icon: Package },
-  { title: "Prislistor", url: "/price-lists", icon: Receipt },
-];
-
-const ordrarItems = [
-  { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw },
-  { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks },
-  { title: "Orderstock", url: "/order-stock", icon: ClipboardList },
-  { title: "Uppdrag", url: "/assignments", icon: UserCheck },
-];
-
-const planeringItems = [
-  { title: "Veckoplanering", url: "/planner", icon: Calendar },
-  { title: "Ruttplanering", url: "/routes", icon: Map },
-  { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin },
-  { title: "Historisk Kartvy", url: "/historical-map", icon: History },
-  { title: "Väderplanering", url: "/weather", icon: Cloud },
-];
-
-const faltItems = [
-  { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
-  { title: "Besiktning", url: "/inspections", icon: ClipboardCheck },
-  { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardCheck },
-  { title: "Kundportal", url: "/customer-portal", icon: Building },
-];
-
-const analysItems = [
-  { title: "AI-Assistent", url: "/ai-assistant", icon: Brain },
-  { title: "Rapportering", url: "/reporting", icon: BarChart3 },
-  { title: "Ekonomi", url: "/economics", icon: DollarSign },
-  { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp },
-  { title: "Prediktivt Underh\u00e5ll", url: "/predictive-maintenance", icon: Activity },
-  { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp },
-];
-
-const adminItems = [
-  { title: "Produktionsstyrning", url: "/planning-parameters", icon: Settings2 },
-  { title: "Upphandlingar", url: "/procurements", icon: FileText },
-  { title: "Inför Optimering", url: "/optimization", icon: Sparkles },
-  { title: "Importera data", url: "/import", icon: Upload },
-  { title: "Metadatainställningar", url: "/metadata-settings", icon: Database },
-  { title: "Systemöversikt", url: "/system-overview", icon: FileText },
-  { title: "Inställningar", url: "/settings", icon: Settings },
-];
+import { LogOut } from "lucide-react";
+import { getNavGroups, sidebarStartItems, type NavItem } from "@/lib/navItems";
+import { useTerminology } from "@/hooks/use-terminology";
+import { useFeatures } from "@/lib/feature-context";
+import { useMemo } from "react";
 
 function UserFooter() {
   const { user } = useAuth();
@@ -112,8 +60,38 @@ function UserFooter() {
   );
 }
 
-export function AppSidebar() {
+function NavGroupSection({ label, items }: { label: string; items: NavItem[] }) {
   const [location] = useLocation();
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
+      <SidebarGroupContent>
+        <SidebarMenu>
+          {items.map((item) => (
+            <SidebarMenuItem key={item.url}>
+              <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
+                <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+                  <item.icon className="h-4 w-4" />
+                  <span>{item.title}</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          ))}
+        </SidebarMenu>
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+}
+
+export function AppSidebar() {
+  const { t } = useTerminology();
+  const { isNavItemEnabled } = useFeatures();
+  const navGroups = useMemo(() => {
+    return getNavGroups(t).map(g => ({
+      ...g,
+      items: g.items.filter(item => isNavItemEnabled(item.url)),
+    })).filter(g => g.items.length > 0);
+  }, [t, isNavItemEnabled]);
 
   return (
     <Sidebar>
@@ -133,131 +111,10 @@ export function AppSidebar() {
       </SidebarHeader>
       
       <SidebarContent>
-        <SidebarGroup>
-          <SidebarGroupLabel>Start</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {startItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Grunddata</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {grunddataItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Ordrar</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {ordrarItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Planering & Karta</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {planeringItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Fält & Utförande</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {faltItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Analys</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {analysItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        <SidebarGroup>
-          <SidebarGroupLabel>Administration</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {adminItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                    <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <NavGroupSection label="Start" items={sidebarStartItems} />
+        {navGroups.map((group) => (
+          <NavGroupSection key={group.key} label={group.label} items={group.items} />
+        ))}
       </SidebarContent>
 
       <SidebarFooter className="p-4">
