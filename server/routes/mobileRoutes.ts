@@ -965,7 +965,8 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
               scheduled: "planerad_resurs", cancelled: "skapad",
               deferred: "skapad", draft: "skapad", planned: "planerad_resurs",
             };
-            const normalizedStatus = ORDER_STATUSES.includes(newStatus as any)
+            const validOrderStatuses: readonly string[] = ORDER_STATUSES;
+            const normalizedStatus = validOrderStatuses.includes(newStatus)
               ? newStatus
               : legacyToOrderStatus[newStatus] || "skapad";
             await storage.updateWorkOrder(orderId, { orderStatus: normalizedStatus });
