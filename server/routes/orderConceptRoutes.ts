@@ -132,11 +132,19 @@ app.get("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, res
     res.json(mappings);
 }));
 
+const articleMappingSchema = z.object({
+  orderConceptArticleId: z.string().min(1),
+  orderConceptObjectId: z.string().min(1),
+  quantity: z.number().positive().optional().default(1),
+});
+
 app.post("/api/order-concepts/:id/article-mappings", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const rawConcept = await storage.getOrderConcept(req.params.id);
     if (!verifyTenantOwnership(rawConcept, tenantId)) throw new NotFoundError("Ej hittad");
-    const result = await storage.createArticleObjectMapping(req.body);
+    const parsed = articleMappingSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+    const result = await storage.createArticleObjectMapping(parsed.data);
     res.status(201).json(result);
 }));
 

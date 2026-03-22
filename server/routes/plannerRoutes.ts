@@ -138,7 +138,7 @@ app.get("/api/planner/drivers/locations", isAuthenticated, asyncHandler(async (r
     res.json(locations);
 }));
 
-app.get("/api/planner/orders", asyncHandler(async (req, res) => {
+app.get("/api/planner/orders", isAuthenticated, asyncHandler(async (req, res) => {
     const range = req.query.range as string || "today";
     const tenantId = getTenantIdWithFallback(req);
     const allOrders = await storage.getWorkOrders(tenantId);
@@ -215,7 +215,7 @@ app.get("/api/planner/events", isAuthenticated, (req, res) => {
   });
 });
 
-app.get("/api/planner/routes", asyncHandler(async (req, res) => {
+app.get("/api/planner/routes", isAuthenticated, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const allOrders = await storage.getWorkOrders(tenantId);
     const now = new Date();
@@ -270,7 +270,7 @@ app.get("/api/planner/routes", asyncHandler(async (req, res) => {
     res.json(routes);
 }));
 
-app.patch("/api/planner/orders/:id/reassign", asyncHandler(async (req, res) => {
+app.patch("/api/planner/orders/:id/reassign", isAuthenticated, asyncHandler(async (req, res) => {
     const orderId = req.params.id;
     const { resourceId } = req.body;
     if (!resourceId) throw new ValidationError("resourceId krävs");

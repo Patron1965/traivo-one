@@ -602,24 +602,39 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
     });
 }));
 
+const materialLogSchema = z.object({
+  articleId: z.string().optional(),
+  articleNumber: z.string().optional(),
+  articleName: z.string().optional(),
+  quantity: z.number().positive().default(1),
+}).refine(data => data.articleId || data.articleNumber, {
+  message: "articleId eller articleNumber krävs",
+});
+
 app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
-    const { articleId, articleNumber, articleName, quantity } = req.body;
+    const parsed = materialLogSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+    const { articleId, articleNumber, articleName, quantity } = parsed.data;
 
     const order = await storage.getWorkOrder(orderId);
     if (!order) throw new NotFoundError("Order hittades inte");
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     let resolvedArticleId = articleId;
+    const tenantArticles = await storage.getArticles(order.tenantId);
     if (!resolvedArticleId && articleNumber) {
-      const articles = await storage.getArticles(order.tenantId);
-      const found = articles.find(a => a.articleNumber === articleNumber);
+      const found = tenantArticles.find(a => a.articleNumber === articleNumber);
       if (found) resolvedArticleId = found.id;
     }
 
     if (!resolvedArticleId) {
       throw new ValidationError("Article ID or valid article number required");
+    }
+
+    if (!tenantArticles.some(a => a.id === resolvedArticleId)) {
+      throw new ForbiddenError("Artikeln tillhör inte denna organisation");
     }
 
     const line = await storage.createWorkOrderLine({

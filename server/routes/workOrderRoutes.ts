@@ -551,10 +551,15 @@ app.post("/api/simulation-scenarios/:id/clone-orders", asyncHandler(async (req, 
     throw new NotFoundError("Simuleringscenario");
   }
 
+  if (!Array.isArray(orderIds) || orderIds.some((id: unknown) => typeof id !== "string")) {
+    throw new ValidationError("orderIds måste vara en array av strängar");
+  }
+
   const clonedOrders = [];
   for (const orderId of orderIds) {
     const original = await storage.getWorkOrder(orderId);
     if (!original) continue;
+    if (original.tenantId !== tenantId) continue;
 
     const clonedOrder = await storage.createWorkOrder({
       tenantId,
