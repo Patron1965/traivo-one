@@ -268,7 +268,7 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
           : `Uppskjuten: ${notes}`;
       }
     } else if (status === 'cancelled') {
-      updateData.orderStatus = 'skapad';
+      updateData.orderStatus = 'avbruten';
       if (notes) {
         updateData.notes = order.notes 
           ? `${order.notes}\n\nInställd: ${notes}` 
@@ -962,7 +962,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
             }
             const legacyToOrderStatus: Record<string, string> = {
               completed: "utford", in_progress: "planerad_resurs",
-              scheduled: "planerad_resurs", cancelled: "skapad",
+              scheduled: "planerad_resurs", cancelled: "avbruten",
               deferred: "skapad", draft: "skapad", planned: "planerad_resurs",
             };
             const validOrderStatuses: readonly string[] = ORDER_STATUSES;
