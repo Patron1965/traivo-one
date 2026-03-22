@@ -2360,12 +2360,17 @@ export class DatabaseStorage implements IStorage {
     if (!currentOrder) return undefined;
     
     const currentStatus = (currentOrder.orderStatus || 'skapad') as OrderStatus;
+    const terminalStatuses: OrderStatus[] = ['avbruten', 'omojlig'];
     const statusFlow: OrderStatus[] = ['skapad', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad'];
     const currentIdx = statusFlow.indexOf(currentStatus);
     const newIdx = statusFlow.indexOf(newStatus);
     
-    // Validate sequential progression (allow forward only, max 1 step at a time or reset to skapad)
-    if (newStatus !== 'skapad' && (newIdx < 0 || newIdx > currentIdx + 1)) {
+    if (terminalStatuses.includes(currentStatus)) {
+      throw new Error(`Cannot transition from terminal status ${currentStatus}`);
+    }
+    
+    if (terminalStatuses.includes(newStatus)) {
+    } else if (newStatus !== 'skapad' && (newIdx < 0 || newIdx > currentIdx + 1)) {
       throw new Error(`Invalid status transition from ${currentStatus} to ${newStatus}`);
     }
     
