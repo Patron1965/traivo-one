@@ -1091,7 +1091,8 @@ export const ORDER_STATUSES = [
   "planerad_las",
   "utford",
   "fakturerad",
-  "omojlig"      // Order kunde inte utföras (låst port, fel adress, etc.)
+  "omojlig",
+  "avbruten"
 ] as const;
 export type OrderStatus = typeof ORDER_STATUSES[number];
 

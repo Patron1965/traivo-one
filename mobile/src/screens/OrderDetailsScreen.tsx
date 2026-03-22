@@ -137,9 +137,10 @@ export function OrderDetailsScreen() {
   }
 
   const status = order.orderStatus;
-  const canStart = status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad';
-  const canComplete = status === 'planerad_resurs' || status === 'planerad_las';
-  const isCompleted = status === 'utford';
+  const execStatus = order.executionStatus;
+  const canStart = (status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad') && execStatus !== 'started' && execStatus !== 'completed';
+  const canComplete = execStatus === 'started' || status === 'planerad_resurs' || status === 'planerad_las';
+  const isCompleted = status === 'utford' || execStatus === 'completed';
   const isCancelled = status === 'avbruten';
 
   return (

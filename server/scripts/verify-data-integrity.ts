@@ -31,7 +31,7 @@ async function verifyDataIntegrity() {
     },
     {
       name: "work_orders with invalid order_status values",
-      query: sql`SELECT COUNT(*) as count FROM work_orders WHERE order_status NOT IN ('skapad', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'omojlig')`,
+      query: sql`SELECT COUNT(*) as count FROM work_orders WHERE order_status NOT IN ('skapad', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'omojlig', 'avbruten')`,
     },
   ];
 
