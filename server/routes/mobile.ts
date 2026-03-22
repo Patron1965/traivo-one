@@ -141,12 +141,17 @@ const MOCK_RESOURCES = [
 const MOCK_TEAM_INVITES: any[] = [];
 
 const MOCK_MATERIAL_LOGS: any[] = [];
+const MOCK_MAX_LOGS = 500;
 
 const MOCK_NOTIFICATIONS: any[] = [
   { id: 'n1', type: 'schedule_change', title: 'Ruttändring', message: 'Order WO-2026-0453 har flyttats till kl 10:00', isRead: false, createdAt: new Date(Date.now() - 3600000).toISOString(), orderId: '3' },
   { id: 'n2', type: 'urgent', title: 'Brådskande uppdrag', message: 'Nytt hämtuppdrag tillagt: Göteborgs Hamn AB', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString(), orderId: '5' },
   { id: 'n3', type: 'info', title: 'Systeminformation', message: 'Ny version av appen tillgänglig', isRead: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
 ];
+
+function findMockOrder(idParam: string) {
+  return MOCK_ORDERS.find(o => o.id === parseInt(idParam) || o.orderNumber === idParam || o.id.toString() === idParam);
+}
 
 const MOCK_ORDERS: any[] = [
   {
@@ -986,7 +991,7 @@ router.get('/my-orders', async (req, res) => {
 
 router.get('/orders/:id', async (req, res) => {
   if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    const order = findMockOrder(req.params.id);
     if (order) {
       res.json(order);
     } else {
@@ -1192,7 +1197,7 @@ router.patch('/orders/:id/status', async (req, res) => {
   }
   const io = (req.app as any).io;
   if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    const order = findMockOrder(req.params.id);
     if (order) {
       if (order.isLocked) {
         res.status(403).json({ error: 'Uppdraget är låst - beroende uppdrag ej slutförda' });
@@ -1217,9 +1222,11 @@ router.patch('/orders/:id/status', async (req, res) => {
         order.completedAt = order.completedAt || new Date().toISOString();
       }
       const driverId = String(order.resourceId || MOCK_RESOURCE.id);
-      handleTimeEntries(String(order.id), driverId, newStatus).catch(err => {
+      try {
+        await handleTimeEntries(String(order.id), driverId, newStatus);
+      } catch (err: any) {
         console.error('[time-entries] Error in mock handleTimeEntries:', err.message);
-      });
+      }
       if (io) {
         io.emit('order:updated', { orderId: order.id, status: order.status, updatedAt: new Date().toISOString() });
         if (MOCK_TEAM.status === 'active') {
@@ -1227,9 +1234,11 @@ router.patch('/orders/:id/status', async (req, res) => {
         }
       }
       const statusLabels: Record<string, string> = {
-        planned: 'Planerad', dispatched: 'Skickad', on_site: 'På plats',
-        in_progress: 'Pågår', completed: 'Slutförd', failed: 'Misslyckad',
-        cancelled: 'Avbruten',
+        skapad: 'Skapad', planerad_pre: 'Förplanerad', planerad_resurs: 'Tilldelad',
+        planerad_las: 'Inlastad', utford: 'Utförd', fakturerad: 'Fakturerad',
+        impossible: 'Omöjlig', planned: 'Planerad', dispatched: 'Skickad',
+        on_site: 'På plats', in_progress: 'Pågår', completed: 'Slutförd',
+        failed: 'Misslyckad', cancelled: 'Avbruten', deferred: 'Uppskjuten',
       };
       const label = statusLabels[newStatus] || newStatus;
       if (order.resourceId) {
@@ -1516,6 +1525,7 @@ router.post('/orders/:id/materials', async (req, res) => {
       createdAt: new Date().toISOString(),
     };
     MOCK_MATERIAL_LOGS.push(entry);
+    if (MOCK_MATERIAL_LOGS.length > MOCK_MAX_LOGS) MOCK_MATERIAL_LOGS.splice(0, MOCK_MATERIAL_LOGS.length - MOCK_MAX_LOGS);
     if (io && MOCK_TEAM.status === 'active') {
       io.to(`team:${MOCK_TEAM.id}`).emit('team:material_logged', { orderId: entry.orderId, entry });
     }
@@ -1532,7 +1542,7 @@ router.post('/orders/:id/materials', async (req, res) => {
 
 router.post('/orders/:id/signature', async (req, res) => {
   if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    const order = findMockOrder(req.params.id);
     if (order) { order.signatureUrl = req.body.signatureData; res.json({ success: true }); }
     else res.status(404).json({ error: 'Order hittades inte' });
     return;
@@ -1567,7 +1577,7 @@ router.post('/orders/:id/notes', async (req, res) => {
 
 router.patch('/orders/:id/substeps/:stepId', async (req, res) => {
   if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    const order = findMockOrder(req.params.id);
     if (order && order.subSteps) {
       const step = order.subSteps.find((s: any) => s.id === parseInt(req.params.stepId));
       if (step) { step.completed = req.body.completed; res.json(step); }
@@ -1585,7 +1595,7 @@ router.patch('/orders/:id/substeps/:stepId', async (req, res) => {
 
 router.post('/orders/:id/inspections', async (req, res) => {
   if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    const order = findMockOrder(req.params.id);
     if (order) { order.inspections = req.body.inspections; res.json({ success: true, inspections: order.inspections }); }
     else res.status(404).json({ error: 'Order hittades inte' });
     return;
@@ -1688,7 +1698,7 @@ router.post('/orders/:id/upload-photo', async (req, res) => {
 
 router.post('/orders/:id/confirm-photo', async (req, res) => {
   if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find(o => o.id === parseInt(req.params.id));
+    const order = findMockOrder(req.params.id);
     if (order) { const photoUrl = `/photos/${req.body.photoId}.jpg`; order.photos.push(photoUrl); res.json({ success: true, photoUrl }); }
     else res.status(404).json({ error: 'Order hittades inte' });
     return;

@@ -451,7 +451,7 @@ export function MapScreen({ navigation }: any) {
               <View style={styles.partnerMarkerCircle}>
                 <Feather name="user" size={14} color="#fff" />
               </View>
-              <Text style={styles.partnerMarkerLabel}>{partner.name.split(' ')[0]}</Text>
+              <Text style={styles.partnerMarkerLabel}>{partner.name?.split(' ')[0] || 'Kollega'}</Text>
             </View>
           </Marker>
         ) : null}

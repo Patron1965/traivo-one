@@ -764,7 +764,7 @@ export function HomeScreen({ navigation }: any) {
           </ThemedText>
           <View style={styles.greetingRow}>
             <ThemedText variant="heading">
-              Hej, {user?.name?.split(' ')[0] || 'Chaufor'}
+              Hej, {user?.name?.split(' ')[0] || 'Chaufför'}
             </ThemedText>
             <Pressable
               style={[styles.onlineToggle, { backgroundColor: isOnline ? '#E8F5E9' : '#FEF2F2', borderColor: isOnline ? '#16A34A' : '#DC2626' }]}
