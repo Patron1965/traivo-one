@@ -520,6 +520,7 @@ export function HomeScreen({ navigation }: any) {
     }
 
     async function startVoiceRecording() {
+      if (voiceRecording || isStoppingVoiceRef.current) return;
       setVoiceError(false);
       setVoiceTranscript('');
       localTranscriptRef.current = '';
@@ -792,14 +793,35 @@ export function HomeScreen({ navigation }: any) {
         ) : null}
       </View>
 
-      {weather && weather.warnings.length > 0 ? (
-        <View style={styles.weatherWarnings}>
-          {weather.warnings.map((w, i) => (
-            <View key={i} style={styles.weatherWarningBadge}>
-              <Feather name="alert-triangle" size={13} color={Colors.warning} />
-              <ThemedText variant="caption" color={Colors.warning}>{w}</ThemedText>
+      {weather ? (
+        <View style={styles.weatherSection}>
+          <View style={styles.weatherCurrent}>
+            <Feather name={weather.icon as any} size={18} color={Colors.primary} />
+            <ThemedText variant="body" style={styles.weatherTemp}>{weather.temperature}°C</ThemedText>
+            <ThemedText variant="caption" color={Colors.textMuted}>{weather.description}</ThemedText>
+            {weather.windSpeed > 0 ? (
+              <View style={styles.weatherDetail}>
+                <Feather name="wind" size={12} color={Colors.textMuted} />
+                <ThemedText variant="caption" color={Colors.textMuted}>{weather.windSpeed} m/s</ThemedText>
+              </View>
+            ) : null}
+            {weather.precipitation > 0 ? (
+              <View style={styles.weatherDetail}>
+                <Feather name="cloud-rain" size={12} color={Colors.textMuted} />
+                <ThemedText variant="caption" color={Colors.textMuted}>{weather.precipitation} mm</ThemedText>
+              </View>
+            ) : null}
+          </View>
+          {weather.warnings.length > 0 ? (
+            <View style={styles.weatherWarnings}>
+              {weather.warnings.map((w, i) => (
+                <View key={i} style={styles.weatherWarningBadge}>
+                  <Feather name="alert-triangle" size={13} color={Colors.warning} />
+                  <ThemedText variant="caption" color={Colors.warning}>{w}</ThemedText>
+                </View>
+              ))}
             </View>
-          ))}
+          ) : null}
         </View>
       ) : null}
 
@@ -1525,6 +1547,28 @@ const styles = StyleSheet.create({
     paddingHorizontal: Spacing.sm,
     paddingVertical: Spacing.xs,
     borderRadius: BorderRadius.round,
+  },
+  weatherSection: {
+    marginBottom: Spacing.sm,
+  },
+  weatherCurrent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.cardElevated,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.xs,
+  },
+  weatherTemp: {
+    fontWeight: '600' as const,
+    color: Colors.text,
+  },
+  weatherDetail: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   weatherWarnings: {
     flexDirection: 'row',
