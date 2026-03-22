@@ -540,6 +540,7 @@ export default function MyTasksPage() {
   const urgentOrders = orders.filter(order => 
     order.orderStatus !== "utford" && 
     order.orderStatus !== "fakturerad" &&
+    order.orderStatus !== "avbruten" &&
     order.priority === "high"
   );
 

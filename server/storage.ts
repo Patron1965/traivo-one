@@ -1361,7 +1361,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (status && status !== 'all') {
-      conditions.push(eq(workOrders.status, status));
+      conditions.push(eq(workOrders.orderStatus, status));
     }
 
     const whereClause = and(...conditions);
@@ -1489,7 +1489,7 @@ export class DatabaseStorage implements IStorage {
         isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, overdueFloor),
         lt(workOrders.scheduledDate, today),
-        notInArray(workOrders.status, ['completed', 'cancelled'])
+        notInArray(workOrders.orderStatus, ['utford', 'fakturerad'])
       ));
 
     // Count today's pending orders
@@ -1501,7 +1501,7 @@ export class DatabaseStorage implements IStorage {
         isNull(workOrders.deletedAt),
         gte(workOrders.scheduledDate, today),
         lt(workOrders.scheduledDate, tomorrow),
-        notInArray(workOrders.status, ['completed', 'cancelled'])
+        notInArray(workOrders.orderStatus, ['utford', 'fakturerad'])
       ));
 
     // Count total non-deleted orders

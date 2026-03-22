@@ -1442,7 +1442,7 @@ app.post("/api/checklist/:workOrderId/generate", asyncHandler(async (req, res) =
       .where(and(
         eq(workOrders.tenantId, workOrder.tenantId),
         eq(workOrders.orderType, workOrder.orderType),
-        eq(workOrders.status, "completed"),
+        eq(workOrders.orderStatus, "utford"),
       ))
       .orderBy(desc(workOrders.completedAt))
       .limit(10);
