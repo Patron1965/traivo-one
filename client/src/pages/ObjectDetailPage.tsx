@@ -1157,11 +1157,11 @@ export default function ObjectDetailPage() {
                           )}
                         </div>
                       </div>
-                      <Badge className={workOrderStatusColors[wo.status || "unassigned"] || workOrderStatusColors.unassigned}>
-                        {wo.status === "completed" ? "Klar" :
-                         wo.status === "scheduled" ? "Schemalagd" :
-                         wo.status === "in_progress" ? "Pågår" :
-                         wo.status === "cancelled" ? "Avbruten" : "Ej tilldelad"}
+                      <Badge className={workOrderStatusColors[wo.orderStatus || "skapad"] || workOrderStatusColors.unassigned}>
+                        {wo.orderStatus === "utford" ? "Klar" :
+                         wo.orderStatus === "planerad_resurs" ? "Planerad" :
+                         wo.orderStatus === "planerad_las" ? "Låst" :
+                         wo.orderStatus === "fakturerad" ? "Fakturerad" : "Skapad"}
                       </Badge>
                     </div>
                   ))}

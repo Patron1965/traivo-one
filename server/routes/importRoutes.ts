@@ -903,6 +903,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         
         const objectNumber = `MODUS-${modusId}`;
         
+        const hierarchyLevelMap: Record<number, string> = { 1: "omrade", 2: "fastighet", 3: "serviceenhet" };
         const objectFields = {
           customerId,
           parentId: null as string | null,
@@ -910,6 +911,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
           objectNumber,
           objectType,
           objectLevel,
+          hierarchyLevel: hierarchyLevelMap[objectLevel] || "serviceenhet",
           address: row["Adress 1"] || null,
           city: row["Ort"] || null,
           postalCode: row["Postnummer"] || null,

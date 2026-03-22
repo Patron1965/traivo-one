@@ -54,7 +54,7 @@ function getWeekDates() {
 
 function calcStats(orders: any[]): WeeklyKPIs {
   const completed = orders.filter(
-    (o) => o.completedAt || o.status === "completed" || o.executionStatus === "completed"
+    (o) => o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
   );
   const durations = completed
     .map((o) => o.actualDuration || o.estimatedDuration || 0)
@@ -88,7 +88,7 @@ function calcResourcePerformance(orders: any[], resources: any[]): ResourcePerfo
     }
     const entry = resourceMap.get(order.resourceId)!;
     entry.total++;
-    if (order.completedAt || order.status === "completed" || order.executionStatus === "completed") {
+    if (order.completedAt || order.orderStatus === "utford" || order.executionStatus === "completed") {
       entry.completed++;
       const dur = order.actualDuration || order.estimatedDuration || 0;
       if (dur > 0) entry.durations.push(dur);
@@ -121,7 +121,7 @@ function calcPriorityBreakdown(orders: any[]): PriorityBreakdown[] {
     if (!map.has(p)) map.set(p, { count: 0, completed: 0 });
     const entry = map.get(p)!;
     entry.count++;
-    if (order.completedAt || order.status === "completed" || order.executionStatus === "completed") {
+    if (order.completedAt || order.orderStatus === "utford" || order.executionStatus === "completed") {
       entry.completed++;
     }
   }

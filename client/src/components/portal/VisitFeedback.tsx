@@ -116,8 +116,8 @@ export function VisitFeedback({ workOrder, portalFetch }: VisitFeedbackProps) {
     },
   });
 
-  const isCompleted = ["utford", "completed", "inspected", "fakturerad", "invoiced"].includes(
-    workOrder.status || ""
+  const isCompleted = ["utford", "fakturerad"].includes(
+    workOrder.orderStatus || ""
   );
 
   if (!isCompleted) return null;

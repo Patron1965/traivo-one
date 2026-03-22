@@ -47,7 +47,7 @@ export function calculateRiskScore(
 
   const resourceHistoryCount = new Map<string, number>();
   for (const order of allOrders) {
-    if (order.resourceId && (order.status === "utford" || order.status === "fakturerad")) {
+    if (order.resourceId && (order.orderStatus === "utford" || order.orderStatus === "fakturerad")) {
       resourceHistoryCount.set(order.resourceId, (resourceHistoryCount.get(order.resourceId) || 0) + 1);
     }
   }

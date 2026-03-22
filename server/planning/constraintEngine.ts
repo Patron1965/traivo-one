@@ -334,7 +334,7 @@ function checkCapacityOverload(moves: ScheduleMove[], ctx: ConstraintContext): C
 
   for (const order of ctx.allOrders) {
     if (!order.resourceId || !order.scheduledDate) continue;
-    if (order.status === "fakturerad" || order.status === "utford") continue;
+    if (order.orderStatus === "fakturerad" || order.orderStatus === "utford") continue;
 
     const dateStr = order.scheduledDate instanceof Date
       ? order.scheduledDate.toISOString().split("T")[0]

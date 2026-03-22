@@ -1070,7 +1070,7 @@ export function AISuggestionsPanel({ weekStart, weekEnd, selectedDate, onApplySu
                             <Calendar className="h-3 w-3 flex-shrink-0" />
                             <span className="truncate">{order.title}</span>
                             <Badge variant="outline" className="text-xs flex-shrink-0">
-                              {order.status}
+                              {order.orderStatus}
                             </Badge>
                           </div>
                         ))}

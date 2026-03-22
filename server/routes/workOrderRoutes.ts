@@ -223,8 +223,8 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
 
   if (newResourceId && !isAssignmentChange && !isScheduleChange && !isPriorityChange) {
     const changes: string[] = [];
-    if (updateData.status && updateData.status !== existingOrder.status) {
-      changes.push(`status ändrad till ${updateData.status}`);
+    if (updateData.orderStatus && updateData.orderStatus !== existingOrder.orderStatus) {
+      changes.push(`status ändrad till ${updateData.orderStatus}`);
     }
     if (updateData.notes !== undefined && updateData.notes !== existingOrder.notes) {
       changes.push("anteckningar uppdaterade");
@@ -237,11 +237,11 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
     }
   }
 
-  const statusChanged = updateData.status && updateData.status !== existingOrder.status;
+  const statusChanged = updateData.orderStatus && updateData.orderStatus !== existingOrder.orderStatus;
   const execStatusChanged = updateData.executionStatus && updateData.executionStatus !== existingOrder.executionStatus;
   if (statusChanged || execStatusChanged) {
-    const oldSt = existingOrder.executionStatus || existingOrder.status;
-    const newSt = updateData.executionStatus || updateData.status || "";
+    const oldSt = existingOrder.executionStatus || existingOrder.orderStatus;
+    const newSt = updateData.executionStatus || updateData.orderStatus || "";
     handleWorkOrderStatusChange(workOrder.id, oldSt, newSt, tenantId).catch(err =>
       console.error("[ai-communication] Event hook error:", err)
     );

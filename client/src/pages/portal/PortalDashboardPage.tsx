@@ -927,7 +927,7 @@ export default function PortalDashboardPage() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-base">{order.title}</CardTitle>
-                        <StatusBadge status={order.status} />
+                        <StatusBadge status={order.orderStatus} />
                       </div>
                       {order.description && (
                         <CardDescription className="line-clamp-2">
@@ -993,7 +993,7 @@ export default function PortalDashboardPage() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-base">{order.title}</CardTitle>
-                        <StatusBadge status={order.status} />
+                        <StatusBadge status={order.orderStatus} />
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">

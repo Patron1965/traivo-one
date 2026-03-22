@@ -374,7 +374,7 @@ function RecentChanges({ orders }: { orders: WorkOrder[] }) {
           <CardContent>
             <div className="space-y-2">
               {recentlyChanged.map(order => {
-                const s = statusLabels[order.orderStatus || order.status] || { label: order.orderStatus || order.status, color: "bg-gray-100 text-gray-800" };
+                const s = statusLabels[order.orderStatus] || { label: order.orderStatus, color: "bg-gray-100 text-gray-800" };
                 return (
                   <div key={order.id} className="flex items-center gap-3 p-2 rounded-md hover:bg-muted/50 transition-colors" data-testid={`recent-change-${order.id}`}>
                     <div className="flex-1 min-w-0">
@@ -488,10 +488,10 @@ function TodaysOrdersList({
                 </span>
               </div>
             </div>
-            <Badge variant={order.status === "completed" ? "default" : "secondary"}>
-              {order.status === "completed" ? "Klar" : 
-               order.status === "in_progress" ? "Pågår" : 
-               order.status === "scheduled" ? "Planerad" : "Ny"}
+            <Badge variant={order.orderStatus === "utford" ? "default" : "secondary"}>
+              {order.orderStatus === "utford" ? "Klar" : 
+               order.orderStatus === "planerad_resurs" ? "Planerad" : 
+               order.orderStatus === "planerad_las" ? "Låst" : "Ny"}
             </Badge>
             {object && onViewObject && (
               <Button
@@ -538,8 +538,8 @@ export default function MyTasksPage() {
   });
 
   const urgentOrders = orders.filter(order => 
-    order.status !== "completed" && 
-    order.status !== "cancelled" &&
+    order.orderStatus !== "utford" && 
+    order.orderStatus !== "fakturerad" &&
     order.priority === "high"
   );
 

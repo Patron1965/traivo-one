@@ -383,9 +383,9 @@ export function JobDetailModal({ open, onClose, workOrderId }: JobDetailModalPro
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             Jobbdetaljer
-            {workOrder?.status && (
-              <Badge className={cn("ml-2", getStatusColor(workOrder.status))}>
-                {getStatusLabel(workOrder.status)}
+            {workOrder?.orderStatus && (
+              <Badge className={cn("ml-2", getStatusColor(workOrder.orderStatus))}>
+                {getStatusLabel(workOrder.orderStatus)}
               </Badge>
             )}
           </DialogTitle>

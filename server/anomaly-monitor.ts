@@ -114,9 +114,7 @@ class AnomalyMonitor {
       todayStart.setHours(0, 0, 0, 0);
 
       for (const order of orders) {
-        const completedStatuses = ["completed", "done", "cancelled", "invoiced"];
         const completedOrderStatuses = ["utford", "fakturerad", "avbruten"];
-        if (completedStatuses.includes(order.status || "")) continue;
         if (completedOrderStatuses.includes(order.orderStatus || "")) continue;
         if (order.completedAt) continue;
 
@@ -125,7 +123,7 @@ class AnomalyMonitor {
           const isToday = scheduledDate >= todayStart && 
                          scheduledDate < new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
           
-          if (isToday && order.status === "scheduled") {
+          if (isToday && (order.orderStatus === "planerad_resurs" || order.orderStatus === "planerad_las")) {
             // Check if past expected time using scheduledStartTime or plannedWindowStart
             let expectedStart: Date | null = null;
             

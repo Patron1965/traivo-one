@@ -434,6 +434,7 @@ export default function ObjectsPage() {
       objectNumber: `${objectToCopy.objectNumber}-COPY`,
       objectType: objectToCopy.objectType,
       objectLevel: objectToCopy.objectLevel,
+      hierarchyLevel: objectToCopy.hierarchyLevel,
       address: objectToCopy.address,
       city: objectToCopy.city,
       postalCode: objectToCopy.postalCode,

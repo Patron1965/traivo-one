@@ -342,7 +342,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     if (!wo.scheduledDate) return false;
     if (resourceId && wo.resourceId !== resourceId) return false;
     const scheduled = new Date(wo.scheduledDate);
-    return scheduled >= todayStart && scheduled <= todayEnd && wo.status !== "completed";
+    return scheduled >= todayStart && scheduled <= todayEnd && wo.orderStatus !== "utford";
   }).sort((a, b) => {
     const timeA = a.scheduledStartTime || "00:00";
     const timeB = b.scheduledStartTime || "00:00";
@@ -401,7 +401,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     if (!wo.scheduledDate) return false;
     if (resourceId && wo.resourceId !== resourceId) return false;
     const scheduled = new Date(wo.scheduledDate);
-    return scheduled >= todayStart && scheduled <= todayEnd && wo.status === "completed";
+    return scheduled >= todayStart && scheduled <= todayEnd && wo.orderStatus === "utford";
   }).length;
 
   const selectedJob = selectedJobId ? workOrders.find(wo => wo.id === selectedJobId) : null;

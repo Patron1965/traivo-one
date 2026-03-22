@@ -248,24 +248,19 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     const updateData: any = {};
     
     if (status === 'paborjad' || status === 'in_progress') {
-      updateData.status = 'in_progress';
       updateData.orderStatus = 'planerad_resurs';
       updateData.executionStatus = 'on_site';
       updateData.onSiteAt = new Date();
     } else if (status === 'en_route') {
-      updateData.status = 'in_progress';
       updateData.executionStatus = 'on_way';
       updateData.onWayAt = new Date();
     } else if (status === 'planned') {
-      updateData.status = 'planned';
       updateData.executionStatus = 'planned_fine';
     } else if (status === 'utford' || status === 'completed') {
-      updateData.status = 'completed';
       updateData.orderStatus = 'utford';
       updateData.executionStatus = 'completed';
       updateData.completedAt = new Date();
     } else if (status === 'ej_utford' || status === 'deferred') {
-      updateData.status = 'deferred';
       updateData.orderStatus = 'skapad';
       if (notes) {
         updateData.notes = order.notes 
@@ -273,7 +268,6 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
           : `Uppskjuten: ${notes}`;
       }
     } else if (status === 'cancelled') {
-      updateData.status = 'cancelled';
       updateData.orderStatus = 'skapad';
       if (notes) {
         updateData.notes = order.notes 
@@ -288,7 +282,7 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     
     const mobileTenantId = order.tenantId;
     if (mobileTenantId) {
-      handleWorkOrderStatusChange(orderId, order.status, status, mobileTenantId).catch(err =>
+      handleWorkOrderStatusChange(orderId, order.orderStatus, status, mobileTenantId).catch(err =>
         console.error("[ai-communication] Mobile event hook error:", err)
       );
     }
@@ -414,7 +408,7 @@ async function enrichOrderForMobile(order: any, storage: any) {
       return {
         orderId: dep.dependsOnWorkOrderId,
         orderNumber: depOrder?.title || dep.dependsOnWorkOrderId,
-        status: depOrder?.status || "unknown",
+        status: depOrder?.orderStatus || "unknown",
         type: dep.dependencyType === "sequential" ? "must_complete_first" : dep.dependencyType,
       };
     })
@@ -471,7 +465,7 @@ async function enrichOrderForMobile(order: any, storage: any) {
   return {
     id: order.id,
     orderNumber: order.title || `WO-${order.id.substring(0, 8)}`,
-    status: order.status,
+    status: order.orderStatus,
     executionStatus: order.executionStatus,
     customerName: customer?.name || "",
     address: object?.address || "",
@@ -776,7 +770,7 @@ app.get("/api/mobile/summary", isMobileAuthenticated, asyncHandler(async (req: a
       return d >= today && d < tomorrow;
     });
 
-    const completedOrders = todayOrders.filter(o => o.status === "completed").length;
+    const completedOrders = todayOrders.filter(o => o.orderStatus === "utford" || o.executionStatus === "completed").length;
     const totalDuration = todayOrders.reduce((sum, o) => sum + (o.estimatedDuration || 0), 0);
 
     res.json({
@@ -966,7 +960,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
               results.push({ clientId, status: "error", error });
               break;
             }
-            await storage.updateWorkOrder(orderId, { status: newStatus });
+            await storage.updateWorkOrder(orderId, { orderStatus: newStatus });
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;

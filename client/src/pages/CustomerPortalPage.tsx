@@ -430,9 +430,9 @@ export default function CustomerPortalPage() {
                             </div>
                             <Badge 
                               variant="secondary"
-                              className={`${orderStatusColors[order.status]} text-white`}
+                              className={`${orderStatusColors[order.orderStatus]} text-white`}
                             >
-                              {orderStatusLabels[order.status]}
+                              {orderStatusLabels[order.orderStatus]}
                             </Badge>
                           </div>
                           <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">

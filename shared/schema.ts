@@ -230,7 +230,7 @@ export const workOrders = pgTable("work_orders", {
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   objectId: varchar("object_id").references(() => objects.id).notNull(),
   // Kluster som ordern tillhör (ärvs från objekt eller sätts manuellt)
-  clusterId: varchar("cluster_id"),
+  clusterId: varchar("cluster_id").references(() => clusters.id, { onDelete: 'set null' }),
   resourceId: varchar("resource_id").references(() => resources.id),
   // Team för förplanering (innan specifik resurs är tilldelad)
   teamId: varchar("team_id").references(() => teams.id),
@@ -3602,9 +3602,9 @@ export interface ExecutedAction {
 export const environmentalData = pgTable("environmental_data", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  workOrderId: varchar("work_order_id").notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: 'set null' }),
   resourceId: varchar("resource_id").references(() => resources.id),
-  vehicleId: varchar("vehicle_id"),
+  vehicleId: varchar("vehicle_id").references(() => vehicles.id, { onDelete: 'set null' }),
   // Körsträcka
   distanceKm: real("distance_km"),
   odometerStart: integer("odometer_start"),
@@ -3668,7 +3668,7 @@ export interface ChemicalUsage {
 export const visitConfirmations = pgTable("visit_confirmations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  workOrderId: varchar("work_order_id").notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id, { onDelete: 'set null' }),
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   confirmedAt: timestamp("confirmed_at").defaultNow().notNull(),
   confirmationStatus: text("confirmation_status").default("confirmed").notNull(), // confirmed, disputed
