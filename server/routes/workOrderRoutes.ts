@@ -9,7 +9,7 @@ import { insertWorkOrderSchema, insertWorkOrderLineSchema, ORDER_STATUSES, type 
 import { handleWorkOrderStatusChange } from "../ai-communication";
 import { notificationService } from "../notifications";
 import { asyncHandler } from "../asyncHandler";
-import { NotFoundError, ValidationError, ConflictError } from "../errors";
+import { NotFoundError, ValidationError, ConflictError, ForbiddenError } from "../errors";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
 
 export async function registerWorkOrderRoutes(app: Express) {
@@ -92,19 +92,21 @@ app.get("/api/resources/:resourceId/work-orders", asyncHandler(async (req, res) 
   res.json(workOrders);
 }));
 
+const bulkUnscheduleSchema = z.object({
+  startDate: z.string().min(1, "startDate krävs"),
+  endDate: z.string().min(1, "endDate krävs"),
+  resourceIds: z.array(z.string()).optional(),
+});
+
 app.post("/api/work-orders/bulk-unschedule", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
-  const { startDate, endDate, resourceIds } = req.body;
-  if (!startDate || !endDate) {
-    throw new ValidationError("startDate and endDate are required");
-  }
+  const parsed = bulkUnscheduleSchema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+  const { startDate, endDate, resourceIds } = parsed.data;
   const parsedStart = new Date(startDate);
   const parsedEnd = new Date(endDate);
   if (isNaN(parsedStart.getTime()) || isNaN(parsedEnd.getTime())) {
     throw new ValidationError("Ogiltigt datumformat");
-  }
-  if (resourceIds && (!Array.isArray(resourceIds) || resourceIds.some((id: unknown) => typeof id !== "string"))) {
-    throw new ValidationError("resourceIds must be an array of strings");
   }
   const count = await storage.bulkUnscheduleWorkOrders(tenantId, parsedStart, parsedEnd, resourceIds);
   res.json({ count });
@@ -551,15 +553,27 @@ app.post("/api/simulation-scenarios/:id/clone-orders", asyncHandler(async (req, 
     throw new NotFoundError("Simuleringscenario");
   }
 
-  if (!Array.isArray(orderIds) || orderIds.some((id: unknown) => typeof id !== "string")) {
-    throw new ValidationError("orderIds måste vara en array av strängar");
+  const cloneSchema = z.object({
+    orderIds: z.array(z.string().min(1)).min(1, "Minst en order krävs"),
+  });
+  const parsed = cloneSchema.safeParse(req.body);
+  if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+  const validatedOrderIds = parsed.data.orderIds;
+
+  const originals = await Promise.all(validatedOrderIds.map(id => storage.getWorkOrder(id)));
+  for (let i = 0; i < validatedOrderIds.length; i++) {
+    const original = originals[i];
+    if (!original) {
+      throw new NotFoundError(`Order ${validatedOrderIds[i]} hittades inte`);
+    }
+    if (original.tenantId !== tenantId) {
+      throw new ForbiddenError(`Order ${validatedOrderIds[i]} tillhör inte din organisation`);
+    }
   }
 
   const clonedOrders = [];
-  for (const orderId of orderIds) {
-    const original = await storage.getWorkOrder(orderId);
+  for (const original of originals) {
     if (!original) continue;
-    if (original.tenantId !== tenantId) continue;
 
     const clonedOrder = await storage.createWorkOrder({
       tenantId,
@@ -580,7 +594,7 @@ app.post("/api/simulation-scenarios/:id/clone-orders", asyncHandler(async (req, 
       metadata: original.metadata as Record<string, unknown> | undefined
     });
 
-    const lines = await storage.getWorkOrderLines(orderId);
+    const lines = await storage.getWorkOrderLines(original.id);
     for (const line of lines) {
       await storage.createWorkOrderLine({
         tenantId,
