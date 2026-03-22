@@ -167,7 +167,7 @@ app.get("/api/planner/orders", isAuthenticated, asyncHandler(async (req, res) =>
         return {
           id: order.id,
           orderNumber: order.title || `WO-${order.id.substring(0, 8)}`,
-          status: order.status,
+          status: order.orderStatus || order.status,
           customerName: customer?.name || "",
           address: object?.address || "",
           latitude: object?.latitude || order.taskLatitude,
@@ -240,7 +240,7 @@ app.get("/api/planner/routes", isAuthenticated, asyncHandler(async (req, res) =>
         latitude: obj?.latitude || order.taskLatitude,
         longitude: obj?.longitude || order.taskLongitude,
         scheduledTimeStart: order.scheduledStartTime,
-        status: order.status,
+        status: order.orderStatus || order.status,
         sequence: order.sequenceNumber || 0,
       });
     }

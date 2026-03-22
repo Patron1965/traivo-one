@@ -136,10 +136,11 @@ export function OrderDetailsScreen() {
     );
   }
 
-  const canStart = order.status === 'scheduled' || order.status === 'draft';
-  const canComplete = order.status === 'in_progress';
-  const isCompleted = order.status === 'completed';
-  const isCancelled = order.status === 'cancelled';
+  const status = order.orderStatus || order.status;
+  const canStart = status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad' || status === 'scheduled' || status === 'draft';
+  const canComplete = status === 'planerad_resurs' || status === 'planerad_las' || status === 'in_progress';
+  const isCompleted = status === 'utford' || status === 'completed';
+  const isCancelled = status === 'avbruten' || status === 'cancelled';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>

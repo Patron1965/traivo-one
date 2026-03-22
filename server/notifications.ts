@@ -312,7 +312,7 @@ class NotificationService {
       data: {
         scheduledDate: order.scheduledDate,
         scheduledStartTime: order.scheduledStartTime,
-        status: order.status
+        status: order.orderStatus || order.status
       }
     });
   }
