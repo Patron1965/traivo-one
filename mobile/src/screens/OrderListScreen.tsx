@@ -23,18 +23,12 @@ function getStatusColor(status: string): string {
     case 'planerad_resurs':
     case 'planerad_las':
     case 'planerad_pre':
-    case 'scheduled':
       return '#2563eb';
-    case 'in_progress':
-      return '#f59e0b';
     case 'utford':
-    case 'completed':
       return '#10b981';
     case 'avbruten':
-    case 'cancelled':
       return '#ef4444';
     case 'skapad':
-    case 'draft':
       return '#6b7280';
     case 'fakturerad':
       return '#8b5cf6';
@@ -50,18 +44,12 @@ function getStatusText(status: string): string {
     case 'planerad_resurs':
     case 'planerad_las':
     case 'planerad_pre':
-    case 'scheduled':
       return 'Planerad';
-    case 'in_progress':
-      return 'Påbörjad';
     case 'utford':
-    case 'completed':
       return 'Utförd';
     case 'avbruten':
-    case 'cancelled':
       return 'Ej utförd';
     case 'skapad':
-    case 'draft':
       return 'Utkast';
     case 'fakturerad':
       return 'Fakturerad';
@@ -73,7 +61,7 @@ function getStatusText(status: string): string {
 }
 
 function OrderCard({ order, onPress }: { order: WorkOrder; onPress: () => void }) {
-  const statusColor = getStatusColor(order.orderStatus || order.status);
+  const statusColor = getStatusColor(order.orderStatus);
   
   return (
     <TouchableOpacity style={styles.card} onPress={onPress}>
@@ -82,7 +70,7 @@ function OrderCard({ order, onPress }: { order: WorkOrder; onPress: () => void }
           {order.title}
         </Text>
         <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-          <Text style={styles.statusText}>{getStatusText(order.orderStatus || order.status)}</Text>
+          <Text style={styles.statusText}>{getStatusText(order.orderStatus)}</Text>
         </View>
       </View>
       

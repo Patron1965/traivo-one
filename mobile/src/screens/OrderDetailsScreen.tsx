@@ -136,11 +136,11 @@ export function OrderDetailsScreen() {
     );
   }
 
-  const status = order.orderStatus || order.status;
-  const canStart = status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad' || status === 'scheduled' || status === 'draft';
-  const canComplete = status === 'planerad_resurs' || status === 'planerad_las' || status === 'in_progress';
-  const isCompleted = status === 'utford' || status === 'completed';
-  const isCancelled = status === 'avbruten' || status === 'cancelled';
+  const status = order.orderStatus;
+  const canStart = status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad';
+  const canComplete = status === 'planerad_resurs' || status === 'planerad_las';
+  const isCompleted = status === 'utford';
+  const isCancelled = status === 'avbruten';
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
