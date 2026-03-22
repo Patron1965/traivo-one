@@ -79,16 +79,14 @@ async function portalFetch(url: string, options: RequestInit = {}) {
 
 function StatusBadge({ status }: { status: string }) {
   const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "outline" | "destructive" }> = {
-    planerad: { label: "Planerad", variant: "secondary" },
-    planned: { label: "Planerad", variant: "secondary" },
-    planned_rough: { label: "Grovplanerad", variant: "secondary" },
-    planned_fine: { label: "Finplanerad", variant: "secondary" },
-    on_way: { label: "På väg", variant: "default" },
-    on_site: { label: "På plats", variant: "default" },
+    skapad: { label: "Skapad", variant: "secondary" },
+    planerad_pre: { label: "Förplanerad", variant: "secondary" },
+    planerad_resurs: { label: "Planerad", variant: "default" },
+    planerad_las: { label: "Låst", variant: "default" },
     utford: { label: "Utförd", variant: "outline" },
-    completed: { label: "Utförd", variant: "outline" },
     fakturerad: { label: "Fakturerad", variant: "outline" },
-    invoiced: { label: "Fakturerad", variant: "outline" },
+    omojlig: { label: "Omöjlig", variant: "destructive" },
+    avbruten: { label: "Avbruten", variant: "destructive" },
   };
 
   const config = statusMap[status] || { label: status, variant: "secondary" as const };
@@ -927,7 +925,7 @@ export default function PortalDashboardPage() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-base">{order.title}</CardTitle>
-                        <StatusBadge status={order.orderStatus} />
+                        <StatusBadge status={order.status} />
                       </div>
                       {order.description && (
                         <CardDescription className="line-clamp-2">
@@ -993,7 +991,7 @@ export default function PortalDashboardPage() {
                     <CardHeader className="pb-2">
                       <div className="flex items-start justify-between gap-2">
                         <CardTitle className="text-base">{order.title}</CardTitle>
-                        <StatusBadge status={order.orderStatus} />
+                        <StatusBadge status={order.status} />
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">

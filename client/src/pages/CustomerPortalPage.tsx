@@ -42,23 +42,25 @@ function createPickupIcon() {
 }
 
 const orderStatusLabels: Record<string, string> = {
-  pending: "Väntar",
-  scheduled: "Schemalagd",
-  assigned: "Tilldelad",
-  in_progress: "Pågår",
-  completed: "Utförd",
-  cancelled: "Avbruten",
-  invoiced: "Fakturerad",
+  skapad: "Skapad",
+  planerad_pre: "Förplanerad",
+  planerad_resurs: "Planerad",
+  planerad_las: "Låst",
+  utford: "Utförd",
+  fakturerad: "Fakturerad",
+  omojlig: "Omöjlig",
+  avbruten: "Avbruten",
 };
 
 const orderStatusColors: Record<string, string> = {
-  pending: "bg-gray-500",
-  scheduled: "bg-blue-500",
-  assigned: "bg-indigo-500",
-  in_progress: "bg-amber-500",
-  completed: "bg-green-500",
-  cancelled: "bg-red-500",
-  invoiced: "bg-emerald-600",
+  skapad: "bg-gray-500",
+  planerad_pre: "bg-blue-400",
+  planerad_resurs: "bg-blue-500",
+  planerad_las: "bg-indigo-500",
+  utford: "bg-green-500",
+  fakturerad: "bg-emerald-600",
+  omojlig: "bg-red-600",
+  avbruten: "bg-red-500",
 };
 
 export default function CustomerPortalPage() {
