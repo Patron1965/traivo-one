@@ -1335,7 +1335,6 @@ export class DatabaseStorage implements IStorage {
         scheduledDate: null,
         scheduledStartTime: null,
         resourceId: null,
-        status: "draft",
         orderStatus: "skapad",
       })
       .where(and(...conditions))
