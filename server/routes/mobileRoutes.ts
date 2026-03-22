@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES } from "@shared/schema";
 import { notificationService } from "../notifications";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
@@ -960,7 +960,15 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
               results.push({ clientId, status: "error", error });
               break;
             }
-            await storage.updateWorkOrder(orderId, { orderStatus: newStatus });
+            const legacyToOrderStatus: Record<string, string> = {
+              completed: "utford", in_progress: "planerad_resurs",
+              scheduled: "planerad_resurs", cancelled: "skapad",
+              deferred: "skapad", draft: "skapad", planned: "planerad_resurs",
+            };
+            const normalizedStatus = ORDER_STATUSES.includes(newStatus as any)
+              ? newStatus
+              : legacyToOrderStatus[newStatus] || "skapad";
+            await storage.updateWorkOrder(orderId, { orderStatus: normalizedStatus });
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;
