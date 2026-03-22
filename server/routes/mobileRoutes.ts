@@ -1471,7 +1471,7 @@ app.post("/api/checklist/:workOrderId/generate", asyncHandler(async (req, res) =
 Ordertyp: ${workOrder.orderType}
 Titel: ${workOrder.title}
 ${workOrder.description ? `Beskrivning: ${workOrder.description}` : ""}
-Status: ${workOrder.status}
+Status: ${workOrder.orderStatus}
 
 ${similarOrders.length > 0 ? `Historik från ${similarOrders.length} liknande jobb:
 ${similarOrders.map((o, i) => `${i + 1}. ${o.title}${o.notes ? ` — ${o.notes}` : ""}`).join("\n")}` : ""}

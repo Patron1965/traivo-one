@@ -207,7 +207,7 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
           return JSON.stringify(todaysOrders.map(o => ({
             id: o.id,
             titel: o.title || o.description,
-            status: o.status === "completed" ? "Klar" : o.status === "in_progress" ? "Pågår" : "Planerad",
+            status: o.orderStatus === "utford" ? "Klar" : o.orderStatus === "planerad_resurs" ? "Pågår" : "Planerad",
             tid: o.scheduledStartTime,
             plats: o.objectId ? (objectMap.get(o.objectId)?.name || objectMap.get(o.objectId)?.address) : "Okänd",
             adress: o.objectId ? objectMap.get(o.objectId)?.address : null,
@@ -228,12 +228,12 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
           
           return JSON.stringify({
             totalt: weekOrders.length,
-            klara: weekOrders.filter(o => o.status === "completed").length,
-            kvar: weekOrders.filter(o => o.status !== "completed").length,
+            klara: weekOrders.filter(o => o.orderStatus === "utford").length,
+            kvar: weekOrders.filter(o => o.orderStatus !== "utford").length,
             ordrar: weekOrders.slice(0, 10).map(o => ({
               titel: o.title || o.description,
               datum: o.scheduledDate,
-              status: o.status,
+              status: o.orderStatus,
               plats: o.objectId ? objectMap.get(o.objectId)?.name : null
             }))
           });
@@ -244,7 +244,7 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
           const objects = await storage.getObjects(tenantId);
           const objectMap = new Map(objects.map(o => [o.id, o]));
           
-          const pending = orders.filter(o => o.status !== "completed" && o.status !== "cancelled");
+          const pending = orders.filter(o => o.orderStatus !== "utford" && o.orderStatus !== "avbruten");
           return JSON.stringify({
             antal: pending.length,
             ordrar: pending.slice(0, 15).map(o => ({
@@ -261,7 +261,7 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
           const objects = await storage.getObjects(tenantId);
           const objectMap = new Map(objects.map(o => [o.id, o]));
           
-          const urgent = orders.filter(o => o.priority === "high" && o.status !== "completed" && o.status !== "cancelled");
+          const urgent = orders.filter(o => o.priority === "high" && o.orderStatus !== "utford" && o.orderStatus !== "avbruten");
           return JSON.stringify({
             antal: urgent.length,
             ordrar: urgent.map(o => ({
@@ -346,8 +346,8 @@ app.post("/api/ai/field-assistant", asyncHandler(async (req, res) => {
             storage.getClusters(tenantId)
           ]);
           
-          const completed = orders.filter(o => o.status === "completed").length;
-          const pending = orders.filter(o => o.status !== "completed" && o.status !== "cancelled").length;
+          const completed = orders.filter(o => o.orderStatus === "utford").length;
+          const pending = orders.filter(o => o.orderStatus !== "utford" && o.orderStatus !== "avbruten").length;
           
           return JSON.stringify({
             ordrar: { totalt: orders.length, klara: completed, väntande: pending },
@@ -502,7 +502,7 @@ const handlePredictiveMaintenance = async (req: any, res: any) => {
     objects.forEach(obj => {
       const objectOrders = orders.filter(o => 
         o.objectId === obj.id && 
-        (o.status === "completed" || o.status === "utford" || o.status === "fakturerad")
+        (o.orderStatus === "utford" || o.orderStatus === "fakturerad")
       ).sort((a, b) => {
         const dateA = a.completedAt ? new Date(a.completedAt).getTime() : 0;
         const dateB = b.completedAt ? new Date(b.completedAt).getTime() : 0;
@@ -608,7 +608,7 @@ app.post("/api/ai/service-patterns", isAuthenticated, asyncHandler(async (req, r
 
     for (const obj of allObjects) {
       const objOrders = orders
-        .filter(o => o.objectId === obj.id && (o.completedAt || o.status === "completed" || o.orderStatus === "utford"))
+        .filter(o => o.objectId === obj.id && (o.completedAt || o.orderStatus === "utford"))
         .sort((a, b) => {
           const da = a.completedAt ? new Date(a.completedAt).getTime() : 0;
           const db = b.completedAt ? new Date(b.completedAt).getTime() : 0;
@@ -773,7 +773,7 @@ app.post("/api/ai/planning-suggestions", asyncHandler(async (req, res) => {
     const resolvedWeekStart = weekStart || new Date().toISOString().split("T")[0];
     const resolvedWeekEnd = weekEnd || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-    const orderStateHash = workOrders.map(o => `${o.id}:${o.status}:${o.scheduledDate || ''}:${o.resourceId || ''}`).join('|');
+    const orderStateHash = workOrders.map(o => `${o.id}:${o.orderStatus}:${o.scheduledDate || ''}:${o.resourceId || ''}`).join('|');
     const resourceStateHash = resources.map(r => `${r.id}:${r.isActive}`).join('|');
     const cacheKey = createAICacheKey({ tenantId, weekStart: resolvedWeekStart, weekEnd: resolvedWeekEnd, orderState: orderStateHash, resourceState: resourceStateHash });
     const cachedResult = getCachedAIResponse(cacheKey);
@@ -822,7 +822,7 @@ app.get("/api/ai/planning-analysis", asyncHandler(async (req, res) => {
 
     const kpis = calculatePlanningKPIs(workOrders, resources, clusters, setupTimeLogs);
 
-    const activeOrders = workOrders.filter(o => o.status !== "fakturerad" && !o.deletedAt);
+    const activeOrders = workOrders.filter(o => o.orderStatus !== "fakturerad" && !o.deletedAt);
     const weekOrders = activeOrders.filter(o => {
       if (!o.scheduledDate) return false;
       const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
@@ -1157,7 +1157,7 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     
     // Only include unexecuted orders
     filteredOrders = filteredOrders.filter(o => 
-      o.status !== "executed" && o.status !== "invoiced"
+      o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
     
     const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters);
@@ -1182,10 +1182,8 @@ app.get("/api/ai/route-recommendations", asyncHandler(async (req, res) => {
     const todayWeather = weather.forecasts.find(f => f.date === date);
     const todayImpact = weather.impacts.find(i => i.date === date);
     
-    // Filter today's orders - check both legacy status and new orderStatus fields
     const isCompleted = (o: typeof workOrders[0]) => 
-      o.orderStatus === "utford" || o.orderStatus === "fakturerad" ||
-      o.status === "utford" || o.status === "fakturerad";
+      o.orderStatus === "utford" || o.orderStatus === "fakturerad";
     
     const todaysOrders = workOrders.filter(o => {
       if (!o.scheduledDate) return false;
@@ -2952,7 +2950,7 @@ app.post("/api/ai/auto-distribute-today", isAuthenticated, asyncHandler(async (r
     const activeResources = allResources.filter(r => r.status === "active" && r.resourceType === "person");
 
     const unplannedToday = allOrders.filter(o => {
-      if (o.status === "completed" || o.status === "cancelled" || o.status === "utford" || o.status === "fakturerad") return false;
+      if (o.orderStatus === "utford" || o.orderStatus === "avbruten" || o.orderStatus === "fakturerad") return false;
       if (o.resourceId) return false;
       if (!o.scheduledDate) return true;
       const dateStr = o.scheduledDate instanceof Date

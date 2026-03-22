@@ -222,7 +222,7 @@ app.get("/api/portal/orders", asyncHandler(async (req, res) => {
         id: order.id,
         title: order.title,
         description: order.description,
-        status: order.orderStatus || order.status,
+        status: order.orderStatus,
         scheduledDate: order.scheduledDate,
         scheduledTime: order.scheduledStartTime,
         completedAt: order.completedAt,
@@ -233,7 +233,7 @@ app.get("/api/portal/orders", asyncHandler(async (req, res) => {
     });
 
     const upcoming = enrichedOrders
-      .filter(o => !["utford", "fakturerad", "completed", "invoiced"].includes(o.status))
+      .filter(o => !["utford", "fakturerad"].includes(o.status))
       .sort((a, b) => {
         if (!a.scheduledDate) return 1;
         if (!b.scheduledDate) return -1;
@@ -241,7 +241,7 @@ app.get("/api/portal/orders", asyncHandler(async (req, res) => {
       });
 
     const history = enrichedOrders
-      .filter(o => ["utford", "fakturerad", "completed", "invoiced"].includes(o.status))
+      .filter(o => ["utford", "fakturerad"].includes(o.status))
       .sort((a, b) => {
         if (!a.completedAt) return 1;
         if (!b.completedAt) return -1;
@@ -679,7 +679,7 @@ app.get("/api/portal/visit-protocols", asyncHandler(async (req, res) => {
     const workOrders = await storage.getWorkOrders(session.tenantId!);
     const customerOrders = workOrders.filter(
       o => o.customerId === session.customerId && 
-      ["utford", "fakturerad", "completed", "invoiced"].includes(o.orderStatus || o.status)
+      ["utford", "fakturerad"].includes(o.orderStatus || "")
     );
 
     const protocols = customerOrders
@@ -692,7 +692,7 @@ app.get("/api/portal/visit-protocols", asyncHandler(async (req, res) => {
         completedAt: o.completedAt,
         objectName: o.objectName,
         objectAddress: o.objectAddress,
-        status: o.orderStatus || o.status,
+        status: o.orderStatus,
       }))
       .sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime())
       .slice(0, 50);
@@ -778,7 +778,7 @@ app.get("/api/portal/customer/:customerId/orders", asyncHandler(async (req, res)
         id: order.id,
         title: order.title,
         description: order.description,
-        status: order.orderStatus || order.status,
+        status: order.orderStatus,
         scheduledDate: order.scheduledDate,
         scheduledTime: order.scheduledStartTime,
         completedAt: order.completedAt,
@@ -1053,7 +1053,7 @@ app.get("/api/portal/work-order-chat/:workOrderId", asyncHandler(async (req, res
         id: workOrder.id,
         title: workOrder.title,
         scheduledDate: workOrder.scheduledDate,
-        status: workOrder.orderStatus || workOrder.status,
+        status: workOrder.orderStatus,
       },
       resource: resource ? {
         id: resource.id,

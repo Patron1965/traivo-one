@@ -112,8 +112,8 @@ export function calculatePlanningKPIs(
     return completedAt >= thirtyDaysAgo;
   });
   
-  const completedOrders = recentOrders.filter(o => o.status === "utford" || o.status === "fakturerad");
-  const allActiveOrders = workOrders.filter(o => o.status !== "fakturerad");
+  const completedOrders = recentOrders.filter(o => o.orderStatus === "utford" || o.orderStatus === "fakturerad");
+  const allActiveOrders = workOrders.filter(o => o.orderStatus !== "fakturerad");
   
   // === Ställtidsberäkningar ===
   const setupTimeByCluster: Record<string, { total: number; count: number }> = {};
@@ -335,7 +335,7 @@ function getOrderDuration(order: WorkOrder): number {
 }
 
 function buildContextPrompt(context: PlanningContext): string {
-  const validOrders = context.workOrders.filter(o => o.status !== "fakturerad" && o.status !== "utford");
+  const validOrders = context.workOrders.filter(o => o.orderStatus !== "fakturerad" && o.orderStatus !== "utford");
   const scheduledOrders = validOrders.filter(o => o.scheduledDate && o.resourceId);
   const unscheduledOrders = validOrders.filter(o => !o.scheduledDate || !o.resourceId);
   
@@ -732,7 +732,7 @@ export async function autoScheduleOrders(
   context: PlanningContext
 ): Promise<AutoScheduleResult> {
   const validOrders = context.workOrders.filter(
-    o => o.status !== "fakturerad" && o.status !== "utford"
+    o => o.orderStatus !== "fakturerad" && o.orderStatus !== "utford"
   );
   const unscheduledOrders = validOrders.filter(
     o => !o.scheduledDate || !o.resourceId
@@ -860,7 +860,7 @@ export function analyzeWorkloadImbalances(context: PlanningContext): WorkloadAna
   const weekEndDate = new Date(context.weekEnd);
   
   const validOrders = context.workOrders.filter(o => {
-    if (o.status === "fakturerad" || o.status === "utford") return false;
+    if (o.orderStatus === "fakturerad" || o.orderStatus === "utford") return false;
     if (!o.scheduledDate || !o.resourceId) return false;
     
     const orderDate = o.scheduledDate instanceof Date 
@@ -1109,7 +1109,7 @@ export async function aiEnhancedSchedule(
   }
 
   const validOrders = context.workOrders.filter(
-    o => o.status !== "fakturerad" && o.status !== "utford"
+    o => o.orderStatus !== "fakturerad" && o.orderStatus !== "utford"
   );
   const scheduledOrders = validOrders.filter(o => o.scheduledDate && o.resourceId);
 
@@ -1333,7 +1333,7 @@ async function autoScheduleOrdersWithWeather(
   weatherImpacts: WeatherImpact[]
 ): Promise<AutoScheduleResult> {
   const validOrders = context.workOrders.filter(
-    o => o.status !== "fakturerad" && o.status !== "utford" && o.status !== "completed"
+    o => o.orderStatus !== "fakturerad" && o.orderStatus !== "utford"
   );
   const unscheduledOrders = validOrders.filter(
     o => !o.scheduledDate || !o.resourceId
@@ -2807,7 +2807,7 @@ export async function processConversationalPlannerQueryV2(
         const overdue = workOrders.filter(o => {
           if (!o.scheduledDate) return false;
           const d = o.scheduledDate instanceof Date ? o.scheduledDate.toISOString().split("T")[0] : String(o.scheduledDate);
-          return d < today && o.status !== "completed" && o.status !== "utford" && o.status !== "fakturerad";
+          return d < today && o.orderStatus !== "utford" && o.orderStatus !== "fakturerad";
         }).slice(0, 20);
         return JSON.stringify(overdue.map(o => ({
           id: o.id, title: o.title, scheduledDate: o.scheduledDate, resourceName: o.resourceId ? resourceMap.get(o.resourceId) : null
@@ -2830,7 +2830,7 @@ export async function processConversationalPlannerQueryV2(
         if (!resource) return JSON.stringify({ error: `Resursen "${args.resourceName}" hittades inte` });
         const rOrders = weekOrders.filter(o => o.resourceId === resource.id).slice(0, 30);
         return JSON.stringify(rOrders.map(o => ({
-          id: o.id, title: o.title, scheduledDate: o.scheduledDate, status: o.status, priority: o.priority
+          id: o.id, title: o.title, scheduledDate: o.scheduledDate, status: o.orderStatus, priority: o.priority
         })));
       }
       case "get_orders_by_day": {
@@ -2839,7 +2839,7 @@ export async function processConversationalPlannerQueryV2(
           return d === args.date;
         }).slice(0, 30);
         return JSON.stringify(dayOrders.map(o => ({
-          id: o.id, title: o.title, resourceName: o.resourceId ? resourceMap.get(o.resourceId) : null, status: o.status
+          id: o.id, title: o.title, resourceName: o.resourceId ? resourceMap.get(o.resourceId) : null, status: o.orderStatus
         })));
       }
       case "suggest_reschedule": {
@@ -2856,7 +2856,7 @@ export async function processConversationalPlannerQueryV2(
       }
       case "get_weekly_summary": {
         const byStatus: Record<string, number> = {};
-        weekOrders.forEach(o => { byStatus[o.status] = (byStatus[o.status] || 0) + 1; });
+        weekOrders.forEach(o => { byStatus[o.orderStatus || "skapad"] = (byStatus[o.orderStatus || "skapad"] || 0) + 1; });
         const unplanned = workOrders.filter(o => !o.scheduledDate || !o.resourceId).length;
         return JSON.stringify({
           totalThisWeek: weekOrders.length,
@@ -2963,8 +2963,8 @@ export async function processConversationalPlannerQuery(
   
   // Calculate statistics
   const delayedOrders = weekOrders.filter(o => 
-    o.status === "paborjad" || 
-    (o.scheduledDate && new Date(o.scheduledDate) < new Date() && o.status !== "utford" && o.status !== "fakturerad")
+    o.orderStatus === "planerad_resurs" || 
+    (o.scheduledDate && new Date(o.scheduledDate) < new Date() && o.orderStatus !== "utford" && o.orderStatus !== "fakturerad")
   );
   
   const unassignedOrders = weekOrders.filter(o => !o.resourceId);
@@ -2978,7 +2978,7 @@ export async function processConversationalPlannerQuery(
   
   const ordersByStatus: Record<string, number> = {};
   weekOrders.forEach(o => {
-    ordersByStatus[o.status] = (ordersByStatus[o.status] || 0) + 1;
+    ordersByStatus[o.orderStatus || "skapad"] = (ordersByStatus[o.orderStatus || "skapad"] || 0) + 1;
   });
 
   const contextSummary = `

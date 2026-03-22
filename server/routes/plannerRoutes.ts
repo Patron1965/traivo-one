@@ -262,7 +262,7 @@ app.get("/api/planner/routes", isAuthenticated, asyncHandler(async (req, res) =>
           orderNumber: o.orderNumber,
           lat: o.latitude,
           lng: o.longitude,
-          status: o.status,
+          status: o.status,  
         })),
       };
     }).filter(r => r.waypoints.length >= 2);

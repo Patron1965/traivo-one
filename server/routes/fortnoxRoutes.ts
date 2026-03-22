@@ -450,7 +450,7 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
 
     const unscheduledOrders = allWorkOrders.filter(wo => 
       (!wo.scheduledDate || !wo.resourceId) && 
-      wo.status !== "completed" && wo.status !== "cancelled" &&
+      wo.orderStatus !== "utford" && wo.orderStatus !== "avbruten" &&
       wo.executionStatus !== "completed" && wo.executionStatus !== "invoiced"
     );
 
@@ -1106,7 +1106,7 @@ app.get("/api/work-orders/:id/sub-steps", asyncHandler(async (req, res) => {
         subSteps.push({
           id: subWo.id,
           title: subWo.title,
-          status: subWo.status,
+          status: subWo.orderStatus,
           executionStatus: subWo.executionStatus,
           estimatedDuration: subWo.estimatedDuration,
           structuralArticleId: dep.structuralArticleId,

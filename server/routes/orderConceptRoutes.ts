@@ -384,7 +384,7 @@ app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
     
     const allOrders = await storage.getWorkOrders(tenantId);
     const completedOrders = allOrders.filter(wo => {
-      const isCompleted = wo.status === "completed" || wo.executionStatus === "completed";
+      const isCompleted = wo.orderStatus === "utford" || wo.executionStatus === "completed";
       if (!isCompleted) return false;
       
       if (customerId && wo.customerId !== customerId) return false;

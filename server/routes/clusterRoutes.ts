@@ -184,8 +184,8 @@ app.post("/api/ai/chat", asyncHandler(async (req, res) => {
     try {
       if (modulePath.startsWith("/economics")) {
         const workOrders = await storage.getWorkOrders(tenantId);
-        const completed = workOrders.filter(wo => wo.status === "completed" || wo.orderStatus === "utford").length;
-        const pending = workOrders.filter(wo => wo.status !== "completed" && wo.orderStatus !== "utford").length;
+        const completed = workOrders.filter(wo => wo.orderStatus === "utford" || wo.orderStatus === "fakturerad").length;
+        const pending = workOrders.filter(wo => wo.orderStatus !== "utford" && wo.orderStatus !== "fakturerad").length;
         moduleData = `Ekonomisk översikt: ${workOrders.length} ordrar totalt, ${completed} utförda, ${pending} väntande`;
       } else if (modulePath.startsWith("/vehicles")) {
         const vehicles = await storage.getVehicles(tenantId);

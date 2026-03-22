@@ -15,7 +15,7 @@ mcpServer.resource(
   async (uri, { status }) => {
     const workOrders = await storage.getWorkOrders("default-tenant");
     const filtered = status 
-      ? workOrders.filter(wo => wo.status === status)
+      ? workOrders.filter(wo => wo.orderStatus === status)
       : workOrders;
     
     return {
@@ -81,7 +81,7 @@ mcpServer.tool(
     }
     
     if (status) {
-      filtered = filtered.filter(wo => wo.status === status);
+      filtered = filtered.filter(wo => wo.orderStatus === status);
     }
     
     return {
@@ -186,8 +186,8 @@ mcpServer.tool(
     const summary = {
       date: targetDate,
       totalOrders: todayOrders.length,
-      scheduledOrders: todayOrders.filter(wo => wo.status === "scheduled").length,
-      completedOrders: todayOrders.filter(wo => wo.status === "completed").length,
+      scheduledOrders: todayOrders.filter(wo => wo.orderStatus === "planerad_resurs" || wo.orderStatus === "planerad_las").length,
+      completedOrders: todayOrders.filter(wo => wo.orderStatus === "utford").length,
       totalResources: resources.length,
       activeResources: Object.keys(byResource).length,
       ordersByResource: Object.entries(byResource).map(([id, count]) => {

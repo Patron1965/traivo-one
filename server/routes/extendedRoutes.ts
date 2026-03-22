@@ -709,7 +709,7 @@ app.get("/api/environmental-certificates/:customerId", asyncHandler(async (req, 
     
     // Count completed work orders
     const completedOrders = customerWorkOrders.filter(
-      wo => wo.status === "utford" || wo.status === "fakturerad"
+      wo => wo.orderStatus === "utford" || wo.orderStatus === "fakturerad"
     ).length;
     
     res.json({

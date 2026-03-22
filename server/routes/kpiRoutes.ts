@@ -31,10 +31,10 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
     const resources = await storage.getResources(tenantId);
 
     const completed = orders.filter(o => 
-      o.completedAt || o.status === "completed" || o.executionStatus === "completed"
+      o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
     );
     const remaining = orders.filter(o => 
-      !o.completedAt && o.status !== "completed" && o.executionStatus !== "completed"
+      !o.completedAt && o.orderStatus !== "utford" && o.executionStatus !== "completed"
     );
 
     const durationsMinutes = completed
@@ -51,7 +51,7 @@ app.get("/api/kpis/daily", asyncHandler(async (req, res) => {
     const resourceKpis = activeResources.map(r => {
       const resourceOrders = orders.filter(o => o.resourceId === r.id);
       const resourceCompleted = resourceOrders.filter(o => 
-        o.completedAt || o.status === "completed" || o.executionStatus === "completed"
+        o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed"
       );
       const resourceDurations = resourceCompleted
         .map(o => o.actualDuration || o.estimatedDuration || 0)
@@ -109,7 +109,7 @@ app.get("/api/kpis/weekly", asyncHandler(async (req, res) => {
     const prevWeek = prevWeekOrders;
 
     const calcStats = (orders: typeof thisWeek) => {
-      const completed = orders.filter(o => o.completedAt || o.status === "completed" || o.executionStatus === "completed");
+      const completed = orders.filter(o => o.completedAt || o.orderStatus === "utford" || o.executionStatus === "completed");
       const durations = completed.map(o => o.actualDuration || o.estimatedDuration || 0).filter(d => d > 0);
       return {
         totalTasks: orders.length,

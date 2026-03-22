@@ -34,7 +34,7 @@ export async function generateInsightCards(tenantId: string): Promise<InsightCar
   const today = new Date();
   const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
 
-  const activeOrders = workOrders.filter(o => o.status !== "fakturerad" && !o.deletedAt);
+  const activeOrders = workOrders.filter(o => o.orderStatus !== "fakturerad" && !o.deletedAt);
   const completedThisWeek = workOrders.filter(o => {
     if (!o.completedAt) return false;
     const d = o.completedAt instanceof Date ? o.completedAt : new Date(o.completedAt);
@@ -44,7 +44,7 @@ export async function generateInsightCards(tenantId: string): Promise<InsightCar
   const overdueOrders = activeOrders.filter(o => {
     if (!o.scheduledDate) return false;
     const d = o.scheduledDate instanceof Date ? o.scheduledDate : new Date(o.scheduledDate);
-    return d < today && o.status !== "completed" && o.status !== "utford";
+    return d < today && o.orderStatus !== "utford" && o.orderStatus !== "fakturerad";
   });
 
   const dataContext = `

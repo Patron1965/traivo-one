@@ -48,9 +48,8 @@ export async function calculateETAForTodaysOrders(tenantId: string): Promise<ETA
       : String(o.scheduledDate).split("T")[0];
     return orderDate === today &&
       o.executionStatus !== "completed" &&
-      o.status !== "completed" &&
-      o.status !== "utford" &&
-      o.status !== "fakturerad";
+      o.orderStatus !== "utford" &&
+      o.orderStatus !== "fakturerad";
   });
 
   const resourceMap = new Map(resources.map(r => [r.id, r]));
