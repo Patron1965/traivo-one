@@ -9,7 +9,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests } from "@shared/schema";
-import { mapGoCategory, mapDeviationToCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
+import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
@@ -803,8 +803,8 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
         if (existing.length === 0) {
           const obj = await storage.getObject(order.objectId);
           if (obj?.customerId) {
-            const mappedCategory = mapDeviationToCategory(deviationType);
-            linkedChangeRequest = await db.insert(customerChangeRequests).values({
+            const mappedCategory = GO_CATEGORY_MAP[deviationType] || mapGoCategory(deviationType);
+            const created = await storage.createCustomerChangeRequest({
               tenantId: order.tenantId!,
               objectId: order.objectId,
               customerId: obj.customerId,
@@ -816,8 +816,8 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
               status: "new",
               severity: "medium",
               createdByResourceId: resourceId,
-              linkedDeviationId: deviation.id,
-            }).returning().then(r => r[0]);
+            });
+            linkedChangeRequest = await storage.updateCustomerChangeRequest(created.id, order.tenantId!, { linkedDeviationId: deviation.id } as any) || created;
 
             console.log(`[mobile] Auto-created change request ${linkedChangeRequest.id} from deviation ${deviation.id}`);
 

@@ -42,6 +42,7 @@ interface ChangeRequest {
   reviewNotes: string | null;
   reviewedBy: string | null;
   createdByResourceId: string | null;
+  linkedDeviationId: string | null;
   createdAt: string;
   updatedAt: string;
   customerName?: string;
