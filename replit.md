@@ -23,7 +23,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner. Includes budget enforcement and monitoring.
-- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, and Data Health Scorecard.
+- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename phase (rename objects/customers/metadata/resources before import), and selective modular import (skip/import individual steps with summary view and localStorage persistence).
 - **Geocoding:** Geoapify Geocoding API with Nominatim fallback.
 - **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.

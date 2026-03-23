@@ -12,7 +12,8 @@ import { useToast } from "@/hooks/use-toast";
 import { 
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
-  ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2
+  ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
+  SkipForward, Ban, BarChart3, ClipboardList
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -232,25 +233,37 @@ const MODUS_EVENT_COLUMNS = [
   { name: "Tid", required: true, description: "Tidsstämpel för händelsen" },
 ];
 
-function StepIndicator({ step, title, active, completed }: { step: number; title: string; active: boolean; completed: boolean }) {
+function StepIndicator({ step, title, active, completed, skipped, onClick }: {
+  step: number; title: string; active: boolean; completed: boolean; skipped?: boolean; onClick?: () => void;
+}) {
   return (
-    <div className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
-      active ? "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" :
-      completed ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800" :
-      "bg-muted/30 border border-transparent"
-    }`}>
+    <div
+      className={`flex items-center gap-3 p-3 rounded-lg transition-colors ${
+        active ? "bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800" :
+        completed ? "bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800" :
+        skipped ? "bg-gray-50 dark:bg-gray-900/30 border border-gray-200 dark:border-gray-700 opacity-60" :
+        "bg-muted/30 border border-transparent"
+      } ${onClick ? "cursor-pointer hover:shadow-sm" : ""}`}
+      onClick={onClick}
+      data-testid={`step-indicator-${step}`}
+    >
       <div className={`flex items-center justify-center h-8 w-8 rounded-full text-sm font-bold ${
         completed ? "bg-green-600 text-white" :
+        skipped ? "bg-gray-400 text-white" :
         active ? "bg-blue-600 text-white" :
         "bg-muted text-muted-foreground"
       }`}>
-        {completed ? <Check className="h-4 w-4" /> : step}
+        {completed ? <Check className="h-4 w-4" /> : skipped ? <Ban className="h-4 w-4" /> : step}
       </div>
-      <span className={`text-sm font-medium ${
-        active ? "text-blue-700 dark:text-blue-300" :
-        completed ? "text-green-700 dark:text-green-300" :
-        "text-muted-foreground"
-      }`}>{title}</span>
+      <div className="flex flex-col">
+        <span className={`text-sm font-medium ${
+          active ? "text-blue-700 dark:text-blue-300" :
+          completed ? "text-green-700 dark:text-green-300" :
+          skipped ? "text-gray-400 dark:text-gray-500" :
+          "text-muted-foreground"
+        }`}>{title}</span>
+        {skipped && <span className="text-[10px] text-gray-400">Ej importerat</span>}
+      </div>
     </div>
   );
 }
@@ -494,6 +507,30 @@ export default function ImportPage() {
   const [taskPreviewResources, setTaskPreviewResources] = useState<string[]>([]);
   const [taskResourceOverrides, setTaskResourceOverrides] = useState<Record<string, string>>({});
   const [taskPreviewTotalRows, setTaskPreviewTotalRows] = useState(0);
+
+  const STORAGE_KEY = "traivo-import-progress";
+  const loadSavedProgress = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved) as { skipped: number[]; completed: number[]; activeStep: number };
+    } catch {}
+    return null;
+  }, []);
+
+  const savedProgress = loadSavedProgress();
+  const [skippedSteps, setSkippedSteps] = useState<Set<number>>(new Set(savedProgress?.skipped || []));
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set(savedProgress?.completed || []));
+  const [activeModusStep, setActiveModusStep] = useState<number>(savedProgress?.activeStep || 2);
+  const [skipConfirmStep, setSkipConfirmStep] = useState<number | null>(null);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      skipped: Array.from(skippedSteps),
+      completed: Array.from(completedSteps),
+      activeStep: activeModusStep,
+    }));
+  }, [skippedSteps, completedSteps, activeModusStep]);
+
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
@@ -560,6 +597,7 @@ export default function ImportPage() {
           sseJobIdRef.current = null;
           if (data.result) {
             setModusResults(prev => ({ ...prev, objects: data.result as ModusObjectResult }));
+            markStepCompleted(2);
           }
           setModusUploading(null);
           queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
@@ -613,6 +651,39 @@ export default function ImportPage() {
     if (objects.length > 0) return 3;
     return 1;
   }, [objects.length, workOrders.length, modusResults]);
+
+  const markStepCompleted = useCallback((step: number) => {
+    setCompletedSteps(prev => { const next = new Set(prev); next.add(step); return next; });
+    setSkippedSteps(prev => { const next = new Set(prev); next.delete(step); return next; });
+    const nextStep = step + 1;
+    if (nextStep <= 6) setActiveModusStep(nextStep);
+  }, []);
+
+  const skipStep = useCallback((step: number) => {
+    setSkippedSteps(prev => { const next = new Set(prev); next.add(step); return next; });
+    const nextStep = step + 1;
+    if (nextStep <= 6) setActiveModusStep(nextStep);
+    setSkipConfirmStep(null);
+  }, []);
+
+  const goToStep = useCallback((step: number) => {
+    setActiveModusStep(step);
+    setSkippedSteps(prev => { const next = new Set(prev); next.delete(step); return next; });
+  }, []);
+
+  const firstSkippedStep = useMemo(() => {
+    for (let i = 2; i <= 5; i++) {
+      if (skippedSteps.has(i)) return i;
+    }
+    return null;
+  }, [skippedSteps]);
+
+  const allStepsDone = useMemo(() => {
+    for (let i = 2; i <= 5; i++) {
+      if (!completedSteps.has(i) && !skippedSteps.has(i)) return false;
+    }
+    return true;
+  }, [completedSteps, skippedSteps]);
 
   const importMutation = useMutation({
     mutationFn: async ({ type, file }: { type: ImportType; file: File }) => {
@@ -935,6 +1006,9 @@ export default function ImportPage() {
       }
       
       setModusResults(prev => ({ ...prev, [type]: result }));
+
+      const stepMap: Record<string, number> = { tasks: 3, "invoice-lines": 4, events: 5 };
+      if (stepMap[type]) markStepCompleted(stepMap[type]);
       
       if (type === "events") {
         toast({
@@ -1031,15 +1105,17 @@ export default function ImportPage() {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <StepIndicator step={1} title="Företagsinställningar" active={importStep === 1} completed={importStep > 1} />
+            <StepIndicator step={1} title="Företagsinställningar" active={activeModusStep === 1} completed={importStep > 1} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={2} title="Importera objekt" active={importStep === 2 || importStep === 1} completed={importStep >= 3} />
+            <StepIndicator step={2} title="Importera objekt" active={activeModusStep === 2} completed={completedSteps.has(2)} skipped={skippedSteps.has(2)} onClick={() => goToStep(2)} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={3} title="Importera uppgifter" active={importStep === 3} completed={importStep >= 4} />
+            <StepIndicator step={3} title="Importera uppgifter" active={activeModusStep === 3} completed={completedSteps.has(3)} skipped={skippedSteps.has(3)} onClick={() => goToStep(3)} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={4} title="Fakturarader" active={importStep === 4} completed={importStep >= 5} />
+            <StepIndicator step={4} title="Fakturarader" active={activeModusStep === 4} completed={completedSteps.has(4)} skipped={skippedSteps.has(4)} onClick={() => goToStep(4)} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={5} title="Analysera händelser" active={importStep === 5} completed={false} />
+            <StepIndicator step={5} title="Analysera händelser" active={activeModusStep === 5} completed={completedSteps.has(5)} skipped={skippedSteps.has(5)} onClick={() => goToStep(5)} />
+            <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
+            <StepIndicator step={6} title="Sammanfattning" active={activeModusStep === 6} completed={false} onClick={() => allStepsDone ? setActiveModusStep(6) : undefined} />
           </div>
 
           <Card>
@@ -1077,19 +1153,32 @@ export default function ImportPage() {
             </CardContent>
           </Card>
 
+          {activeModusStep === 2 && !completedSteps.has(2) && !skippedSteps.has(2) && (
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">2</div>
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Importera objekt från Modus 2.0
-                  </CardTitle>
-                  <CardDescription>
-                    Objekt-hierarkin (fastigheter, rum, kärl) — kunder skapas automatiskt
-                  </CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">2</div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Importera objekt från Modus 2.0
+                      {modusValidation?.scorecard && (
+                        <Badge variant="outline" className={`text-xs ml-2 ${getScorecardBg(modusValidation.scorecard.overallScore)}`} data-testid="badge-quality-step-2">
+                          <BarChart3 className="h-3 w-3 mr-1" />
+                          {modusValidation.scorecard.overallScore}%
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      Objekt-hierarkin (fastigheter, rum, kärl) — kunder skapas automatiskt
+                    </CardDescription>
+                  </div>
                 </div>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setSkipConfirmStep(2)} data-testid="button-skip-step-2">
+                  <SkipForward className="h-4 w-4 mr-1" />
+                  Hoppa över
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1376,20 +1465,28 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
+          {activeModusStep === 3 && !completedSteps.has(3) && !skippedSteps.has(3) && (
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">3</div>
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Truck className="h-4 w-4" />
-                    Importera uppgifter (arbetsordrar)
-                  </CardTitle>
-                  <CardDescription>
-                    Arbetsordrar med schemaläggning — resurser skapas automatiskt
-                  </CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">3</div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Truck className="h-4 w-4" />
+                      Importera uppgifter (arbetsordrar)
+                    </CardTitle>
+                    <CardDescription>
+                      Arbetsordrar med schemaläggning — resurser skapas automatiskt
+                    </CardDescription>
+                  </div>
                 </div>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setSkipConfirmStep(3)} data-testid="button-skip-step-3">
+                  <SkipForward className="h-4 w-4 mr-1" />
+                  Hoppa över
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1527,20 +1624,28 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
+          {activeModusStep === 4 && !completedSteps.has(4) && !skippedSteps.has(4) && (
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-amber-600 text-white text-sm font-bold">4</div>
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <FileSpreadsheet className="h-4 w-4" />
-                    Importera fakturarader (valfritt)
-                  </CardTitle>
-                  <CardDescription>
-                    Kopplar Fortnox-artiklar och priser till importerade uppgifter
-                  </CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-amber-600 text-white text-sm font-bold">4</div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Importera fakturarader (valfritt)
+                    </CardTitle>
+                    <CardDescription>
+                      Kopplar Fortnox-artiklar och priser till importerade uppgifter
+                    </CardDescription>
+                  </div>
                 </div>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setSkipConfirmStep(4)} data-testid="button-skip-step-4">
+                  <SkipForward className="h-4 w-4 mr-1" />
+                  Hoppa över
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1634,20 +1739,28 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          )}
 
+          {activeModusStep === 5 && !completedSteps.has(5) && !skippedSteps.has(5) && (
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">5</div>
-                <div>
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Clock className="h-4 w-4" />
-                    Analysera händelser (valfritt)
-                  </CardTitle>
-                  <CardDescription>
-                    Beräknar arbetstider och ställtider baserat på historiska händelser
-                  </CardDescription>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-blue-600 text-white text-sm font-bold">5</div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Clock className="h-4 w-4" />
+                      Analysera händelser (valfritt)
+                    </CardTitle>
+                    <CardDescription>
+                      Beräknar arbetstider och ställtider baserat på historiska händelser
+                    </CardDescription>
+                  </div>
                 </div>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setSkipConfirmStep(5)} data-testid="button-skip-step-5">
+                  <SkipForward className="h-4 w-4 mr-1" />
+                  Hoppa över
+                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1739,6 +1852,91 @@ export default function ImportPage() {
               )}
             </CardContent>
           </Card>
+          )}
+
+          {activeModusStep === 6 && (
+          <Card data-testid="card-import-summary-final">
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center justify-center h-8 w-8 rounded-full bg-green-600 text-white text-sm font-bold">
+                  <ClipboardList className="h-4 w-4" />
+                </div>
+                <div>
+                  <CardTitle className="text-base">Sammanfattning</CardTitle>
+                  <CardDescription>Översikt av importerade och överhoppade steg</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                {[
+                  { step: 2, label: "Objekt", icon: <Building2 className="h-4 w-4" />, count: modusResults.objects ? `${modusResults.objects.created} skapade, ${modusResults.objects.updated} uppdaterade` : null },
+                  { step: 3, label: "Uppgifter", icon: <Truck className="h-4 w-4" />, count: modusResults.tasks ? `${modusResults.tasks.imported} importerade` : null },
+                  { step: 4, label: "Fakturarader", icon: <FileSpreadsheet className="h-4 w-4" />, count: modusResults["invoice-lines"] ? `${modusResults["invoice-lines"].imported} importerade` : null },
+                  { step: 5, label: "Händelser", icon: <Clock className="h-4 w-4" />, count: modusResults.events ? `${modusResults.events.totalEvents} analyserade` : null },
+                ].map(({ step, label, icon, count }) => (
+                  <div key={step} className={`p-3 rounded-lg border text-center ${
+                    completedSteps.has(step) ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800" :
+                    skippedSteps.has(step) ? "bg-gray-50 dark:bg-gray-900/20 border-gray-200 dark:border-gray-700" :
+                    "bg-muted/30 border-transparent"
+                  }`} data-testid={`summary-step-${step}`}>
+                    <div className="flex items-center justify-center gap-2 mb-1">
+                      {icon}
+                      <span className="text-sm font-medium">{label}</span>
+                    </div>
+                    {completedSteps.has(step) ? (
+                      <div>
+                        <Badge variant="default" className="bg-green-600 text-xs">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Importerad
+                        </Badge>
+                        {count && <p className="text-xs text-muted-foreground mt-1">{count}</p>}
+                      </div>
+                    ) : skippedSteps.has(step) ? (
+                      <Badge variant="secondary" className="text-xs">
+                        <Ban className="h-3 w-3 mr-1" />
+                        Överhoppad
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="text-xs">Ej påbörjad</Badge>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {skippedSteps.size > 0 && (
+                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-md text-sm text-amber-700 dark:text-amber-300">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{skippedSteps.size} steg hoppades över.</span>
+                  {firstSkippedStep && (
+                    <Button variant="outline" size="sm" className="ml-auto" onClick={() => goToStep(firstSkippedStep)} data-testid="button-import-remaining">
+                      <ArrowRight className="h-3 w-3 mr-1" />
+                      Importera resten
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {skippedSteps.size === 0 && completedSteps.size >= 4 && (
+                <div className="flex items-center gap-2 p-3 bg-green-50 dark:bg-green-950/20 rounded-md text-sm text-green-700 dark:text-green-300">
+                  <CheckCircle className="h-4 w-4 shrink-0" />
+                  Alla steg har genomförts. Importen är komplett.
+                </div>
+              )}
+
+              <Button variant="outline" size="sm" onClick={() => {
+                setSkippedSteps(new Set());
+                setCompletedSteps(new Set());
+                setActiveModusStep(2);
+                setModusResults({ objects: null, tasks: null, events: null, "invoice-lines": null });
+                localStorage.removeItem(STORAGE_KEY);
+              }} data-testid="button-reset-import">
+                <Undo2 className="h-4 w-4 mr-1" />
+                Börja om
+              </Button>
+            </CardContent>
+          </Card>
+          )}
 
           {importBatches.length > 0 && (
             <Card data-testid="card-import-history">
@@ -2130,6 +2328,24 @@ export default function ImportPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={skipConfirmStep !== null} onOpenChange={(open) => { if (!open) setSkipConfirmStep(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Hoppa över detta steg?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Du kan alltid gå tillbaka och importera detta steg senare genom att klicka på steget i stegöversikten.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-skip">Avbryt</AlertDialogCancel>
+            <AlertDialogAction onClick={() => skipConfirmStep && skipStep(skipConfirmStep)} data-testid="button-confirm-skip">
+              <SkipForward className="h-4 w-4 mr-1" />
+              Hoppa över
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
