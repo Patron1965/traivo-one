@@ -1,4 +1,4 @@
-export const GO_TO_ONE_CATEGORY_MAP: Record<string, string> = {
+export const GO_CATEGORY_MAP: Record<string, string> = {
   blocked_access: "tillganglighet",
   damaged_container: "skadat_material",
   wrong_waste: "ovrigt",
@@ -15,6 +15,16 @@ export const ONE_CATEGORIES = [
   "ovrigt",
 ] as const;
 
+export const GO_CATEGORIES = [
+  "blocked_access",
+  "damaged_container",
+  "wrong_waste",
+  "overloaded",
+  "other",
+] as const;
+
+export const ALL_CATEGORIES = [...ONE_CATEGORIES, ...GO_CATEGORIES] as const;
+
 export const CATEGORY_LABELS: Record<string, string> = {
   antal_karl_andrat: "Antal kärl ändrat",
   skadat_material: "Skadat material",
@@ -22,6 +32,11 @@ export const CATEGORY_LABELS: Record<string, string> = {
   skador: "Skador på utrymme",
   rengorings_behov: "Rengöringsbehov",
   ovrigt: "Övrigt",
+  blocked_access: "Blockerad åtkomst",
+  damaged_container: "Skadad behållare",
+  wrong_waste: "Fel avfall",
+  overloaded: "Överlastad",
+  other: "Övrigt (Go)",
 };
 
 export const SEVERITY_LEVELS = ["low", "medium", "high", "critical"] as const;
@@ -34,10 +49,9 @@ export const SEVERITY_LABELS: Record<string, string> = {
 };
 
 export type OneCategory = typeof ONE_CATEGORIES[number];
+export type GoCategory = typeof GO_CATEGORIES[number];
 export type SeverityLevel = typeof SEVERITY_LEVELS[number];
 
-export const CATEGORY_MAP = GO_TO_ONE_CATEGORY_MAP;
-
 export function mapGoCategory(goCategory: string): string {
-  return GO_TO_ONE_CATEGORY_MAP[goCategory] || "ovrigt";
+  return GO_CATEGORY_MAP[goCategory] || "ovrigt";
 }

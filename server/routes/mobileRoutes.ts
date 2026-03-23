@@ -9,7 +9,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests } from "@shared/schema";
-import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS } from "@shared/changeRequestCategories";
+import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
@@ -1842,7 +1842,7 @@ const mobileChangeRequestSchema = z.object({
   photos: z.array(z.string()).optional(),
   latitude: z.number().optional(),
   longitude: z.number().optional(),
-  severity: z.enum(["low", "medium", "high", "critical"]).optional().default("medium"),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional().nullable(),
 });
 
 app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
@@ -1879,7 +1879,7 @@ app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHan
       latitude: data.latitude ?? null,
       longitude: data.longitude ?? null,
       status: "new",
-      severity: data.severity || "medium",
+      severity: data.severity || null,
       createdByResourceId: resourceId,
     });
 
@@ -1968,10 +1968,13 @@ app.post("/api/mobile/customer-change-requests/confirm-photo", isMobileAuthentic
 }));
 
 app.get("/api/mobile/customer-change-requests/categories", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
-    const { GO_TO_ONE_CATEGORY_MAP, ONE_CATEGORIES: cats, SEVERITY_LEVELS: sevs } = await import("@shared/changeRequestCategories");
+    const { GO_CATEGORY_MAP: goMap, ONE_CATEGORIES: oneCats, GO_CATEGORIES: goCats, ALL_CATEGORIES: allCats, CATEGORY_LABELS: labels, SEVERITY_LEVELS: sevs } = await import("@shared/changeRequestCategories");
     res.json({
-      categories: cats,
-      goCategoryMapping: GO_TO_ONE_CATEGORY_MAP,
+      oneCategories: oneCats,
+      goCategories: goCats,
+      allCategories: allCats,
+      categoryLabels: labels,
+      goCategoryMapping: goMap,
       severityLevels: sevs,
     });
 }));
