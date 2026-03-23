@@ -1949,6 +1949,23 @@ app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, as
     res.status(201).json({ workOrder, report: { id: report.id, status: "resolved" } });
 }));
 
+app.get("/api/customer-change-requests/summary", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { objectId, category, customerId, dateFrom, dateTo } = req.query;
+    const { items } = await storage.getCustomerChangeRequests(tenantId, {
+      objectId: objectId as string | undefined,
+      category: category as string | undefined,
+      customerId: customerId as string | undefined,
+      dateFrom: dateFrom as string | undefined,
+      dateTo: dateTo as string | undefined,
+    });
+    const counts: Record<string, number> = { new: 0, reviewed: 0, resolved: 0, rejected: 0, total: items.length };
+    for (const r of items) {
+      counts[r.status] = (counts[r.status] || 0) + 1;
+    }
+    res.json(counts);
+}));
+
 app.get("/api/customer-change-requests/counts-by-object", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { items: requests } = await storage.getCustomerChangeRequests(tenantId, { status: "new" });

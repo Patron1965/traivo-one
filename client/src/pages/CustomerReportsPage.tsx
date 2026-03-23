@@ -166,12 +166,21 @@ export default function CustomerReportsPage() {
     );
   }, [reports, search]);
 
-  const statusCounts = useMemo(() => {
-    return reports.reduce((acc, r) => {
-      acc[r.status] = (acc[r.status] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-  }, [reports]);
+  const { data: summaryData } = useQuery<Record<string, number>>({
+    queryKey: ["/api/customer-change-requests/summary", categoryFilter, objectIdFilter, customerFilter, dateFrom, dateTo],
+    queryFn: async () => {
+      const p = new URLSearchParams();
+      if (categoryFilter !== "all") p.set("category", categoryFilter);
+      if (customerFilter !== "all") p.set("customerId", customerFilter);
+      if (objectIdFilter) p.set("objectId", objectIdFilter);
+      if (dateFrom) p.set("dateFrom", dateFrom);
+      if (dateTo) p.set("dateTo", dateTo);
+      const res = await fetch(`/api/customer-change-requests/summary?${p}`, { credentials: "include" });
+      if (!res.ok) return { new: 0, reviewed: 0, resolved: 0, rejected: 0, total: 0 };
+      return res.json();
+    },
+  });
+  const statusCounts = summaryData || { new: 0, reviewed: 0, resolved: 0, rejected: 0, total: 0 };
 
   function resetPage() { setCurrentPage(0); }
 
@@ -260,7 +269,7 @@ export default function CustomerReportsPage() {
         </Card>
         <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "all" ? "ring-2 ring-primary" : ""}`} onClick={() => { setStatusFilter("all"); resetPage(); }} data-testid="stat-all">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold">{totalReports}</p>
+            <p className="text-2xl font-bold">{statusCounts["total"] || 0}</p>
             <p className="text-xs text-muted-foreground">Totalt</p>
           </CardContent>
         </Card>
