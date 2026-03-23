@@ -1670,7 +1670,7 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
         id: wo.id,
         scheduledDate: wo.scheduledDate,
         completedAt: wo.completedAt,
-        status: wo.status,
+        status: wo.orderStatus || wo.status,
         description: wo.description,
       }));
 
@@ -1751,8 +1751,8 @@ app.post("/api/portal/field/report", asyncHandler(async (req, res) => {
       category,
       description,
       photos: photos || [],
-      latitude: latitude || null,
-      longitude: longitude || null,
+      latitude: latitude ?? null,
+      longitude: longitude ?? null,
       status: "new",
     });
 
