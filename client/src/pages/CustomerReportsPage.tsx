@@ -323,7 +323,7 @@ export default function CustomerReportsPage() {
           <Input
             type="date"
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(e) => { setDateFrom(e.target.value); resetPage(); }}
             className="w-[150px] h-9"
             placeholder="Från datum"
             data-testid="input-date-from"
@@ -332,7 +332,7 @@ export default function CustomerReportsPage() {
           <Input
             type="date"
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(e) => { setDateTo(e.target.value); resetPage(); }}
             className="w-[150px] h-9"
             placeholder="Till datum"
             data-testid="input-date-to"

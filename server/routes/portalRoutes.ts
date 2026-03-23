@@ -1904,6 +1904,9 @@ app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, as
     if (!report || report.tenantId !== tenantId) {
       throw new NotFoundError("Rapport hittades inte");
     }
+    if (report.status === "resolved" && report.reviewNotes?.startsWith("Arbetsorder skapad:")) {
+      return res.status(409).json({ error: "En arbetsorder har redan skapats för denna rapport." });
+    }
 
     const obj = await storage.getObject(report.objectId);
     if (!obj) {
