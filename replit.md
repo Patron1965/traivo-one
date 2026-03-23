@@ -23,7 +23,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner. Includes budget enforcement and monitoring.
-- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename phase (rename objects/customers/metadata/resources before import), selective modular import (skip/import individual steps with summary view and localStorage persistence), and Import Health Overview with data quality warnings, "Granska" links, and accept/dismiss functionality.
+- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename phase (rename objects/customers/metadata/resources before import), selective modular import (skip/import individual steps with summary view and localStorage persistence), and Import Health Overview with data quality warnings (4-stat grid: customers/objects/work orders/invoice lines), 5 issue types with severity levels (no-coords, no-address, no-customer, unassigned resources, empty-metadata), "Granska" links with server-side issue filtering on ObjectsPage and WeekPlannerPage, tenant-scoped accept/dismiss via localStorage, and filter banners with "Rensa filter" buttons.
 - **Geocoding:** Geoapify Geocoding API with Nominatim fallback.
 - **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.
@@ -50,7 +50,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.
 - **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.
 - **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard for building delivery schedules and subscription calculations.
-- **Smart AI Checklist & Field Validation:** AI-driven checklist for field workers suggesting steps based on order type and history, with mandatory field validation before completion.
+- **Smart AI Kontrollmallar & Field Validation:** AI-driven control templates (formerly "Checklista-mallar", renamed to "Kontrollmallar") for field workers suggesting steps based on order type and history, with mandatory field validation before completion.
 - **Field Worker Task Dependency View & Photo Upload:** Mobile app displays task dependencies and supports two-step presigned URL photo uploads.
 - **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
 - **Team Management & User Administration:** User management with admin CRUD, team system, bulk actions, and invitation system.
