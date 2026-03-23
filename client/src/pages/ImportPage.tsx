@@ -490,21 +490,32 @@ export default function ImportPage() {
   const [showInvoiceColumns, setShowInvoiceColumns] = useState(false);
 
   const STORAGE_KEY = "traivo-import-progress";
+  const STORAGE_VERSION = 2;
   const savedProgress = useMemo(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as {
-        skipped: number[];
-        completed: number[];
-        activeStep: number;
-        results?: {
-          objects: ModusObjectResult | null;
-          tasks: ImportResult | null;
-          events: ModusEventsResult | null;
-          "invoice-lines": ImportResult | null;
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.version !== STORAGE_VERSION) {
+          localStorage.removeItem(STORAGE_KEY);
+          return null;
+        }
+        return parsed as {
+          version: number;
+          skipped: number[];
+          completed: number[];
+          activeStep: number;
+          results?: {
+            objects: ModusObjectResult | null;
+            tasks: ImportResult | null;
+            events: ModusEventsResult | null;
+            "invoice-lines": ImportResult | null;
+          };
         };
-      };
-    } catch {}
+      }
+    } catch {
+      localStorage.removeItem(STORAGE_KEY);
+    }
     return null;
   }, []);
 
@@ -538,6 +549,7 @@ export default function ImportPage() {
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
+      version: STORAGE_VERSION,
       skipped: Array.from(skippedSteps),
       completed: Array.from(completedSteps),
       activeStep: activeModusStep,
@@ -1121,13 +1133,15 @@ export default function ImportPage() {
           <div className="flex flex-wrap gap-2">
             <StepIndicator step={1} title="Företagsinställningar" active={activeModusStep === 1} completed={importStep > 1} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={2} title="Importera objekt" active={activeModusStep === 2} completed={completedSteps.has(2)} skipped={skippedSteps.has(2)} onClick={() => goToStep(2)} />
-            <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={3} title="Importera uppgifter" active={activeModusStep === 3} completed={completedSteps.has(3)} skipped={skippedSteps.has(3)} onClick={() => goToStep(3)} />
-            <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={4} title="Fakturarader" active={activeModusStep === 4} completed={completedSteps.has(4)} skipped={skippedSteps.has(4)} onClick={() => goToStep(4)} />
-            <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={5} title="Analysera händelser" active={activeModusStep === 5} completed={completedSteps.has(5)} skipped={skippedSteps.has(5)} onClick={() => goToStep(5)} />
+            {[2, 3, 4, 5].map(s => {
+              const canNavigate = completedSteps.has(s) || skippedSteps.has(s) || Array.from({length: s - 2}, (_, i) => i + 2).every(p => completedSteps.has(p) || skippedSteps.has(p));
+              return (
+                <span key={s} className="contents">
+                  <StepIndicator step={s} title={[, , "Importera objekt", "Importera uppgifter", "Fakturarader", "Analysera händelser"][s]!} active={activeModusStep === s} completed={completedSteps.has(s)} skipped={skippedSteps.has(s)} onClick={canNavigate ? () => goToStep(s) : undefined} />
+                  {s < 5 && <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />}
+                </span>
+              );
+            })}
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
             <StepIndicator step={6} title="Sammanfattning" active={activeModusStep === 6} completed={false} onClick={allStepsDone ? () => setActiveModusStep(6) : undefined} />
           </div>
