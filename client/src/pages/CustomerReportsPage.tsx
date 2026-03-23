@@ -285,7 +285,7 @@ export default function CustomerReportsPage() {
                 <div>
                   <p className="text-sm font-medium mb-1">Foton ({selectedReport.photos.length})</p>
                   <div className="flex gap-2 flex-wrap">
-                    {selectedReport.photos.map((p, i) => (
+                    {selectedReport.photos.filter(p => p.startsWith("/objects/")).map((p, i) => (
                       <a key={i} href={p} target="_blank" rel="noopener noreferrer" className="block w-24 h-24 rounded border bg-muted overflow-hidden relative" data-testid={`photo-thumb-${i}`}>
                         <img src={p} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">

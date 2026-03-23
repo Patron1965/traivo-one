@@ -1723,11 +1723,12 @@ app.post("/api/portal/field/report", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
+    const safeObjectPathRegex = /^\/objects\/[a-zA-Z0-9\/_-]+$/;
     const reportSchema = z.object({
       objectId: z.string().min(1),
       category: z.enum(["antal_karl_andrat", "skadat_material", "tillganglighet", "skador", "rengorings_behov", "ovrigt"]),
       description: z.string().min(1).max(5000),
-      photos: z.array(z.string()).max(10).optional().default([]),
+      photos: z.array(z.string().regex(safeObjectPathRegex, "Ogiltig fotosökväg")).max(10).optional().default([]),
       latitude: z.number().min(-90).max(90).nullable().optional(),
       longitude: z.number().min(-180).max(180).nullable().optional(),
     });
@@ -1785,8 +1786,21 @@ app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
     if (!session) return;
 
     const { objectPath } = req.body;
-    if (!objectPath) {
+    if (!objectPath || typeof objectPath !== "string") {
       throw new ValidationError("objectPath krävs");
+    }
+
+    const safePathRegex = /^\/objects\/[a-zA-Z0-9\/_-]+$/;
+    if (!safePathRegex.test(objectPath)) {
+      throw new ValidationError("Ogiltig fotosökväg");
+    }
+
+    try {
+      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+      const oss = new ObjectStorageService();
+      await oss.getObjectEntityFile(objectPath);
+    } catch {
+      throw new ValidationError("Fotot kunde inte verifieras i lagringen");
     }
 
     res.json({ success: true, photoPath: objectPath });

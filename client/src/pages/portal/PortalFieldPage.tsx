@@ -655,7 +655,7 @@ export default function PortalFieldPage() {
             <div className="space-y-2">
               <label className="text-sm font-medium">Foton</label>
               <div className="flex flex-wrap gap-2">
-                {reportPhotos.map((photo, i) => (
+                {reportPhotos.filter(p => p.startsWith("/objects/")).map((photo, i) => (
                   <div key={i} className="relative w-20 h-20 rounded-lg border bg-muted overflow-hidden" data-testid={`photo-${i}`}>
                     <img src={photo} alt={`Foto ${i + 1}`} className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                     <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
