@@ -1836,8 +1836,10 @@ app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, 
     const tenantId = getTenantIdWithFallback(req);
     const { objectId, status, category, customerId, dateFrom, dateTo, limit, offset } = req.query;
 
-    const parsedLimit = limit ? Math.min(parseInt(limit as string, 10), 100) : 50;
-    const parsedOffset = offset ? parseInt(offset as string, 10) : 0;
+    const rawLimit = parseInt(limit as string, 10);
+    const parsedLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 50;
+    const rawOffset = parseInt(offset as string, 10);
+    const parsedOffset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
     const { items: requests, total } = await storage.getCustomerChangeRequests(tenantId, {
       objectId: objectId as string | undefined,

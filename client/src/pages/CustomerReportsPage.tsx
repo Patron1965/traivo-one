@@ -12,7 +12,7 @@ import {
   Camera, Search, MapPin, Loader2, CheckCircle, AlertTriangle,
   Package, Wrench, HelpCircle, Clock, Building2, Eye, Trash2,
   Filter, MessageSquare, ClipboardList, ExternalLink, X, Calendar,
-  ArrowRight, History, User
+  History, User
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -184,13 +184,6 @@ export default function CustomerReportsPage() {
 
   function resetPage() { setCurrentPage(0); }
 
-  const uniqueCustomers = useMemo(() => {
-    const ids = [...new Set(reports.map(r => r.customerId))];
-    return ids.map(id => {
-      const report = reports.find(r => r.customerId === id);
-      return { id, name: report?.customerName || id };
-    });
-  }, [reports]);
 
   function openReview(report: ChangeRequest) {
     setSelectedReport(report);
