@@ -40,9 +40,15 @@ export function DeviationReportScreen() {
 
   const mutation = useMutation({
     mutationFn: () => reportDeviation(orderId, { type, description }),
-    onSuccess: () => {
+    onSuccess: (data: any) => {
       queryClient.invalidateQueries({ queryKey: ['order', orderId] });
-      Alert.alert('Klart', 'Avvikelsen har rapporterats');
+      const hasLinkedReport = data?.linkedChangeRequest != null;
+      Alert.alert(
+        'Klart',
+        hasLinkedReport
+          ? 'Avvikelsen har rapporterats och en kundrapport har skapats automatiskt.'
+          : 'Avvikelsen har rapporterats',
+      );
       navigation.goBack();
     },
     onError: async () => {
