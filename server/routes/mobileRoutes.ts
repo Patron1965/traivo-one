@@ -1887,6 +1887,7 @@ app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHan
       type: "change_request:created",
       data: {
         id: created.id,
+        tenantId: created.tenantId,
         objectId: created.objectId,
         customerId: created.customerId,
         category: created.category,

@@ -15,7 +15,23 @@ export const ONE_CATEGORIES = [
   "ovrigt",
 ] as const;
 
+export const CATEGORY_LABELS: Record<string, string> = {
+  antal_karl_andrat: "Antal kärl ändrat",
+  skadat_material: "Skadat material",
+  tillganglighet: "Tillgänglighetsproblem",
+  skador: "Skador på utrymme",
+  rengorings_behov: "Rengöringsbehov",
+  ovrigt: "Övrigt",
+};
+
 export const SEVERITY_LEVELS = ["low", "medium", "high", "critical"] as const;
+
+export const SEVERITY_LABELS: Record<string, string> = {
+  low: "Låg",
+  medium: "Medel",
+  high: "Hög",
+  critical: "Kritisk",
+};
 
 export type OneCategory = typeof ONE_CATEGORIES[number];
 export type SeverityLevel = typeof SEVERITY_LEVELS[number];

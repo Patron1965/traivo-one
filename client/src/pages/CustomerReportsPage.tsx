@@ -16,15 +16,9 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { CATEGORY_LABELS, SEVERITY_LABELS as SHARED_SEVERITY_LABELS } from "@shared/changeRequestCategories";
 
-const CATEGORIES: Record<string, string> = {
-  antal_karl_andrat: "Antal kärl ändrat",
-  skadat_material: "Skadat material",
-  tillganglighet: "Tillgänglighetsproblem",
-  skador: "Skador på utrymme",
-  rengorings_behov: "Rengöringsbehov",
-  ovrigt: "Övrigt",
-};
+const CATEGORIES = CATEGORY_LABELS;
 
 const STATUS_LABELS: Record<string, string> = {
   new: "Ny",
@@ -69,13 +63,6 @@ function getStatusBadge(status: string) {
     default: return <Badge variant="outline">{status}</Badge>;
   }
 }
-
-const SEVERITY_LABELS: Record<string, string> = {
-  low: "Låg",
-  medium: "Medel",
-  high: "Hög",
-  critical: "Kritisk",
-};
 
 function getSeverityBadge(severity: string | null) {
   if (!severity || severity === "medium") return null;
@@ -478,7 +465,7 @@ export default function CustomerReportsPage() {
                 {getStatusBadge(selectedReport.status)}
                 {getSeverityBadge(selectedReport.severity)}
                 {selectedReport.severity && (
-                  <span className="text-xs">Allvarlighet: {SEVERITY_LABELS[selectedReport.severity] || selectedReport.severity}</span>
+                  <span className="text-xs">Allvarlighet: {SHARED_SEVERITY_LABELS[selectedReport.severity] || selectedReport.severity}</span>
                 )}
                 <span>{new Date(selectedReport.createdAt).toLocaleString("sv")}</span>
               </div>

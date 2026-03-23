@@ -1899,9 +1899,23 @@ app.patch("/api/customer-change-requests/:id/status", requireAdmin, asyncHandler
     }
 
     const eventClients: Map<string, any> = (global as any).__plannerEventClients || new Map();
-    const eventMsg = `data: ${JSON.stringify({ type: "change_request:status_updated", data: { id: updated.id, objectId: updated.objectId, customerId: updated.customerId, status: updated.status, previousStatus: req.body.previousStatus || null } })}\n\n`;
+    const eventPayload = {
+      type: "change_request:status_updated",
+      data: {
+        id: updated.id,
+        tenantId: updated.tenantId,
+        objectId: updated.objectId,
+        customerId: updated.customerId,
+        status: updated.status,
+        reviewNotes: updated.reviewNotes || null,
+      },
+    };
+    const eventMsg = `data: ${JSON.stringify(eventPayload)}\n\n`;
     eventClients.forEach((clientRes: any, clientId: string) => {
-      try { clientRes.write(eventMsg); } catch { eventClients.delete(clientId); }
+      try {
+        if ((clientRes as any).__tenantId && (clientRes as any).__tenantId !== updated.tenantId) return;
+        clientRes.write(eventMsg);
+      } catch { eventClients.delete(clientId); }
     });
 
     res.json(updated);
