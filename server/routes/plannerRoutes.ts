@@ -206,6 +206,8 @@ app.get("/api/planner/events", isAuthenticated, (req, res) => {
     (global as any).__plannerEventClients = new Map();
   }
   const clients: Map<string, any> = (global as any).__plannerEventClients;
+  const tenantId = getTenantIdWithFallback(req);
+  (res as any).__tenantId = tenantId;
   clients.set(clientId, res);
 
   res.write(`data: ${JSON.stringify({ type: 'connected', clientId })}\n\n`);

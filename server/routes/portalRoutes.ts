@@ -1892,7 +1892,7 @@ app.patch("/api/customer-change-requests/:id/status", requireAdmin, asyncHandler
 
     const userId = (req as any).user?.claims?.sub || (req as any).headers?.["x-replit-user-id"] || null;
 
-    const updateData: Record<string, any> = {
+    const updateData: Partial<{ status: string; reviewNotes: string | null; reviewedBy: string | null; reviewedAt: Date; severity: string }> = {
       status,
       reviewNotes: reviewNotes || null,
       reviewedBy: userId,
