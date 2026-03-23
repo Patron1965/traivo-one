@@ -808,6 +808,9 @@ export default function ImportPage() {
     setModusObjectFile(file);
     setModusValidation(null);
     setIsValidating(true);
+    setShowImportPreview(false);
+    setPreviewObjectRows([]);
+    setNameOverrides({ objects: {}, customers: {}, metadata: {}, resources: {} });
     const formData = new FormData();
     formData.append("file", file);
 
