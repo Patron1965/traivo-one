@@ -104,6 +104,7 @@ export default function CustomerReportsPage() {
   const [selectedReport, setSelectedReport] = useState<ChangeRequest | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [newStatus, setNewStatus] = useState("");
+  const [newSeverity, setNewSeverity] = useState("");
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
@@ -132,8 +133,10 @@ export default function CustomerReportsPage() {
   const totalPages = Math.ceil(totalReports / PAGE_SIZE);
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, status, reviewNotes }: { id: string; status: string; reviewNotes: string }) => {
-      return apiRequest("PATCH", `/api/customer-change-requests/${id}/status`, { status, reviewNotes });
+    mutationFn: async ({ id, status, reviewNotes, severity }: { id: string; status: string; reviewNotes: string; severity?: string }) => {
+      const body: Record<string, string> = { status, reviewNotes };
+      if (severity) body.severity = severity;
+      return apiRequest("PATCH", `/api/customer-change-requests/${id}/status`, body);
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/customer-change-requests"] });
@@ -199,6 +202,7 @@ export default function CustomerReportsPage() {
     setSelectedReport(report);
     setReviewNotes(report.reviewNotes || "");
     setNewStatus(report.status);
+    setNewSeverity(report.severity || "");
   }
 
   function clearObjectFilter() {
@@ -596,6 +600,17 @@ export default function CustomerReportsPage() {
                     <SelectItem value="rejected">Avvisad</SelectItem>
                   </SelectContent>
                 </Select>
+                <Select value={newSeverity} onValueChange={setNewSeverity}>
+                  <SelectTrigger data-testid="select-new-severity">
+                    <SelectValue placeholder="Välj allvarlighetsgrad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="low">Låg</SelectItem>
+                    <SelectItem value="medium">Medel</SelectItem>
+                    <SelectItem value="high">Hög</SelectItem>
+                    <SelectItem value="critical">Kritisk</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Textarea
                   placeholder="Kommentar till kund..."
                   value={reviewNotes}
@@ -630,7 +645,7 @@ export default function CustomerReportsPage() {
                 <Button
                   onClick={() => {
                     if (selectedReport && newStatus) {
-                      updateMutation.mutate({ id: selectedReport.id, status: newStatus, reviewNotes });
+                      updateMutation.mutate({ id: selectedReport.id, status: newStatus, reviewNotes, severity: newSeverity || undefined });
                     }
                   }}
                   disabled={!newStatus || updateMutation.isPending}

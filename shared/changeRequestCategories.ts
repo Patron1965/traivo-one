@@ -36,6 +36,8 @@ export const SEVERITY_LABELS: Record<string, string> = {
 export type OneCategory = typeof ONE_CATEGORIES[number];
 export type SeverityLevel = typeof SEVERITY_LEVELS[number];
 
+export const CATEGORY_MAP = GO_TO_ONE_CATEGORY_MAP;
+
 export function mapGoCategory(goCategory: string): string {
   return GO_TO_ONE_CATEGORY_MAP[goCategory] || "ovrigt";
 }

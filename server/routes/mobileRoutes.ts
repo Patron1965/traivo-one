@@ -1979,8 +1979,12 @@ app.get("/api/mobile/customer-change-requests/categories", isMobileAuthenticated
 function broadcastPlannerEvent(event: { type: string; data: any }) {
   const clients: Map<string, any> = (global as any).__plannerEventClients || new Map();
   const msg = `data: ${JSON.stringify(event)}\n\n`;
+  const eventTenantId = event.data?.tenantId;
   clients.forEach((res: any, id: string) => {
-    try { res.write(msg); } catch(e) { clients.delete(id); }
+    try {
+      if (eventTenantId && (res as any).__tenantId && (res as any).__tenantId !== eventTenantId) return;
+      res.write(msg);
+    } catch(e) { clients.delete(id); }
   });
 }
 

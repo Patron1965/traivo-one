@@ -1879,20 +1879,30 @@ app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, 
 
 app.patch("/api/customer-change-requests/:id/status", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { status, reviewNotes } = req.body;
+    const { status, reviewNotes, severity } = req.body;
 
     if (!status || !["new", "reviewed", "resolved", "rejected"].includes(status)) {
       throw new ValidationError("Ogiltig status");
     }
 
+    const validSeverities = ["low", "medium", "high", "critical"];
+    if (severity !== undefined && !validSeverities.includes(severity)) {
+      throw new ValidationError("Ogiltig allvarlighetsgrad");
+    }
+
     const userId = (req as any).user?.claims?.sub || (req as any).headers?.["x-replit-user-id"] || null;
 
-    const updated = await storage.updateCustomerChangeRequest(req.params.id, tenantId, {
+    const updateData: Record<string, any> = {
       status,
       reviewNotes: reviewNotes || null,
       reviewedBy: userId,
       reviewedAt: new Date(),
-    });
+    };
+    if (severity !== undefined) {
+      updateData.severity = severity;
+    }
+
+    const updated = await storage.updateCustomerChangeRequest(req.params.id, tenantId, updateData);
 
     if (!updated) {
       throw new NotFoundError("Ändringsbegäran hittades inte");
