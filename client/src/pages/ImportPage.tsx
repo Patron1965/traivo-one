@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImportSummaryView } from "@/components/ImportSummaryView";
+import { ImportHealthOverview } from "@/components/ImportHealthOverview";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
 import type { Customer, Resource, ServiceObject } from "@shared/schema";
@@ -1949,6 +1950,8 @@ export default function ImportPage() {
               }}
             />
           )}
+
+          <ImportHealthOverview />
 
           {importBatches.length > 0 && (
             <Card data-testid="card-import-history">

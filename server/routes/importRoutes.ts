@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
-import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
+import { eq, sql, desc, and, gte, isNull, isNotNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
 import { getTenantIdWithFallback } from "../tenant-middleware";
@@ -11,6 +11,7 @@ import multer from "multer";
 import Papa from "papaparse";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
+import { objects, workOrders, customers, objectMetadata } from "@shared/schema";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -1448,6 +1449,73 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
       articlesAutoCreated,
       errors: errors.slice(0, 50),
       totalRows: (result.data as unknown[]).length,
+    });
+}));
+
+app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+
+    const [
+      totalObjectsResult,
+      noCoordinatesResult,
+      noAddressResult,
+      totalWorkOrdersResult,
+      noResourceResult,
+      totalCustomersResult,
+      totalMetadataResult,
+      emptyMetadataResult,
+    ] = await Promise.all([
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(objects)
+        .where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt))),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(objects)
+        .where(and(
+          eq(objects.tenantId, tenantId),
+          isNull(objects.deletedAt),
+          sql`(${objects.latitude} IS NULL OR ${objects.longitude} IS NULL)`,
+        )),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(objects)
+        .where(and(
+          eq(objects.tenantId, tenantId),
+          isNull(objects.deletedAt),
+          sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
+        )),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(workOrders)
+        .where(and(eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt))),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(workOrders)
+        .where(and(
+          eq(workOrders.tenantId, tenantId),
+          isNull(workOrders.deletedAt),
+          isNull(workOrders.resourceId),
+        )),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(customers)
+        .where(and(eq(customers.tenantId, tenantId), isNull(customers.deletedAt))),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(objectMetadata)
+        .where(eq(objectMetadata.tenantId, tenantId)),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(objectMetadata)
+        .where(and(
+          eq(objectMetadata.tenantId, tenantId),
+          sql`(${objectMetadata.value} IS NULL OR ${objectMetadata.value} = '')`,
+          isNull(objectMetadata.valueJson),
+        )),
+    ]);
+
+    res.json({
+      totalObjects: totalObjectsResult[0]?.count || 0,
+      objectsWithoutCoordinates: noCoordinatesResult[0]?.count || 0,
+      objectsWithoutAddress: noAddressResult[0]?.count || 0,
+      totalWorkOrders: totalWorkOrdersResult[0]?.count || 0,
+      workOrdersWithoutResource: noResourceResult[0]?.count || 0,
+      totalCustomers: totalCustomersResult[0]?.count || 0,
+      totalMetadata: totalMetadataResult[0]?.count || 0,
+      emptyMetadata: emptyMetadataResult[0]?.count || 0,
     });
 }));
 
