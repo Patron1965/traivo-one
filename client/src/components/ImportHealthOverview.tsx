@@ -4,20 +4,23 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
 import {
   MapPin, Building2, Users, Truck, FileSpreadsheet, CheckCircle,
-  AlertTriangle, XCircle, ChevronDown, ChevronUp, Eye, ShieldCheck, Activity
+  AlertTriangle, XCircle, ChevronDown, ChevronUp, Eye, ShieldCheck, Activity, Link2Off
 } from "lucide-react";
 
 interface HealthStats {
   totalObjects: number;
   objectsWithoutCoordinates: number;
   objectsWithoutAddress: number;
+  objectsWithoutCustomer: number;
   totalWorkOrders: number;
   workOrdersWithoutResource: number;
   totalCustomers: number;
   totalMetadata: number;
   emptyMetadata: number;
+  totalInvoiceLines: number;
 }
 
 interface HealthIssue {
@@ -31,25 +34,29 @@ interface HealthIssue {
   description: string;
 }
 
-const ACCEPTED_KEY = "traivo-import-health-accepted";
+function getAcceptedKey(tenantId: string) {
+  return `traivo-import-health-accepted-${tenantId}`;
+}
 
-function loadAccepted(): Set<string> {
+function loadAccepted(tenantId: string): Set<string> {
   try {
-    const saved = localStorage.getItem(ACCEPTED_KEY);
+    const saved = localStorage.getItem(getAcceptedKey(tenantId));
     return saved ? new Set(JSON.parse(saved)) : new Set();
   } catch {
     return new Set();
   }
 }
 
-function saveAccepted(accepted: Set<string>) {
-  localStorage.setItem(ACCEPTED_KEY, JSON.stringify(Array.from(accepted)));
+function saveAccepted(tenantId: string, accepted: Set<string>) {
+  localStorage.setItem(getAcceptedKey(tenantId), JSON.stringify(Array.from(accepted)));
 }
 
 export function ImportHealthOverview() {
   const [, navigate] = useLocation();
+  const { user } = useAuth();
+  const scopeKey = user?.id || "anonymous";
   const [expanded, setExpanded] = useState(true);
-  const [acceptedIssues, setAcceptedIssues] = useState<Set<string>>(loadAccepted);
+  const [acceptedIssues, setAcceptedIssues] = useState<Set<string>>(() => loadAccepted(scopeKey));
 
   const { data: stats, isLoading } = useQuery<HealthStats>({
     queryKey: ["/api/import/health-stats"],
@@ -67,7 +74,7 @@ export function ImportHealthOverview() {
         total: stats.totalObjects,
         severity: stats.objectsWithoutCoordinates > stats.totalObjects * 0.5 ? "critical" : "warning",
         icon: <MapPin className="h-4 w-4" />,
-        link: "/planner-map",
+        link: "/objects?issue=no-coords",
         description: "Dessa objekt kan inte visas på kartan eller ingå i ruttoptimering.",
       });
     }
@@ -80,8 +87,21 @@ export function ImportHealthOverview() {
         total: stats.totalObjects,
         severity: stats.objectsWithoutAddress > stats.totalObjects * 0.3 ? "critical" : "warning",
         icon: <Building2 className="h-4 w-4" />,
-        link: "/objects",
+        link: "/objects?issue=no-address",
         description: "Adress saknas — geokodning och kartvisning fungerar inte.",
+      });
+    }
+
+    if (stats.objectsWithoutCustomer > 0) {
+      list.push({
+        id: "no-customer",
+        label: "Objekt utan kundkoppling",
+        count: stats.objectsWithoutCustomer,
+        total: stats.totalObjects,
+        severity: "warning",
+        icon: <Link2Off className="h-4 w-4" />,
+        link: "/objects?issue=no-customer",
+        description: "Dessa objekt saknar aktiv kundkoppling — kan påverka fakturering.",
       });
     }
 
@@ -106,7 +126,7 @@ export function ImportHealthOverview() {
         total: stats.totalMetadata,
         severity: "info",
         icon: <FileSpreadsheet className="h-4 w-4" />,
-        link: "/objects",
+        link: "/objects?issue=empty-metadata",
         description: "Tomma metadata-fält kan påverka filtrering och rapportering.",
       });
     }
@@ -126,7 +146,7 @@ export function ImportHealthOverview() {
       } else {
         next.add(issueId);
       }
-      saveAccepted(next);
+      saveAccepted(scopeKey, next);
       return next;
     });
   };
@@ -180,7 +200,7 @@ export function ImportHealthOverview() {
                 )}
               </CardTitle>
               <CardDescription>
-                {stats.totalCustomers} kunder · {stats.totalObjects} objekt · {stats.totalWorkOrders} uppgifter
+                {stats.totalCustomers} kunder · {stats.totalObjects} objekt · {stats.totalWorkOrders} uppgifter · {stats.totalInvoiceLines} fakturarader
               </CardDescription>
             </div>
           </div>
@@ -192,7 +212,7 @@ export function ImportHealthOverview() {
 
       {expanded && (
         <CardContent className="space-y-3 pt-0">
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
             <div className="text-center p-2 rounded-lg bg-muted/30" data-testid="stat-customers">
               <Users className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
               <p className="text-lg font-bold">{stats.totalCustomers}</p>
@@ -207,6 +227,11 @@ export function ImportHealthOverview() {
               <Truck className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
               <p className="text-lg font-bold">{stats.totalWorkOrders}</p>
               <p className="text-xs text-muted-foreground">Uppgifter</p>
+            </div>
+            <div className="text-center p-2 rounded-lg bg-muted/30" data-testid="stat-invoicelines">
+              <FileSpreadsheet className="h-4 w-4 mx-auto mb-1 text-muted-foreground" />
+              <p className="text-lg font-bold">{stats.totalInvoiceLines}</p>
+              <p className="text-xs text-muted-foreground">Fakturarader</p>
             </div>
           </div>
 

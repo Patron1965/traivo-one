@@ -11,7 +11,7 @@ import multer from "multer";
 import Papa from "papaparse";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
-import { objects, workOrders, customers, objectMetadata } from "@shared/schema";
+import { objects, workOrders, customers, objectMetadata, workOrderLines } from "@shared/schema";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -1459,11 +1459,13 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
       totalObjectsResult,
       noCoordinatesResult,
       noAddressResult,
+      noCustomerLinkResult,
       totalWorkOrdersResult,
       noResourceResult,
       totalCustomersResult,
       totalMetadataResult,
       emptyMetadataResult,
+      totalInvoiceLinesResult,
     ] = await Promise.all([
       db.select({ count: sql<number>`count(*)::int` })
         .from(objects)
@@ -1481,6 +1483,13 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
           eq(objects.tenantId, tenantId),
           isNull(objects.deletedAt),
           sql`(${objects.address} IS NULL OR ${objects.address} = '')`,
+        )),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(objects)
+        .where(and(
+          eq(objects.tenantId, tenantId),
+          isNull(objects.deletedAt),
+          sql`(${objects.customerId} IS NULL OR NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = ${objects.customerId} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL))`,
         )),
       db.select({ count: sql<number>`count(*)::int` })
         .from(workOrders)
@@ -1505,17 +1514,22 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
           sql`(${objectMetadata.value} IS NULL OR ${objectMetadata.value} = '')`,
           isNull(objectMetadata.valueJson),
         )),
+      db.select({ count: sql<number>`count(*)::int` })
+        .from(workOrderLines)
+        .where(eq(workOrderLines.tenantId, tenantId)),
     ]);
 
     res.json({
       totalObjects: totalObjectsResult[0]?.count || 0,
       objectsWithoutCoordinates: noCoordinatesResult[0]?.count || 0,
       objectsWithoutAddress: noAddressResult[0]?.count || 0,
+      objectsWithoutCustomer: noCustomerLinkResult[0]?.count || 0,
       totalWorkOrders: totalWorkOrdersResult[0]?.count || 0,
       workOrdersWithoutResource: noResourceResult[0]?.count || 0,
       totalCustomers: totalCustomersResult[0]?.count || 0,
       totalMetadata: totalMetadataResult[0]?.count || 0,
       emptyMetadata: emptyMetadataResult[0]?.count || 0,
+      totalInvoiceLines: totalInvoiceLinesResult[0]?.count || 0,
     });
 }));
 

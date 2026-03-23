@@ -72,6 +72,10 @@ export default function ObjectsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [typeFilter, setTypeFilterRaw] = useState("all");
   const [accessFilter, setAccessFilterRaw] = useState("all");
+  const [issueFilter, setIssueFilter] = useState<string | null>(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("issue");
+  });
   const [customerFilter, setCustomerFilterRaw] = useState<string[]>(() => {
     const params = new URLSearchParams(window.location.search);
     const c = params.get("customer");
@@ -169,7 +173,7 @@ export default function ObjectsPage() {
   }, [searchQuery]);
 
   const { data: objectsData, isLoading } = useQuery<{ objects: ServiceObject[]; total: number }>({
-    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, interimFilter],
+    queryKey: ["/api/objects", "paginated", currentPage, debouncedSearch, customerFilter, typeFilter, accessFilter, hierarchyFilter, interimFilter, issueFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
@@ -192,6 +196,9 @@ export default function ObjectsPage() {
       }
       if (interimFilter) {
         params.append("interim", "true");
+      }
+      if (issueFilter) {
+        params.append("issue", issueFilter);
       }
       const res = await fetch(`/api/objects?${params.toString()}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch objects");
@@ -360,7 +367,8 @@ export default function ObjectsPage() {
     customerFilter.length > 0 ? 1 : 0,
     hierarchyFilter !== "all" ? 1 : 0,
     (setupTimeRange[0] !== 0 || setupTimeRange[1] !== 60) ? 1 : 0,
-  ].reduce((a, b) => a + b, 0), [typeFilter, accessFilter, customerFilter, hierarchyFilter, setupTimeRange]);
+    issueFilter ? 1 : 0,
+  ].reduce((a, b) => a + b, 0), [typeFilter, accessFilter, customerFilter, hierarchyFilter, setupTimeRange, issueFilter]);
 
   const quickStats = useMemo(() => {
     const typeCounts: Record<string, number> = {};
@@ -392,6 +400,8 @@ export default function ObjectsPage() {
     setCustomerFilter([]);
     setHierarchyFilter("all");
     setSetupTimeRange([0, 60]);
+    setIssueFilter(null);
+    window.history.replaceState({}, "", window.location.pathname);
   };
 
   const objectsWithCoords = useMemo(() => filteredObjects.filter(o => o.latitude && o.longitude), [filteredObjects]);
@@ -845,8 +855,26 @@ export default function ObjectsPage() {
     ? mapPositions[0] 
     : [59.196, 17.626];
 
+  const issueFilterLabels: Record<string, string> = {
+    "no-coords": "Objekt utan koordinater",
+    "no-address": "Objekt utan adress",
+    "no-customer": "Objekt utan kundkoppling",
+    "empty-metadata": "Objekt med tomma metadata-fält",
+  };
+
   return (
     <div className="p-6 space-y-6">
+      {issueFilter && (
+        <div className="flex items-center gap-3 p-3 rounded-lg bg-amber-50 border border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" data-testid="banner-issue-filter">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+          <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            Filtrerat: {issueFilterLabels[issueFilter] || issueFilter}
+          </span>
+          <Button variant="ghost" size="sm" className="h-7 text-xs ml-auto" onClick={clearAllFilters} data-testid="button-clear-issue-filter">
+            Rensa filter
+          </Button>
+        </div>
+      )}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-semibold">{t("object_plural")}</h1>

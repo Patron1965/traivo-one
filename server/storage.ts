@@ -167,7 +167,7 @@ export interface IStorage {
   deleteCustomer(id: string): Promise<void>;
   
   getObjects(tenantId: string): Promise<ServiceObject[]>;
-  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean }): Promise<{ objects: ServiceObject[]; total: number }>;
+  getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string }): Promise<{ objects: ServiceObject[]; total: number }>;
   getObjectsByIds(tenantId: string, ids: string[]): Promise<ServiceObject[]>;
   getObject(id: string): Promise<ServiceObject | undefined>;
   getObjectByObjectNumber(tenantId: string, objectNumber: string): Promise<ServiceObject | undefined>;
@@ -921,7 +921,7 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(objects).where(and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
   }
 
-  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean }): Promise<{ objects: ServiceObject[]; total: number }> {
+  async getObjectsPaginated(tenantId: string, limit: number, offset: number, search?: string, customerIds?: string[], filters?: { objectType?: string; hierarchyLevel?: string; accessType?: string; isInterimObject?: boolean; issue?: string }): Promise<{ objects: ServiceObject[]; total: number }> {
     const { sql, count, inArray } = await import("drizzle-orm");
     
     let whereConditions = and(eq(objects.tenantId, tenantId), isNull(objects.deletedAt));
@@ -948,6 +948,16 @@ export class DatabaseStorage implements IStorage {
     
     if (filters?.isInterimObject !== undefined) {
       whereConditions = and(whereConditions, eq(objects.isInterimObject, filters.isInterimObject));
+    }
+
+    if (filters?.issue) {
+      if (filters.issue === "no-coords") {
+        whereConditions = and(whereConditions, sql`(${objects.latitude} IS NULL OR ${objects.longitude} IS NULL)`);
+      } else if (filters.issue === "no-address") {
+        whereConditions = and(whereConditions, sql`(${objects.address} IS NULL OR ${objects.address} = '')`);
+      } else if (filters.issue === "no-customer") {
+        whereConditions = and(whereConditions, sql`(${objects.customerId} IS NULL OR NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = ${objects.customerId} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL))`);
+      }
     }
     
     if (search && search.trim()) {
