@@ -18,6 +18,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
 import type { Customer, Resource, ServiceObject } from "@shared/schema";
+import { ImportPreviewPanel, ResourcePreviewPanel, type NameOverrides } from "@/components/ImportPreviewPanel";
 
 type ImportType = "customers" | "resources" | "objects";
 type ModusImportType = "objects" | "tasks" | "events" | "invoice-lines";
@@ -485,6 +486,14 @@ export default function ImportPage() {
   const [isValidating, setIsValidating] = useState(false);
   const [importProgress, setImportProgress] = useState<SSEProgress | null>(null);
   const [undoBatchId, setUndoBatchId] = useState<string | null>(null);
+  const [showImportPreview, setShowImportPreview] = useState(false);
+  const [previewObjectRows, setPreviewObjectRows] = useState<{ modusId: string; originalName: string; type: string; customer: string }[]>([]);
+  const [nameOverrides, setNameOverrides] = useState<NameOverrides>({ objects: {}, customers: {}, metadata: {}, resources: {} });
+  const [showTaskPreview, setShowTaskPreview] = useState(false);
+  const [taskPreviewFile, setTaskPreviewFile] = useState<File | null>(null);
+  const [taskPreviewResources, setTaskPreviewResources] = useState<string[]>([]);
+  const [taskResourceOverrides, setTaskResourceOverrides] = useState<Record<string, string>>({});
+  const [taskPreviewTotalRows, setTaskPreviewTotalRows] = useState(0);
   const eventSourceRef = useRef<EventSource | null>(null);
 
   const { data: customers = [] } = useQuery<Customer[]>({ queryKey: ["/api/customers"] });
@@ -833,6 +842,29 @@ export default function ImportPage() {
     }
   };
 
+  const openImportPreview = useCallback(() => {
+    if (!modusObjectFile || !modusValidation) return;
+    Papa.parse<Record<string, string>>(modusObjectFile, {
+      header: true,
+      skipEmptyLines: true,
+      delimiter: ";",
+      complete: (results) => {
+        const rows = results.data.map((row) => {
+          const modusId = (row["Id"] || "").replace(/\s/g, "");
+          const originalName = row["Namn"] || "";
+          const type = row["Typ"] || "";
+          const kundRaw = row["Kund"] || "";
+          const match = kundRaw.match(/^(.+?)\s*\(\d+\)$/);
+          const customer = match ? match[1].trim() : kundRaw.trim();
+          return { modusId, originalName, type, customer };
+        }).filter(r => r.modusId && r.originalName);
+        setPreviewObjectRows(rows);
+        setNameOverrides({ objects: {}, customers: {}, metadata: {}, resources: {} });
+        setShowImportPreview(true);
+      },
+    });
+  }, [modusObjectFile, modusValidation]);
+
   const handleModusImportAfterValidation = async () => {
     if (!modusObjectFile) return;
     setImportProgress(null);
@@ -850,6 +882,7 @@ export default function ImportPage() {
       },
     } : null;
     await handleModusUpload("objects", modusObjectFile, scorecardSummary);
+    setShowImportPreview(false);
     setModusObjectFile(null);
     setModusValidation(null);
   };
@@ -860,6 +893,19 @@ export default function ImportPage() {
     formData.append("file", file);
     if (scorecardSummary) {
       formData.append("scorecardSummary", JSON.stringify(scorecardSummary));
+    }
+
+    if (type === "objects") {
+      const hasOverrides = Object.keys(nameOverrides.objects).length > 0 ||
+        Object.keys(nameOverrides.customers).length > 0 ||
+        Object.keys(nameOverrides.metadata).length > 0;
+      if (hasOverrides) {
+        formData.append("nameOverrides", JSON.stringify(nameOverrides));
+      }
+    }
+
+    if (type === "tasks" && Object.keys(taskResourceOverrides).length > 0) {
+      formData.append("resourceNameOverrides", JSON.stringify(taskResourceOverrides));
     }
     
     if (type === "objects") {
@@ -1175,37 +1221,49 @@ export default function ImportPage() {
                     </div>
                   )}
 
-                  <div className="flex items-center gap-3 pt-2 border-t">
-                    <Button
-                      variant="default"
-                      disabled={modusUploading !== null}
-                      onClick={handleModusImportAfterValidation}
-                      data-testid="button-modus-start-import"
-                    >
-                      {modusUploading === "objects" ? (
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      ) : (
-                        <Upload className="h-4 w-4 mr-2" />
+                  {!showImportPreview && (
+                    <div className="flex items-center gap-3 pt-2 border-t">
+                      <Button
+                        variant="default"
+                        disabled={modusUploading !== null}
+                        onClick={openImportPreview}
+                        data-testid="button-modus-start-import"
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70
+                          ? "Granska & importera ändå"
+                          : `Granska & döp om (${modusValidation.totalRows} objekt)`}
+                      </Button>
+                      {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70 && (
+                        <Badge variant="destructive" className="text-xs">
+                          Låg datakvalitet — överväg att åtgärda först
+                        </Badge>
                       )}
-                      {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70
-                        ? "Importera ändå"
-                        : `Starta import (${modusValidation.totalRows} objekt)`}
-                    </Button>
-                    {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70 && (
-                      <Badge variant="destructive" className="text-xs">
-                        Låg datakvalitet — överväg att åtgärda först
-                      </Badge>
-                    )}
-                    <Button
-                      variant="ghost"
-                      onClick={() => { setModusValidation(null); setModusObjectFile(null); }}
-                      data-testid="button-modus-cancel-validation"
-                    >
-                      {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70
-                        ? "Åtgärda först"
-                        : "Avbryt"}
-                    </Button>
-                  </div>
+                      <Button
+                        variant="ghost"
+                        onClick={() => { setModusValidation(null); setModusObjectFile(null); }}
+                        data-testid="button-modus-cancel-validation"
+                      >
+                        {modusValidation.scorecard && modusValidation.scorecard.overallScore < 70
+                          ? "Åtgärda först"
+                          : "Avbryt"}
+                      </Button>
+                    </div>
+                  )}
+
+                  {showImportPreview && (
+                    <ImportPreviewPanel
+                      objectRows={previewObjectRows}
+                      customerNames={[...modusValidation.customersNew, ...modusValidation.customersExisting]}
+                      metadataColumns={modusValidation.metadataColumns}
+                      nameOverrides={nameOverrides}
+                      onNameOverridesChange={setNameOverrides}
+                      onConfirmImport={handleModusImportAfterValidation}
+                      onCancel={() => { setShowImportPreview(false); }}
+                      isImporting={modusUploading === "objects"}
+                      totalRows={modusValidation.totalRows}
+                    />
+                  )}
                 </div>
               )}
 
@@ -1370,13 +1428,34 @@ export default function ImportPage() {
                   id="modus-tasks"
                   onChange={(e) => {
                     const file = e.target.files?.[0];
-                    if (file) handleModusUpload("tasks", file);
+                    if (file) {
+                      Papa.parse<Record<string, string>>(file, {
+                        header: true,
+                        skipEmptyLines: true,
+                        delimiter: ";",
+                        complete: (results) => {
+                          const teamSet = new Set<string>();
+                          const existingResourceNames = new Set(resources.map(r => r.name.toLowerCase()));
+                          for (const row of results.data) {
+                            const team = (row["Team"] || "").trim();
+                            if (team && !existingResourceNames.has(team.toLowerCase())) {
+                              teamSet.add(team);
+                            }
+                          }
+                          setTaskPreviewFile(file);
+                          setTaskPreviewResources(Array.from(teamSet).sort());
+                          setTaskResourceOverrides({});
+                          setTaskPreviewTotalRows(results.data.length);
+                          setShowTaskPreview(true);
+                        },
+                      });
+                    }
                     e.target.value = "";
                   }}
                 />
                 <Button
                   variant="default"
-                  disabled={modusUploading !== null}
+                  disabled={modusUploading !== null || showTaskPreview}
                   onClick={() => document.getElementById("modus-tasks")?.click()}
                   data-testid="button-modus-tasks"
                 >
@@ -1394,6 +1473,25 @@ export default function ImportPage() {
                   </Badge>
                 )}
               </div>
+
+              {showTaskPreview && taskPreviewFile && (
+                <ResourcePreviewPanel
+                  resourceNames={taskPreviewResources}
+                  resourceOverrides={taskResourceOverrides}
+                  onOverridesChange={setTaskResourceOverrides}
+                  onConfirmImport={() => {
+                    handleModusUpload("tasks", taskPreviewFile);
+                    setShowTaskPreview(false);
+                    setTaskPreviewFile(null);
+                  }}
+                  onCancel={() => {
+                    setShowTaskPreview(false);
+                    setTaskPreviewFile(null);
+                  }}
+                  isImporting={modusUploading === "tasks"}
+                  totalRows={taskPreviewTotalRows}
+                />
+              )}
 
               {modusResults.tasks && (
                 <div className="grid grid-cols-2 gap-3 p-3 border rounded-lg bg-muted/30">

@@ -780,6 +780,13 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         scorecardSummary = JSON.parse(req.body.scorecardSummary);
       }
     } catch {}
+
+    let nameOverrides: { objects?: Record<string, string>; customers?: Record<string, string>; metadata?: Record<string, string> } = {};
+    try {
+      if (req.body?.nameOverrides) {
+        nameOverrides = JSON.parse(req.body.nameOverrides);
+      }
+    } catch {}
     
     importJobs.set(importBatchId, { tenantId, status: "running", phase: "kunder", processed: 0, total: totalRows, created: 0, updated: 0, errors: 0, listeners: new Set() });
     
@@ -791,13 +798,15 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
     const customerMap = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c.id]));
     
     for (const name of Array.from(customerNames)) {
-      if (!customerMap.has(name.toLowerCase())) {
+      const resolvedName = nameOverrides.customers?.[name] || name;
+      if (!customerMap.has(resolvedName.toLowerCase())) {
         const newCustomer = await storage.createCustomer({
           tenantId,
-          name: name,
+          name: resolvedName,
           importBatchId,
         });
         customerMap.set(name.toLowerCase(), newCustomer.id);
+        customerMap.set(resolvedName.toLowerCase(), newCustomer.id);
       }
     }
 
@@ -814,12 +823,13 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
     for (const row of result.data as Record<string, string>[]) {
       try {
         const modusId = (row["Id"] || "").replace(/\s/g, "");
-        const name = row["Namn"] || "";
+        const originalName = row["Namn"] || "";
+        const name = nameOverrides.objects?.[modusId] || originalName;
         const typ = row["Typ"] || "Område";
         const parent = (row["Parent"] || "").replace(/\s/g, "");
         const kundRaw = row["Kund"] || "";
         
-        if (!name || !modusId) {
+        if (!originalName || !modusId) {
           skipped.push(`Rad utan namn eller ID`);
           continue;
         }
@@ -983,7 +993,8 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
     if (firstRow) {
       for (const key of Object.keys(firstRow)) {
         if (key.startsWith("Metadata - ")) {
-          const metadataName = key.replace("Metadata - ", "").trim();
+          const originalMetadataName = key.replace("Metadata - ", "").trim();
+          const metadataName = nameOverrides.metadata?.[originalMetadataName] || originalMetadataName;
           metadataColumns.push({ csvColumn: key, metadataName });
         }
       }
@@ -1097,6 +1108,14 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
 
     const tenantId = getTenantIdWithFallback(req);
     const taskBatchId = crypto.randomUUID();
+
+    let resourceNameOverrides: Record<string, string> = {};
+    try {
+      if (req.body?.resourceNameOverrides) {
+        resourceNameOverrides = JSON.parse(req.body.resourceNameOverrides);
+      }
+    } catch {}
+
     const objects = await storage.getObjects(tenantId);
     const objectMap = new Map(objects.map(o => [o.objectNumber, o]));
     
@@ -1145,15 +1164,17 @@ app.post("/api/import/modus/tasks", upload.single("file"), asyncHandler(async (r
         // Find or create resource
         let resourceId = null;
         if (team) {
-          resourceId = resourceMap.get(team.toLowerCase());
+          const resolvedTeamName = resourceNameOverrides[team] || team;
+          resourceId = resourceMap.get(team.toLowerCase()) || resourceMap.get(resolvedTeamName.toLowerCase());
           if (!resourceId) {
             const newResource = await storage.createResource({
               tenantId,
-              name: team,
-              initials: team.substring(0, 3).toUpperCase(),
+              name: resolvedTeamName,
+              initials: resolvedTeamName.substring(0, 3).toUpperCase(),
             });
             resourceId = newResource.id;
             resourceMap.set(team.toLowerCase(), resourceId);
+            resourceMap.set(resolvedTeamName.toLowerCase(), resourceId);
           }
         }
         
