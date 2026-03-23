@@ -1834,15 +1834,20 @@ app.get("/api/portal/field/qr-lookup/:code", asyncHandler(async (req, res) => {
 
 app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { objectId, status, category, customerId, dateFrom, dateTo } = req.query;
+    const { objectId, status, category, customerId, dateFrom, dateTo, limit, offset } = req.query;
 
-    const requests = await storage.getCustomerChangeRequests(tenantId, {
+    const parsedLimit = limit ? Math.min(parseInt(limit as string, 10), 100) : 50;
+    const parsedOffset = offset ? parseInt(offset as string, 10) : 0;
+
+    const { items: requests, total } = await storage.getCustomerChangeRequests(tenantId, {
       objectId: objectId as string | undefined,
       status: status as string | undefined,
       category: category as string | undefined,
       customerId: customerId as string | undefined,
       dateFrom: dateFrom as string | undefined,
       dateTo: dateTo as string | undefined,
+      limit: parsedLimit,
+      offset: parsedOffset,
     });
 
     const objectIds = [...new Set(requests.map(r => r.objectId))];
@@ -1856,12 +1861,15 @@ app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, 
       : [];
     const customerMap = new Map(customersData.filter(Boolean).map(c => [c!.id, { name: c!.name }]));
 
-    res.json(requests.map(r => ({
-      ...r,
-      objectName: objectMap.get(r.objectId)?.name || "Okänt objekt",
-      objectAddress: objectMap.get(r.objectId)?.address || "",
-      customerName: customerMap.get(r.customerId)?.name || "Okänd kund",
-    })));
+    res.json({
+      items: requests.map(r => ({
+        ...r,
+        objectName: objectMap.get(r.objectId)?.name || "Okänt objekt",
+        objectAddress: objectMap.get(r.objectId)?.address || "",
+        customerName: customerMap.get(r.customerId)?.name || "Okänd kund",
+      })),
+      total,
+    });
 }));
 
 app.patch("/api/customer-change-requests/:id/status", requireAdmin, asyncHandler(async (req, res) => {
@@ -1943,7 +1951,7 @@ app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, as
 
 app.get("/api/customer-change-requests/counts-by-object", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const requests = await storage.getCustomerChangeRequests(tenantId, { status: "new" });
+    const { items: requests } = await storage.getCustomerChangeRequests(tenantId, { status: "new" });
     const counts: Record<string, number> = {};
     for (const r of requests) {
       counts[r.objectId] = (counts[r.objectId] || 0) + 1;

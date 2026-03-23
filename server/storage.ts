@@ -608,7 +608,7 @@ export interface IStorage {
   updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined>;
   
   // Customer Change Requests
-  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string }): Promise<CustomerChangeRequest[]>;
+  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }>;
   getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined>;
   createCustomerChangeRequest(request: InsertCustomerChangeRequest): Promise<CustomerChangeRequest>;
   updateCustomerChangeRequest(id: string, tenantId: string, data: Partial<CustomerChangeRequest>): Promise<CustomerChangeRequest | undefined>;
@@ -4669,7 +4669,7 @@ export class DatabaseStorage implements IStorage {
   // CUSTOMER CHANGE REQUESTS
   // ============================================
 
-  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string }): Promise<CustomerChangeRequest[]> {
+  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }> {
     const conditions = [eq(customerChangeRequests.tenantId, tenantId)];
     if (options?.customerId) {
       conditions.push(eq(customerChangeRequests.customerId, options.customerId));
@@ -4691,9 +4691,18 @@ export class DatabaseStorage implements IStorage {
       end.setDate(end.getDate() + 1);
       conditions.push(lte(customerChangeRequests.createdAt, end));
     }
-    return db.select().from(customerChangeRequests)
-      .where(and(...conditions))
-      .orderBy(desc(customerChangeRequests.createdAt));
+    const whereClause = and(...conditions);
+    const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(customerChangeRequests).where(whereClause);
+    const total = Number(countResult?.count || 0);
+    let query = db.select().from(customerChangeRequests).where(whereClause).orderBy(desc(customerChangeRequests.createdAt));
+    if (options?.limit !== undefined) {
+      query = query.limit(options.limit) as typeof query;
+    }
+    if (options?.offset !== undefined) {
+      query = query.offset(options.offset) as typeof query;
+    }
+    const items = await query;
+    return { items, total };
   }
 
   async getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined> {

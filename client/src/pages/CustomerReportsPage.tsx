@@ -86,6 +86,8 @@ export default function CustomerReportsPage() {
   const params = new URLSearchParams(searchStr);
   const initialObjectId = params.get("objectId") || "";
 
+  const PAGE_SIZE = 20;
+  const [currentPage, setCurrentPage] = useState(0);
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [customerFilter, setCustomerFilter] = useState<string>("all");
@@ -101,8 +103,8 @@ export default function CustomerReportsPage() {
     queryKey: ["/api/customers"],
   });
 
-  const { data: reports = [], isLoading } = useQuery<ChangeRequest[]>({
-    queryKey: ["/api/customer-change-requests", statusFilter, categoryFilter, objectIdFilter, customerFilter, dateFrom, dateTo],
+  const { data: reportsData, isLoading } = useQuery<{ items: ChangeRequest[]; total: number }>({
+    queryKey: ["/api/customer-change-requests", statusFilter, categoryFilter, objectIdFilter, customerFilter, dateFrom, dateTo, currentPage],
     queryFn: async () => {
       const p = new URLSearchParams();
       if (statusFilter !== "all") p.set("status", statusFilter);
@@ -111,11 +113,17 @@ export default function CustomerReportsPage() {
       if (objectIdFilter) p.set("objectId", objectIdFilter);
       if (dateFrom) p.set("dateFrom", dateFrom);
       if (dateTo) p.set("dateTo", dateTo);
+      p.set("limit", PAGE_SIZE.toString());
+      p.set("offset", (currentPage * PAGE_SIZE).toString());
       const res = await fetch(`/api/customer-change-requests?${p}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
     },
   });
+
+  const reports = reportsData?.items || [];
+  const totalReports = reportsData?.total || 0;
+  const totalPages = Math.ceil(totalReports / PAGE_SIZE);
 
   const updateMutation = useMutation({
     mutationFn: async ({ id, status, reviewNotes }: { id: string; status: string; reviewNotes: string }) => {
@@ -165,6 +173,8 @@ export default function CustomerReportsPage() {
     }, {} as Record<string, number>);
   }, [reports]);
 
+  function resetPage() { setCurrentPage(0); }
+
   const uniqueCustomers = useMemo(() => {
     const ids = [...new Set(reports.map(r => r.customerId))];
     return ids.map(id => {
@@ -192,6 +202,7 @@ export default function CustomerReportsPage() {
     setDateTo("");
     setObjectIdFilter("");
     setSearch("");
+    setCurrentPage(0);
     window.history.replaceState({}, "", "/customer-reports");
   }
 
@@ -229,27 +240,27 @@ export default function CustomerReportsPage() {
       )}
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "new" ? "ring-2 ring-blue-500" : ""}`} onClick={() => setStatusFilter("new")} data-testid="stat-new">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "new" ? "ring-2 ring-blue-500" : ""}`} onClick={() => { setStatusFilter("new"); resetPage(); }} data-testid="stat-new">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-blue-500">{statusCounts["new"] || 0}</p>
             <p className="text-xs text-muted-foreground">Nya</p>
           </CardContent>
         </Card>
-        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "reviewed" ? "ring-2 ring-amber-500" : ""}`} onClick={() => setStatusFilter("reviewed")} data-testid="stat-reviewed">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "reviewed" ? "ring-2 ring-amber-500" : ""}`} onClick={() => { setStatusFilter("reviewed"); resetPage(); }} data-testid="stat-reviewed">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-amber-500">{statusCounts["reviewed"] || 0}</p>
             <p className="text-xs text-muted-foreground">Under granskning</p>
           </CardContent>
         </Card>
-        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "resolved" ? "ring-2 ring-green-500" : ""}`} onClick={() => setStatusFilter("resolved")} data-testid="stat-resolved">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "resolved" ? "ring-2 ring-green-500" : ""}`} onClick={() => { setStatusFilter("resolved"); resetPage(); }} data-testid="stat-resolved">
           <CardContent className="p-4 text-center">
             <p className="text-2xl font-bold text-green-500">{statusCounts["resolved"] || 0}</p>
             <p className="text-xs text-muted-foreground">Lösta</p>
           </CardContent>
         </Card>
-        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "all" ? "ring-2 ring-primary" : ""}`} onClick={() => setStatusFilter("all")} data-testid="stat-all">
+        <Card className={`cursor-pointer hover:shadow-md transition-shadow ${statusFilter === "all" ? "ring-2 ring-primary" : ""}`} onClick={() => { setStatusFilter("all"); resetPage(); }} data-testid="stat-all">
           <CardContent className="p-4 text-center">
-            <p className="text-2xl font-bold">{reports.length}</p>
+            <p className="text-2xl font-bold">{totalReports}</p>
             <p className="text-xs text-muted-foreground">Totalt</p>
           </CardContent>
         </Card>
@@ -266,7 +277,7 @@ export default function CustomerReportsPage() {
             data-testid="input-search-reports"
           />
         </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); resetPage(); }}>
           <SelectTrigger className="w-[160px]" data-testid="select-status-filter">
             <Filter className="h-4 w-4 mr-2" />
             <SelectValue />
@@ -279,7 +290,7 @@ export default function CustomerReportsPage() {
             <SelectItem value="rejected">Avvisade</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+        <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); resetPage(); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-category-filter">
             <SelectValue placeholder="Alla kategorier" />
           </SelectTrigger>
@@ -290,7 +301,7 @@ export default function CustomerReportsPage() {
             ))}
           </SelectContent>
         </Select>
-        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+        <Select value={customerFilter} onValueChange={(v) => { setCustomerFilter(v); resetPage(); }}>
           <SelectTrigger className="w-[180px]" data-testid="select-customer-filter">
             <Building2 className="h-4 w-4 mr-2" />
             <SelectValue placeholder="Alla kunder" />
@@ -392,6 +403,37 @@ export default function CustomerReportsPage() {
               </CardContent>
             </Card>
           ))}
+        </div>
+      )}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between pt-2" data-testid="pagination-controls">
+          <p className="text-sm text-muted-foreground">
+            Visar {currentPage * PAGE_SIZE + 1}–{Math.min((currentPage + 1) * PAGE_SIZE, totalReports)} av {totalReports}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage === 0}
+              onClick={() => setCurrentPage(p => p - 1)}
+              data-testid="button-prev-page"
+            >
+              Föregående
+            </Button>
+            <span className="text-sm text-muted-foreground">
+              Sida {currentPage + 1} av {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={currentPage >= totalPages - 1}
+              onClick={() => setCurrentPage(p => p + 1)}
+              data-testid="button-next-page"
+            >
+              Nästa
+            </Button>
+          </div>
         </div>
       )}
 
