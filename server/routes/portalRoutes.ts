@@ -1622,7 +1622,7 @@ app.get("/api/portal/field/objects", asyncHandler(async (req, res) => {
     if (!session) return;
 
     const customerObjects = await storage.getObjectsByCustomer(session.customerId!);
-    const changeRequests = await storage.getCustomerChangeRequests(session.tenantId!, { customerId: session.customerId! });
+    const { items: changeRequests } = await storage.getCustomerChangeRequests(session.tenantId!, { customerId: session.customerId! });
 
     const reportCountByObject: Record<string, number> = {};
     for (const cr of changeRequests) {
@@ -1654,7 +1654,7 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
     const metadata = await db.select().from(objectMetadata)
       .where(and(eq(objectMetadata.objectId, obj.id), eq(objectMetadata.tenantId, session.tenantId!)));
 
-    const changeRequests = await storage.getCustomerChangeRequests(session.tenantId!, {
+    const { items: changeRequests } = await storage.getCustomerChangeRequests(session.tenantId!, {
       customerId: session.customerId!,
       objectId: obj.id,
     });
@@ -1703,7 +1703,7 @@ app.get("/api/portal/field/reports", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const reports = await storage.getCustomerChangeRequests(session.tenantId!, {
+    const { items: reports } = await storage.getCustomerChangeRequests(session.tenantId!, {
       customerId: session.customerId!,
     });
 
