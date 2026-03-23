@@ -8,7 +8,8 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests } from "@shared/schema";
+import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
@@ -1828,6 +1829,150 @@ Svara ENBART med JSON-array av strängar, t.ex. ["Steg 1", "Steg 2"]. Skriv på 
       }
       res.json({ steps: insertedItems, generated: insertedItems.length, fallback: true });
     }
+}));
+
+// ========================================
+// MOBILE - Customer Change Requests (Go integration)
+// ========================================
+
+const mobileChangeRequestSchema = z.object({
+  objectId: z.string().uuid(),
+  category: z.string().min(1),
+  description: z.string().min(1).max(5000),
+  photos: z.array(z.string()).optional(),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional().default("medium"),
+});
+
+app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new ForbiddenError("Resurs hittades inte");
+    const tenantId = resource.tenantId;
+
+    const parseResult = mobileChangeRequestSchema.safeParse(req.body);
+    if (!parseResult.success) {
+      return res.status(400).json(formatZodError(parseResult.error));
+    }
+    const data = parseResult.data;
+
+    const obj = await storage.getObject(data.objectId);
+    if (!obj || obj.tenantId !== tenantId) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+    if (!obj.customerId) {
+      throw new ValidationError("Objektet saknar kund-koppling");
+    }
+
+    const mappedCategory = (ONE_CATEGORIES as readonly string[]).includes(data.category)
+      ? data.category
+      : mapGoCategory(data.category);
+
+    const created = await storage.createCustomerChangeRequest({
+      tenantId,
+      objectId: data.objectId,
+      customerId: obj.customerId,
+      category: mappedCategory,
+      description: data.description,
+      photos: data.photos || null,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      status: "new",
+      severity: data.severity || "medium",
+      createdByResourceId: resourceId,
+    });
+
+    broadcastPlannerEvent({
+      type: "change_request:created",
+      data: {
+        id: created.id,
+        objectId: created.objectId,
+        customerId: created.customerId,
+        category: created.category,
+        severity: created.severity,
+        createdByResourceId: resourceId,
+      },
+    });
+
+    console.log(`[mobile] Change request created: ${created.id} by resource ${resourceId} for object ${data.objectId}`);
+    res.status(201).json(created);
+}));
+
+app.get("/api/mobile/customer-change-requests/mine", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new ForbiddenError("Resurs hittades inte");
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const offset = parseInt(req.query.offset as string) || 0;
+    const status = req.query.status as string | undefined;
+
+    const { items, total } = await storage.getCustomerChangeRequests({
+      tenantId: resource.tenantId,
+      createdByResourceId: resourceId,
+      status: status || undefined,
+      limit,
+      offset,
+    });
+
+    const objectIds = [...new Set(items.map(r => r.objectId))];
+    const customerIds = [...new Set(items.map(r => r.customerId))];
+    const objectsArr = objectIds.length > 0 ? await storage.getObjectsByIds(resource.tenantId, objectIds) : [];
+    const objectMap = new Map(objectsArr.map(o => [o.id, o]));
+    const customersArr = customerIds.length > 0 ? await Promise.all(customerIds.map(id => storage.getCustomer(id))) : [];
+    const customerMap = new Map(customersArr.filter(Boolean).map(c => [c!.id, c!]));
+
+    const enriched = items.map(r => ({
+      ...r,
+      objectName: objectMap.get(r.objectId)?.name || null,
+      objectAddress: objectMap.get(r.objectId)?.address || null,
+      customerName: customerMap.get(r.customerId)?.name || null,
+    }));
+
+    res.json({ items: enriched, total });
+}));
+
+app.post("/api/mobile/customer-change-requests/upload-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const objectStorageService = new ObjectStorageService();
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+    res.json({ uploadURL, objectPath });
+}));
+
+app.post("/api/mobile/customer-change-requests/confirm-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const { objectPath } = req.body;
+    if (!objectPath || typeof objectPath !== "string") {
+      throw new ValidationError("objectPath krävs");
+    }
+
+    const safePathRegex = /^\/objects\/[a-zA-Z0-9\/_-]+$/;
+    if (!safePathRegex.test(objectPath)) {
+      throw new ValidationError("Ogiltig fotosökväg");
+    }
+
+    try {
+      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+      const oss = new ObjectStorageService();
+      await oss.getObjectEntityFile(objectPath);
+    } catch {
+      throw new ValidationError("Filen hittades inte eller kunde inte verifieras");
+    }
+
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const oss = new ObjectStorageService();
+    const downloadURL = await oss.getObjectEntityDownloadURL(objectPath);
+    res.json({ confirmed: true, objectPath, downloadURL });
+}));
+
+app.get("/api/mobile/customer-change-requests/categories", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const { GO_TO_ONE_CATEGORY_MAP, ONE_CATEGORIES: cats, SEVERITY_LEVELS: sevs } = await import("@shared/changeRequestCategories");
+    res.json({
+      categories: cats,
+      goCategoryMapping: GO_TO_ONE_CATEGORY_MAP,
+      severityLevels: sevs,
+    });
 }));
 
 function broadcastPlannerEvent(event: { type: string; data: any }) {

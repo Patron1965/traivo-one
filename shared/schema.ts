@@ -3595,6 +3595,8 @@ export const customerChangeRequests = pgTable("customer_change_requests", {
   latitude: real("latitude"),
   longitude: real("longitude"),
   status: text("status").default("new").notNull(),
+  severity: text("severity").default("medium"),
+  createdByResourceId: varchar("created_by_resource_id"),
   reviewedBy: varchar("reviewed_by").references(() => users.id),
   reviewedAt: timestamp("reviewed_at"),
   reviewNotes: text("review_notes"),

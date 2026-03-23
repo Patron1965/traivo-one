@@ -608,7 +608,7 @@ export interface IStorage {
   updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined>;
   
   // Customer Change Requests
-  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }>;
+  getCustomerChangeRequests(options: { tenantId: string; customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; createdByResourceId?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }>;
   getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined>;
   createCustomerChangeRequest(request: InsertCustomerChangeRequest): Promise<CustomerChangeRequest>;
   updateCustomerChangeRequest(id: string, tenantId: string, data: Partial<CustomerChangeRequest>): Promise<CustomerChangeRequest | undefined>;
@@ -4669,8 +4669,8 @@ export class DatabaseStorage implements IStorage {
   // CUSTOMER CHANGE REQUESTS
   // ============================================
 
-  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }> {
-    const conditions = [eq(customerChangeRequests.tenantId, tenantId)];
+  async getCustomerChangeRequests(options: { tenantId: string; customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string; createdByResourceId?: string; limit?: number; offset?: number }): Promise<{ items: CustomerChangeRequest[]; total: number }> {
+    const conditions = [eq(customerChangeRequests.tenantId, options.tenantId)];
     if (options?.customerId) {
       conditions.push(eq(customerChangeRequests.customerId, options.customerId));
     }
@@ -4690,6 +4690,9 @@ export class DatabaseStorage implements IStorage {
       const end = new Date(options.dateTo);
       end.setDate(end.getDate() + 1);
       conditions.push(lte(customerChangeRequests.createdAt, end));
+    }
+    if (options?.createdByResourceId) {
+      conditions.push(eq(customerChangeRequests.createdByResourceId, options.createdByResourceId));
     }
     const whereClause = and(...conditions);
     const [countResult] = await db.select({ count: sql<number>`count(*)` }).from(customerChangeRequests).where(whereClause);

@@ -42,10 +42,12 @@ interface ChangeRequest {
   description: string;
   photos: string[] | null;
   status: string;
+  severity: string | null;
   latitude: number | null;
   longitude: number | null;
   reviewNotes: string | null;
   reviewedBy: string | null;
+  createdByResourceId: string | null;
   createdAt: string;
   updatedAt: string;
   customerName?: string;
@@ -65,6 +67,23 @@ function getStatusBadge(status: string) {
     case "resolved": return <Badge className="bg-green-500 text-white" data-testid={`badge-status-${status}`}>Löst</Badge>;
     case "rejected": return <Badge variant="secondary" data-testid={`badge-status-${status}`}>Avvisad</Badge>;
     default: return <Badge variant="outline">{status}</Badge>;
+  }
+}
+
+const SEVERITY_LABELS: Record<string, string> = {
+  low: "Låg",
+  medium: "Medel",
+  high: "Hög",
+  critical: "Kritisk",
+};
+
+function getSeverityBadge(severity: string | null) {
+  if (!severity || severity === "medium") return null;
+  switch (severity) {
+    case "critical": return <Badge className="bg-red-600 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Kritisk</Badge>;
+    case "high": return <Badge className="bg-orange-500 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Hög</Badge>;
+    case "low": return <Badge variant="outline" className="text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Låg</Badge>;
+    default: return null;
   }
 }
 
@@ -377,6 +396,7 @@ export default function CustomerReportsPage() {
                       {getCategoryIcon(report.category)}
                       <span className="font-medium text-sm">{CATEGORIES[report.category] || report.category}</span>
                       {getStatusBadge(report.status)}
+                      {getSeverityBadge(report.severity)}
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-2">{report.description}</p>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
@@ -456,6 +476,10 @@ export default function CustomerReportsPage() {
             <div className="space-y-4">
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {getStatusBadge(selectedReport.status)}
+                {getSeverityBadge(selectedReport.severity)}
+                {selectedReport.severity && (
+                  <span className="text-xs">Allvarlighet: {SEVERITY_LABELS[selectedReport.severity] || selectedReport.severity}</span>
+                )}
                 <span>{new Date(selectedReport.createdAt).toLocaleString("sv")}</span>
               </div>
 

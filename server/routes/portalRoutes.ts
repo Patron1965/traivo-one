@@ -1622,7 +1622,7 @@ app.get("/api/portal/field/objects", asyncHandler(async (req, res) => {
     if (!session) return;
 
     const customerObjects = await storage.getObjectsByCustomer(session.customerId!);
-    const { items: changeRequests } = await storage.getCustomerChangeRequests(session.tenantId!, { customerId: session.customerId! });
+    const { items: changeRequests } = await storage.getCustomerChangeRequests({ tenantId: session.tenantId!, customerId: session.customerId! });
 
     const reportCountByObject: Record<string, number> = {};
     for (const cr of changeRequests) {
@@ -1654,7 +1654,8 @@ app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
     const metadata = await db.select().from(objectMetadata)
       .where(and(eq(objectMetadata.objectId, obj.id), eq(objectMetadata.tenantId, session.tenantId!)));
 
-    const { items: changeRequests } = await storage.getCustomerChangeRequests(session.tenantId!, {
+    const { items: changeRequests } = await storage.getCustomerChangeRequests({
+      tenantId: session.tenantId!,
       customerId: session.customerId!,
       objectId: obj.id,
     });
@@ -1703,7 +1704,8 @@ app.get("/api/portal/field/reports", asyncHandler(async (req, res) => {
     const session = await requirePortalAuth(req, res);
     if (!session) return;
 
-    const { items: reports } = await storage.getCustomerChangeRequests(session.tenantId!, {
+    const { items: reports } = await storage.getCustomerChangeRequests({
+      tenantId: session.tenantId!,
       customerId: session.customerId!,
     });
 
@@ -1841,7 +1843,8 @@ app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, 
     const rawOffset = parseInt(offset as string, 10);
     const parsedOffset = Number.isFinite(rawOffset) && rawOffset >= 0 ? rawOffset : 0;
 
-    const { items: requests, total } = await storage.getCustomerChangeRequests(tenantId, {
+    const { items: requests, total } = await storage.getCustomerChangeRequests({
+      tenantId,
       objectId: objectId as string | undefined,
       status: status as string | undefined,
       category: category as string | undefined,
@@ -1894,6 +1897,12 @@ app.patch("/api/customer-change-requests/:id/status", requireAdmin, asyncHandler
     if (!updated) {
       throw new NotFoundError("Ändringsbegäran hittades inte");
     }
+
+    const eventClients: Map<string, any> = (global as any).__plannerEventClients || new Map();
+    const eventMsg = `data: ${JSON.stringify({ type: "change_request:status_updated", data: { id: updated.id, objectId: updated.objectId, customerId: updated.customerId, status: updated.status, previousStatus: req.body.previousStatus || null } })}\n\n`;
+    eventClients.forEach((clientRes: any, clientId: string) => {
+      try { clientRes.write(eventMsg); } catch { eventClients.delete(clientId); }
+    });
 
     res.json(updated);
 }));
@@ -1957,7 +1966,8 @@ app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, as
 app.get("/api/customer-change-requests/summary", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const { objectId, category, customerId, dateFrom, dateTo } = req.query;
-    const { items } = await storage.getCustomerChangeRequests(tenantId, {
+    const { items } = await storage.getCustomerChangeRequests({
+      tenantId,
       objectId: objectId as string | undefined,
       category: category as string | undefined,
       customerId: customerId as string | undefined,
@@ -1973,7 +1983,7 @@ app.get("/api/customer-change-requests/summary", requireAdmin, asyncHandler(asyn
 
 app.get("/api/customer-change-requests/counts-by-object", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { items: requests } = await storage.getCustomerChangeRequests(tenantId, { status: "new" });
+    const { items: requests } = await storage.getCustomerChangeRequests({ tenantId, status: "new" });
     const counts: Record<string, number> = {};
     for (const r of requests) {
       counts[r.objectId] = (counts[r.objectId] || 0) + 1;
