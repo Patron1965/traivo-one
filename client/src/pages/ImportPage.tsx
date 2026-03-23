@@ -1134,7 +1134,8 @@ export default function ImportPage() {
             <StepIndicator step={1} title="Företagsinställningar" active={activeModusStep === 1} completed={importStep > 1} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
             {[2, 3, 4, 5].map(s => {
-              const canNavigate = completedSteps.has(s) || skippedSteps.has(s) || Array.from({length: s - 2}, (_, i) => i + 2).every(p => completedSteps.has(p) || skippedSteps.has(p));
+              const priorResolved = Array.from({length: s - 2}, (_, i) => i + 2).every(p => completedSteps.has(p) || skippedSteps.has(p));
+              const canNavigate = !completedSteps.has(s) && (skippedSteps.has(s) || priorResolved);
               return (
                 <span key={s} className="contents">
                   <StepIndicator step={s} title={[, , "Importera objekt", "Importera uppgifter", "Fakturarader", "Analysera händelser"][s]!} active={activeModusStep === s} completed={completedSteps.has(s)} skipped={skippedSteps.has(s)} onClick={canNavigate ? () => goToStep(s) : undefined} />
