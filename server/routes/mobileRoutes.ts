@@ -9,7 +9,7 @@ import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests } from "@shared/schema";
-import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP } from "@shared/changeRequestCategories";
+import { mapGoCategory, mapDeviationToCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
@@ -789,8 +789,51 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
       status: "reported",
     });
 
+    let linkedChangeRequest = null;
+    const deviationType = type || "other";
+    const shouldAutoLink = (AUTO_LINK_DEVIATION_TYPES as readonly string[]).includes(deviationType);
+
+    if (shouldAutoLink && order.objectId) {
+      try {
+        const existing = await db.select()
+          .from(customerChangeRequests)
+          .where(eq(customerChangeRequests.linkedDeviationId, deviation.id))
+          .limit(1);
+
+        if (existing.length === 0) {
+          const obj = await storage.getObject(order.objectId);
+          if (obj?.customerId) {
+            const mappedCategory = mapDeviationToCategory(deviationType);
+            linkedChangeRequest = await db.insert(customerChangeRequests).values({
+              tenantId: order.tenantId!,
+              objectId: order.objectId,
+              customerId: obj.customerId,
+              category: mappedCategory,
+              description: `[Auto från avvikelse] ${DEVIATION_TYPE_MAP[deviationType] || deviationType}: ${description || "Ingen beskrivning"}`,
+              photos: photos || [],
+              latitude: latitude || null,
+              longitude: longitude || null,
+              status: "new",
+              severity: "medium",
+              createdByResourceId: resourceId,
+              linkedDeviationId: deviation.id,
+            }).returning().then(r => r[0]);
+
+            console.log(`[mobile] Auto-created change request ${linkedChangeRequest.id} from deviation ${deviation.id}`);
+
+            broadcastPlannerEvent({
+              type: 'change_request:created',
+              data: { id: linkedChangeRequest.id, category: mappedCategory, objectId: order.objectId, linkedDeviationId: deviation.id, timestamp: new Date().toISOString() }
+            });
+          }
+        }
+      } catch (err) {
+        console.error(`[mobile] Failed to auto-create change request from deviation ${deviation.id}:`, err);
+      }
+    }
+
     console.log(`[mobile] Deviation reported for order ${orderId} by resource ${resourceId}`);
-    res.json({ success: true, deviation });
+    res.json({ success: true, deviation, linkedChangeRequest });
 
     broadcastPlannerEvent({
       type: 'deviation_reported',

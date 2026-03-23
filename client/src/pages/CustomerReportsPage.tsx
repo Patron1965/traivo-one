@@ -389,6 +389,12 @@ export default function CustomerReportsPage() {
                       <span className="font-medium text-sm">{CATEGORIES[report.category] || report.category}</span>
                       {getStatusBadge(report.status)}
                       {getSeverityBadge(report.severity)}
+                      {report.linkedDeviationId && (
+                        <Badge variant="outline" className="text-[10px] px-1.5 border-orange-300 text-orange-600 dark:text-orange-400" data-testid={`badge-deviation-link-${report.id}`}>
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Avvikelse
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-2">{report.description}</p>
                     <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
@@ -474,6 +480,15 @@ export default function CustomerReportsPage() {
                 )}
                 <span>{new Date(selectedReport.createdAt).toLocaleString("sv")}</span>
               </div>
+
+              {selectedReport.linkedDeviationId && (
+                <div className="flex items-center gap-2 p-3 bg-orange-50 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-800 rounded-lg" data-testid="section-deviation-link">
+                  <AlertTriangle className="h-4 w-4 text-orange-500 shrink-0" />
+                  <span className="text-sm text-orange-700 dark:text-orange-300">
+                    Skapad automatiskt från avvikelserapport
+                  </span>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">

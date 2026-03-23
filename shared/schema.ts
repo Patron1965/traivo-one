@@ -3597,6 +3597,7 @@ export const customerChangeRequests = pgTable("customer_change_requests", {
   status: text("status").default("new").notNull(),
   severity: text("severity"),
   createdByResourceId: varchar("created_by_resource_id").references(() => resources.id),
+  linkedDeviationId: varchar("linked_deviation_id").references(() => deviationReports.id),
   reviewedBy: varchar("reviewed_by").references(() => users.id),
   reviewedAt: timestamp("reviewed_at"),
   reviewNotes: text("review_notes"),
@@ -3606,6 +3607,7 @@ export const customerChangeRequests = pgTable("customer_change_requests", {
   index("idx_ccr_object").on(table.objectId),
   index("idx_ccr_customer").on(table.customerId),
   index("idx_ccr_tenant_status").on(table.tenantId, table.status),
+  index("idx_ccr_linked_deviation").on(table.linkedDeviationId),
 ]);
 
 export const customerChangeRequestsRelations = relations(customerChangeRequests, ({ one }) => ({
@@ -3615,7 +3617,7 @@ export const customerChangeRequestsRelations = relations(customerChangeRequests,
   reviewedByUser: one(users, { fields: [customerChangeRequests.reviewedBy], references: [users.id] }),
 }));
 
-export const insertCustomerChangeRequestSchema = createInsertSchema(customerChangeRequests).omit({ id: true, createdAt: true, reviewedBy: true, reviewedAt: true, reviewNotes: true, linkedWorkOrderId: true });
+export const insertCustomerChangeRequestSchema = createInsertSchema(customerChangeRequests).omit({ id: true, createdAt: true, reviewedBy: true, reviewedAt: true, reviewNotes: true, linkedWorkOrderId: true, linkedDeviationId: true });
 export type CustomerChangeRequest = typeof customerChangeRequests.$inferSelect;
 export type InsertCustomerChangeRequest = z.infer<typeof insertCustomerChangeRequestSchema>;
 
