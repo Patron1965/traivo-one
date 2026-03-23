@@ -1,16 +1,16 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { useAuth } from "@/hooks/use-auth";
 import {
   MapPin, Building2, Users, Truck, FileSpreadsheet, CheckCircle,
   AlertTriangle, XCircle, ChevronDown, ChevronUp, Eye, ShieldCheck, Activity, Link2Off
 } from "lucide-react";
 
 interface HealthStats {
+  tenantId: string;
   totalObjects: number;
   objectsWithoutCoordinates: number;
   objectsWithoutAddress: number;
@@ -53,14 +53,20 @@ function saveAccepted(tenantId: string, accepted: Set<string>) {
 
 export function ImportHealthOverview() {
   const [, navigate] = useLocation();
-  const { user } = useAuth();
-  const scopeKey = user?.id || "anonymous";
   const [expanded, setExpanded] = useState(true);
-  const [acceptedIssues, setAcceptedIssues] = useState<Set<string>>(() => loadAccepted(scopeKey));
+  const [acceptedIssues, setAcceptedIssues] = useState<Set<string>>(new Set());
 
   const { data: stats, isLoading } = useQuery<HealthStats>({
     queryKey: ["/api/import/health-stats"],
   });
+
+  const tenantId = stats?.tenantId || "";
+
+  useEffect(() => {
+    if (tenantId) {
+      setAcceptedIssues(loadAccepted(tenantId));
+    }
+  }, [tenantId]);
 
   const issues = useMemo<HealthIssue[]>(() => {
     if (!stats) return [];
@@ -113,7 +119,7 @@ export function ImportHealthOverview() {
         total: stats.totalWorkOrders,
         severity: stats.workOrdersWithoutResource > stats.totalWorkOrders * 0.5 ? "critical" : "warning",
         icon: <Truck className="h-4 w-4" />,
-        link: "/week-planner",
+        link: "/week-planner?filter=unassigned",
         description: "Dessa uppgifter har ingen tilldelad resurs och kommer inte visas i veckoplaneraren.",
       });
     }
@@ -146,7 +152,7 @@ export function ImportHealthOverview() {
       } else {
         next.add(issueId);
       }
-      saveAccepted(scopeKey, next);
+      saveAccepted(tenantId, next);
       return next;
     });
   };

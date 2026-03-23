@@ -4,12 +4,17 @@ import { JobModal } from "@/components/JobModal";
 import { JobDetailModal } from "@/components/JobDetailModal";
 import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
 import { Button } from "@/components/ui/button";
-import { Sparkles, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Sparkles, X, AlertTriangle } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
   const [showJobModal, setShowJobModal] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [filterParam] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get("filter");
+  });
   const [showAIPanel, setShowAIPanel] = useState(() => {
     const saved = localStorage.getItem('weekplanner-ai-panel-open');
     return saved === 'true';
@@ -28,7 +33,17 @@ export default function WeekPlannerPage() {
   }, []);
 
   return (
-    <div className="flex h-full relative">
+    <div className="flex h-full relative flex-col">
+      {filterParam === "unassigned" && (
+        <div className="flex items-center gap-3 px-4 py-2 bg-amber-50 border-b border-amber-200 dark:bg-amber-950/20 dark:border-amber-800" data-testid="banner-unassigned-filter">
+          <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+          <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+            Uppgifter utan resurstilldelning — tilldela resurser via veckoplaneraren nedan
+          </span>
+          <Badge variant="outline" className="text-xs border-amber-300 text-amber-600">Från import</Badge>
+        </div>
+      )}
+      <div className="flex flex-1 min-h-0">
       <div className="flex-1 min-w-0 overflow-auto">
         <WeekPlanner 
           onAddJob={() => setShowJobModal(true)}
@@ -76,6 +91,7 @@ export default function WeekPlannerPage() {
         onClose={() => setSelectedJobId(null)}
         workOrderId={selectedJobId}
       />
+      </div>
     </div>
   );
 }

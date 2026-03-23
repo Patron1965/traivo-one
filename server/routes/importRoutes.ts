@@ -1520,6 +1520,7 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
     ]);
 
     res.json({
+      tenantId,
       totalObjects: totalObjectsResult[0]?.count || 0,
       objectsWithoutCoordinates: noCoordinatesResult[0]?.count || 0,
       objectsWithoutAddress: noAddressResult[0]?.count || 0,

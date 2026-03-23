@@ -957,6 +957,8 @@ export class DatabaseStorage implements IStorage {
         whereConditions = and(whereConditions, sql`(${objects.address} IS NULL OR ${objects.address} = '')`);
       } else if (filters.issue === "no-customer") {
         whereConditions = and(whereConditions, sql`(${objects.customerId} IS NULL OR NOT EXISTS (SELECT 1 FROM customers c WHERE c.id = ${objects.customerId} AND c.tenant_id = ${tenantId} AND c.deleted_at IS NULL))`);
+      } else if (filters.issue === "empty-metadata") {
+        whereConditions = and(whereConditions, sql`EXISTS (SELECT 1 FROM object_metadata om WHERE om.object_id = ${objects.id} AND om.tenant_id = ${tenantId} AND (om.value IS NULL OR om.value = '') AND om.value_json IS NULL)`);
       }
     }
     
