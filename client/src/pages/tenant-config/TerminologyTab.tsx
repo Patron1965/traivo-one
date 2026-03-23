@@ -11,6 +11,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { DEFAULT_TERMINOLOGY, INDUSTRY_TERMINOLOGY } from "@shared/schema";
 import { LABEL_KEY_DESCRIPTIONS } from "./shared-constants";
 import { Palette, Save, Loader2 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 export function TerminologyTab() {
   const { toast } = useToast();
@@ -74,6 +75,7 @@ export function TerminologyTab() {
           <CardTitle className="flex items-center gap-2" data-testid="text-terminology-title">
             <Palette className="h-5 w-5" />
             Branschanpassad terminologi
+            <HelpTooltip content="Ändrar du en term här (t.ex. 'Objekt' till 'Kärl') uppdateras den i hela systemets gränssnitt — menyer, rubriker och formulär." />
           </CardTitle>
           <CardDescription>
             Anpassa termer i gränssnittet så att de matchar er bransch. Lämna fältet tomt för att använda standardvärdet.

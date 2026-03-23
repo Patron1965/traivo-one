@@ -13,6 +13,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import { EXECUTION_CODE_OPTIONS, PROFILE_COLORS, PROFILE_ICON_OPTIONS, getProfileIcon, EQUIPMENT_TYPE_OPTIONS } from "./shared-constants";
 import { Plus, Pencil, Trash2, UserPlus, Wrench, CheckCircle2, Loader2 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 export function ResourceProfilesTab() {
   const { toast } = useToast();
@@ -199,7 +200,7 @@ export function ResourceProfilesTab() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle data-testid="text-profiles-title">Utföranderoller / Resursprofiler</CardTitle>
+            <CardTitle data-testid="text-profiles-title">Utföranderoller / Resursprofiler <HelpTooltip content="En resursprofil samlar exekveringskoder, utrustning, kostnadsställe och serviceområde i en mall. Tilldela profilen till resurser för att snabbt definiera vad de kan utföra." /></CardTitle>
             <CardDescription>Definiera profiler som beskriver kapacitet, utrustning och serviceområden för era resurser</CardDescription>
           </div>
           <Dialog open={dialogOpen} onOpenChange={(open) => { if (!open) closeDialog(); else setDialogOpen(true); }}>

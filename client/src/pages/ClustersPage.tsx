@@ -64,6 +64,7 @@ import {
   Sparkles,
   Layers,
 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -401,6 +402,7 @@ export default function ClustersPage() {
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">
               Kundhierarkier med dataärvning - navet i verksamheten
+              <HelpTooltip content="Kluster grupperar objekt geografiskt för att optimera rutter och planering. Varje kluster kan ha eget team, SLA-nivå och servicefrekvens." />
             </span>
             {quickStats.total > 0 && (
               <Badge variant="secondary" className="text-xs font-normal gap-1">

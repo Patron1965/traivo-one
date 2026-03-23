@@ -11,6 +11,7 @@ import { Link } from "wouter";
 import type { Article } from "@shared/schema";
 import { EXECUTION_CODE_OPTIONS } from "./shared-constants";
 import { Package, CheckCircle2, AlertTriangle, Tag, ExternalLink, Save, Loader2 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 export function ArticlesExecutionTab() {
   const { toast } = useToast();
@@ -92,6 +93,7 @@ export function ArticlesExecutionTab() {
               <CardTitle className="flex items-center gap-2">
                 <Tag className="h-5 w-5" />
                 Artiklar & exekveringskoder
+                <HelpTooltip content="Exekveringskoder anger vilken typ av tjänst en artikel representerar (t.ex. slamtömning, gräsklippning). Resurser med matchande kod kan tilldelas uppgiften automatiskt." />
               </CardTitle>
               <CardDescription>Tilldela exekveringskoder till artiklar för att styra vilka resurser som kan utföra dem</CardDescription>
             </div>

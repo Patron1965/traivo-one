@@ -69,12 +69,12 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { OrderConcept, Cluster, Article, ConceptFilter, DeliveryScheduleEntry } from "@shared/schema";
 import { ORDER_CONCEPT_SCENARIO_LABELS, BILLING_FREQUENCY_LABELS } from "@shared/schema";
-import { PageHelp } from "@/components/ui/help-tooltip";
+import { PageHelp, HelpTooltip } from "@/components/ui/help-tooltip";
 
 const scenarioOptions = [
-  { value: "avrop", label: "Avrop (engång)", desc: "Manuellt eller vid behov" },
-  { value: "schema", label: "Schema (leveransplan)", desc: "Återkommande med tidsfönster" },
-  { value: "abonnemang", label: "Abonnemang (fast avgift)", desc: "Fast månadsavgift per enhet" },
+  { value: "avrop", label: "Avrop (engång)", desc: "Manuellt eller vid behov", help: "Genererar en enskild order direkt eller vid behov — används för ad hoc-tjänster som inte är schemalagda." },
+  { value: "schema", label: "Schema (leveransplan)", desc: "Återkommande med tidsfönster", help: "Skapar ordrar automatiskt enligt en leveransplan, t.ex. 'första måndagen varje månad' — perfekt för regelbundna besök." },
+  { value: "abonnemang", label: "Abonnemang (fast avgift)", desc: "Fast månadsavgift per enhet", help: "Fast månadsavgift oavsett antal besök. Systemet beräknar kostnaden per enhet baserat på vald frekvens och prislista." },
 ];
 
 const priorityOptions = [
@@ -885,7 +885,7 @@ export default function OrderConceptsPage() {
                     }`}
                     data-testid={`button-scenario-${s.value}`}
                   >
-                    <div className="font-medium text-sm">{s.label}</div>
+                    <div className="font-medium text-sm">{s.label} <HelpTooltip content={s.help} /></div>
                     <div className="text-xs text-muted-foreground mt-1">{s.desc}</div>
                   </button>
                 ))}

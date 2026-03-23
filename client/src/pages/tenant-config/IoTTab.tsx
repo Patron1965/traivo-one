@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import type { IotDevice, IotApiKey, IotSignal, ServiceObject } from "@shared/schema";
 import { Radio, Key, Signal, Plus, Trash2, Copy, Battery, Loader2 } from "lucide-react";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 export function IoTTab() {
   const { toast } = useToast();
@@ -129,6 +130,7 @@ export function IoTTab() {
               <CardTitle className="flex items-center gap-2">
                 <Radio className="h-5 w-5" />
                 IoT-enheter
+                <HelpTooltip content="IoT-enheter (t.ex. fyllnadssensorer) skickar signaler när tröskelvärden nås. Systemet kan då automatiskt skapa arbetsordrar, t.ex. tömning när en container är 80% full." />
               </CardTitle>
               <CardDescription>Registrera sensorer kopplade till era objekt</CardDescription>
             </div>

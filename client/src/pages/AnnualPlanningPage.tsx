@@ -5,6 +5,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -456,19 +457,19 @@ export default function AnnualPlanningPage() {
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
             <div className="text-2xl font-bold text-green-600" data-testid="text-on-track-count">{summary.onTrack}</div>
-            <div className="text-xs text-muted-foreground">På plan</div>
+            <div className="text-xs text-muted-foreground">På plan <HelpTooltip content="Målet ligger i fas — tillräckligt många ordrar har utförts i förhållande till årets gång." /></div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
             <div className="text-2xl font-bold text-yellow-600" data-testid="text-at-risk-count">{summary.atRisk}</div>
-            <div className="text-xs text-muted-foreground">Risk</div>
+            <div className="text-xs text-muted-foreground">Risk <HelpTooltip content="Målet ligger efter — framstegen är lägre än förväntat för denna tidpunkt på året." /></div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4 pb-3 text-center">
             <div className="text-2xl font-bold text-red-600" data-testid="text-behind-count">{summary.behind}</div>
-            <div className="text-xs text-muted-foreground">Kritisk</div>
+            <div className="text-xs text-muted-foreground">Kritisk <HelpTooltip content="Målet är kraftigt efter — det krävs omedelbara åtgärder för att hinna ikapp under året." /></div>
           </CardContent>
         </Card>
         <Card>
