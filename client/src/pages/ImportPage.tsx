@@ -1258,6 +1258,7 @@ export default function ImportPage() {
                     <ImportPreviewPanel
                       objectRows={previewObjectRows}
                       customerNames={[...modusValidation.customersNew, ...modusValidation.customersExisting]}
+                      existingCustomerNames={modusValidation.customersExisting}
                       metadataColumns={modusValidation.metadataColumns}
                       nameOverrides={nameOverrides}
                       onNameOverridesChange={setNameOverrides}

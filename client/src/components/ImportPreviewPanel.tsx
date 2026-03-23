@@ -1,5 +1,4 @@
 import { useState, useMemo, useCallback } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -11,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   Search, Replace, Users, Building2, Database, Truck,
-  Pencil, CheckCircle, ArrowRight, Upload, Loader2
+  Pencil, Upload, Loader2
 } from "lucide-react";
 
 export interface NameOverrides {
@@ -31,6 +30,7 @@ interface ObjectRow {
 interface ImportPreviewPanelProps {
   objectRows: ObjectRow[];
   customerNames: string[];
+  existingCustomerNames?: string[];
   metadataColumns: string[];
   nameOverrides: NameOverrides;
   onNameOverridesChange: (overrides: NameOverrides) => void;
@@ -43,6 +43,7 @@ interface ImportPreviewPanelProps {
 export function ImportPreviewPanel({
   objectRows,
   customerNames,
+  existingCustomerNames = [],
   metadataColumns,
   nameOverrides,
   onNameOverridesChange,
@@ -56,6 +57,8 @@ export function ImportPreviewPanel({
   const [searchTerm, setSearchTerm] = useState("");
   const [replaceTerm, setReplaceTerm] = useState("");
   const [objectFilter, setObjectFilter] = useState("");
+
+  const existingCustomerSet = useMemo(() => new Set(existingCustomerNames.map(n => n.toLowerCase())), [existingCustomerNames]);
 
   const changedCount = useMemo(() => {
     return Object.keys(nameOverrides.objects).length +
@@ -296,7 +299,11 @@ export function ImportPreviewPanel({
                       />
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="text-xs">Ny</Badge>
+                      {existingCustomerSet.has(name.toLowerCase()) ? (
+                        <Badge variant="secondary" className="text-xs">Finns</Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs text-green-600 border-green-300">Ny</Badge>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -393,7 +400,7 @@ export function ImportPreviewPanel({
             </div>
             {searchTerm && (
               <p className="text-xs text-muted-foreground" data-testid="text-search-preview">
-                {previewSearchReplace} träffar i objekt- och kundnamn
+                {previewSearchReplace} träffar i objekt-, kund- och metadatanamn
               </p>
             )}
           </div>
