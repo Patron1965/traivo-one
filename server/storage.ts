@@ -608,7 +608,7 @@ export interface IStorage {
   updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined>;
   
   // Customer Change Requests
-  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string }): Promise<CustomerChangeRequest[]>;
+  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string }): Promise<CustomerChangeRequest[]>;
   getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined>;
   createCustomerChangeRequest(request: InsertCustomerChangeRequest): Promise<CustomerChangeRequest>;
   updateCustomerChangeRequest(id: string, tenantId: string, data: Partial<CustomerChangeRequest>): Promise<CustomerChangeRequest | undefined>;
@@ -4669,7 +4669,7 @@ export class DatabaseStorage implements IStorage {
   // CUSTOMER CHANGE REQUESTS
   // ============================================
 
-  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string }): Promise<CustomerChangeRequest[]> {
+  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string }): Promise<CustomerChangeRequest[]> {
     const conditions = [eq(customerChangeRequests.tenantId, tenantId)];
     if (options?.customerId) {
       conditions.push(eq(customerChangeRequests.customerId, options.customerId));
@@ -4679,6 +4679,9 @@ export class DatabaseStorage implements IStorage {
     }
     if (options?.status) {
       conditions.push(eq(customerChangeRequests.status, options.status));
+    }
+    if (options?.category) {
+      conditions.push(eq(customerChangeRequests.category, options.category));
     }
     return db.select().from(customerChangeRequests)
       .where(and(...conditions))

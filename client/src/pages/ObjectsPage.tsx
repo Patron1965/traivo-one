@@ -19,7 +19,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info, Camera
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
@@ -217,6 +217,17 @@ export default function ObjectsPage() {
     staleTime: 30000,
   });
   const interimCount = interimCountData?.total || 0;
+
+  const { data: reportCountsData } = useQuery<Record<string, number>>({
+    queryKey: ["/api/customer-change-requests/counts-by-object"],
+    queryFn: async () => {
+      const res = await fetch("/api/customer-change-requests/counts-by-object", { credentials: "include" });
+      if (!res.ok) return {};
+      return res.json();
+    },
+    staleTime: 30000,
+  });
+  const reportCounts = reportCountsData || {};
 
   const objects = objectsData?.objects || [];
   const totalObjects = objectsData?.total || 0;
@@ -621,6 +632,25 @@ export default function ObjectsPage() {
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="max-w-xs text-sm">Objekt som skapats via extern felanmälan (QR-kod) och ännu inte verifierats av en administratör.</p>
+                  </TooltipContent>
+                </Tooltip>
+              )}
+              {reportCounts[obj.id] > 0 && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <a
+                      href={`/customer-reports?objectId=${obj.id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      data-testid={`badge-reports-${obj.id}`}
+                    >
+                      <Badge className="bg-teal-500 text-white text-xs gap-1 cursor-pointer hover:bg-teal-600">
+                        <Camera className="h-3 w-3" />
+                        {reportCounts[obj.id]} rapport{reportCounts[obj.id] !== 1 ? "er" : ""}
+                      </Badge>
+                    </a>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="text-sm">{reportCounts[obj.id]} ny(a) kundrapport(er). Klicka för att visa.</p>
                   </TooltipContent>
                 </Tooltip>
               )}

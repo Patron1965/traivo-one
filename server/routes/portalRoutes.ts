@@ -1834,11 +1834,13 @@ app.get("/api/portal/field/qr-lookup/:code", asyncHandler(async (req, res) => {
 
 app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { objectId, status } = req.query;
+    const { objectId, status, category, customerId } = req.query;
 
     const requests = await storage.getCustomerChangeRequests(tenantId, {
       objectId: objectId as string | undefined,
       status: status as string | undefined,
+      category: category as string | undefined,
+      customerId: customerId as string | undefined,
     });
 
     const objectIds = [...new Set(requests.map(r => r.objectId))];
@@ -1882,6 +1884,69 @@ app.patch("/api/customer-change-requests/:id/status", requireAdmin, asyncHandler
     }
 
     res.json(updated);
+}));
+
+app.post("/api/customer-change-requests/:id/create-work-order", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const report = await storage.getCustomerChangeRequest(req.params.id);
+    if (!report || report.tenantId !== tenantId) {
+      throw new NotFoundError("Rapport hittades inte");
+    }
+
+    const obj = await storage.getObject(report.objectId);
+    if (!obj) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+
+    const categoryLabels: Record<string, string> = {
+      antal_karl_andrat: "Antal kärl ändrat",
+      skadat_material: "Skadat material",
+      tillganglighet: "Tillgänglighetsproblem",
+      skador: "Skador på utrymme",
+      rengorings_behov: "Rengöringsbehov",
+      ovrigt: "Övrigt",
+    };
+
+    const workOrder = await storage.createWorkOrder({
+      tenantId,
+      customerId: report.customerId,
+      objectId: report.objectId,
+      title: `Kundrapport: ${categoryLabels[report.category] || report.category}`,
+      description: `Rapport från kund:\n${report.description}\n\nRapport-ID: ${report.id}`,
+      orderType: "service",
+      priority: "normal",
+      status: "draft",
+      orderStatus: "planerad",
+    });
+
+    await storage.updateCustomerChangeRequest(report.id, tenantId, {
+      status: "resolved",
+      reviewNotes: `Arbetsorder skapad: ${workOrder.id}`,
+      reviewedAt: new Date(),
+      reviewedBy: (req as any).user?.claims?.sub || (req as any).headers?.["x-replit-user-id"] || null,
+    });
+
+    try {
+      const { notificationService: ns } = await import("../notifications");
+      ns.broadcastToTenant(tenantId, {
+        type: "work_order_created",
+        title: "Arbetsorder skapad från kundrapport",
+        message: `Ny order "${workOrder.title}" skapad för ${obj.name}`,
+        data: { workOrderId: workOrder.id, objectId: obj.id },
+      });
+    } catch {}
+
+    res.status(201).json({ workOrder, report: { id: report.id, status: "resolved" } });
+}));
+
+app.get("/api/customer-change-requests/counts-by-object", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const requests = await storage.getCustomerChangeRequests(tenantId, { status: "new" });
+    const counts: Record<string, number> = {};
+    for (const r of requests) {
+      counts[r.objectId] = (counts[r.objectId] || 0) + 1;
+    }
+    res.json(counts);
 }));
 
 }
