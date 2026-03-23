@@ -1865,9 +1865,12 @@ app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHan
       throw new ValidationError("Objektet saknar kund-koppling");
     }
 
-    const mappedCategory = (ONE_CATEGORIES as readonly string[]).includes(data.category)
-      ? data.category
-      : mapGoCategory(data.category);
+    const isOneCategory = (ONE_CATEGORIES as readonly string[]).includes(data.category);
+    const isGoCategory = Object.keys(GO_CATEGORY_MAP).includes(data.category);
+    if (!isOneCategory && !isGoCategory) {
+      throw new ValidationError(`Okänd kategori: ${data.category}. Giltiga kategorier: ${[...ONE_CATEGORIES, ...Object.keys(GO_CATEGORY_MAP)].join(", ")}`);
+    }
+    const mappedCategory = isOneCategory ? data.category : mapGoCategory(data.category);
 
     const created = await storage.createCustomerChangeRequest({
       tenantId,

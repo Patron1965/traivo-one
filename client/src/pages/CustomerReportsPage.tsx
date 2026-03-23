@@ -65,10 +65,11 @@ function getStatusBadge(status: string) {
 }
 
 function getSeverityBadge(severity: string | null) {
-  if (!severity || severity === "medium") return null;
+  if (!severity) return null;
   switch (severity) {
     case "critical": return <Badge className="bg-red-600 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Kritisk</Badge>;
     case "high": return <Badge className="bg-orange-500 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Hög</Badge>;
+    case "medium": return <Badge className="bg-yellow-500 text-white text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Medel</Badge>;
     case "low": return <Badge variant="outline" className="text-[10px] px-1.5" data-testid={`badge-severity-${severity}`}>Låg</Badge>;
     default: return null;
   }
