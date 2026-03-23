@@ -3584,6 +3584,39 @@ export const insertPublicIssueReportSchema = createInsertSchema(publicIssueRepor
 export type PublicIssueReport = typeof publicIssueReports.$inferSelect;
 export type InsertPublicIssueReport = z.infer<typeof insertPublicIssueReportSchema>;
 
+export const customerChangeRequests = pgTable("customer_change_requests", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  category: text("category").notNull(),
+  description: text("description").notNull(),
+  photos: text("photos").array(),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  status: text("status").default("new").notNull(),
+  reviewedBy: varchar("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  linkedWorkOrderId: varchar("linked_work_order_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_ccr_object").on(table.objectId),
+  index("idx_ccr_customer").on(table.customerId),
+  index("idx_ccr_tenant_status").on(table.tenantId, table.status),
+]);
+
+export const customerChangeRequestsRelations = relations(customerChangeRequests, ({ one }) => ({
+  tenant: one(tenants, { fields: [customerChangeRequests.tenantId], references: [tenants.id] }),
+  object: one(objects, { fields: [customerChangeRequests.objectId], references: [objects.id] }),
+  customer: one(customers, { fields: [customerChangeRequests.customerId], references: [customers.id] }),
+  reviewedByUser: one(users, { fields: [customerChangeRequests.reviewedBy], references: [users.id] }),
+}));
+
+export const insertCustomerChangeRequestSchema = createInsertSchema(customerChangeRequests).omit({ id: true, createdAt: true, reviewedBy: true, reviewedAt: true, reviewNotes: true, linkedWorkOrderId: true });
+export type CustomerChangeRequest = typeof customerChangeRequests.$inferSelect;
+export type InsertCustomerChangeRequest = z.infer<typeof insertCustomerChangeRequestSchema>;
+
 // Utförd åtgärd-struktur (för protocols.executedActions)
 export interface ExecutedAction {
   articleId?: string;

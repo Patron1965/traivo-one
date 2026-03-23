@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
-import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject } from "@shared/schema";
+import { insertPortalMessageSchema, insertSelfBookingSchema, insertVisitConfirmationSchema, insertTechnicianRatingSchema, insertQrCodeLinkSchema, insertSelfBookingSlotSchema, type InsertObject, objectMetadata } from "@shared/schema";
 import { notificationService } from "../notifications";
 import { sendEmail } from "../replit_integrations/resend";
 import { isModuleEnabled } from "../feature-flags";
@@ -1610,6 +1610,264 @@ app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(asy
       status: "converted",
     });
     res.status(201).json(interimObject);
+}));
+
+// ============================================
+// CUSTOMER FIELD DOCUMENTATION
+// Kund-fältdokumentation — QR-skanning, foto & ändringsrapporter
+// ============================================
+
+app.get("/api/portal/field/objects", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const customerObjects = await storage.getObjectsByCustomer(session.customerId!);
+    const changeRequests = await storage.getCustomerChangeRequests(session.tenantId!, { customerId: session.customerId! });
+
+    const reportCountByObject: Record<string, number> = {};
+    for (const cr of changeRequests) {
+      reportCountByObject[cr.objectId] = (reportCountByObject[cr.objectId] || 0) + 1;
+    }
+
+    res.json(customerObjects.map(o => ({
+      id: o.id,
+      name: o.name,
+      objectNumber: o.objectNumber,
+      address: o.address,
+      city: o.city,
+      objectType: o.objectType,
+      latitude: o.latitude,
+      longitude: o.longitude,
+      reportCount: reportCountByObject[o.id] || 0,
+    })));
+}));
+
+app.get("/api/portal/field/object/:id", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const obj = await storage.getObject(req.params.id);
+    if (!obj || obj.customerId !== session.customerId) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+
+    const metadata = await db.select().from(objectMetadata)
+      .where(and(eq(objectMetadata.objectId, obj.id), eq(objectMetadata.tenantId, session.tenantId!)));
+
+    const changeRequests = await storage.getCustomerChangeRequests(session.tenantId!, {
+      customerId: session.customerId!,
+      objectId: obj.id,
+    });
+
+    const now = new Date();
+    const pastDate = new Date();
+    pastDate.setMonth(pastDate.getMonth() - 6);
+    const allOrders = await storage.getWorkOrders(session.tenantId!, pastDate, now, false, 100);
+    const objectOrders = allOrders
+      .filter((wo: any) => wo.objectId === obj.id)
+      .slice(0, 5)
+      .map((wo: any) => ({
+        id: wo.id,
+        scheduledDate: wo.scheduledDate,
+        completedAt: wo.completedAt,
+        status: wo.status,
+        description: wo.description,
+      }));
+
+    res.json({
+      id: obj.id,
+      name: obj.name,
+      objectNumber: obj.objectNumber,
+      address: obj.address,
+      city: obj.city,
+      objectType: obj.objectType,
+      latitude: obj.latitude,
+      longitude: obj.longitude,
+      accessCode: obj.accessCode,
+      notes: obj.notes,
+      metadata: metadata.map(m => ({ key: m.key, value: m.value })),
+      recentVisits: objectOrders,
+      changeRequests: changeRequests.map(cr => ({
+        id: cr.id,
+        category: cr.category,
+        description: cr.description,
+        photos: cr.photos,
+        status: cr.status,
+        createdAt: cr.createdAt,
+        reviewNotes: cr.reviewNotes,
+      })),
+    });
+}));
+
+app.get("/api/portal/field/reports", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const reports = await storage.getCustomerChangeRequests(session.tenantId!, {
+      customerId: session.customerId!,
+    });
+
+    res.json(reports.map(cr => ({
+      id: cr.id,
+      objectId: cr.objectId,
+      category: cr.category,
+      description: cr.description,
+      photos: cr.photos,
+      status: cr.status,
+      createdAt: cr.createdAt,
+      reviewNotes: cr.reviewNotes,
+    })));
+}));
+
+app.post("/api/portal/field/report", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const reportSchema = z.object({
+      objectId: z.string().min(1),
+      category: z.enum(["antal_karl_andrat", "skadat_material", "tillganglighet", "skador", "rengorings_behov", "ovrigt"]),
+      description: z.string().min(1).max(5000),
+      photos: z.array(z.string()).max(10).optional().default([]),
+      latitude: z.number().min(-90).max(90).nullable().optional(),
+      longitude: z.number().min(-180).max(180).nullable().optional(),
+    });
+
+    const parsed = reportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw new ValidationError(formatZodError(parsed.error));
+    }
+    const { objectId, category, description, photos, latitude, longitude } = parsed.data;
+
+    const obj = await storage.getObject(objectId);
+    if (!obj || obj.customerId !== session.customerId) {
+      throw new NotFoundError("Objekt hittades inte eller tillhör inte din kund");
+    }
+
+    const report = await storage.createCustomerChangeRequest({
+      tenantId: session.tenantId!,
+      objectId,
+      customerId: session.customerId!,
+      category,
+      description,
+      photos: photos || [],
+      latitude: latitude || null,
+      longitude: longitude || null,
+      status: "new",
+    });
+
+    try {
+      const { notificationService: ns } = await import("../notifications");
+      ns.broadcastToTenant(session.tenantId!, {
+        type: "customer_change_request",
+        title: "Ny kundrapport",
+        message: `Kund ${session.customerName} rapporterade "${category}" på ${obj.name}`,
+        data: { reportId: report.id, objectId },
+      });
+    } catch {}
+
+    res.status(201).json(report);
+}));
+
+app.post("/api/portal/field/upload-photo", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const objectStorageService = new ObjectStorageService();
+    const uploadURL = await objectStorageService.getObjectEntityUploadURL();
+    const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
+
+    res.json({ uploadURL, objectPath });
+}));
+
+app.post("/api/portal/field/confirm-photo", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const { objectPath } = req.body;
+    if (!objectPath) {
+      throw new ValidationError("objectPath krävs");
+    }
+
+    res.json({ success: true, photoPath: objectPath });
+}));
+
+app.get("/api/portal/field/qr-lookup/:code", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+
+    const qrLink = await storage.getQrCodeLinkByCode(req.params.code);
+    if (!qrLink || !qrLink.isActive) {
+      throw new NotFoundError("QR-kod hittades inte eller är inaktiv");
+    }
+
+    const obj = await storage.getObject(qrLink.objectId);
+    if (!obj) {
+      throw new NotFoundError("Objektet kopplat till QR-koden hittades inte");
+    }
+
+    if (obj.customerId !== session.customerId) {
+      throw new ForbiddenError("Detta objekt tillhör inte din organisation");
+    }
+
+    res.json({
+      objectId: obj.id,
+      objectName: obj.name,
+      address: obj.address,
+      objectType: obj.objectType,
+    });
+}));
+
+app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { objectId, status } = req.query;
+
+    const requests = await storage.getCustomerChangeRequests(tenantId, {
+      objectId: objectId as string | undefined,
+      status: status as string | undefined,
+    });
+
+    const objectIds = [...new Set(requests.map(r => r.objectId))];
+    const customerIds = [...new Set(requests.map(r => r.customerId))];
+
+    const objectsData = objectIds.length > 0 ? await storage.getObjectsByIds(tenantId, objectIds) : [];
+    const objectMap = new Map(objectsData.map(o => [o.id, { name: o.name, address: o.address }]));
+
+    const customersData = customerIds.length > 0
+      ? await Promise.all(customerIds.map(id => storage.getCustomer(id)))
+      : [];
+    const customerMap = new Map(customersData.filter(Boolean).map(c => [c!.id, { name: c!.name }]));
+
+    res.json(requests.map(r => ({
+      ...r,
+      objectName: objectMap.get(r.objectId)?.name || "Okänt objekt",
+      objectAddress: objectMap.get(r.objectId)?.address || "",
+      customerName: customerMap.get(r.customerId)?.name || "Okänd kund",
+    })));
+}));
+
+app.patch("/api/customer-change-requests/:id/status", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { status, reviewNotes } = req.body;
+
+    if (!status || !["new", "reviewed", "resolved", "rejected"].includes(status)) {
+      throw new ValidationError("Ogiltig status");
+    }
+
+    const userId = (req as any).user?.claims?.sub || (req as any).headers?.["x-replit-user-id"] || null;
+
+    const updated = await storage.updateCustomerChangeRequest(req.params.id, tenantId, {
+      status,
+      reviewNotes: reviewNotes || null,
+      reviewedBy: userId,
+      reviewedAt: new Date(),
+    });
+
+    if (!updated) {
+      throw new NotFoundError("Ändringsbegäran hittades inte");
+    }
+
+    res.json(updated);
 }));
 
 }

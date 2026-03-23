@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -543,6 +543,21 @@ export default function PortalDashboardPage() {
                 <div className="flex-1">
                   <h3 className="font-semibold">Mina ärenden</h3>
                   <p className="text-sm text-muted-foreground">Felanmälan och support</p>
+                </div>
+                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+              </CardContent>
+            </Card>
+          </Link>
+          
+          <Link href="/portal/field">
+            <Card className="hover-elevate cursor-pointer group" data-testid="card-field-docs">
+              <CardContent className="p-5 flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-teal-500/10 group-hover:bg-teal-500/20 transition-colors">
+                  <Camera className="h-6 w-6 text-teal-500" />
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold">Fältdokumentation</h3>
+                  <p className="text-sm text-muted-foreground">QR-skanning, foto & rapporter</p>
                 </div>
                 <ArrowRight className="h-4 w-4 text-muted-foreground" />
               </CardContent>

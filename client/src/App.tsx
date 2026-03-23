@@ -50,6 +50,7 @@ const PredictivePlanningPage = lazy(() => import("@/pages/PredictivePlanningPage
 const AutoClusterPage = lazy(() => import("@/pages/AutoClusterPage"));
 const WeatherPlanningPage = lazy(() => import("@/pages/WeatherPlanningPage"));
 const CustomerPortalPage = lazy(() => import("@/pages/CustomerPortalPage"));
+const CustomerReportsPage = lazy(() => import("@/pages/CustomerReportsPage"));
 const PortalMessagesPage = lazy(() => import("@/pages/PortalMessagesPage"));
 const SystemDashboardPage = lazy(() => import("@/pages/SystemDashboardPage"));
 const IndustryPackagesPage = lazy(() => import("@/pages/IndustryPackagesPage"));
@@ -81,6 +82,7 @@ const PortalSettingsPage = lazy(() => import("@/pages/portal/PortalSettingsPage"
 const PortalIssuesPage = lazy(() => import("@/pages/portal/PortalIssuesPage"));
 const PortalDemoPage = lazy(() => import("@/pages/portal/PortalDemoPage"));
 const PortalROIReportPage = lazy(() => import("@/pages/portal/PortalROIReportPage"));
+const PortalFieldPage = lazy(() => import("@/pages/portal/PortalFieldPage"));
 const AIPlanningPage = lazy(() => import("@/pages/AIPlanningPage"));
 const AICommandCenterPage = lazy(() => import("@/pages/AICommandCenterPage"));
 const FieldLoginPage = lazy(() => import("@/pages/FieldLoginPage"));
@@ -142,6 +144,7 @@ function Router() {
         <Route path="/auto-cluster">{() => <ProtectedRoute component={AutoClusterPage} path="/auto-cluster" />}</Route>
         <Route path="/weather">{() => <ProtectedRoute component={WeatherPlanningPage} path="/weather" />}</Route>
         <Route path="/customer-portal">{() => <ProtectedRoute component={CustomerPortalPage} path="/customer-portal" />}</Route>
+        <Route path="/customer-reports">{() => <ProtectedRoute component={CustomerReportsPage} path="/customer-reports" />}</Route>
         <Route path="/portal-messages">{() => <ProtectedRoute component={PortalMessagesPage} path="/portal-messages" />}</Route>
         <Route path="/import">{() => <ProtectedRoute component={ImportPage} path="/import" />}</Route>
         <Route path="/system-overview">{() => <ProtectedRoute component={SystemOverviewPage} path="/system-overview" />}</Route>
@@ -206,6 +209,7 @@ function PortalRouter() {
         <Route path="/portal/settings" component={PortalSettingsPage} />
         <Route path="/portal/issues" component={PortalIssuesPage} />
         <Route path="/portal/roi-report" component={PortalROIReportPage} />
+        <Route path="/portal/field" component={PortalFieldPage} />
         <Route component={NotFound} />
       </Switch>
     </Suspense>

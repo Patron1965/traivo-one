@@ -72,6 +72,7 @@
     "framer-motion": "^11.13.1",
     "google-auth-library": "^10.5.0",
     "html2canvas": "^1.4.1",
+    "html5-qrcode": "^2.3.8",
     "idb": "^8.0.3",
     "input-otp": "^1.4.2",
     "jimp": "^0.22.12",

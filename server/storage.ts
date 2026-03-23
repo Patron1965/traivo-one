@@ -74,6 +74,7 @@ import {
   type DeviationReport, type InsertDeviationReport,
   type QrCodeLink, type InsertQrCodeLink,
   type PublicIssueReport, type InsertPublicIssueReport,
+  type CustomerChangeRequest, type InsertCustomerChangeRequest,
   type EnvironmentalData, type InsertEnvironmentalData,
   type VisitConfirmation, type InsertVisitConfirmation,
   type TechnicianRating, type InsertTechnicianRating,
@@ -118,7 +119,7 @@ import {
   invoiceConfigurations, documentConfigurations, deliverySchedules,
   customerPortalTokens, customerPortalSessions, customerBookingRequests, customerPortalMessages,
   customerInvoices, customerIssueReports, customerServiceContracts, customerNotificationSettings,
-  protocols, deviationReports, qrCodeLinks, publicIssueReports, environmentalData,
+  protocols, deviationReports, qrCodeLinks, publicIssueReports, customerChangeRequests, environmentalData,
   visitConfirmations, technicianRatings, portalMessages, selfBookingSlots, selfBookings,
   tenantFeatures,
   planningDecisionLog
@@ -605,6 +606,12 @@ export interface IStorage {
   getPublicIssueReport(id: string): Promise<PublicIssueReport | undefined>;
   createPublicIssueReport(report: InsertPublicIssueReport): Promise<PublicIssueReport>;
   updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined>;
+  
+  // Customer Change Requests
+  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string }): Promise<CustomerChangeRequest[]>;
+  getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined>;
+  createCustomerChangeRequest(request: InsertCustomerChangeRequest): Promise<CustomerChangeRequest>;
+  updateCustomerChangeRequest(id: string, tenantId: string, data: Partial<CustomerChangeRequest>): Promise<CustomerChangeRequest | undefined>;
   
   // Environmental Data
   getEnvironmentalData(tenantId: string, options?: { workOrderId?: string; resourceId?: string; startDate?: Date; endDate?: Date }): Promise<EnvironmentalData[]>;
@@ -4654,6 +4661,44 @@ export class DatabaseStorage implements IStorage {
     const [result] = await db.update(publicIssueReports)
       .set(data)
       .where(and(eq(publicIssueReports.id, id), eq(publicIssueReports.tenantId, tenantId)))
+      .returning();
+    return result;
+  }
+
+  // ============================================
+  // CUSTOMER CHANGE REQUESTS
+  // ============================================
+
+  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string }): Promise<CustomerChangeRequest[]> {
+    const conditions = [eq(customerChangeRequests.tenantId, tenantId)];
+    if (options?.customerId) {
+      conditions.push(eq(customerChangeRequests.customerId, options.customerId));
+    }
+    if (options?.objectId) {
+      conditions.push(eq(customerChangeRequests.objectId, options.objectId));
+    }
+    if (options?.status) {
+      conditions.push(eq(customerChangeRequests.status, options.status));
+    }
+    return db.select().from(customerChangeRequests)
+      .where(and(...conditions))
+      .orderBy(desc(customerChangeRequests.createdAt));
+  }
+
+  async getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined> {
+    const [result] = await db.select().from(customerChangeRequests).where(eq(customerChangeRequests.id, id));
+    return result;
+  }
+
+  async createCustomerChangeRequest(request: InsertCustomerChangeRequest): Promise<CustomerChangeRequest> {
+    const [result] = await db.insert(customerChangeRequests).values(request).returning();
+    return result;
+  }
+
+  async updateCustomerChangeRequest(id: string, tenantId: string, data: Partial<CustomerChangeRequest>): Promise<CustomerChangeRequest | undefined> {
+    const [result] = await db.update(customerChangeRequests)
+      .set(data)
+      .where(and(eq(customerChangeRequests.id, id), eq(customerChangeRequests.tenantId, tenantId)))
       .returning();
     return result;
   }
