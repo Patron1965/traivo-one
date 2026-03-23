@@ -488,16 +488,40 @@ export default function ImportPage() {
   
   const [modusUploading, setModusUploading] = useState<ModusImportType | null>(null);
   const [showInvoiceColumns, setShowInvoiceColumns] = useState(false);
+
+  const STORAGE_KEY = "traivo-import-progress";
+  const savedProgress = useMemo(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) return JSON.parse(saved) as {
+        skipped: number[];
+        completed: number[];
+        activeStep: number;
+        results?: {
+          objects: ModusObjectResult | null;
+          tasks: ImportResult | null;
+          events: ModusEventsResult | null;
+          "invoice-lines": ImportResult | null;
+        };
+      };
+    } catch {}
+    return null;
+  }, []);
+
   const [modusResults, setModusResults] = useState<{
     objects: ModusObjectResult | null;
     tasks: ImportResult | null;
     events: ModusEventsResult | null;
     "invoice-lines": ImportResult | null;
   }>(() => {
-    const saved = savedProgress?.results;
-    if (saved) return saved;
+    if (savedProgress?.results) return savedProgress.results;
     return { objects: null, tasks: null, events: null, "invoice-lines": null };
   });
+  const [skippedSteps, setSkippedSteps] = useState<Set<number>>(new Set(savedProgress?.skipped || []));
+  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set(savedProgress?.completed || []));
+  const [activeModusStep, setActiveModusStep] = useState<number>(savedProgress?.activeStep || 2);
+  const [skipConfirmStep, setSkipConfirmStep] = useState<number | null>(null);
+
   const [modusObjectFile, setModusObjectFile] = useState<File | null>(null);
   const [modusValidation, setModusValidation] = useState<ModusValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -511,21 +535,6 @@ export default function ImportPage() {
   const [taskPreviewResources, setTaskPreviewResources] = useState<string[]>([]);
   const [taskResourceOverrides, setTaskResourceOverrides] = useState<Record<string, string>>({});
   const [taskPreviewTotalRows, setTaskPreviewTotalRows] = useState(0);
-
-  const STORAGE_KEY = "traivo-import-progress";
-  const loadSavedProgress = useCallback(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as { skipped: number[]; completed: number[]; activeStep: number; results?: typeof modusResults };
-    } catch {}
-    return null;
-  }, []);
-
-  const savedProgress = loadSavedProgress();
-  const [skippedSteps, setSkippedSteps] = useState<Set<number>>(new Set(savedProgress?.skipped || []));
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set(savedProgress?.completed || []));
-  const [activeModusStep, setActiveModusStep] = useState<number>(savedProgress?.activeStep || 2);
-  const [skipConfirmStep, setSkipConfirmStep] = useState<number | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -1482,16 +1491,22 @@ export default function ImportPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <Truck className="h-4 w-4" />
                       Importera uppgifter (arbetsordrar)
-                      {objects.length === 0 && (
+                      {objects.length === 0 && !completedSteps.has(2) && (
                         <Badge variant="outline" className="text-xs ml-2 bg-red-50 text-red-600 border-red-200" data-testid="badge-quality-step-3">
                           <AlertCircle className="h-3 w-3 mr-1" />
-                          Kräver objekt
+                          Importera objekt först
+                        </Badge>
+                      )}
+                      {objects.length === 0 && completedSteps.has(2) && (
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-3">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          {modusResults.objects?.errors?.length ? `${modusResults.objects.errors.length} varningar` : "0 objekt"}
                         </Badge>
                       )}
                       {objects.length > 0 && (
                         <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-3">
                           <CheckCircle className="h-3 w-3 mr-1" />
-                          Redo
+                          {objects.length} objekt redo
                         </Badge>
                       )}
                     </CardTitle>
@@ -1653,10 +1668,22 @@ export default function ImportPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <FileSpreadsheet className="h-4 w-4" />
                       Importera fakturarader (valfritt)
-                      <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-4">
-                        <Info className="h-3 w-3 mr-1" />
-                        Valfritt
-                      </Badge>
+                      {completedSteps.has(3) && modusResults.tasks ? (
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-4">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {modusResults.tasks.imported} uppgifter att koppla
+                        </Badge>
+                      ) : !completedSteps.has(3) ? (
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-4">
+                          <Info className="h-3 w-3 mr-1" />
+                          Kräver uppgifter
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 text-blue-600 border-blue-200" data-testid="badge-quality-step-4">
+                          <Info className="h-3 w-3 mr-1" />
+                          Valfritt
+                        </Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>
                       Kopplar Fortnox-artiklar och priser till importerade uppgifter
@@ -1772,10 +1799,22 @@ export default function ImportPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <Clock className="h-4 w-4" />
                       Analysera händelser (valfritt)
-                      <Badge variant="outline" className="text-xs ml-2 bg-blue-50 text-blue-600 border-blue-200" data-testid="badge-quality-step-5">
-                        <Info className="h-3 w-3 mr-1" />
-                        Valfritt
-                      </Badge>
+                      {completedSteps.has(3) && modusResults.tasks ? (
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-5">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {modusResults.tasks.imported} uppgifter att analysera
+                        </Badge>
+                      ) : !completedSteps.has(3) ? (
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-5">
+                          <Info className="h-3 w-3 mr-1" />
+                          Kräver uppgifter
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs ml-2 bg-blue-50 text-blue-600 border-blue-200" data-testid="badge-quality-step-5">
+                          <Info className="h-3 w-3 mr-1" />
+                          Valfritt
+                        </Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>
                       Beräknar arbetstider och ställtider baserat på historiska händelser
