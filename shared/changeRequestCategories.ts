@@ -52,17 +52,6 @@ export type OneCategory = typeof ONE_CATEGORIES[number];
 export type GoCategory = typeof GO_CATEGORIES[number];
 export type SeverityLevel = typeof SEVERITY_LEVELS[number];
 
-export const DEVIATION_TO_CATEGORY_MAP: Record<string, string> = {
-  blocked_access: "tillganglighet",
-  damaged_container: "skadat_material",
-  wrong_waste: "ovrigt",
-  overloaded: "antal_karl_andrat",
-  safety: "skador",
-  quality: "rengorings_behov",
-  environment: "ovrigt",
-  other: "ovrigt",
-};
-
 export const AUTO_LINK_DEVIATION_TYPES = [
   "blocked_access",
   "damaged_container",
@@ -75,8 +64,4 @@ export const AUTO_LINK_DEVIATION_TYPES = [
 
 export function mapGoCategory(goCategory: string): string {
   return GO_CATEGORY_MAP[goCategory] || "ovrigt";
-}
-
-export function mapDeviationToCategory(deviationType: string): string {
-  return DEVIATION_TO_CATEGORY_MAP[deviationType] || "ovrigt";
 }

@@ -3617,7 +3617,7 @@ export const customerChangeRequestsRelations = relations(customerChangeRequests,
   reviewedByUser: one(users, { fields: [customerChangeRequests.reviewedBy], references: [users.id] }),
 }));
 
-export const insertCustomerChangeRequestSchema = createInsertSchema(customerChangeRequests).omit({ id: true, createdAt: true, reviewedBy: true, reviewedAt: true, reviewNotes: true, linkedWorkOrderId: true, linkedDeviationId: true });
+export const insertCustomerChangeRequestSchema = createInsertSchema(customerChangeRequests).omit({ id: true, createdAt: true, reviewedBy: true, reviewedAt: true, reviewNotes: true, linkedWorkOrderId: true });
 export type CustomerChangeRequest = typeof customerChangeRequests.$inferSelect;
 export type InsertCustomerChangeRequest = z.infer<typeof insertCustomerChangeRequestSchema>;
 

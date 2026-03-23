@@ -804,7 +804,7 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
           const obj = await storage.getObject(order.objectId);
           if (obj?.customerId) {
             const mappedCategory = GO_CATEGORY_MAP[deviationType] || mapGoCategory(deviationType);
-            const created = await storage.createCustomerChangeRequest({
+            linkedChangeRequest = await storage.createCustomerChangeRequest({
               tenantId: order.tenantId!,
               objectId: order.objectId,
               customerId: obj.customerId,
@@ -816,8 +816,8 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
               status: "new",
               severity: "medium",
               createdByResourceId: resourceId,
+              linkedDeviationId: deviation.id,
             });
-            linkedChangeRequest = await storage.updateCustomerChangeRequest(created.id, order.tenantId!, { linkedDeviationId: deviation.id } as any) || created;
 
             console.log(`[mobile] Auto-created change request ${linkedChangeRequest.id} from deviation ${deviation.id}`);
 
