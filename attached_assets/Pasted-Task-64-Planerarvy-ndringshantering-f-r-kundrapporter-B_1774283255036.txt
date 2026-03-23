@@ -1,0 +1,79 @@
+Task #64: Planerarvy & Ändringshantering för kundrapporter
+Backend (server/routes/portalRoutes.ts + server/storage.ts)
+GET /api/customer-change-requests
+
+Returnerar { items, total } med server-side paginering (limit/offset, default 50, max 100)
+Filtrering på: status, category, customerId, objectId, dateFrom, dateTo
+Enrichar varje rapport med objectName, objectAddress och customerName via objekts- och kunduppslag
+Robust param-parsing (skyddar mot NaN/negativa värden)
+GET /api/customer-change-requests/summary
+
+Returnerar aggregerade statusräknare (new, reviewed, resolved, rejected, total) oberoende av paginering
+Stödjer samma filter som huvudendpointen (utom status, eftersom den aggregerar alla statusar)
+Används av KPI-korten i frontend
+GET /api/customer-change-requests/counts-by-object
+
+Returnerar Record<objectId, antal> för rapporter med status new
+Används för att visa badge-räknare på ObjectsPage
+PATCH /api/customer-change-requests/:id/status
+
+Uppdaterar status + granskningskommentar (reviewNotes)
+Sätter reviewedBy och reviewedAt
+POST /api/customer-change-requests/:id/create-work-order
+
+Skapar en arbetsorder (typ service, status draft) kopplad till rapportens objekt och kund
+Titel: "Kundrapport: [kategorinamn]", beskrivning inkluderar rapporttext + rapport-ID
+Sätter rapporten till resolved med reviewNotes "Arbetsorder skapad: [workOrderId]"
+Idempotency-skydd: avvisar med 409 om rapporten redan konverterats
+Skickar WebSocket-notifikation till tenant
+Storage-ändringar:
+
+getCustomerChangeRequests returnerar nu { items, total } istället för bara en array
+Stödjer dateFrom/dateTo via gte/lte på createdAt
+Stödjer limit/offset för server-side paginering
+Alla befintliga anropare i portalRoutes (portal field endpoints) uppdaterade för ny returtyp
+Frontend — CustomerReportsPage (/customer-reports)
+Filter & sökning:
+
+Statusfilter (dropdown + klickbara KPI-kort)
+Kategorifilter (6 kategorier: antal kärl ändrat, skadat material, tillgänglighetsproblem, skador, rengöringsbehov, övrigt)
+Kundfilter (hämtar kundlista från /api/customers)
+Datumintervall (från/till med date-inputs)
+Fritextsökning (beskrivning, kundnamn, objektnamn, kategori)
+ObjectId via URL-param (/customer-reports?objectId=X) med filterbanner och "Rensa filter"
+"Rensa alla filter"-knapp
+KPI-kort:
+
+Nya / Under granskning / Lösta / Totalt
+Drivs av /summary-endpoint (visar korrekta siffror oavsett paginering)
+Klickbara — filtrerar listan på vald status
+Paginering:
+
+Server-side, 20 per sida
+Föregående/Nästa-knappar + sidindikator
+Alla filterändringar nollställer sidan
+Detaljdialog (modal):
+
+Kundinformation (kundnamn, objektnamn, adress, länk till objektsidan)
+GPS-position med kartlänk till OpenStreetMap
+Foton med miniatyrbilder (filtrerade med safe path regex /objects/...)
+Statushistorik-tidslinje (skapad → senaste statusändring med granskare och kommentar)
+Statusändring med dropdown + kommentarsfält
+"Skapa arbetsorder"-knapp (med laddningsindikator, dold om redan löst)
+Toast-feedback vid framgång och fel
+Cache-invalidering:
+
+Alla mutationer invaliderar huvudlistan, summary och counts-by-object
+Frontend — ObjectsPage-integration
+Hämtar rapportantal per objekt via /counts-by-object
+Visar teal-färgad badge med kameraikon + antal ("X rapporter") på objekt med nya rapporter
+Klick navigerar till /customer-reports?objectId=X (SPA-navigation via router)
+Tooltip förklarar vad badgen visar
+Kategorier som stöds
+antal_karl_andrat, skadat_material, tillganglighet, skador, rengorings_behov, ovrigt
+
+Statusar
+new → reviewed → resolved / rejected
+
+Det borde ge Traivo GO-teamet en bra bild av vad som finns och vad de ev. behöver komplettera med. Vill du att jag justerar eller lägger till något i beskrivningen?
+
