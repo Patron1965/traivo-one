@@ -1589,7 +1589,7 @@ app.post("/api/public-issue-reports/:id/create-interim-object", asyncHandler(asy
         throw new NotFoundError("Förälderobjekt hittades inte");
       }
     }
-    const objectName = name || report.title || "Interimobjekt från felanmälan";
+    const objectName = name || report.title || "Rapporterat objekt från felanmälan";
     const insertData: InsertObject = {
       tenantId,
       customerId,

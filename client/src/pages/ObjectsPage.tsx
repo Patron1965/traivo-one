@@ -19,7 +19,7 @@ import {
   Search, Plus, Filter, Loader2, ChevronRight, ChevronLeft, Building2, MapPin, Trash2, 
   Map as MapIcon, List, Edit2, Copy, Upload, Clock, Key, Keyboard, Users, DoorOpen,
   Check, X, FileSpreadsheet, Download, BarChart3, MoreHorizontal, AlertTriangle, ChevronDown, ChevronUp, XCircle,
-  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package
+  Image, GitFork, Link2, Globe, ShieldAlert, ShieldCheck, ShieldX, Package, Info
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AICard } from "@/components/AICard";
@@ -273,7 +273,7 @@ export default function ObjectsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
-      toast({ title: "Objekt verifierat", description: "Interimobjektet har verifierats och är nu ett vanligt objekt." });
+      toast({ title: "Objekt verifierat", description: "Det rapporterade objektet har verifierats och är nu ett vanligt objekt." });
     },
     onError: () => {
       toast({ title: "Fel vid verifiering", variant: "destructive" });
@@ -286,7 +286,7 @@ export default function ObjectsPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"], exact: false });
-      toast({ title: "Objekt avvisat", description: "Interimobjektet har avvisats." });
+      toast({ title: "Objekt avvisat", description: "Det rapporterade objektet har avvisats." });
     },
     onError: () => {
       toast({ title: "Fel vid avvisning", variant: "destructive" });
@@ -602,10 +602,17 @@ export default function ObjectsPage() {
                 {objectTypeLabels[obj.objectType] || obj.objectType}
               </Badge>
               {obj.isInterimObject && (
-                <Badge variant="destructive" className="text-xs gap-1">
-                  <ShieldAlert className="h-3 w-3" />
-                  Interim
-                </Badge>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="destructive" className="text-xs gap-1 cursor-help">
+                      <ShieldAlert className="h-3 w-3" />
+                      Rapporterat
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-sm">Objekt som skapats via extern felanmälan (QR-kod) och ännu inte verifierats av en administratör.</p>
+                  </TooltipContent>
+                </Tooltip>
               )}
               {obj.accessType && obj.accessType !== "open" && (
                 <Tooltip>
@@ -954,21 +961,31 @@ export default function ObjectsPage() {
                 )}
                 {filtersOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
               </Button>
-              <Button
-                variant={interimFilter ? "default" : "outline"}
-                size="sm"
-                onClick={() => { setInterimFilter(!interimFilter); setCurrentPage(0); }}
-                className="gap-2"
-                data-testid="button-interim-filter"
-              >
-                <ShieldAlert className="h-4 w-4" />
-                Interimobjekt
-                {interimCount > 0 && (
-                  <Badge variant={interimFilter ? "outline" : "destructive"} className="h-5 min-w-[20px] p-0 flex items-center justify-center text-xs rounded-full">
-                    {interimCount}
-                  </Badge>
-                )}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant={interimFilter ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => { setInterimFilter(!interimFilter); setCurrentPage(0); }}
+                  className="gap-2"
+                  data-testid="button-interim-filter"
+                >
+                  <ShieldAlert className="h-4 w-4" />
+                  Rapporterade objekt
+                  {interimCount > 0 && (
+                    <Badge variant={interimFilter ? "outline" : "destructive"} className="h-5 min-w-[20px] p-0 flex items-center justify-center text-xs rounded-full">
+                      {interimCount}
+                    </Badge>
+                  )}
+                </Button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="h-4 w-4 text-muted-foreground cursor-help" data-testid="info-rapporterade-objekt" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-sm">Objekt som skapats via extern felanmälan (QR-kod) och ännu inte verifierats av en administratör.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
               {(activeFilterCount > 0 || interimFilter) && (
                 <Button variant="ghost" size="sm" onClick={() => { clearAllFilters(); setInterimFilter(false); }} className="gap-1 text-muted-foreground" data-testid="button-clear-filters">
                   <XCircle className="h-4 w-4" />

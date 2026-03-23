@@ -335,7 +335,7 @@ app.put("/api/objects/:id/verify", asyncHandler(async (req, res) => {
     throw new NotFoundError("Objekt");
   }
   if (!existing!.isInterimObject) {
-    throw new ValidationError("Objektet är inte ett interimobjekt");
+    throw new ValidationError("Objektet är inte ett rapporterat objekt");
   }
   const object = await storage.updateObject(req.params.id, { isInterimObject: false });
   res.json(object);
@@ -348,7 +348,7 @@ app.put("/api/objects/:id/reject", asyncHandler(async (req, res) => {
     throw new NotFoundError("Objekt");
   }
   if (!existing!.isInterimObject) {
-    throw new ValidationError("Objektet är inte ett interimobjekt");
+    throw new ValidationError("Objektet är inte ett rapporterat objekt");
   }
   const object = await storage.updateObject(req.params.id, { deletedAt: new Date(), status: "rejected" });
   res.json(object);
