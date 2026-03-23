@@ -493,7 +493,11 @@ export default function ImportPage() {
     tasks: ImportResult | null;
     events: ModusEventsResult | null;
     "invoice-lines": ImportResult | null;
-  }>({ objects: null, tasks: null, events: null, "invoice-lines": null });
+  }>(() => {
+    const saved = savedProgress?.results;
+    if (saved) return saved;
+    return { objects: null, tasks: null, events: null, "invoice-lines": null };
+  });
   const [modusObjectFile, setModusObjectFile] = useState<File | null>(null);
   const [modusValidation, setModusValidation] = useState<ModusValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
@@ -512,7 +516,7 @@ export default function ImportPage() {
   const loadSavedProgress = useCallback(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) return JSON.parse(saved) as { skipped: number[]; completed: number[]; activeStep: number };
+      if (saved) return JSON.parse(saved) as { skipped: number[]; completed: number[]; activeStep: number; results?: typeof modusResults };
     } catch {}
     return null;
   }, []);
@@ -528,8 +532,9 @@ export default function ImportPage() {
       skipped: Array.from(skippedSteps),
       completed: Array.from(completedSteps),
       activeStep: activeModusStep,
+      results: modusResults,
     }));
-  }, [skippedSteps, completedSteps, activeModusStep]);
+  }, [skippedSteps, completedSteps, activeModusStep, modusResults]);
 
   const eventSourceRef = useRef<EventSource | null>(null);
 
@@ -1477,6 +1482,18 @@ export default function ImportPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <Truck className="h-4 w-4" />
                       Importera uppgifter (arbetsordrar)
+                      {objects.length === 0 && (
+                        <Badge variant="outline" className="text-xs ml-2 bg-red-50 text-red-600 border-red-200" data-testid="badge-quality-step-3">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          Kräver objekt
+                        </Badge>
+                      )}
+                      {objects.length > 0 && (
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-3">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          Redo
+                        </Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>
                       Arbetsordrar med schemaläggning — resurser skapas automatiskt
@@ -1636,6 +1653,10 @@ export default function ImportPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <FileSpreadsheet className="h-4 w-4" />
                       Importera fakturarader (valfritt)
+                      <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-4">
+                        <Info className="h-3 w-3 mr-1" />
+                        Valfritt
+                      </Badge>
                     </CardTitle>
                     <CardDescription>
                       Kopplar Fortnox-artiklar och priser till importerade uppgifter
@@ -1751,6 +1772,10 @@ export default function ImportPage() {
                     <CardTitle className="text-base flex items-center gap-2">
                       <Clock className="h-4 w-4" />
                       Analysera händelser (valfritt)
+                      <Badge variant="outline" className="text-xs ml-2 bg-blue-50 text-blue-600 border-blue-200" data-testid="badge-quality-step-5">
+                        <Info className="h-3 w-3 mr-1" />
+                        Valfritt
+                      </Badge>
                     </CardTitle>
                     <CardDescription>
                       Beräknar arbetstider och ställtider baserat på historiska händelser
@@ -1923,6 +1948,37 @@ export default function ImportPage() {
                   Alla steg har genomförts. Importen är komplett.
                 </div>
               )}
+
+              {(() => {
+                const allWarnings: string[] = [];
+                if (modusResults.objects?.errors?.length) {
+                  allWarnings.push(...modusResults.objects.errors.slice(0, 10).map(e => `[Objekt] ${e}`));
+                  if (modusResults.objects.errors.length > 10) allWarnings.push(`[Objekt] ... och ${modusResults.objects.errors.length - 10} till`);
+                }
+                if (modusResults.tasks?.errors?.length) {
+                  allWarnings.push(...modusResults.tasks.errors.slice(0, 10).map(e => `[Uppgifter] ${e}`));
+                  if (modusResults.tasks.errors.length > 10) allWarnings.push(`[Uppgifter] ... och ${modusResults.tasks.errors.length - 10} till`);
+                }
+                if (modusResults["invoice-lines"]?.errors?.length) {
+                  allWarnings.push(...modusResults["invoice-lines"].errors.slice(0, 10).map(e => `[Fakturarader] ${e}`));
+                }
+                if (allWarnings.length === 0) return null;
+                return (
+                  <details className="border rounded-md p-3" data-testid="summary-warnings">
+                    <summary className="text-sm font-medium text-orange-600 cursor-pointer flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4" />
+                      {allWarnings.length} varningar/problem
+                    </summary>
+                    <ScrollArea className="h-40 mt-2">
+                      <ul className="text-xs text-muted-foreground space-y-1 ml-4 list-disc">
+                        {allWarnings.map((w, i) => (
+                          <li key={i}>{w}</li>
+                        ))}
+                      </ul>
+                    </ScrollArea>
+                  </details>
+                );
+              })()}
 
               <Button variant="outline" size="sm" onClick={() => {
                 setSkippedSteps(new Set());
