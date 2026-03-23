@@ -694,7 +694,6 @@ export default function ImportPage() {
 
   const goToStep = useCallback((step: number) => {
     setActiveModusStep(step);
-    setSkippedSteps(prev => { const next = new Set(prev); next.delete(step); return next; });
   }, []);
 
   const firstSkippedStep = useMemo(() => {
@@ -1182,7 +1181,7 @@ export default function ImportPage() {
             </CardContent>
           </Card>
 
-          {activeModusStep === 2 && !completedSteps.has(2) && !skippedSteps.has(2) && (
+          {activeModusStep === 2 && !completedSteps.has(2) && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1496,7 +1495,7 @@ export default function ImportPage() {
           </Card>
           )}
 
-          {activeModusStep === 3 && !completedSteps.has(3) && !skippedSteps.has(3) && (
+          {activeModusStep === 3 && !completedSteps.has(3) && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1673,7 +1672,7 @@ export default function ImportPage() {
           </Card>
           )}
 
-          {activeModusStep === 4 && !completedSteps.has(4) && !skippedSteps.has(4) && (
+          {activeModusStep === 4 && !completedSteps.has(4) && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -1804,7 +1803,7 @@ export default function ImportPage() {
           </Card>
           )}
 
-          {activeModusStep === 5 && !completedSteps.has(5) && !skippedSteps.has(5) && (
+          {activeModusStep === 5 && !completedSteps.has(5) && (
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
