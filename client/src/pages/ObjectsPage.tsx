@@ -638,16 +638,15 @@ export default function ObjectsPage() {
               {reportCounts[obj.id] > 0 && (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <a
-                      href={`/customer-reports?objectId=${obj.id}`}
-                      onClick={(e) => e.stopPropagation()}
+                    <span
+                      onClick={(e) => { e.stopPropagation(); navigate(`/customer-reports?objectId=${obj.id}`); }}
                       data-testid={`badge-reports-${obj.id}`}
                     >
                       <Badge className="bg-teal-500 text-white text-xs gap-1 cursor-pointer hover:bg-teal-600">
                         <Camera className="h-3 w-3" />
                         {reportCounts[obj.id]} rapport{reportCounts[obj.id] !== 1 ? "er" : ""}
                       </Badge>
-                    </a>
+                    </span>
                   </TooltipTrigger>
                   <TooltipContent>
                     <p className="text-sm">{reportCounts[obj.id]} ny(a) kundrapport(er). Klicka för att visa.</p>

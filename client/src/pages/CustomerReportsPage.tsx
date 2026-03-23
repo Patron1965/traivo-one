@@ -131,6 +131,8 @@ export default function CustomerReportsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/customer-change-requests"] });
+      qc.invalidateQueries({ queryKey: ["/api/customer-change-requests/summary"] });
+      qc.invalidateQueries({ queryKey: ["/api/customer-change-requests/counts-by-object"] });
       toast({ title: "Status uppdaterad", description: "Rapportens status har ändrats." });
       setSelectedReport(null);
       setReviewNotes("");
@@ -147,6 +149,8 @@ export default function CustomerReportsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/customer-change-requests"] });
+      qc.invalidateQueries({ queryKey: ["/api/customer-change-requests/summary"] });
+      qc.invalidateQueries({ queryKey: ["/api/customer-change-requests/counts-by-object"] });
       toast({ title: "Arbetsorder skapad", description: "En ny arbetsorder har skapats från denna rapport." });
       setSelectedReport(null);
     },
