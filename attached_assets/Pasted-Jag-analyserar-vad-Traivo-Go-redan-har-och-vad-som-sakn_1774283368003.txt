@@ -1,0 +1,47 @@
+Jag analyserar vad Traivo Go redan har och vad som saknas i Traivo One för att koppla ihop kundrapporterna med mobilappen.
+
+Nu har jag en bra bild av båda systemen. Här är min analys:
+
+Traivo One har byggt (Task #64):
+
+Kundrapporter (Customer Change Requests) med planerarvy
+Kategorier: antal_karl_andrat, skadat_material, tillganglighet, skador, rengorings_behov, ovrigt
+Status: new → reviewed → resolved/rejected
+Endpoints: GET/PATCH/POST för att lista, filtrera, ändra status, skapa arbetsorder
+Traivo Go har redan:
+
+Avvikelserapportering (POST /orders/:id/deviations) med egna kategorier
+AI-bildanalys för avvikelser
+GPS-position vid rapportering
+Foto-uppladdning
+Vad som saknas i Traivo One för full integration:
+
+Mobil-specifikt API saknas — Traivo One:s endpoints (/api/customer-change-requests/*) är byggda för portalvyn. Det behövs ett mobilanpassat endpoint som:
+
+POST /api/mobile/customer-change-requests — så chauffören kan skapa en kundrapport direkt från fältet (med GPS, foto, kategori)
+GET /api/mobile/orders/:id/customer-reports — hämta eventuella kundrapporter kopplade till en specifik order/objekt
+Kategorimappning — Traivo Go:s avvikelsekategorier (10 st: blocked_access, damaged_container, etc.) matchar inte Traivo One:s 6 kategorier (antal_karl_andrat, skadat_material, etc.). Det behövs antingen:
+
+En mappningstabell mellan Go:s och One:s kategorier, eller
+Att Go anpassar sig till One:s kategorier, eller
+Att One utökar sina kategorier
+Fotostöd i kundrapporter — Traivo One visar foton i detaljdialogen (filtrerade med regex /objects/...), men det saknas ett tydligt upload-endpoint för mobilen att bifoga foton till en kundrapport (base64 eller multipart).
+
+Push-notis till chauffören — När en planerare ändrar status på en kundrapport (reviewed/resolved/rejected), borde chauffören få en push-notis eller WebSocket-event tillbaka. Just nu skickar POST /:id/create-work-order en WS-notis till tenant, men inte specifikt till den resurs som skapade rapporten.
+
+Deviation → Change Request-koppling — När en chaufför rapporterar en avvikelse via POST /orders/:id/deviations i Go, borde det automatiskt skapa en Customer Change Request i One (eller åtminstone erbjuda det). Just nu lagras avvikelser bara lokalt på ordern.
+
+Severity-fält — Go har severity (low/medium/high/critical) på avvikelser, men One:s kundrapporter saknar severity. Det kan vara bra att lägga till.
+
+GET /api/mobile/customer-change-requests/mine — Så chauffören kan se sina egna inskickade rapporter och deras status (ny → granskad → löst/avvisad) direkt i appen.
+
+Sammanfattning — vad som bör kompletteras i Traivo One:
+
+Prioritet	Vad	Varför
+Hög	POST /api/mobile/customer-change-requests	Chauffören behöver kunna skapa kundrapporter från fältet
+Hög	Kategorimappning/harmonisering	Go och One använder olika kategorinamn
+Medel	GET /api/mobile/customer-change-requests/mine	Chauffören vill se status på sina rapporter
+Medel	Foto-upload endpoint för mobilen	Base64-bilder från kameran behöver kunna bifogas
+Medel	WS-event change_request:status_updated till chauffören	Feedback-loop när planeraren hanterat rapporten
+Låg	Severity-fält i Change Request-modellen	Matchning med Go:s allvarlighetsgrader
+Låg	Auto-koppling deviation → change request	Smidigare flöde från fältavvikelse till planerarvy
