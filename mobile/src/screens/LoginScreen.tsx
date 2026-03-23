@@ -11,6 +11,7 @@ import {
   Alert,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { colors, spacing, fontSize, borderRadius } from '../theme';
 
 export function LoginScreen() {
   const { login } = useAuth();
@@ -44,7 +45,10 @@ export function LoginScreen() {
     >
       <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>Fältapp</Text>
+          <View style={styles.logoCircle}>
+            <Text style={styles.logoText}>TG</Text>
+          </View>
+          <Text style={styles.title}>Traivo Go</Text>
           <Text style={styles.subtitle}>Logga in för att se dina uppdrag</Text>
         </View>
 
@@ -56,11 +60,12 @@ export function LoginScreen() {
               value={email}
               onChangeText={setEmail}
               placeholder="din@email.se"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.mountainGray}
               keyboardType="email-address"
               autoCapitalize="none"
               autoCorrect={false}
               editable={!isLoading}
+              data-testid="input-email"
             />
           </View>
 
@@ -71,11 +76,12 @@ export function LoginScreen() {
               value={pin}
               onChangeText={setPin}
               placeholder="****"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.mountainGray}
               keyboardType="number-pad"
               secureTextEntry
               maxLength={6}
               editable={!isLoading}
+              data-testid="input-pin"
             />
           </View>
 
@@ -83,9 +89,10 @@ export function LoginScreen() {
             style={[styles.button, isLoading && styles.buttonDisabled]}
             onPress={handleLogin}
             disabled={isLoading}
+            data-testid="button-login"
           >
             {isLoading ? (
-              <ActivityIndicator color="#fff" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.buttonText}>Logga in</Text>
             )}
@@ -99,61 +106,77 @@ export function LoginScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.arcticIce,
   },
   content: {
     flex: 1,
     justifyContent: 'center',
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xxl,
   },
   header: {
     alignItems: 'center',
     marginBottom: 48,
   },
-  title: {
-    fontSize: 32,
+  logoCircle: {
+    width: 72,
+    height: 72,
+    borderRadius: 36,
+    backgroundColor: colors.deepOceanBlue,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: spacing.lg,
+  },
+  logoText: {
+    color: colors.white,
+    fontSize: fontSize.xxl,
     fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+  },
+  title: {
+    fontSize: fontSize.xxxl,
+    fontWeight: 'bold',
+    color: colors.midnightNavy,
+    marginBottom: spacing.sm,
   },
   subtitle: {
-    fontSize: 16,
-    color: '#666',
+    fontSize: fontSize.md,
+    color: colors.mountainGray,
   },
   form: {
-    gap: 16,
+    gap: spacing.lg,
   },
   inputContainer: {
-    gap: 8,
+    gap: spacing.sm,
   },
   label: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontWeight: '600',
-    color: '#333',
+    color: colors.midnightNavy,
   },
   input: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    paddingHorizontal: spacing.lg,
     paddingVertical: 14,
-    fontSize: 16,
+    fontSize: fontSize.md,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    color: '#1a1a1a',
+    borderColor: colors.border,
+    color: colors.midnightNavy,
   },
   button: {
-    backgroundColor: '#2563eb',
-    borderRadius: 12,
-    paddingVertical: 16,
+    backgroundColor: colors.deepOceanBlue,
+    borderRadius: borderRadius.md,
+    paddingVertical: spacing.lg,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
+    minHeight: 52,
+    justifyContent: 'center',
   },
   buttonDisabled: {
     opacity: 0.6,
   },
   buttonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.white,
+    fontSize: fontSize.lg,
+    fontWeight: '700',
   },
 });

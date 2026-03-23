@@ -12,34 +12,44 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getMyWorkOrders } from '../api/workOrders';
-import { useAuth } from '../context/AuthContext';
 import type { WorkOrder } from '../types';
 import type { RootStackParamList } from '../navigation';
+import { colors, spacing, fontSize, borderRadius } from '../theme';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'OrderList'>;
+type FilterType = 'alla' | 'ej_startade' | 'pagaende' | 'klara';
+
+const FILTERS: Array<{ value: FilterType; label: string }> = [
+  { value: 'alla', label: 'Alla' },
+  { value: 'ej_startade', label: 'Ej startade' },
+  { value: 'pagaende', label: 'Pågående' },
+  { value: 'klara', label: 'Klara' },
+];
 
 function getStatusColor(status: string): string {
   switch (status) {
     case 'planerad_resurs':
     case 'planerad_las':
     case 'planerad_pre':
-      return '#2563eb';
+      return colors.statusBlue;
     case 'utford':
-      return '#10b981';
+      return colors.statusGreen;
     case 'avbruten':
-      return '#ef4444';
+      return colors.statusRed;
     case 'skapad':
-      return '#6b7280';
+      return colors.statusGray;
     case 'fakturerad':
-      return '#8b5cf6';
+      return colors.northernTeal;
     case 'omojlig':
-      return '#dc2626';
+      return colors.statusRed;
     default:
-      return '#6b7280';
+      return colors.statusGray;
   }
 }
 
-function getStatusText(status: string): string {
+function getStatusText(status: string, execStatus?: string): string {
+  if (execStatus === 'on_way') return 'På väg';
+  if (execStatus === 'on_site') return 'På plats';
+  if (execStatus === 'completed') return 'Utförd';
   switch (status) {
     case 'planerad_resurs':
     case 'planerad_las':
@@ -53,39 +63,59 @@ function getStatusText(status: string): string {
       return 'Utkast';
     case 'fakturerad':
       return 'Fakturerad';
-    case 'omojlig':
-      return 'Omöjlig';
     default:
       return status;
   }
 }
 
+function filterOrders(orders: WorkOrder[], filter: FilterType): WorkOrder[] {
+  switch (filter) {
+    case 'ej_startade':
+      return orders.filter(o =>
+        !['utford', 'avbruten'].includes(o.orderStatus) &&
+        !['on_way', 'on_site', 'completed'].includes(o.executionStatus || '')
+      );
+    case 'pagaende':
+      return orders.filter(o =>
+        ['on_way', 'on_site'].includes(o.executionStatus || '')
+      );
+    case 'klara':
+      return orders.filter(o =>
+        o.orderStatus === 'utford' || o.executionStatus === 'completed'
+      );
+    default:
+      return orders;
+  }
+}
+
 function OrderCard({ order, onPress }: { order: WorkOrder; onPress: () => void }) {
   const statusColor = getStatusColor(order.orderStatus);
-  
+
   return (
-    <TouchableOpacity style={styles.card} onPress={onPress}>
+    <TouchableOpacity style={styles.card} onPress={onPress} data-testid={`card-order-${order.id}`}>
       <View style={styles.cardHeader}>
         <Text style={styles.cardTitle} numberOfLines={1}>
           {order.title}
         </Text>
-        <View style={[styles.statusBadge, { backgroundColor: statusColor }]}>
-          <Text style={styles.statusText}>{getStatusText(order.orderStatus)}</Text>
+        <View style={[styles.statusBadge, { backgroundColor: statusColor + '20' }]}>
+          <Text style={[styles.statusText, { color: statusColor }]}>
+            {getStatusText(order.orderStatus, order.executionStatus)}
+          </Text>
         </View>
       </View>
-      
+
       <View style={styles.cardBody}>
         <Text style={styles.addressText} numberOfLines={2}>
-          {order.objectAddress || 'Ingen adress'}
+          📍 {order.objectAddress || 'Ingen adress'}
         </Text>
         {order.objectName && (
           <Text style={styles.objectName}>{order.objectName}</Text>
         )}
       </View>
-      
+
       <View style={styles.cardFooter}>
         <Text style={styles.durationText}>
-          {order.estimatedDuration} min
+          ⏱ {order.estimatedDuration} min
         </Text>
         {order.scheduledStartTime && (
           <Text style={styles.timeText}>{order.scheduledStartTime}</Text>
@@ -96,13 +126,13 @@ function OrderCard({ order, onPress }: { order: WorkOrder; onPress: () => void }
 }
 
 export function OrderListScreen() {
-  const navigation = useNavigation<NavigationProp>();
-  const { resource, logout } = useAuth();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [refreshing, setRefreshing] = useState(false);
+  const [filter, setFilter] = useState<FilterType>('alla');
 
   const today = new Date().toISOString().split('T')[0];
 
-  const { data, isLoading, refetch, error } = useQuery({
+  const { data, isLoading, refetch } = useQuery({
     queryKey: ['myOrders', today],
     queryFn: () => getMyWorkOrders(today),
   });
@@ -120,43 +150,43 @@ export function OrderListScreen() {
   if (isLoading && !refreshing) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.deepOceanBlue} />
         <Text style={styles.loadingText}>Laddar uppdrag...</Text>
       </View>
     );
   }
 
-  const orders = data?.orders || [];
+  const allOrders = data?.orders || [];
+  const orders = filterOrders(allOrders, filter);
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Hej, {resource?.name}</Text>
-          <Text style={styles.dateText}>
-            {new Date().toLocaleDateString('sv-SE', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutButton}>
-          <Text style={styles.logoutText}>Logga ut</Text>
-        </TouchableOpacity>
+      <View style={styles.filterRow}>
+        {FILTERS.map((f) => (
+          <TouchableOpacity
+            key={f.value}
+            style={[styles.filterButton, filter === f.value && styles.filterButtonActive]}
+            onPress={() => setFilter(f.value)}
+            data-testid={`filter-${f.value}`}
+          >
+            <Text style={[styles.filterText, filter === f.value && styles.filterTextActive]}>
+              {f.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
       </View>
 
-      <View style={styles.summary}>
+      <View style={styles.summaryBar}>
         <Text style={styles.summaryText}>
-          {orders.length} uppdrag idag
+          {orders.length} uppdrag {filter !== 'alla' ? `(${FILTERS.find(f => f.value === filter)?.label})` : 'idag'}
         </Text>
       </View>
 
       {orders.length === 0 ? (
         <View style={styles.emptyState}>
-          <Text style={styles.emptyTitle}>Inga uppdrag idag</Text>
+          <Text style={styles.emptyTitle}>Inga uppdrag</Text>
           <Text style={styles.emptySubtitle}>
-            Dra nedåt för att uppdatera
+            {filter !== 'alla' ? 'Inga uppdrag matchar filtret' : 'Dra nedåt för att uppdatera'}
           </Text>
         </View>
       ) : (
@@ -168,7 +198,7 @@ export function OrderListScreen() {
           )}
           contentContainerStyle={styles.list}
           refreshControl={
-            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.deepOceanBlue} />
           }
         />
       )}
@@ -179,141 +209,137 @@ export function OrderListScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.arcticIce,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.arcticIce,
   },
   loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: '#666',
+    marginTop: spacing.md,
+    fontSize: fontSize.md,
+    color: colors.mountainGray,
   },
-  header: {
+  filterRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    backgroundColor: colors.white,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    gap: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.border,
   },
-  greeting: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#1a1a1a',
+  filterButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: borderRadius.full,
+    backgroundColor: colors.arcticIce,
   },
-  dateText: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 2,
+  filterButtonActive: {
+    backgroundColor: colors.deepOceanBlue,
   },
-  logoutButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  logoutText: {
-    fontSize: 14,
-    color: '#ef4444',
+  filterText: {
+    fontSize: fontSize.sm,
+    color: colors.mountainGray,
     fontWeight: '500',
   },
-  summary: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  filterTextActive: {
+    color: colors.white,
+    fontWeight: '600',
+  },
+  summaryBar: {
+    backgroundColor: colors.deepOceanBlue,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
   },
   summaryText: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontWeight: '600',
-    color: '#fff',
+    color: colors.white,
   },
   list: {
-    padding: 16,
-    gap: 12,
+    padding: spacing.lg,
   },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.05,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   cardTitle: {
-    fontSize: 16,
+    fontSize: fontSize.md,
     fontWeight: '600',
-    color: '#1a1a1a',
+    color: colors.midnightNavy,
     flex: 1,
-    marginRight: 8,
+    marginRight: spacing.sm,
   },
   statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: borderRadius.full,
   },
   statusText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#fff',
+    fontSize: fontSize.xs,
+    fontWeight: '700',
   },
   cardBody: {
-    marginBottom: 12,
+    marginBottom: spacing.md,
   },
   addressText: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: fontSize.sm,
+    color: colors.midnightNavy,
     lineHeight: 20,
   },
   objectName: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 4,
+    fontSize: fontSize.sm,
+    color: colors.mountainGray,
+    marginTop: spacing.xs,
   },
   cardFooter: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
-    paddingTop: 12,
+    borderTopColor: colors.border,
+    paddingTop: spacing.md,
   },
   durationText: {
-    fontSize: 13,
-    color: '#666',
+    fontSize: fontSize.sm,
+    color: colors.mountainGray,
   },
   timeText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: '#2563eb',
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.deepOceanBlue,
   },
   emptyState: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 32,
+    padding: spacing.xxxl,
   },
   emptyTitle: {
-    fontSize: 18,
+    fontSize: fontSize.lg,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
+    color: colors.midnightNavy,
+    marginBottom: spacing.sm,
   },
   emptySubtitle: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: fontSize.md,
+    color: colors.mountainGray,
     textAlign: 'center',
   },
 });

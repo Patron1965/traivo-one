@@ -389,6 +389,207 @@ app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req:
 }));
 
 // ============================================
+// WORK SESSION API
+// ============================================
+
+app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | undefined;
+
+    if (activeSession && (activeSession as { status?: string }).status === 'active') {
+      return res.json(activeSession);
+    }
+
+    const session = {
+      id: `ws-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
+      startTime: new Date().toISOString(),
+      endTime: null,
+      status: 'active' as const,
+      pausedAt: null,
+      totalPauseMinutes: 0,
+    };
+
+    await storage.updateResource(resourceId, {
+      metadata: { ...existingMeta, activeWorkSession: session },
+    } as any);
+
+    console.log(`[mobile] Work session started for resource ${resourceId}`);
+    res.json(session);
+}));
+
+app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
+
+    if (activeSession && (activeSession as { status?: string }).status !== 'completed') {
+      res.json(activeSession);
+    } else {
+      res.json(null);
+    }
+}));
+
+app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
+
+    if (!activeSession) {
+      return res.json({ success: false, error: "Inget aktivt arbetspass" });
+    }
+
+    const updatedSession = {
+      ...activeSession,
+      endTime: new Date().toISOString(),
+      status: 'completed',
+    };
+
+    await storage.updateResource(resourceId, {
+      metadata: { ...existingMeta, activeWorkSession: updatedSession },
+    } as any);
+
+    console.log(`[mobile] Work session stopped for resource ${resourceId}`);
+    res.json(updatedSession);
+}));
+
+app.patch("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
+
+    if (!activeSession) {
+      return res.json({ success: false, error: "Inget aktivt arbetspass" });
+    }
+
+    const updatedSession = {
+      ...activeSession,
+      status: 'paused',
+      pausedAt: new Date().toISOString(),
+    };
+
+    await storage.updateResource(resourceId, {
+      metadata: { ...existingMeta, activeWorkSession: updatedSession },
+    } as any);
+
+    res.json(updatedSession);
+}));
+
+app.patch("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
+    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
+
+    if (!activeSession) {
+      return res.json({ success: false, error: "Inget aktivt arbetspass" });
+    }
+
+    const pausedAt = (activeSession as { pausedAt?: string }).pausedAt;
+    const totalPause = ((activeSession as { totalPauseMinutes?: number }).totalPauseMinutes || 0) +
+      (pausedAt ? Math.round((Date.now() - new Date(pausedAt).getTime()) / 60000) : 0);
+
+    const updatedSession = {
+      ...activeSession,
+      status: 'active',
+      pausedAt: null,
+      totalPauseMinutes: totalPause,
+    };
+
+    await storage.updateResource(resourceId, {
+      metadata: { ...existingMeta, activeWorkSession: updatedSession },
+    } as any);
+
+    res.json(updatedSession);
+}));
+
+// ============================================
+// PHOTO DOCUMENTATION API
+// ============================================
+
+app.post("/api/mobile/orders/:id/photos", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const { photos } = req.body;
+
+    if (!photos || !Array.isArray(photos) || photos.length === 0) {
+      throw new ValidationError("Foton krävs");
+    }
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    const existingMetadata = (order.metadata as Record<string, unknown>) || {};
+    const existingPhotos = (existingMetadata.photos as Array<{ uri: string; caption: string; uploadedAt: string; uploadedBy: string }>) || [];
+
+    const newPhotos = photos.map((p: { uri: string; caption?: string }) => ({
+      uri: p.uri,
+      caption: p.caption || '',
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: resourceId,
+    }));
+
+    await storage.updateWorkOrder(orderId, {
+      metadata: {
+        ...existingMetadata,
+        photos: [...existingPhotos, ...newPhotos],
+      },
+    } as any);
+
+    console.log(`[mobile] ${photos.length} photos uploaded for order ${orderId} by resource ${resourceId}`);
+    res.json({ success: true, count: photos.length });
+}));
+
+// ============================================
+// CHECKLIST SUBMISSION API (mobile)
+// ============================================
+
+app.post("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const { checklist } = req.body;
+
+    if (!checklist || !Array.isArray(checklist)) {
+      throw new ValidationError("Checklista krävs");
+    }
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    for (const item of checklist) {
+      if (item.checked) {
+        await db.insert(orderChecklistItems).values({
+          workOrderId: orderId,
+          stepText: item.label || item.id,
+          isCompleted: true,
+          completedAt: new Date(),
+          isAiGenerated: false,
+          sortOrder: 0,
+        }).onConflictDoNothing();
+      }
+    }
+
+    console.log(`[mobile] Checklist submitted for order ${orderId} by resource ${resourceId}: ${checklist.filter((i: { checked: boolean }) => i.checked).length}/${checklist.length} checked`);
+    res.json({ success: true, total: checklist.length, checked: checklist.filter((i: { checked: boolean }) => i.checked).length });
+}));
+
+// ============================================
 // DRIVER CORE FIELD APP API - Extended Endpoints
 // ============================================
 
@@ -948,7 +1149,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
       try {
         switch (actionType) {
           case "status_update": {
-            const { orderId, status: newStatus } = payload;
+            const { orderId, status: newStatus, notes: statusNotes } = payload;
             if (!orderId || !newStatus) {
               await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId and status required");
               results.push({ clientId, status: "error", error: "orderId and status required" });
@@ -960,16 +1161,39 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
               results.push({ clientId, status: "error", error });
               break;
             }
-            const legacyToOrderStatus: Record<string, string> = {
-              completed: "utford", in_progress: "planerad_resurs",
-              scheduled: "planerad_resurs", cancelled: "avbruten",
-              deferred: "skapad", draft: "skapad", planned: "planerad_resurs",
-            };
-            const validOrderStatuses: readonly string[] = ORDER_STATUSES;
-            const normalizedStatus = validOrderStatuses.includes(newStatus)
-              ? newStatus
-              : legacyToOrderStatus[newStatus] || "skapad";
-            await storage.updateWorkOrder(orderId, { orderStatus: normalizedStatus });
+            const updateData: Record<string, any> = {};
+            if (newStatus === 'paborjad' || newStatus === 'in_progress') {
+              updateData.orderStatus = 'planerad_resurs';
+              updateData.executionStatus = 'on_site';
+              updateData.onSiteAt = new Date();
+            } else if (newStatus === 'en_route') {
+              updateData.executionStatus = 'on_way';
+              updateData.onWayAt = new Date();
+            } else if (newStatus === 'planned') {
+              updateData.executionStatus = 'planned_fine';
+            } else if (newStatus === 'utford' || newStatus === 'completed') {
+              updateData.orderStatus = 'utford';
+              updateData.executionStatus = 'completed';
+              updateData.completedAt = new Date();
+            } else if (newStatus === 'ej_utford' || newStatus === 'deferred') {
+              updateData.orderStatus = 'skapad';
+              if (statusNotes) {
+                updateData.notes = order.notes
+                  ? `${order.notes}\n\nUppskjuten: ${statusNotes}`
+                  : `Uppskjuten: ${statusNotes}`;
+              }
+            } else if (newStatus === 'cancelled') {
+              updateData.orderStatus = 'avbruten';
+              if (statusNotes) {
+                updateData.notes = order.notes
+                  ? `${order.notes}\n\nInställd: ${statusNotes}`
+                  : `Inställd: ${statusNotes}`;
+              }
+            } else {
+              const validOrderStatuses: readonly string[] = ORDER_STATUSES;
+              updateData.orderStatus = validOrderStatuses.includes(newStatus) ? newStatus : 'skapad';
+            }
+            await storage.updateWorkOrder(orderId, updateData);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;
@@ -981,16 +1205,17 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
               results.push({ clientId, status: "error", error: "orderId and text required" });
               break;
             }
-            const { order, error } = await verifyOrder(orderId);
-            if (!order) {
+            const { order: noteOrder, error } = await verifyOrder(orderId);
+            if (!noteOrder) {
               await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
               results.push({ clientId, status: "error", error });
               break;
             }
-            const existingNotes = Array.isArray(order.notes) ? order.notes : [];
-            await storage.updateWorkOrder(orderId, {
-              notes: [...existingNotes, { text, by: resourceId, at: new Date().toISOString() }] as any,
-            });
+            const newNote = `[${new Date().toISOString()}] ${text}`;
+            const updatedNotes = noteOrder.notes
+              ? `${noteOrder.notes}\n${newNote}`
+              : newNote;
+            await storage.updateWorkOrder(orderId, { notes: updatedNotes });
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;
@@ -1070,10 +1295,10 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
             break;
           }
           case "inspection": {
-            const { orderId, inspections } = payload;
-            if (!orderId || !Array.isArray(inspections)) {
-              await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId and inspections required");
-              results.push({ clientId, status: "error", error: "orderId and inspections required" });
+            const { orderId, inspections, checklist } = payload;
+            if (!orderId) {
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId required");
+              results.push({ clientId, status: "error", error: "orderId required" });
               break;
             }
             const { order, error } = await verifyOrder(orderId);
@@ -1082,18 +1307,90 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
               results.push({ clientId, status: "error", error });
               break;
             }
-            await Promise.all(inspections.map((insp: any) =>
-              storage.createInspectionMetadata({
-                tenantId,
-                workOrderId: orderId,
-                objectId: order.objectId!,
-                inspectionType: insp.category || "Övrigt",
-                status: insp.status || "ok",
-                issues: insp.issues || [],
-                comment: insp.comment || null,
-                inspectedBy: resourceId,
-              })
-            ));
+            if (Array.isArray(inspections)) {
+              await Promise.all(inspections.map((insp: any) =>
+                storage.createInspectionMetadata({
+                  tenantId,
+                  workOrderId: orderId,
+                  objectId: order.objectId!,
+                  inspectionType: insp.category || "Övrigt",
+                  status: insp.status || "ok",
+                  issues: insp.issues || [],
+                  comment: insp.comment || null,
+                  inspectedBy: resourceId,
+                })
+              ));
+            }
+            if (Array.isArray(checklist)) {
+              for (const item of checklist) {
+                if (item.checked) {
+                  await db.insert(orderChecklistItems).values({
+                    workOrderId: orderId,
+                    stepText: item.label || item.id,
+                    isCompleted: true,
+                    completedAt: new Date(),
+                    isAiGenerated: false,
+                    sortOrder: 0,
+                  }).onConflictDoNothing();
+                }
+              }
+            }
+            await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+            results.push({ clientId, status: "completed" });
+            break;
+          }
+          case "signature": {
+            const { orderId, signature } = payload;
+            if (!orderId || !signature) {
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId and signature required");
+              results.push({ clientId, status: "error", error: "orderId and signature required" });
+              break;
+            }
+            const { order, error } = await verifyOrder(orderId);
+            if (!order) {
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
+              results.push({ clientId, status: "error", error });
+              break;
+            }
+            await storage.createProtocol({
+              tenantId,
+              workOrderId: orderId,
+              objectId: order.objectId,
+              protocolType: "service",
+              executedAt: new Date(),
+              executedByName: (await storage.getResource(resourceId))?.name || "Fältarbetare",
+              signature,
+              signedAt: new Date(),
+              status: "completed",
+            });
+            await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
+            results.push({ clientId, status: "completed" });
+            break;
+          }
+          case "photo": {
+            const { orderId, photos } = payload;
+            if (!orderId) {
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "error", "orderId required");
+              results.push({ clientId, status: "error", error: "orderId required" });
+              break;
+            }
+            const { order, error } = await verifyOrder(orderId);
+            if (!order) {
+              await storage.updateOfflineSyncLogStatus(logEntry.id, "error", error!);
+              results.push({ clientId, status: "error", error });
+              break;
+            }
+            const meta = (order.metadata as Record<string, unknown>) || {};
+            const existingPhotos = (meta.photos as Array<unknown>) || [];
+            const newPhotos = (Array.isArray(photos) ? photos : []).map((p: any) => ({
+              uri: p.uri,
+              caption: p.caption || '',
+              uploadedAt: new Date().toISOString(),
+              uploadedBy: resourceId,
+            }));
+            await storage.updateWorkOrder(orderId, {
+              metadata: { ...meta, photos: [...existingPhotos, ...newPhotos] },
+            } as any);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;

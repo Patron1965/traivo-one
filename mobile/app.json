@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Traivo Go",
+    "slug": "traivo-go",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -10,18 +10,61 @@
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#1B4B6B"
     },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Traivo Go behöver din position för GPS-spårning under arbetspass.",
+          "locationAlwaysPermission": "Traivo Go behöver bakgrundsposition för att spåra din rutt under aktiva arbetspass.",
+          "locationWhenInUsePermission": "Traivo Go behöver din position för incheckning och ruttspårning.",
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Traivo Go behöver kameraåtkomst för fotodokumentation."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Traivo Go behöver åtkomst till dina foton för dokumentation.",
+          "cameraPermission": "Traivo Go behöver kameraåtkomst för fotodokumentation."
+        }
+      ]
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.traivo.go",
+      "infoPlist": {
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Traivo Go behöver din position för GPS-spårning under arbetspass.",
+        "NSLocationAlwaysUsageDescription": "Traivo Go behöver bakgrundsposition för att spåra din rutt under aktiva arbetspass.",
+        "NSLocationWhenInUseUsageDescription": "Traivo Go behöver din position för incheckning och ruttspårning.",
+        "NSCameraUsageDescription": "Traivo Go behöver kameraåtkomst för fotodokumentation.",
+        "NSPhotoLibraryUsageDescription": "Traivo Go behöver åtkomst till dina foton för dokumentation.",
+        "UIBackgroundModes": ["location", "fetch"]
+      }
     },
     "android": {
+      "package": "com.traivo.go",
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#1B4B6B"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
+        "CAMERA"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

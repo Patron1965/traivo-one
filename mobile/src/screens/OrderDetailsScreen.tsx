@@ -14,18 +14,22 @@ import {
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRoute, useNavigation } from '@react-navigation/native';
 import type { RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { getWorkOrderDetails, updateOrderStatus, addOrderNote } from '../api/workOrders';
-import type { RootStackParamList } from '../navigation';
+import { addToQueue } from '../services/offlineQueue';
+import { colors, spacing, fontSize, borderRadius } from '../theme';
 import type { OrderStatusUpdate } from '../types';
+import type { RootStackParamList } from '../navigation';
 
 type RouteProps = RouteProp<RootStackParamList, 'OrderDetails'>;
+type NavProps = NativeStackNavigationProp<RootStackParamList>;
 
 export function OrderDetailsScreen() {
   const route = useRoute<RouteProps>();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NavProps>();
   const queryClient = useQueryClient();
   const { orderId } = route.params;
-  
+
   const [notes, setNotes] = useState('');
   const [showNotesInput, setShowNotesInput] = useState(false);
   const [generalNote, setGeneralNote] = useState('');
@@ -42,14 +46,19 @@ export function OrderDetailsScreen() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['order', orderId] });
       queryClient.invalidateQueries({ queryKey: ['myOrders'] });
+      queryClient.invalidateQueries({ queryKey: ['summary'] });
       Alert.alert('Klart', 'Status uppdaterad');
       if (showNotesInput) {
         setShowNotesInput(false);
         setNotes('');
       }
     },
-    onError: () => {
-      Alert.alert('Fel', 'Kunde inte uppdatera status');
+    onError: async (_, variables) => {
+      await addToQueue({
+        type: 'status_update',
+        payload: { orderId, status: variables.status, notes: variables.notes },
+      });
+      Alert.alert('Sparad offline', 'Statusändringen sparas lokalt');
     },
   });
 
@@ -77,8 +86,14 @@ export function OrderDetailsScreen() {
       setShowGeneralNoteInput(false);
       setGeneralNote('');
     },
-    onError: () => {
-      Alert.alert('Fel', 'Kunde inte spara anteckning');
+    onError: async (_, note) => {
+      await addToQueue({
+        type: 'note',
+        payload: { orderId, text: note },
+      });
+      Alert.alert('Sparad offline', 'Anteckningen sparas lokalt');
+      setShowGeneralNoteInput(false);
+      setGeneralNote('');
     },
   });
 
@@ -92,13 +107,11 @@ export function OrderDetailsScreen() {
 
   const openMaps = () => {
     if (!order?.objectAddress) return;
-
     const address = encodeURIComponent(order.objectAddress);
     const url = Platform.select({
       ios: `maps:0,0?q=${address}`,
       android: `geo:0,0?q=${address}`,
     });
-
     if (url) {
       Linking.openURL(url).catch(() => {
         Linking.openURL(`https://www.google.com/maps/search/?api=1&query=${address}`);
@@ -117,7 +130,7 @@ export function OrderDetailsScreen() {
   if (isLoading) {
     return (
       <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#2563eb" />
+        <ActivityIndicator size="large" color={colors.deepOceanBlue} />
       </View>
     );
   }
@@ -126,10 +139,7 @@ export function OrderDetailsScreen() {
     return (
       <View style={styles.centered}>
         <Text style={styles.errorText}>Kunde inte ladda uppdraget</Text>
-        <TouchableOpacity
-          style={styles.retryButton}
-          onPress={() => navigation.goBack()}
-        >
+        <TouchableOpacity style={styles.retryButton} onPress={() => navigation.goBack()}>
           <Text style={styles.retryText}>Tillbaka</Text>
         </TouchableOpacity>
       </View>
@@ -138,10 +148,13 @@ export function OrderDetailsScreen() {
 
   const status = order.orderStatus;
   const execStatus = order.executionStatus;
-  const canStart = (status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad') && !['on_way', 'on_site', 'completed'].includes(execStatus || '');
+  const canStart = (status === 'planerad_resurs' || status === 'planerad_las' || status === 'skapad') &&
+    !['on_way', 'on_site', 'completed'].includes(execStatus || '');
   const canComplete = ['on_way', 'on_site'].includes(execStatus || '');
   const isCompleted = status === 'utford' || execStatus === 'completed';
   const isCancelled = status === 'avbruten';
+  const isActive = ['on_way', 'on_site'].includes(execStatus || '') ||
+    (status !== 'utford' && status !== 'avbruten');
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
@@ -155,12 +168,15 @@ export function OrderDetailsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>Plats</Text>
         <View style={styles.infoCard}>
-          <Text style={styles.addressText}>{order.objectAddress || 'Ingen adress'}</Text>
+          <Text style={styles.addressText}>📍 {order.objectAddress || 'Ingen adress'}</Text>
           {order.objectName && (
             <Text style={styles.objectName}>{order.objectName}</Text>
           )}
-          <TouchableOpacity style={styles.actionButton} onPress={openMaps}>
-            <Text style={styles.actionButtonText}>Navigera hit</Text>
+          {order.accessCode && (
+            <Text style={styles.accessInfo}>🔑 Portkod: {order.accessCode}</Text>
+          )}
+          <TouchableOpacity style={styles.navButton} onPress={openMaps} data-testid="button-navigate">
+            <Text style={styles.navButtonText}>🗺 Navigera hit</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -170,8 +186,8 @@ export function OrderDetailsScreen() {
         <View style={styles.infoCard}>
           <Text style={styles.customerName}>{order.customerName || 'Okänd kund'}</Text>
           {order.customerPhone && (
-            <TouchableOpacity style={styles.phoneButton} onPress={callCustomer}>
-              <Text style={styles.phoneText}>{order.customerPhone}</Text>
+            <TouchableOpacity style={styles.phoneButton} onPress={callCustomer} data-testid="button-call-customer">
+              <Text style={styles.phoneText}>📞 {order.customerPhone}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -182,7 +198,7 @@ export function OrderDetailsScreen() {
         <View style={styles.infoCard}>
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Beräknad tid</Text>
-            <Text style={styles.detailValue}>{order.estimatedDuration} minuter</Text>
+            <Text style={styles.detailValue}>{order.estimatedDuration} min</Text>
           </View>
           {order.scheduledStartTime && (
             <View style={styles.detailRow}>
@@ -190,12 +206,73 @@ export function OrderDetailsScreen() {
               <Text style={styles.detailValue}>{order.scheduledStartTime}</Text>
             </View>
           )}
-          <View style={styles.detailRow}>
+          <View style={[styles.detailRow, { borderBottomWidth: 0 }]}>
             <Text style={styles.detailLabel}>Typ</Text>
             <Text style={styles.detailValue}>{order.orderType}</Text>
           </View>
         </View>
       </View>
+
+      {isActive && !isCompleted && !isCancelled && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Åtgärder</Text>
+          <View style={styles.actionGrid}>
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => navigation.navigate('DeviationReport', { orderId })}
+              data-testid="button-deviation"
+            >
+              <Text style={styles.actionIcon}>⚠️</Text>
+              <Text style={styles.actionLabel}>Avvikelse</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => navigation.navigate('MaterialLog', { orderId })}
+              data-testid="button-material"
+            >
+              <Text style={styles.actionIcon}>📦</Text>
+              <Text style={styles.actionLabel}>Material</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => navigation.navigate('Signature', { orderId })}
+              data-testid="button-signature"
+            >
+              <Text style={styles.actionIcon}>✍️</Text>
+              <Text style={styles.actionLabel}>Signatur</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => navigation.navigate('Inspection', { orderId })}
+              data-testid="button-inspection"
+            >
+              <Text style={styles.actionIcon}>🔍</Text>
+              <Text style={styles.actionLabel}>Inspektion</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => navigation.navigate('PhotoDocumentation', { orderId })}
+              data-testid="button-photo"
+            >
+              <Text style={styles.actionIcon}>📸</Text>
+              <Text style={styles.actionLabel}>Foto</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => navigation.navigate('Checklist', { orderId })}
+              data-testid="button-checklist"
+            >
+              <Text style={styles.actionIcon}>✅</Text>
+              <Text style={styles.actionLabel}>Checklista</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      )}
 
       <View style={styles.section}>
         <View style={styles.sectionHeader}>
@@ -204,6 +281,7 @@ export function OrderDetailsScreen() {
             <TouchableOpacity
               style={styles.addNoteButton}
               onPress={() => setShowGeneralNoteInput(true)}
+              data-testid="button-add-note"
             >
               <Text style={styles.addNoteButtonText}>+ Lägg till</Text>
             </TouchableOpacity>
@@ -218,7 +296,7 @@ export function OrderDetailsScreen() {
             <Text style={styles.emptyNotesText}>Inga anteckningar</Text>
           </View>
         ) : null}
-        
+
         {showGeneralNoteInput && (
           <>
             <TextInput
@@ -226,17 +304,15 @@ export function OrderDetailsScreen() {
               value={generalNote}
               onChangeText={setGeneralNote}
               placeholder="Skriv anteckning..."
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.mountainGray}
               multiline
               numberOfLines={3}
+              data-testid="input-note"
             />
             <View style={styles.notesButtons}>
               <TouchableOpacity
                 style={[styles.noteButton, styles.cancelButton]}
-                onPress={() => {
-                  setShowGeneralNoteInput(false);
-                  setGeneralNote('');
-                }}
+                onPress={() => { setShowGeneralNoteInput(false); setGeneralNote(''); }}
               >
                 <Text style={styles.cancelButtonText}>Avbryt</Text>
               </TouchableOpacity>
@@ -244,9 +320,10 @@ export function OrderDetailsScreen() {
                 style={[styles.noteButton, styles.submitButton]}
                 onPress={handleAddNote}
                 disabled={noteMutation.isPending}
+                data-testid="button-save-note"
               >
                 {noteMutation.isPending ? (
-                  <ActivityIndicator color="#fff" size="small" />
+                  <ActivityIndicator color={colors.white} size="small" />
                 ) : (
                   <Text style={styles.submitButtonText}>Spara</Text>
                 )}
@@ -264,17 +341,15 @@ export function OrderDetailsScreen() {
             value={notes}
             onChangeText={setNotes}
             placeholder="Ange anledning..."
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.mountainGray}
             multiline
             numberOfLines={3}
+            data-testid="input-not-done-reason"
           />
           <View style={styles.notesButtons}>
             <TouchableOpacity
               style={[styles.noteButton, styles.cancelButton]}
-              onPress={() => {
-                setShowNotesInput(false);
-                setNotes('');
-              }}
+              onPress={() => { setShowNotesInput(false); setNotes(''); }}
             >
               <Text style={styles.cancelButtonText}>Avbryt</Text>
             </TouchableOpacity>
@@ -282,9 +357,10 @@ export function OrderDetailsScreen() {
               style={[styles.noteButton, styles.submitButton]}
               onPress={handleSubmitWithNotes}
               disabled={statusMutation.isPending}
+              data-testid="button-submit-not-done"
             >
               {statusMutation.isPending ? (
-                <ActivityIndicator color="#fff" size="small" />
+                <ActivityIndicator color={colors.white} size="small" />
               ) : (
                 <Text style={styles.submitButtonText}>Spara</Text>
               )}
@@ -294,17 +370,18 @@ export function OrderDetailsScreen() {
       )}
 
       {!showNotesInput && (
-        <View style={styles.actions}>
+        <View style={styles.statusActions}>
           {canStart && (
             <TouchableOpacity
               style={[styles.statusButton, styles.startButton]}
               onPress={() => handleStatusUpdate('paborjad')}
               disabled={statusMutation.isPending}
+              data-testid="button-start-order"
             >
               {statusMutation.isPending ? (
-                <ActivityIndicator color="#fff" />
+                <ActivityIndicator color={colors.white} />
               ) : (
-                <Text style={styles.statusButtonText}>Starta uppdrag</Text>
+                <Text style={styles.statusButtonText}>▶ Starta uppdrag</Text>
               )}
             </TouchableOpacity>
           )}
@@ -315,21 +392,35 @@ export function OrderDetailsScreen() {
                 style={[styles.statusButton, styles.completeButton]}
                 onPress={() => handleStatusUpdate('utford')}
                 disabled={statusMutation.isPending}
+                data-testid="button-complete-order"
               >
                 {statusMutation.isPending ? (
-                  <ActivityIndicator color="#fff" />
+                  <ActivityIndicator color={colors.white} />
                 ) : (
-                  <Text style={styles.statusButtonText}>Markera som klar</Text>
+                  <Text style={styles.statusButtonText}>✅ Markera som klar</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.statusButton, styles.failButton]}
                 onPress={() => handleStatusUpdate('ej_utford')}
                 disabled={statusMutation.isPending}
+                data-testid="button-not-done"
               >
-                <Text style={styles.statusButtonText}>Ej utförd</Text>
+                <Text style={styles.statusButtonText}>❌ Ej utförd</Text>
               </TouchableOpacity>
             </>
+          )}
+
+          {isCompleted && (
+            <TouchableOpacity
+              style={[styles.statusButton, { backgroundColor: colors.northernTeal + '20' }]}
+              onPress={() => navigation.navigate('RouteFeedback')}
+              data-testid="button-route-feedback"
+            >
+              <Text style={[styles.statusButtonText, { color: colors.northernTeal }]}>
+                ⭐ Betygsätt rutt
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
       )}
@@ -340,52 +431,52 @@ export function OrderDetailsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.arcticIce,
   },
   content: {
-    padding: 16,
-    paddingBottom: 32,
+    padding: spacing.lg,
+    paddingBottom: spacing.xxxl,
   },
   centered: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.arcticIce,
   },
   errorText: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 16,
+    fontSize: fontSize.md,
+    color: colors.mountainGray,
+    marginBottom: spacing.lg,
   },
   retryButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    backgroundColor: colors.deepOceanBlue,
+    borderRadius: borderRadius.sm,
   },
   retryText: {
-    color: '#fff',
-    fontWeight: '500',
+    color: colors.white,
+    fontWeight: '600',
   },
   section: {
-    marginBottom: 20,
+    marginBottom: spacing.xl,
   },
   title: {
-    fontSize: 24,
+    fontSize: fontSize.xxl,
     fontWeight: 'bold',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    color: colors.midnightNavy,
+    marginBottom: spacing.sm,
   },
   description: {
-    fontSize: 15,
-    color: '#666',
+    fontSize: fontSize.md,
+    color: colors.mountainGray,
     lineHeight: 22,
   },
   sectionTitle: {
-    fontSize: 14,
+    fontSize: fontSize.sm,
     fontWeight: '600',
-    color: '#666',
-    marginBottom: 8,
+    color: colors.mountainGray,
+    marginBottom: spacing.sm,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -393,141 +484,175 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing.sm,
   },
   addNoteButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    backgroundColor: '#2563eb',
-    borderRadius: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    backgroundColor: colors.northernTeal,
+    borderRadius: borderRadius.sm,
   },
   addNoteButtonText: {
-    color: '#fff',
-    fontSize: 12,
+    color: colors.white,
+    fontSize: fontSize.xs,
     fontWeight: '600',
-  },
-  emptyNotesText: {
-    fontSize: 14,
-    color: '#999',
-    fontStyle: 'italic',
   },
   infoCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
   },
   addressText: {
-    fontSize: 16,
-    color: '#1a1a1a',
-    marginBottom: 4,
+    fontSize: fontSize.md,
+    color: colors.midnightNavy,
+    marginBottom: spacing.xs,
   },
   objectName: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 12,
+    fontSize: fontSize.sm,
+    color: colors.mountainGray,
+    marginBottom: spacing.md,
   },
-  actionButton: {
-    backgroundColor: '#2563eb',
-    borderRadius: 8,
-    paddingVertical: 12,
+  accessInfo: {
+    fontSize: fontSize.sm,
+    color: colors.deepOceanBlue,
+    fontWeight: '500',
+    marginBottom: spacing.md,
+  },
+  navButton: {
+    backgroundColor: colors.deepOceanBlue,
+    borderRadius: borderRadius.sm,
+    paddingVertical: spacing.md,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: spacing.sm,
   },
-  actionButtonText: {
-    color: '#fff',
+  navButtonText: {
+    color: colors.white,
     fontWeight: '600',
-    fontSize: 14,
+    fontSize: fontSize.md,
   },
   customerName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#1a1a1a',
-    marginBottom: 8,
+    fontSize: fontSize.md,
+    fontWeight: '600',
+    color: colors.midnightNavy,
+    marginBottom: spacing.sm,
   },
   phoneButton: {
-    paddingVertical: 4,
+    paddingVertical: spacing.xs,
   },
   phoneText: {
-    fontSize: 15,
-    color: '#2563eb',
+    fontSize: fontSize.md,
+    color: colors.deepOceanBlue,
     fontWeight: '500',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 8,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.border,
   },
   detailLabel: {
-    fontSize: 14,
-    color: '#666',
+    fontSize: fontSize.sm,
+    color: colors.mountainGray,
   },
   detailValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: '#1a1a1a',
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.midnightNavy,
+  },
+  actionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.md,
+  },
+  actionCard: {
+    width: '47%',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  actionIcon: {
+    fontSize: 28,
+    marginBottom: spacing.sm,
+  },
+  actionLabel: {
+    fontSize: fontSize.sm,
+    fontWeight: '600',
+    color: colors.midnightNavy,
+  },
+  emptyNotesText: {
+    fontSize: fontSize.sm,
+    color: colors.mountainGray,
+    fontStyle: 'italic',
   },
   notesText: {
-    fontSize: 14,
-    color: '#333',
+    fontSize: fontSize.sm,
+    color: colors.midnightNavy,
     lineHeight: 20,
   },
   notesInput: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 15,
-    color: '#1a1a1a',
+    backgroundColor: colors.white,
+    borderRadius: borderRadius.md,
+    padding: spacing.lg,
+    fontSize: fontSize.md,
+    color: colors.midnightNavy,
     minHeight: 100,
     textAlignVertical: 'top',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   notesButtons: {
     flexDirection: 'row',
-    gap: 12,
-    marginTop: 12,
+    gap: spacing.md,
+    marginTop: spacing.md,
   },
   noteButton: {
     flex: 1,
     paddingVertical: 14,
-    borderRadius: 8,
+    borderRadius: borderRadius.sm,
     alignItems: 'center',
+    minHeight: 48,
+    justifyContent: 'center',
   },
   cancelButton: {
-    backgroundColor: '#e5e5e5',
+    backgroundColor: colors.border,
   },
   cancelButtonText: {
-    color: '#333',
-    fontWeight: '600',
+    color: colors.midnightNavy,
+    fontWeight: '500',
   },
   submitButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.northernTeal,
   },
   submitButtonText: {
-    color: '#fff',
+    color: colors.white,
     fontWeight: '600',
   },
-  actions: {
-    gap: 12,
-    marginTop: 16,
+  statusActions: {
+    gap: spacing.md,
   },
   statusButton: {
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: spacing.lg,
+    borderRadius: borderRadius.md,
     alignItems: 'center',
+    minHeight: 52,
+    justifyContent: 'center',
   },
   startButton: {
-    backgroundColor: '#f59e0b',
+    backgroundColor: colors.deepOceanBlue,
   },
   completeButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.auroraGreen,
   },
   failButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: colors.statusRed,
   },
   statusButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+    color: colors.white,
+    fontSize: fontSize.lg,
+    fontWeight: '700',
   },
 });
