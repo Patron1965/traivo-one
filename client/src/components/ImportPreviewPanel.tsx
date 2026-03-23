@@ -125,11 +125,23 @@ export function ImportPreviewPanel({
       }
     }
 
+    for (const col of metadataColumns) {
+      const currentName = updated.metadata[col] || col;
+      if (currentName.includes(searchTerm)) {
+        const newName = currentName.replaceAll(searchTerm, replaceTerm);
+        if (newName !== col) {
+          updated.metadata[col] = newName;
+        } else {
+          delete updated.metadata[col];
+        }
+      }
+    }
+
     onNameOverridesChange(updated);
     setSearchReplaceOpen(false);
     setSearchTerm("");
     setReplaceTerm("");
-  }, [searchTerm, replaceTerm, objectRows, customerNames, nameOverrides, onNameOverridesChange]);
+  }, [searchTerm, replaceTerm, objectRows, customerNames, metadataColumns, nameOverrides, onNameOverridesChange]);
 
   const previewSearchReplace = useMemo(() => {
     if (!searchTerm) return 0;
@@ -142,8 +154,12 @@ export function ImportPreviewPanel({
       const currentName = nameOverrides.customers[name] || name;
       if (currentName.includes(searchTerm)) count++;
     }
+    for (const col of metadataColumns) {
+      const currentName = nameOverrides.metadata[col] || col;
+      if (currentName.includes(searchTerm)) count++;
+    }
     return count;
-  }, [searchTerm, objectRows, customerNames, nameOverrides]);
+  }, [searchTerm, objectRows, customerNames, metadataColumns, nameOverrides]);
 
   const filteredObjectRows = useMemo(() => {
     if (!objectFilter) return objectRows.slice(0, 200);
@@ -218,6 +234,7 @@ export function ImportPreviewPanel({
                   <TableHead className="text-xs">Originalnamn</TableHead>
                   <TableHead className="text-xs">Nytt namn</TableHead>
                   <TableHead className="w-[100px] text-xs">Typ</TableHead>
+                  <TableHead className="text-xs">Kund</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -239,6 +256,7 @@ export function ImportPreviewPanel({
                     <TableCell>
                       <Badge variant="outline" className="text-xs">{row.type}</Badge>
                     </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">{row.customer || "—"}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

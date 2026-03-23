@@ -799,7 +799,10 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
     
     for (const name of Array.from(customerNames)) {
       const resolvedName = nameOverrides.customers?.[name] || name;
-      if (!customerMap.has(resolvedName.toLowerCase())) {
+      const existingId = customerMap.get(resolvedName.toLowerCase());
+      if (existingId) {
+        customerMap.set(name.toLowerCase(), existingId);
+      } else {
         const newCustomer = await storage.createCustomer({
           tenantId,
           name: resolvedName,
