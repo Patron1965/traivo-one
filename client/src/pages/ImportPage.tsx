@@ -1129,7 +1129,7 @@ export default function ImportPage() {
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
             <StepIndicator step={5} title="Analysera händelser" active={activeModusStep === 5} completed={completedSteps.has(5)} skipped={skippedSteps.has(5)} onClick={() => goToStep(5)} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={6} title="Sammanfattning" active={activeModusStep === 6} completed={false} onClick={() => allStepsDone ? setActiveModusStep(6) : undefined} />
+            <StepIndicator step={6} title="Sammanfattning" active={activeModusStep === 6} completed={false} onClick={allStepsDone ? () => setActiveModusStep(6) : undefined} />
           </div>
 
           <Card>
