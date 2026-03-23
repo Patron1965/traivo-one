@@ -608,7 +608,7 @@ export interface IStorage {
   updatePublicIssueReport(id: string, tenantId: string, data: Partial<InsertPublicIssueReport>): Promise<PublicIssueReport | undefined>;
   
   // Customer Change Requests
-  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string }): Promise<CustomerChangeRequest[]>;
+  getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string }): Promise<CustomerChangeRequest[]>;
   getCustomerChangeRequest(id: string): Promise<CustomerChangeRequest | undefined>;
   createCustomerChangeRequest(request: InsertCustomerChangeRequest): Promise<CustomerChangeRequest>;
   updateCustomerChangeRequest(id: string, tenantId: string, data: Partial<CustomerChangeRequest>): Promise<CustomerChangeRequest | undefined>;
@@ -4669,7 +4669,7 @@ export class DatabaseStorage implements IStorage {
   // CUSTOMER CHANGE REQUESTS
   // ============================================
 
-  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string }): Promise<CustomerChangeRequest[]> {
+  async getCustomerChangeRequests(tenantId: string, options?: { customerId?: string; objectId?: string; status?: string; category?: string; dateFrom?: string; dateTo?: string }): Promise<CustomerChangeRequest[]> {
     const conditions = [eq(customerChangeRequests.tenantId, tenantId)];
     if (options?.customerId) {
       conditions.push(eq(customerChangeRequests.customerId, options.customerId));
@@ -4682,6 +4682,14 @@ export class DatabaseStorage implements IStorage {
     }
     if (options?.category) {
       conditions.push(eq(customerChangeRequests.category, options.category));
+    }
+    if (options?.dateFrom) {
+      conditions.push(gte(customerChangeRequests.createdAt, new Date(options.dateFrom)));
+    }
+    if (options?.dateTo) {
+      const end = new Date(options.dateTo);
+      end.setDate(end.getDate() + 1);
+      conditions.push(lte(customerChangeRequests.createdAt, end));
     }
     return db.select().from(customerChangeRequests)
       .where(and(...conditions))

@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useLocation, useSearch, Link } from "wouter";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useSearch, Link } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -11,9 +11,11 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import {
   Camera, Search, MapPin, Loader2, CheckCircle, AlertTriangle,
   Package, Wrench, HelpCircle, Clock, Building2, Eye, Trash2,
-  Filter, MessageSquare, ClipboardList, ExternalLink, X
+  Filter, MessageSquare, ClipboardList, ExternalLink, X, Calendar,
+  ArrowRight, History, User
 } from "lucide-react";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 const CATEGORIES: Record<string, string> = {
   antal_karl_andrat: "Antal kärl ändrat",
@@ -51,6 +53,11 @@ interface ChangeRequest {
   objectAddress?: string;
 }
 
+interface Customer {
+  id: string;
+  name: string;
+}
+
 function getStatusBadge(status: string) {
   switch (status) {
     case "new": return <Badge className="bg-blue-500 text-white" data-testid={`badge-status-${status}`}>Ny</Badge>;
@@ -74,25 +81,36 @@ function getCategoryIcon(cat: string) {
 
 export default function CustomerReportsPage() {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const searchStr = useSearch();
   const params = new URLSearchParams(searchStr);
   const initialObjectId = params.get("objectId") || "";
 
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [customerFilter, setCustomerFilter] = useState<string>("all");
   const [objectIdFilter, setObjectIdFilter] = useState<string>(initialObjectId);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
   const [search, setSearch] = useState("");
   const [selectedReport, setSelectedReport] = useState<ChangeRequest | null>(null);
   const [reviewNotes, setReviewNotes] = useState("");
   const [newStatus, setNewStatus] = useState("");
 
+  const { data: customers = [] } = useQuery<Customer[]>({
+    queryKey: ["/api/customers"],
+  });
+
   const { data: reports = [], isLoading } = useQuery<ChangeRequest[]>({
-    queryKey: ["/api/customer-change-requests", statusFilter, categoryFilter, objectIdFilter],
+    queryKey: ["/api/customer-change-requests", statusFilter, categoryFilter, objectIdFilter, customerFilter, dateFrom, dateTo],
     queryFn: async () => {
       const p = new URLSearchParams();
       if (statusFilter !== "all") p.set("status", statusFilter);
       if (categoryFilter !== "all") p.set("category", categoryFilter);
+      if (customerFilter !== "all") p.set("customerId", customerFilter);
       if (objectIdFilter) p.set("objectId", objectIdFilter);
+      if (dateFrom) p.set("dateFrom", dateFrom);
+      if (dateTo) p.set("dateTo", dateTo);
       const res = await fetch(`/api/customer-change-requests?${p}`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch");
       return res.json();
@@ -105,9 +123,13 @@ export default function CustomerReportsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/customer-change-requests"] });
+      toast({ title: "Status uppdaterad", description: "Rapportens status har ändrats." });
       setSelectedReport(null);
       setReviewNotes("");
       setNewStatus("");
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte uppdatera status.", variant: "destructive" });
     },
   });
 
@@ -117,25 +139,39 @@ export default function CustomerReportsPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["/api/customer-change-requests"] });
+      toast({ title: "Arbetsorder skapad", description: "En ny arbetsorder har skapats från denna rapport." });
       setSelectedReport(null);
+    },
+    onError: () => {
+      toast({ title: "Fel", description: "Kunde inte skapa arbetsorder.", variant: "destructive" });
     },
   });
 
-  const filteredReports = reports.filter(r => {
-    if (!search) return true;
+  const filteredReports = useMemo(() => {
+    if (!search) return reports;
     const s = search.toLowerCase();
-    return (
+    return reports.filter(r =>
       r.description?.toLowerCase().includes(s) ||
       r.customerName?.toLowerCase().includes(s) ||
       r.objectName?.toLowerCase().includes(s) ||
       CATEGORIES[r.category]?.toLowerCase().includes(s)
     );
-  });
+  }, [reports, search]);
 
-  const statusCounts = reports.reduce((acc, r) => {
-    acc[r.status] = (acc[r.status] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  const statusCounts = useMemo(() => {
+    return reports.reduce((acc, r) => {
+      acc[r.status] = (acc[r.status] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+  }, [reports]);
+
+  const uniqueCustomers = useMemo(() => {
+    const ids = [...new Set(reports.map(r => r.customerId))];
+    return ids.map(id => {
+      const report = reports.find(r => r.customerId === id);
+      return { id, name: report?.customerName || id };
+    });
+  }, [reports]);
 
   function openReview(report: ChangeRequest) {
     setSelectedReport(report);
@@ -147,6 +183,19 @@ export default function CustomerReportsPage() {
     setObjectIdFilter("");
     window.history.replaceState({}, "", "/customer-reports");
   }
+
+  function clearAllFilters() {
+    setStatusFilter("all");
+    setCategoryFilter("all");
+    setCustomerFilter("all");
+    setDateFrom("");
+    setDateTo("");
+    setObjectIdFilter("");
+    setSearch("");
+    window.history.replaceState({}, "", "/customer-reports");
+  }
+
+  const hasActiveFilters = statusFilter !== "all" || categoryFilter !== "all" || customerFilter !== "all" || dateFrom || dateTo || objectIdFilter;
 
   return (
     <div className="space-y-6">
@@ -160,6 +209,12 @@ export default function CustomerReportsPage() {
             Hantera ändringsrapporter och foton från kunders fältdokumentation
           </p>
         </div>
+        {hasActiveFilters && (
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-xs" data-testid="button-clear-all-filters">
+            <X className="h-3 w-3 mr-1" />
+            Rensa alla filter
+          </Button>
+        )}
       </div>
 
       {objectIdFilter && (
@@ -235,6 +290,47 @@ export default function CustomerReportsPage() {
             ))}
           </SelectContent>
         </Select>
+        <Select value={customerFilter} onValueChange={setCustomerFilter}>
+          <SelectTrigger className="w-[180px]" data-testid="select-customer-filter">
+            <Building2 className="h-4 w-4 mr-2" />
+            <SelectValue placeholder="Alla kunder" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alla kunder</SelectItem>
+            {customers.map(c => (
+              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <Calendar className="h-4 w-4 text-muted-foreground" />
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="w-[150px] h-9"
+            placeholder="Från datum"
+            data-testid="input-date-from"
+          />
+          <span className="text-muted-foreground text-sm">–</span>
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="w-[150px] h-9"
+            placeholder="Till datum"
+            data-testid="input-date-to"
+          />
+        </div>
+        {(dateFrom || dateTo) && (
+          <Button variant="ghost" size="sm" onClick={() => { setDateFrom(""); setDateTo(""); }} className="text-xs h-7" data-testid="button-clear-dates">
+            <X className="h-3 w-3 mr-1" />
+            Rensa datum
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -380,6 +476,50 @@ export default function CustomerReportsPage() {
                   </div>
                 </div>
               )}
+
+              <div className="border-t pt-4 space-y-3" data-testid="section-status-history">
+                <p className="text-sm font-medium flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  Statushistorik
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-start gap-3 text-sm">
+                    <div className="mt-1 w-2 h-2 rounded-full bg-blue-500 shrink-0" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">Rapport skapad</span>
+                        <span className="text-xs text-muted-foreground">{new Date(selectedReport.createdAt).toLocaleString("sv")}</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground">Kund rapporterade: {CATEGORIES[selectedReport.category] || selectedReport.category}</p>
+                    </div>
+                  </div>
+
+                  {selectedReport.status !== "new" && (
+                    <div className="flex items-start gap-3 text-sm">
+                      <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${
+                        selectedReport.status === "reviewed" ? "bg-amber-500" :
+                        selectedReport.status === "resolved" ? "bg-green-500" :
+                        "bg-gray-400"
+                      }`} />
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">{STATUS_LABELS[selectedReport.status] || selectedReport.status}</span>
+                          <span className="text-xs text-muted-foreground">{new Date(selectedReport.updatedAt).toLocaleString("sv")}</span>
+                        </div>
+                        {selectedReport.reviewedBy && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1">
+                            <User className="h-3 w-3" />
+                            {selectedReport.reviewedBy}
+                          </p>
+                        )}
+                        {selectedReport.reviewNotes && (
+                          <p className="text-xs text-muted-foreground mt-1 italic">"{selectedReport.reviewNotes}"</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <div className="border-t pt-4 space-y-3">
                 <p className="text-sm font-medium flex items-center gap-2">

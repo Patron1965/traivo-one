@@ -1834,13 +1834,15 @@ app.get("/api/portal/field/qr-lookup/:code", asyncHandler(async (req, res) => {
 
 app.get("/api/customer-change-requests", requireAdmin, asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { objectId, status, category, customerId } = req.query;
+    const { objectId, status, category, customerId, dateFrom, dateTo } = req.query;
 
     const requests = await storage.getCustomerChangeRequests(tenantId, {
       objectId: objectId as string | undefined,
       status: status as string | undefined,
       category: category as string | undefined,
       customerId: customerId as string | undefined,
+      dateFrom: dateFrom as string | undefined,
+      dateTo: dateTo as string | undefined,
     });
 
     const objectIds = [...new Set(requests.map(r => r.objectId))];
