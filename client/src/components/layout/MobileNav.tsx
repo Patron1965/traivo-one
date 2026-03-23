@@ -91,7 +91,7 @@ const navigationGroups = [
     items: [
       { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone },
       { title: "Besiktning", url: "/inspections", icon: ClipboardList },
-      { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardList },
+      { title: "Kontrollmallar", url: "/checklist-templates", icon: ClipboardList },
       { title: "Kundportal", url: "/customer-portal", icon: Building },
     ],
   },

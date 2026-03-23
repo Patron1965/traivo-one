@@ -221,7 +221,7 @@ export default function ChecklistTemplatesPage() {
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2" data-testid="text-page-title">
             <ClipboardCheck className="h-6 w-6 text-primary" />
-            Checklista-mallar
+            Kontrollmallar
           </h1>
           <div className="flex items-center gap-3 mt-1 flex-wrap">
             <span className="text-sm text-muted-foreground">

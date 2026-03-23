@@ -108,7 +108,7 @@ export const MODULE_DEFINITIONS: Record<ModuleKey, Omit<ModuleDefinition, "key">
   },
   inspections: {
     label: "Besiktningar",
-    description: "Inspektionsprotokoll och checklista-mallar",
+    description: "Inspektionsprotokoll och kontrollmallar",
     icon: "ClipboardCheck",
     routes: ["/inspections", "/checklist-templates"],
     navItems: ["/inspections", "/checklist-templates"],

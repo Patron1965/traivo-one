@@ -87,7 +87,7 @@ export function getFaltItems(t: (key: string, fallback: string) => string): NavI
   return [
     { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },
     { title: t("inspection_singular", "Besiktning"), url: "/inspections", icon: ClipboardCheck, description: "Inspektionsprotokoll" },
-    { title: "Checklista-mallar", url: "/checklist-templates", icon: ClipboardCheck, description: "Inspektionsfrågor per artikeltyp" },
+    { title: "Kontrollmallar", url: "/checklist-templates", icon: ClipboardCheck, description: "Inspektionsfrågor per artikeltyp" },
     { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
   ];
 }
