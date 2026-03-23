@@ -40,7 +40,7 @@ export function DeviationReportScreen() {
 
   const mutation = useMutation({
     mutationFn: () => reportDeviation(orderId, { type, description }),
-    onSuccess: (data: any) => {
+    onSuccess: (data: { success: boolean; deviation: Record<string, unknown>; linkedChangeRequest: Record<string, unknown> | null }) => {
       queryClient.invalidateQueries({ queryKey: ['order', orderId] });
       const hasLinkedReport = data?.linkedChangeRequest != null;
       Alert.alert(
