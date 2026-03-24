@@ -143,7 +143,7 @@ const MOCK_TEAM_INVITES: any[] = [];
 const MOCK_MATERIAL_LOGS: any[] = [];
 const MOCK_MAX_LOGS = 500;
 
-const MOCK_NOTIFICATIONS: any[] = [
+const MOCK_NOTIFICATIONS_LEGACY: any[] = [
   { id: 'n1', type: 'schedule_change', title: 'Ruttändring', message: 'Order WO-2026-0453 har flyttats till kl 10:00', isRead: false, createdAt: new Date(Date.now() - 3600000).toISOString(), orderId: '3' },
   { id: 'n2', type: 'urgent', title: 'Brådskande uppdrag', message: 'Nytt hämtuppdrag tillagt: Göteborgs Hamn AB', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString(), orderId: '5' },
   { id: 'n3', type: 'info', title: 'Systeminformation', message: 'Ny version av appen tillgänglig', isRead: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
@@ -1713,7 +1713,7 @@ router.post('/orders/:id/confirm-photo', async (req, res) => {
 
 router.get('/notifications/count', async (req, res) => {
   if (IS_MOCK_MODE) {
-    const unread = MOCK_NOTIFICATIONS.filter(n => !n.isRead).length;
+    const unread = MOCK_NOTIFICATIONS_LEGACY.filter(n => !n.isRead).length;
     res.json({ count: unread });
     return;
   }
@@ -1721,39 +1721,6 @@ router.get('/notifications/count', async (req, res) => {
     const { status, data } = await traivoFetch('/api/mobile/notifications/count', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch { res.json({ count: 0 }); }
-});
-
-router.get('/notifications', async (req, res) => {
-  if (IS_MOCK_MODE) { res.json(MOCK_NOTIFICATIONS); return; }
-  try {
-    const { status, data } = await traivoFetch('/api/mobile/notifications', { method: 'GET', headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch { res.json(MOCK_NOTIFICATIONS); }
-});
-
-router.patch('/notifications/:id/read', async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const notification = MOCK_NOTIFICATIONS.find(n => n.id === req.params.id);
-    if (notification) { notification.isRead = true; res.json(notification); }
-    else res.status(404).json({ error: 'Notifikation hittades inte' });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
-      method: 'PATCH', headers: getAuthHeader(req),
-    });
-    res.status(status).json(data);
-  } catch { res.status(503).json({ error: 'Kunde inte markera notifikation.' }); }
-});
-
-router.patch('/notifications/read-all', async (req, res) => {
-  if (IS_MOCK_MODE) { MOCK_NOTIFICATIONS.forEach(n => { n.isRead = true; }); res.json({ success: true }); return; }
-  try {
-    const { status, data } = await traivoFetch('/api/mobile/notifications/read-all', {
-      method: 'PATCH', headers: getAuthHeader(req),
-    });
-    res.status(status).json(data);
-  } catch { res.json({ success: true }); }
 });
 
 router.get('/map-config', async (req, res) => {
@@ -2787,6 +2754,85 @@ router.post('/work-orders/:id/auto-eta-sms', async (req, res) => {
   } catch (error: any) {
     console.error('Auto ETA SMS error:', error?.message);
     res.status(503).json({ error: 'Kunde inte skicka ETA-SMS.' });
+  }
+});
+
+// ========== Notifications (Aviseringar) ==========
+
+interface MockNotification {
+  id: number;
+  type: 'order_assigned' | 'status_change' | 'team_invite' | 'schedule_change' | 'deviation_reviewed' | 'material_update' | 'sign_off_complete' | 'system';
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+  relatedOrderId?: number;
+  relatedTeamId?: number;
+  metadata?: Record<string, any>;
+}
+
+const now = new Date();
+const h = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 3600000).toISOString();
+
+const MOCK_NOTIFICATIONS: MockNotification[] = [
+  { id: 1, type: 'order_assigned', title: 'Nytt uppdrag tilldelat', body: 'WO-2026-0456 — Volvo Lundby har tilldelats dig.', read: false, createdAt: h(0.5), relatedOrderId: 1 },
+  { id: 2, type: 'schedule_change', title: 'Schema ändrat', body: 'Ordningen på dina uppdrag har uppdaterats av planeraren.', read: false, createdAt: h(1.2) },
+  { id: 3, type: 'team_invite', title: 'Teaminbjudan', body: 'Anna Svensson har bjudit in dig till Team Göteborg Öst.', read: false, createdAt: h(2) },
+  { id: 4, type: 'deviation_reviewed', title: 'Avvikelse granskad', body: 'Din avvikelse "Blockerad infart" på WO-2026-0452 har godkänts.', read: true, createdAt: h(5), relatedOrderId: 2 },
+  { id: 5, type: 'status_change', title: 'Order uppdaterad', body: 'WO-2026-0453 har ändrats till "Pågår" av planeraren.', read: true, createdAt: h(8), relatedOrderId: 3 },
+  { id: 6, type: 'sign_off_complete', title: 'Kundkvittering mottagen', body: 'Kunden har signerat WO-2026-0451.', read: true, createdAt: h(24), relatedOrderId: 1 },
+  { id: 7, type: 'material_update', title: 'Materiallager uppdaterat', body: 'Artikeln "Plastkärl 370L" har fyllts på i lagret.', read: true, createdAt: h(26) },
+  { id: 8, type: 'system', title: 'Appuppdatering tillgänglig', body: 'Traivo Go v2.4 finns nu tillgänglig med förbättrad GPS-precision.', read: true, createdAt: h(48) },
+  { id: 9, type: 'order_assigned', title: 'Nytt uppdrag tilldelat', body: 'WO-2026-0455 — Göteborgs Hamn har tilldelats dig.', read: true, createdAt: h(50), relatedOrderId: 5 },
+  { id: 10, type: 'schedule_change', title: 'Prioritet ändrad', body: 'WO-2026-0454 har fått högre prioritet.', read: true, createdAt: h(72), relatedOrderId: 4 },
+];
+
+router.get('/notifications', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const unreadCount = MOCK_NOTIFICATIONS.filter(n => !n.read).length;
+    res.json({ notifications: MOCK_NOTIFICATIONS, unreadCount });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/mobile/notifications', { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error: any) {
+    console.error('Notifications fetch error:', error?.message);
+    res.status(503).json({ error: 'Kunde inte hämta aviseringar.' });
+  }
+});
+
+router.post('/notifications/:id/read', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const id = parseInt(req.params.id);
+    const notif = MOCK_NOTIFICATIONS.find(n => n.id === id);
+    if (notif) notif.read = true;
+    res.json({ success: true });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
+      method: 'POST', headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    res.status(503).json({ error: 'Kunde inte markera som läst.' });
+  }
+});
+
+router.post('/notifications/read-all', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    MOCK_NOTIFICATIONS.forEach(n => { n.read = true; });
+    res.json({ success: true, count: MOCK_NOTIFICATIONS.length });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/mobile/notifications/read-all', {
+      method: 'POST', headers: getAuthHeader(req),
+    });
+    res.status(status).json(data);
+  } catch (error: any) {
+    res.status(503).json({ error: 'Kunde inte markera alla som lästa.' });
   }
 });
 

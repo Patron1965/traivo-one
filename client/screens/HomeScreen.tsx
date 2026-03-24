@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react';
+import React, { useCallback, useMemo, useState, useRef, useEffect, useLayoutEffect } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Platform, Animated, Linking, Modal } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -138,6 +138,12 @@ export function HomeScreen({ navigation }: any) {
     refetchInterval: 60000,
   });
 
+  const { data: notifData } = useQuery<{ unreadCount: number }>({
+    queryKey: ['/api/mobile/notifications'],
+    select: (d: any) => ({ unreadCount: d?.unreadCount || 0 }),
+    refetchInterval: 30000,
+  });
+
   const { currentPosition } = useGpsTracking();
   const { partner } = useTeam();
   const pendingCount = useOfflinePendingCount();
@@ -150,6 +156,29 @@ export function HomeScreen({ navigation }: any) {
       useNativeDriver: true,
     }).start();
   }, [pendingCount > 0]);
+
+  const unreadCount = notifData?.unreadCount || 0;
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={() => navigation.navigate('Notifications')}
+          style={styles.headerBellBtn}
+          hitSlop={8}
+          testID="button-notifications"
+        >
+          <Feather name="bell" size={22} color={Colors.text} />
+          {unreadCount > 0 ? (
+            <View style={styles.bellBadge}>
+              <ThemedText variant="caption" color={Colors.textInverse} style={styles.bellBadgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </ThemedText>
+            </View>
+          ) : null}
+        </Pressable>
+      ),
+    });
+  }, [navigation, unreadCount]);
 
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -1458,6 +1487,27 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: Colors.background,
+  },
+  headerBellBtn: {
+    padding: Spacing.xs,
+    position: 'relative',
+  },
+  bellBadge: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: Colors.error,
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  bellBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 14,
   },
   content: {
     paddingHorizontal: Spacing.lg,

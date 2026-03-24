@@ -19,6 +19,7 @@ import { RouteFeedbackScreen } from '../screens/RouteFeedbackScreen';
 import { TeamScreen } from '../screens/TeamScreen';
 import { CustomerReportsScreen } from '../screens/CustomerReportsScreen';
 import { MyDeviationsScreen } from '../screens/MyDeviationsScreen';
+import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 import { FIELD_APP_ALLOWED_ROLES } from '../types';
@@ -151,6 +152,11 @@ export function RootNavigator() {
               name="MyDeviations"
               component={MyDeviationsScreen}
               options={{ headerTitle: 'Mina avvikelser' }}
+            />
+            <Stack.Screen
+              name="Notifications"
+              component={NotificationsScreen}
+              options={{ headerTitle: 'Aviseringar' }}
             />
           </>
         ) : (

@@ -309,6 +309,16 @@ export function ProfileScreen() {
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
         <View style={styles.divider} />
+        <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Notifications')} testID="button-notifications">
+          <View style={styles.menuLeft}>
+            <View style={[styles.menuIcon, { backgroundColor: '#E3F2FD' }]}>
+              <Feather name="bell" size={16} color="#2196F3" />
+            </View>
+            <ThemedText variant="body">Aviseringar</ThemedText>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
+        <View style={styles.divider} />
         <Pressable style={styles.menuItem} onPress={() => navigation.navigate('CustomerReports')} testID="button-customer-reports">
           <View style={styles.menuLeft}>
             <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>

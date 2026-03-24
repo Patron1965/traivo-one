@@ -279,7 +279,7 @@ var MOCK_RESOURCES = [
 var MOCK_TEAM_INVITES = [];
 var MOCK_MATERIAL_LOGS = [];
 var MOCK_MAX_LOGS = 500;
-var MOCK_NOTIFICATIONS = [
+var MOCK_NOTIFICATIONS_LEGACY = [
   { id: "n1", type: "schedule_change", title: "Rutt\xE4ndring", message: "Order WO-2026-0453 har flyttats till kl 10:00", isRead: false, createdAt: new Date(Date.now() - 36e5).toISOString(), orderId: "3" },
   { id: "n2", type: "urgent", title: "Br\xE5dskande uppdrag", message: "Nytt h\xE4mtuppdrag tillagt: G\xF6teborgs Hamn AB", isRead: false, createdAt: new Date(Date.now() - 72e5).toISOString(), orderId: "5" },
   { id: "n3", type: "info", title: "Systeminformation", message: "Ny version av appen tillg\xE4nglig", isRead: true, createdAt: new Date(Date.now() - 864e5).toISOString() }
@@ -1163,40 +1163,40 @@ router.get("/orders/:id/checklist", async (req, res) => {
   }
 });
 async function handleTimeEntries(orderId, driverId, newStatus) {
-  const now = /* @__PURE__ */ new Date();
+  const now2 = /* @__PURE__ */ new Date();
   try {
     if (newStatus === "dispatched") {
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'travel', $3)`,
-        [orderId, driverId, now]
+        [orderId, driverId, now2]
       );
     } else if (newStatus === "on_site") {
       await pool.query(
         `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'travel' AND ended_at IS NULL`,
-        [now, orderId, driverId]
+        [now2, orderId, driverId]
       );
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'on_site', $3)`,
-        [orderId, driverId, now]
+        [orderId, driverId, now2]
       );
     } else if (newStatus === "in_progress") {
       await pool.query(
         `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'on_site' AND ended_at IS NULL`,
-        [now, orderId, driverId]
+        [now2, orderId, driverId]
       );
       await pool.query(
         `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'working', $3)`,
-        [orderId, driverId, now]
+        [orderId, driverId, now2]
       );
     } else if (newStatus === "completed" || newStatus === "utford") {
       await pool.query(
         `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
-        [now, orderId, driverId]
+        [now2, orderId, driverId]
       );
     } else if (newStatus === "failed" || newStatus === "impossible" || newStatus === "cancelled") {
       await pool.query(
         `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
-        [now, orderId, driverId]
+        [now2, orderId, driverId]
       );
     }
   } catch (err) {
@@ -1427,9 +1427,9 @@ router.get("/time-summary", async (req, res) => {
     let travelSeconds = 0;
     let onSiteSeconds = 0;
     let workingSeconds = 0;
-    const now = /* @__PURE__ */ new Date();
+    const now2 = /* @__PURE__ */ new Date();
     for (const row of result.rows) {
-      const duration = row.duration_seconds != null ? row.duration_seconds : Math.floor((now.getTime() - new Date(row.started_at).getTime()) / 1e3);
+      const duration = row.duration_seconds != null ? row.duration_seconds : Math.floor((now2.getTime() - new Date(row.started_at).getTime()) / 1e3);
       if (row.status === "travel") travelSeconds += duration;
       else if (row.status === "on_site") onSiteSeconds += duration;
       else if (row.status === "working") workingSeconds += duration;
@@ -1451,23 +1451,23 @@ router.get("/statistics", async (req, res) => {
   const driverId = String(MOCK_RESOURCE.id);
   const period = req.query.period || "week";
   const offset = parseInt(req.query.offset) || 0;
-  const now = /* @__PURE__ */ new Date();
+  const now2 = /* @__PURE__ */ new Date();
   let periodStart;
   let periodEnd;
   let prevStart;
   let prevEnd;
   let days;
   if (period === "month") {
-    const y = now.getFullYear();
-    const m = now.getMonth() - offset;
+    const y = now2.getFullYear();
+    const m = now2.getMonth() - offset;
     periodStart = new Date(y, m, 1);
     periodEnd = new Date(y, m + 1, 1);
     prevStart = new Date(y, m - 1, 1);
     prevEnd = new Date(y, m, 1);
     days = Math.ceil((periodEnd.getTime() - periodStart.getTime()) / 864e5);
   } else {
-    const dayOfWeek = now.getDay() || 7;
-    const mondayThis = new Date(now.getFullYear(), now.getMonth(), now.getDate() - dayOfWeek + 1);
+    const dayOfWeek = now2.getDay() || 7;
+    const mondayThis = new Date(now2.getFullYear(), now2.getMonth(), now2.getDate() - dayOfWeek + 1);
     periodStart = new Date(mondayThis.getTime() - offset * 7 * 864e5);
     periodEnd = new Date(periodStart.getTime() + 7 * 864e5);
     prevStart = new Date(periodStart.getTime() - 7 * 864e5);
@@ -1845,7 +1845,7 @@ router.post("/orders/:id/confirm-photo", async (req, res) => {
 });
 router.get("/notifications/count", async (req, res) => {
   if (IS_MOCK_MODE) {
-    const unread = MOCK_NOTIFICATIONS.filter((n) => !n.isRead).length;
+    const unread = MOCK_NOTIFICATIONS_LEGACY.filter((n) => !n.isRead).length;
     res.json({ count: unread });
     return;
   }
@@ -1854,55 +1854,6 @@ router.get("/notifications/count", async (req, res) => {
     res.status(status).json(data);
   } catch {
     res.json({ count: 0 });
-  }
-});
-router.get("/notifications", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    res.json(MOCK_NOTIFICATIONS);
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/mobile/notifications", { method: "GET", headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch {
-    res.json(MOCK_NOTIFICATIONS);
-  }
-});
-router.patch("/notifications/:id/read", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const notification = MOCK_NOTIFICATIONS.find((n) => n.id === req.params.id);
-    if (notification) {
-      notification.isRead = true;
-      res.json(notification);
-    } else res.status(404).json({ error: "Notifikation hittades inte" });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
-      method: "PATCH",
-      headers: getAuthHeader(req)
-    });
-    res.status(status).json(data);
-  } catch {
-    res.status(503).json({ error: "Kunde inte markera notifikation." });
-  }
-});
-router.patch("/notifications/read-all", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    MOCK_NOTIFICATIONS.forEach((n) => {
-      n.isRead = true;
-    });
-    res.json({ success: true });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/mobile/notifications/read-all", {
-      method: "PATCH",
-      headers: getAuthHeader(req)
-    });
-    res.status(status).json(data);
-  } catch {
-    res.json({ success: true });
   }
 });
 router.get("/map-config", async (req, res) => {
@@ -2938,6 +2889,70 @@ router.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
     res.status(503).json({ error: "Kunde inte skicka ETA-SMS." });
   }
 });
+var now = /* @__PURE__ */ new Date();
+var h = (hoursAgo) => new Date(now.getTime() - hoursAgo * 36e5).toISOString();
+var MOCK_NOTIFICATIONS = [
+  { id: 1, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0456 \u2014 Volvo Lundby har tilldelats dig.", read: false, createdAt: h(0.5), relatedOrderId: 1 },
+  { id: 2, type: "schedule_change", title: "Schema \xE4ndrat", body: "Ordningen p\xE5 dina uppdrag har uppdaterats av planeraren.", read: false, createdAt: h(1.2) },
+  { id: 3, type: "team_invite", title: "Teaminbjudan", body: "Anna Svensson har bjudit in dig till Team G\xF6teborg \xD6st.", read: false, createdAt: h(2) },
+  { id: 4, type: "deviation_reviewed", title: "Avvikelse granskad", body: 'Din avvikelse "Blockerad infart" p\xE5 WO-2026-0452 har godk\xE4nts.', read: true, createdAt: h(5), relatedOrderId: 2 },
+  { id: 5, type: "status_change", title: "Order uppdaterad", body: 'WO-2026-0453 har \xE4ndrats till "P\xE5g\xE5r" av planeraren.', read: true, createdAt: h(8), relatedOrderId: 3 },
+  { id: 6, type: "sign_off_complete", title: "Kundkvittering mottagen", body: "Kunden har signerat WO-2026-0451.", read: true, createdAt: h(24), relatedOrderId: 1 },
+  { id: 7, type: "material_update", title: "Materiallager uppdaterat", body: 'Artikeln "Plastk\xE4rl 370L" har fyllts p\xE5 i lagret.', read: true, createdAt: h(26) },
+  { id: 8, type: "system", title: "Appuppdatering tillg\xE4nglig", body: "Traivo Go v2.4 finns nu tillg\xE4nglig med f\xF6rb\xE4ttrad GPS-precision.", read: true, createdAt: h(48) },
+  { id: 9, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0455 \u2014 G\xF6teborgs Hamn har tilldelats dig.", read: true, createdAt: h(50), relatedOrderId: 5 },
+  { id: 10, type: "schedule_change", title: "Prioritet \xE4ndrad", body: "WO-2026-0454 har f\xE5tt h\xF6gre prioritet.", read: true, createdAt: h(72), relatedOrderId: 4 }
+];
+router.get("/notifications", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.read).length;
+    res.json({ notifications: MOCK_NOTIFICATIONS, unreadCount });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/notifications", { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("Notifications fetch error:", error?.message);
+    res.status(503).json({ error: "Kunde inte h\xE4mta aviseringar." });
+  }
+});
+router.post("/notifications/:id/read", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const id = parseInt(req.params.id);
+    const notif = MOCK_NOTIFICATIONS.find((n) => n.id === id);
+    if (notif) notif.read = true;
+    res.json({ success: true });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
+      method: "POST",
+      headers: getAuthHeader(req)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte markera som l\xE4st." });
+  }
+});
+router.post("/notifications/read-all", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    MOCK_NOTIFICATIONS.forEach((n) => {
+      n.read = true;
+    });
+    res.json({ success: true, count: MOCK_NOTIFICATIONS.length });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/notifications/read-all", {
+      method: "POST",
+      headers: getAuthHeader(req)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte markera alla som l\xE4sta." });
+  }
+});
 
 // server/routes/ai.ts
 var import_express2 = require("express");
@@ -3245,10 +3260,10 @@ var import_express3 = require("express");
 var router3 = (0, import_express3.Router)();
 function getWeekDates() {
   const dates = [];
-  const now = /* @__PURE__ */ new Date();
-  const dayOfWeek = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  const now2 = /* @__PURE__ */ new Date();
+  const dayOfWeek = now2.getDay();
+  const monday = new Date(now2);
+  monday.setDate(now2.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);

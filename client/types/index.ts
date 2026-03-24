@@ -511,3 +511,36 @@ export interface DeviationWithOrder extends Deviation {
   customerName?: string;
   address?: string;
 }
+
+export type NotificationType =
+  | 'order_assigned'
+  | 'status_change'
+  | 'team_invite'
+  | 'schedule_change'
+  | 'deviation_reviewed'
+  | 'material_update'
+  | 'sign_off_complete'
+  | 'system';
+
+export interface AppNotification {
+  id: number;
+  type: NotificationType;
+  title: string;
+  body: string;
+  read: boolean;
+  createdAt: string;
+  relatedOrderId?: number;
+  relatedTeamId?: number;
+  metadata?: Record<string, any>;
+}
+
+export const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, { icon: string; color: string; label: string }> = {
+  order_assigned: { icon: 'plus-circle', color: '#2196F3', label: 'Nytt uppdrag' },
+  status_change: { icon: 'refresh-cw', color: '#FF9800', label: 'Statusändring' },
+  team_invite: { icon: 'users', color: '#9C27B0', label: 'Team' },
+  schedule_change: { icon: 'calendar', color: '#F44336', label: 'Schema' },
+  deviation_reviewed: { icon: 'check-circle', color: '#4CAF50', label: 'Avvikelse' },
+  material_update: { icon: 'package', color: '#795548', label: 'Material' },
+  sign_off_complete: { icon: 'file-text', color: '#009688', label: 'Kvittering' },
+  system: { icon: 'info', color: '#607D8B', label: 'System' },
+};
