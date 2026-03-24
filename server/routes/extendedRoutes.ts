@@ -1556,4 +1556,198 @@ app.post("/api/auth/logout", (req, res) => {
   });
 });
 
+// ============================================
+// FIELD ENDPOINTS (Session auth — mirrors mobile API logic)
+// ============================================
+
+const fieldDeviationSchema = z.object({
+  type: z.string().min(1),
+  description: z.string().optional().default(""),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
+  photos: z.array(z.string()).optional().default([]),
+});
+
+app.post("/api/field/orders/:id/deviations", asyncHandler(async (req: any, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const orderId = req.params.id;
+    const user = req.user || (req.session as any)?.passport?.user;
+    const userResourceId = user?.resourceId || req.body.resourceId;
+
+    const parsed = fieldDeviationSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+    const { type, description, latitude, longitude, photos } = parsed.data;
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.tenantId !== tenantId) throw new ForbiddenError("Ej behörig för denna order");
+
+    const DEVIATION_TYPE_MAP: Record<string, string> = {
+      blocked_access: "Blockerad åtkomst",
+      damaged_container: "Skadat kärl",
+      wrong_waste: "Felaktigt avfall",
+      overloaded: "Överlastat",
+      locked_gate: "Låst grind",
+      no_access: "Ingen åtkomst",
+      wrong_address: "Fel adress",
+      obstacle: "Hinder",
+      customer_absent: "Kund ej hemma",
+      weather: "Väderförhållanden",
+      equipment_issue: "Utrustningsproblem",
+      other: "Övrigt",
+    };
+
+    let reporterName = "Fältarbetare";
+    if (userResourceId) {
+      try {
+        const resource = await storage.getResource(userResourceId);
+        if (resource) reporterName = resource.name;
+      } catch {}
+    }
+
+    const deviation = await storage.createDeviationReport({
+      tenantId,
+      workOrderId: orderId,
+      objectId: order.objectId,
+      category: type || "other",
+      title: DEVIATION_TYPE_MAP[type] || type || "Avvikelse",
+      description: description || "",
+      severityLevel: "medium",
+      reportedByName: reporterName,
+      latitude: latitude || null,
+      longitude: longitude || null,
+      photos: photos || [],
+      status: "reported",
+    });
+
+    let linkedChangeRequest = null;
+    const { AUTO_LINK_DEVIATION_TYPES, GO_CATEGORY_MAP, mapGoCategory } = await import("@shared/changeRequestCategories");
+    const deviationType = type || "other";
+    const shouldAutoLink = (AUTO_LINK_DEVIATION_TYPES as readonly string[]).includes(deviationType);
+
+    if (shouldAutoLink && order.objectId) {
+      try {
+        const { customerChangeRequests } = await import("@shared/schema");
+        const existing = await db.select()
+          .from(customerChangeRequests)
+          .where(eq(customerChangeRequests.linkedDeviationId, deviation.id))
+          .limit(1);
+
+        if (existing.length === 0) {
+          const obj = await storage.getObject(order.objectId);
+          if (obj?.customerId) {
+            const mappedCategory = GO_CATEGORY_MAP[deviationType] || mapGoCategory(deviationType);
+            linkedChangeRequest = await storage.createCustomerChangeRequest({
+              tenantId,
+              objectId: order.objectId,
+              customerId: obj.customerId,
+              category: mappedCategory,
+              description: `[Auto från avvikelse] ${DEVIATION_TYPE_MAP[deviationType] || deviationType}: ${description || "Ingen beskrivning"}`,
+              photos: photos || [],
+              latitude: latitude || null,
+              longitude: longitude || null,
+              status: "new",
+              severity: "medium",
+              createdByResourceId: userResourceId || null,
+              linkedDeviationId: deviation.id,
+            });
+            console.log(`[field] Auto-created change request ${linkedChangeRequest.id} from deviation ${deviation.id}`);
+          }
+        }
+      } catch (err) {
+        console.error(`[field] Failed to auto-create change request from deviation ${deviation.id}:`, err);
+      }
+    }
+
+    console.log(`[field] Deviation reported for order ${orderId}`);
+    res.status(201).json({ success: true, deviation, linkedChangeRequest });
+}));
+
+const fieldChangeRequestSchema = z.object({
+  objectId: z.string().uuid(),
+  category: z.string().min(1),
+  description: z.string().min(1).max(5000),
+  photos: z.array(z.string()).optional(),
+  latitude: z.number().optional().nullable(),
+  longitude: z.number().optional().nullable(),
+  severity: z.enum(["low", "medium", "high", "critical"]).optional().nullable(),
+});
+
+app.post("/api/field/customer-change-requests", asyncHandler(async (req: any, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const user = req.user || (req.session as any)?.passport?.user;
+    const userResourceId = user?.resourceId || req.body.resourceId;
+
+    const parsed = fieldChangeRequestSchema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error));
+    const data = parsed.data;
+
+    const obj = await storage.getObject(data.objectId);
+    if (!obj || obj.tenantId !== tenantId) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+    if (!obj.customerId) {
+      throw new ValidationError("Objektet saknar kund-koppling");
+    }
+
+    const { ONE_CATEGORIES, GO_CATEGORY_MAP, mapGoCategory } = await import("@shared/changeRequestCategories");
+    const isOneCategory = (ONE_CATEGORIES as readonly string[]).includes(data.category);
+    const isGoCategory = Object.keys(GO_CATEGORY_MAP).includes(data.category);
+    if (!isOneCategory && !isGoCategory) {
+      throw new ValidationError(`Okänd kategori: ${data.category}`);
+    }
+    const mappedCategory = isOneCategory ? data.category : mapGoCategory(data.category);
+
+    const created = await storage.createCustomerChangeRequest({
+      tenantId,
+      objectId: data.objectId,
+      customerId: obj.customerId,
+      category: mappedCategory,
+      description: data.description,
+      photos: data.photos || null,
+      latitude: data.latitude ?? null,
+      longitude: data.longitude ?? null,
+      status: "new",
+      severity: data.severity || null,
+      createdByResourceId: userResourceId || null,
+    });
+
+    console.log(`[field] Change request created: ${created.id} for object ${data.objectId}`);
+    res.status(201).json(created);
+}));
+
+app.get("/api/field/my-reports", asyncHandler(async (req: any, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const user = req.user || (req.session as any)?.passport?.user;
+    const userResourceId = user?.resourceId || (req.query.resourceId as string);
+
+    if (!userResourceId) {
+      return res.json({ deviations: [], changeRequests: { items: [], total: 0 } });
+    }
+
+    let reporterName = userResourceId;
+    try {
+      const resource = await storage.getResource(userResourceId);
+      if (resource) reporterName = resource.name;
+    } catch {}
+
+    const { deviationReports } = await import("@shared/schema");
+    const deviations = await db.select().from(deviationReports)
+      .where(and(
+        eq(deviationReports.tenantId, tenantId),
+        eq(deviationReports.reportedByName, reporterName)
+      ))
+      .orderBy(desc(deviationReports.reportedAt))
+      .limit(50);
+
+    const changeRequests = await storage.getCustomerChangeRequests({
+      tenantId,
+      createdByResourceId: userResourceId,
+      limit: 50,
+      offset: 0,
+    });
+
+    res.json({ deviations, changeRequests });
+}));
+
 }

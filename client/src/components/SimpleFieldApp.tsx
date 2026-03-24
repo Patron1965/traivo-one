@@ -31,7 +31,9 @@ import { OrderChecklist } from "@/components/OrderChecklist";
 import { SigningValidationModal } from "@/components/SigningValidationModal";
 import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS, REQUIRED_FIELDS_BY_ORDER_TYPE } from "@shared/schema";
+import { CATEGORY_LABELS, SEVERITY_LABELS, GO_CATEGORIES } from "@shared/changeRequestCategories";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { VoiceInput } from "@/components/VoiceInput";
 import {
@@ -88,6 +90,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [showCompletedDialog, setShowCompletedDialog] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [validationMissingFields, setValidationMissingFields] = useState<{ field: string; label: string }[]>([]);
+
+  const [showChangeRequestPanel, setShowChangeRequestPanel] = useState(false);
+  const [changeRequestCategory, setChangeRequestCategory] = useState("");
+  const [changeRequestDescription, setChangeRequestDescription] = useState("");
+  const [changeRequestSeverity, setChangeRequestSeverity] = useState<string>("medium");
+  const [changeRequestPhoto, setChangeRequestPhoto] = useState<string | null>(null);
+  const [isUploadingChangePhoto, setIsUploadingChangePhoto] = useState(false);
 
   const [dismissedInstallBanner, setDismissedInstallBanner] = useState(() => {
     try {
@@ -500,6 +509,17 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     },
   });
 
+  const IMPOSSIBLE_TO_DEVIATION_TYPE: Record<string, string> = {
+    locked_gate: "blocked_access",
+    no_access: "blocked_access",
+    wrong_address: "other",
+    obstacle: "blocked_access",
+    customer_absent: "customer_absent",
+    weather: "other",
+    equipment_issue: "equipment_issue",
+    other: "other",
+  };
+
   const markImpossibleMutation = useMutation({
     mutationFn: async ({ 
       id, 
@@ -520,12 +540,25 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         impossibleBy: resourceId || null,
         impossiblePhotoUrl: photoUrl || null,
       });
+
+      try {
+        const deviationType = IMPOSSIBLE_TO_DEVIATION_TYPE[reason] || "other";
+        const reasonLabel = IMPOSSIBLE_REASON_LABELS[reason as keyof typeof IMPOSSIBLE_REASON_LABELS] || reason;
+        await apiRequest("POST", `/api/field/orders/${id}/deviations`, {
+          type: deviationType,
+          description: `${reasonLabel}${reasonText ? `: ${reasonText}` : ""}`,
+          photos: photoUrl ? [photoUrl] : [],
+          resourceId: resourceId || undefined,
+        });
+      } catch (err) {
+        console.error("[field] Failed to create deviation report:", err);
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
       toast({ 
         title: "Order markerad som omöjlig", 
-        description: "Ordern har markerats och en ny kommer schemaläggas.",
+        description: "Avvikelserapport skapad automatiskt.",
       });
       setShowImpossibleDialog(false);
       setSelectedImpossibleReason(null);
@@ -540,6 +573,41 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         title: "Fel", 
         description: "Kunde inte markera ordern som omöjlig.", 
         variant: "destructive" 
+      });
+    },
+  });
+
+  const submitChangeRequestMutation = useMutation({
+    mutationFn: async (data: {
+      objectId: string;
+      category: string;
+      description: string;
+      severity: string;
+      photos?: string[];
+    }) => {
+      const res = await apiRequest("POST", "/api/field/customer-change-requests", {
+        ...data,
+        resourceId: resourceId || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/field/my-reports"] });
+      toast({
+        title: "Kundrapport skickad",
+        description: "Rapporten har registrerats och skickats till planeraren.",
+      });
+      setShowChangeRequestPanel(false);
+      setChangeRequestCategory("");
+      setChangeRequestDescription("");
+      setChangeRequestSeverity("medium");
+      setChangeRequestPhoto(null);
+    },
+    onError: () => {
+      toast({
+        title: "Fel",
+        description: "Kunde inte skicka kundrapport.",
+        variant: "destructive",
       });
     },
   });
@@ -1227,34 +1295,179 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-orange-500" />
-                  Markera som omöjlig
+                  Rapportera problem
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Välj anledning till att ordern inte kan utföras:
-                </p>
-                <div className="grid grid-cols-2 gap-2">
-                  {IMPOSSIBLE_REASONS.map((reason) => (
-                    <Button
-                      key={reason}
-                      variant="outline"
-                      className="h-auto py-3 flex-col gap-1"
-                      onClick={() => handleSelectImpossibleReason(reason)}
-                      data-testid={`button-impossible-${reason}`}
-                    >
-                      {reason === "locked_gate" && <Ban className="h-5 w-5 text-red-500" />}
-                      {reason === "no_access" && <Ban className="h-5 w-5 text-red-500" />}
-                      {reason === "wrong_address" && <MapPinOff className="h-5 w-5 text-yellow-600" />}
-                      {reason === "obstacle" && <Trash2 className="h-5 w-5 text-orange-500" />}
-                      {reason === "customer_absent" && <Clock className="h-5 w-5 text-blue-500" />}
-                      {reason === "weather" && <AlertTriangle className="h-5 w-5 text-gray-500" />}
-                      {reason === "equipment_issue" && <AlertTriangle className="h-5 w-5 text-purple-500" />}
-                      {reason === "other" && <HelpCircle className="h-5 w-5 text-gray-500" />}
-                      <span className="text-xs">{IMPOSSIBLE_REASON_LABELS[reason]}</span>
-                    </Button>
-                  ))}
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="text-sm font-medium mb-2">Markera som omöjlig</p>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Välj anledning till att ordern inte kan utföras:
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {IMPOSSIBLE_REASONS.map((reason) => (
+                      <Button
+                        key={reason}
+                        variant="outline"
+                        className="h-auto py-3 flex-col gap-1"
+                        onClick={() => handleSelectImpossibleReason(reason)}
+                        data-testid={`button-impossible-${reason}`}
+                      >
+                        {reason === "locked_gate" && <Ban className="h-5 w-5 text-red-500" />}
+                        {reason === "no_access" && <Ban className="h-5 w-5 text-red-500" />}
+                        {reason === "wrong_address" && <MapPinOff className="h-5 w-5 text-yellow-600" />}
+                        {reason === "obstacle" && <Trash2 className="h-5 w-5 text-orange-500" />}
+                        {reason === "customer_absent" && <Clock className="h-5 w-5 text-blue-500" />}
+                        {reason === "weather" && <AlertTriangle className="h-5 w-5 text-gray-500" />}
+                        {reason === "equipment_issue" && <AlertTriangle className="h-5 w-5 text-purple-500" />}
+                        {reason === "other" && <HelpCircle className="h-5 w-5 text-gray-500" />}
+                        <span className="text-xs">{IMPOSSIBLE_REASON_LABELS[reason]}</span>
+                      </Button>
+                    ))}
+                  </div>
                 </div>
+
+                <div className="border-t pt-4">
+                  <Button
+                    variant={showChangeRequestPanel ? "default" : "outline"}
+                    className="w-full gap-2"
+                    onClick={() => setShowChangeRequestPanel(!showChangeRequestPanel)}
+                    data-testid="button-toggle-change-request"
+                  >
+                    <Flag className="h-4 w-4" />
+                    Skicka kundrapport
+                  </Button>
+                </div>
+
+                {showChangeRequestPanel && selectedJob && (
+                  <div className="border rounded-lg p-3 space-y-3 bg-muted/30">
+                    <p className="text-sm font-medium">Ny kundrapport</p>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Kategori</label>
+                      <Select value={changeRequestCategory} onValueChange={setChangeRequestCategory}>
+                        <SelectTrigger data-testid="select-change-category">
+                          <SelectValue placeholder="Välj kategori..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {GO_CATEGORIES.map((cat) => (
+                            <SelectItem key={cat} value={cat}>
+                              {CATEGORY_LABELS[cat] || cat}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Allvarlighetsgrad</label>
+                      <Select value={changeRequestSeverity} onValueChange={setChangeRequestSeverity}>
+                        <SelectTrigger data-testid="select-change-severity">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {Object.entries(SEVERITY_LABELS).map(([val, label]) => (
+                            <SelectItem key={val} value={val}>
+                              {label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Beskrivning</label>
+                      <Textarea
+                        value={changeRequestDescription}
+                        onChange={(e) => setChangeRequestDescription(e.target.value)}
+                        placeholder="Beskriv problemet..."
+                        className="min-h-[60px]"
+                        data-testid="input-change-description"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-medium">Foto (valfritt)</label>
+                      {changeRequestPhoto ? (
+                        <div className="relative">
+                          <img src={changeRequestPhoto} alt="Foto" className="w-full h-24 object-cover rounded-md border" />
+                          <Button size="icon" variant="destructive" className="absolute top-1 right-1 h-6 w-6" onClick={() => setChangeRequestPhoto(null)} data-testid="button-remove-change-photo">
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="hidden"
+                            id="change-request-photo-input"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setIsUploadingChangePhoto(true);
+                                try {
+                                  const response = await fetch("/api/uploads/request-url", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({
+                                      name: `change-req-${selectedJobId}-${Date.now()}-${file.name}`,
+                                      size: file.size,
+                                      contentType: file.type,
+                                    }),
+                                  });
+                                  if (!response.ok) throw new Error("Upload URL failed");
+                                  const { uploadURL, objectPath } = await response.json();
+                                  const uploadRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+                                  if (!uploadRes.ok) throw new Error("Upload failed");
+                                  setChangeRequestPhoto(objectPath);
+                                  toast({ title: "Foto uppladdat" });
+                                } catch {
+                                  toast({ title: "Fel vid uppladdning", variant: "destructive" });
+                                } finally {
+                                  setIsUploadingChangePhoto(false);
+                                }
+                              }
+                              e.target.value = "";
+                            }}
+                            data-testid="input-change-photo"
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full gap-1"
+                            onClick={() => document.getElementById("change-request-photo-input")?.click()}
+                            disabled={isUploadingChangePhoto}
+                            data-testid="button-take-change-photo"
+                          >
+                            {isUploadingChangePhoto ? <Loader2 className="h-3 w-3 animate-spin" /> : <Camera className="h-3 w-3" />}
+                            {isUploadingChangePhoto ? "Laddar upp..." : "Ta foto"}
+                          </Button>
+                        </>
+                      )}
+                    </div>
+                    <Button
+                      className="w-full gap-2"
+                      onClick={() => {
+                        if (selectedJob?.objectId && changeRequestCategory && changeRequestDescription.trim()) {
+                          submitChangeRequestMutation.mutate({
+                            objectId: selectedJob.objectId,
+                            category: changeRequestCategory,
+                            description: changeRequestDescription.trim(),
+                            severity: changeRequestSeverity,
+                            photos: changeRequestPhoto ? [changeRequestPhoto] : undefined,
+                          });
+                        }
+                      }}
+                      disabled={!changeRequestCategory || !changeRequestDescription.trim() || submitChangeRequestMutation.isPending}
+                      data-testid="button-submit-change-request"
+                    >
+                      {submitChangeRequestMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Send className="h-4 w-4" />
+                      )}
+                      Skicka rapport
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
