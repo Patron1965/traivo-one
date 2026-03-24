@@ -79,16 +79,12 @@ function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url
       try {
         const [crRes, devRes] = await Promise.all([
           mobileApiCall("GET", "/api/mobile/customer-change-requests/mine?limit=20"),
-          fetch("/api/deviation-reports?limit=20").then(r => r.ok ? r : Promise.reject()),
+          mobileApiCall("GET", "/api/mobile/deviations/mine?limit=20"),
         ]);
         const crData = await crRes.json();
         if (!cancelled) setChangeRequests(crData.items || []);
-        try {
-          const devData = await devRes.json();
-          if (!cancelled) setDeviations(Array.isArray(devData) ? devData.slice(0, 20) : []);
-        } catch {
-          if (!cancelled) setDeviations([]);
-        }
+        const devData = await devRes.json();
+        if (!cancelled) setDeviations(devData.items || []);
       } catch {
         if (!cancelled) {
           setChangeRequests([]);

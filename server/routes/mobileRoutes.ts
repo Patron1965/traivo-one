@@ -841,6 +841,27 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
     });
 }));
 
+app.get("/api/mobile/deviations/mine", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new ForbiddenError("Resurs hittades inte");
+
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+
+    const { deviationReports } = await import("@shared/schema");
+    const { eq, and, desc } = await import("drizzle-orm");
+
+    const items = await db.select().from(deviationReports)
+      .where(and(
+        eq(deviationReports.tenantId, resource.tenantId),
+        eq(deviationReports.reportedByName, resource.name)
+      ))
+      .orderBy(desc(deviationReports.reportedAt))
+      .limit(limit);
+
+    res.json({ items, total: items.length });
+}));
+
 const materialLogSchema = z.object({
   articleId: z.string().optional(),
   articleNumber: z.string().optional(),
