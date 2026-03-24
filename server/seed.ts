@@ -397,7 +397,45 @@ export async function seedDatabase() {
     status: "active",
   }).returning();
 
-  console.log("Created resources:", resource1.name, resource2.name, resource3.name);
+  const [tomasResource] = await db.insert(resources).values({
+    id: "res-tomas",
+    tenantId: DEFAULT_TENANT_ID,
+    name: "Tomas Björnberg",
+    initials: "TB",
+    resourceType: "person",
+    phone: "070-123 45 67",
+    email: "tomas@nordicrouting.se",
+    homeLocation: "Södertälje",
+    weeklyHours: 40,
+    competencies: ["tvatt", "besiktning", "hamtning", "kontroll", "service", "etablering"],
+    status: "active",
+    homeLatitude: 59.1955,
+    homeLongitude: 17.6253,
+  }).returning();
+
+  await db.insert(resources).values({
+    id: "res-anna",
+    tenantId: DEFAULT_TENANT_ID,
+    name: "Anna Lindqvist",
+    initials: "AL",
+    resourceType: "person",
+    phone: "073-456 78 90",
+    email: "anna@kinab.se",
+    homeLocation: "Huddinge",
+    weeklyHours: 40,
+    competencies: ["tvatt", "besiktning", "hamtning"],
+    status: "active",
+    homeLatitude: 59.2369,
+    homeLongitude: 17.9812,
+  });
+
+  console.log("Created resources:", resource1.name, resource2.name, resource3.name, tomasResource.name);
+
+  const tomasUser = await db.select().from(users).where(sql`email = 'tomas@nordicrouting.se'`);
+  if (tomasUser.length > 0) {
+    await db.update(users).set({ resourceId: "res-tomas" }).where(sql`id = ${tomasUser[0].id}`);
+    console.log("Linked user Tomas to resource res-tomas");
+  }
 
   const today = new Date();
   const monday = new Date(today);
@@ -491,6 +529,11 @@ export async function seedDatabase() {
   ]);
 
   console.log("Created work orders");
+
+  const demoCust1 = await db.select().from(customers).where(sql`id = 'cust-telge'`);
+  if (demoCust1.length === 0) {
+    await seedFieldAppDemoData(tomasResource.id);
+  }
 
   // Seed branding templates (8 industry templates)
   const existingTemplates = await db.select().from(brandingTemplates).limit(1);
@@ -644,9 +687,8 @@ export async function seedDatabase() {
     console.log("Created default tenant branding");
   }
 
-  // Create owner role for Tomas Björneberg resource user if exists
-  const tomasResource = await db.select().from(resources).where(sql`email = 'tomas@nordicrouting.se'`);
-  if (tomasResource.length > 0) {
+  const tomasResCheck = await db.select().from(resources).where(sql`email = 'tomas@nordicrouting.se'`);
+  if (tomasResCheck.length > 0) {
     // Check if user exists in users table
     const existingUser = await db.select().from(users).where(sql`email = 'tomas@nordicrouting.se'`);
     let userId: string;
@@ -691,4 +733,49 @@ async function refreshDemoWorkOrderDates() {
   if (result.length > 0) {
     console.log(`Updated ${result.length} demo work orders to today's date`);
   }
+
+  const tomasUser = await db.select().from(users).where(sql`email = 'tomas@nordicrouting.se'`);
+  if (tomasUser.length > 0 && !tomasUser[0].resourceId) {
+    const res = await db.select().from(resources).where(sql`id = 'res-tomas'`);
+    if (res.length > 0) {
+      await db.update(users).set({ resourceId: "res-tomas" }).where(sql`id = ${tomasUser[0].id}`);
+      console.log("Linked user Tomas to resource res-tomas");
+    }
+  }
+}
+
+async function seedFieldAppDemoData(tomasResourceId: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  await db.insert(customers).values([
+    { id: "cust-telge", tenantId: DEFAULT_TENANT_ID, name: "Telgebostäder AB", customerNumber: "K001", contactPerson: "Erik Svensson", email: "erik@telgebostader.se", phone: "08-550 123 00", address: "Storgatan 1", city: "Södertälje", postalCode: "151 72" },
+    { id: "cust-brf", tenantId: DEFAULT_TENANT_ID, name: "BRF Strandhöjden", customerNumber: "K002", contactPerson: "Maria Johansson", email: "maria@strandhojden.se", phone: "08-523 456 00", address: "Strandvägen 15", city: "Södertälje", postalCode: "151 38" },
+    { id: "cust-kommun", tenantId: DEFAULT_TENANT_ID, name: "Södertälje Kommun", customerNumber: "K003", contactPerson: "Anders Nilsson", email: "anders@sodertalje.se", phone: "08-550 200 00", address: "Campusgatan 26", city: "Södertälje", postalCode: "151 87" },
+    { id: "cust-fastighet", tenantId: DEFAULT_TENANT_ID, name: "Förvaltaren Fastigheter", customerNumber: "K004", contactPerson: "Karin Ström", email: "karin@forvaltaren.se", phone: "08-588 100 00", address: "Centralgatan 8", city: "Sundbyberg", postalCode: "172 68" },
+  ]);
+
+  await db.insert(objects).values([
+    { id: "obj-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", name: "Stensätravägen 2 - Soprum A", objectNumber: "OBJ-001", objectType: "rum", objectLevel: 3, address: "Stensätravägen 2", city: "Södertälje", postalCode: "151 57", latitude: 59.1876, longitude: 17.6432, accessType: "code", accessCode: "1234", hierarchyLevel: "rum", avgSetupTime: 5 },
+    { id: "obj-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", name: "Oxbacksleden 12 - Fastighet", objectNumber: "OBJ-002", objectType: "fastighet", objectLevel: 2, address: "Oxbacksleden 12", city: "Södertälje", postalCode: "151 42", latitude: 59.1923, longitude: 17.6198, accessType: "key", hierarchyLevel: "fastighet", avgSetupTime: 10 },
+    { id: "obj-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", name: "Strandvägen 15 - Kärl 240L", objectNumber: "OBJ-003", objectType: "karl", objectLevel: 4, address: "Strandvägen 15", city: "Södertälje", postalCode: "151 38", latitude: 59.1978, longitude: 17.6345, accessType: "open", hierarchyLevel: "karl", avgSetupTime: 3 },
+    { id: "obj-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", name: "Strandvägen 17 - Soprum", objectNumber: "OBJ-004", objectType: "rum", objectLevel: 3, address: "Strandvägen 17", city: "Södertälje", postalCode: "151 38", latitude: 59.1981, longitude: 17.6351, accessType: "code", accessCode: "4567", hierarchyLevel: "rum", avgSetupTime: 8 },
+    { id: "obj-5", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", name: "Torekällbergets Skola", objectNumber: "OBJ-005", objectType: "fastighet", objectLevel: 2, address: "Torekällgatan 40", city: "Södertälje", postalCode: "151 72", latitude: 59.2012, longitude: 17.6287, accessType: "key", hierarchyLevel: "fastighet", avgSetupTime: 15 },
+    { id: "obj-6", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", name: "Brunnsängsparken - Container", objectNumber: "OBJ-006", objectType: "karl", objectLevel: 4, address: "Brunnsängsvägen 8", city: "Södertälje", postalCode: "151 45", latitude: 59.1834, longitude: 17.6512, accessType: "open", hierarchyLevel: "karl", avgSetupTime: 5 },
+    { id: "obj-7", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Sturegatan 22 - Tvättstuga", objectNumber: "OBJ-007", objectType: "rum", objectLevel: 3, address: "Sturegatan 22", city: "Sundbyberg", postalCode: "172 31", latitude: 59.3614, longitude: 17.9724, accessType: "code", accessCode: "8901", hierarchyLevel: "rum", avgSetupTime: 10 },
+    { id: "obj-8", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Esplanaden 5 - Källare", objectNumber: "OBJ-008", objectType: "rum", objectLevel: 3, address: "Esplanaden 5", city: "Sundbyberg", postalCode: "172 67", latitude: 59.3589, longitude: 17.9681, accessType: "key", hierarchyLevel: "rum", avgSetupTime: 12 },
+  ]);
+
+  await db.insert(workOrders).values([
+    { id: "wo-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-1", resourceId: tomasResourceId, title: "Tvätt soprum A", description: "Storstädning och tvätt av soprum inkl. väggar och golv", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "07:30", estimatedDuration: 45 },
+    { id: "wo-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-2", resourceId: tomasResourceId, title: "Besiktning fastighet", description: "Årlig besiktning av avfallsutrymmen och behållare", orderType: "besiktning", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "08:30", estimatedDuration: 60 },
+    { id: "wo-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-3", resourceId: tomasResourceId, title: "Tvätt kärl 240L", description: "Högtryckstvätt av brunt kärl vid Strandvägen 15", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "09:45", estimatedDuration: 30 },
+    { id: "wo-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-4", resourceId: tomasResourceId, title: "Kontroll soprum", description: "Kontroll av brandsäkerhet och skyltning i soprum", orderType: "kontroll", priority: "normal", orderStatus: "paborjad", scheduledDate: today, scheduledStartTime: "10:30", estimatedDuration: 40 },
+    { id: "wo-5", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-5", resourceId: tomasResourceId, title: "Service ventilation skola", description: "Ventilationsservice och filterbyte i soprummet", orderType: "service", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "11:30", estimatedDuration: 90 },
+    { id: "wo-6", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-6", resourceId: tomasResourceId, title: "Tvätt container", description: "Invändig tvätt av 660L container vid Brunnsängsparken", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "13:30", estimatedDuration: 35 },
+    { id: "wo-7", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", objectId: "obj-7", resourceId: tomasResourceId, title: "Etablering tvättstuga", description: "Ny etablering av avfallshantering i tvättstuga", orderType: "etablering", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "14:30", estimatedDuration: 75 },
+    { id: "wo-8", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", objectId: "obj-8", resourceId: tomasResourceId, title: "Besiktning källare", description: "Statusbesiktning av avfallsutrymme i källare", orderType: "besiktning", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today, scheduledStartTime: "16:00", estimatedDuration: 45 },
+  ]);
+
+  console.log("Created SimpleFieldApp demo data: 4 customers, 8 objects, 8 work orders for today");
 }
