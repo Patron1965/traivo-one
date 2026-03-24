@@ -1633,29 +1633,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                           if (file) {
                             setIsUploadingImpossiblePhoto(true);
                             try {
-                              const response = await fetch("/api/uploads/request-url", {
-                                method: "POST",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({
-                                  name: `impossible-${selectedJobId}-${Date.now()}-${file.name}`,
-                                  size: file.size,
-                                  contentType: file.type,
-                                }),
-                              });
-
-                              if (!response.ok) throw new Error("Kunde inte få uppladdnings-URL");
-
-                              const { uploadURL, objectPath } = await response.json();
-
-                              const uploadResponse = await fetch(uploadURL, {
-                                method: "PUT",
-                                body: file,
-                                headers: { "Content-Type": file.type },
-                              });
-
-                              if (!uploadResponse.ok) throw new Error("Uppladdning misslyckades");
-                              
-                              setImpossiblePhoto(objectPath);
+                              const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
+                              const { uploadURL, objectPath } = await uploadRes.json();
+                              const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+                              if (!putRes.ok) throw new Error("Uppladdning misslyckades");
+                              const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
+                              const { downloadURL } = await confirmRes.json();
+                              setImpossiblePhoto(downloadURL || objectPath);
                               toast({ title: "Foto uppladdat" });
                             } catch (error) {
                               console.error("Upload error:", error);
