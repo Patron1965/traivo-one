@@ -1562,7 +1562,10 @@ app.post("/api/auth/logout", (req, res) => {
 
 app.post("/api/field/mobile-token", asyncHandler(async (req: any, res) => {
     const user = req.user || (req.session as any)?.passport?.user;
-    const userResourceId = user?.resourceId || req.body.resourceId;
+    if (!user) {
+      throw new ForbiddenError("Ej autentiserad");
+    }
+    const userResourceId = user.resourceId;
 
     if (!userResourceId) {
       throw new ValidationError("Ingen resurs-ID kopplad till din användare");

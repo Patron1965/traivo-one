@@ -643,6 +643,18 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       reasonText?: string;
       photoUrl?: string;
     }) => {
+      const deviationType = IMPOSSIBLE_TO_DEVIATION_TYPE[reason] || "other";
+      const reasonLabel = IMPOSSIBLE_REASON_LABELS[reason as keyof typeof IMPOSSIBLE_REASON_LABELS] || reason;
+      const gpsPos = lastPositionRef.current;
+
+      await mobileApiCall("POST", `/api/mobile/orders/${id}/deviations`, {
+        type: deviationType,
+        description: `${reasonLabel}${reasonText ? `: ${reasonText}` : ""}`,
+        photos: photoUrl ? [photoUrl] : [],
+        latitude: gpsPos?.lat ?? undefined,
+        longitude: gpsPos?.lng ?? undefined,
+      });
+
       await apiRequest("PATCH", `/api/work-orders/${id}`, {
         status: "omojlig",
         impossibleReason: reason,
@@ -651,18 +663,6 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         impossibleBy: resourceId || null,
         impossiblePhotoUrl: photoUrl || null,
       });
-
-      try {
-        const deviationType = IMPOSSIBLE_TO_DEVIATION_TYPE[reason] || "other";
-        const reasonLabel = IMPOSSIBLE_REASON_LABELS[reason as keyof typeof IMPOSSIBLE_REASON_LABELS] || reason;
-        await mobileApiCall("POST", `/api/mobile/orders/${id}/deviations`, {
-          type: deviationType,
-          description: `${reasonLabel}${reasonText ? `: ${reasonText}` : ""}`,
-          photos: photoUrl ? [photoUrl] : [],
-        });
-      } catch (err) {
-        console.error("[field] Failed to create deviation report:", err);
-      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
@@ -694,6 +694,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       description: string;
       severity: string;
       photos?: string[];
+      latitude?: number;
+      longitude?: number;
     }) => {
       const res = await mobileApiCall("POST", "/api/mobile/customer-change-requests", data);
       return res.json();
@@ -1547,12 +1549,14 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                       className="w-full gap-2"
                       onClick={() => {
                         if (selectedJob?.objectId && changeRequestCategory && changeRequestDescription.trim()) {
+                          const gpsPos = lastPositionRef.current;
                           submitChangeRequestMutation.mutate({
                             objectId: selectedJob.objectId,
                             category: changeRequestCategory,
                             description: changeRequestDescription.trim(),
                             severity: changeRequestSeverity,
                             photos: changeRequestPhoto ? [changeRequestPhoto] : undefined,
+                            ...(gpsPos ? { latitude: gpsPos.lat, longitude: gpsPos.lng } : {}),
                           });
                         }
                       }}
