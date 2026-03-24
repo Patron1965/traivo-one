@@ -3,10 +3,12 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
+type FeatherIconName = React.ComponentProps<typeof Feather>['name'];
+
 interface Props {
   children: ReactNode;
   fallbackTitle?: string;
-  fallbackIcon?: string;
+  fallbackIcon?: FeatherIconName;
 }
 
 interface State {
@@ -39,7 +41,7 @@ export class ScreenErrorBoundary extends Component<Props, State> {
         <View style={styles.container}>
           <View style={styles.iconContainer}>
             <Feather
-              name={(fallbackIcon as any) || 'alert-circle'}
+              name={fallbackIcon ?? 'alert-circle'}
               size={40}
               color={Colors.warning}
             />
