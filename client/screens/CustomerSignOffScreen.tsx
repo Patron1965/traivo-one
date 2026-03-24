@@ -6,7 +6,7 @@ import {
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerImpact, NotificationFeedbackType, ImpactFeedbackStyle } from '../lib/haptics';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { ThemedText } from '../components/ThemedText';
@@ -45,11 +45,11 @@ export function CustomerSignOffScreen({ route, navigation }: any) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       navigation.goBack();
     },
     onError: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerNotification(NotificationFeedbackType.Error);
     },
   });
 
@@ -96,7 +96,7 @@ export function CustomerSignOffScreen({ route, navigation }: any) {
     if (currentPathSvgRef.current) {
       currentPathSvgRef.current.setNativeProps({ d: '' });
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    triggerImpact(ImpactFeedbackStyle.Light);
   }, []);
 
   const handleSubmit = useCallback(() => {

@@ -3,7 +3,7 @@ import { View, StyleSheet, Pressable, PanResponder, Dimensions, Platform } from 
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerImpact, NotificationFeedbackType, ImpactFeedbackStyle } from '../lib/haptics';
 import { Feather } from '@expo/vector-icons';
 import Svg, { Path } from 'react-native-svg';
 import { ThemedText } from '../components/ThemedText';
@@ -34,7 +34,7 @@ export function SignatureScreen({ route, navigation }: any) {
       apiRequest('POST', `/api/mobile/orders/${orderId}/signature`, { signatureData }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       navigation.goBack();
     },
   });
@@ -82,7 +82,7 @@ export function SignatureScreen({ route, navigation }: any) {
     if (currentPathSvgRef.current) {
       currentPathSvgRef.current.setNativeProps({ d: '' });
     }
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    triggerImpact(ImpactFeedbackStyle.Light);
   }, []);
 
   const handleSave = useCallback(() => {

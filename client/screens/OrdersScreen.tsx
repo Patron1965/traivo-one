@@ -17,7 +17,7 @@ import Animated, {
   interpolate,
   Extrapolation,
 } from 'react-native-reanimated';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerImpact, NotificationFeedbackType, ImpactFeedbackStyle } from '../lib/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
@@ -160,18 +160,18 @@ function SwipeableOrderCard({
 
   const handleAdvance = useCallback(() => {
     if (nextStatus) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       onAdvance(order.id, nextStatus);
     }
   }, [nextStatus, order.id, onAdvance]);
 
   const handleDeviation = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    triggerImpact(ImpactFeedbackStyle.Medium);
     onDeviation(order.id);
   }, [order.id, onDeviation]);
 
   const triggerHaptic = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    triggerImpact(ImpactFeedbackStyle.Light);
   }, []);
 
   const pan = Gesture.Pan()
@@ -536,7 +536,7 @@ export function OrdersScreen({ navigation }: any) {
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
     },
     onError: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerNotification(NotificationFeedbackType.Error);
     },
   });
 

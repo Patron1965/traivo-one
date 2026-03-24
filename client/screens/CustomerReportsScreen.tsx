@@ -4,7 +4,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, NotificationFeedbackType } from '../lib/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
@@ -61,7 +61,7 @@ export function CustomerReportsScreen({ navigation }: any) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/customer-change-requests/mine'] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       setShowCreateModal(false);
       setCategory(null);
       setDescription('');

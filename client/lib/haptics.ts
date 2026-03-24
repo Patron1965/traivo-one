@@ -1,6 +1,9 @@
 import * as Haptics from 'expo-haptics';
 import { getSettings } from './settings';
 
+export const ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle;
+export const NotificationFeedbackType = Haptics.NotificationFeedbackType;
+
 export async function triggerImpact(style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Medium): Promise<void> {
   if (!getSettings().hapticFeedback) return;
   return Haptics.impactAsync(style);

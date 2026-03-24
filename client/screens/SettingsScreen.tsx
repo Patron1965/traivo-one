@@ -167,7 +167,6 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
             trackColor={{ false: Colors.border, true: Colors.primaryLight }}
             thumbColor={settings.darkMode ? Colors.primary : Colors.textMuted}
             testID="switch-darkmode"
-            disabled
           />
         </View>
       </Card>

@@ -4,7 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import * as ImagePicker from 'expo-image-picker';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, NotificationFeedbackType } from '../lib/haptics';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
@@ -33,7 +33,7 @@ export function CameraCaptureScreen({ route, navigation }: any) {
     });
     if (!result.canceled && result.assets[0]) {
       setPhotos(prev => [...prev, { uri: result.assets[0].uri, status: 'pending' }]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
     }
   }
 
@@ -48,7 +48,7 @@ export function CameraCaptureScreen({ route, navigation }: any) {
     if (!result.canceled && result.assets) {
       const newPhotos = result.assets.map(a => ({ uri: a.uri, status: 'pending' as const }));
       setPhotos(prev => [...prev, ...newPhotos]);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
     }
   }
 
@@ -112,10 +112,10 @@ export function CameraCaptureScreen({ route, navigation }: any) {
     setIsSaving(false);
 
     if (successCount === photos.length) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       navigation.goBack();
     } else {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerNotification(NotificationFeedbackType.Error);
     }
   }
 

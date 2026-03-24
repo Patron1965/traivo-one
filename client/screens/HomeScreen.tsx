@@ -6,7 +6,7 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerImpact, NotificationFeedbackType, ImpactFeedbackStyle } from '../lib/haptics';
 import * as Speech from 'expo-speech';
 import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
@@ -216,12 +216,12 @@ export function HomeScreen({ navigation }: any) {
   const carryOverMutation = useMutation({
     mutationFn: () => apiRequest('POST', '/api/mobile/work-orders/carry-over', {}),
     onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       setCarryOverError(null);
       refetchOrders();
     },
     onError: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerNotification(NotificationFeedbackType.Error);
       setCarryOverError('Kunde inte flytta ordrar. Försök igen.');
     },
   });
@@ -329,13 +329,13 @@ export function HomeScreen({ navigation }: any) {
       if (Platform.OS === 'web') return;
       switch (type) {
         case 'start':
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          triggerImpact(ImpactFeedbackStyle.Heavy);
           break;
         case 'stop':
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          triggerImpact(ImpactFeedbackStyle.Light);
           break;
         case 'error':
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          triggerNotification(NotificationFeedbackType.Error);
           break;
       }
     }

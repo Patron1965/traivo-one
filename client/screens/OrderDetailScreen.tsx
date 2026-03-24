@@ -7,7 +7,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerImpact, NotificationFeedbackType, ImpactFeedbackStyle } from '../lib/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
@@ -340,14 +340,14 @@ export function OrderDetailScreen({ route, navigation }: any) {
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}/time-entries`] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/time-summary'] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       const finishStatuses: OrderStatus[] = ['completed', 'utford', 'fakturerad', 'impossible'];
       if (finishStatuses.includes(variables.status)) {
         navigation.navigate('MainTabs', { screen: 'OrdersTab' });
       }
     },
     onError: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerNotification(NotificationFeedbackType.Error);
     },
   });
 
@@ -356,7 +356,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
       apiRequest('PATCH', `/api/mobile/orders/${orderId}/substeps/${stepId}`, { completed }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      triggerImpact(ImpactFeedbackStyle.Light);
     },
   });
 
@@ -366,7 +366,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
       setNoteText('');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
     },
   });
 
@@ -523,12 +523,12 @@ export function OrderDetailScreen({ route, navigation }: any) {
       return apiRequest('POST', `/api/mobile/work-orders/${orderId}/auto-eta-sms`, {});
     },
     onSuccess: (data: any) => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       setEtaMessage({ text: data?.message || 'ETA-SMS skickat!', isError: false });
       setTimeout(() => setEtaMessage(null), 3000);
     },
     onError: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      triggerNotification(NotificationFeedbackType.Error);
       setEtaMessage({ text: 'Kunde inte skicka ETA-SMS. Försök igen.', isError: true });
       setTimeout(() => setEtaMessage(null), 5000);
     },

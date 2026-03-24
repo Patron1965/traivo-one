@@ -3,7 +3,7 @@ import { View, ScrollView, Pressable, TextInput, StyleSheet, FlatList } from 're
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerSelection, NotificationFeedbackType } from '../lib/haptics';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
@@ -71,7 +71,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
       setQuantity('1');
       setNote('');
       setSearch('');
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
     },
   });
 
@@ -120,7 +120,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
               onPress={() => {
                 setSelectedArticle(article);
                 setQuantity(String(article.quantity));
-                Haptics.selectionAsync();
+                triggerSelection();
               }}
               testID={`button-article-${article.id}`}
             >
@@ -164,7 +164,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
               onPress={() => {
                 setSelectedArticle(article);
                 setSearch('');
-                Haptics.selectionAsync();
+                triggerSelection();
               }}
             >
               <ThemedText variant="body">{article.name}</ThemedText>
@@ -185,7 +185,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
                 onPress={() => {
                   const n = Math.max(1, parseInt(quantity) - 1);
                   setQuantity(String(n));
-                  Haptics.selectionAsync();
+                  triggerSelection();
                 }}
               >
                 <Feather name="minus" size={18} color={Colors.primary} />
@@ -202,7 +202,7 @@ export function MaterialLogScreen({ route, navigation }: any) {
                 onPress={() => {
                   const n = parseInt(quantity) + 1;
                   setQuantity(String(n));
-                  Haptics.selectionAsync();
+                  triggerSelection();
                 }}
               >
                 <Feather name="plus" size={18} color={Colors.primary} />

@@ -5,7 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerImpact, triggerSelection, NotificationFeedbackType, ImpactFeedbackStyle } from '../lib/haptics';
 import { Feather } from '@expo/vector-icons';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
@@ -134,7 +134,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       navigation.goBack();
     },
   });
@@ -212,7 +212,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
         setAiConfidence(result.confidence);
       }
       setAiSuggestion(result.description || null);
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
     } catch {
       setAiSuggestion('Kunde inte analysera bilden. Fyll i manuellt.');
     } finally {
@@ -222,7 +222,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
 
   function handleAcceptAi() {
     setAiAccepted(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    triggerImpact(ImpactFeedbackStyle.Light);
   }
 
   function handleSubmit() {
@@ -337,7 +337,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
             ]}
             onPress={() => {
               setSeverity(key);
-              Haptics.selectionAsync();
+              triggerSelection();
             }}
             testID={`button-severity-${key}`}
           >
@@ -359,7 +359,7 @@ export function ReportDeviationScreen({ route, navigation }: any) {
             style={[styles.categoryChip, category === key ? styles.categoryActive : null]}
             onPress={() => {
               setCategory(key);
-              Haptics.selectionAsync();
+              triggerSelection();
             }}
             testID={`button-category-${key}`}
           >

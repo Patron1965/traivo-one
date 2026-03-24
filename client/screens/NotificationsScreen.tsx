@@ -4,7 +4,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, NotificationFeedbackType } from '../lib/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, BorderRadius, FontSize } from '../constants/theme';
@@ -66,16 +66,16 @@ export function NotificationsScreen({ navigation }: any) {
   const markReadMutation = useMutation({
     mutationFn: (id: number) => apiRequest('POST', `/api/mobile/notifications/${id}/read`, {}),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] }),
-    onError: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
+    onError: () => triggerNotification(NotificationFeedbackType.Error),
   });
 
   const markAllReadMutation = useMutation({
     mutationFn: () => apiRequest('POST', '/api/mobile/notifications/read-all', {}),
     onSuccess: () => {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/notifications'] });
     },
-    onError: () => Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
+    onError: () => triggerNotification(NotificationFeedbackType.Error),
   });
 
   const handleTap = useCallback((item: AppNotification) => {

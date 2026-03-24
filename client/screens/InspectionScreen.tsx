@@ -4,7 +4,7 @@ import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
-import * as Haptics from 'expo-haptics';
+import { triggerNotification, triggerImpact, NotificationFeedbackType, ImpactFeedbackStyle } from '../lib/haptics';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import { ThemedText } from '../components/ThemedText';
@@ -157,7 +157,7 @@ export function InspectionScreen({ route, navigation }: any) {
     onSuccess: () => {
       setUploadProgress(null);
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}`] });
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
       navigation.goBack();
     },
     onError: (err: any) => {
@@ -182,7 +182,7 @@ export function InspectionScreen({ route, navigation }: any) {
       ...prev,
       [key]: { ...prev[key], status },
     }));
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    triggerImpact(ImpactFeedbackStyle.Light);
   }
 
   function toggleIssue(key: string, issue: string) {
@@ -226,7 +226,7 @@ export function InspectionScreen({ route, navigation }: any) {
           },
         },
       }));
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
     }
   }
 
@@ -250,7 +250,7 @@ export function InspectionScreen({ route, navigation }: any) {
           },
         },
       }));
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      triggerNotification(NotificationFeedbackType.Success);
     }
   }
 
@@ -289,7 +289,7 @@ export function InspectionScreen({ route, navigation }: any) {
   function handleSave() {
     const missing = getMissingPhotoCategories();
     if (missing.length > 0) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      triggerNotification(NotificationFeedbackType.Warning);
       return;
     }
 
