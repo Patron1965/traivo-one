@@ -79,6 +79,11 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **External Optimization:** Route optimization is offloaded to a separate Traivo optimization service.
 - **Data Validation:** DataClean service handles external data validation and geocoding.
 - **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app.
+- **Article Service Constraints:** `maxPerAddress` field on articles for limiting service count per address (e.g., 1 etablering per address).
+- **Field Worker Task Summary:** Aggregated task type counts ("10 tvättar, 2 besiktningar") in SimpleFieldApp job list header.
+- **Route GPS Start:** Route optimizer uses live GPS position (if recent <30min) as start point instead of home coordinates.
+- **Carry-Over Logic:** `POST /api/work-orders/carry-over` endpoint and WeekPlanner "Flytta oavslutade" button for moving unfinished jobs from yesterday to today.
+- **Proactive Sales View:** `/proactive-sales` page showing inactive customers (configurable threshold), historical revenue, and contact information.
 
 ## External Dependencies
 - **PostgreSQL:** Primary database.

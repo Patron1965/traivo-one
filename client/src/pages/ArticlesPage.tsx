@@ -155,6 +155,7 @@ interface ArticleFormData {
   fetchMetadataCode: string;
   leaveMetadataCode: string;
   leaveMetadataFormat: string;
+  maxPerAddress: number | null;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -173,6 +174,7 @@ const emptyFormData: ArticleFormData = {
   fetchMetadataCode: "",
   leaveMetadataCode: "",
   leaveMetadataFormat: "",
+  maxPerAddress: null,
 };
 
 export default function ArticlesPage() {
@@ -289,6 +291,7 @@ export default function ArticlesPage() {
       fetchMetadataCode: (article as any).fetchMetadataCode || "",
       leaveMetadataCode: (article as any).leaveMetadataCode || "",
       leaveMetadataFormat: (article as any).leaveMetadataFormat || "",
+      maxPerAddress: (article as any).maxPerAddress ?? null,
     });
     setDialogOpen(true);
   };
@@ -984,6 +987,33 @@ export default function ArticlesPage() {
                   </div>
                   <p className="text-xs text-muted-foreground">
                     Artikeln kommer endast att gälla för objekt som har en registrerad accesskod (t.ex. portkod)
+                  </p>
+                </div>
+              )}
+
+              {formData.hookLevel && formData.hookLevel !== "" && (
+                <div className="space-y-2 p-3 rounded-md border bg-muted/30">
+                  <Label htmlFor="maxPerAddress">Max antal per adress</Label>
+                  <div className="flex items-center gap-3">
+                    <Input
+                      id="maxPerAddress"
+                      type="number"
+                      min={1}
+                      placeholder="Obegränsat"
+                      value={formData.maxPerAddress ?? ""}
+                      onChange={(e) => setFormData({ 
+                        ...formData, 
+                        maxPerAddress: e.target.value ? parseInt(e.target.value) : null 
+                      })}
+                      className="w-32"
+                      data-testid="input-max-per-address"
+                    />
+                    <span className="text-xs text-muted-foreground">
+                      {formData.maxPerAddress ? `Max ${formData.maxPerAddress} per adress` : "Ingen begränsning"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    T.ex. etablering = 1 per adress, tvätt = obegränsad
                   </p>
                 </div>
               )}

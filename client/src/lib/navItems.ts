@@ -98,6 +98,7 @@ export function getAnalysItems(): NavItem[] {
   return [
     { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
     { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
+    { title: "Proaktiv försäljning", url: "/proactive-sales", icon: TrendingUp, description: "Inaktiva kunder & intäkter" },
     { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
     { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
     { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },

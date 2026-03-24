@@ -2124,6 +2124,29 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
           compact 
         />
 
+        {todayJobs.length > 0 && (() => {
+          const typeCounts: Record<string, number> = {};
+          for (const job of todayJobs) {
+            const type = job.orderType || "service";
+            typeCounts[type] = (typeCounts[type] || 0) + 1;
+          }
+          const typeLabels: Record<string, string> = {
+            service: "servicejobb", tvatt: "tvättar", besiktning: "besiktningar",
+            kontroll: "kontroller", etablering: "etableringar", tomning: "tömningar",
+            reparation: "reparationer", installation: "installationer",
+          };
+          const parts = Object.entries(typeCounts)
+            .sort((a, b) => b[1] - a[1])
+            .map(([type, count]) => `${count} ${typeLabels[type] || type}`);
+          return (
+            <div className="bg-muted/50 rounded-lg px-3 py-2 text-center" data-testid="summary-task-types">
+              <p className="text-sm font-medium text-muted-foreground">
+                {parts.join(", ")}
+              </p>
+            </div>
+          );
+        })()}
+
         {(() => {
           const nextPendingJob = getNextPendingJob();
           if (!nextPendingJob) return null;

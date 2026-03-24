@@ -390,6 +390,24 @@ export function usePlannerData() {
     try { const data = await (await apiRequest("POST", "/api/auto-plan-week/apply", { assignments: autoFillPreview })).json(); toast({ title: "Planering tillämpad", description: `${data.applied} uppdrag planerade${autoFillSkipped > 0 ? `, ${autoFillSkipped} ryms ej denna vecka` : ""}` }); setAutoFillDialogOpen(false); setAutoFillPreview(null); queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] }); setUnscheduledPage(0); } catch { toast({ title: "Fel", description: "Kunde inte tillämpa planering", variant: "destructive" }); } finally { setAutoFillApplying(false); }
   };
 
+  const handleCarryOver = useCallback(async () => {
+    const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+    const today = new Date();
+    try {
+      const data = await (await apiRequest("POST", "/api/work-orders/carry-over", { 
+        fromDate: format(yesterday, "yyyy-MM-dd"), 
+        toDate: format(today, "yyyy-MM-dd") 
+      })).json();
+      queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
+      setUnscheduledPage(0);
+      if (data.moved > 0) {
+        toast({ title: "Jobb flyttade", description: `${data.moved} oavslutade jobb från igår flyttade till idag.` });
+      } else {
+        toast({ title: "Inga jobb att flytta", description: "Alla jobb från igår är redan avslutade." });
+      }
+    } catch { toast({ title: "Fel", description: "Kunde inte flytta jobb", variant: "destructive" }); }
+  }, [toast]);
+
   const handleOpenDepChain = useCallback((jobId: string) => { setDepChainJobId(jobId); setDepChainDialogOpen(true); }, []);
   const handleToggleSubStep = useCallback((jobId: string) => setExpandedSubSteps(prev => ({ ...prev, [jobId]: !prev[jobId] })), []);
 
@@ -459,7 +477,7 @@ export function usePlannerData() {
     handleJobClick, handleOpenAssignDialog, handleQuickAssign,
     handleAcceptConflict, handleUnschedule, handleUndo, handleRedo,
     handleResourceClick, handleSendSchedule, handleSendScheduleEmail, handleCopyFieldAppLink,
-    handleOptimizeRoute, handleClearAllScheduled, handleAutoFillPreview, handleAutoFillApply,
+    handleOptimizeRoute, handleClearAllScheduled, handleAutoFillPreview, handleAutoFillApply, handleCarryOver,
     handleOpenDepChain, handleToggleSubStep,
     executeSchedule, detectConflictsForJob,
     selectedJobIds, toggleJobSelection, clearSelection, selectAllVisible,

@@ -237,9 +237,14 @@ export async function optimizeResourceDayRoute(
   const originalStops = [...stops];
   const originalOrder = originalStops.map(s => s.workOrderId);
   
-  const startCoord = resource?.homeLatitude && resource?.homeLongitude
-    ? { lat: resource.homeLatitude, lng: resource.homeLongitude }
-    : undefined;
+  const hasLivePosition = resource?.currentLatitude && resource?.currentLongitude && resource?.lastPositionUpdate 
+    && (Date.now() - new Date(resource.lastPositionUpdate).getTime()) < 30 * 60 * 1000;
+  
+  const startCoord = hasLivePosition
+    ? { lat: resource.currentLatitude!, lng: resource.currentLongitude! }
+    : (resource?.homeLatitude && resource?.homeLongitude
+      ? { lat: resource.homeLatitude, lng: resource.homeLongitude }
+      : undefined);
   
   // Beräkna originaldistans från den ursprungliga ordningen
   const originalDistance = calculateTotalDistance(originalStops, startCoord);

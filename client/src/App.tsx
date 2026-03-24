@@ -94,6 +94,7 @@ const ROIReportPage = lazy(() => import("@/pages/ROIReportPage"));
 const InspectionSearchPage = lazy(() => import("@/pages/InspectionSearchPage"));
 const InvoicingPage = lazy(() => import("@/pages/InvoicingPage"));
 const FleetManagementPage = lazy(() => import("@/pages/FleetManagementPage"));
+const ProactiveSalesPage = lazy(() => import("@/pages/ProactiveSalesPage"));
 const PlannerMapPage = lazy(() => import("@/pages/PlannerMapPage"));
 const HistoricalMapPage = lazy(() => import("@/pages/HistoricalMapPage"));
 const ChecklistTemplatesPage = lazy(() => import("@/pages/ChecklistTemplatesPage"));
@@ -172,6 +173,7 @@ function Router() {
         <Route path="/pitch">{() => <ProtectedRoute component={PitchPage} path="/pitch" />}</Route>
         <Route path="/ai-assistant">{() => <ProtectedRoute component={AIAssistantPage} path="/ai-assistant" />}</Route>
         <Route path="/reporting">{() => <ProtectedRoute component={ReportingDashboardPage} path="/reporting" />}</Route>
+        <Route path="/proactive-sales">{() => <ProtectedRoute component={ProactiveSalesPage} path="/proactive-sales" />}</Route>
         <Route path="/workflow-guide">{() => <ProtectedRoute component={WorkflowGuidePage} path="/workflow-guide" />}</Route>
         <Route path="/data-requirements">{() => <ProtectedRoute component={DataRequirementsPage} path="/data-requirements" />}</Route>
         <Route path="/investor-pitch">{() => <ProtectedRoute component={InvestorPitchPage} path="/investor-pitch" />}</Route>

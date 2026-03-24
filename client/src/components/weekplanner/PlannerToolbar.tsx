@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode } from "./types";
 import { zoomLevels } from "./types";
@@ -33,6 +33,7 @@ interface PlannerToolbarProps {
   onAddJob?: () => void;
   onAutoFill: () => void;
   onClearAll: () => void;
+  onCarryOver?: () => void;
   showAIPanel?: boolean;
   onToggleAIPanel?: () => void;
   weekGoals: {
@@ -67,7 +68,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     undoCount, redoCount, onUndo, onRedo,
     zoomLevel, setZoomLevel,
     resources, visibleResources, hiddenResourceIds, setHiddenResourceIds,
-    onAddJob, onAutoFill, onClearAll, showAIPanel, onToggleAIPanel,
+    onAddJob, onAutoFill, onClearAll, onCarryOver, showAIPanel, onToggleAIPanel,
     weekGoals, weekTravelTotal,
     visibleDates, getResourceDayHours,
     jobConflictCount, filteredScheduledCount, unscheduledCount,
@@ -232,6 +233,16 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
           <Button variant="outline" onClick={onAutoFill} data-testid="button-auto-fill-week">
             <Wand2 className="h-4 w-4 mr-2" />Fyll veckan
           </Button>
+          {onCarryOver && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" onClick={onCarryOver} data-testid="button-carry-over">
+                  <ArrowRight className="h-4 w-4 mr-2" />Flytta oavslutade
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Flytta gårdagens oavslutade jobb till idag</TooltipContent>
+            </Tooltip>
+          )}
           <Tooltip>
             <TooltipTrigger asChild>
               <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10" onClick={onClearAll} data-testid="button-clear-all-scheduled">

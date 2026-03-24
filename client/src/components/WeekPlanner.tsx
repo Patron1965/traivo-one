@@ -99,6 +99,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             hiddenResourceIds={d.hiddenResourceIds} setHiddenResourceIds={d.setHiddenResourceIds}
             onAddJob={onAddJob} onAutoFill={() => { d.setAutoFillDialogOpen(true); }}
             onClearAll={() => d.setClearDialogOpen(true)}
+            onCarryOver={d.handleCarryOver}
             showAIPanel={showAIPanel} onToggleAIPanel={onToggleAIPanel}
             weekGoals={d.weekGoals} weekTravelTotal={d.weekTravelTotal}
             visibleDates={d.visibleDates} getResourceDayHours={d.getResourceDayHours}

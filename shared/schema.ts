@@ -432,6 +432,7 @@ export const articles = pgTable("articles", {
   leaveMetadataFormat: text("leave_metadata_format"),
   // Associations-kod för artikelhook mot metadata-typ
   associationCode: text("association_code"),
+  maxPerAddress: integer("max_per_address"),
   // Intern beskrivning för utförare
   internalDescription: text("internal_description"),
   // Länk till arbetsbeskrivning

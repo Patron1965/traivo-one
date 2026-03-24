@@ -112,6 +112,37 @@ app.post("/api/work-orders/bulk-unschedule", asyncHandler(async (req, res) => {
   res.json({ count });
 }));
 
+app.post("/api/work-orders/carry-over", asyncHandler(async (req, res) => {
+  const tenantId = getTenantIdWithFallback(req);
+  const { fromDate, toDate, resourceIds } = req.body;
+  if (!fromDate || !toDate) throw new ValidationError("fromDate och toDate krävs");
+  
+  const from = new Date(fromDate);
+  const to = new Date(toDate);
+  const fromStart = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 0, 0, 0);
+  const fromEnd = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 23, 59, 59);
+  
+  const allOrders = await storage.getWorkOrders(tenantId);
+  const unfinished = allOrders.filter(wo => {
+    if (!wo.scheduledDate) return false;
+    const d = new Date(wo.scheduledDate);
+    if (d < fromStart || d > fromEnd) return false;
+    if (resourceIds?.length && !resourceIds.includes(wo.resourceId)) return false;
+    return !["utford", "fakturerad", "avbruten", "omojlig"].includes(wo.orderStatus);
+  });
+  
+  let movedCount = 0;
+  for (const wo of unfinished) {
+    await storage.updateWorkOrder(wo.id, { 
+      scheduledDate: to,
+      orderStatus: wo.orderStatus === "paborjad" ? "planerad_resurs" : wo.orderStatus
+    });
+    movedCount++;
+  }
+  
+  res.json({ moved: movedCount, toDate: to.toISOString().split("T")[0] });
+}));
+
 app.post("/api/work-orders", asyncHandler(async (req, res) => {
   const tenantId = getTenantIdWithFallback(req);
 
