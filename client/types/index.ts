@@ -460,3 +460,54 @@ export interface OrderChecklist {
   articleTypes: string[];
   checklists: ChecklistTemplate[];
 }
+
+export type ChangeRequestCategory =
+  | 'antal_karl_andrat'
+  | 'skadat_material'
+  | 'tillganglighet'
+  | 'skador'
+  | 'rengorings_behov'
+  | 'ovrigt';
+
+export const CHANGE_REQUEST_CATEGORIES: Record<ChangeRequestCategory, string> = {
+  antal_karl_andrat: 'Antal kärl ändrat',
+  skadat_material: 'Skadat material',
+  tillganglighet: 'Tillgänglighetsproblem',
+  skador: 'Skador',
+  rengorings_behov: 'Rengöringsbehov',
+  ovrigt: 'Övrigt',
+};
+
+export type ChangeRequestStatus = 'new' | 'reviewed' | 'resolved' | 'rejected';
+
+export const CHANGE_REQUEST_STATUS_LABELS: Record<ChangeRequestStatus, string> = {
+  new: 'Ny',
+  reviewed: 'Under granskning',
+  resolved: 'Löst',
+  rejected: 'Avvisad',
+};
+
+export interface CustomerChangeRequest {
+  id: string;
+  category: ChangeRequestCategory;
+  description: string;
+  severity?: string;
+  status: ChangeRequestStatus;
+  objectId?: string;
+  objectName?: string;
+  customerId?: string;
+  customerName?: string;
+  photos?: string[];
+  reportedByName: string;
+  reportedByResourceId: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  reviewNotes?: string;
+  createdAt: string;
+}
+
+export interface DeviationWithOrder extends Deviation {
+  orderNumber?: string;
+  customerName?: string;
+  address?: string;
+}

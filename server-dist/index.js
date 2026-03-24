@@ -2746,6 +2746,198 @@ router.get("/terminology", async (req, res) => {
   }
   res.json({ success: true, terminology });
 });
+var CHANGE_REQUEST_CATEGORIES = [
+  { id: "antal_karl_andrat", name: "Antal k\xE4rl \xE4ndrat", icon: "package" },
+  { id: "skadat_material", name: "Skadat material", icon: "alert-triangle" },
+  { id: "tillganglighet", name: "Tillg\xE4nglighetsproblem", icon: "map-pin" },
+  { id: "skador", name: "Skador", icon: "alert-circle" },
+  { id: "rengorings_behov", name: "Reng\xF6ringsbehov", icon: "droplet" },
+  { id: "ovrigt", name: "\xD6vrigt", icon: "more-horizontal" }
+];
+var MOCK_CHANGE_REQUESTS = [
+  {
+    id: "cr-1",
+    category: "skadat_material",
+    description: "K\xE4rlet har spricka i sidan, l\xE4cker vid regn.",
+    severity: "high",
+    status: "new",
+    objectId: "obj-101",
+    objectName: "K\xE4rl 240L - BRF Solsidan",
+    customerId: "cust-1",
+    customerName: "BRF Solsidan",
+    photos: [],
+    reportedByName: "Erik Lindqvist",
+    reportedByResourceId: "101",
+    createdAt: new Date(Date.now() - 864e5 * 2).toISOString()
+  },
+  {
+    id: "cr-2",
+    category: "tillganglighet",
+    description: "Parkerade bilar blockerar regelbundet infartsv\xE4gen till k\xE4rlutrymmet.",
+    severity: "medium",
+    status: "reviewed",
+    objectId: "obj-202",
+    objectName: "Container 8m\xB3 - Fastighets AB Norden",
+    customerId: "cust-2",
+    customerName: "Fastighets AB Norden",
+    photos: [],
+    reportedByName: "Erik Lindqvist",
+    reportedByResourceId: "101",
+    reviewedBy: "Lisa Plansson",
+    reviewedAt: new Date(Date.now() - 864e5).toISOString(),
+    reviewNotes: "Kontaktat fastighets\xE4garen, skyltar best\xE4llda.",
+    createdAt: new Date(Date.now() - 864e5 * 5).toISOString()
+  },
+  {
+    id: "cr-3",
+    category: "antal_karl_andrat",
+    description: "Beh\xF6ver ett extra 370L k\xE4rl f\xF6r tr\xE4dg\xE5rdsavfall.",
+    severity: "low",
+    status: "resolved",
+    objectId: "obj-101",
+    objectName: "K\xE4rl 240L - BRF Solsidan",
+    customerId: "cust-1",
+    customerName: "BRF Solsidan",
+    photos: [],
+    reportedByName: "Erik Lindqvist",
+    reportedByResourceId: "101",
+    reviewedBy: "Lisa Plansson",
+    reviewedAt: new Date(Date.now() - 864e5 * 3).toISOString(),
+    reviewNotes: "Arbetsorder skapad: WO-2026-0500",
+    createdAt: new Date(Date.now() - 864e5 * 10).toISOString()
+  }
+];
+router.get("/customer-change-requests/categories", async (_req, res) => {
+  res.json({ success: true, categories: CHANGE_REQUEST_CATEGORIES });
+});
+router.get("/customer-change-requests/mine", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const resourceId = String(req.mobileResourceId || MOCK_RESOURCE.id);
+    const mine = MOCK_CHANGE_REQUESTS.filter((r) => r.reportedByResourceId === resourceId);
+    res.json({ success: true, items: mine, total: mine.length });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/customer-change-requests/mine", {
+      headers: getAuthHeader(req)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("Customer change requests mine error:", error?.message);
+    res.status(503).json({ error: "Kunde inte h\xE4mta kundrapporter." });
+  }
+});
+router.post("/customer-change-requests", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const newReport = {
+      id: `cr-${Date.now()}`,
+      ...req.body,
+      status: "new",
+      reportedByName: MOCK_RESOURCE.name,
+      reportedByResourceId: String(MOCK_RESOURCE.id),
+      createdAt: (/* @__PURE__ */ new Date()).toISOString()
+    };
+    MOCK_CHANGE_REQUESTS.unshift(newReport);
+    if (MOCK_CHANGE_REQUESTS.length > MOCK_MAX_LOGS) MOCK_CHANGE_REQUESTS.splice(MOCK_MAX_LOGS);
+    res.json({ success: true, report: newReport });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/customer-change-requests", {
+      method: "POST",
+      headers: getAuthHeader(req),
+      body: JSON.stringify(req.body)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("Customer change request create error:", error?.message);
+    res.status(503).json({ error: "Kunde inte skapa kundrapport." });
+  }
+});
+router.get("/deviations/mine", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const allDeviations = [];
+    for (const order of MOCK_ORDERS) {
+      if (order.deviations) {
+        for (const d of order.deviations) {
+          allDeviations.push({
+            ...d,
+            orderNumber: order.orderNumber,
+            customerName: order.customerName,
+            address: order.address
+          });
+        }
+      }
+    }
+    allDeviations.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    res.json({ success: true, items: allDeviations, total: allDeviations.length });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/deviations/mine", {
+      headers: getAuthHeader(req)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("My deviations error:", error?.message);
+    res.status(503).json({ error: "Kunde inte h\xE4mta avvikelser." });
+  }
+});
+router.post("/work-orders/carry-over", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const yesterday = /* @__PURE__ */ new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const incomplete = MOCK_ORDERS.filter(
+      (o) => !["completed", "utford", "fakturerad", "cancelled", "impossible"].includes(o.status)
+    );
+    const carriedOver = incomplete.map((o) => ({
+      id: o.id,
+      orderNumber: o.orderNumber,
+      customerName: o.customerName,
+      previousDate: yesterday.toISOString().split("T")[0],
+      newDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
+    }));
+    res.json({ success: true, carriedOver, count: carriedOver.length });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/work-orders/carry-over", {
+      method: "POST",
+      headers: getAuthHeader(req),
+      body: JSON.stringify(req.body)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("Carry-over error:", error?.message);
+    res.status(503).json({ error: "Kunde inte flytta ordrar." });
+  }
+});
+router.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const order = findMockOrder(req.params.id);
+    if (!order) {
+      res.status(404).json({ error: "Order hittades inte" });
+      return;
+    }
+    res.json({
+      success: true,
+      message: `ETA-SMS skickat till ${order.customerName}`,
+      estimatedArrival: new Date(Date.now() + (order.estimatedMinutes || 15) * 6e4).toISOString()
+    });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/work-orders/${req.params.id}/auto-eta-sms`, {
+      method: "POST",
+      headers: getAuthHeader(req),
+      body: JSON.stringify(req.body)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("Auto ETA SMS error:", error?.message);
+    res.status(503).json({ error: "Kunde inte skicka ETA-SMS." });
+  }
+});
 
 // server/routes/ai.ts
 var import_express2 = require("express");

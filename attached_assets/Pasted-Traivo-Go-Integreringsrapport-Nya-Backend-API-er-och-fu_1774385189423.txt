@@ -1,0 +1,111 @@
+Traivo Go — Integreringsrapport: Nya Backend-API:er och funktioner (Mars 2026)
+Backend-URL
+Peka Traivo Go mot: https://8a66c250-81a0-4795-8b10-d7e5288aac2f-00-31xofz3v62pfu.worf.replit.dev
+
+1. Autentisering — Mobil Token Bridge
+Traivo Go kan autentisera via PIN/lösenord som förut, men det finns nu också en webb-brygga:
+
+Befintlig login:
+
+POST /api/mobile/login
+Body: { email, pin } eller { username, password }
+Response: { token, resourceId, expiresIn }
+Token-hantering:
+
+Alla mobil-API-anrop kräver header: Authorization: Bearer <token>
+Token gäller 24 timmar
+req.mobileResourceId identifierar den autentiserade resursen i alla endpoints
+2. NYA Endpoints — Avvikelser & Kundrapporter
+Skapa avvikelse på en order:
+
+POST /api/mobile/orders/:id/deviations
+Body: { type, description, severity, category, photos[] }
+Auth: Bearer token (order.resourceId måste matcha req.mobileResourceId)
+Hämta mina avvikelser:
+
+GET /api/mobile/deviations/mine
+Auth: Bearer token (filtrerar på resource.name matchning mot reportedByName)
+Kundrapporter (Change Requests):
+
+POST /api/mobile/customer-change-requests
+Body: { category, description, severity, objectId, customerId, photos[] }
+GET /api/mobile/customer-change-requests/mine
+GET /api/mobile/customer-change-requests/categories
+Foto-upload via presigned URL (tvåstegs-flow):
+
+POST /api/mobile/customer-change-requests/upload-photo
+Response: { uploadUrl, filePath }
+POST /api/mobile/customer-change-requests/confirm-photo  
+Body: { filePath }
+3. NYA Endpoints — Fältarbetaruppgifter (Task Dependencies)
+GET /api/field-worker/tasks?date=YYYY-MM-DD&resourceId=xxx
+POST /api/field-worker/tasks/:id/start
+POST /api/field-worker/tasks/:id/complete
+POST /api/field-worker/tasks/:id/update-metadata
+Dessa stödjer beroendehantering mellan uppgifter (en uppgift kan blockeras tills en annan är klar).
+
+4. Alla befintliga Mobile-API:er (komplett referens)
+Work Orders:
+
+GET    /api/mobile/my-orders?date=YYYY-MM-DD
+GET    /api/mobile/orders/:id
+PATCH  /api/mobile/orders/:id/status    — Body: { status } (on_way, on_site, completed)
+POST   /api/mobile/orders/:id/notes     — Body: { text }
+POST   /api/mobile/orders/:id/signature — Body: { signatureData, signerName }
+POST   /api/mobile/orders/:id/photos    — Body: { photoData (base64), description }
+POST   /api/mobile/orders/:id/materials — Body: { articleId, quantity }
+POST   /api/mobile/orders/:id/inspections
+POST   /api/mobile/orders/:id/deviations
+GET    /api/mobile/orders/:id/checklist
+POST   /api/mobile/orders/:id/checklist
+PATCH  /api/mobile/orders/:id/substeps/:stepId
+GET    /api/mobile/summary
+POST   /api/mobile/quick-action
+GPS & Navigering:
+
+POST   /api/mobile/position    — Body: { latitude, longitude, speed, heading, accuracy, status }
+POST   /api/mobile/gps         — Alternativ GPS-endpoint
+POST   /api/mobile/travel-times — Body: { origins[], destinations[] }
+POST   /api/work-orders/:id/auto-eta-sms — Skickar ETA-SMS till kund
+Work Sessions (Snöret — tidsregistrering):
+
+POST   /api/mobile/work-sessions/start
+GET    /api/mobile/work-sessions/active
+PATCH  /api/mobile/work-sessions/:id/stop
+PATCH  /api/mobile/work-sessions/:id/pause
+PATCH  /api/mobile/work-sessions/:id/resume
+AI-funktioner:
+
+POST   /api/mobile/ai/chat       — Kontextmedveten AI-assistent
+POST   /api/mobile/ai/transcribe — Whisper röst-till-text
+POST   /api/mobile/ai/analyze-image — AI-bildanalys (kategori + allvarlighet)
+Offline sync:
+
+POST   /api/mobile/sync         — Batch-sync av offline-åtgärder
+GET    /api/mobile/sync/status
+Övrigt:
+
+GET    /api/mobile/weather
+GET    /api/mobile/notifications
+PATCH  /api/mobile/notifications/:id/read
+GET    /api/mobile/terminology   — Tenant-specifika benämningar
+GET    /api/mobile/articles      — Artikelsökning
+5. Ny funktionalitet i SimpleFieldApp (referens för Go)
+Dessa funktioner finns i webb-appen och bör implementeras/uppdateras i Traivo Go:
+
+Uppgiftssammanfattning: Aggregerade räkningar ovanför jobblistan ("3 tvättar, 2 besiktningar")
+Nästa stopp-kort: Navigation med avstånd/tid per jobb, deep link till Apple/Google Maps
+Planerade anteckningar: plannedNotes-fält på work orders — planerarens meddelande till fältarbetaren
+10-minuters varning: Toast/notis 10 min innan nästa schemalagt jobb
+Carry-over logik: POST /api/work-orders/carry-over — flytta gårdagens oavslutade jobb till idag
+Route GPS start: Ruttoptimering använder live GPS-position (om <30 min gammal) istället för hemadress
+Smart kontrollmallar: AI-föreslagna checklista-steg baserade på ordertyp och historik
+WebSocket-notiser: Anslut till /ws/notifications med Bearer token för realtidsuppdateringar (job_assigned, job_cancelled, schedule_changed)
+6. Demodata
+Backend har nu demodata med 8 arbetsordrar schemalagda på dagens datum, kopplade till resursen "Tomas Björnberg" (res-tomas). Dessa uppdateras automatiskt till dagens datum vid varje serverstart, så Traivo Go alltid har jobb att visa.
+
+Testresurs: res-tomas (tomas@nordicrouting.se)
+Kunder: Telgebostäder AB, BRF Strandhöjden, Södertälje Kommun, Förvaltaren Fastigheter
+Jobbtyper: tvätt, besiktning, kontroll, service, etablering
+
+Klistra in detta i Traivo Go-projektet så har du en komplett referens för vad backend:en stödjer!

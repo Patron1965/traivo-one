@@ -17,6 +17,8 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import StatisticsScreen from '../screens/StatisticsScreen';
 import { RouteFeedbackScreen } from '../screens/RouteFeedbackScreen';
 import { TeamScreen } from '../screens/TeamScreen';
+import { CustomerReportsScreen } from '../screens/CustomerReportsScreen';
+import { MyDeviationsScreen } from '../screens/MyDeviationsScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 import { FIELD_APP_ALLOWED_ROLES } from '../types';
@@ -139,6 +141,16 @@ export function RootNavigator() {
               name="Team"
               component={TeamScreen}
               options={{ headerTitle: 'Mitt team' }}
+            />
+            <Stack.Screen
+              name="CustomerReports"
+              component={CustomerReportsScreen}
+              options={{ headerTitle: 'Kundrapporter' }}
+            />
+            <Stack.Screen
+              name="MyDeviations"
+              component={MyDeviationsScreen}
+              options={{ headerTitle: 'Mina avvikelser' }}
             />
           </>
         ) : (

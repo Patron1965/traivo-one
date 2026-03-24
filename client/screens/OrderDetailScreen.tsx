@@ -173,6 +173,8 @@ const ActionButtons = React.memo(function ActionButtons({
   onSignature,
   onCustomerSignOff,
   onAiTip,
+  onSendEta,
+  etaSending,
 }: {
   orderId: number | string;
   articles: Order['articles'];
@@ -184,6 +186,8 @@ const ActionButtons = React.memo(function ActionButtons({
   onSignature: () => void;
   onCustomerSignOff: () => void;
   onAiTip: () => void;
+  onSendEta: () => void;
+  etaSending: boolean;
 }) {
   return (
     <Card>
@@ -251,6 +255,21 @@ const ActionButtons = React.memo(function ActionButtons({
             <ThemedText variant="caption" style={styles.actionLabel}>Kundkvittering</ThemedText>
           </Pressable>
         ) : null}
+        <Pressable
+          style={styles.actionGridItem}
+          onPress={onSendEta}
+          disabled={etaSending}
+          testID="button-send-eta"
+        >
+          <View style={[styles.actionIconBox, { backgroundColor: '#E8F5E9' }]}>
+            {etaSending ? (
+              <ActivityIndicator size="small" color={Colors.success} />
+            ) : (
+              <Feather name="send" size={24} color={Colors.success} />
+            )}
+          </View>
+          <ThemedText variant="caption" style={styles.actionLabel}>ETA SMS</ThemedText>
+        </Pressable>
         <Pressable
           style={styles.actionGridItem}
           onPress={onAiTip}
@@ -501,6 +520,27 @@ export function OrderDetailScreen({ route, navigation }: any) {
   const handleNavigateCustomerSignOff = useCallback(() => {
     navigation.navigate('CustomerSignOff', { orderId });
   }, [navigation, orderId]);
+
+  const [etaMessage, setEtaMessage] = useState<{ text: string; isError: boolean } | null>(null);
+  const etaMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest('POST', `/api/mobile/work-orders/${orderId}/auto-eta-sms`, {});
+    },
+    onSuccess: (data: any) => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setEtaMessage({ text: data?.message || 'ETA-SMS skickat!', isError: false });
+      setTimeout(() => setEtaMessage(null), 3000);
+    },
+    onError: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setEtaMessage({ text: 'Kunde inte skicka ETA-SMS. Försök igen.', isError: true });
+      setTimeout(() => setEtaMessage(null), 5000);
+    },
+  });
+
+  const handleSendEta = useCallback(() => {
+    etaMutation.mutate();
+  }, [etaMutation]);
 
   function formatNoteDate(dateStr: string): string {
     const d = new Date(dateStr);
@@ -788,7 +828,18 @@ export function OrderDetailScreen({ route, navigation }: any) {
           onSignature={handleNavigateSignature}
           onCustomerSignOff={handleNavigateCustomerSignOff}
           onAiTip={handleAiTip}
+          onSendEta={handleSendEta}
+          etaSending={etaMutation.isPending}
         />
+
+        {etaMessage ? (
+          <View style={[styles.etaFeedback, { backgroundColor: etaMessage.isError ? Colors.error + '15' : Colors.success + '15' }]}>
+            <Feather name={etaMessage.isError ? 'alert-circle' : 'check-circle'} size={14} color={etaMessage.isError ? Colors.error : Colors.success} />
+            <ThemedText variant="caption" color={etaMessage.isError ? Colors.error : Colors.success}>
+              {etaMessage.text}
+            </ThemedText>
+          </View>
+        ) : null}
 
         {timeEntries && timeEntries.length > 0 ? (
           <Card>
@@ -1346,6 +1397,15 @@ const styles = StyleSheet.create({
     fontSize: FontSize.xs,
     textAlign: 'center',
     color: Colors.text,
+  },
+  etaFeedback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    marginBottom: Spacing.sm,
   },
   bottomBar: {
     position: 'absolute',

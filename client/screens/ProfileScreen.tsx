@@ -309,6 +309,26 @@ export function ProfileScreen() {
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
         <View style={styles.divider} />
+        <Pressable style={styles.menuItem} onPress={() => navigation.navigate('CustomerReports')} testID="button-customer-reports">
+          <View style={styles.menuLeft}>
+            <View style={[styles.menuIcon, { backgroundColor: '#E8F5E9' }]}>
+              <Feather name="file-text" size={16} color={Colors.success} />
+            </View>
+            <ThemedText variant="body">Kundrapporter</ThemedText>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
+        <View style={styles.divider} />
+        <Pressable style={styles.menuItem} onPress={() => navigation.navigate('MyDeviations')} testID="button-my-deviations">
+          <View style={styles.menuLeft}>
+            <View style={[styles.menuIcon, { backgroundColor: '#FFF3E0' }]}>
+              <Feather name="alert-triangle" size={16} color="#E67E22" />
+            </View>
+            <ThemedText variant="body">Mina avvikelser</ThemedText>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
+        <View style={styles.divider} />
         <Pressable style={styles.menuItem} onPress={() => navigation.navigate('RouteFeedback')} testID="button-route-feedback">
           <View style={styles.menuLeft}>
             <View style={[styles.menuIcon, { backgroundColor: '#FFF8E1' }]}>

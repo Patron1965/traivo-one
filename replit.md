@@ -37,6 +37,11 @@ The application is built using React Native with Expo SDK 54 and TypeScript for 
 - **Route Feedback:** RouteFeedbackScreen with 1-5 star rating, reason categories (too long, too short, logical, illogical, good, traffic), and comment field. Database table `route_feedback`. Accessible from ProfileScreen. GET `/api/mobile/route-feedback/mine` and POST `/api/mobile/route-feedback` endpoints.
 - **Terminology:** GET `/api/mobile/terminology` endpoint returning tenant-specific Swedish terms. Falls back to built-in defaults in mock mode, forwards to Traivo API in production.
 - **Auto-Logout:** 24-hour inactivity timeout. Activity recorded on login, app foregrounding, and API interactions. Checked every 5 minutes and on app state changes.
+- **Customer Change Requests (Kundrapporter):** CustomerReportsScreen with create modal (category grid, severity chips, description), list view with KPI badges (new/reviewed/resolved/rejected counts), detail modal with review notes. POST/GET `/api/mobile/customer-change-requests`, GET `/mine`. Categories: `antal_karl_andrat`, `karl_saknas`, `extra_karl`, `felaktig_adress`, `tillganglighet`, `ovrigt`. Accessible from ProfileScreen. Types: `CustomerChangeRequest`, `ChangeRequestCategory`, `ChangeRequestStatus`.
+- **My Deviations (Mina avvikelser):** MyDeviationsScreen showing driver's own deviation history with category summary, status badges, and tap-to-navigate to parent order. GET `/api/mobile/deviations/mine` endpoint. Accessible from ProfileScreen.
+- **Carry-Over Orders:** Banner on HomeScreen detecting orders from previous days still not completed, with "Flytta" button to carry them to today via POST `/api/mobile/work-orders/carry-over`.
+- **ETA SMS:** "ETA SMS" action button on OrderDetailScreen to send automatic ETA notification to customer via POST `/api/mobile/work-orders/:id/auto-eta-sms`.
+- **HomeScreen Enhancements:** Task type summary badge (e.g. "3 kärl, 2 containers"), 10-minute warning card before scheduled jobs, full weather display row (temp/description/wind/precipitation), next order card with address + navigate-to-Maps deep link + estimated minutes.
 - **Branding & UI:** Rebranded to "Traivo Go" with Traivo logo, "Midnight Sun" color scheme, custom icons, and a focus on intuitive UI/UX across screens like Profile, AI Assistant, and Orders.
 
 **Deployment:**

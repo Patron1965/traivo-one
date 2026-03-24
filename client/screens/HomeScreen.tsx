@@ -2,7 +2,7 @@ import React, { useCallback, useMemo, useState, useRef, useEffect } from 'react'
 import { View, ScrollView, Pressable, StyleSheet, RefreshControl, ActivityIndicator, Platform, Animated, Linking, Modal } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
 import { Audio } from 'expo-av';
 import * as FileSystem from 'expo-file-system';
@@ -170,6 +170,60 @@ export function HomeScreen({ navigation }: any) {
 
   const breakSuggestion = useMemo(() => computeBreakSuggestion(orders), [orders]);
   const [breakDismissed, setBreakDismissed] = React.useState(false);
+
+  const [carryOverDismissed, setCarryOverDismissed] = useState(false);
+  const carryOverOrders = useMemo(() => {
+    if (!orders) return [];
+    const today = new Date().toISOString().split('T')[0];
+    return orders.filter(o => {
+      if (!o.scheduledDate) return false;
+      const scheduled = typeof o.scheduledDate === 'string' ? o.scheduledDate.split('T')[0] : '';
+      return scheduled < today && !['completed', 'utford', 'fakturerad', 'cancelled', 'impossible'].includes(o.status);
+    });
+  }, [orders]);
+
+  const [carryOverError, setCarryOverError] = useState<string | null>(null);
+  const carryOverMutation = useMutation({
+    mutationFn: () => apiRequest('POST', '/api/mobile/work-orders/carry-over', {}),
+    onSuccess: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      setCarryOverError(null);
+      refetchOrders();
+    },
+    onError: () => {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      setCarryOverError('Kunde inte flytta ordrar. Försök igen.');
+    },
+  });
+
+  const taskSummary = useMemo(() => {
+    if (!orders || orders.length === 0) return null;
+    const typeCounts: Record<string, number> = {};
+    for (const o of orders) {
+      const t = o.objectType || 'Uppdrag';
+      typeCounts[t] = (typeCounts[t] || 0) + 1;
+    }
+    return Object.entries(typeCounts).map(([type, count]) => `${count} ${type.toLowerCase()}`).join(', ');
+  }, [orders]);
+
+  const [tenMinWarningDismissed, setTenMinWarningDismissed] = React.useState(false);
+  const tenMinWarning = useMemo(() => {
+    if (!orders || orders.length === 0) return null;
+    const now = Date.now();
+    for (const o of orders) {
+      if (o.status === 'completed' || o.status === 'cancelled') continue;
+      const timeStr = o.scheduledTimeStart || o.scheduledStartTime;
+      if (!timeStr) continue;
+      const dateStr = o.scheduledDate ? o.scheduledDate.split('T')[0] : new Date().toISOString().split('T')[0];
+      const scheduled = new Date(`${dateStr}T${timeStr}:00`).getTime();
+      if (isNaN(scheduled)) continue;
+      const diff = scheduled - now;
+      if (diff > 0 && diff <= 10 * 60 * 1000) {
+        return { order: o, minutesLeft: Math.ceil(diff / 60000) };
+      }
+    }
+    return null;
+  }, [orders]);
 
   const queryClient = useQueryClient();
     const [voiceRecording, setVoiceRecording] = useState(false);
@@ -886,6 +940,78 @@ export function HomeScreen({ navigation }: any) {
         </View>
       </Card>
 
+      {carryOverOrders.length > 0 && !carryOverDismissed ? (
+        <Card style={styles.carryOverBanner}>
+          <View style={styles.carryOverContent}>
+            <View style={styles.carryOverLeft}>
+              <View style={[styles.tenMinIconCircle, { backgroundColor: Colors.error + '20' }]}>
+                <Feather name="rotate-cw" size={18} color={Colors.error} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <ThemedText variant="label" color={Colors.error}>
+                  {carryOverOrders.length} ej slutförda från igår
+                </ThemedText>
+                <ThemedText variant="caption" color={Colors.textSecondary}>
+                  Flytta till dagens lista?
+                </ThemedText>
+              </View>
+            </View>
+            <View style={styles.carryOverActions}>
+              <Pressable
+                style={styles.carryOverBtn}
+                onPress={() => carryOverMutation.mutate()}
+                disabled={carryOverMutation.isPending}
+                testID="button-carry-over"
+              >
+                {carryOverMutation.isPending ? (
+                  <ActivityIndicator size="small" color={Colors.textInverse} />
+                ) : (
+                  <ThemedText variant="caption" color={Colors.textInverse}>Flytta</ThemedText>
+                )}
+              </Pressable>
+              <Pressable onPress={() => setCarryOverDismissed(true)} hitSlop={8}>
+                <Feather name="x" size={16} color={Colors.textMuted} />
+              </Pressable>
+            </View>
+          </View>
+          {carryOverError ? (
+            <ThemedText variant="caption" color={Colors.error} style={{ marginTop: Spacing.xs }}>
+              {carryOverError}
+            </ThemedText>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {taskSummary ? (
+        <View style={styles.taskSummaryBadge}>
+          <Feather name="clipboard" size={14} color={Colors.primary} />
+          <ThemedText variant="caption" color={Colors.primary}>{taskSummary}</ThemedText>
+        </View>
+      ) : null}
+
+      {tenMinWarning && !tenMinWarningDismissed ? (
+        <Card style={styles.tenMinWarning}>
+          <View style={styles.tenMinContent}>
+            <View style={styles.tenMinLeft}>
+              <View style={styles.tenMinIconCircle}>
+                <Feather name="clock" size={18} color={Colors.warning} />
+              </View>
+              <View>
+                <ThemedText variant="label" color={Colors.warning}>
+                  {tenMinWarning.minutesLeft} min till nästa jobb
+                </ThemedText>
+                <ThemedText variant="caption" color={Colors.textSecondary}>
+                  {tenMinWarning.order.customerName}
+                </ThemedText>
+              </View>
+            </View>
+            <Pressable onPress={() => setTenMinWarningDismissed(true)} hitSlop={8}>
+              <Feather name="x" size={16} color={Colors.textMuted} />
+            </Pressable>
+          </View>
+        </Card>
+      ) : null}
+
       {timeSummary && timeSummary.totalSeconds > 0 ? (
         <Card style={styles.workTimeCard}>
           <View style={styles.workTimeHeader}>
@@ -965,31 +1091,68 @@ export function HomeScreen({ navigation }: any) {
         </Card>
       ) : null}
 
-      {!ordersLoading && activeOrders.length > 0 ? (
-        <Pressable
-          style={styles.nextOrderButton}
-          onPress={() => {
-            const nextOrder = activeOrders.find(o => !o.isLocked) || activeOrders[0];
-            navigation.navigate('OrderDetail', { orderId: nextOrder.id });
-          }}
-          testID="button-next-order"
-        >
-          <View style={styles.nextOrderLeft}>
-            <View style={styles.nextOrderIconCircle}>
-              <Feather name="arrow-right-circle" size={28} color={Colors.textInverse} />
-            </View>
-            <View>
-              <ThemedText variant="subheading" color={Colors.textInverse}>
-                Nästa uppdrag
-              </ThemedText>
-              <ThemedText variant="caption" color="rgba(255,255,255,0.8)">
-                {(activeOrders.find(o => !o.isLocked) || activeOrders[0]).customerName}
-              </ThemedText>
-            </View>
+      {!ordersLoading && activeOrders.length > 0 ? (() => {
+        const nextOrder = activeOrders.find(o => !o.isLocked) || activeOrders[0];
+        return (
+          <View>
+            <Pressable
+              style={styles.nextOrderButton}
+              onPress={() => navigation.navigate('OrderDetail', { orderId: nextOrder.id })}
+              testID="button-next-order"
+            >
+              <View style={styles.nextOrderLeft}>
+                <View style={styles.nextOrderIconCircle}>
+                  <Feather name="arrow-right-circle" size={28} color={Colors.textInverse} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText variant="subheading" color={Colors.textInverse}>
+                    Nästa uppdrag
+                  </ThemedText>
+                  <ThemedText variant="caption" color="rgba(255,255,255,0.8)">
+                    {nextOrder.customerName}
+                  </ThemedText>
+                  {nextOrder.address ? (
+                    <ThemedText variant="caption" color="rgba(255,255,255,0.6)" numberOfLines={1}>
+                      {nextOrder.address}
+                    </ThemedText>
+                  ) : null}
+                </View>
+              </View>
+              <Feather name="chevron-right" size={24} color={Colors.textInverse} />
+            </Pressable>
+            {nextOrder.taskLatitude && nextOrder.taskLongitude ? (
+              <View style={styles.nextOrderActions}>
+                <Pressable
+                  style={styles.nextOrderNavButton}
+                  onPress={() => {
+                    const lat = nextOrder.taskLatitude;
+                    const lng = nextOrder.taskLongitude;
+                    const label = encodeURIComponent(nextOrder.customerName || 'Destination');
+                    const url = Platform.select({
+                      ios: `maps:?daddr=${lat},${lng}&dirflg=d`,
+                      android: `google.navigation:q=${lat},${lng}`,
+                      default: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
+                    });
+                    if (url) Linking.openURL(url).catch(() => {});
+                  }}
+                  testID="button-navigate-next"
+                >
+                  <Feather name="navigation" size={14} color={Colors.primary} />
+                  <ThemedText variant="caption" color={Colors.primary}>Navigera</ThemedText>
+                </Pressable>
+                {nextOrder.estimatedMinutes ? (
+                  <View style={styles.nextOrderEta}>
+                    <Feather name="clock" size={12} color={Colors.textMuted} />
+                    <ThemedText variant="caption" color={Colors.textMuted}>
+                      ca {nextOrder.estimatedMinutes} min
+                    </ThemedText>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </View>
-          <Feather name="chevron-right" size={24} color={Colors.textInverse} />
-        </Pressable>
-      ) : null}
+        );
+      })() : null}
 
 
 
@@ -1407,6 +1570,90 @@ const styles = StyleSheet.create({
     height: 48,
     borderRadius: 24,
     backgroundColor: 'rgba(255,255,255,0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  nextOrderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: Spacing.md,
+    marginTop: Spacing.xs,
+    marginBottom: Spacing.sm,
+  },
+  nextOrderNavButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: Colors.primary + '15',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+  },
+  nextOrderEta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  taskSummaryBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    backgroundColor: Colors.primary + '12',
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.round,
+    alignSelf: 'flex-start',
+    marginBottom: Spacing.sm,
+  },
+  carryOverBanner: {
+    marginBottom: Spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.error,
+  },
+  carryOverContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  carryOverLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  carryOverActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+  },
+  carryOverBtn: {
+    backgroundColor: Colors.error,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.xs,
+    borderRadius: BorderRadius.round,
+  },
+  tenMinWarning: {
+    marginBottom: Spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: Colors.warning,
+  },
+  tenMinContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  tenMinLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.sm,
+    flex: 1,
+  },
+  tenMinIconCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: Colors.warning + '20',
     justifyContent: 'center',
     alignItems: 'center',
   },
