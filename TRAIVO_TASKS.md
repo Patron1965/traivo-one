@@ -349,6 +349,144 @@ Visuell diff-vy som gör AI-förslag genomskinliga:
   - Constraint-violations-panel
 
 
+TASK #43 — AI Budgetstyrning & Kapacitetshantering
+-----------------------------------------------------
+Komplett budgetstyrning för AI-användning per tenant:
+  - Budgetvarningar vid 50%, 80%, 95% av månadsbudget (WebSocket-notifiering)
+  - Hård budgetspärr vid 100% — blockerar AI-anrop med tydligt felmeddelande
+  - Per-tenant rate limiting (sliding window, Standard: 50/h, Premium: 200/h)
+  - AI-modellstyrning per tier (Standard → GPT-4o-mini, Premium → GPT-4o)
+  - Budget-dashboard med förbrukningsöversikt och prognos
+  - Retry med exponential backoff (3 försök) och fallback vid timeout
+  - Cachning av identiska AI-svar (15 min TTL)
+  - Samtidighetslås för auto-scheduling (en körning per tenant)
+
+TASK #48 — WeekPlanner Drag-and-Drop Förbättringar
+-----------------------------------------------------
+Förbättrad interaktion i WeekPlanner:
+  - Inline konfliktindikator vid drag-over (röd outline/varningsikon)
+  - Multi-select med checkbox/shift-klick och bulk-flytt av order
+  - "Föreslå optimal tid" per oplanerad order (beräknar bästa resurs/dag/tid)
+  - Befintlig funktionalitet (undo/redo, auto-fill) oförändrad
+
+TASK #52 — Performance-optimering
+------------------------------------
+Prestandaförbättringar för växande datamängder:
+  - Lazy loading av orderhistorik (senaste 30 dagarna default, "Ladda mer"-knapp)
+  - WebSocket position batching (max en uppdatering per 30 sekunder per resurs)
+  - Snabbare API-svar vid >500 order
+
+TASK #53 — Säkerhetshärdning & Tenant-isolering
+--------------------------------------------------
+Säkerhetsåtgärder för produktionsbruk:
+  - Autentisering på alla öppna /api/planner, /api/reports, /api/dashboard endpoints
+  - Tenant-isolering vid kloning av arbetsordrar (verifierar order-IDn mot tenant)
+  - Tenant-isolering vid material-loggning (verifierar artikel-ID mot tenant)
+  - Zod-validering på alla req.body i work order-, mobile- och orderkoncept-routes
+  - Fail-closed default-tenant fallback i produktionsläge
+
+TASK #55 — Databaskonsolidering & Referensintegritet
+------------------------------------------------------
+Städning av databasschemat:
+  - Legacy `status`-fält migrerat till `order_status` i all kod
+  - Foreign key-constraints tillagda på cluster_id, environmental_data, visit_confirmations
+  - Konsoliderad hierarchy_level (ersätter object_level)
+  - Verifiering och uppsnyggning av orphaned records
+
+TASK #57 — Byt "Interimobjekt" → "Rapporterat objekt"
+--------------------------------------------------------
+Namnbyte genom hela gränssnittet:
+  - Alla synliga texter ändrade från "Interimobjekt"/"Interim" till "Rapporterat objekt"
+  - Info-ikon (ⓘ) med tooltip som förklarar konceptet
+  - Databasfält (isInterimObject) behåller internt namn
+  - Påverkar ObjectsPage, portalRoutes och customerRoutes
+
+TASK #58 — Förhandsgranskning & Omdöpning vid Import
+-------------------------------------------------------
+Preview & Rename-fas i Modus 2.0 importwizard:
+  - Förhandsgranskningstabell efter CSV-validering med inline-redigering
+  - Omdöpning av kunder, objekt, metadata-fält och resurser/team
+  - Sök & Ersätt-funktion för batch-omdöpning
+  - Backend stöder nameOverrides-mappning vid skapande
+
+TASK #59 — Selektiv Modulär Import
+-------------------------------------
+Fristående importsteg med flexibel kontroll:
+  - "Hoppa över detta steg"-knapp på varje importmodul
+  - Stegindikator med tre states: aktiv, slutförd, överhoppad
+  - Nytt steg 6: Sammanfattning med antal per typ och varningar
+  - "Importera resten"-funktion för att gå till överhoppade steg
+  - Datakvalitets-badge (grön/gul/röd) per steg
+  - localStorage-persistens av importframsteg
+
+TASK #60 — Importöversikt med Datakvalitetsvarningar
+-------------------------------------------------------
+Samlad hälsoöversikt efter import:
+  - Statistikrutnät: kunder, objekt, uppgifter, fakturarader
+  - 5 issue-typer med severity: saknade koordinater, adresser, kundkoppling,
+    resurstilldelning, tom metadata
+  - "Granska"-knappar med server-side filtrering till ObjectsPage/WeekPlanner
+  - Accept/dismiss per varning med tenant-scopad localStorage-persistens
+  - Filterbanners med "Rensa filter"-knappar på målsidorna
+
+TASK #62 — Funktionskontroll av Importflödet
+-----------------------------------------------
+Helhetskontroll av Modus 2.0-importflödet:
+  - Verifiering av alla 6 importsteg med korrekt rendering
+  - Stegnavigering, skip/complete-status fungerar
+  - ImportHealthOverview med statistikrutnät och varningar
+  - Granska-länkar med filtrerad navigation till rätt sidor
+  - Accept/dismiss-persistens i localStorage
+  - Backend health-stats endpoint verifierad
+
+TASK #63 — Kund-fältdokumentation (QR, Foto, Rapporter)
+----------------------------------------------------------
+Mobilanpassad fältdokumentation i kundportalen:
+  - Ny vy `/portal/field` med QR-kodskanning via kameran
+  - Fotouppladding med presigned URL-flöde via Object Storage
+  - Strukturerat ändringsrapportformulär med kategorier:
+    antal kärl ändrat, skadat material, tillgänglighetsproblem, övrigt
+  - Ny `customer_change_requests`-tabell i databasen
+  - GPS-position vid rapportering
+  - Objektvy med metadata, besökshistorik och tidigare rapporter
+  - Admin-lista med inkomna rapporter i objektvyn
+
+TASK #64 — Planerarvy & Ändringshantering för Kundrapporter
+--------------------------------------------------------------
+Dedikerad planerarsida för kundrapporter:
+  - Ny sida `/customer-reports` med navigeringslänk
+  - KPI-kort: Totalt, Nya, Under granskning, Lösta
+  - Server-side paginering med filter (status, kategori, kund, datum)
+  - Detaljdialog med foton, GPS-kartlänk, kundinfo, statushistorik
+  - Statusflöde: Ny → Granskas → Löst/Avvisad med kommentar
+  - "Skapa arbetsorder"-knapp med idempotency-skydd
+  - ObjectsPage-integration med badge för aktiva rapporter
+
+TASK #65/66 — Mobil-API för Kundrapporter (Go-integration)
+------------------------------------------------------------
+Komplett mobil-API för kundrapporter via Traivo Go:
+  - POST `/api/mobile/customer-change-requests` — skapa rapport med GPS + foto
+  - GET `/api/mobile/customer-change-requests/mine` — egna rapporter (paginerat)
+  - POST `/api/mobile/customer-change-requests/upload-photo` — presigned URL
+  - Kategoriharmonisering Go ↔ One via `shared/changeRequestCategories.ts`
+  - Ny kolumn `severity` (low/medium/high/critical) i databasen
+  - Ny kolumn `createdByResourceId` (FK → resources) för chaufförskoppling
+  - WebSocket-event `change_request:created` och `change_request:status_updated`
+  - Tenant-scopad SSE-broadcast vid statusändring
+  - CustomerReportsPage: severity-badge och kategorifilter
+
+TASK #67 — Auto-koppling: Avvikelse → Kundrapport
+----------------------------------------------------
+Automatisk kundrapport vid avvikelserapportering från Traivo Go:
+  - Deviation-endpoint skapar automatiskt CustomerChangeRequest
+  - Kategorikonvertering via GO_CATEGORY_MAP
+  - Ny kolumn `linkedDeviationId` (FK → deviation_reports) i customer_change_requests
+  - Dubblettskydd: ingen ny rapport om avvikelsen redan är kopplad
+  - Planerarvy visar orange "Avvikelse"-badge på auto-skapade rapporter
+  - Detaljdialog visar informationsbanner för auto-kopplade rapporter
+  - Chauffören ser bekräftelse att kundrapport skapades i mobilappen
+
+
 ÖVRIGA GENOMFÖRDA ARBETEN
 =========================
 
@@ -405,6 +543,8 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
    - AI-driven årsplaneringsfördelning
    - Riskberäkning (0-1 score)
    - AI Field Assistant (mobilapp)
+   - AI Budgetstyrning med spärr, rate limiting och modellstyrning per tier
+   - "Föreslå optimal tid" per order i WeekPlanner
 
 3. KARTOR & GEOGRAFI
    - Planner Map med realtids-förarpositon
@@ -437,6 +577,9 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
    - Orderhistorik och kommande besök
    - Realtids-chatt kundportal ↔ planerare
    - ROI-rapport per kund
+   - Kund-fältdokumentation (QR-skanning, foto, ändringsrapporter)
+   - Planerarvy för kundrapporter med statushantering
+   - Auto-koppling avvikelse → kundrapport
 
 7. OBJEKTHANTERING
    - Hierarkisk objektstruktur med multi-parent
@@ -456,6 +599,9 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
    - AI-chatt och transkribering
    - Uppgiftsberoenden-vy
    - Väderdata
+   - Mobil-API för kundrapporter (Go-integration)
+   - Kategoriharmonisering Go ↔ One med severity-nivåer
+   - Auto-koppling avvikelse → kundrapport med dubblettskydd
 
 9. IoT & SENSORER
    - IoT-enhetshantering
@@ -506,6 +652,9 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
 
 15. IMPORT & INTEGRATION
     - Modus 2.0 CSV-import med validering
+    - Preview & Rename vid import (inline-redigering, sök & ersätt)
+    - Selektiv modulär import (hoppa över/importera steg)
+    - Importöversikt med datakvalitetsvarningar och Granska-länkar
     - Fortnox entitetsimport/export
     - Geoapify routing & VRP-optimering
     - Open-Meteo väderdata
@@ -533,7 +682,8 @@ Tenant:      tenants, tenant_features, tenant_branding, tenant_labels,
              tenant_package_installations, feature_audit_log
 Användare:   users, user_tenant_roles, teams, team_members, invitations
 Portal:      customer_portal_tokens, customer_portal_sessions,
-             customer_portal_messages, portal_messages, self_bookings
+             customer_portal_messages, portal_messages, self_bookings,
+             customer_change_requests
 Orderkoncept: order_concepts, order_concept_articles, order_concept_objects,
               concept_filters, delivery_schedules, subscriptions
 Arbetspass:  work_sessions, work_entries, time_logs
