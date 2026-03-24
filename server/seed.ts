@@ -9,7 +9,8 @@ export async function seedDatabase() {
 
   const existingTenant = await db.select().from(tenants).where(sql`id = ${DEFAULT_TENANT_ID}`);
   if (existingTenant.length > 0) {
-    console.log("Database already seeded, skipping...");
+    console.log("Database already seeded, refreshing demo work order dates...");
+    await refreshDemoWorkOrderDates();
     return;
   }
 
@@ -676,4 +677,18 @@ export async function seedDatabase() {
   }
 
   console.log("Database seeding complete!");
+}
+
+async function refreshDemoWorkOrderDates() {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const result = await db.update(workOrders)
+    .set({ scheduledDate: today })
+    .where(sql`id IN ('wo-1','wo-2','wo-3','wo-4','wo-5','wo-6','wo-7','wo-8') AND (scheduled_date IS NULL OR scheduled_date != ${today})`)
+    .returning({ id: workOrders.id });
+  
+  if (result.length > 0) {
+    console.log(`Updated ${result.length} demo work orders to today's date`);
+  }
 }
