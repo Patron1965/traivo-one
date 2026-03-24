@@ -3,13 +3,15 @@ import { Platform, AppState } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiRequest } from '../lib/query-client';
+import { useSettings } from '../lib/settings';
 import type { SyncAction } from '../types';
 
 const OUTBOX_KEY = '@offline_outbox';
 const CACHE_PREFIX = '@offline_cache_';
 const ROUTE_CACHE_PREFIX = '@route_cache_';
 const ORDER_CACHE_KEY = '@order_cache';
-const SYNC_INTERVAL = 30000;
+const SYNC_INTERVAL_NORMAL = 30000;
+const SYNC_INTERVAL_OFFLINE = 120000;
 const MAX_OUTBOX_ITEMS = 500;
 const MAX_OUTBOX_BYTES = 5 * 1024 * 1024;
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -61,6 +63,7 @@ function isOnline(): boolean {
 
 export function useOfflineSync() {
   const queryClient = useQueryClient();
+  const { settings } = useSettings();
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<string | null>(null);
@@ -179,11 +182,12 @@ export function useOfflineSync() {
       if (stored) setLastSyncTime(stored);
     })();
 
+    const syncInterval = settings.offlineMode ? SYNC_INTERVAL_OFFLINE : SYNC_INTERVAL_NORMAL;
     intervalRef.current = setInterval(async () => {
       if (globalPendingCount > 0) {
         processOutbox();
       }
-    }, SYNC_INTERVAL);
+    }, syncInterval);
 
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
@@ -205,7 +209,7 @@ export function useOfflineSync() {
       if (intervalRef.current) clearInterval(intervalRef.current);
       subscription.remove();
     };
-  }, [processOutbox]);
+  }, [processOutbox, settings.offlineMode]);
 
   const cacheRouteData = useCallback(async (routeData: any) => {
     try {

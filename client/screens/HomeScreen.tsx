@@ -18,6 +18,7 @@ import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useTeam } from '../hooks/useTeam';
 import { useOfflinePendingCount } from '../hooks/useOfflineSync';
+import { openMapNavigation } from '../lib/navigation-links';
 import { SyncStatusDot } from '../components/OfflineIndicator';
 import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
 
@@ -424,12 +425,7 @@ export function HomeScreen({ navigation }: any) {
         case 'navigate_to': {
           const navOrder = activeOrders.find(o => o.status === 'dispatched' || o.status === 'planerad_resurs' || o.status === 'on_site') || activeOrders[0];
           if (navOrder && navOrder.latitude && navOrder.longitude) {
-            const url = Platform.select({
-              ios: `maps:0,0?q=${navOrder.latitude},${navOrder.longitude}`,
-              android: `geo:0,0?q=${navOrder.latitude},${navOrder.longitude}(${encodeURIComponent(navOrder.address)})`,
-              default: `https://www.google.com/maps/dir/?api=1&destination=${navOrder.latitude},${navOrder.longitude}`,
-            }) as string;
-            Linking.openURL(url).catch(() => {});
+            openMapNavigation(navOrder.latitude, navOrder.longitude, navOrder.address);
             const msg = `Navigerar till ${navOrder.address}.`;
             showVoiceFeedback(msg);
             speakConfirmation(msg);
@@ -1156,13 +1152,9 @@ export function HomeScreen({ navigation }: any) {
                   onPress={() => {
                     const lat = nextOrder.taskLatitude;
                     const lng = nextOrder.taskLongitude;
-                    const label = encodeURIComponent(nextOrder.customerName || 'Destination');
-                    const url = Platform.select({
-                      ios: `maps:?daddr=${lat},${lng}&dirflg=d`,
-                      android: `google.navigation:q=${lat},${lng}`,
-                      default: `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`,
-                    });
-                    if (url) Linking.openURL(url).catch(() => {});
+                    if (lat && lng) {
+                      openMapNavigation(lat, lng, nextOrder.customerName || 'Destination');
+                    }
                   }}
                   testID="button-navigate-next"
                 >

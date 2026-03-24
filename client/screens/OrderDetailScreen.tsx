@@ -14,6 +14,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
+import { openMapNavigation } from '../lib/navigation-links';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import type { Order, OrderStatus, TimeRestriction, SubStep, OrderNote, ImpossibleReason } from '../types';
 import { TIME_RESTRICTION_LABELS, ORDER_STATUS_SEQUENCE, IMPOSSIBLE_REASONS } from '../types';
@@ -473,12 +474,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
 
   function openNavigation() {
     if (!order) return;
-    const url = Platform.select({
-      ios: `maps:0,0?q=${order.latitude},${order.longitude}`,
-      android: `geo:0,0?q=${order.latitude},${order.longitude}(${order.address})`,
-      default: `https://www.google.com/maps/search/?api=1&query=${order.latitude},${order.longitude}`,
-    });
-    if (url) Linking.openURL(url);
+    openMapNavigation(order.latitude, order.longitude, order.address);
   }
 
   function callContact(phone: string) {

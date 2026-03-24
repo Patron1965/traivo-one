@@ -1,58 +1,68 @@
-import React, { useState, useEffect } from 'react';
-import { View, ScrollView, Switch, Pressable, StyleSheet, Platform, Linking } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, ScrollView, Switch, Pressable, StyleSheet, Modal, Platform } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
+import { useGpsTracking } from '../hooks/useGpsTracking';
+import { useSettings, MapApp } from '../lib/settings';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 
-const SETTINGS_KEY = 'driver_core_settings';
+const MAP_APP_OPTIONS: { value: MapApp; label: string; icon: string }[] = [
+  { value: 'google', label: 'Google Maps', icon: 'map' },
+  { value: 'apple', label: 'Apple Maps', icon: 'compass' },
+  { value: 'waze', label: 'Waze', icon: 'navigation' },
+];
 
-interface Settings {
-  gpsTracking: boolean;
-  notifications: boolean;
-  hapticFeedback: boolean;
-  offlineMode: boolean;
-  darkMode: boolean;
-}
-
-const DEFAULT_SETTINGS: Settings = {
-  gpsTracking: true,
-  notifications: true,
-  hapticFeedback: true,
-  offlineMode: false,
-  darkMode: false,
-};
-
-export function SettingsScreen({ navigation }: any) {
+export function SettingsScreen({ navigation }: { navigation: unknown }) {
   const headerHeight = useHeaderHeight();
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS);
+  const { settings, updateSetting } = useSettings();
+  const { isTracking, startTracking, stopTracking } = useGpsTracking();
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (settings.gpsTracking !== isTracking) {
+      if (settings.gpsTracking) {
+        startTracking();
+      } else {
+        stopTracking();
+      }
+    }
+  }, [settings.gpsTracking]);
 
-  async function loadSettings() {
+  const handleGpsToggle = useCallback(async (value: boolean) => {
+    await updateSetting('gpsTracking', value);
+    if (value) {
+      startTracking();
+    } else {
+      stopTracking();
+    }
+  }, [updateSetting, startTracking, stopTracking]);
+
+  const handleClearCache = useCallback(async () => {
+    setClearingCache(true);
     try {
-      const stored = await AsyncStorage.getItem(SETTINGS_KEY);
-      if (stored) {
-        setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(stored) });
+      const keys = await AsyncStorage.getAllKeys();
+      const cacheKeys = keys.filter(k =>
+        k.startsWith('@offline_cache_') ||
+        k.startsWith('@route_cache_') ||
+        k === '@order_cache' ||
+        k === '@offline_outbox' ||
+        k === '@last_sync_time'
+      );
+      if (cacheKeys.length > 0) {
+        await AsyncStorage.multiRemove(cacheKeys);
       }
     } catch {}
-  }
-
-  async function updateSetting(key: keyof Settings, value: boolean) {
-    const updated = { ...settings, [key]: value };
-    setSettings(updated);
-    try {
-      await AsyncStorage.setItem(SETTINGS_KEY, JSON.stringify(updated));
-    } catch {}
-  }
+    setClearingCache(false);
+    setShowClearConfirm(false);
+  }, []);
 
   return (
     <ScrollView
@@ -80,7 +90,7 @@ export function SettingsScreen({ navigation }: any) {
           </View>
           <Switch
             value={settings.gpsTracking}
-            onValueChange={(v) => updateSetting('gpsTracking', v)}
+            onValueChange={handleGpsToggle}
             trackColor={{ false: Colors.border, true: Colors.primaryLight }}
             thumbColor={settings.gpsTracking ? Colors.primary : Colors.textMuted}
             testID="switch-gps"
@@ -138,6 +148,66 @@ export function SettingsScreen({ navigation }: any) {
             testID="switch-haptic"
           />
         </View>
+        <View style={styles.divider} />
+        <View style={styles.settingRow}>
+          <View style={styles.settingLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: '#E8F0FE' }]}>
+              <Feather name="moon" size={16} color="#5B6ABF" />
+            </View>
+            <View style={styles.settingText}>
+              <ThemedText variant="body">Mörkt läge</ThemedText>
+              <ThemedText variant="caption" color={Colors.textSecondary}>
+                Kommer snart
+              </ThemedText>
+            </View>
+          </View>
+          <Switch
+            value={settings.darkMode}
+            onValueChange={(v) => updateSetting('darkMode', v)}
+            trackColor={{ false: Colors.border, true: Colors.primaryLight }}
+            thumbColor={settings.darkMode ? Colors.primary : Colors.textMuted}
+            testID="switch-darkmode"
+            disabled
+          />
+        </View>
+      </Card>
+
+      <ThemedText variant="caption" color={Colors.textSecondary} style={styles.sectionLabel}>
+        NAVIGATION
+      </ThemedText>
+      <Card style={styles.sectionCard}>
+        <View style={styles.mapAppHeader}>
+          <View style={[styles.iconCircle, { backgroundColor: Colors.accentLight }]}>
+            <Feather name="map-pin" size={16} color={Colors.accent} />
+          </View>
+          <ThemedText variant="body" style={{ flex: 1 }}>Kartapp</ThemedText>
+        </View>
+        <View style={styles.mapAppOptions}>
+          {MAP_APP_OPTIONS.map((opt) => (
+            <Pressable
+              key={opt.value}
+              style={[
+                styles.mapAppButton,
+                settings.mapApp === opt.value ? styles.mapAppButtonActive : null,
+              ]}
+              onPress={() => updateSetting('mapApp', opt.value)}
+              testID={`button-map-${opt.value}`}
+            >
+              <Feather
+                name={opt.icon as React.ComponentProps<typeof Feather>['name']}
+                size={16}
+                color={settings.mapApp === opt.value ? Colors.primary : Colors.textMuted}
+              />
+              <ThemedText
+                variant="caption"
+                color={settings.mapApp === opt.value ? Colors.primary : Colors.textSecondary}
+                style={settings.mapApp === opt.value ? styles.mapAppLabelActive : undefined}
+              >
+                {opt.label}
+              </ThemedText>
+            </Pressable>
+          ))}
+        </View>
       </Card>
 
       <ThemedText variant="caption" color={Colors.textSecondary} style={styles.sectionLabel}>
@@ -164,6 +234,25 @@ export function SettingsScreen({ navigation }: any) {
             testID="switch-offline"
           />
         </View>
+        <View style={styles.divider} />
+        <Pressable
+          style={styles.clearCacheRow}
+          onPress={() => setShowClearConfirm(true)}
+          testID="button-clear-cache"
+        >
+          <View style={styles.settingLeft}>
+            <View style={[styles.iconCircle, { backgroundColor: Colors.dangerLight }]}>
+              <Feather name="trash-2" size={16} color={Colors.danger} />
+            </View>
+            <View style={styles.settingText}>
+              <ThemedText variant="body" color={Colors.danger}>Rensa cache</ThemedText>
+              <ThemedText variant="caption" color={Colors.textSecondary}>
+                Radera sparad ruttdata och offlinedata
+              </ThemedText>
+            </View>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
       </Card>
 
       <ThemedText variant="caption" color={Colors.textSecondary} style={styles.sectionLabel}>
@@ -196,8 +285,48 @@ export function SettingsScreen({ navigation }: any) {
       </Card>
 
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
-        Nordnav Go v2.0 | Field Service
+        Traivo Go v2.0 | Field Service
       </ThemedText>
+
+      <Modal
+        visible={showClearConfirm}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowClearConfirm(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowClearConfirm(false)}>
+          <Pressable style={styles.modalContent} onPress={() => {}}>
+            <View style={styles.modalIconWrap}>
+              <Feather name="trash-2" size={28} color={Colors.danger} />
+            </View>
+            <ThemedText variant="heading" style={styles.modalTitle}>
+              Rensa cache?
+            </ThemedText>
+            <ThemedText variant="body" color={Colors.textSecondary} style={styles.modalMessage}>
+              Detta raderar sparad ruttdata, offlinedata och synkkö. Du kan behöva ladda om appen efteråt.
+            </ThemedText>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => setShowClearConfirm(false)}
+                testID="button-cancel-clear"
+              >
+                <ThemedText variant="body" color={Colors.textSecondary}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable
+                style={styles.modalConfirmButton}
+                onPress={handleClearCache}
+                disabled={clearingCache}
+                testID="button-confirm-clear"
+              >
+                <ThemedText variant="body" color={Colors.textInverse}>
+                  {clearingCache ? 'Rensar...' : 'Rensa'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </ScrollView>
   );
 }
@@ -262,5 +391,94 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: Spacing.xl,
     marginBottom: Spacing.md,
+  },
+  mapAppHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.md,
+    paddingVertical: Spacing.xs,
+  },
+  mapAppOptions: {
+    flexDirection: 'row',
+    gap: Spacing.sm,
+    marginTop: Spacing.sm,
+  },
+  mapAppButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: Spacing.xs,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.surface,
+  },
+  mapAppButtonActive: {
+    borderColor: Colors.primary,
+    backgroundColor: Colors.infoLight,
+  },
+  mapAppLabelActive: {
+    fontFamily: 'Inter_600SemiBold',
+  },
+  clearCacheRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: Spacing.xs,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: Spacing.xl,
+  },
+  modalContent: {
+    backgroundColor: Colors.surface,
+    borderRadius: BorderRadius.xl,
+    padding: Spacing.xl,
+    width: '100%',
+    maxWidth: 340,
+    alignItems: 'center',
+  },
+  modalIconWrap: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: Colors.dangerLight,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: Spacing.md,
+  },
+  modalTitle: {
+    marginBottom: Spacing.sm,
+    textAlign: 'center',
+  },
+  modalMessage: {
+    textAlign: 'center',
+    marginBottom: Spacing.xl,
+    lineHeight: 22,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: Spacing.md,
+    width: '100%',
+  },
+  modalCancelButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    borderWidth: 1,
+    borderColor: Colors.border,
+  },
+  modalConfirmButton: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: Spacing.md,
+    borderRadius: BorderRadius.lg,
+    backgroundColor: Colors.danger,
   },
 });

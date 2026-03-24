@@ -16,6 +16,7 @@ import { ErrorBoundary } from './client/components/ErrorBoundary';
 import { AuthProvider } from './client/context/AuthContext';
 import { RootNavigator } from './client/navigation/RootNavigator';
 import { queryClient } from './client/lib/query-client';
+import { loadGlobalSettings } from './client/lib/settings';
 import { OfflineIndicator } from './client/components/OfflineIndicator';
 
 SplashScreen.preventAutoHideAsync();
@@ -26,6 +27,10 @@ export default function App() {
     Inter_600SemiBold,
     Inter_700Bold,
   });
+
+  useEffect(() => {
+    loadGlobalSettings();
+  }, []);
 
   useEffect(() => {
     if (fontsLoaded || fontError) {
