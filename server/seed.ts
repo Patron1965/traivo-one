@@ -722,6 +722,57 @@ export async function seedDatabase() {
 }
 
 async function refreshDemoWorkOrderDates() {
+  const existingResource = await db.select().from(resources).where(sql`id = 'res-tomas'`);
+  if (existingResource.length === 0) {
+    await db.insert(resources).values({
+      id: "res-tomas",
+      tenantId: DEFAULT_TENANT_ID,
+      name: "Tomas Björnberg",
+      initials: "TB",
+      resourceType: "person",
+      phone: "070-123 45 67",
+      email: "tomas@nordicrouting.se",
+      homeLocation: "Södertälje",
+      weeklyHours: 40,
+      competencies: ["tvatt", "besiktning", "hamtning", "kontroll", "service", "etablering"],
+      status: "active",
+      homeLatitude: 59.1955,
+      homeLongitude: 17.6253,
+    });
+    console.log("Created resource res-tomas");
+  }
+
+  const annaRes = await db.select().from(resources).where(sql`id = 'res-anna'`);
+  if (annaRes.length === 0) {
+    await db.insert(resources).values({
+      id: "res-anna",
+      tenantId: DEFAULT_TENANT_ID,
+      name: "Anna Lindqvist",
+      initials: "AL",
+      resourceType: "person",
+      phone: "073-456 78 90",
+      email: "anna@kinab.se",
+      homeLocation: "Huddinge",
+      weeklyHours: 40,
+      competencies: ["tvatt", "besiktning", "hamtning"],
+      status: "active",
+      homeLatitude: 59.2369,
+      homeLongitude: 17.9812,
+    });
+    console.log("Created resource res-anna");
+  }
+
+  const tomasUser = await db.select().from(users).where(sql`email = 'tomas@nordicrouting.se'`);
+  if (tomasUser.length > 0 && !tomasUser[0].resourceId) {
+    await db.update(users).set({ resourceId: "res-tomas" }).where(sql`id = ${tomasUser[0].id}`);
+    console.log("Linked user Tomas to resource res-tomas");
+  }
+
+  const existingDemoCust = await db.select().from(customers).where(sql`id = 'cust-telge'`);
+  if (existingDemoCust.length === 0) {
+    await seedFieldAppDemoData("res-tomas");
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
@@ -732,15 +783,6 @@ async function refreshDemoWorkOrderDates() {
   
   if (result.length > 0) {
     console.log(`Updated ${result.length} demo work orders to today's date`);
-  }
-
-  const tomasUser = await db.select().from(users).where(sql`email = 'tomas@nordicrouting.se'`);
-  if (tomasUser.length > 0 && !tomasUser[0].resourceId) {
-    const res = await db.select().from(resources).where(sql`id = 'res-tomas'`);
-    if (res.length > 0) {
-      await db.update(users).set({ resourceId: "res-tomas" }).where(sql`id = ${tomasUser[0].id}`);
-      console.log("Linked user Tomas to resource res-tomas");
-    }
   }
 }
 
