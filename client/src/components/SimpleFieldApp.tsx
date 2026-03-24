@@ -46,6 +46,83 @@ import {
 
 type View = "jobs" | "job";
 
+interface MyReportItem {
+  id: string;
+  category: string;
+  description: string;
+  status: string;
+  severity?: string | null;
+  objectName?: string | null;
+  objectAddress?: string | null;
+  customerName?: string | null;
+  createdAt?: string;
+}
+
+function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url: string, body?: unknown) => Promise<Response> }) {
+  const [reports, setReports] = useState<MyReportItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await mobileApiCall("GET", "/api/mobile/customer-change-requests/mine?limit=20");
+        const data = await res.json();
+        if (!cancelled) setReports(data.items || []);
+      } catch {
+        if (!cancelled) setReports([]);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mobileApiCall]);
+
+  const statusLabels: Record<string, string> = {
+    new: "Ny",
+    in_progress: "Pågår",
+    resolved: "Löst",
+    rejected: "Avvisad",
+  };
+
+  return (
+    <Card className="border-orange-200 dark:border-orange-800" data-testid="panel-my-reports">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm flex items-center gap-2">
+          <Flag className="h-4 w-4 text-orange-500" />
+          Mina rapporter
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+          </div>
+        ) : reports.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-3">Inga rapporter ännu</p>
+        ) : (
+          <div className="space-y-2 max-h-60 overflow-auto">
+            {reports.map((r) => (
+              <div key={r.id} className="border rounded-lg p-2 text-sm" data-testid={`report-item-${r.id}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium truncate">{CATEGORY_LABELS[r.category] || r.category}</span>
+                  <Badge variant={r.status === "new" ? "default" : r.status === "resolved" ? "secondary" : "outline"} className="text-[10px] shrink-0">
+                    {statusLabels[r.status] || r.status}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground truncate mt-0.5">{r.description}</p>
+                {r.objectName && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{r.objectName}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 interface SimpleFieldAppProps {
   resourceId?: string;
 }
@@ -97,6 +174,40 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const [changeRequestSeverity, setChangeRequestSeverity] = useState<string>("medium");
   const [changeRequestPhoto, setChangeRequestPhoto] = useState<string | null>(null);
   const [isUploadingChangePhoto, setIsUploadingChangePhoto] = useState(false);
+  const [showMyReportsPanel, setShowMyReportsPanel] = useState(false);
+
+  const mobileTokenRef = useRef<string | null>(null);
+
+  const getMobileToken = useCallback(async (): Promise<string> => {
+    if (mobileTokenRef.current) return mobileTokenRef.current;
+    const res = await apiRequest("POST", "/api/field/mobile-token", { resourceId });
+    const data = await res.json();
+    mobileTokenRef.current = data.token;
+    return data.token;
+  }, [resourceId]);
+
+  const mobileApiCall = useCallback(async (method: string, url: string, body?: unknown) => {
+    const token = await getMobileToken();
+    const options: RequestInit = {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+    };
+    if (body) options.body = JSON.stringify(body);
+    const res = await fetch(url, options);
+    if (res.status === 401) {
+      mobileTokenRef.current = null;
+      const newToken = await getMobileToken();
+      options.headers = { ...options.headers as Record<string, string>, "Authorization": `Bearer ${newToken}` };
+      const retry = await fetch(url, options);
+      if (!retry.ok) throw new Error(`Mobile API error: ${retry.status}`);
+      return retry;
+    }
+    if (!res.ok) throw new Error(`Mobile API error: ${res.status}`);
+    return res;
+  }, [getMobileToken]);
 
   const [dismissedInstallBanner, setDismissedInstallBanner] = useState(() => {
     try {
@@ -544,11 +655,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       try {
         const deviationType = IMPOSSIBLE_TO_DEVIATION_TYPE[reason] || "other";
         const reasonLabel = IMPOSSIBLE_REASON_LABELS[reason as keyof typeof IMPOSSIBLE_REASON_LABELS] || reason;
-        await apiRequest("POST", `/api/field/orders/${id}/deviations`, {
+        await mobileApiCall("POST", `/api/mobile/orders/${id}/deviations`, {
           type: deviationType,
           description: `${reasonLabel}${reasonText ? `: ${reasonText}` : ""}`,
           photos: photoUrl ? [photoUrl] : [],
-          resourceId: resourceId || undefined,
         });
       } catch (err) {
         console.error("[field] Failed to create deviation report:", err);
@@ -585,14 +695,11 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
       severity: string;
       photos?: string[];
     }) => {
-      const res = await apiRequest("POST", "/api/field/customer-change-requests", {
-        ...data,
-        resourceId: resourceId || undefined,
-      });
+      const res = await mobileApiCall("POST", "/api/mobile/customer-change-requests", data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/field/my-reports"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/mobile/customer-change-requests/mine"] });
       toast({
         title: "Kundrapport skickad",
         description: "Rapporten har registrerats och skickats till planeraren.",
@@ -1404,20 +1511,13 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                               if (file) {
                                 setIsUploadingChangePhoto(true);
                                 try {
-                                  const response = await fetch("/api/uploads/request-url", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({
-                                      name: `change-req-${selectedJobId}-${Date.now()}-${file.name}`,
-                                      size: file.size,
-                                      contentType: file.type,
-                                    }),
-                                  });
-                                  if (!response.ok) throw new Error("Upload URL failed");
-                                  const { uploadURL, objectPath } = await response.json();
-                                  const uploadRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
-                                  if (!uploadRes.ok) throw new Error("Upload failed");
-                                  setChangeRequestPhoto(objectPath);
+                                  const uploadRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/upload-photo", {});
+                                  const { uploadURL, objectPath } = await uploadRes.json();
+                                  const putRes = await fetch(uploadURL, { method: "PUT", body: file, headers: { "Content-Type": file.type } });
+                                  if (!putRes.ok) throw new Error("Upload failed");
+                                  const confirmRes = await mobileApiCall("POST", "/api/mobile/customer-change-requests/confirm-photo", { objectPath });
+                                  const { downloadURL } = await confirmRes.json();
+                                  setChangeRequestPhoto(downloadURL || objectPath);
                                   toast({ title: "Foto uppladdat" });
                                 } catch {
                                   toast({ title: "Fel vid uppladdning", variant: "destructive" });
@@ -1943,6 +2043,15 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
             )}
             <Button 
               variant="ghost" 
+              size="sm"
+              className="h-8 px-2 gap-1"
+              onClick={() => setShowMyReportsPanel(!showMyReportsPanel)}
+              data-testid="button-toggle-my-reports"
+            >
+              <Flag className={`h-4 w-4 ${showMyReportsPanel ? "text-orange-500" : "text-muted-foreground"}`} />
+            </Button>
+            <Button 
+              variant="ghost" 
               size="icon"
               onClick={() => setShowAiPanel(true)}
               data-testid="button-open-ai-assistant"
@@ -1969,6 +2078,10 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
               ))}
             </CardContent>
           </Card>
+        )}
+
+        {showMyReportsPanel && (
+          <MyReportsPanel mobileApiCall={mobileApiCall} />
         )}
 
         <DailyProgressCard 
