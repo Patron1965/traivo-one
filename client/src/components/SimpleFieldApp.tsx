@@ -58,19 +58,42 @@ interface MyReportItem {
   createdAt?: string;
 }
 
+interface DeviationReportItem {
+  id: string;
+  category: string;
+  title: string;
+  description: string;
+  status: string;
+  reportedAt?: string;
+}
+
 function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url: string, body?: unknown) => Promise<Response> }) {
-  const [reports, setReports] = useState<MyReportItem[]>([]);
+  const [changeRequests, setChangeRequests] = useState<MyReportItem[]>([]);
+  const [deviations, setDeviations] = useState<DeviationReportItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<"changes" | "deviations">("changes");
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const res = await mobileApiCall("GET", "/api/mobile/customer-change-requests/mine?limit=20");
-        const data = await res.json();
-        if (!cancelled) setReports(data.items || []);
+        const [crRes, devRes] = await Promise.all([
+          mobileApiCall("GET", "/api/mobile/customer-change-requests/mine?limit=20"),
+          fetch("/api/deviation-reports?limit=20").then(r => r.ok ? r : Promise.reject()),
+        ]);
+        const crData = await crRes.json();
+        if (!cancelled) setChangeRequests(crData.items || []);
+        try {
+          const devData = await devRes.json();
+          if (!cancelled) setDeviations(Array.isArray(devData) ? devData.slice(0, 20) : []);
+        } catch {
+          if (!cancelled) setDeviations([]);
+        }
       } catch {
-        if (!cancelled) setReports([]);
+        if (!cancelled) {
+          setChangeRequests([]);
+          setDeviations([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -83,7 +106,10 @@ function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url
     in_progress: "Pågår",
     resolved: "Löst",
     rejected: "Avvisad",
+    reported: "Rapporterad",
   };
+
+  const items = activeTab === "changes" ? changeRequests : deviations;
 
   return (
     <Card className="border-orange-200 dark:border-orange-800" data-testid="panel-my-reports">
@@ -93,26 +119,50 @@ function MyReportsPanel({ mobileApiCall }: { mobileApiCall: (method: string, url
           Mina rapporter
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2">
+        <div className="flex gap-1">
+          <Button
+            variant={activeTab === "changes" ? "default" : "outline"}
+            size="sm"
+            className="text-xs h-7 flex-1"
+            onClick={() => setActiveTab("changes")}
+            data-testid="tab-change-requests"
+          >
+            Kundrapporter ({changeRequests.length})
+          </Button>
+          <Button
+            variant={activeTab === "deviations" ? "default" : "outline"}
+            size="sm"
+            className="text-xs h-7 flex-1"
+            onClick={() => setActiveTab("deviations")}
+            data-testid="tab-deviations"
+          >
+            Avvikelser ({deviations.length})
+          </Button>
+        </div>
         {loading ? (
           <div className="flex items-center justify-center py-4">
             <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
           </div>
-        ) : reports.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-3">Inga rapporter ännu</p>
+        ) : items.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-3">
+            {activeTab === "changes" ? "Inga kundrapporter ännu" : "Inga avvikelser ännu"}
+          </p>
         ) : (
           <div className="space-y-2 max-h-60 overflow-auto">
-            {reports.map((r) => (
+            {items.map((r) => (
               <div key={r.id} className="border rounded-lg p-2 text-sm" data-testid={`report-item-${r.id}`}>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium truncate">{CATEGORY_LABELS[r.category] || r.category}</span>
-                  <Badge variant={r.status === "new" ? "default" : r.status === "resolved" ? "secondary" : "outline"} className="text-[10px] shrink-0">
+                  <span className="font-medium truncate">
+                    {CATEGORY_LABELS[r.category] || ("title" in r ? (r as DeviationReportItem).title : r.category)}
+                  </span>
+                  <Badge variant={r.status === "new" || r.status === "reported" ? "default" : r.status === "resolved" ? "secondary" : "outline"} className="text-[10px] shrink-0">
                     {statusLabels[r.status] || r.status}
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground truncate mt-0.5">{r.description}</p>
-                {r.objectName && (
-                  <p className="text-[10px] text-muted-foreground mt-0.5">{r.objectName}</p>
+                {"objectName" in r && (r as MyReportItem).objectName && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">{(r as MyReportItem).objectName}</p>
                 )}
               </div>
             ))}
