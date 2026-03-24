@@ -163,8 +163,10 @@ export function MapScreen({ navigation }: any) {
       parts.push(`${routeOrigin.longitude},${routeOrigin.latitude}`);
     }
     liveActiveOrders.forEach(o => {
-      if (o.latitude && o.longitude && o.latitude !== 0 && o.longitude !== 0) {
-        parts.push(`${o.longitude},${o.latitude}`);
+      const lat = Number(o.latitude);
+      const lng = Number(o.longitude);
+      if (isFinite(lat) && isFinite(lng) && lat !== 0 && lng !== 0 && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+        parts.push(`${lng},${lat}`);
       }
     });
     if (parts.length < 2) return null;
@@ -224,7 +226,14 @@ export function MapScreen({ navigation }: any) {
   const activeOrders = useMemo(
     () => {
       const source = effectiveOrders || [];
-      return source.filter((o: Order) => o.status !== 'cancelled').sort((a: Order, b: Order) => a.sortOrder - b.sortOrder);
+      return source
+        .filter((o: Order) => o.status !== 'cancelled')
+        .filter((o: Order) => {
+          const lat = Number(o.latitude);
+          const lng = Number(o.longitude);
+          return isFinite(lat) && isFinite(lng) && lat !== 0 && lng !== 0 && Math.abs(lat) <= 90 && Math.abs(lng) <= 180;
+        })
+        .sort((a: Order, b: Order) => a.sortOrder - b.sortOrder);
     },
     [effectiveOrders]
   );

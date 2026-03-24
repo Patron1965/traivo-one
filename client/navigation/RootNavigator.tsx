@@ -13,6 +13,7 @@ import { CameraCaptureScreen } from '../screens/CameraCaptureScreen';
 import { SignatureScreen } from '../screens/SignatureScreen';
 import { CustomerSignOffScreen } from '../screens/CustomerSignOffScreen';
 import { InspectionScreen } from '../screens/InspectionScreen';
+import { ScreenErrorBoundary } from '../components/ScreenErrorBoundary';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import StatisticsScreen from '../screens/StatisticsScreen';
 import { RouteFeedbackScreen } from '../screens/RouteFeedbackScreen';
@@ -120,9 +121,14 @@ export function RootNavigator() {
             />
             <Stack.Screen
               name="Inspection"
-              component={InspectionScreen}
               options={{ headerTitle: 'Inspektion' }}
-            />
+            >
+              {(props: any) => (
+                <ScreenErrorBoundary fallbackTitle="Inspektionen kunde inte visas" fallbackIcon="clipboard">
+                  <InspectionScreen {...props} />
+                </ScreenErrorBoundary>
+              )}
+            </Stack.Screen>
             <Stack.Screen
               name="Settings"
               component={SettingsScreen}

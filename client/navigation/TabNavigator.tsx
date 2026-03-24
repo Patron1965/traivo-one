@@ -7,6 +7,7 @@ import { OrdersScreen } from '../screens/OrdersScreen';
 import { MapScreen } from '../screens/MapScreen';
 import { AIAssistantScreen } from '../screens/AIAssistantScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { ScreenErrorBoundary } from '../components/ScreenErrorBoundary';
 import { useScreenOptions } from '../hooks/useScreenOptions';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
 
@@ -68,7 +69,6 @@ export function TabNavigator() {
       />
       <Tab.Screen
         name="MapTab"
-        component={MapScreen}
         options={{
           headerTitle: 'Karta',
           tabBarLabel: 'Karta',
@@ -76,10 +76,15 @@ export function TabNavigator() {
             <TabIcon name="map" color={color} focused={focused} />
           ),
         }}
-      />
+      >
+        {(props: any) => (
+          <ScreenErrorBoundary fallbackTitle="Kartan kunde inte visas" fallbackIcon="map">
+            <MapScreen {...props} />
+          </ScreenErrorBoundary>
+        )}
+      </Tab.Screen>
       <Tab.Screen
         name="AIAssistantTab"
-        component={AIAssistantScreen}
         options={{
           headerTitle: 'Nordnav Assist',
           headerStyle: { backgroundColor: Colors.surface },
@@ -90,7 +95,13 @@ export function TabNavigator() {
             <TabIcon name="cpu" color={color} focused={focused} />
           ),
         }}
-      />
+      >
+        {(props: any) => (
+          <ScreenErrorBoundary fallbackTitle="Assistenten kunde inte visas" fallbackIcon="cpu">
+            <AIAssistantScreen {...props} />
+          </ScreenErrorBoundary>
+        )}
+      </Tab.Screen>
       <Tab.Screen
         name="ProfileTab"
         component={ProfileScreen}
