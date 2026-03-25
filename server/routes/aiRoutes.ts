@@ -1128,18 +1128,18 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
 
 // VRP-based route optimization using Geoapify Route Planner
 app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
-    const { optimizeRoutesVRP } = await import("../route-optimizer");
-    const { date, clusterId } = req.body;
+    const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
+    const { date, clusterId, breakConfig: reqBreakConfig } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
-    const [workOrders, resources, objects, clusters] = await Promise.all([
+    const [workOrders, resources, objects, clusters, tenant] = await Promise.all([
       storage.getWorkOrders(tenantId),
       storage.getResources(tenantId),
       storage.getObjects(tenantId),
       storage.getClusters(tenantId),
+      storage.getTenant(tenantId),
     ]);
     
-    // Filter orders if specific date or cluster provided
     let filteredOrders = workOrders;
     
     if (date) {
@@ -1156,12 +1156,14 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
       filteredOrders = filteredOrders.filter(o => o.clusterId === clusterId);
     }
     
-    // Only include unexecuted orders
     filteredOrders = filteredOrders.filter(o => 
       o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
+
+    const tenantSettings = (tenant?.settings as Record<string, any>) || {};
+    const breakConfig = reqBreakConfig ?? tenantSettings.breakConfig ?? DEFAULT_BREAK_CONFIG;
     
-    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters);
+    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, breakConfig);
     res.json(result);
 }));
 

@@ -294,10 +294,25 @@ export async function optimizeResourceDayRoute(
 // Geoapify Route Planner API (VRP Optimization)
 // =============================================================================
 
+export interface BreakConfig {
+  enabled: boolean;
+  durationMinutes: number;
+  earliestStart: number;
+  latestEnd: number;
+}
+
+export const DEFAULT_BREAK_CONFIG: BreakConfig = {
+  enabled: true,
+  durationMinutes: 30,
+  earliestStart: 11 * 3600,
+  latestEnd: 13 * 3600,
+};
+
 interface GeoapifyAgent {
   start_location: [number, number];
   end_location?: [number, number];
   time_windows?: [number, number][];
+  breaks?: Array<{ duration: number; time_windows?: [number, number][] }>;
   id?: string;
   description?: string;
 }
@@ -312,7 +327,7 @@ interface GeoapifyJob {
 }
 
 interface GeoapifyAction {
-  type: "start" | "end" | "job";
+  type: "start" | "end" | "job" | "break";
   start_time?: number;
   duration?: number;
   job_index?: number;
@@ -355,25 +370,30 @@ interface GeoapifyRoutePlannerResponse {
   features: GeoapifyAgentPlan[];
 }
 
+export interface VRPRouteStop {
+  orderId: string;
+  orderTitle: string;
+  sequence: number;
+  arrivalSeconds?: number;
+  serviceMinutes: number;
+  waitingMinutes: number;
+  location: { lat: number; lng: number };
+  isBreak?: boolean;
+  breakDurationMinutes?: number;
+}
+
 export interface VRPOptimizationResult {
   success: boolean;
   routes: Array<{
     resourceId: string;
     resourceName: string;
-    stops: Array<{
-      orderId: string;
-      orderTitle: string;
-      sequence: number;
-      arrivalSeconds?: number;
-      serviceMinutes: number;
-      waitingMinutes: number;
-      location: { lat: number; lng: number };
-    }>;
+    stops: VRPRouteStop[];
     totalDurationMinutes: number;
     totalDistanceKm: number;
     totalServiceMinutes: number;
     efficiency: number;
     geometry?: string;
+    breakConfig?: BreakConfig;
   }>;
   unassignedOrders: Array<{ orderId: string; reason: string }>;
   summary: {
@@ -419,7 +439,8 @@ export async function optimizeRoutesVRP(
   workOrders: WorkOrder[],
   resources: Resource[],
   objects: ServiceObject[],
-  clusters: Cluster[]
+  clusters: Cluster[],
+  breakConfig?: BreakConfig,
 ): Promise<VRPOptimizationResult> {
   if (!GEOAPIFY_API_KEY) {
     return {
@@ -511,12 +532,14 @@ export async function optimizeRoutesVRP(
     };
   }
 
+  const effectiveBreak = breakConfig?.enabled !== false ? (breakConfig || DEFAULT_BREAK_CONFIG) : null;
+
   const agents: GeoapifyAgent[] = resources.map((resource, idx) => {
     const startCoord: [number, number] = resource.homeLatitude && resource.homeLongitude
       ? [resource.homeLongitude, resource.homeLatitude]
       : [20.263, 63.826]; // Umeå default
 
-    return {
+    const agent: GeoapifyAgent = {
       start_location: startCoord,
       end_location: startCoord,
       time_windows: [
@@ -528,6 +551,15 @@ export async function optimizeRoutesVRP(
       id: resource.id,
       description: resource.name,
     };
+
+    if (effectiveBreak) {
+      agent.breaks = [{
+        duration: effectiveBreak.durationMinutes * 60,
+        time_windows: [[effectiveBreak.earliestStart, effectiveBreak.latestEnd]],
+      }];
+    }
+
+    return agent;
   });
 
   if (agents.length === 0) {
@@ -585,29 +617,48 @@ export async function optimizeRoutesVRP(
       const props = feature.properties;
       const resource = resources[props.agent_index];
 
-      const jobActions = props.actions.filter(a => a.type === "job");
-      const stops = jobActions.map((action, idx) => {
-        const orderId = action.job_id || (action.job_index !== undefined ? jobIndexToOrderId.get(action.job_index) : "") || "";
-        const order = orderMap.get(orderId);
-        const waypoint = action.waypoint_index !== undefined ? props.waypoints[action.waypoint_index] : null;
+      const relevantActions = props.actions.filter(a => a.type === "job" || a.type === "break");
+      const stops: VRPRouteStop[] = [];
+      let seq = 1;
 
-        return {
-          orderId,
-          orderTitle: order?.title || `Order ${orderId.slice(0, 8)}`,
-          sequence: idx + 1,
-          arrivalSeconds: action.start_time || 0,
-          serviceMinutes: Math.round((action.duration || 0) / 60),
-          waitingMinutes: 0,
-          location: waypoint?.location 
-            ? { lat: waypoint.location[1], lng: waypoint.location[0] }
-            : { lat: 0, lng: 0 }
-        };
-      });
+      for (const action of relevantActions) {
+        if (action.type === "break") {
+          const prevStop = stops.length > 0 ? stops[stops.length - 1] : null;
+          stops.push({
+            orderId: `break-${resource?.id || props.agent_index}`,
+            orderTitle: "Rast",
+            sequence: seq++,
+            arrivalSeconds: action.start_time || 0,
+            serviceMinutes: Math.round((action.duration || 0) / 60),
+            waitingMinutes: 0,
+            location: prevStop?.location || { lat: 0, lng: 0 },
+            isBreak: true,
+            breakDurationMinutes: Math.round((action.duration || 0) / 60),
+          });
+        } else {
+          const orderId = action.job_id || (action.job_index !== undefined ? jobIndexToOrderId.get(action.job_index) : "") || "";
+          const order = orderMap.get(orderId);
+          const waypoint = action.waypoint_index !== undefined ? props.waypoints[action.waypoint_index] : null;
 
-      totalAssigned += stops.length;
+          stops.push({
+            orderId,
+            orderTitle: order?.title || `Order ${orderId.slice(0, 8)}`,
+            sequence: seq++,
+            arrivalSeconds: action.start_time || 0,
+            serviceMinutes: Math.round((action.duration || 0) / 60),
+            waitingMinutes: 0,
+            location: waypoint?.location 
+              ? { lat: waypoint.location[1], lng: waypoint.location[0] }
+              : { lat: 0, lng: 0 },
+          });
+        }
+      }
+
+      const jobStops = stops.filter(s => !s.isBreak);
+      totalAssigned += jobStops.length;
 
       const totalDur = Math.round(props.time / 60);
-      const totalSvc = stops.reduce((s, st) => s + st.serviceMinutes, 0);
+      const totalSvc = jobStops.reduce((s, st) => s + st.serviceMinutes, 0);
       const distKm = Math.round(props.distance / 100) / 10;
 
       totalDistance += props.distance;
@@ -621,7 +672,8 @@ export async function optimizeRoutesVRP(
         totalDistanceKm: distKm,
         totalServiceMinutes: totalSvc,
         efficiency: totalDur > 0 ? Math.round((totalSvc / totalDur) * 100) : 0,
-        geometry: feature.geometry
+        geometry: feature.geometry,
+        breakConfig: effectiveBreak || undefined,
       };
     });
 

@@ -1636,5 +1636,43 @@ app.put("/api/terminology", requireAdmin, asyncHandler(async (req, res) => {
     res.json({ success: true });
 }));
 
+app.get("/api/break-config", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const tenant = await storage.getTenant(tenantId);
+    const settings = (tenant?.settings as Record<string, any>) || {};
+    const breakConfig = settings.breakConfig || {
+      enabled: true,
+      durationMinutes: 30,
+      earliestStart: 11 * 3600,
+      latestEnd: 13 * 3600,
+    };
+    res.json(breakConfig);
+}));
+
+app.patch("/api/break-config", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      enabled: z.boolean().optional(),
+      durationMinutes: z.number().min(15).max(120).optional(),
+      earliestStart: z.number().optional(),
+      latestEnd: z.number().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Ogiltig rastkonfiguration" });
+    }
+    const tenant = await storage.getTenant(tenantId);
+    const currentSettings = (tenant?.settings as Record<string, any>) || {};
+    const currentBreak = currentSettings.breakConfig || {
+      enabled: true,
+      durationMinutes: 30,
+      earliestStart: 11 * 3600,
+      latestEnd: 13 * 3600,
+    };
+    const updatedBreak = { ...currentBreak, ...parsed.data };
+    await storage.updateTenantSettings(tenantId, { ...currentSettings, breakConfig: updatedBreak });
+    res.json(updatedBreak);
+}));
+
 
 }

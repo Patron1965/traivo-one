@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Loader2, LocateFixed, Send, Truck } from "lucide-react";
+import { Coffee, Loader2, LocateFixed, Send, Truck } from "lucide-react";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from "react-leaflet";
 import { format } from "date-fns";
@@ -27,6 +27,13 @@ function MapFitBounds({ bounds }: { bounds: L.LatLngBoundsExpression | null }) {
   return null;
 }
 
+export interface VRPBreakStop {
+  orderId: string;
+  arrivalSeconds: number;
+  durationMinutes: number;
+  location: { lat: number; lng: number };
+}
+
 interface RouteMapViewProps {
   currentDate: Date;
   resources: Resource[];
@@ -41,6 +48,7 @@ interface RouteMapViewProps {
   onSortEnd: (oldIndex: number, newIndex: number) => void;
   onOptimizeRoute: () => void;
   onSendSchedule: (resource: Resource) => void;
+  vrpBreaks?: VRPBreakStop[];
 }
 
 export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps) {
@@ -48,6 +56,7 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     currentDate, resources, routeViewResourceId, setRouteViewResourceId,
     routeJobs, routeJobOrder, customerMap, isOptimizing,
     selectedJob, onJobClick, onSortEnd, onOptimizeRoute, onSendSchedule,
+    vrpBreaks,
   } = props;
 
   const mapConfig = useMapConfig();
@@ -88,8 +97,9 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
       }
     }
     const totalWorkMinutes = orderedJobs.reduce((sum, j) => sum + (j.estimatedDuration || 0), 0);
-    return { totalMinutes, totalKm: Math.round(totalKm), totalWorkMinutes, stops: orderedJobs.length };
-  }, [orderedJobs]);
+    const breakMinutes = (vrpBreaks || []).reduce((sum, b) => sum + (b.durationMinutes || 0), 0);
+    return { totalMinutes, totalKm: Math.round(totalKm), totalWorkMinutes, stops: orderedJobs.length, breakMinutes };
+  }, [orderedJobs, vrpBreaks]);
 
   const selectedResource = resources.find(r => r.id === routeViewResourceId);
 
@@ -132,6 +142,14 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                   <div className="text-lg font-bold">{(routeStats.totalWorkMinutes / 60).toFixed(1)}</div>
                   <div className="text-[10px] text-muted-foreground">h arbete</div>
                 </Card>
+                {routeStats.breakMinutes > 0 && (
+                  <Card className="p-2 text-center col-span-2 bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800" data-testid="route-break-stat">
+                    <div className="flex items-center justify-center gap-1">
+                      <Coffee className="h-3.5 w-3.5 text-amber-600" />
+                      <span className="text-sm font-bold">{routeStats.breakMinutes} min rast</span>
+                    </div>
+                  </Card>
+                )}
               </div>
               <div className="flex gap-2">
                 <Button
@@ -175,17 +193,34 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                     travelToNext = calculateTravelTime(job.taskLatitude, job.taskLongitude, next.taskLatitude, next.taskLongitude);
                   }
                 }
+                const breakAfter = (vrpBreaks || []).find(b => {
+                  if (!b.arrivalSeconds) return false;
+                  const jobArrival = job.scheduledStartTime ? parseFloat(job.scheduledStartTime.split(":")[0]) * 3600 + parseFloat(job.scheduledStartTime.split(":")[1] || "0") * 60 : 0;
+                  const nextJob = index < orderedJobs.length - 1 ? orderedJobs[index + 1] : null;
+                  const nextArrival = nextJob?.scheduledStartTime ? parseFloat(nextJob.scheduledStartTime.split(":")[0]) * 3600 + parseFloat(nextJob.scheduledStartTime.split(":")[1] || "0") * 60 : 999999;
+                  return b.arrivalSeconds >= jobArrival && b.arrivalSeconds < nextArrival;
+                });
                 return (
-                  <SortableRouteItem
-                    key={job.id}
-                    job={job}
-                    index={index}
-                    totalCount={orderedJobs.length}
-                    customer={customer}
-                    travelToNext={travelToNext}
-                    isSelected={selectedJob === job.id}
-                    onSelect={onJobClick}
-                  />
+                  <div key={job.id}>
+                    <SortableRouteItem
+                      job={job}
+                      index={index}
+                      totalCount={orderedJobs.length}
+                      customer={customer}
+                      travelToNext={travelToNext}
+                      isSelected={selectedJob === job.id}
+                      onSelect={onJobClick}
+                    />
+                    {breakAfter && (
+                      <div className="flex items-center gap-2 px-3 py-1.5 mx-1 my-0.5 rounded bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800" data-testid="route-break-indicator">
+                        <Coffee className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                        <span className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                          Rast {breakAfter.durationMinutes} min
+                          {breakAfter.arrivalSeconds > 0 && ` (${Math.floor(breakAfter.arrivalSeconds / 3600).toString().padStart(2,"0")}:${Math.floor((breakAfter.arrivalSeconds % 3600) / 60).toString().padStart(2,"0")})`}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
               {orderedJobs.length === 0 && routeViewResourceId && (
@@ -245,6 +280,27 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
                         </span>
                       )}
                     </div>
+                  </div>
+                </Popup>
+              </Marker>
+            );
+          })}
+          {(vrpBreaks || []).map((brk) => {
+            if (!brk.location.lat || !brk.location.lng) return null;
+            const breakTime = brk.arrivalSeconds ? `${Math.floor(brk.arrivalSeconds / 3600).toString().padStart(2,"0")}:${Math.floor((brk.arrivalSeconds % 3600) / 60).toString().padStart(2,"0")}` : "";
+            const breakIcon = L.divIcon({
+              className: "custom-div-icon",
+              html: `<div style="background:#F59E0B;color:#fff;width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;border:2px solid #fff;box-shadow:0 2px 4px rgba(0,0,0,0.3)">☕</div>`,
+              iconSize: [28, 28],
+              iconAnchor: [14, 14],
+            });
+            return (
+              <Marker key={brk.orderId} position={[brk.location.lat, brk.location.lng]} icon={breakIcon}>
+                <Popup>
+                  <div className="min-w-[150px]">
+                    <div className="font-medium flex items-center gap-1">☕ Rast</div>
+                    <div className="text-sm text-gray-500">{brk.durationMinutes} min</div>
+                    {breakTime && <div className="text-xs bg-amber-100 px-1.5 py-0.5 rounded mt-1 inline-block">{breakTime}</div>}
                   </div>
                 </Popup>
               </Marker>

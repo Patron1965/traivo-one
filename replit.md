@@ -1,7 +1,7 @@
 # Traivo - AI-Driven Field Service Planning Platform
 
 ## Overview
-Traivo is an AI-driven platform designed to optimize field service operations, initially for Nordic waste management companies. It aims to revolutionize field service by transitioning from manual management to AI-driven optimization, offering real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's vision is to become the leading platform for Nordic field service, evolving into a commercial SaaS solution with comprehensive multi-tenant capabilities.
+Traivo is an AI-driven platform optimizing field service operations for Nordic waste management companies. It aims to transform manual processes into AI-driven optimization, offering real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's vision is to become the leading commercial SaaS platform for Nordic field service with comprehensive multi-tenant capabilities.
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
@@ -22,54 +22,36 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Backend:** Express.js with modular route architecture.
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
-- **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner, including budget enforcement.
-- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename, selective modular import, Import Health Overview with data quality warnings, flexible column mapping with auto-suggestions, hierarchy tree preview, batch rollback (soft delete), and detailed error reporting with row/column references.
+- **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner, including budget enforcement. Predictive maintenance uses AI to forecast service dates from IoT data.
+- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, flexible column mapping, and detailed error reporting.
 - **Geocoding:** Geoapify Geocoding API with Nominatim fallback.
 - **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.
 - **Offline Architecture:** Complete offline-first architecture for mobile field workers using IndexedDB.
 - **Automatic Anomaly Monitoring:** Background job for detecting operational anomalies and broadcasting alerts.
-- **Mobile API Endpoints:** Dedicated REST API for mobile features with offline sync capabilities.
-- **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, comprehensive work order management, and per-object article management with resolved pricing.
-- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, self-booking with recurring slot patterns, dynamic widgets, sidebar navigation with unread badges, cancellation with reason, and field documentation.
-- **Customer Field Documentation:** Mobile-first portal feature for object documentation via QR code, photo capture, and structured change reports, with admin review.
-- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Geoapify Routing API distance calculations with Haversine fallback, and Auto-Fill Week functionality with Geographic Day-Clustering (k-means based zone grouping for minimizing daily travel).
-- **Distance Matrix Service:** Centralized `server/distance-matrix-service.ts` providing cached Geoapify Routing API calls with TTL-based caching (2h, 5000 entries max), batch distance resolution, and automatic Haversine fallback. Used by AI suggest-placement, auto-distribute-today, and ETA service.
+- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, upcoming visits, order history, real-time chat, self-booking, and field documentation.
+- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Geoapify Routing API distance calculations with Haversine fallback, and Auto-Fill Week functionality with Geographic Day-Clustering.
+- **Distance Matrix Service:** Centralized caching for Geoapify Routing API calls with automatic Haversine fallback.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
 - **Environmental Statistics & Certificates:** Tracking mileage, fuel, CO2, and generation of annual environmental certificates.
-- **Industry Packages System:** Predefined templates for different industries with configurable articles and metadata.
 - **SMS Infrastructure:** Unified multi-channel notification service supporting email and SMS.
 - **Route Feedback System:** Driver daily route ratings, reason categories, free text, and reporting UI with KPI cards and charts, with an AI field assistant.
-- **Planner Map:** Real-time driver/job map with real road geometry, filtering, status filter chips, enhanced job popups, colored driver avatars, and route information.
+- **Planner Map:** Real-time driver/job map with real road geometry, filtering, and status updates.
 - **Historical Map View:** Playback of daily GPS movement patterns per resource with timeline slider and KPI overlay.
 - **Reporting & KPI Dashboard:** Enhanced `/reporting` page with tabs for overview, productivity, completion, deviations, resources, areas, and customers, featuring Recharts diagrams.
-- **Execution Codes & Resource Profiles:** System for mapping resource capabilities to task requirements, and profile templates for auto-planning.
 - **Work Sessions & Time Tracking (Snöret):** Complete work session management system with check-in/check-out, time entries, weekly time summaries, labor rule violation detection, and payroll CSV export.
 - **Annual Planning (Årsplanering):** Annual goal tracking per customer/object with AI-driven distribution proposing optimal monthly work order distribution.
 - **Equipment Sharing & Shift Collision Control:** Tracking vehicle/equipment bookings, collision detection, and availability timeline.
-- **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
-- **Association Tvåstegsfilter (Kinab P3):** Two-step article↔object matching via metadata labels, with backend service and frontend integration.
-- **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner.
-- **Structural Tasks:** Composite tasks composed of multiple sub-steps.
-- **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.
-- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard.
 - **Smart AI Kontrollmallar & Field Validation:** AI-driven control templates for field workers suggesting steps based on order type and history, with mandatory field validation.
-- **Field Worker Task Dependency View & Photo Upload:** Mobile app displays task dependencies and supports two-step presigned URL photo uploads.
 - **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
 - **Team Management & User Administration:** User management with admin CRUD, team system, bulk actions, and invitation system.
-- **Access Control & Invitations:** Frontend access gate and admin invitation system for pre-approving users with role assignment.
 - **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, permissions, and branded demo configuration.
 - **Branded Demo Experience:** Quick branding editor in tenant settings with live preview and auto-scrape feature.
 - **Fleet Management:** Comprehensive fleet management page with vehicle dashboard, maintenance planning, and fuel tracking.
-- **Tenant Onboarding Wizard:** Admin wizard for creating new company accounts with industry package selection.
-- **Multi-Strategy Auto-Clustering:** Enhanced `/auto-cluster` page with 5 strategies for automatic cluster generation.
-- **Interim Objects & Object Verification:** `isInterimObject` flag for public issue reports with admin UI for verification.
 - **IoT API & Automatic Order Generation:** Management of IoT devices, API keys, and signals, with auto-generation of work orders based on sensor signals.
-- **Predictive Maintenance:** AI-driven predictive maintenance using IoT signal history to forecast next service date with confidence scoring.
-- **Event-Driven Disruption Service:** Automated disruption detection and re-optimization suggestions for 4 trigger types: resource unavailable (sjukanmälan), emergency jobs, significant delays (>50%), and early completion (slack time). DisruptionPanel in WeekPlanner shows real-time alerts with scored suggestions and one-click application. All proposals include decision trace logging. WebSocket notifications broadcast disruptions to connected planners.
-- **ROI-rapport:** Generalized ROI report per customer calculated from real usage data.
+- **Event-Driven Disruption Service:** Automated disruption detection and re-optimization suggestions for resource unavailability, emergency jobs, significant delays, and early completion. DisruptionPanel shows real-time alerts with scored suggestions and one-click application.
+- **Intelligent Break Placement in VRP:** Break constraints included in Geoapify Route Planner API VRP requests, placing breaks at natural route turning points.
 - **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields, UI for visualization, and aggregated preferences for order placement.
-- **Job Creation Price List Override:** Optional price list selector in JobModal allowing manual override of automatic price resolution hierarchy.
 - **Planned Notes (Meddelande till utförare):** Planner can write messages to field workers, displayed prominently in the SimpleFieldApp.
 - **Tenant Feature Flags:** Module-based feature packaging system with 4 tiers, allowing per-tenant module enablement.
 - **WeekPlanner Drag-and-Drop Improvements:** Inline conflict indicators, multi-select bulk-move, and AI "Föreslå optimal tid" per order with scoring algorithm.
@@ -84,13 +66,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **External Optimization:** Route optimization is offloaded to a separate Traivo optimization service.
 - **Data Validation:** DataClean service handles external data validation and geocoding.
 - **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app.
-- **Article Service Constraints:** `maxPerAddress` field on articles for limiting service count per address.
-- **Field Worker Task Summary:** Aggregated task type counts ("10 tvättar, 2 besiktningar") in SimpleFieldApp job list header.
-- **Route GPS Start:** Route optimizer uses live GPS position as start point instead of home coordinates.
-- **Carry-Over Logic:** `POST /api/work-orders/carry-over` endpoint and WeekPlanner "Flytta oavslutade" button for moving unfinished jobs.
-- **Proactive Sales View:** `/proactive-sales` page showing inactive customers, historical revenue, and contact information.
-- **Telephony Lookup API (Växel-API):** GET /api/telephony/lookup?phone=... identifies customers by phone number (direct match + metadata search), returns customer info, objects, recent orders, cluster/area data.
-- **Status Message Templates:** Configurable message templates with variable substitution ({resource.name}, {resource.nextAvailable}, etc.) for auto-responses.
+- **Status Message Templates:** Configurable message templates with variable substitution for auto-responses.
 - **Resource Availability Service:** Real-time resource schedule analysis computing next available time from today's work orders.
 - **Portal Chat Auto-Responses:** Automatic status messages in customer portal chat when keywords like "status", "när", "ledig" are detected.
 
@@ -106,7 +82,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **react-leaflet:** Interactive map visualizations.
 - **shadcn/ui:** UI component library.
 - **Open-Meteo API:** Provides weather forecast data.
-- **Fortnox API:** Integration with the Fortnox accounting system for entity import and export.
+- **Fortnox API:** Integration with the Fortnox accounting system.
 - **Resend:** Email notification service.
 - **Twilio API:** SMS notification service.
 - **jsPDF:** PDF generation library.
