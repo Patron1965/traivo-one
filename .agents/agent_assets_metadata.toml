@@ -18,3 +18,9 @@ id = "MPXLlb5-9QxgeNKLS_bsD"
 uri = "file://.local/traivo-go-integration-instructions.md"
 type = "text"
 title = "Traivo GO — Integrationsinstruktioner (senaste 24h)"
+
+[[outputs]]
+id = "Uo3MQOocf3xIVwyBdL1zj"
+uri = "file://TRAIVO_GO_INTEGRATION_R1-R6.md"
+type = "text"
+title = "Traivo GO — Integrationsinstruktion R1–R6"
