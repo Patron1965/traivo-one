@@ -161,6 +161,14 @@ interface ArticleFormData {
   associationLabel: string;
   associationValue: string;
   associationOperator: string;
+  fetchMetadataLabel: string;
+  fetchMetadataLabelFormat: string;
+  canUpdateMetadata: boolean;
+  updateMetadataLabel: string;
+  updateMetadataFormat: string;
+  showPreviousValue: boolean;
+  isInfoCarrier: boolean;
+  limitationType: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -183,6 +191,14 @@ const emptyFormData: ArticleFormData = {
   associationLabel: "",
   associationValue: "",
   associationOperator: "equals",
+  fetchMetadataLabel: "",
+  fetchMetadataLabelFormat: "",
+  canUpdateMetadata: false,
+  updateMetadataLabel: "",
+  updateMetadataFormat: "",
+  showPreviousValue: false,
+  isInfoCarrier: false,
+  limitationType: "unlimited",
 };
 
 export default function ArticlesPage() {
@@ -333,6 +349,14 @@ export default function ArticlesPage() {
       associationLabel: (article as any).associationLabel || "",
       associationValue: (article as any).associationValue || "",
       associationOperator: (article as any).associationOperator || "equals",
+      fetchMetadataLabel: (article as any).fetchMetadataLabel || "",
+      fetchMetadataLabelFormat: (article as any).fetchMetadataLabelFormat || "",
+      canUpdateMetadata: (article as any).canUpdateMetadata || false,
+      updateMetadataLabel: (article as any).updateMetadataLabel || "",
+      updateMetadataFormat: (article as any).updateMetadataFormat || "",
+      showPreviousValue: (article as any).showPreviousValue || false,
+      isInfoCarrier: (article as any).isInfoCarrier || false,
+      limitationType: (article as any).limitationType || "unlimited",
     });
     setDialogOpen(true);
   };
@@ -1217,6 +1241,157 @@ export default function ArticlesPage() {
                   <p className="text-xs text-muted-foreground">Hur metadata-värdet skapas vid utförande</p>
                 </div>
               )}
+
+              <Separator />
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  Etikett-koppling (Kinab)
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Koppla artikeln till metadata-etiketter för hämtning/uppdatering i fält
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Hämta etikett (visa för fältarbetare)</Label>
+                  <Select
+                    value={formData.fetchMetadataLabel || "_none"}
+                    onValueChange={(v) => setFormData({ ...formData, fetchMetadataLabel: v === "_none" ? "" : v })}
+                  >
+                    <SelectTrigger data-testid="select-fetch-metadata-label">
+                      <SelectValue placeholder="Ingen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Ingen</SelectItem>
+                      {metadataLabels.map(ml => (
+                        <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
+                          {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Visningsformat</Label>
+                  <Select
+                    value={formData.fetchMetadataLabelFormat || "text"}
+                    onValueChange={(v) => setFormData({ ...formData, fetchMetadataLabelFormat: v })}
+                    disabled={!formData.fetchMetadataLabel}
+                  >
+                    <SelectTrigger data-testid="select-fetch-label-format">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text">Fritext</SelectItem>
+                      <SelectItem value="ok_ej_ok">OK / EJ OK</SelectItem>
+                      <SelectItem value="number">Numeriskt</SelectItem>
+                      <SelectItem value="date">Datum</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.canUpdateMetadata}
+                    onChange={(e) => setFormData({ ...formData, canUpdateMetadata: e.target.checked })}
+                    className="rounded border-gray-300"
+                    data-testid="checkbox-can-update-metadata"
+                  />
+                  <span className="text-sm">Fältarbetare kan uppdatera metadata</span>
+                </label>
+              </div>
+
+              {formData.canUpdateMetadata && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Uppdatera etikett</Label>
+                    <Select
+                      value={formData.updateMetadataLabel || "_none"}
+                      onValueChange={(v) => setFormData({ ...formData, updateMetadataLabel: v === "_none" ? "" : v })}
+                    >
+                      <SelectTrigger data-testid="select-update-metadata-label">
+                        <SelectValue placeholder="Ingen" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="_none">Samma som hämta-etikett</SelectItem>
+                        {metadataLabels.map(ml => (
+                          <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
+                            {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Uppdateringsformat</Label>
+                    <Select
+                      value={formData.updateMetadataFormat || "value"}
+                      onValueChange={(v) => setFormData({ ...formData, updateMetadataFormat: v })}
+                    >
+                      <SelectTrigger data-testid="select-update-format">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="value">Värde (direkt input)</SelectItem>
+                        <SelectItem value="ok_ej_ok">OK / EJ OK</SelectItem>
+                        <SelectItem value="timestamp">Tidsstämpel (automatisk)</SelectItem>
+                        <SelectItem value="counter_increment">Räknare: +1</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+
+              {formData.canUpdateMetadata && (
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.showPreviousValue}
+                    onChange={(e) => setFormData({ ...formData, showPreviousValue: e.target.checked })}
+                    className="rounded border-gray-300"
+                    data-testid="checkbox-show-previous-value"
+                  />
+                  <span className="text-sm">Visa föregående värde för fältarbetare</span>
+                </label>
+              )}
+
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.isInfoCarrier}
+                    onChange={(e) => setFormData({ ...formData, isInfoCarrier: e.target.checked })}
+                    className="rounded border-gray-300"
+                    data-testid="checkbox-is-info-carrier"
+                  />
+                  <span className="text-sm">Blindartikel (informationsbärare)</span>
+                </label>
+                <HelpTooltip content="Blindartiklar visas som info-kort i fältappen utan utförande-steg" />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Begränsningstyp</Label>
+                <Select
+                  value={formData.limitationType || "unlimited"}
+                  onValueChange={(v) => setFormData({ ...formData, limitationType: v })}
+                >
+                  <SelectTrigger data-testid="select-limitation-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unlimited">Obegränsad</SelectItem>
+                    <SelectItem value="once_per_object">En gång per objekt</SelectItem>
+                    <SelectItem value="once_per_period">En gång per period</SelectItem>
+                    <SelectItem value="max_per_address">Max per adress (se ovan)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Styr hur ofta denna artikel får utföras</p>
+              </div>
 
               <Separator />
               <div className="space-y-1">

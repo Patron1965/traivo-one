@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import OpenAI from "openai";
@@ -2266,6 +2266,127 @@ app.post("/api/mobile/travel-times", isAuthenticated, asyncHandler(async (req: a
       console.error("[mobile] Travel times error:", error);
       res.status(500).json({ error: "Kunde inte beräkna restider" });
     }
+}));
+
+app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    if (!order.objectId) return res.json({ articles: [], metadata: [] });
+
+    const tenantId = getTenantIdWithFallback(req);
+    const allArticles = await storage.getArticles(tenantId);
+
+    const orderArticleIds: string[] = [];
+    if (order.articleId) orderArticleIds.push(order.articleId);
+
+    const relevantArticles = allArticles.filter(a =>
+      a.status === "active" && (
+        (a as any).fetchMetadataLabel ||
+        (a as any).canUpdateMetadata ||
+        (a as any).isInfoCarrier
+      ) && (
+        orderArticleIds.includes(a.id) ||
+        !a.hookLevel ||
+        (a.objectTypes && a.objectTypes.length === 0)
+      )
+    );
+
+    const objectMetadata = await getArticleMetadataForObject(order.objectId, tenantId);
+
+    const result = relevantArticles.map(article => {
+      const fetchLabel = (article as any).fetchMetadataLabel;
+      const updateLabel = (article as any).updateMetadataLabel;
+      let fetchedValue: string | null = null;
+      let previousValue: string | null = null;
+
+      if (fetchLabel && objectMetadata) {
+        const match = objectMetadata.find((m: any) =>
+          m.katalog?.beteckning === fetchLabel || m.katalog?.namn === fetchLabel
+        );
+        if (match) {
+          fetchedValue = match.vardeString ?? (match.vardeInteger != null ? String(match.vardeInteger) : null) ?? null;
+        }
+      }
+
+      if (updateLabel && (article as any).showPreviousValue && objectMetadata) {
+        const match = objectMetadata.find((m: any) =>
+          m.katalog?.beteckning === updateLabel || m.katalog?.namn === updateLabel
+        );
+        if (match) {
+          previousValue = match.vardeString ?? (match.vardeInteger != null ? String(match.vardeInteger) : null) ?? null;
+        }
+      }
+
+      return {
+        articleId: article.id,
+        articleName: article.name,
+        articleNumber: article.articleNumber,
+        isInfoCarrier: (article as any).isInfoCarrier || false,
+        fetchMetadataLabel: fetchLabel || null,
+        fetchMetadataLabelFormat: (article as any).fetchMetadataLabelFormat || null,
+        fetchedValue,
+        canUpdateMetadata: (article as any).canUpdateMetadata || false,
+        updateMetadataLabel: updateLabel || null,
+        updateMetadataFormat: (article as any).updateMetadataFormat || null,
+        showPreviousValue: (article as any).showPreviousValue || false,
+        previousValue,
+      };
+    });
+
+    res.json({ articles: result });
+}));
+
+app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const { articleId, metadataLabel, newValue, inspectionStatus, inspectionComment, inspectionPhoto } = req.body;
+
+    if (!metadataLabel || newValue === undefined) {
+      throw new ValidationError("metadataLabel och newValue krävs");
+    }
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+    if (!order.objectId) throw new ValidationError("Order saknar objekt");
+
+    const tenantId = getTenantIdWithFallback(req);
+    const objectMetadata = await getArticleMetadataForObject(order.objectId, tenantId);
+    let previousValue: string | null = null;
+
+    if (objectMetadata) {
+      const match = objectMetadata.find((m: any) =>
+        m.katalog?.beteckning === metadataLabel || m.katalog?.namn === metadataLabel
+      );
+      if (match) {
+        previousValue = match.vardeString ?? (match.vardeInteger != null ? String(match.vardeInteger) : null) ?? null;
+      }
+    }
+
+    const effectiveValue = inspectionStatus
+      ? JSON.stringify({ status: inspectionStatus, value: newValue, comment: inspectionComment || null, photo: inspectionPhoto || null })
+      : newValue;
+
+    await writeArticleMetadataOnObject(order.objectId, metadataLabel, effectiveValue, tenantId, resourceId);
+
+    await db.insert(taskMetadataUpdates).values({
+      tenantId,
+      workOrderId: orderId,
+      objectId: order.objectId,
+      articleId: articleId || null,
+      metadataLabel,
+      previousValue,
+      newValue: effectiveValue,
+      updatedBy: resourceId,
+    });
+
+    console.log(`[mobile] Metadata updated: ${metadataLabel} = ${effectiveValue} on object ${order.objectId} by ${resourceId}`);
+
+    res.json({ success: true, previousValue, newValue: effectiveValue });
 }));
 
 function getFallbackChecklist(orderType: string): string[] {

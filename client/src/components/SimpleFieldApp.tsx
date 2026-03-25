@@ -10,7 +10,7 @@ import {
   HelpCircle, Clock, Trash2, Ban, MapPinOff, Timer, Bell, WifiOff, FileSignature, Camera, X,
   Key, DoorOpen, ListChecks, CircleDot, Circle, Mail, Coffee, MessageSquare, ChevronRight,
   User, CloudSun, Pause, SkipForward, Send, Flag, Thermometer, Wind, Download, Share,
-  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car
+  Lock, Unlock, ClipboardCheck, Wrench, UserX, AlarmClock, Car, Database
 } from "lucide-react";
 import { startOfDay, endOfDay, format } from "date-fns";
 import { sv } from "date-fns/locale";
@@ -33,6 +33,7 @@ import type { WorkOrderWithObject, Customer } from "@shared/schema";
 import { IMPOSSIBLE_REASONS, IMPOSSIBLE_REASON_LABELS, REQUIRED_FIELDS_BY_ORDER_TYPE } from "@shared/schema";
 import { CATEGORY_LABELS, SEVERITY_LABELS, GO_CATEGORIES } from "@shared/changeRequestCategories";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DailyProgressCard } from "@/components/DailyProgressCard";
 import { VoiceInput } from "@/components/VoiceInput";
@@ -575,6 +576,55 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
   const selectedCustomer = selectedJob ? customerMap.get(selectedJob.customerId) : null;
   const selectedJobMetadata = (selectedJob?.metadata as Record<string, unknown>) || {};
   const existingSignaturePath = (selectedJobMetadata.signaturePath as string) || null;
+
+  interface MetadataArticleContext {
+    articleId: string;
+    articleName: string;
+    articleNumber: string;
+    isInfoCarrier: boolean;
+    fetchMetadataLabel: string | null;
+    fetchMetadataLabelFormat: string | null;
+    fetchedValue: string | null;
+    canUpdateMetadata: boolean;
+    updateMetadataLabel: string | null;
+    updateMetadataFormat: string | null;
+    showPreviousValue: boolean;
+    previousValue: string | null;
+  }
+
+  const [metadataUpdates, setMetadataUpdates] = useState<Record<string, { value: string; status?: string; comment?: string }>>({});
+  const [savingMetadata, setSavingMetadata] = useState<string | null>(null);
+
+  const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[] }>({
+    queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"],
+    queryFn: async () => {
+      if (!selectedJobId) return { articles: [] };
+      const res = await mobileApiCall("GET", `/api/mobile/tasks/${selectedJobId}/metadata-context`);
+      return res.json();
+    },
+    enabled: !!selectedJobId && view === "job",
+    staleTime: 30000,
+  });
+
+  const handleMetadataUpdate = useCallback(async (articleId: string, metadataLabel: string, newValue: string, inspectionStatus?: string, inspectionComment?: string) => {
+    if (!selectedJobId) return;
+    setSavingMetadata(articleId);
+    try {
+      await mobileApiCall("POST", `/api/mobile/tasks/${selectedJobId}/metadata-update`, {
+        articleId,
+        metadataLabel,
+        newValue,
+        inspectionStatus,
+        inspectionComment,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"] });
+      toast({ title: "Metadata uppdaterad", description: `${metadataLabel} = ${newValue}` });
+    } catch {
+      toast({ title: "Fel", description: "Kunde inte spara metadata", variant: "destructive" });
+    } finally {
+      setSavingMetadata(null);
+    }
+  }, [selectedJobId, mobileApiCall, toast]);
 
   const completeJobMutation = useMutation({
     mutationFn: async ({ id, signaturePath }: { id: string; signaturePath?: string }) => {
@@ -1166,6 +1216,155 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                 <p className="text-sm text-blue-900 dark:text-blue-200">{selectedJob.plannedNotes}</p>
               </CardContent>
             </Card>
+          )}
+
+          {metadataContext && metadataContext.articles.length > 0 && (
+            <div className="space-y-2" data-testid="panel-metadata-context">
+              {metadataContext.articles.filter(a => a.isInfoCarrier).map(article => (
+                <Card key={article.articleId} className="border-violet-200 dark:border-violet-800 bg-violet-50 dark:bg-violet-950/30" data-testid={`card-info-carrier-${article.articleId}`}>
+                  <CardContent className="py-3">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <CircleDot className="h-4 w-4 text-violet-600" />
+                      <span className="text-xs font-medium text-violet-800 dark:text-violet-400">{article.articleName}</span>
+                    </div>
+                    {article.fetchedValue && (
+                      <p className="text-sm font-medium">{article.fetchMetadataLabel}: {article.fetchedValue}</p>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+
+              {metadataContext.articles.filter(a => !a.isInfoCarrier && (a.fetchMetadataLabel || a.canUpdateMetadata)).map(article => (
+                <Card key={article.articleId} className="border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-950/20" data-testid={`card-metadata-${article.articleId}`}>
+                  <CardContent className="py-3 space-y-2">
+                    <div className="flex items-center gap-1.5">
+                      <Database className="h-4 w-4 text-teal-600" />
+                      <span className="text-xs font-medium text-teal-800 dark:text-teal-400">{article.articleName}</span>
+                    </div>
+
+                    {article.fetchedValue !== null && (
+                      <div className="flex items-center justify-between bg-white dark:bg-background rounded border p-2">
+                        <span className="text-xs text-muted-foreground">{article.fetchMetadataLabel}</span>
+                        <span className="text-sm font-medium">{article.fetchedValue}</span>
+                      </div>
+                    )}
+
+                    {article.showPreviousValue && article.previousValue !== null && (
+                      <div className="flex items-center justify-between text-xs text-muted-foreground px-2">
+                        <span>Föregående värde:</span>
+                        <span className="font-mono">{article.previousValue}</span>
+                      </div>
+                    )}
+
+                    {article.canUpdateMetadata && article.updateMetadataLabel && (
+                      <div className="space-y-2">
+                        {(article.updateMetadataFormat === "ok_ej_ok") ? (
+                          <div className="space-y-2">
+                            <Select
+                              value={metadataUpdates[article.articleId]?.status || ""}
+                              onValueChange={(v) => {
+                                setMetadataUpdates(prev => ({
+                                  ...prev,
+                                  [article.articleId]: { ...prev[article.articleId], value: v, status: v }
+                                }));
+                                if (v === "OK") {
+                                  handleMetadataUpdate(article.articleId, article.updateMetadataLabel!, v, v);
+                                }
+                              }}
+                            >
+                              <SelectTrigger className="h-10" data-testid={`select-inspection-${article.articleId}`}>
+                                <SelectValue placeholder="Välj status..." />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="OK">
+                                  <span className="flex items-center gap-2 text-green-600 font-medium">
+                                    <CheckCircle className="h-4 w-4" /> OK
+                                  </span>
+                                </SelectItem>
+                                <SelectItem value="EJ_OK">
+                                  <span className="flex items-center gap-2 text-red-600 font-medium">
+                                    <AlertTriangle className="h-4 w-4" /> EJ OK
+                                  </span>
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+
+                            {metadataUpdates[article.articleId]?.status === "EJ_OK" && (
+                              <div className="space-y-2 pl-2 border-l-2 border-red-300">
+                                <Textarea
+                                  placeholder="Beskriv avvikelsen..."
+                                  value={metadataUpdates[article.articleId]?.comment || ""}
+                                  onChange={(e) => setMetadataUpdates(prev => ({
+                                    ...prev,
+                                    [article.articleId]: { ...prev[article.articleId], comment: e.target.value }
+                                  }))}
+                                  className="text-sm"
+                                  rows={2}
+                                  data-testid={`textarea-inspection-comment-${article.articleId}`}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  className="w-full"
+                                  disabled={savingMetadata === article.articleId}
+                                  onClick={() => {
+                                    const update = metadataUpdates[article.articleId];
+                                    handleMetadataUpdate(
+                                      article.articleId,
+                                      article.updateMetadataLabel!,
+                                      "EJ OK",
+                                      "EJ_OK",
+                                      update?.comment
+                                    );
+                                  }}
+                                  data-testid={`button-save-inspection-${article.articleId}`}
+                                >
+                                  {savingMetadata === article.articleId ? (
+                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                  ) : (
+                                    <Send className="h-4 w-4 mr-1" />
+                                  )}
+                                  Spara avvikelse
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Input
+                              placeholder={`Ange ${article.updateMetadataLabel}...`}
+                              value={metadataUpdates[article.articleId]?.value || ""}
+                              onChange={(e) => setMetadataUpdates(prev => ({
+                                ...prev,
+                                [article.articleId]: { ...prev[article.articleId], value: e.target.value }
+                              }))}
+                              className="text-sm h-9"
+                              data-testid={`input-metadata-${article.articleId}`}
+                            />
+                            <Button
+                              size="sm"
+                              className="h-9"
+                              disabled={savingMetadata === article.articleId || !metadataUpdates[article.articleId]?.value}
+                              onClick={() => {
+                                const val = metadataUpdates[article.articleId]?.value;
+                                if (val) handleMetadataUpdate(article.articleId, article.updateMetadataLabel!, val);
+                              }}
+                              data-testid={`button-save-metadata-${article.articleId}`}
+                            >
+                              {savingMetadata === article.articleId ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Send className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
 
           {/* Åtkomstinformation - stort och tydligt */}

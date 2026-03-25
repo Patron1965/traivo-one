@@ -430,6 +430,17 @@ export const articles = pgTable("articles", {
   fetchMetadataCode: text("fetch_metadata_code"),
   leaveMetadataCode: text("leave_metadata_code"),
   leaveMetadataFormat: text("leave_metadata_format"),
+  // Kinab: metadata-etikett-koppling (P4/P7)
+  fetchMetadataLabel: text("fetch_metadata_label"),
+  fetchMetadataLabelFormat: text("fetch_metadata_label_format"),
+  canUpdateMetadata: boolean("can_update_metadata").default(false),
+  updateMetadataLabel: text("update_metadata_label"),
+  updateMetadataFormat: text("update_metadata_format"),
+  showPreviousValue: boolean("show_previous_value").default(false),
+  // Blindartikel / informationsbärare (P8)
+  isInfoCarrier: boolean("is_info_carrier").default(false),
+  // Artikelbegränsning (P11)
+  limitationType: text("limitation_type").default("unlimited"),
   // Associations-kod för artikelhook mot metadata-typ (legacy)
   associationCode: text("association_code"),
   // Kinab tvåstegsfilter: association via metadata-etikett + värde
@@ -1051,6 +1062,27 @@ export type Procurement = typeof procurements.$inferSelect;
 export type InsertProcurement = z.infer<typeof insertProcurementSchema>;
 export type Article = typeof articles.$inferSelect;
 export type InsertArticle = z.infer<typeof insertArticleSchema>;
+
+export const taskMetadataUpdates = pgTable("task_metadata_updates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  objectId: varchar("object_id").references(() => objects.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id),
+  metadataLabel: text("metadata_label").notNull(),
+  previousValue: text("previous_value"),
+  newValue: text("new_value").notNull(),
+  updatedBy: varchar("updated_by"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_task_metadata_updates_wo").on(table.workOrderId),
+  index("idx_task_metadata_updates_obj").on(table.objectId),
+]);
+
+export const insertTaskMetadataUpdateSchema = createInsertSchema(taskMetadataUpdates).omit({ id: true, updatedAt: true });
+export type TaskMetadataUpdate = typeof taskMetadataUpdates.$inferSelect;
+export type InsertTaskMetadataUpdate = z.infer<typeof insertTaskMetadataUpdateSchema>;
+
 export type PriceList = typeof priceLists.$inferSelect;
 export type InsertPriceList = z.infer<typeof insertPriceListSchema>;
 export type PriceListArticle = typeof priceListArticles.$inferSelect;
