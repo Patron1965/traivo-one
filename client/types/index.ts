@@ -214,6 +214,9 @@ export interface Order {
   articleId?: string | number;
   quantity?: number;
   unit?: string;
+  actualDuration?: number;
+  enRouteAt?: string;
+  customerNotified?: boolean;
   impossibleReason?: string;
   impossibleAt?: string;
   impossibleBy?: string;

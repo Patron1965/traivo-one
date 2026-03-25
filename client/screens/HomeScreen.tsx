@@ -14,10 +14,11 @@ import { Card } from '../components/Card';
 import { StatusBadge } from '../components/StatusBadge';
 import { Colors, Spacing, FontSize, BorderRadius, Shadows } from '../constants/theme';
 import { getApiUrl, apiRequest } from '../lib/query-client';
-import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
+import { estimateTravelMinutes, formatTravelTime, fetchDrivingDistance } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useTeam } from '../hooks/useTeam';
 import { useOfflinePendingCount } from '../hooks/useOfflineSync';
+import { useDisruptionMonitor } from '../hooks/useDisruptionMonitor';
 import { openMapNavigation } from '../lib/navigation-links';
 import { SyncStatusDot } from '../components/OfflineIndicator';
 import type { Order, OrderStatus, DaySummary, WeatherData } from '../types';
@@ -148,6 +149,7 @@ export function HomeScreen({ navigation }: any) {
   const { currentPosition } = useGpsTracking();
   const { partner } = useTeam();
   const pendingCount = useOfflinePendingCount();
+  useDisruptionMonitor();
   const syncBadgeOpacity = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -190,6 +192,19 @@ export function HomeScreen({ navigation }: any) {
   }, [refetchOrders, refetchSummary]);
 
   const activeOrders = orders?.filter(o => o.status !== 'completed' && o.status !== 'cancelled') || [];
+  const nextOrder = useMemo(() => activeOrders.find(o => !o.isLocked) || activeOrders[0], [activeOrders]);
+
+  const { data: nextOrderDistance } = useQuery({
+    queryKey: ['/api/mobile/distance', currentPosition?.latitude, currentPosition?.longitude, nextOrder?.latitude, nextOrder?.longitude],
+    queryFn: async () => {
+      if (!currentPosition?.latitude || !currentPosition?.longitude || !nextOrder?.latitude || !nextOrder?.longitude) return null;
+      return fetchDrivingDistance(currentPosition.latitude, currentPosition.longitude, nextOrder.latitude, nextOrder.longitude);
+    },
+    enabled: !!currentPosition?.latitude && !!nextOrder?.latitude,
+    staleTime: 15 * 60 * 1000,
+    refetchInterval: 5 * 60 * 1000,
+  });
+
   const completedCount = orders?.filter(o => o.status === 'completed').length || 0;
   const totalCount = orders?.length || 0;
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
@@ -1116,8 +1131,7 @@ export function HomeScreen({ navigation }: any) {
         </Card>
       ) : null}
 
-      {!ordersLoading && activeOrders.length > 0 ? (() => {
-        const nextOrder = activeOrders.find(o => !o.isLocked) || activeOrders[0];
+      {!ordersLoading && activeOrders.length > 0 && nextOrder ? (() => {
         return (
           <View>
             <Pressable
@@ -1161,11 +1175,18 @@ export function HomeScreen({ navigation }: any) {
                   <Feather name="navigation" size={14} color={Colors.primary} />
                   <ThemedText variant="caption" color={Colors.primary}>Navigera</ThemedText>
                 </Pressable>
-                {nextOrder.estimatedMinutes ? (
+                {nextOrderDistance?.durationMin ? (
                   <View style={styles.nextOrderEta}>
                     <Feather name="clock" size={12} color={Colors.textMuted} />
                     <ThemedText variant="caption" color={Colors.textMuted}>
-                      ca {nextOrder.estimatedMinutes} min
+                      ca {nextOrderDistance.durationMin} min ({nextOrderDistance.distanceKm} km)
+                    </ThemedText>
+                  </View>
+                ) : (nextOrder as any).estimatedMinutes ? (
+                  <View style={styles.nextOrderEta}>
+                    <Feather name="clock" size={12} color={Colors.textMuted} />
+                    <ThemedText variant="caption" color={Colors.textMuted}>
+                      ca {(nextOrder as any).estimatedMinutes} min
                     </ThemedText>
                   </View>
                 ) : null}

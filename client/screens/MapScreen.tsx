@@ -135,6 +135,10 @@ export function MapScreen({ navigation }: any) {
   const { currentPosition } = useGpsTracking();
   const { partner } = useTeam();
   const { startPosition } = useAuth();
+
+  const { data: breakConfig } = useQuery<{ enabled: boolean; durationMinutes: number; earliestSeconds: number; latestSeconds: number }>({
+    queryKey: ['/api/mobile/break-config'],
+  });
   const { cacheRouteData, getCachedRouteData, cacheOrderData, getCachedOrderData } = useOfflineSync();
 
   const routeOrigin = useMemo(() => {
@@ -520,7 +524,35 @@ export function MapScreen({ navigation }: any) {
                   {displayOrders.map((order, idx) => {
                     const legOffset = hasDriverStart ? idx + 1 : idx;
                     const leg = legTimes[legOffset - 1] || (idx === 0 && hasDriverStart ? legTimes[0] : null);
-                    return (
+                    const items: React.ReactNode[] = [];
+
+                    if (breakConfig?.enabled && idx > 0) {
+                      let arrivalSec = 0;
+                      for (let i = 0; i < legOffset; i++) {
+                        arrivalSec += (legTimes[i]?.duration || 0) + ((displayOrders[i]?.estimatedDuration || 10) * 60);
+                      }
+                      const earliest = breakConfig.earliestSeconds;
+                      const latest = breakConfig.latestSeconds;
+                      let prevArrivalSec = 0;
+                      for (let i = 0; i < legOffset - 1; i++) {
+                        prevArrivalSec += (legTimes[i]?.duration || 0) + ((displayOrders[i]?.estimatedDuration || 10) * 60);
+                      }
+                      if (prevArrivalSec <= earliest && arrivalSec >= earliest && arrivalSec <= latest + 1800) {
+                        items.push(
+                          <View key={`break-${idx}`} style={styles.legItem}>
+                            <View style={[styles.legDot, { backgroundColor: Colors.warning }]}>
+                              <Feather name="coffee" size={10} color="#fff" />
+                            </View>
+                            <View style={styles.legInfo}>
+                              <Text style={styles.legName}>Rast</Text>
+                              <Text style={styles.legTime}>{breakConfig.durationMinutes} min</Text>
+                            </View>
+                          </View>
+                        );
+                      }
+                    }
+
+                    items.push(
                       <View key={order.id} style={styles.legItem}>
                         <View style={[styles.legDot, { backgroundColor: getMarkerColor(order) }]}>
                           <Text style={styles.legDotText}>{idx + 1}</Text>
@@ -537,6 +569,7 @@ export function MapScreen({ navigation }: any) {
                         ) : null}
                       </View>
                     );
+                    return items;
                   })}
                 </View>
               ) : null}

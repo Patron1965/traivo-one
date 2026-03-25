@@ -1,3 +1,5 @@
+import { apiRequest } from './query-client';
+
 export function haversineDistance(
   lat1: number, lon1: number,
   lat2: number, lon2: number
@@ -37,4 +39,28 @@ export function formatTravelTime(minutes: number | null): string | null {
     return m > 0 ? `~${h}h ${m}min` : `~${h}h`;
   }
   return `~${minutes} min`;
+}
+
+export interface DistanceResult {
+  distanceKm: number;
+  durationMin: number;
+  source: 'geoapify' | 'haversine';
+}
+
+export async function fetchDrivingDistance(
+  fromLat: number, fromLng: number,
+  toLat: number, toLng: number
+): Promise<DistanceResult> {
+  try {
+    return await apiRequest('POST', '/api/mobile/distance', {
+      fromLat, fromLng, toLat, toLng,
+    });
+  } catch {
+    const distKm = haversineDistance(fromLat, fromLng, toLat, toLng);
+    return {
+      distanceKm: Math.round(distKm * 10) / 10,
+      durationMin: Math.max(1, Math.round((distKm / AVG_SPEED_KMH) * 60)),
+      source: 'haversine',
+    };
+  }
 }

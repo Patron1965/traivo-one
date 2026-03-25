@@ -8,6 +8,7 @@ import { Feather } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useResourceProfiles } from '../hooks/useResourceProfiles';
 import { useTeam } from '../hooks/useTeam';
+import { useDisruptionMonitor } from '../hooks/useDisruptionMonitor';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
@@ -47,7 +48,10 @@ export function ProfileScreen() {
   const { user, logout, isOnline, setIsOnline } = useAuth();
   const { profiles, isLoading: profilesLoading } = useResourceProfiles();
   const { team, partner, isLeader } = useTeam();
+  const { reportUnavailable } = useDisruptionMonitor();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [showSickLeaveModal, setShowSickLeaveModal] = useState(false);
+  const [sickLeaveLoading, setSickLeaveLoading] = useState(false);
 
   const { data: orders } = useQuery<Order[]>({
     queryKey: ['/api/mobile/my-orders'],
@@ -349,6 +353,20 @@ export function ProfileScreen() {
           <Feather name="chevron-right" size={18} color={Colors.textMuted} />
         </Pressable>
         <View style={styles.divider} />
+        <Pressable
+          style={styles.menuItem}
+          onPress={() => setShowSickLeaveModal(true)}
+          testID="button-sick-leave"
+        >
+          <View style={styles.menuLeft}>
+            <View style={[styles.menuIcon, { backgroundColor: '#FFEBEE' }]}>
+              <Feather name="thermometer" size={16} color={Colors.danger} />
+            </View>
+            <ThemedText variant="body">Sjukanmälan</ThemedText>
+          </View>
+          <Feather name="chevron-right" size={18} color={Colors.textMuted} />
+        </Pressable>
+        <View style={styles.divider} />
         <Pressable style={styles.menuItem} onPress={() => navigation.navigate('Settings')} testID="button-about">
           <View style={styles.menuLeft}>
             <View style={[styles.menuIcon, { backgroundColor: Colors.infoLight }]}>
@@ -374,6 +392,53 @@ export function ProfileScreen() {
       <ThemedText variant="caption" color={Colors.textMuted} style={styles.versionText}>
         Nordnav Go v1.0.0
       </ThemedText>
+
+      <Modal
+        visible={showSickLeaveModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowSickLeaveModal(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setShowSickLeaveModal(false)}>
+          <View style={styles.modalContent}>
+            <View style={[styles.modalIconCircle, { backgroundColor: '#FFEBEE' }]}>
+              <Feather name="thermometer" size={24} color={Colors.danger} />
+            </View>
+            <ThemedText variant="subheading" style={styles.modalTitle}>
+              Sjukanmälan
+            </ThemedText>
+            <ThemedText variant="body" color={Colors.textSecondary} style={styles.modalDesc}>
+              Anmäl att du inte kan arbeta idag. Planeraren kommer att omfördela dina uppdrag.
+            </ThemedText>
+            <View style={styles.modalButtons}>
+              <Pressable
+                style={styles.modalCancelButton}
+                onPress={() => setShowSickLeaveModal(false)}
+                testID="button-cancel-sick"
+              >
+                <ThemedText variant="body" color={Colors.textSecondary}>Avbryt</ThemedText>
+              </Pressable>
+              <Pressable
+                style={styles.modalLogoutButton}
+                onPress={async () => {
+                  setSickLeaveLoading(true);
+                  try {
+                    await reportUnavailable('sick');
+                    setShowSickLeaveModal(false);
+                  } catch {} finally {
+                    setSickLeaveLoading(false);
+                  }
+                }}
+                testID="button-confirm-sick"
+              >
+                <ThemedText variant="body" color={Colors.textInverse}>
+                  {sickLeaveLoading ? 'Skickar...' : 'Bekräfta'}
+                </ThemedText>
+              </Pressable>
+            </View>
+          </View>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={showLogoutModal}

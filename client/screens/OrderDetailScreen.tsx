@@ -467,7 +467,14 @@ export function OrderDetailScreen({ route, navigation }: any) {
   function handleConfirmAction() {
     if (confirmAction === 'complete') {
       const next = order ? getNextStatus(order.status) : null;
-      statusMutation.mutate({ status: next || ('utford' as OrderStatus) });
+      const params: { status: OrderStatus; actualDuration?: number } = {
+        status: next || ('utford' as OrderStatus),
+      };
+      if (order?.actualStartTime) {
+        const startMs = new Date(order.actualStartTime).getTime();
+        params.actualDuration = Math.round((Date.now() - startMs) / 60000);
+      }
+      statusMutation.mutate(params);
     }
     setConfirmAction(null);
   }
@@ -587,7 +594,15 @@ export function OrderDetailScreen({ route, navigation }: any) {
             ) : null}
           </View>
           <ThemedText variant="heading">{order.customerName}</ThemedText>
-          <StatusBadge status={order.status} />
+          <View style={styles.statusRow}>
+            <StatusBadge status={order.status} />
+            {order.customerNotified ? (
+              <View style={styles.notifiedBadge}>
+                <Feather name="check-circle" size={12} color={Colors.success} />
+                <ThemedText variant="caption" color={Colors.success}>Kund notifierad</ThemedText>
+              </View>
+            ) : null}
+          </View>
         </View>
 
         {activeEntry ? (
@@ -1144,6 +1159,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: Spacing.sm,
     flexWrap: 'wrap',
+  },
+  statusRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: Spacing.sm,
+    flexWrap: 'wrap' as const,
+  },
+  notifiedBadge: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 4,
+    backgroundColor: Colors.success + '15',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: BorderRadius.sm,
   },
   execCodesRow: {
     flexDirection: 'row',

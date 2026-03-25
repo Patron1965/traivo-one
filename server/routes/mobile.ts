@@ -1188,7 +1188,7 @@ router.post('/travel-times', async (req, res) => {
 
 router.patch('/orders/:id/status', async (req, res) => {
   const { status: newStatus } = req.body;
-  const allowedStatuses = ['planned', 'dispatched', 'on_site', 'in_progress', 'completed', 'failed', 'cancelled', 'deferred', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'impossible'];
+  const allowedStatuses = ['planned', 'dispatched', 'en_route', 'on_site', 'in_progress', 'completed', 'failed', 'cancelled', 'deferred', 'planerad_pre', 'planerad_resurs', 'planerad_las', 'utford', 'fakturerad', 'impossible'];
   if (!newStatus || typeof newStatus !== 'string') {
     return res.status(400).json({ error: 'Status krävs' });
   }
@@ -1210,6 +1210,18 @@ router.patch('/orders/:id/status', async (req, res) => {
       if (newStatus === 'completed' || newStatus === 'utford') {
         order.completedAt = new Date().toISOString();
         order.actualEndTime = new Date().toISOString();
+        if (order.actualStartTime) {
+          const startMs = new Date(order.actualStartTime).getTime();
+          const endMs = new Date(order.completedAt).getTime();
+          order.actualDuration = Math.round((endMs - startMs) / 60000);
+        }
+        if (req.body.actualDuration != null) {
+          order.actualDuration = req.body.actualDuration;
+        }
+      }
+      if (newStatus === 'dispatched' || newStatus === 'en_route') {
+        order.enRouteAt = new Date().toISOString();
+        order.customerNotified = true;
       }
       if (newStatus === 'failed' || newStatus === 'impossible') {
         order.actualEndTime = new Date().toISOString();
@@ -2834,6 +2846,199 @@ router.post('/notifications/read-all', async (req, res) => {
   } catch (error: any) {
     res.status(503).json({ error: 'Kunde inte markera alla som lästa.' });
   }
+});
+
+const MOCK_DISRUPTIONS: any[] = [];
+
+router.post('/distance', async (req, res) => {
+  const { fromLat, fromLng, toLat, toLng } = req.body;
+  if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
+    return res.status(400).json({ error: 'fromLat, fromLng, toLat, toLng krävs' });
+  }
+  if (IS_MOCK_MODE) {
+    const distKm = haversineDistance(fromLat, fromLng, toLat, toLng);
+    const durationMin = Math.round(distKm * 1.4);
+    return res.json({ distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, durationMin), source: 'haversine' as const });
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/distance', {
+      method: 'POST',
+      headers: getAuthHeader(req),
+      body: JSON.stringify({ fromLat, fromLng, toLat, toLng }),
+    });
+    res.status(status).json(data);
+  } catch {
+    const distKm = haversineDistance(fromLat, fromLng, toLat, toLng);
+    res.json({ distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, Math.round(distKm * 1.4)), source: 'haversine' as const });
+  }
+});
+
+router.post('/distance/batch', async (req, res) => {
+  const { pairs } = req.body;
+  if (!Array.isArray(pairs)) {
+    return res.status(400).json({ error: 'pairs array krävs' });
+  }
+  const results: Record<string, any> = {};
+  for (const p of pairs) {
+    const distKm = haversineDistance(p.fromLat, p.fromLng, p.toLat, p.toLng);
+    results[p.id] = { distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, Math.round(distKm * 1.4)), source: 'haversine' as const };
+  }
+  res.json({ results });
+});
+
+router.post('/disruptions/trigger/delay', async (req, res) => {
+  const { workOrderId, workOrderTitle, resourceId, resourceName, estimatedDuration, actualDuration } = req.body;
+  if (!workOrderId || !resourceId || estimatedDuration == null || actualDuration == null) {
+    return res.status(400).json({ error: 'workOrderId, resourceId, estimatedDuration, actualDuration krävs' });
+  }
+  const ratio = actualDuration / estimatedDuration;
+  if (ratio <= 1.5) {
+    return res.json({ message: 'Förseningen understiger tröskelvärdet (50%)' });
+  }
+  if (IS_MOCK_MODE) {
+    const event = {
+      id: `disr-${Date.now()}`,
+      tenantId: 'traivo-demo',
+      type: 'significant_delay',
+      severity: ratio > 2.5 ? 'critical' : ratio > 2 ? 'high' : 'medium',
+      title: `Betydande försening: ${workOrderTitle || workOrderId}`,
+      description: `${resourceName || resourceId} har arbetat ${actualDuration} min (beräknat ${estimatedDuration} min)`,
+      timestamp: new Date().toISOString(),
+      status: 'active',
+      affectedResources: [resourceId],
+      affectedOrders: [workOrderId],
+      suggestions: [],
+      decisionTrace: [],
+    };
+    MOCK_DISRUPTIONS.push(event);
+    return res.json(event);
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/disruptions/trigger/delay', {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte trigga störning.' }); }
+});
+
+router.post('/disruptions/trigger/early-completion', async (req, res) => {
+  const { resourceId, resourceName, slackMinutes } = req.body;
+  if (!resourceId || slackMinutes == null) {
+    return res.status(400).json({ error: 'resourceId, slackMinutes krävs' });
+  }
+  if (slackMinutes <= 45) {
+    return res.json({ message: 'Ingen ledig tid (under 45 min).' });
+  }
+  if (IS_MOCK_MODE) {
+    const event = {
+      id: `disr-${Date.now()}`,
+      tenantId: 'traivo-demo',
+      type: 'early_completion',
+      severity: 'low',
+      title: `Tidigt klart: ${resourceName || resourceId}`,
+      description: `${resourceName || resourceId} har ${slackMinutes} min kvar av arbetsdagen`,
+      timestamp: new Date().toISOString(),
+      status: 'active',
+      affectedResources: [resourceId],
+      affectedOrders: [],
+      suggestions: [],
+      decisionTrace: [],
+    };
+    MOCK_DISRUPTIONS.push(event);
+    return res.json(event);
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/disruptions/trigger/early-completion', {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte trigga störning.' }); }
+});
+
+router.post('/disruptions/trigger/resource-unavailable', async (req, res) => {
+  const { resourceId, resourceName, reason } = req.body;
+  if (!resourceId || !reason) {
+    return res.status(400).json({ error: 'resourceId, reason krävs' });
+  }
+  if (IS_MOCK_MODE) {
+    const event = {
+      id: `disr-${Date.now()}`,
+      tenantId: 'traivo-demo',
+      type: 'resource_unavailable',
+      severity: 'high',
+      title: `Resurs ej tillgänglig: ${resourceName || resourceId}`,
+      description: `Orsak: ${reason}`,
+      timestamp: new Date().toISOString(),
+      status: 'active',
+      affectedResources: [resourceId],
+      affectedOrders: MOCK_ORDERS.filter(o => String(o.resourceId) === String(resourceId) && !['completed', 'utford', 'impossible', 'cancelled'].includes(o.status)).map(o => String(o.id)),
+      suggestions: [],
+      decisionTrace: [],
+    };
+    MOCK_DISRUPTIONS.push(event);
+    return res.json(event);
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/disruptions/trigger/resource-unavailable', {
+      method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte trigga störning.' }); }
+});
+
+router.get('/break-config', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    return res.json({
+      enabled: true,
+      durationMinutes: 30,
+      earliestSeconds: 39600,
+      latestSeconds: 46800,
+    });
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/break-config', { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte hämta rastkonfiguration.' }); }
+});
+
+router.get('/eta-notification/history', async (req, res) => {
+  const { workOrderId, customerId } = req.query;
+  if (IS_MOCK_MODE) {
+    const notifications: any[] = [];
+    for (const order of MOCK_ORDERS) {
+      if (order.customerNotified) {
+        if (workOrderId && String(order.id) !== String(workOrderId)) continue;
+        notifications.push({
+          id: `eta-${order.id}`,
+          workOrderId: String(order.id),
+          customerId: order.customer?.id || 'cust-1',
+          channel: 'email',
+          etaMinutes: 15,
+          etaTime: order.enRouteAt || new Date().toISOString(),
+          marginMinutes: 15,
+          status: 'sent',
+          errorMessage: null,
+          createdAt: order.enRouteAt || new Date().toISOString(),
+        });
+      }
+    }
+    return res.json(notifications);
+  }
+  try {
+    const qs = customerId ? `?customerId=${customerId}` : workOrderId ? `?workOrderId=${workOrderId}` : '';
+    const { status, data } = await traivoFetch(`/api/eta-notification/history${qs}`, { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte hämta notifieringshistorik.' }); }
+});
+
+router.get('/eta-notification/config', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    return res.json({ enabled: true, marginMinutes: 15, channel: 'email', triggerOnEnRoute: true });
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/eta-notification/config', { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte hämta konfiguration.' }); }
 });
 
 export { router as mobileRoutes, MOCK_ORDERS };
