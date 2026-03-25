@@ -1308,13 +1308,17 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
       standardArvs: z.boolean().optional(),
       arLogisk: z.boolean().optional(),
     });
-    let updateData = updateSchema.parse(req.body);
+    const parsed = updateSchema.parse(req.body);
+    
+    const protectedFields = ['namn', 'beteckning', 'datatyp', 'kategori', 'isRequired'] as const;
+    let updateData: Record<string, any> = { ...parsed };
     
     if (existing.isSystem) {
-      const { namn, beteckning, datatyp, kategori, isRequired, ...allowed } = updateData;
-      updateData = allowed;
+      for (const field of protectedFields) {
+        delete updateData[field];
+      }
       if (Object.keys(updateData).length === 0) {
-        throw new ForbiddenError("Systemmetadata: dessa fält kan inte ändras");
+        throw new ForbiddenError("Systemmetadata: skyddade fält kan inte ändras (namn, beteckning, datatyp, kategori, isRequired)");
       }
     }
     
