@@ -2128,14 +2128,61 @@ function parseCoordPoints(coords: string) {
   return parsed;
 }
 
+function perpendicularDistance(point: number[], lineStart: number[], lineEnd: number[]): number {
+  const dx = lineEnd[0] - lineStart[0];
+  const dy = lineEnd[1] - lineStart[1];
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) {
+    const ex = point[0] - lineStart[0];
+    const ey = point[1] - lineStart[1];
+    return Math.sqrt(ex * ex + ey * ey);
+  }
+  const t = Math.max(0, Math.min(1, ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / lenSq));
+  const projX = lineStart[0] + t * dx;
+  const projY = lineStart[1] + t * dy;
+  const ex = point[0] - projX;
+  const ey = point[1] - projY;
+  return Math.sqrt(ex * ex + ey * ey);
+}
+
+function rdpSimplify(coords: number[][], epsilon: number): number[][] {
+  if (coords.length <= 2) return coords;
+  let maxDist = 0;
+  let maxIdx = 0;
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  for (let i = 1; i < coords.length - 1; i++) {
+    const d = perpendicularDistance(coords[i], first, last);
+    if (d > maxDist) {
+      maxDist = d;
+      maxIdx = i;
+    }
+  }
+  if (maxDist > epsilon) {
+    const left = rdpSimplify(coords.slice(0, maxIdx + 1), epsilon);
+    const right = rdpSimplify(coords.slice(maxIdx), epsilon);
+    return left.slice(0, -1).concat(right);
+  }
+  return [first, last];
+}
+
 function simplifyCoordinates(coords: number[][], maxPoints: number): number[][] {
   if (coords.length <= maxPoints) return coords;
-  const step = (coords.length - 1) / (maxPoints - 1);
-  const result: number[][] = [];
-  for (let i = 0; i < maxPoints - 1; i++) {
-    result.push(coords[Math.round(i * step)]);
+  let lo = 0;
+  let hi = 0.01;
+  let result = coords;
+  for (let iter = 0; iter < 20; iter++) {
+    const mid = (lo + hi) / 2;
+    result = rdpSimplify(coords, mid);
+    if (result.length > maxPoints) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
   }
-  result.push(coords[coords.length - 1]);
+  if (result.length > maxPoints) {
+    result = rdpSimplify(coords, hi);
+  }
   return result;
 }
 
@@ -2224,7 +2271,7 @@ router.get('/route', async (req, res) => {
       };
     });
 
-    const simplified = simplifyCoordinates(allCoordinates, 500);
+    const simplified = simplifyCoordinates(allCoordinates, 1500);
     console.log('[route] Success: rawCoords=', allCoordinates.length, 'simplified=', simplified.length, 'dist=', totalDistanceMeters, 'dur=', trafficDuration, 'normalDur=', normalDuration);
     res.json({
       waypoints: parsed.map((p, i) => ({
@@ -2392,7 +2439,7 @@ router.get('/route-optimized', async (req, res) => {
           return res.json({
             waypoints: reorderedWaypoints,
             trips: [{
-              geometry: { type: 'LineString', coordinates: simplifyCoordinates(routeCoords, 500) },
+              geometry: { type: 'LineString', coordinates: simplifyCoordinates(routeCoords, 1500) },
               distance: routeTotalDist,
               duration: routeTrafficDuration,
               durationWithoutTraffic: routeNormalDuration,
@@ -2425,7 +2472,7 @@ router.get('/route-optimized', async (req, res) => {
     res.json({
       waypoints: reorderedWaypoints,
       trips: [{
-        geometry: { type: 'LineString', coordinates: simplifyCoordinates(allCoordinates, 500) },
+        geometry: { type: 'LineString', coordinates: simplifyCoordinates(allCoordinates, 1500) },
         distance: fallbackDist,
         duration: fallbackTrafficDur,
         durationWithoutTraffic: fallbackNormalDur,
