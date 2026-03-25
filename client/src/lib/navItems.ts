@@ -32,6 +32,7 @@ import {
   Clock,
   MessageSquare,
   Camera,
+  Phone,
   type LucideIcon,
 } from "lucide-react";
 
@@ -91,6 +92,7 @@ export function getFaltItems(t: (key: string, fallback: string) => string): NavI
     { title: "Kontrollmallar", url: "/checklist-templates", icon: ClipboardCheck, description: "Inspektionsfrågor per artikeltyp" },
     { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
     { title: "Kundrapporter", url: "/customer-reports", icon: Camera, description: "Fältrapporter från kunder" },
+    { title: "Växel & Tillgänglighet", url: "/telephony", icon: Phone, description: "Telefonsökning och resurstillgänglighet" },
   ];
 }
 
