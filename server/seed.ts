@@ -830,18 +830,18 @@ async function seedSystemMetadataLabels() {
     { namn: "Förälder", beteckning: "PARENT", kategori: "administrativ", datatyp: "referens", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Överordnat objekt i hierarkin", icon: "GitFork" },
     { namn: "Objekttyp", beteckning: "TYP", kategori: "administrativ", datatyp: "string", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Typ av objekt (t.ex. bök, RBK)", icon: "Package" },
     { namn: "Område", beteckning: "OMR", kategori: "geografi", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Geografiskt område", icon: "MapPin" },
-    { namn: "Antal", beteckning: "ANT", kategori: "produktion", datatyp: "integer", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Antal enheter (kärl, containrar etc.)", icon: "Hash" },
-    { namn: "Önskad leveransperiod", beteckning: "LEV", kategori: "leverans", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Önskad leveransperiod (t.ex. '0201-0430' eller 'Torsdag EM')", icon: "Calendar" },
-    { namn: "Oönskad leveransperiod", beteckning: "LEV NEJ", kategori: "leverans", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Tider som inte passar (t.ex. 'Mån-Tisdag')", icon: "CalendarX" },
-    { namn: "Leveransintervall", beteckning: "LEVPERIOD", kategori: "leverans", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Leveransintervall (t.ex. '2-3 månader')", icon: "Clock" },
-    { namn: "Fastighetsbeteckning", beteckning: "FASBET", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Fastighetsbeteckning (t.ex. 'STORA ORMEN 2')", icon: "Building" },
-    { namn: "Fakturareferens", beteckning: "REF", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Kundens fakturareferens", icon: "FileText" },
-    { namn: "Fasadnummer", beteckning: "FASNR", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Fasadnummer på byggnaden", icon: "Hash" },
-    { namn: "Butiksnummer", beteckning: "NUTNR", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Butiks- eller enhetsnummer", icon: "Store" },
+    { namn: "Antal", beteckning: "ANT", kategori: "produktion", datatyp: "integer", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Antal enheter (kärl, containrar etc.)", icon: "Hash" },
+    { namn: "Önskad leveransperiod", beteckning: "LEV", kategori: "leverans", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Önskad leveransperiod (t.ex. '0201-0430' eller 'Torsdag EM')", icon: "Calendar" },
+    { namn: "Oönskad leveransperiod", beteckning: "LEV NEJ", kategori: "leverans", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Tider som inte passar (t.ex. 'Mån-Tisdag')", icon: "CalendarX" },
+    { namn: "Leveransintervall", beteckning: "LEVPERIOD", kategori: "leverans", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Leveransintervall (t.ex. '2-3 månader')", icon: "Clock" },
+    { namn: "Fastighetsbeteckning", beteckning: "FASBET", kategori: "kundreferens", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Fastighetsbeteckning (t.ex. 'STORA ORMEN 2')", icon: "Building" },
+    { namn: "Fakturareferens", beteckning: "REF", kategori: "kundreferens", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Kundens fakturareferens", icon: "FileText" },
+    { namn: "Fasadnummer", beteckning: "FASNR", kategori: "kundreferens", datatyp: "string", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Fasadnummer på byggnaden", icon: "Hash" },
+    { namn: "Butiksnummer", beteckning: "NUTNR", kategori: "kundreferens", datatyp: "string", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Butiks- eller enhetsnummer", icon: "Store" },
     { namn: "Association", beteckning: "ASSOC", kategori: "artikel", datatyp: "string", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Koppling artikel → objekt (t.ex. 'Matavfallskärl 125 liter')", icon: "Link" },
-    { namn: "Avdelning", beteckning: "AVD", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Avdelning hos kund", icon: "Building2" },
-    { namn: "Uppdragsbild", beteckning: "BILD", kategori: "produktion", datatyp: "image", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Foto på kärlet/objektet", icon: "Camera" },
-    { namn: "Visningsbild", beteckning: "ICON", kategori: "produktion", datatyp: "image", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Visningsbild/ikon för objektet", icon: "Image" },
+    { namn: "Avdelning", beteckning: "AVD", kategori: "kundreferens", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Avdelning hos kund", icon: "Building2" },
+    { namn: "Uppdragsbild", beteckning: "BILD", kategori: "produktion", datatyp: "image", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Foto på kärlet/objektet", icon: "Camera" },
+    { namn: "Visningsbild", beteckning: "ICON", kategori: "produktion", datatyp: "image", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Visningsbild/ikon för objektet", icon: "Image" },
   ];
 
   let created = 0;
@@ -860,6 +860,13 @@ async function seedSystemMetadataLabels() {
         ...label,
       });
       created++;
+    } else if (label.isSystem) {
+      await db.update(metadataKatalog)
+        .set({ isSystem: true })
+        .where(and(
+          eq(metadataKatalog.tenantId, DEFAULT_TENANT_ID),
+          eq(metadataKatalog.beteckning, label.beteckning)
+        ));
     }
   }
 

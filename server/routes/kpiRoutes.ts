@@ -1311,7 +1311,7 @@ app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res
     const parsed = updateSchema.parse(req.body);
     
     const protectedFields = ['namn', 'beteckning', 'datatyp', 'kategori', 'isRequired'] as const;
-    let updateData: Record<string, any> = { ...parsed };
+    let updateData: Record<string, string | number | boolean | string[] | null | undefined> = { ...parsed };
     
     if (existing.isSystem) {
       for (const field of protectedFields) {

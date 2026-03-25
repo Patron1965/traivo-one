@@ -15,7 +15,8 @@ import {
   Plus, Lock, Trash2, Edit2, Tag, Hash, Calendar, CalendarX, Clock, Building, Building2,
   FileText, MapPin, Package, Users, Link, Camera, Image, Store, GitFork, Search, Loader2, Shield
 } from "lucide-react";
-import type { MetadataKatalog } from "@shared/schema";
+import type { LucideIcon } from "lucide-react";
+import type { MetadataKatalog, InsertMetadataKatalog } from "@shared/schema";
 
 const kategoriLabels: Record<string, { label: string; color: string }> = {
   administrativ: { label: "Administrativ", color: "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200" },
@@ -42,12 +43,12 @@ const datatypLabels: Record<string, string> = {
   location: "Plats",
 };
 
-const iconMap: Record<string, any> = {
+const iconMap: Record<string, LucideIcon> = {
   Users, GitFork, Package, MapPin, Hash, Calendar, CalendarX, Clock,
   Building, Building2, FileText, Store, Link, Camera, Image, Tag, Shield,
 };
 
-function getIcon(iconName: string | null) {
+function getIcon(iconName: string | null): LucideIcon {
   if (!iconName) return Tag;
   return iconMap[iconName] || Tag;
 }
@@ -75,7 +76,7 @@ export function MetadataLabelsTab() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (data: any) => apiRequest("POST", "/api/metadata-labels", data),
+    mutationFn: async (data: Partial<InsertMetadataKatalog>) => apiRequest("POST", "/api/metadata-labels", data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata-labels"] });
       toast({ title: "Etikett skapad" });
@@ -85,7 +86,7 @@ export function MetadataLabelsTab() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: async ({ id, data }: { id: string; data: any }) => apiRequest("PATCH", `/api/metadata-labels/${id}`, data),
+    mutationFn: async ({ id, data }: { id: string; data: Partial<InsertMetadataKatalog> }) => apiRequest("PATCH", `/api/metadata-labels/${id}`, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/metadata-labels"] });
       toast({ title: "Etikett uppdaterad" });
@@ -132,7 +133,7 @@ export function MetadataLabelsTab() {
   };
 
   const handleSubmit = () => {
-    const payload: any = {
+    const payload: Partial<InsertMetadataKatalog> = {
       namn: formData.namn,
       beteckning: formData.beteckning || null,
       beskrivning: formData.beskrivning || null,
