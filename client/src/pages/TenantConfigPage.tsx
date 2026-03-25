@@ -15,6 +15,7 @@ import {
   Wifi,
   ToggleLeft,
   Zap,
+  Tag,
 } from "lucide-react";
 import {
   CompanyInfoTab,
@@ -26,6 +27,7 @@ import {
   TerminologyTab,
   BrandingTab,
   ModulesTab,
+  MetadataLabelsTab,
 } from "./tenant-config";
 
 export default function TenantConfigPage() {
@@ -82,7 +84,7 @@ export default function TenantConfigPage() {
       </Card>
 
       <Tabs defaultValue="company" className="w-full">
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="grid w-full grid-cols-10">
           <TabsTrigger value="company" data-testid="tab-company" className="flex items-center gap-2">
             <Building2 className="h-4 w-4" />
             <span className="hidden sm:inline">Företagsinfo</span>
@@ -110,6 +112,10 @@ export default function TenantConfigPage() {
           <TabsTrigger value="profiles" data-testid="tab-profiles" className="flex items-center gap-2">
             <Wrench className="h-4 w-4" />
             <span className="hidden sm:inline">Utföranderoller</span>
+          </TabsTrigger>
+          <TabsTrigger value="metadata" data-testid="tab-metadata" className="flex items-center gap-2">
+            <Tag className="h-4 w-4" />
+            <span className="hidden sm:inline">Etiketter</span>
           </TabsTrigger>
           <TabsTrigger value="iot" data-testid="tab-iot" className="flex items-center gap-2">
             <Wifi className="h-4 w-4" />
@@ -141,6 +147,9 @@ export default function TenantConfigPage() {
         </TabsContent>
         <TabsContent value="profiles">
           <ResourceProfilesTab />
+        </TabsContent>
+        <TabsContent value="metadata">
+          <MetadataLabelsTab />
         </TabsContent>
         <TabsContent value="iot">
           <IoTTab />

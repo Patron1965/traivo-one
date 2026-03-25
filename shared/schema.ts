@@ -3016,9 +3016,22 @@ export const metadataKatalog = pgTable("metadata_katalog", {
   // Ikon för visualisering
   icon: text("icon"),
   
+  // === KINAB ETIKETT-NAMN SYSTEM ===
+  // Kort beteckningskod (t.ex. "LEV", "ANT", "KUND") — Kinab metadata designation
+  beteckning: varchar("beteckning", { length: 30 }),
+  // Systemmetadata som inte kan raderas (KUND, PARENT, TYP, etc.)
+  isSystem: boolean("is_system").default(false).notNull(),
+  // Obligatorisk metadata vid objektskapande
+  isRequired: boolean("is_required").default(false).notNull(),
+  // Tillåtna värden (dropdown) — null = fritext
+  allowedValues: text("allowed_values").array(),
+  // Vilken nivå som får ändra (null = alla)
+  editableByLevel: varchar("editable_by_level", { length: 50 }),
+  
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
-  index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn)
+  index("idx_metadata_katalog_tenant_namn").on(table.tenantId, table.namn),
+  index("idx_metadata_katalog_tenant_beteckning").on(table.tenantId, table.beteckning),
 ]);
 
 // Metadatavärden - EAV-modell med typade värdefält och korsbefruktning

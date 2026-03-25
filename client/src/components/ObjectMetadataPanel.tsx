@@ -874,6 +874,14 @@ export function ObjectMetadataPanel({ object, trigger }: ObjectMetadataPanelProp
                                 <TooltipContent>{DATA_TYPE_LABELS[entry.katalog.datatyp] || entry.katalog.datatyp}</TooltipContent>
                               </Tooltip>
                               <span className="text-sm font-medium truncate">{entry.katalog.namn}</span>
+                              {entry.katalog.beteckning && (
+                                <Badge variant="outline" className="text-[10px] font-mono px-1 py-0 h-4 shrink-0">
+                                  {entry.katalog.beteckning}
+                                </Badge>
+                              )}
+                              {entry.katalog.isSystem && (
+                                <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
+                              )}
                               {getSourceBadge(entry)}
                             </div>
                             <div className="flex items-center gap-0.5 shrink-0">

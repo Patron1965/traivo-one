@@ -53,6 +53,10 @@ const objectTypeLabels: Record<string, string> = {
   uj_hushallsavfall: "UJ Hushållsavfall",
   matafall: "Matavfall",
   atervinning: "Återvinning",
+  physical: "Fysiskt objekt",
+  organizational: "Organisatoriskt",
+  area: "Yta/område",
+  karl: "Kärl",
 };
 
 const accessTypeLabels: Record<string, { label: string; icon: typeof Key }> = {

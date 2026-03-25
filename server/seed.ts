@@ -1,6 +1,6 @@
 import { db } from "./db";
-import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users } from "@shared/schema";
-import { sql } from "drizzle-orm";
+import { tenants, customers, objects, resources, workOrders, brandingTemplates, tenantBranding, userTenantRoles, users, metadataKatalog } from "@shared/schema";
+import { sql, eq, and } from "drizzle-orm";
 
 const DEFAULT_TENANT_ID = "default-tenant";
 
@@ -11,6 +11,7 @@ export async function seedDatabase() {
   if (existingTenant.length > 0) {
     console.log("Database already seeded, refreshing demo work order dates...");
     await refreshDemoWorkOrderDates();
+    await seedSystemMetadataLabels();
     return;
   }
 
@@ -820,4 +821,48 @@ async function seedFieldAppDemoData(tomasResourceId: string) {
   ]);
 
   console.log("Created SimpleFieldApp demo data: 4 customers, 8 objects, 8 work orders for today");
+}
+
+async function seedSystemMetadataLabels() {
+  const systemLabels = [
+    { namn: "Kundkoppling", beteckning: "KUND", kategori: "administrativ", datatyp: "referens", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Vilken kund objektet tillhör", icon: "Users" },
+    { namn: "Förälder", beteckning: "PARENT", kategori: "administrativ", datatyp: "referens", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Överordnat objekt i hierarkin", icon: "GitFork" },
+    { namn: "Objekttyp", beteckning: "TYP", kategori: "administrativ", datatyp: "string", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Typ av objekt (t.ex. bök, RBK)", icon: "Package" },
+    { namn: "Område", beteckning: "OMR", kategori: "geografi", datatyp: "string", isSystem: true, isRequired: false, standardArvs: true, beskrivning: "Geografiskt område", icon: "MapPin" },
+    { namn: "Antal", beteckning: "ANT", kategori: "produktion", datatyp: "integer", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Antal enheter (kärl, containrar etc.)", icon: "Hash" },
+    { namn: "Önskad leveransperiod", beteckning: "LEV", kategori: "leverans", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Önskad leveransperiod (t.ex. '0201-0430' eller 'Torsdag EM')", icon: "Calendar" },
+    { namn: "Oönskad leveransperiod", beteckning: "LEV NEJ", kategori: "leverans", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Tider som inte passar (t.ex. 'Mån-Tisdag')", icon: "CalendarX" },
+    { namn: "Leveransintervall", beteckning: "LEVPERIOD", kategori: "leverans", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Leveransintervall (t.ex. '2-3 månader')", icon: "Clock" },
+    { namn: "Fastighetsbeteckning", beteckning: "FASBET", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Fastighetsbeteckning (t.ex. 'STORA ORMEN 2')", icon: "Building" },
+    { namn: "Fakturareferens", beteckning: "REF", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Kundens fakturareferens", icon: "FileText" },
+    { namn: "Fasadnummer", beteckning: "FASNR", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Fasadnummer på byggnaden", icon: "Hash" },
+    { namn: "Butiksnummer", beteckning: "NUTNR", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Butiks- eller enhetsnummer", icon: "Store" },
+    { namn: "Association", beteckning: "ASSOC", kategori: "artikel", datatyp: "string", isSystem: true, isRequired: false, standardArvs: false, beskrivning: "Koppling artikel → objekt (t.ex. 'Matavfallskärl 125 liter')", icon: "Link" },
+    { namn: "Avdelning", beteckning: "AVD", kategori: "kundreferens", datatyp: "string", isSystem: false, isRequired: false, standardArvs: true, beskrivning: "Avdelning hos kund", icon: "Building2" },
+    { namn: "Uppdragsbild", beteckning: "BILD", kategori: "produktion", datatyp: "image", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Foto på kärlet/objektet", icon: "Camera" },
+    { namn: "Visningsbild", beteckning: "ICON", kategori: "produktion", datatyp: "image", isSystem: false, isRequired: false, standardArvs: false, beskrivning: "Visningsbild/ikon för objektet", icon: "Image" },
+  ];
+
+  let created = 0;
+  for (const label of systemLabels) {
+    const existing = await db.select({ id: metadataKatalog.id })
+      .from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.tenantId, DEFAULT_TENANT_ID),
+        eq(metadataKatalog.beteckning, label.beteckning)
+      ))
+      .limit(1);
+
+    if (existing.length === 0) {
+      await db.insert(metadataKatalog).values({
+        tenantId: DEFAULT_TENANT_ID,
+        ...label,
+      });
+      created++;
+    }
+  }
+
+  if (created > 0) {
+    console.log(`Seeded ${created} system metadata labels (etiketter)`);
+  }
 }

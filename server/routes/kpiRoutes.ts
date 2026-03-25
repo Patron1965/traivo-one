@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError, ConflictError } from "../errors";
 import { requireAdmin } from "../tenant-middleware";
-import { objects, workOrders, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema } from "@shared/schema";
+import { objects, workOrders, apiUsageLogs, apiBudgets, invitations, insertMetadataDefinitionSchema, insertObjectMetadataSchema, insertObjectPayerSchema, metadataKatalog, insertMetadataKatalogSchema } from "@shared/schema";
 import { getISOWeek, getStartOfISOWeek } from "./helpers";
 import { sendEmail } from "../replit_integrations/resend";
 
@@ -1240,6 +1240,112 @@ app.delete("/api/metadata-definitions/:id", requireAdmin, asyncHandler(async (re
       throw new NotFoundError("Definition hittades inte");
     }
     await storage.deleteMetadataDefinition(req.params.id);
+    res.status(204).send();
+}));
+
+// ============== METADATA LABELS (ETIKETTER / KATALOG) ==============
+
+app.get("/api/metadata-labels", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { kategori, beteckning, isSystem } = req.query;
+    
+    const results = await db.select().from(metadataKatalog)
+      .where(eq(metadataKatalog.tenantId, tenantId))
+      .orderBy(metadataKatalog.kategori, metadataKatalog.sortOrder, metadataKatalog.namn);
+    
+    let filtered = results;
+    if (kategori) {
+      filtered = filtered.filter(r => r.kategori === kategori);
+    }
+    if (beteckning) {
+      filtered = filtered.filter(r => r.beteckning === beteckning);
+    }
+    if (isSystem === 'true') {
+      filtered = filtered.filter(r => r.isSystem);
+    }
+    
+    res.json(filtered);
+}));
+
+app.get("/api/metadata-labels/:id", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const [label] = await db.select().from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.id, req.params.id),
+        eq(metadataKatalog.tenantId, tenantId)
+      ));
+    if (!label) throw new NotFoundError("Etikett hittades inte");
+    res.json(label);
+}));
+
+app.post("/api/metadata-labels", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const data = insertMetadataKatalogSchema.parse({ ...req.body, tenantId, isSystem: false });
+    const [label] = await db.insert(metadataKatalog).values(data).returning();
+    res.status(201).json(label);
+}));
+
+app.patch("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const [existing] = await db.select().from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.id, req.params.id),
+        eq(metadataKatalog.tenantId, tenantId)
+      ));
+    if (!existing) throw new NotFoundError("Etikett hittades inte");
+    
+    const updateSchema = z.object({
+      namn: z.string().optional(),
+      beskrivning: z.string().nullable().optional(),
+      datatyp: z.string().optional(),
+      beteckning: z.string().nullable().optional(),
+      kategori: z.string().optional(),
+      sortOrder: z.number().optional(),
+      icon: z.string().nullable().optional(),
+      isRequired: z.boolean().optional(),
+      allowedValues: z.array(z.string()).nullable().optional(),
+      editableByLevel: z.string().nullable().optional(),
+      standardArvs: z.boolean().optional(),
+      arLogisk: z.boolean().optional(),
+    });
+    let updateData = updateSchema.parse(req.body);
+    
+    if (existing.isSystem) {
+      const { namn, beteckning, datatyp, kategori, isRequired, ...allowed } = updateData;
+      updateData = allowed;
+      if (Object.keys(updateData).length === 0) {
+        throw new ForbiddenError("Systemmetadata: dessa fält kan inte ändras");
+      }
+    }
+    
+    const [updated] = await db.update(metadataKatalog)
+      .set(updateData)
+      .where(and(
+        eq(metadataKatalog.id, req.params.id),
+        eq(metadataKatalog.tenantId, tenantId)
+      ))
+      .returning();
+    res.json(updated);
+}));
+
+app.delete("/api/metadata-labels/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const [existing] = await db.select().from(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.id, req.params.id),
+        eq(metadataKatalog.tenantId, tenantId)
+      ));
+    if (!existing) throw new NotFoundError("Etikett hittades inte");
+    
+    if (existing.isSystem) {
+      throw new ForbiddenError("Systemmetadata kan inte raderas");
+    }
+    
+    await db.delete(metadataKatalog)
+      .where(and(
+        eq(metadataKatalog.id, req.params.id),
+        eq(metadataKatalog.tenantId, tenantId)
+      ));
     res.status(204).send();
 }));
 
