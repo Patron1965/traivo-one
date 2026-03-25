@@ -33,13 +33,13 @@ Fillagring:     Replit Object Storage
 Autentisering:  Replit Auth med rollbaserad åtkomstkontroll
 
 Kodstatistik:
-- 137 854 rader TypeScript/TSX-kod
-- 117 databastabeller
-- 446 API-endpoints
-- 72 frontend-sidor
-- 62 UI-komponenter
+- ~145 000 rader TypeScript/TSX-kod
+- 120+ databastabeller
+- 470+ API-endpoints
+- 75+ frontend-sidor
+- 65+ UI-komponenter
 - 21 backend-routerfiler
-- 20 databasmigreringar
+- 77 genomförda utvecklingsuppgifter
 
 
 GENOMFÖRDA UTVECKLINGSUPPGIFTER
@@ -486,6 +486,100 @@ Automatisk kundrapport vid avvikelserapportering från Traivo Go:
   - Detaljdialog visar informationsbanner för auto-kopplade rapporter
   - Chauffören ser bekräftelse att kundrapport skapades i mobilappen
 
+TASK #68 — SimpleFieldApp → Mobil-API
+----------------------------------------
+SimpleFieldApp kopplad till mobil-API för avvikelser och kundrapporter.
+Integration med Go-appens kategorier och severity-nivåer.
+
+TASK #69 — SimpleFieldApp Demodata
+-------------------------------------
+Realistiska demojobb för visning i SimpleFieldApp.
+Visar typiska dagliga arbetsordrar för fältpersonal.
+
+TASK #70 — Kinab Sprint 1: Objekttyp & Metadata-arkitektur (P1+P2+P6)
+------------------------------------------------------------------------
+Kinab-anpassad metadata-arkitektur:
+  - Utökat EAV-system med beteckningskod per metadata-typ
+  - Systemmetadata (KUND, PARENT, TYP) som inte kan raderas
+  - Obligatorisk metadata vid objektskapande
+  - Tillåtna värden (dropdown) per metadatatyp
+  - Nivåbaserad redigeringsbehörighet
+  - Metadata-historik med spårning av ändringar
+  - Objekttyper med hierarkinivåer
+
+TASK #71 — Kinab Sprint 1: Association Tvåstegsfilter (P3)
+------------------------------------------------------------
+Tvåstegsfilter för artikel-objekt-matchning via metadata:
+  - associationLabel + associationValue på artiklar
+  - Backend-tjänst som matchar artiklar mot objekt via metadata-etiketter
+  - Stöd för operatorer: equals, contains, starts_with
+  - API-endpoint för att hitta matchade objekt per artikel
+
+TASK #72 — Kinab Sprint 2: Artikellogik med Metadata-koppling (P4+P7+P8+P11)
+--------------------------------------------------------------------------------
+Utökad artikellogik för Kinab:
+  - fetchMetadataLabel/Format: hämta metadata-värde vid utförande
+  - canUpdateMetadata + updateMetadataLabel/Format: skriv tillbaka metadata
+  - showPreviousValue: visa föregående värde vid uppdatering
+  - isInfoCarrier (blindartikel/informationsbärare, P8)
+  - limitationType: artikelbegränsning per adress (P11)
+  - maxPerAddress: max antal utföranden per adress
+  - Auto metadata writeback med ändringshistorik
+
+TASK #73 — Kinab Sprint 2-3: Trestegsimport (P5+P12+P13)
+------------------------------------------------------------
+Förbättrat importflöde:
+  - Metadata-etikettimport med automatisk katalog-skapande
+  - Orderkoncept-import med artikelkoppling
+  - Tidsbegränsningar per objekt vid import
+  - Strukturuppgifter-import
+  - Förbättrad felhantering och validering
+
+TASK #74 — Kinab Sprint 3: Flerkund-fakturering & Polylinje-stöd (P9+P10)
+------------------------------------------------------------------------------
+Multi-payer fakturering och geografisk data:
+  - isPrimary-flagga och payerLabel på objectPayers
+  - BillingCustomerDialog i JobModal (auto-väljer primär betalare)
+  - polylineData (GeoJSON jsonb) på objects-tabellen
+  - PolylineEditor: interaktiv polygon/polyline-ritning på karta
+  - ObjectsMapView renderar polygon/polyline-overlays
+  - find-in-polygon API med ray-casting och coordinateFormat-param
+
+TASK #75 — Kinab Sprint 4: Växel-API & Statusmeddelanden (P14+P15)
+---------------------------------------------------------------------
+Telefoniuppslag och automatiska statusmeddelanden:
+  - GET /api/telephony/lookup?phone=... — kundidentifiering via telefonnummer
+  - Tvåstegs-sökning: direkt customers.phone + metadata-telefonfält (EAV)
+  - Returnerar kund, objekt, ordrar, kluster och OMR-områdesdata
+  - Resurstillgänglighetstjänst: beräknar nästa lediga tid från dagens schema
+  - Statusmeddelande-mallar med variabelsubstitution:
+    {resource.name}, {resource.nextAvailable}, {resource.isBusy}
+  - Automatiska svar i kundportal-chatt vid statusfrågor
+  - CRUD för statusmeddelande-mallar
+
+TASK #76 — Kinab Sprint 5: Växel-UI & Tillgänglighetsvy (P16+P17)
+--------------------------------------------------------------------
+Frontend för telefoni och resurstillgänglighet:
+  - Ny sida /telephony med tre flikar:
+    1. Telefonsökning: sökfält, kundkort, objekt, ordrar, kluster
+    2. Tillgänglighet: realtidsöversikt av alla resurser (ledig/upptagen)
+    3. Meddelandemallar: CRUD-editor med variabelförhandsvisning
+  - Färgkodade statusindikator (grön=ledig, röd=upptagen)
+  - Auto-refresh var 30:e sekund med manuell refresh-knapp
+  - Sammanfattning: antal lediga/upptagna resurser
+  - Navigeringslänk i sidomenyn under "Fält & Utförande"
+
+TASK #77 — Kinab Sprint 5: Avancerad Fakturahantering (P18)
+--------------------------------------------------------------
+Utökad fakturering utöver orderbaserad:
+  - Manuella fakturarader (ej kopplade till order)
+  - Kreditfakturor med negerade belopp och originalreferens
+  - Ny tabell manualInvoiceLines för fristående rader
+  - Fortnox-artikelimport till Traivos artikelregister
+  - Fortnox kostnadsställen/projekt-import
+  - "Manuella rader"-flik i fakturavyn med artikelväljare
+  - Kreditknapp synlig enbart på exporterade fakturor med Fortnox-nummer
+
 
 ÖVRIGA GENOMFÖRDA ARBETEN
 =========================
@@ -569,6 +663,7 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
    - Strukturella uppgifter (sammansatta)
    - Uppgiftsberoenden
    - Pickup-tasks (automatgenererade)
+   - Flerkund-fakturering (multi-payer med primärbetalare)
 
 6. KUNDHANTERING
    - Kundregister med kontaktpersoner
@@ -583,11 +678,14 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
 
 7. OBJEKTHANTERING
    - Hierarkisk objektstruktur med multi-parent
-   - EAV-metadata (dynamiska fält)
+   - EAV-metadata (dynamiska fält) med beteckningskod och historik
    - Tidsrestriktioner och tidsönskemål
    - QR-baserad felanmälan (publik)
    - Interimobjekt med verifieringsflöde
    - Per-objekt artikelhantering
+   - Association tvåstegsfilter (metadata-etikett-matchning)
+   - Polyline/polygon-stöd (GeoJSON) med interaktiv editor
+   - Auto metadata writeback med ändringshistorik
 
 8. MOBIL FÄLTAPP
    - Komplett REST API för Driver Core
@@ -617,6 +715,9 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
     - Prislistor med artikelkoppling
     - Prisöverridning vid orderskapande
     - ROI-rapporter
+    - Manuella fakturarader (ej orderkopplade)
+    - Kreditfakturor med Fortnox-integration
+    - Fortnox artikelimport och kostnadsställen/projekt-synk
 
 11. RAPPORTERING & KPI
     - Dashboard med interaktiva diagram
@@ -649,8 +750,18 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
     - SMS via Twilio
     - Anomalidetektering med automatiska larm
     - Planerade meddelanden till utförare
+    - Automatiska statusmeddelanden i kundportal-chatt
+    - Statusmeddelande-mallar med variabelsubstitution
 
-15. IMPORT & INTEGRATION
+15. TELEFONI & VÄXEL-API
+    - Kundidentifiering via telefonnummer (direkt + metadata-sökning)
+    - Växel-UI med telefonsökning, kundkort och orderhistorik
+    - Realtids resurstillgänglighetsvy (ledig/upptagen)
+    - Kluster/område-data i sökresultat
+    - Statusmeddelande-generering per resurs
+    - Meddelandemall-editor med variabelförhandsvisning
+
+16. IMPORT & INTEGRATION
     - Modus 2.0 CSV-import med validering
     - Preview & Rename vid import (inline-redigering, sök & ersätt)
     - Selektiv modulär import (hoppa över/importera steg)
@@ -661,8 +772,8 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
     - DataClean-tjänst (extern datavalidering)
 
 
-DATABASTABELLER (117 st)
-=========================
+DATABASTABELLER (120+ st)
+==========================
 Ordrar:      work_orders, work_order_lines, work_order_objects, assignments
 Objekt:      objects, object_articles, object_metadata, object_contacts,
              object_images, object_parents, object_payers, object_time_restrictions
@@ -677,7 +788,8 @@ Planering:   planning_parameters, planning_decision_log, clusters,
              simulation_scenarios, annual_goals
 IoT:         iot_devices, iot_signals, iot_api_keys, predictive_forecasts
 Ekonomi:     price_lists, price_list_articles, invoice_configurations,
-             invoice_rules, fortnox_config, fortnox_invoice_exports
+             invoice_rules, fortnox_config, fortnox_invoice_exports,
+             manual_invoice_lines
 Tenant:      tenants, tenant_features, tenant_branding, tenant_labels,
              tenant_package_installations, feature_audit_log
 Användare:   users, user_tenant_roles, teams, team_members, invitations
@@ -689,6 +801,7 @@ Orderkoncept: order_concepts, order_concept_articles, order_concept_objects,
 Arbetspass:  work_sessions, work_entries, time_logs
 Rapporter:   protocols, deviation_reports, route_feedback,
              environmental_data, setup_time_logs
+Kommunikation: status_message_templates
 Övriga:      articles, metadata_definitions, metadata_katalog,
              metadata_varden, metadata_historik, audit_logs,
              api_usage_logs, api_budgets, public_issue_reports,
