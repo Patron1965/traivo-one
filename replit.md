@@ -51,6 +51,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **IoT API & Automatic Order Generation:** Management of IoT devices, API keys, and signals, with auto-generation of work orders based on sensor signals.
 - **Event-Driven Disruption Service:** Automated disruption detection and re-optimization suggestions for resource unavailability, emergency jobs, significant delays, and early completion. DisruptionPanel shows real-time alerts with scored suggestions and one-click application.
 - **Intelligent Break Placement in VRP:** Break constraints included in Geoapify Route Planner API VRP requests, placing breaks at natural route turning points.
+- **Feedback-loop — Beräknat vs Faktiskt:** Analytics comparing estimated vs actual service durations. Weekly accuracy trends, article-type deviation, per-resource accuracy, carry-over analysis, and suggested duration adjustments with planner approval. "Prediktionsnoggrannhet" tab in Reporting page with MAPE, accuracy rate, MAE KPIs.
 - **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields, UI for visualization, and aggregated preferences for order placement.
 - **Planned Notes (Meddelande till utförare):** Planner can write messages to field workers, displayed prominently in the SimpleFieldApp.
 - **Tenant Feature Flags:** Module-based feature packaging system with 4 tiers, allowing per-tenant module enablement.

@@ -23,6 +23,7 @@ import { format, startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, end
 import { sv } from "date-fns/locale";
 import type { WorkOrder, Customer, Resource, Cluster, DeviationReport } from "@shared/schema";
 import { DEVIATION_CATEGORY_LABELS, SEVERITY_LEVEL_LABELS } from "@shared/schema";
+import { PredictionAccuracyTab } from "@/components/reporting/PredictionAccuracyTab";
 
 interface KPICardProps {
   title: string;
@@ -996,6 +997,7 @@ export default function ReportingDashboardPage() {
           <TabsTrigger value="areas" data-testid="tab-areas">Områden</TabsTrigger>
           <TabsTrigger value="customers" data-testid="tab-customers">Kunder</TabsTrigger>
           <TabsTrigger value="route-feedback" data-testid="tab-route-feedback">Rutt-feedback</TabsTrigger>
+          <TabsTrigger value="prediction" data-testid="tab-prediction">Prediktionsnoggrannhet</TabsTrigger>
         </TabsList>
 
         {/* === OVERVIEW TAB === */}
@@ -1727,6 +1729,11 @@ export default function ReportingDashboardPage() {
         {/* === ROUTE FEEDBACK TAB === */}
         <TabsContent value="route-feedback" className="space-y-4" data-testid="tab-content-route-feedback">
           <RouteFeedbackTab />
+        </TabsContent>
+
+        {/* === PREDICTION ACCURACY TAB === */}
+        <TabsContent value="prediction" className="space-y-4" data-testid="tab-content-prediction">
+          <PredictionAccuracyTab />
         </TabsContent>
       </Tabs>
     </div>
