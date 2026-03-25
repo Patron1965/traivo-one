@@ -33,7 +33,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, comprehensive work order management, and per-object article management with resolved pricing.
 - **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, self-booking with recurring slot patterns, dynamic widgets, sidebar navigation with unread badges, cancellation with reason, and field documentation.
 - **Customer Field Documentation:** Mobile-first portal feature for object documentation via QR code, photo capture, and structured change reports, with admin review.
-- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality.
+- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality with Geographic Day-Clustering (k-means based zone grouping for minimizing daily travel).
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
 - **Environmental Statistics & Certificates:** Tracking mileage, fuel, CO2, and generation of annual environmental certificates.
 - **Industry Packages System:** Predefined templates for different industries with configurable articles and metadata.

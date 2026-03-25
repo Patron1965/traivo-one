@@ -374,7 +374,7 @@ app.delete("/api/work-orders/:workOrderId/timewindows/:id", asyncHandler(async (
 // ============================================
 app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
-    const { weekStartDate, resourceIds, overbookingPercent = 0 } = req.body;
+    const { weekStartDate, resourceIds, overbookingPercent = 0, geoClusteringEnabled = true } = req.body;
 
     if (!weekStartDate || !resourceIds || !Array.isArray(resourceIds)) {
       throw new ValidationError("weekStartDate and resourceIds[] required");
@@ -471,6 +471,62 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
       return 0;
     });
 
+    const orderDayZonePreference = new Map<string, number>();
+    let geoZoneCount = 0;
+    if (geoClusteringEnabled) {
+      const geoOrders = sorted.filter(o => o.taskLatitude && o.taskLongitude && !o.plannedWindowStart);
+      if (geoOrders.length >= 3) {
+        const numZones = Math.min(5, Math.max(2, Math.ceil(geoOrders.length / 4)));
+        const coords = geoOrders.map(o => ({ lat: o.taskLatitude!, lng: o.taskLongitude! }));
+        const minLat = Math.min(...coords.map(c => c.lat));
+        const maxLat = Math.max(...coords.map(c => c.lat));
+        const minLng = Math.min(...coords.map(c => c.lng));
+        const maxLng = Math.max(...coords.map(c => c.lng));
+        const latRange = maxLat - minLat || 0.01;
+        const lngRange = maxLng - minLng || 0.01;
+
+        const centroids: Array<{ lat: number; lng: number }> = [];
+        for (let i = 0; i < numZones; i++) {
+          centroids.push({
+            lat: minLat + (latRange * (i + 0.5)) / numZones,
+            lng: minLng + (lngRange * (i + 0.5)) / numZones,
+          });
+        }
+
+        for (let iter = 0; iter < 8; iter++) {
+          const groups: Array<Array<{ lat: number; lng: number }>> = centroids.map(() => []);
+          for (const c of coords) {
+            let bestIdx = 0;
+            let bestDist = Infinity;
+            for (let j = 0; j < centroids.length; j++) {
+              const d = (c.lat - centroids[j].lat) ** 2 + (c.lng - centroids[j].lng) ** 2;
+              if (d < bestDist) { bestDist = d; bestIdx = j; }
+            }
+            groups[bestIdx].push(c);
+          }
+          for (let j = 0; j < centroids.length; j++) {
+            if (groups[j].length > 0) {
+              centroids[j] = {
+                lat: groups[j].reduce((s, c) => s + c.lat, 0) / groups[j].length,
+                lng: groups[j].reduce((s, c) => s + c.lng, 0) / groups[j].length,
+              };
+            }
+          }
+        }
+
+        for (const order of geoOrders) {
+          let bestZone = 0;
+          let bestDist = Infinity;
+          for (let j = 0; j < centroids.length; j++) {
+            const d = (order.taskLatitude! - centroids[j].lat) ** 2 + (order.taskLongitude! - centroids[j].lng) ** 2;
+            if (d < bestDist) { bestDist = d; bestZone = j; }
+          }
+          orderDayZonePreference.set(order.id, bestZone % 5);
+        }
+        geoZoneCount = numZones;
+      }
+    }
+
     const HOURS_PER_DAY = 8;
     const maxMinutesPerDay = HOURS_PER_DAY * 60 * (1 + overbookingPercent / 100);
 
@@ -499,6 +555,18 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
       return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     };
 
+    const resourceDayZoneCounts = new Map<string, Map<number, number>>();
+    const getDayZoneKey = (resourceId: string, dayStr: string) => `${resourceId}::${dayStr}`;
+    const getDominantZone = (key: string): number | null => {
+      const counts = resourceDayZoneCounts.get(key);
+      if (!counts || counts.size === 0) return null;
+      let best = -1, bestCount = 0;
+      for (const [zone, count] of counts) {
+        if (count > bestCount) { bestCount = count; best = zone; }
+      }
+      return best;
+    };
+
     const assignments: Array<{
       workOrderId: string;
       resourceId: string;
@@ -508,6 +576,7 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
       address: string;
       estimatedDuration: number;
       priority: string;
+      geoZone?: number;
     }> = [];
     const skipped: string[] = [];
     let clusterSkipped = 0;
@@ -583,6 +652,19 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
             }
           }
 
+          if (geoClusteringEnabled && geoZoneCount > 0) {
+            const orderZone = orderDayZonePreference.get(order.id);
+            if (orderZone !== undefined) {
+              const zoneKey = getDayZoneKey(resource.id, dayStr);
+              const dayDominant = getDominantZone(zoneKey);
+              if (dayDominant !== null && dayDominant !== orderZone) {
+                score += 200;
+              } else if (dayDominant === orderZone) {
+                score -= 50;
+              }
+            }
+          }
+
           if (!bestResource || score < bestScore) {
             bestResource = resource;
             bestScore = score;
@@ -596,6 +678,7 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
           const startMin = startMinutes % 60;
           const startTime = `${startHour.toString().padStart(2, "0")}:${startMin.toString().padStart(2, "0")}`;
 
+          const orderZone = orderDayZonePreference.get(order.id);
           assignments.push({
             workOrderId: order.id,
             resourceId: bestResource.id,
@@ -605,7 +688,15 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
             address: order.objectAddress || "",
             estimatedDuration: orderDur,
             priority: order.priority,
+            geoZone: orderZone,
           });
+
+          if (orderZone !== undefined) {
+            const zoneKey = getDayZoneKey(bestResource.id, dayStr);
+            if (!resourceDayZoneCounts.has(zoneKey)) resourceDayZoneCounts.set(zoneKey, new Map());
+            const counts = resourceDayZoneCounts.get(zoneKey)!;
+            counts.set(orderZone, (counts.get(orderZone) || 0) + 1);
+          }
 
           resourceDayMinutes[bestResource.id][dayStr] = (resourceDayMinutes[bestResource.id][dayStr] || 0) + orderDur;
           assigned = true;
@@ -633,6 +724,26 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
       }
     }
 
+    const geoSpreadPerDay: Record<string, { totalJobs: number; zonesUsed: number; dominantZonePct: number }> = {};
+    if (geoClusteringEnabled && geoZoneCount > 0) {
+      for (const day of weekDays) {
+        const dayStr = day.toISOString().split("T")[0];
+        const dayAssignments = assignments.filter(a => a.scheduledDate === dayStr && a.geoZone !== undefined);
+        if (dayAssignments.length > 0) {
+          const zoneCounts = new Map<number, number>();
+          for (const a of dayAssignments) {
+            zoneCounts.set(a.geoZone!, (zoneCounts.get(a.geoZone!) || 0) + 1);
+          }
+          const maxZoneCount = Math.max(...zoneCounts.values());
+          geoSpreadPerDay[dayStr] = {
+            totalJobs: dayAssignments.length,
+            zonesUsed: zoneCounts.size,
+            dominantZonePct: Math.round((maxZoneCount / dayAssignments.length) * 100),
+          };
+        }
+      }
+    }
+
     res.json({
       assignments,
       totalAssigned: assignments.length,
@@ -643,6 +754,9 @@ app.post("/api/auto-plan-week", asyncHandler(async (req, res) => {
       capacityPerDay: capacitySummary,
       maxMinutesPerDay: Math.round(maxMinutesPerDay),
       resourceCount: selectedResources.length,
+      geoClusteringEnabled,
+      geoZoneCount,
+      geoSpreadPerDay,
     });
 }));
 

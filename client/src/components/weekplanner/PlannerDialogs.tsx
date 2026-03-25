@@ -5,7 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send } from "lucide-react";
+import { AlertTriangle, Loader2, User, Sparkles, Wand2, Mail, Copy, Check, Link2, ArrowRight, Trash2, Send, MapPin } from "lucide-react";
 import { format, startOfWeek } from "date-fns";
 import { sv } from "date-fns/locale";
 import type { Resource, WorkOrderWithObject } from "@shared/schema";
@@ -224,6 +224,9 @@ interface AutoFillDialogProps {
   onOpenChange: (v: boolean) => void;
   overbooking: number;
   setOverbooking: (v: number) => void;
+  geoClustering: boolean;
+  setGeoClustering: (v: boolean) => void;
+  geoSpread: Record<string, { totalJobs: number; zonesUsed: number; dominantZonePct: number }> | null;
   loading: boolean;
   applying: boolean;
   preview: AutoFillAssignment[] | null;
@@ -239,7 +242,8 @@ interface AutoFillDialogProps {
 
 export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialogProps) {
   const {
-    open, onOpenChange, overbooking, setOverbooking, loading, applying,
+    open, onOpenChange, overbooking, setOverbooking, geoClustering, setGeoClustering,
+    geoSpread, loading, applying,
     preview, skipped, diag, resources, viewMode, currentWeekStart, currentDate,
     onPreview, onApply,
   } = props;
@@ -263,6 +267,14 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
               <span>0% (exakt)</span><span>25%</span><span>50% (max)</span>
             </div>
           </div>
+          <div className="flex items-center gap-3">
+            <label className="flex items-center gap-2 cursor-pointer" data-testid="toggle-geo-clustering">
+              <input type="checkbox" checked={geoClustering} onChange={(e) => setGeoClustering(e.target.checked)} className="h-4 w-4 rounded border-border accent-primary" />
+              <MapPin className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Geografisk dagsklustring</span>
+            </label>
+            <span className="text-xs text-muted-foreground">Gruppera uppdrag per område och dag</span>
+          </div>
           <div className="flex items-center gap-2">
             <Button onClick={onPreview} disabled={loading} data-testid="button-auto-fill-preview">
               {loading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Sparkles className="h-4 w-4 mr-2" />}
@@ -284,6 +296,32 @@ export const AutoFillDialog = memo(function AutoFillDialog(props: AutoFillDialog
                   {diag && diag.clusterSkipped > 0 && (
                     <p className="text-amber-500">{diag.clusterSkipped} av dessa saknar matchande resurs för sitt kluster.</p>
                   )}
+                </div>
+              )}
+              {geoSpread && Object.keys(geoSpread).length > 0 && (
+                <div className="border rounded-lg p-3 bg-muted/30" data-testid="geo-spread-indicator">
+                  <div className="flex items-center gap-2 mb-2">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Geografisk spridning per dag</span>
+                  </div>
+                  <div className="grid grid-cols-5 gap-2">
+                    {Object.entries(geoSpread).sort().map(([day, info]) => {
+                      const focusPct = info.dominantZonePct;
+                      const quality = focusPct >= 80 ? "text-green-600" : focusPct >= 60 ? "text-amber-500" : "text-red-500";
+                      const bgColor = focusPct >= 80 ? "bg-green-500" : focusPct >= 60 ? "bg-amber-500" : "bg-red-500";
+                      return (
+                        <div key={day} className="text-center text-xs" data-testid={`geo-spread-day-${day}`}>
+                          <p className="font-medium">{format(new Date(day + "T12:00:00"), "EEE", { locale: sv })}</p>
+                          <div className="h-1.5 bg-muted rounded-full overflow-hidden mt-1">
+                            <div className={`h-full rounded-full ${bgColor}`} style={{ width: `${focusPct}%` }} />
+                          </div>
+                          <p className={`mt-0.5 font-medium ${quality}`}>{focusPct}%</p>
+                          <p className="text-muted-foreground">{info.zonesUsed} zon{info.zonesUsed !== 1 ? "er" : ""}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2">Högre procent = mer koncentrerad geografisk planering per dag</p>
                 </div>
               )}
               {preview.length > 0 && (

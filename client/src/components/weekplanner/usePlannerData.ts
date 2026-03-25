@@ -72,6 +72,8 @@ export function usePlannerData() {
   const [depChainDialogOpen, setDepChainDialogOpen] = useState(false);
   const [depChainJobId, setDepChainJobId] = useState<string | null>(null);
   const [autoFillOverbooking, setAutoFillOverbooking] = useState(0);
+  const [autoFillGeoClustering, setAutoFillGeoClustering] = useState(true);
+  const [autoFillGeoSpread, setAutoFillGeoSpread] = useState<Record<string, { totalJobs: number; zonesUsed: number; dominantZonePct: number }> | null>(null);
   const [autoFillLoading, setAutoFillLoading] = useState(false);
   const [autoFillPreview, setAutoFillPreview] = useState<Array<{ workOrderId: string; resourceId: string; scheduledDate: string; scheduledStartTime: string; title: string; address: string; estimatedDuration: number; priority: string }> | null>(null);
   const [autoFillApplying, setAutoFillApplying] = useState(false);
@@ -382,7 +384,7 @@ export function usePlannerData() {
 
   const handleAutoFillPreview = async () => {
     setAutoFillLoading(true); setAutoFillPreview(null);
-    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null); } catch { toast({ title: "Fel", description: "Kunde inte generera planering", variant: "destructive" }); } finally { setAutoFillLoading(false); }
+    try { const ws = viewMode === "week" ? currentWeekStart : startOfWeek(currentDate, { weekStartsOn: 1 }); const data = await (await apiRequest("POST", "/api/auto-plan-week", { weekStartDate: format(ws, "yyyy-MM-dd"), resourceIds: resources.map(r => r.id), overbookingPercent: autoFillOverbooking, geoClusteringEnabled: autoFillGeoClustering })).json(); setAutoFillPreview(data.assignments || []); setAutoFillSkipped(data.totalSkipped || 0); setAutoFillDiag(data.totalUnscheduled != null ? { totalUnscheduled: data.totalUnscheduled, capacityPerDay: data.capacityPerDay || {}, maxMinutesPerDay: data.maxMinutesPerDay || 480, resourceCount: data.resourceCount || 0, clusterSkipped: data.clusterSkipped || 0 } : null); setAutoFillGeoSpread(data.geoSpreadPerDay || null); } catch { toast({ title: "Fel", description: "Kunde inte generera planering", variant: "destructive" }); } finally { setAutoFillLoading(false); }
   };
 
   const handleAutoFillApply = async () => {
@@ -456,6 +458,7 @@ export function usePlannerData() {
     sendScheduleDialogOpen, setSendScheduleDialogOpen, sendScheduleResource, sendScheduleCopied,
     conflictDialogOpen, setConflictDialogOpen, pendingSchedule, setPendingSchedule,
     autoFillDialogOpen, setAutoFillDialogOpen, autoFillOverbooking, setAutoFillOverbooking,
+    autoFillGeoClustering, setAutoFillGeoClustering, autoFillGeoSpread,
     autoFillLoading, autoFillPreview, autoFillApplying, autoFillSkipped, autoFillDiag,
     clearDialogOpen, setClearDialogOpen, clearLoading,
     depChainDialogOpen, setDepChainDialogOpen, depChainJobId, depChainData,
