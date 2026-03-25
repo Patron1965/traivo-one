@@ -12,3 +12,9 @@ id = "JEuz__hGh8T42gNvZ3xp7"
 uri = "file://Traivo-Go-Systemskiss.md"
 type = "text"
 title = "Traivo Go — Systemskiss"
+
+[[outputs]]
+id = "SJe1m9a-6yLJnRpqY4H1W"
+uri = "file://Traivo_Go_Integration_Report.md"
+type = "text"
+title = "Traivo Go ↔ Traivo One — Integrationsrapport"
