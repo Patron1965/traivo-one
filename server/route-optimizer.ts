@@ -390,6 +390,27 @@ const GEOAPIFY_ROUTE_PLANNER_URL = "https://api.geoapify.com/v1/routeplanner";
 const DEFAULT_SERVICE_TIME_SECONDS = 30 * 60; // 30 min
 const DEFAULT_WORK_HOURS: [number, number] = [8 * 3600, 17 * 3600]; // 08-17
 
+function parseScheduledTime(value: string): number | null {
+  const timeOnly = value.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (timeOnly) {
+    const hours = parseInt(timeOnly[1], 10);
+    const minutes = parseInt(timeOnly[2], 10);
+    if (hours >= 0 && hours <= 23 && minutes >= 0 && minutes <= 59) {
+      return hours * 3600 + minutes * 60;
+    }
+  }
+
+  const date = new Date(value);
+  if (!isNaN(date.getTime())) {
+    const hours = date.getHours();
+    const minutes = date.getMinutes();
+    return hours * 3600 + minutes * 60;
+  }
+
+  console.warn(`Unable to parse scheduledStartTime value: "${value}", skipping time_window constraint`);
+  return null;
+}
+
 /**
  * Optimize routes using Geoapify Route Planner API
  * Supports multi-vehicle VRP with time windows
@@ -459,9 +480,15 @@ export async function optimizeRoutesVRP(
     };
 
     if (order.scheduledStartTime) {
-      const start = new Date(order.scheduledStartTime);
-      const startSec = start.getHours() * 3600 + start.getMinutes() * 60;
-      job.time_windows = [[startSec, Math.min(startSec + 3600, DEFAULT_WORK_HOURS[1])]];
+      const parsedSec = parseScheduledTime(order.scheduledStartTime);
+      if (parsedSec !== null) {
+        const endSec = Math.min(parsedSec + 3600, DEFAULT_WORK_HOURS[1]);
+        if (endSec > parsedSec) {
+          job.time_windows = [[parsedSec, endSec]];
+        } else {
+          console.warn(`Scheduled time ${parsedSec}s is at or past work hours end ${DEFAULT_WORK_HOURS[1]}s, skipping time_window`);
+        }
+      }
     }
 
     validJobs.push({ order, job, index: jobIndex });
@@ -492,7 +519,12 @@ export async function optimizeRoutesVRP(
     return {
       start_location: startCoord,
       end_location: startCoord,
-      time_windows: [DEFAULT_WORK_HOURS],
+      time_windows: [
+        [
+          Number.isFinite(DEFAULT_WORK_HOURS[0]) ? DEFAULT_WORK_HOURS[0] : 8 * 3600,
+          Number.isFinite(DEFAULT_WORK_HOURS[1]) ? DEFAULT_WORK_HOURS[1] : 17 * 3600
+        ]
+      ],
       id: resource.id,
       description: resource.name,
     };
