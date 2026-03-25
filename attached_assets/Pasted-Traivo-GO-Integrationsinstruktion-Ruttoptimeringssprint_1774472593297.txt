@@ -1,0 +1,333 @@
+Traivo GO — Integrationsinstruktion: Ruttoptimeringssprint R1–R6
+
+**Version:** 1.0  
+**Datum:** 2026-03-25  
+**Gäller:** Traivo One backend-ändringar som påverkar Traivo GO (mobilappen)
+
+---
+
+## Översikt
+
+Sex funktionsområden har implementerats i Traivo One som kräver uppdateringar i Traivo GO för att systemet ska synkronisera korrekt. Dokumentet beskriver varje område med API-kontrakt, datamodeller, och rekommenderade integrationspunkter i mobilappen.
+
+**Autentisering:** Alla `/api/mobile/*`-endpoints kräver header `x-mobile-token` (JWT). Alla andra admin-endpoints kräver Replit Auth-session. Portal-endpoints kräver header `x-portal-token`.
+
+---
+
+## R1: Geografisk Dagsklustring i Veckoplanering
+
+### Påverkan på GO
+**Låg.** Klusterlogiken är helt planeringsstyrd och påverkar hur ordrar fördelas geografiskt. GO behöver inte anropa kluster-API:er, men ordrarnas `clusterId` kan nu vara satt.
+
+### Förändring i datamodell
+`WorkOrder`-objektet kan nu ha ett populerat `clusterId`-fält som refererar till ett geografiskt kluster.
+
+### Rekommendation
+Ingen åtgärd krävs. Om GO vill visa klusterinformation i framtiden kan `clusterId` användas för att hämta klusternamn via `GET /api/clusters`.
+
+---
+
+## R2: Geoapify Routing API — Distance Matrix Service
+
+### Påverkan på GO
+**Medel.** En centraliserad avståndstjänst finns nu tillgänglig som GO kan använda för exakta köravstånd och körtider istället för fågelvägen.
+
+### Nya API-endpoints (admin-autentisering)
+
+#### Enskilt avstånd
+```
+POST /api/distance
+Body: { fromLat: number, fromLng: number, toLat: number, toLng: number }
+Response: { distanceKm: number, durationMin: number, source: "geoapify" | "haversine" }
+```
+
+#### Batch-avstånd
+```
+POST /api/distance/batch
+Body: { pairs: [{ id: string, fromLat, fromLng, toLat, toLng }] }
+Response: { results: { [id]: { distanceKm, durationMin, source } } }
+```
+
+### Rekommendation för GO
+Använd `POST /api/distance` för att visa verklig körtid och köravstånd till nästa stopp i navigationskortet ("Nästa stopp"-kortet). Ersätt befintlig haversine-beräkning med detta API-anrop för mer exakta tidsuppskattningar.
+
+**Cachning:** Servern cachar resultat i 1 timme. GO bör inte cacha lokalt utöver 15 minuter.
+
+---
+
+## R3: Händelsestyrd Omoptimering vid Störningar (Disruption Service)
+
+### Påverkan på GO
+**Hög.** GO ska trigga störningshändelser automatiskt vid vissa situationer.
+
+### Triggers som GO ska anropa
+
+#### 1. Betydande försening (>50% av beräknad tid)
+Triggas när fältarbetaren har arbetat länge med ett jobb och faktisk tid överstiger beräknad tid med >50%.
+
+```
+POST /api/disruptions/trigger/delay
+Body: {
+  workOrderId: string,
+  workOrderTitle: string,
+  resourceId: string,
+  resourceName: string,
+  estimatedDuration: number,   // minuter (från ordern)
+  actualDuration: number       // minuter (faktisk tid hittills)
+}
+Response: DisruptionEvent | { message: "Förseningen understiger tröskelvärdet (50%)" }
+```
+
+**Triggerlogik i GO:** Beräkna `actualDuration` som skillnaden mellan `onSiteAt` och nu. Om `actualDuration / estimatedDuration > 1.5`, skicka triggern. Kör check var 5:e minut för aktiva jobb.
+
+#### 2. Tidigt klart (>45 min slack)
+Triggas när resursen slutför dagens arbete och har >45 minuter kvar av arbetsdagen.
+
+```
+POST /api/disruptions/trigger/early-completion
+Body: {
+  resourceId: string,
+  resourceName: string,
+  slackMinutes: number   // minuter kvar av planerad arbetsdag
+}
+Response: DisruptionEvent | { message: "Ingen ledig tid..." }
+```
+
+**Triggerlogik i GO:** Vid slutförande av sista planerade order, beräkna kvarvarande tid av arbetsdagen. Om >45 min, anropa endpointen.
+
+#### 3. Sjukanmälan / Resurs ej tillgänglig
+Triggas om fältarbetaren sjukanmäler sig via appen.
+
+```
+POST /api/disruptions/trigger/resource-unavailable
+Body: {
+  resourceId: string,
+  resourceName: string,
+  reason: string         // "sick", "vehicle_breakdown", etc.
+}
+```
+
+### DisruptionEvent-format (response)
+```typescript
+{
+  id: string,
+  tenantId: string,
+  type: "resource_unavailable" | "emergency_job" | "significant_delay" | "early_completion",
+  severity: "low" | "medium" | "high" | "critical",
+  title: string,
+  description: string,
+  timestamp: string,                    // ISO 8601
+  status: "active" | "dismissed" | "resolved",
+  affectedResources: string[],
+  affectedOrders: string[],
+  suggestions: Array<{
+    id: string,
+    action: string,
+    description: string,
+    score: number,                      // 0-100
+    estimatedImpact: string,
+    metadata: object
+  }>,
+  decisionTrace: Array<{ step, input, output, reasoning }>
+}
+```
+
+### Rekommendation för GO
+- Implementera en bakgrundsprocess (timer/interval) som var 5:e minut kontrollerar pågående jobb mot beräknad tid och triggar `delay` om tröskeln överskrids.
+- Vid slutförande av sista order: beräkna slack och trigga `early-completion` om >45 min.
+- Lägg till sjukanmälningsknapp i profilinställningarna som triggar `resource-unavailable`.
+
+---
+
+## R4: Intelligent Rastplacering i VRP
+
+### Påverkan på GO
+**Medel.** VRP-optimerade rutter kan nu innehålla rast-stopp. GO behöver hantera dessa i ruttlistan.
+
+### Förändring i VRP-resultat
+`VRPRouteStop` har nu två nya fält:
+```typescript
+{
+  orderId: string,
+  orderTitle: string,
+  sequence: number,
+  arrivalSeconds: number,       // sekunder från start
+  serviceMinutes: number,
+  waitingMinutes: number,
+  location: { lat: number, lng: number },
+  isBreak?: boolean,            // NYT: true om stoppet är en rast
+  breakDurationMinutes?: number // NYT: t.ex. 30
+}
+```
+
+### Rastkonfiguration per tenant
+```
+GET /api/break-config
+Response: {
+  enabled: boolean,
+  durationMinutes: number,       // default 30
+  earliestSeconds: number,       // default 39600 (11:00)
+  latestSeconds: number          // default 46800 (13:00)
+}
+```
+
+### Rekommendation för GO
+- När ruttdata hämtas och visas i ruttlistan, kontrollera `isBreak`-flaggan.
+- Visa rast-stopp med en distinkt ikon (t.ex. ☕) och text "Rast — 30 min".
+- Visa rasten med tidpunkt beräknad från `arrivalSeconds`.
+- Raststoppet bör inte vara "slutförbart" eller ha statusknapp — det visas bara som information.
+- Navigera INTE till rast-stoppets position (det är föregående stopps position).
+
+---
+
+## R5: Feedback-loop — Beräknat vs Faktiskt
+
+### Påverkan på GO
+**Medel.** GO rapporterar redan `actualDuration` vid orderslutförande. Nu används denna data för att kontinuerligt förbättra tidsuppskattningar. Inga nya API-anrop krävs, men kvaliteten på data som GO skickar är kritisk.
+
+### Viktiga datapunkter som GO MÅSTE rapportera korrekt
+
+#### 1. Faktisk arbetstid (`actualDuration`)
+Vid orderslutförande via `PATCH /api/mobile/orders/:id/status` med `status: "utford"`:
+```
+Body: {
+  status: "utford",
+  actualDuration: number     // VIKTIGT: faktisk tid i minuter (onSiteAt → completedAt)
+}
+```
+
+**GO bör:** Automatiskt beräkna `actualDuration` som `Math.round((completedAt - onSiteAt) / 60000)` och inkludera i slutförande-anropet.
+
+#### 2. GPS-position vid statusändringar
+Rapportera GPS-position kontinuerligt via:
+```
+POST /api/mobile/position
+Body: {
+  resourceId: string,
+  latitude: number,
+  longitude: number,
+  speed?: number,
+  heading?: number,
+  accuracy?: number,
+  status?: string,           // "traveling" | "on_site" | "idle"
+  workOrderId?: string       // aktuell order om på plats
+}
+```
+
+### Nya analytics-endpoints (enbart för admin/planerarvy)
+Dessa behöver INTE implementeras i GO men listas för referens:
+- `GET /api/feedback-loop/overview-kpis` — MAPE, noggrannhet, medelfel
+- `GET /api/feedback-loop/article-accuracy` — avvikelse per artikeltyp
+- `GET /api/feedback-loop/resource-accuracy` — avvikelse per resurs
+- `GET /api/feedback-loop/carry-over` — orsaker till oavslutade jobb
+- `GET /api/feedback-loop/suggested-durations` — föreslagna justeringar
+
+### Rekommendation för GO
+- Säkerställ att `actualDuration` alltid beräknas och skickas vid orderslutförande.
+- Säkerställ att GPS-position rapporteras minst var 60:e sekund under aktiv arbetsdag.
+- Om GO har lokal offline-cache: synka korrekt `actualDuration` vid reconnect.
+
+---
+
+## R6: Kundnotifieringar — "Vi är på väg"
+
+### Påverkan på GO
+**Hög.** GO triggar nu automatiskt kundnotifieringar vid statusändring till "en route".
+
+### Automatisk trigger (redan implementerad server-side)
+När GO anropar:
+```
+PATCH /api/mobile/orders/:id/status
+Body: { status: "en_route" }
+```
+
+...triggas automatiskt:
+1. ETA beräknas via Geoapify Routing (resursens GPS → objektets position)
+2. Kunden får SMS/e-post: *"Tekniker {resursnamn} beräknas anlända kl {etaTime} ±{margin} min"*
+3. Notifieringen loggas i `eta_notifications`-tabellen
+
+### Skyddmekanismer (server-side)
+- Max 1 notifiering per order (dubblettskydd)
+- Kontrollerar kundens `notify_on_technician_on_way`-inställning
+- Kontrollerar att kontaktuppgifter finns (email/telefon)
+- Konfigurering per tenant: kanal (email/sms/both), marginal (5-60 min)
+
+### ETANotificationConfig (tenant-nivå)
+```
+GET /api/eta-notification/config
+Response: {
+  enabled: boolean,          // default true
+  marginMinutes: number,     // default 15
+  channel: "email" | "sms" | "both",  // default "email"
+  triggerOnEnRoute: boolean   // default true
+}
+```
+
+### Rekommendation för GO
+- **Ingen kodsändring krävs** om GO redan anropar `PATCH /api/mobile/orders/:id/status` med `{ status: "en_route" }` — notifieringen triggas automatiskt server-side.
+- **Viktigt:** Säkerställ att GO anropar `en_route`-statusen INNAN fältarbetaren börjar köra mot nästa stopp, inte vid ankomst.
+- Överväg att visa en bekräftelseindikator i appen: *"Kund notifierad ✓"* — detta kan verifieras via:
+```
+GET /api/eta-notification/history?customerId={id}
+Response: Array<{
+  id: string,
+  workOrderId: string,
+  customerId: string,
+  channel: string,
+  etaMinutes: number,
+  etaTime: string,
+  marginMinutes: number,
+  status: "sent" | "failed",
+  errorMessage: string | null,
+  createdAt: string
+}>
+```
+
+### Ny databasstabell: `eta_notifications`
+```sql
+CREATE TABLE eta_notifications (
+  id VARCHAR PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id VARCHAR NOT NULL REFERENCES tenants(id),
+  work_order_id VARCHAR NOT NULL REFERENCES work_orders(id),
+  customer_id VARCHAR NOT NULL REFERENCES customers(id),
+  resource_id VARCHAR REFERENCES resources(id),
+  channel TEXT NOT NULL,
+  notification_type TEXT NOT NULL,
+  recipient_email TEXT,
+  recipient_phone TEXT,
+  eta_minutes INTEGER,
+  eta_time TEXT,
+  margin_minutes INTEGER DEFAULT 15,
+  status TEXT NOT NULL DEFAULT 'sent',
+  error_message TEXT,
+  created_at TIMESTAMP NOT NULL DEFAULT NOW()
+);
+```
+
+---
+
+## Sammanfattning: Åtgärder för Traivo GO
+
+| Prio | Område | Åtgärd | Uppskattad insats |
+|------|--------|--------|-------------------|
+| 🔴 | R6 | Verifiera att `en_route`-status anropas korrekt (triggar kundnotifiering) | Låg (verifiering) |
+| 🔴 | R5 | Säkerställ att `actualDuration` alltid beräknas och skickas vid slutförande | Medel |
+| 🔴 | R3 | Implementera disruption-triggers (delay, early-completion, sjukanmälan) | Hög |
+| 🟡 | R4 | Hantera rast-stopp (`isBreak`) i ruttlistan med distinkt ikon | Medel |
+| 🟡 | R2 | Ersätt haversine med `POST /api/distance` för körtid till nästa stopp | Medel |
+| 🟢 | R6 | Visa "Kund notifierad ✓" efter en_route | Låg |
+| 🟢 | R1 | Ingen åtgärd krävs | — |
+
+### Testscenarier
+
+1. **ETA-notifiering:** Ändra order till `en_route` → verifiera att kund får e-post/SMS
+2. **Disruption delay:** Stanna på plats >150% av `estimatedDuration` → verifiera att trigger skickas
+3. **Rast i rutt:** Hämta VRP-optimerad rutt → verifiera att rast-stopp visas korrekt
+4. **Slutförandetid:** Slutför order → verifiera att `actualDuration` loggas i databasen
+5. **Offline-sync:** Slutför order offline → verifiera att `actualDuration` synkas korrekt vid reconnect
+
+---
+
+## Kontakt
+
+Vid frågor om API-kontrakt eller datamodeller, kontakta Traivo One backend-teamet. Alla endpoints är dokumenterade i server-koden under `server/routes/`.
