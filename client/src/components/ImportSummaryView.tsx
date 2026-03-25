@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Building2, Truck, FileSpreadsheet, Clock, CheckCircle, AlertCircle,
-  ArrowRight, ClipboardList, Ban, Undo2
+  ArrowRight, ClipboardList, Ban, Undo2, Tag
 } from "lucide-react";
 
 interface ModusObjectResult {
@@ -79,6 +79,7 @@ export function ImportSummaryView({
     { step: 3, label: "Uppgifter", icon: <Truck className="h-4 w-4" />, count: modusResults.tasks ? `${modusResults.tasks.imported} importerade` : null, errorCount: modusResults.tasks?.errors?.length || 0 },
     { step: 4, label: "Fakturarader", icon: <FileSpreadsheet className="h-4 w-4" />, count: modusResults["invoice-lines"] ? `${modusResults["invoice-lines"].imported} importerade` : null, errorCount: modusResults["invoice-lines"]?.errors?.length || 0 },
     { step: 5, label: "Händelser", icon: <Clock className="h-4 w-4" />, count: modusResults.events ? `${modusResults.events.totalEvents} analyserade` : null, errorCount: 0 },
+    { step: 6, label: "Metadata", icon: <Tag className="h-4 w-4" />, count: completedSteps.has(6) ? "Klar" : null, errorCount: 0 },
   ];
 
   return (

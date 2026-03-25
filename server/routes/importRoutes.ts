@@ -11,7 +11,8 @@ import multer from "multer";
 import Papa from "papaparse";
 import { importJobs, notifyImportProgress } from "./helpers";
 import { geocodeAddress } from "../google-geocoding";
-import { objects, workOrders, customers, objectMetadata, workOrderLines } from "@shared/schema";
+import { objects, workOrders, customers, objectMetadata, workOrderLines, metadataKatalog } from "@shared/schema";
+import { createMetadata, getAllMetadataTypes } from "../metadata-queries";
 
 const upload = multer({ 
   storage: multer.memoryStorage(),
@@ -916,6 +917,8 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
         else if (objectType === "omrade" && parent) objectLevel = 2;
         
         const objectNumber = `MODUS-${modusId}`;
+
+        const what3words = (row["What3words"] || row["What3Words"] || row["what3words"] || row["W3W"] || "").trim() || null;
         
         const hierarchyLevelMap: Record<number, string> = { 1: "omrade", 2: "fastighet", 3: "serviceenhet" };
         const objectFields = {
@@ -926,7 +929,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
           objectType,
           objectLevel,
           hierarchyLevel: hierarchyLevelMap[objectLevel] || "serviceenhet",
-          address: row["Adress 1"] || null,
+          address: row["Adress 1"] || row["Adress"] || null,
           city: row["Ort"] || null,
           postalCode: row["Postnummer"] || null,
           latitude,
@@ -936,6 +939,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
           keyNumber,
           accessInfo,
           containerCount,
+          ...(what3words ? { notes: `W3W: ${what3words}` } : {}),
         };
         
         const existingObject = await storage.getObjectByObjectNumber(tenantId, objectNumber);
@@ -1019,8 +1023,7 @@ app.post("/api/import/modus/objects", upload.single("file"), asyncHandler(async 
             const metaType = metadataTypeMap.get(metadataName.toLowerCase());
             if (!metaType) {
               // Auto-create metadata type if not found
-              const { metadataKatalog: mkSchema } = await import("@shared/schema");
-              const [newType] = await db.insert(mkSchema).values({
+              const [newType] = await db.insert(metadataKatalog).values({
                 tenantId,
                 namn: metadataName,
                 datatyp: 'string',
@@ -1450,6 +1453,362 @@ app.post("/api/import/modus/invoice-lines", upload.single("file"), asyncHandler(
       errors: errors.slice(0, 50),
       totalRows: (result.data as unknown[]).length,
     });
+}));
+
+app.post("/api/import/customers/validate", upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new ValidationError("Ingen fil uppladdad");
+    }
+
+    const csvText = req.file.buffer.toString("utf-8");
+    const delimiter = csvText.includes(";") ? ";" : ",";
+    const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter });
+
+    if (result.errors.length > 0) {
+      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+    }
+
+    const tenantId = getTenantIdWithFallback(req);
+    const existingCustomers = await storage.getCustomers(tenantId);
+    const existingByName = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c]));
+    const existingByNumber = new Map(existingCustomers.filter(c => c.customerNumber).map(c => [c.customerNumber!.toLowerCase(), c]));
+
+    const rows = result.data as Record<string, string>[];
+    const preview: Array<{
+      row: number;
+      name: string;
+      customerNumber: string;
+      address: string;
+      city: string;
+      postalCode: string;
+      contactPerson: string;
+      email: string;
+      phone: string;
+      invoiceReference: string;
+      duplicate: null | { type: string; existingId: string; existingName: string };
+      errors: string[];
+    }> = [];
+
+    const csvNumbers = new Map<string, number[]>();
+    const csvNames = new Map<string, number[]>();
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      const name = (row.namn || row.Namn || row.name || row.Name || "").trim();
+      const customerNumber = (row.kundnummer || row.Kundnummer || row.customerNumber || "").trim();
+      const address = (row.adress || row.Adress || row.address || "").trim();
+      const city = (row.ort || row.Ort || row.stad || row.city || "").trim();
+      const postalCode = (row.postnr || row.postnummer || row.Postnummer || row.postalCode || "").trim();
+      const contactPerson = (row.kontakt || row.kontaktperson || row.Kontaktperson || row.contactPerson || "").trim();
+      const email = (row["e-post"] || row.epost || row.Epost || row.email || "").trim();
+      const phone = (row.telefon || row.Telefon || row.phone || "").trim();
+      const invoiceReference = (row.fakturareferens || row.Fakturareferens || row.invoiceReference || "").trim();
+
+      const errors: string[] = [];
+      if (!name) errors.push("Namn saknas");
+
+      let duplicate: typeof preview[0]["duplicate"] = null;
+
+      if (customerNumber) {
+        const existing = existingByNumber.get(customerNumber.toLowerCase());
+        if (existing) {
+          duplicate = { type: "customerNumber", existingId: existing.id, existingName: existing.name };
+        }
+        if (!csvNumbers.has(customerNumber.toLowerCase())) csvNumbers.set(customerNumber.toLowerCase(), []);
+        csvNumbers.get(customerNumber.toLowerCase())!.push(rowNum);
+      }
+
+      if (!duplicate && name) {
+        const existing = existingByName.get(name.toLowerCase());
+        if (existing) {
+          duplicate = { type: "name", existingId: existing.id, existingName: existing.name };
+        }
+        if (!csvNames.has(name.toLowerCase())) csvNames.set(name.toLowerCase(), []);
+        csvNames.get(name.toLowerCase())!.push(rowNum);
+      }
+
+      preview.push({ row: rowNum, name, customerNumber, address, city, postalCode, contactPerson, email, phone, invoiceReference, duplicate, errors });
+    }
+
+    const csvDuplicates: Array<{ value: string; type: string; rows: number[] }> = [];
+    for (const [num, rowNums] of csvNumbers) {
+      if (rowNums.length > 1) csvDuplicates.push({ value: num, type: "customerNumber", rows: rowNums });
+    }
+    for (const [name, rowNums] of csvNames) {
+      if (rowNums.length > 1) csvDuplicates.push({ value: name, type: "name", rows: rowNums });
+    }
+
+    const totalRows = rows.length;
+    const duplicateCount = preview.filter(p => p.duplicate !== null).length;
+    const errorCount = preview.filter(p => p.errors.length > 0).length;
+    const newCount = preview.filter(p => !p.duplicate && p.errors.length === 0).length;
+
+    res.json({
+      totalRows,
+      preview: preview.slice(0, 500),
+      duplicateCount,
+      errorCount,
+      newCount,
+      csvDuplicates,
+      columns: rows.length > 0 ? Object.keys(rows[0]) : [],
+    });
+}));
+
+app.post("/api/import/customers/bulk", upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new ValidationError("Ingen fil uppladdad");
+    }
+
+    const csvText = req.file.buffer.toString("utf-8");
+    const delimiter = csvText.includes(";") ? ";" : ",";
+    const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter });
+
+    if (result.errors.length > 0) {
+      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+    }
+
+    const tenantId = getTenantIdWithFallback(req);
+    let duplicateAction = "skip";
+    try {
+      if (req.body?.duplicateAction) duplicateAction = req.body.duplicateAction;
+    } catch {}
+
+    const existingCustomers = await storage.getCustomers(tenantId);
+    const existingByName = new Map(existingCustomers.map(c => [c.name.toLowerCase(), c]));
+    const existingByNumber = new Map(existingCustomers.filter(c => c.customerNumber).map(c => [c.customerNumber!.toLowerCase(), c]));
+
+    const rows = result.data as Record<string, string>[];
+    const imported: string[] = [];
+    const merged: string[] = [];
+    const skipped: string[] = [];
+    const errors: string[] = [];
+
+    for (const row of rows) {
+      try {
+        const name = (row.namn || row.Namn || row.name || row.Name || "").trim();
+        const customerNumber = (row.kundnummer || row.Kundnummer || row.customerNumber || "").trim();
+        if (!name) { errors.push("Rad saknar namn"); continue; }
+
+        const existingByNum = customerNumber ? existingByNumber.get(customerNumber.toLowerCase()) : undefined;
+        const existingByN = existingByName.get(name.toLowerCase());
+        const existing = existingByNum || existingByN;
+
+        const customerData = {
+          name,
+          customerNumber: customerNumber || null,
+          contactPerson: (row.kontakt || row.kontaktperson || row.Kontaktperson || row.contactPerson || "").trim() || null,
+          email: (row["e-post"] || row.epost || row.Epost || row.email || "").trim() || null,
+          phone: (row.telefon || row.Telefon || row.phone || "").trim() || null,
+          address: (row.adress || row.Adress || row.address || "").trim() || null,
+          city: (row.ort || row.Ort || row.stad || row.city || "").trim() || null,
+          postalCode: (row.postnr || row.postnummer || row.Postnummer || row.postalCode || "").trim() || null,
+        };
+
+        if (existing) {
+          if (duplicateAction === "merge") {
+            const updates: Record<string, string | null> = {};
+            for (const [key, val] of Object.entries(customerData)) {
+              if (val && !(existing as any)[key]) {
+                updates[key] = val;
+              }
+            }
+            if (Object.keys(updates).length > 0) {
+              await storage.updateCustomer(existing.id, updates);
+            }
+            merged.push(name);
+          } else if (duplicateAction === "create") {
+            await storage.createCustomer({ tenantId, ...customerData });
+            imported.push(name);
+          } else {
+            skipped.push(name);
+          }
+        } else {
+          await storage.createCustomer({ tenantId, ...customerData });
+          imported.push(name);
+        }
+      } catch (err) {
+        errors.push(`Kunde inte importera: ${row.namn || row.Namn || "okänd"}`);
+      }
+    }
+
+    res.json({ imported: imported.length, merged: merged.length, skipped: skipped.length, errors });
+}));
+
+app.post("/api/import/metadata/bulk", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { objectIds, metadataLabel, metadataValue, method } = req.body;
+
+    if (!objectIds || !Array.isArray(objectIds) || objectIds.length === 0) {
+      throw new ValidationError("Inga objekt valda");
+    }
+    if (!metadataLabel || !metadataValue) {
+      throw new ValidationError("Etikett och värde krävs");
+    }
+
+    let written = 0;
+    const errors: string[] = [];
+
+    for (const objectId of objectIds) {
+      try {
+        await createMetadata({
+          tenantId,
+          objektId: objectId,
+          metadataTypNamn: metadataLabel,
+          varde: metadataValue,
+          skapadAv: "bulk-import",
+          metod: method || "manuell",
+        });
+        written++;
+      } catch (err: any) {
+        errors.push(`Objekt ${objectId}: ${err.message}`);
+      }
+    }
+
+    res.json({ written, errors: errors.slice(0, 50) });
+}));
+
+app.post("/api/import/metadata/csv", upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) {
+      throw new ValidationError("Ingen fil uppladdad");
+    }
+
+    const csvText = req.file.buffer.toString("utf-8");
+    const delimiter = csvText.includes(";") ? ";" : ",";
+    const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, delimiter });
+
+    if (result.errors.length > 0) {
+      return res.status(400).json({ error: "CSV-fel", details: result.errors.slice(0, 10) });
+    }
+
+    const tenantId = getTenantIdWithFallback(req);
+    const existingObjects = await storage.getObjects(tenantId);
+    const objectByNumber = new Map(existingObjects.map(o => [o.objectNumber?.toLowerCase() || "", o]));
+    const objectByName = new Map(existingObjects.map(o => [o.name.toLowerCase(), o]));
+
+    const rows = result.data as Record<string, string>[];
+    const metadataTypes = await getAllMetadataTypes(tenantId);
+    const metadataTypeMap = new Map(metadataTypes.map(t => [t.namn.toLowerCase(), t]));
+
+    const metadataCols = rows.length > 0
+      ? Object.keys(rows[0]).filter(k => !["objektnummer", "objektnamn", "objekt", "id", "namn", "name", "objectnumber"].includes(k.toLowerCase()))
+      : [];
+
+    let written = 0;
+    const errors: string[] = [];
+
+    for (const row of rows) {
+      const objKey = (row.objektnummer || row.Objektnummer || row.id || row.Id || row.objekt || row.Objekt || "").trim();
+      const objName = (row.objektnamn || row.Objektnamn || row.namn || row.Namn || row.name || "").trim();
+
+      let obj = objKey ? objectByNumber.get(objKey.toLowerCase()) || objectByNumber.get(`modus-${objKey}`.toLowerCase()) : null;
+      if (!obj && objName) obj = objectByName.get(objName.toLowerCase());
+
+      if (!obj) {
+        errors.push(`Objekt "${objKey || objName}" hittades inte`);
+        continue;
+      }
+
+      for (const col of metadataCols) {
+        const value = (row[col] || "").trim();
+        if (!value) continue;
+
+        try {
+          let metaType = metadataTypeMap.get(col.toLowerCase());
+          if (!metaType) {
+            const [newType] = await db.insert(metadataKatalog).values({
+              tenantId,
+              namn: col,
+              datatyp: "string",
+              arLogisk: true,
+              standardArvs: false,
+              kategori: "importerad",
+              beskrivning: `Importerad via metadata-CSV`,
+              sortOrder: 100,
+            }).returning();
+            metadataTypeMap.set(col.toLowerCase(), newType);
+            metaType = newType;
+          }
+
+          await createMetadata({
+            tenantId,
+            objektId: obj.id,
+            metadataTypNamn: metaType.namn,
+            varde: value,
+            skapadAv: "csv-metadata-import",
+            metod: "manuell",
+          });
+          written++;
+        } catch (err: any) {
+          errors.push(`${col} för "${obj.name}": ${err.message}`);
+        }
+      }
+    }
+
+    res.json({ written, totalRows: rows.length, metadataColumns: metadataCols, errors: errors.slice(0, 50) });
+}));
+
+app.post("/api/import/objects/detect-duplicates", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { objectData } = req.body;
+
+    if (!objectData || !Array.isArray(objectData)) {
+      throw new ValidationError("objectData krävs som array");
+    }
+
+    const existingObjects = await storage.getObjects(tenantId);
+    const existingByNumber = new Map(existingObjects.map(o => [o.objectNumber?.toLowerCase() || "", o]));
+    const existingByNameAddr = new Map(existingObjects.map(o => [`${o.name.toLowerCase()}|${(o.address || "").toLowerCase()}`, o]));
+
+    const duplicates: Array<{
+      rowIndex: number;
+      name: string;
+      matchType: string;
+      existingId: string;
+      existingName: string;
+      existingObjectNumber: string | null;
+    }> = [];
+
+    for (let i = 0; i < objectData.length; i++) {
+      const item = objectData[i];
+      const name = (item.name || "").trim();
+      const objectNumber = (item.objectNumber || "").trim();
+      const address = (item.address || "").trim();
+      const lat = parseFloat(item.latitude) || null;
+      const lng = parseFloat(item.longitude) || null;
+
+      if (objectNumber) {
+        const existing = existingByNumber.get(objectNumber.toLowerCase()) || existingByNumber.get(`modus-${objectNumber}`.toLowerCase());
+        if (existing) {
+          duplicates.push({ rowIndex: i, name, matchType: "objectNumber", existingId: existing.id, existingName: existing.name, existingObjectNumber: existing.objectNumber });
+          continue;
+        }
+      }
+
+      if (name && address) {
+        const key = `${name.toLowerCase()}|${address.toLowerCase()}`;
+        const existing = existingByNameAddr.get(key);
+        if (existing) {
+          duplicates.push({ rowIndex: i, name, matchType: "nameAddress", existingId: existing.id, existingName: existing.name, existingObjectNumber: existing.objectNumber });
+          continue;
+        }
+      }
+
+      if (lat && lng) {
+        for (const obj of existingObjects) {
+          if (obj.latitude && obj.longitude) {
+            const dlat = Math.abs(obj.latitude - lat);
+            const dlng = Math.abs(obj.longitude - lng);
+            if (dlat < 0.0001 && dlng < 0.0001) {
+              duplicates.push({ rowIndex: i, name, matchType: "gps", existingId: obj.id, existingName: obj.name, existingObjectNumber: obj.objectNumber });
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    res.json({ duplicates, totalChecked: objectData.length });
 }));
 
 app.get("/api/import/health-stats", asyncHandler(async (req, res) => {

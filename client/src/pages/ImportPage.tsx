@@ -9,11 +9,14 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { 
   Upload, Users, Building2, Truck, Trash2, CheckCircle, AlertCircle, 
   Loader2, Download, Eye, X, FileUp, Check, Clock, FileSpreadsheet, Database,
   ArrowRight, Info, Settings, ChevronDown, ChevronUp, ListChecks, History, Undo2,
-  SkipForward, Ban, BarChart3, ClipboardList
+  SkipForward, Ban, BarChart3, ClipboardList, Tag, AlertTriangle, Merge, Copy
 } from "lucide-react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImportSummaryView } from "@/components/ImportSummaryView";
@@ -123,6 +126,29 @@ interface ModusValidationResult {
   metadataColumns: string[];
   warnings: string[];
   scorecard: DataHealthScorecard;
+}
+
+interface CustomerValidationResult {
+  totalRows: number;
+  preview: Array<{
+    row: number;
+    name: string;
+    customerNumber: string;
+    address: string;
+    city: string;
+    postalCode: string;
+    contactPerson: string;
+    email: string;
+    phone: string;
+    invoiceReference: string;
+    duplicate: null | { type: string; existingId: string; existingName: string };
+    errors: string[];
+  }>;
+  duplicateCount: number;
+  errorCount: number;
+  newCount: number;
+  csvDuplicates: Array<{ value: string; type: string; rows: number[] }>;
+  columns: string[];
 }
 
 interface ParsedRow {
@@ -492,7 +518,7 @@ export default function ImportPage() {
   const [showInvoiceColumns, setShowInvoiceColumns] = useState(false);
 
   const STORAGE_KEY = "traivo-import-progress";
-  const STORAGE_VERSION = 2;
+  const STORAGE_VERSION = 3;
   const savedProgress = useMemo(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
@@ -548,6 +574,22 @@ export default function ImportPage() {
   const [taskPreviewResources, setTaskPreviewResources] = useState<string[]>([]);
   const [taskResourceOverrides, setTaskResourceOverrides] = useState<Record<string, string>>({});
   const [taskPreviewTotalRows, setTaskPreviewTotalRows] = useState(0);
+
+  const [customerValidation, setCustomerValidation] = useState<CustomerValidationResult | null>(null);
+  const [customerFile, setCustomerFile] = useState<File | null>(null);
+  const [isValidatingCustomers, setIsValidatingCustomers] = useState(false);
+  const [customerDuplicateAction, setCustomerDuplicateAction] = useState<"skip" | "merge" | "create">("skip");
+  const [isImportingCustomers, setIsImportingCustomers] = useState(false);
+  const [customerImportResult, setCustomerImportResult] = useState<{ imported: number; merged: number; skipped: number; errors: string[] } | null>(null);
+  const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
+
+  const [metadataLabel, setMetadataLabel] = useState("");
+  const [metadataValue, setMetadataValue] = useState("");
+  const [selectedMetadataObjects, setSelectedMetadataObjects] = useState<Set<string>>(new Set());
+  const [metadataSelectAll, setMetadataSelectAll] = useState(false);
+  const [isAssigningMetadata, setIsAssigningMetadata] = useState(false);
+  const [metadataAssignResult, setMetadataAssignResult] = useState<{ written: number; errors: string[] } | null>(null);
+  const [metadataCsvResult, setMetadataCsvResult] = useState<{ written: number; totalRows: number; metadataColumns: string[]; errors: string[] } | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -684,13 +726,13 @@ export default function ImportPage() {
     setCompletedSteps(prev => { const next = new Set(prev); next.add(step); return next; });
     setSkippedSteps(prev => { const next = new Set(prev); next.delete(step); return next; });
     const nextStep = step + 1;
-    if (nextStep <= 6) setActiveModusStep(nextStep);
+    if (nextStep <= 7) setActiveModusStep(nextStep);
   }, []);
 
   const skipStep = useCallback((step: number) => {
     setSkippedSteps(prev => { const next = new Set(prev); next.add(step); return next; });
     const nextStep = step + 1;
-    if (nextStep <= 6) setActiveModusStep(nextStep);
+    if (nextStep <= 7) setActiveModusStep(nextStep);
     setSkipConfirmStep(null);
   }, []);
 
@@ -699,18 +741,96 @@ export default function ImportPage() {
   }, []);
 
   const firstSkippedStep = useMemo(() => {
-    for (let i = 2; i <= 5; i++) {
+    for (let i = 2; i <= 6; i++) {
       if (skippedSteps.has(i)) return i;
     }
     return null;
   }, [skippedSteps]);
 
   const allStepsDone = useMemo(() => {
-    for (let i = 2; i <= 5; i++) {
+    for (let i = 2; i <= 6; i++) {
       if (!completedSteps.has(i) && !skippedSteps.has(i)) return false;
     }
     return true;
   }, [completedSteps, skippedSteps]);
+
+  const handleCustomerValidate = async (file: File) => {
+    setCustomerFile(file);
+    setCustomerValidation(null);
+    setCustomerImportResult(null);
+    setIsValidatingCustomers(true);
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await fetch("/api/import/customers/validate", { method: "POST", body: formData, credentials: "include" });
+      if (!response.ok) throw new Error((await response.json()).error || "Validering misslyckades");
+      const result = await response.json() as CustomerValidationResult;
+      setCustomerValidation(result);
+      if (result.duplicateCount > 0) setShowDuplicateDialog(true);
+      toast({ title: "Kundlista validerad", description: `${result.totalRows} rader, ${result.duplicateCount} dubbletter, ${result.newCount} nya` });
+    } catch (err) {
+      toast({ title: "Validering misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+      setCustomerFile(null);
+    } finally {
+      setIsValidatingCustomers(false);
+    }
+  };
+
+  const handleCustomerImport = async () => {
+    if (!customerFile) return;
+    setIsImportingCustomers(true);
+    const formData = new FormData();
+    formData.append("file", customerFile);
+    formData.append("duplicateAction", customerDuplicateAction);
+    try {
+      const response = await fetch("/api/import/customers/bulk", { method: "POST", body: formData, credentials: "include" });
+      if (!response.ok) throw new Error((await response.json()).error || "Import misslyckades");
+      const result = await response.json();
+      setCustomerImportResult(result);
+      queryClient.invalidateQueries({ queryKey: ["/api/customers"] });
+      toast({ title: "Kundimport klar", description: `${result.imported} importerade, ${result.merged} sammanslagna, ${result.skipped} hoppade över` });
+    } catch (err) {
+      toast({ title: "Import misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setIsImportingCustomers(false);
+      setShowDuplicateDialog(false);
+    }
+  };
+
+  const handleMetadataBulkAssign = async () => {
+    if (selectedMetadataObjects.size === 0 || !metadataLabel || !metadataValue) return;
+    setIsAssigningMetadata(true);
+    try {
+      const response = await fetch("/api/import/metadata/bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ objectIds: Array.from(selectedMetadataObjects), metadataLabel, metadataValue }),
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error((await response.json()).error || "Tilldelning misslyckades");
+      const result = await response.json();
+      setMetadataAssignResult(result);
+      toast({ title: "Metadata tilldelad", description: `${result.written} objekt uppdaterade` });
+    } catch (err) {
+      toast({ title: "Tilldelning misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    } finally {
+      setIsAssigningMetadata(false);
+    }
+  };
+
+  const handleMetadataCsvUpload = async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const response = await fetch("/api/import/metadata/csv", { method: "POST", body: formData, credentials: "include" });
+      if (!response.ok) throw new Error((await response.json()).error || "CSV-import misslyckades");
+      const result = await response.json();
+      setMetadataCsvResult(result);
+      toast({ title: "Metadata-CSV importerad", description: `${result.written} värden skrivna för ${result.metadataColumns.length} kolumner` });
+    } catch (err) {
+      toast({ title: "CSV-import misslyckades", description: err instanceof Error ? err.message : "Okänt fel", variant: "destructive" });
+    }
+  };
 
   const importMutation = useMutation({
     mutationFn: async ({ type, file }: { type: ImportType; file: File }) => {
@@ -1134,18 +1254,18 @@ export default function ImportPage() {
           <div className="flex flex-wrap gap-2">
             <StepIndicator step={1} title="Företagsinställningar" active={activeModusStep === 1} completed={importStep > 1} />
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            {[2, 3, 4, 5].map(s => {
+            {[2, 3, 4, 5, 6].map(s => {
               const priorResolved = Array.from({length: s - 2}, (_, i) => i + 2).every(p => completedSteps.has(p) || skippedSteps.has(p));
               const canNavigate = !completedSteps.has(s) && (skippedSteps.has(s) || priorResolved);
               return (
                 <span key={s} className="contents">
-                  <StepIndicator step={s} title={[, , "Importera objekt", "Importera uppgifter", "Fakturarader", "Analysera händelser"][s]!} active={activeModusStep === s} completed={completedSteps.has(s)} skipped={skippedSteps.has(s)} onClick={canNavigate ? () => goToStep(s) : undefined} />
-                  {s < 5 && <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />}
+                  <StepIndicator step={s} title={[, , "Importera objekt", "Importera uppgifter", "Fakturarader", "Analysera händelser", "Metadata"][s]!} active={activeModusStep === s} completed={completedSteps.has(s)} skipped={skippedSteps.has(s)} onClick={canNavigate ? () => goToStep(s) : undefined} />
+                  {s < 6 && <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />}
                 </span>
               );
             })}
             <ArrowRight className="h-5 w-5 text-muted-foreground self-center hidden md:block" />
-            <StepIndicator step={6} title="Sammanfattning" active={activeModusStep === 6} completed={false} onClick={allStepsDone ? () => setActiveModusStep(6) : undefined} />
+            <StepIndicator step={7} title="Sammanfattning" active={activeModusStep === 7} completed={false} onClick={allStepsDone ? () => setActiveModusStep(7) : undefined} />
           </div>
 
           <Card>
@@ -1180,6 +1300,221 @@ export default function ImportPage() {
                   </a>
                 </Button>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card data-testid="card-customer-import">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-teal-600 text-white text-sm font-bold">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Users className="h-4 w-4" />
+                      Steg 0: Kundlista-import (valfritt)
+                      {customerImportResult && (
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-customer-import-done">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {customerImportResult.imported} importerade
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      Importera kundlista från CSV innan objektimport — dubbletter detekteras automatiskt
+                    </CardDescription>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="bg-teal-50 dark:bg-teal-950/20 p-3 rounded-md text-sm space-y-1">
+                <p className="font-medium text-teal-700 dark:text-teal-300">Förväntade kolumner (semikolon- eller komma-separerad CSV):</p>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {["namn", "kundnummer", "adress", "postnr", "ort", "kontakt", "e-post", "telefon", "fakturareferens"].map(col => (
+                    <Badge key={col} variant="secondary" className="text-xs font-mono">{col}</Badge>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  id="customer-csv-import"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleCustomerValidate(file);
+                    e.target.value = "";
+                  }}
+                  data-testid="input-customer-csv"
+                />
+                <Button
+                  variant="outline"
+                  disabled={isValidatingCustomers || isImportingCustomers}
+                  onClick={() => document.getElementById("customer-csv-import")?.click()}
+                  data-testid="button-customer-csv-upload"
+                >
+                  {isValidatingCustomers ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4 mr-2" />
+                  )}
+                  Välj kundlista-CSV
+                </Button>
+                {customerFile && !customerImportResult && (
+                  <span className="text-xs text-muted-foreground">{customerFile.name}</span>
+                )}
+              </div>
+
+              {customerValidation && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-green-600" data-testid="text-customer-new">{customerValidation.newCount}</div>
+                      <div className="text-xs text-muted-foreground">Nya kunder</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-amber-600" data-testid="text-customer-duplicates">{customerValidation.duplicateCount}</div>
+                      <div className="text-xs text-muted-foreground">Dubbletter</div>
+                    </div>
+                    <div className="text-center">
+                      <div className="text-lg font-bold text-red-600" data-testid="text-customer-errors">{customerValidation.errorCount}</div>
+                      <div className="text-xs text-muted-foreground">Fel</div>
+                    </div>
+                  </div>
+
+                  {customerValidation.duplicateCount > 0 && (
+                    <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded-md text-sm">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <span className="font-medium text-amber-700 dark:text-amber-300">
+                          {customerValidation.duplicateCount} dubbletter hittade
+                        </span>
+                      </div>
+                      <ScrollArea className="max-h-32">
+                        <ul className="text-xs space-y-1 text-amber-600 dark:text-amber-400">
+                          {customerValidation.preview.filter(p => p.duplicate).slice(0, 20).map((p, i) => (
+                            <li key={i}>
+                              Rad {p.row}: <strong>{p.name}</strong> — matchar {p.duplicate!.type === "customerNumber" ? "kundnummer" : "namn"} "{p.duplicate!.existingName}"
+                            </li>
+                          ))}
+                        </ul>
+                      </ScrollArea>
+                    </div>
+                  )}
+
+                  <details className="text-sm">
+                    <summary className="cursor-pointer text-muted-foreground hover:text-foreground font-medium text-xs">
+                      Visa förhandsgranskning ({customerValidation.preview.length} rader)
+                    </summary>
+                    <ScrollArea className="max-h-48 mt-2">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead className="text-xs">Rad</TableHead>
+                            <TableHead className="text-xs">Namn</TableHead>
+                            <TableHead className="text-xs">Kundnr</TableHead>
+                            <TableHead className="text-xs">Adress</TableHead>
+                            <TableHead className="text-xs">Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {customerValidation.preview.slice(0, 50).map((p, i) => (
+                            <TableRow key={i} className={p.duplicate ? "bg-amber-50/50 dark:bg-amber-950/10" : p.errors.length > 0 ? "bg-red-50/50 dark:bg-red-950/10" : ""}>
+                              <TableCell className="text-xs">{p.row}</TableCell>
+                              <TableCell className="text-xs font-medium">{p.name || "—"}</TableCell>
+                              <TableCell className="text-xs font-mono">{p.customerNumber || "—"}</TableCell>
+                              <TableCell className="text-xs">{[p.address, p.postalCode, p.city].filter(Boolean).join(", ") || "—"}</TableCell>
+                              <TableCell className="text-xs">
+                                {p.duplicate ? (
+                                  <Badge variant="outline" className="text-xs bg-amber-50 text-amber-600 border-amber-200">
+                                    <AlertTriangle className="h-3 w-3 mr-1" /> Dubblett
+                                  </Badge>
+                                ) : p.errors.length > 0 ? (
+                                  <Badge variant="outline" className="text-xs bg-red-50 text-red-600 border-red-200">
+                                    <AlertCircle className="h-3 w-3 mr-1" /> Fel
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="text-xs bg-green-50 text-green-600 border-green-200">
+                                    <CheckCircle className="h-3 w-3 mr-1" /> Ny
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </ScrollArea>
+                  </details>
+
+                  <div className="flex items-center gap-3">
+                    {customerValidation.duplicateCount > 0 && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Dubbletthantering:</span>
+                        <Select value={customerDuplicateAction} onValueChange={(v) => setCustomerDuplicateAction(v as "skip" | "merge" | "create")}>
+                          <SelectTrigger className="w-[180px] h-8 text-xs" data-testid="select-duplicate-action">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="skip">Hoppa över dubbletter</SelectItem>
+                            <SelectItem value="merge">Sammanfoga (fyll i tomma fält)</SelectItem>
+                            <SelectItem value="create">Skapa ändå (tillåt dubbletter)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                    <Button
+                      variant="default"
+                      disabled={isImportingCustomers || customerValidation.newCount === 0 && customerDuplicateAction === "skip"}
+                      onClick={handleCustomerImport}
+                      data-testid="button-customer-import-confirm"
+                    >
+                      {isImportingCustomers ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Upload className="h-4 w-4 mr-2" />
+                      )}
+                      Importera kunder
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {customerImportResult && (
+                <div className="grid grid-cols-4 gap-3 p-3 border rounded-lg bg-muted/30">
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-green-600">{customerImportResult.imported}</div>
+                    <div className="text-xs text-muted-foreground">Importerade</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-blue-600">{customerImportResult.merged}</div>
+                    <div className="text-xs text-muted-foreground">Sammanfogade</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-gray-500">{customerImportResult.skipped}</div>
+                    <div className="text-xs text-muted-foreground">Hoppade över</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-lg font-bold text-red-500">{customerImportResult.errors.length}</div>
+                    <div className="text-xs text-muted-foreground">Fel</div>
+                  </div>
+                  {customerImportResult.errors.length > 0 && (
+                    <div className="col-span-full">
+                      <details className="text-xs">
+                        <summary className="text-red-600 cursor-pointer font-medium">Visa fel</summary>
+                        <ul className="text-muted-foreground space-y-0.5 ml-4 list-disc mt-1">
+                          {customerImportResult.errors.map((err, i) => (
+                            <li key={i}>{err}</li>
+                          ))}
+                        </ul>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -1934,7 +2269,246 @@ export default function ImportPage() {
           </Card>
           )}
 
-          {activeModusStep === 6 && (
+          {activeModusStep === 6 && !completedSteps.has(6) && (
+          <Card data-testid="card-metadata-step">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center h-8 w-8 rounded-full bg-purple-600 text-white text-sm font-bold">6</div>
+                  <div>
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Tag className="h-4 w-4" />
+                      Metadata-tilldelning (valfritt)
+                      {objects.length > 0 ? (
+                        <Badge variant="outline" className="text-xs ml-2 bg-green-50 text-green-600 border-green-200" data-testid="badge-quality-step-6">
+                          <CheckCircle className="h-3 w-3 mr-1" />
+                          {objects.length} objekt tillgängliga
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-xs ml-2 bg-amber-50 text-amber-600 border-amber-200" data-testid="badge-quality-step-6">
+                          <AlertCircle className="h-3 w-3 mr-1" />
+                          Importera objekt först
+                        </Badge>
+                      )}
+                    </CardTitle>
+                    <CardDescription>
+                      Tilldela metadata till importerade objekt — manuellt eller via CSV
+                    </CardDescription>
+                  </div>
+                </div>
+                <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setSkipConfirmStep(6)} data-testid="button-skip-step-6">
+                  <SkipForward className="h-4 w-4 mr-1" />
+                  Hoppa över
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Tabs defaultValue="bulk" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="bulk" data-testid="tab-metadata-bulk">Manuell tilldelning</TabsTrigger>
+                  <TabsTrigger value="csv" data-testid="tab-metadata-csv">CSV-import</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="bulk" className="space-y-4 mt-4">
+                  <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-md text-sm space-y-1">
+                    <p className="font-medium text-purple-700 dark:text-purple-300">Välj objekt och tilldela en metadata-etikett med ett värde:</p>
+                    <ul className="text-purple-600 dark:text-purple-400 text-xs space-y-0.5 ml-4 list-disc">
+                      <li>Markera objekt i listan nedan</li>
+                      <li>Ange etikett (t.ex. "Kärlstorlek") och värde (t.ex. "370L")</li>
+                      <li>Klicka "Tilldela metadata" för att skriva till alla valda objekt</li>
+                    </ul>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Metadata-etikett</label>
+                      <Input
+                        placeholder="t.ex. Kärlstorlek, Material, Typ"
+                        value={metadataLabel}
+                        onChange={(e) => setMetadataLabel(e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-metadata-label"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground mb-1 block">Värde</label>
+                      <Input
+                        placeholder="t.ex. 370L, Plast, Underjord"
+                        value={metadataValue}
+                        onChange={(e) => setMetadataValue(e.target.value)}
+                        className="h-8 text-sm"
+                        data-testid="input-metadata-value"
+                      />
+                    </div>
+                  </div>
+
+                  {objects.length > 0 && (
+                    <div className="border rounded-md">
+                      <div className="flex items-center gap-2 p-2 border-b bg-muted/30">
+                        <Checkbox
+                          checked={metadataSelectAll}
+                          onCheckedChange={(checked) => {
+                            setMetadataSelectAll(!!checked);
+                            if (checked) {
+                              setSelectedMetadataObjects(new Set(objects.map(o => o.id)));
+                            } else {
+                              setSelectedMetadataObjects(new Set());
+                            }
+                          }}
+                          data-testid="checkbox-metadata-select-all"
+                        />
+                        <span className="text-xs font-medium text-muted-foreground">
+                          Markera alla ({objects.length} objekt) — {selectedMetadataObjects.size} valda
+                        </span>
+                      </div>
+                      <ScrollArea className="max-h-48">
+                        <div className="divide-y">
+                          {objects.slice(0, 200).map(obj => (
+                            <div key={obj.id} className="flex items-center gap-2 px-2 py-1.5 text-xs hover:bg-muted/30">
+                              <Checkbox
+                                checked={selectedMetadataObjects.has(obj.id)}
+                                onCheckedChange={(checked) => {
+                                  setSelectedMetadataObjects(prev => {
+                                    const next = new Set(prev);
+                                    if (checked) next.add(obj.id); else next.delete(obj.id);
+                                    return next;
+                                  });
+                                }}
+                                data-testid={`checkbox-metadata-obj-${obj.id.slice(0, 8)}`}
+                              />
+                              <span className="font-medium">{obj.name}</span>
+                              {obj.objectNumber && <span className="text-muted-foreground font-mono">({obj.objectNumber})</span>}
+                              {obj.address && <span className="text-muted-foreground ml-auto">{obj.address}</span>}
+                            </div>
+                          ))}
+                          {objects.length > 200 && (
+                            <div className="px-2 py-1.5 text-xs text-muted-foreground text-center">
+                              ... och {objects.length - 200} fler objekt
+                            </div>
+                          )}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <Button
+                      variant="default"
+                      disabled={isAssigningMetadata || selectedMetadataObjects.size === 0 || !metadataLabel || !metadataValue}
+                      onClick={handleMetadataBulkAssign}
+                      data-testid="button-metadata-assign"
+                    >
+                      {isAssigningMetadata ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Tag className="h-4 w-4 mr-2" />
+                      )}
+                      Tilldela metadata ({selectedMetadataObjects.size} objekt)
+                    </Button>
+                  </div>
+
+                  {metadataAssignResult && (
+                    <div className="grid grid-cols-2 gap-3 p-3 border rounded-lg bg-muted/30">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-600">{metadataAssignResult.written}</div>
+                        <div className="text-xs text-muted-foreground">Objekt uppdaterade</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-red-500">{metadataAssignResult.errors.length}</div>
+                        <div className="text-xs text-muted-foreground">Fel</div>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+
+                <TabsContent value="csv" className="space-y-4 mt-4">
+                  <div className="bg-purple-50 dark:bg-purple-950/20 p-3 rounded-md text-sm space-y-1">
+                    <p className="font-medium text-purple-700 dark:text-purple-300">CSV med metadata per objekt:</p>
+                    <ul className="text-purple-600 dark:text-purple-400 text-xs space-y-0.5 ml-4 list-disc">
+                      <li>Kolumn "objektnummer" eller "objektnamn" identifierar objektet</li>
+                      <li>Övriga kolumner blir metadata-etiketter med cellvärden som metadata-värden</li>
+                      <li>Nya metadata-typer skapas automatiskt</li>
+                    </ul>
+                    <div className="flex flex-wrap gap-1 mt-2">
+                      {["objektnummer", "Kärlstorlek", "Material", "Frekvens"].map(col => (
+                        <Badge key={col} variant="secondary" className="text-xs font-mono">{col}</Badge>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="file"
+                      accept=".csv"
+                      className="hidden"
+                      id="metadata-csv-import"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleMetadataCsvUpload(file);
+                        e.target.value = "";
+                      }}
+                      data-testid="input-metadata-csv"
+                    />
+                    <Button
+                      variant="outline"
+                      disabled={objects.length === 0}
+                      onClick={() => document.getElementById("metadata-csv-import")?.click()}
+                      data-testid="button-metadata-csv-upload"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Välj metadata-CSV
+                    </Button>
+                  </div>
+
+                  {metadataCsvResult && (
+                    <div className="grid grid-cols-3 gap-3 p-3 border rounded-lg bg-muted/30">
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-green-600">{metadataCsvResult.written}</div>
+                        <div className="text-xs text-muted-foreground">Värden skrivna</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-purple-600">{metadataCsvResult.metadataColumns.length}</div>
+                        <div className="text-xs text-muted-foreground">Metadata-kolumner</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-lg font-bold text-red-500">{metadataCsvResult.errors.length}</div>
+                        <div className="text-xs text-muted-foreground">Fel</div>
+                      </div>
+                      {metadataCsvResult.metadataColumns.length > 0 && (
+                        <div className="col-span-full flex flex-wrap gap-1">
+                          {metadataCsvResult.metadataColumns.map(col => (
+                            <Badge key={col} variant="secondary" className="text-xs">{col}</Badge>
+                          ))}
+                        </div>
+                      )}
+                      {metadataCsvResult.errors.length > 0 && (
+                        <div className="col-span-full">
+                          <details className="text-xs">
+                            <summary className="text-red-600 cursor-pointer font-medium">Visa fel ({metadataCsvResult.errors.length})</summary>
+                            <ScrollArea className="max-h-24 mt-1">
+                              <ul className="text-muted-foreground space-y-0.5 ml-4 list-disc">
+                                {metadataCsvResult.errors.map((err, i) => <li key={i}>{err}</li>)}
+                              </ul>
+                            </ScrollArea>
+                          </details>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+
+              <div className="flex justify-end">
+                <Button variant="default" onClick={() => markStepCompleted(6)} data-testid="button-complete-step-6">
+                  <CheckCircle className="h-4 w-4 mr-2" />
+                  Markera som klar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+          )}
+
+          {activeModusStep === 7 && (
             <ImportSummaryView
               completedSteps={completedSteps}
               skippedSteps={skippedSteps}
