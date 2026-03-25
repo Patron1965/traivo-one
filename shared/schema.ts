@@ -1495,22 +1495,48 @@ export const fortnoxMappings = pgTable("fortnox_mappings", {
 export const fortnoxInvoiceExports = pgTable("fortnox_invoice_exports", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
-  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  workOrderId: varchar("work_order_id"),
   fortnoxInvoiceNumber: varchar("fortnox_invoice_number"),
-  // pending, exported, failed, cancelled
+  // pending, exported, failed, cancelled, credited
   status: varchar("status", { length: 20 }).default("pending").notNull(),
   costCenter: varchar("cost_center"),
   project: varchar("project"),
-  // Vilken betalare (för multi-payer split)
   payerId: varchar("payer_id"),
   totalAmount: integer("total_amount"),
   errorMessage: text("error_message"),
+  isCreditInvoice: boolean("is_credit_invoice").default(false),
+  originalExportId: varchar("original_export_id"),
+  creditedByExportId: varchar("credited_by_export_id"),
+  sourceType: varchar("source_type", { length: 20 }).default("work_order"),
+  sourceId: varchar("source_id"),
+  customerId: varchar("customer_id"),
   exportedAt: timestamp("exported_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 }, (table) => [
   index("idx_fortnox_exports_tenant").on(table.tenantId),
   index("idx_fortnox_exports_work_order").on(table.workOrderId),
   index("idx_fortnox_exports_status").on(table.status),
+]);
+
+// Manuella fakturarader (ej kopplade till arbetsordrar)
+export const manualInvoiceLines = pgTable("manual_invoice_lines", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  articleId: varchar("article_id").references(() => articles.id),
+  description: text("description").notNull(),
+  quantity: integer("quantity").default(1).notNull(),
+  unitPrice: integer("unit_price").default(0).notNull(),
+  costCenter: varchar("cost_center"),
+  project: varchar("project"),
+  notes: text("notes"),
+  invoiceExportId: varchar("invoice_export_id"),
+  status: varchar("status", { length: 20 }).default("draft").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_manual_invoice_lines_tenant").on(table.tenantId),
+  index("idx_manual_invoice_lines_customer").on(table.customerId),
+  index("idx_manual_invoice_lines_status").on(table.status),
 ]);
 
 // ============================================
@@ -2410,6 +2436,7 @@ export const objectMetadataRelations = relations(objectMetadata, ({ one }) => ({
 export const insertFortnoxConfigSchema = createInsertSchema(fortnoxConfig).omit({ id: true, createdAt: true });
 export const insertFortnoxMappingSchema = createInsertSchema(fortnoxMappings).omit({ id: true, createdAt: true });
 export const insertFortnoxInvoiceExportSchema = createInsertSchema(fortnoxInvoiceExports).omit({ id: true, createdAt: true });
+export const insertManualInvoiceLineSchema = createInsertSchema(manualInvoiceLines).omit({ id: true, createdAt: true });
 export const insertObjectPayerSchema = createInsertSchema(objectPayers).omit({ id: true, createdAt: true });
 export const insertMetadataDefinitionSchema = createInsertSchema(metadataDefinitions).omit({ id: true, createdAt: true });
 export const insertObjectMetadataSchema = createInsertSchema(objectMetadata).omit({ id: true, createdAt: true });
@@ -2432,6 +2459,8 @@ export type FortnoxMapping = typeof fortnoxMappings.$inferSelect;
 export type InsertFortnoxMapping = z.infer<typeof insertFortnoxMappingSchema>;
 export type FortnoxInvoiceExport = typeof fortnoxInvoiceExports.$inferSelect;
 export type InsertFortnoxInvoiceExport = z.infer<typeof insertFortnoxInvoiceExportSchema>;
+export type ManualInvoiceLine = typeof manualInvoiceLines.$inferSelect;
+export type InsertManualInvoiceLine = z.infer<typeof insertManualInvoiceLineSchema>;
 export type ObjectPayer = typeof objectPayers.$inferSelect;
 export type InsertObjectPayer = z.infer<typeof insertObjectPayerSchema>;
 export type MetadataDefinition = typeof metadataDefinitions.$inferSelect;

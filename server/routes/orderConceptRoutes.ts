@@ -545,6 +545,56 @@ app.get("/api/invoice-preview", asyncHandler(async (req, res) => {
       });
     }
     
+    const manualLines = await storage.getManualInvoiceLines(tenantId, customerId as string | undefined, "draft");
+    const manualByCustomer: Record<string, typeof manualLines> = {};
+    for (const ml of manualLines) {
+      if (!manualByCustomer[ml.customerId]) manualByCustomer[ml.customerId] = [];
+      manualByCustomer[ml.customerId].push(ml);
+    }
+
+    for (const [cid, lines] of Object.entries(manualByCustomer)) {
+      const existing = invoicePreviews.find(ip => ip.customerId === cid);
+      const manualLineItems = lines.map(ml => ({
+        workOrderId: `manual:${ml.id}`,
+        description: ml.description,
+        objectName: null,
+        objectAddress: null,
+        quantity: ml.quantity,
+        unitPrice: ml.unitPrice,
+        total: ml.quantity * ml.unitPrice,
+        completedAt: ml.createdAt,
+        metadata: { typ: "Manuell rad" } as Record<string, string>,
+      }));
+
+      if (existing) {
+        existing.lines.push(...manualLineItems);
+        const addedTotal = manualLineItems.reduce((s, l) => s + l.total, 0);
+        existing.summary.totalExVat = Math.round((existing.summary.totalExVat + addedTotal) * 100) / 100;
+        existing.summary.vat = Math.round(existing.summary.totalExVat * 0.25 * 100) / 100;
+        existing.summary.totalInclVat = Math.round((existing.summary.totalExVat + existing.summary.vat) * 100) / 100;
+      } else {
+        const customer = customerMap.get(cid);
+        const totalExVat = manualLineItems.reduce((s, l) => s + l.total, 0);
+        const vat = totalExVat * 0.25;
+        invoicePreviews.push({
+          customerId: cid,
+          customerName: customer?.name || 'Okänd kund',
+          invoiceStopObject: null,
+          invoiceReference: null,
+          invoiceType: 'per_task',
+          headerMetadata: {},
+          lines: manualLineItems,
+          summary: {
+            totalExVat: Math.round(totalExVat * 100) / 100,
+            vat: Math.round(vat * 100) / 100,
+            totalInclVat: Math.round((totalExVat + vat) * 100) / 100,
+            orderCount: 0,
+          },
+          waitForAll: false,
+        });
+      }
+    }
+
     res.json(invoicePreviews);
 }));
 

@@ -1171,14 +1171,27 @@ app.post("/api/invoice-preview/export-to-fortnox", asyncHandler(async (req, res)
       for (const line of lines) {
         if (!line.workOrderId) continue;
         try {
+          const isManualLine = line.workOrderId.startsWith("manual:");
+          const manualLineId = isManualLine ? line.workOrderId.replace("manual:", "") : null;
+          
           const invoiceExport = await storage.createFortnoxInvoiceExport({
             tenantId,
-            workOrderId: line.workOrderId,
+            workOrderId: isManualLine ? null : line.workOrderId,
             status: "pending",
             totalAmount: Math.round(line.total || 0),
             costCenter: invoice.headerMetadata?.kostnadsställe || null,
             project: invoice.headerMetadata?.projekt || null,
+            sourceType: isManualLine ? "manual" : "work_order",
+            sourceId: isManualLine ? manualLineId : line.workOrderId,
+            customerId: invoice.customerId || null,
           });
+          
+          if (isManualLine && manualLineId) {
+            await storage.updateManualInvoiceLine(manualLineId, tenantId, {
+              status: "queued",
+              invoiceExportId: invoiceExport.id,
+            });
+          }
           
           results.push({
             customerId: invoice.customerId,
@@ -1202,6 +1215,126 @@ app.post("/api/invoice-preview/export-to-fortnox", asyncHandler(async (req, res)
       failed: results.filter(r => r.status === "error").length,
       results 
     });
+}));
+
+// ============================================
+// MANUAL INVOICE LINES
+// ============================================
+
+app.get("/api/manual-invoice-lines", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { customerId, status } = req.query;
+    const lines = await storage.getManualInvoiceLines(tenantId, customerId as string | undefined, status as string | undefined);
+    res.json(lines);
+}));
+
+app.post("/api/manual-invoice-lines", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { customerId, articleId, description, quantity, unitPrice, costCenter, project, notes } = req.body;
+    if (!customerId || !description) {
+      throw new ValidationError("Kund och beskrivning krävs");
+    }
+    const customer = await storage.getCustomer(customerId);
+    if (!customer || customer.tenantId !== tenantId) {
+      throw new ValidationError("Kunden tillhör inte din organisation");
+    }
+    if (articleId) {
+      const article = await storage.getArticle(articleId);
+      if (!article || article.tenantId !== tenantId) {
+        throw new ValidationError("Artikeln tillhör inte din organisation");
+      }
+    }
+    const parsedQuantity = Math.max(1, Math.round(Number(quantity) || 1));
+    const parsedUnitPrice = Math.round(Number(unitPrice) || 0);
+    const line = await storage.createManualInvoiceLine({
+      tenantId,
+      customerId,
+      articleId: articleId || null,
+      description: String(description).slice(0, 500),
+      quantity: parsedQuantity,
+      unitPrice: parsedUnitPrice,
+      costCenter: costCenter ? String(costCenter).slice(0, 50) : null,
+      project: project ? String(project).slice(0, 50) : null,
+      notes: notes ? String(notes).slice(0, 1000) : null,
+      status: "draft",
+    });
+    res.status(201).json(line);
+}));
+
+app.patch("/api/manual-invoice-lines/:id", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const existing = await storage.getManualInvoiceLine(req.params.id);
+    if (!existing || existing.tenantId !== tenantId) {
+      throw new NotFoundError("Manuell fakturarad hittades inte");
+    }
+    const allowedFields = ["description", "quantity", "unitPrice", "costCenter", "project", "notes", "articleId"];
+    const safeData: Record<string, unknown> = {};
+    for (const key of allowedFields) {
+      if (req.body[key] !== undefined) safeData[key] = req.body[key];
+    }
+    const updated = await storage.updateManualInvoiceLine(req.params.id, tenantId, safeData);
+    res.json(updated);
+}));
+
+app.delete("/api/manual-invoice-lines/:id", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const existing = await storage.getManualInvoiceLine(req.params.id);
+    if (!existing || existing.tenantId !== tenantId) {
+      throw new NotFoundError("Manuell fakturarad hittades inte");
+    }
+    if (existing.status === "queued" || existing.status === "invoiced") {
+      throw new ValidationError("Kan inte radera en fakturarad som redan är köad eller fakturerad");
+    }
+    await storage.deleteManualInvoiceLine(req.params.id, tenantId);
+    res.status(204).send();
+}));
+
+// ============================================
+// CREDIT INVOICES
+// ============================================
+
+app.post("/api/fortnox/exports/:id/credit", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const originalExport = await storage.getFortnoxInvoiceExport(req.params.id);
+    if (!originalExport || originalExport.tenantId !== tenantId) {
+      throw new NotFoundError("Fakturaexport hittades inte");
+    }
+    if (originalExport.isCreditInvoice) {
+      throw new ValidationError("Kan inte kreditera en kreditfaktura");
+    }
+    if (originalExport.creditedByExportId) {
+      throw new ValidationError("Denna faktura har redan krediterats");
+    }
+    if (originalExport.status !== "exported") {
+      throw new ValidationError("Kan bara kreditera exporterade fakturor med Fortnox-fakturanummer");
+    }
+    if (!originalExport.fortnoxInvoiceNumber) {
+      throw new ValidationError("Originalfakturan saknar Fortnox-fakturanummer");
+    }
+    if (originalExport.fortnoxInvoiceNumber.includes(",")) {
+      throw new ValidationError("Kan inte kreditera fakturor med flera Fortnox-fakturanummer. Kontakta support.");
+    }
+
+    const creditExport = await storage.createFortnoxInvoiceExport({
+      tenantId,
+      workOrderId: originalExport.workOrderId || null,
+      status: "pending",
+      totalAmount: originalExport.totalAmount ? -originalExport.totalAmount : 0,
+      costCenter: originalExport.costCenter,
+      project: originalExport.project,
+      payerId: originalExport.payerId,
+      isCreditInvoice: true,
+      originalExportId: originalExport.id,
+      sourceType: "credit",
+      sourceId: originalExport.id,
+      customerId: originalExport.customerId || null,
+    });
+
+    await storage.updateFortnoxInvoiceExport(originalExport.id, tenantId, {
+      creditedByExportId: creditExport.id,
+    });
+
+    res.status(201).json(creditExport);
 }));
 
 // ============================================

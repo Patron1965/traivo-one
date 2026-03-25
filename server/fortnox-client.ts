@@ -35,14 +35,7 @@ interface FortnoxTokenResponse {
 
 interface FortnoxInvoice {
   CustomerNumber: string;
-  InvoiceRows: Array<{
-    ArticleNumber: string;
-    DeliveredQuantity: number;
-    Description?: string;
-    Price?: number;
-    CostCenter?: string;
-    Project?: string;
-  }>;
+  InvoiceRows: Array<Record<string, unknown>>;
   CostCenter?: string;
   Project?: string;
 }
@@ -231,6 +224,10 @@ export class FortnoxClient {
     });
   }
 
+  async creditInvoice(invoiceNumber: string): Promise<FortnoxInvoiceResponse> {
+    return this.apiRequest<FortnoxInvoiceResponse>("PUT", `/invoices/${invoiceNumber}/credit`);
+  }
+
   async getCustomer(customerNumber: string): Promise<any> {
     return this.apiRequest("GET", `/customers/${customerNumber}`);
   }
@@ -316,6 +313,18 @@ export async function exportWorkOrderToFortnox(
     const invoiceExport = await storage.getFortnoxInvoiceExport(exportId);
     if (!invoiceExport || invoiceExport.tenantId !== tenantId) {
       return { success: false, error: "Export not found" };
+    }
+
+    if (invoiceExport.sourceType === "manual") {
+      return await exportManualLineToFortnox(tenantId, exportId, invoiceExport);
+    }
+
+    if (invoiceExport.isCreditInvoice && invoiceExport.originalExportId) {
+      return await exportCreditInvoiceToFortnox(tenantId, exportId, invoiceExport);
+    }
+
+    if (!invoiceExport.workOrderId) {
+      return { success: false, error: "No work order ID for this export" };
     }
 
     const workOrder = await storage.getWorkOrder(invoiceExport.workOrderId);
@@ -432,6 +441,148 @@ export async function exportWorkOrderToFortnox(
     return { success: true, invoiceNumber: invoiceNumbers.join(", ") };
   } catch (error) {
     console.error("Export to Fortnox failed:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+async function exportManualLineToFortnox(
+  tenantId: string,
+  exportId: string,
+  invoiceExport: any
+): Promise<{ success: boolean; invoiceNumber?: string; error?: string }> {
+  try {
+    const manualLine = invoiceExport.sourceId ? await storage.getManualInvoiceLine(invoiceExport.sourceId) : null;
+    if (!manualLine) {
+      await storage.updateFortnoxInvoiceExport(exportId, tenantId, {
+        status: "failed",
+        errorMessage: "Manuell fakturarad hittades inte (kan ha raderats)",
+      });
+      return { success: false, error: "Manual invoice line not found" };
+    }
+
+    const customerMapping = invoiceExport.customerId
+      ? await storage.getFortnoxMapping(tenantId, "customer", invoiceExport.customerId)
+      : await storage.getFortnoxMapping(tenantId, "customer", manualLine.customerId);
+    if (!customerMapping) {
+      return { success: false, error: "Customer not mapped to Fortnox" };
+    }
+
+    const client = new FortnoxClient(tenantId);
+    const isConnected = await client.isConnected();
+    if (!isConnected) {
+      return { success: false, error: "Fortnox not connected - authorization required" };
+    }
+
+    const invoiceRow: Record<string, unknown> = {
+      Description: manualLine.description,
+      DeliveredQuantity: manualLine.quantity,
+      Price: manualLine.unitPrice,
+      CostCenter: invoiceExport.costCenter || manualLine.costCenter || undefined,
+      Project: invoiceExport.project || manualLine.project || undefined,
+    };
+
+    if (manualLine.articleId) {
+      const articleMapping = await storage.getFortnoxMapping(tenantId, "article", manualLine.articleId);
+      if (articleMapping) {
+        invoiceRow.ArticleNumber = articleMapping.fortnoxId;
+      }
+    }
+
+    const fortnoxInvoice: FortnoxInvoice = {
+      CustomerNumber: customerMapping.fortnoxId,
+      InvoiceRows: [invoiceRow],
+      CostCenter: invoiceExport.costCenter || manualLine.costCenter || undefined,
+      Project: invoiceExport.project || manualLine.project || undefined,
+    };
+
+    const response = await client.createInvoice(fortnoxInvoice);
+    await storage.updateFortnoxInvoiceExport(exportId, tenantId, {
+      status: "exported",
+      fortnoxInvoiceNumber: response.Invoice.DocumentNumber,
+      totalAmount: Math.round(response.Invoice.Total || 0),
+      exportedAt: new Date(),
+    });
+
+    if (invoiceExport.sourceId) {
+      await storage.updateManualInvoiceLine(invoiceExport.sourceId, tenantId, {
+        status: "invoiced",
+      });
+    }
+
+    return { success: true, invoiceNumber: response.Invoice.DocumentNumber };
+  } catch (error) {
+    console.error("Manual line export to Fortnox failed:", error);
+    await storage.updateFortnoxInvoiceExport(exportId, tenantId, {
+      status: "failed",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
+
+    if (invoiceExport.sourceId) {
+      await storage.updateManualInvoiceLine(invoiceExport.sourceId, tenantId, {
+        status: "draft",
+        invoiceExportId: null,
+      });
+    }
+
+    return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
+  }
+}
+
+async function exportCreditInvoiceToFortnox(
+  tenantId: string,
+  exportId: string,
+  invoiceExport: any
+): Promise<{ success: boolean; invoiceNumber?: string; error?: string }> {
+  try {
+    const originalExport = await storage.getFortnoxInvoiceExport(invoiceExport.originalExportId);
+    if (!originalExport) {
+      return { success: false, error: "Original export not found for credit" };
+    }
+
+    if (!originalExport.fortnoxInvoiceNumber) {
+      return { success: false, error: "Original invoice has no Fortnox invoice number - cannot create credit" };
+    }
+
+    const client = new FortnoxClient(tenantId);
+    const isConnected = await client.isConnected();
+    if (!isConnected) {
+      return { success: false, error: "Fortnox not connected - authorization required" };
+    }
+
+    try {
+      const creditResponse = await client.creditInvoice(originalExport.fortnoxInvoiceNumber);
+
+      const creditInvoiceNumber = creditResponse?.Invoice?.DocumentNumber || "CREDIT-" + originalExport.fortnoxInvoiceNumber;
+
+      await storage.updateFortnoxInvoiceExport(exportId, tenantId, {
+        status: "exported",
+        fortnoxInvoiceNumber: creditInvoiceNumber,
+        exportedAt: new Date(),
+      });
+
+      await storage.updateFortnoxInvoiceExport(invoiceExport.originalExportId!, tenantId, {
+        status: "credited",
+      });
+
+      return { success: true, invoiceNumber: creditInvoiceNumber };
+    } catch (apiError) {
+      await storage.updateFortnoxInvoiceExport(exportId, tenantId, {
+        status: "failed",
+        errorMessage: apiError instanceof Error ? apiError.message : "Fortnox credit API error",
+      });
+
+      await storage.updateFortnoxInvoiceExport(invoiceExport.originalExportId!, tenantId, {
+        creditedByExportId: null,
+      });
+
+      return { success: false, error: apiError instanceof Error ? apiError.message : "Fortnox credit API error" };
+    }
+  } catch (error) {
+    console.error("Credit invoice export to Fortnox failed:", error);
+    await storage.updateFortnoxInvoiceExport(exportId, tenantId, {
+      status: "failed",
+      errorMessage: error instanceof Error ? error.message : "Unknown error",
+    });
     return { success: false, error: error instanceof Error ? error.message : "Unknown error" };
   }
 }

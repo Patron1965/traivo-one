@@ -86,7 +86,7 @@ interface FortnoxMapping {
 interface FortnoxInvoiceExport {
   id: string;
   tenantId: string;
-  workOrderId: string;
+  workOrderId: string | null;
   fortnoxInvoiceNumber: string | null;
   status: string;
   costCenter: string | null;
@@ -94,6 +94,9 @@ interface FortnoxInvoiceExport {
   payerId: string | null;
   totalAmount: number | null;
   errorMessage: string | null;
+  isCreditInvoice: boolean | null;
+  sourceType: string | null;
+  sourceId: string | null;
   exportedAt: string | null;
   createdAt: string;
 }
@@ -664,7 +667,9 @@ export default function FortnoxSettingsPage() {
                       >
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="font-medium">Order: {exp.workOrderId.slice(0, 8)}...</span>
+                            <span className="font-medium">
+                              {exp.sourceType === "manual" ? "Manuell rad" : exp.sourceType === "credit" ? "Kreditfaktura" : exp.workOrderId ? `Order: ${exp.workOrderId.slice(0, 8)}...` : "Okänd källa"}
+                            </span>
                             <Badge
                               variant={
                                 exp.status === "exported" ? "default" :

@@ -40,6 +40,7 @@ import {
   type FortnoxConfig, type InsertFortnoxConfig,
   type FortnoxMapping, type InsertFortnoxMapping,
   type FortnoxInvoiceExport, type InsertFortnoxInvoiceExport,
+  type ManualInvoiceLine, type InsertManualInvoiceLine,
   type ObjectImage, type InsertObjectImage,
   type ObjectContact, type InsertObjectContact,
   type TaskDesiredTimewindow, type InsertTaskDesiredTimewindow,
@@ -103,7 +104,7 @@ import {
   inspectionMetadata, checklistTemplates, driverNotifications, offlineSyncLog,
   fuelLogs, maintenanceLogs, objectParents, objectArticles,
   resourceProfiles, resourceProfileAssignments,
-  fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports,
+  fortnoxConfig, fortnoxMappings, fortnoxInvoiceExports, manualInvoiceLines,
   users, tenants, customers, objects, resources, workOrders, setupTimeLogs, procurements,
   articles, priceLists, priceListArticles, resourceArticles, workOrderLines, simulationScenarios,
   vehicles, equipment, resourceVehicles, resourceEquipment, resourceAvailability,
@@ -407,6 +408,13 @@ export interface IStorage {
   getFortnoxInvoiceExport(id: string): Promise<FortnoxInvoiceExport | undefined>;
   createFortnoxInvoiceExport(invoiceExport: InsertFortnoxInvoiceExport): Promise<FortnoxInvoiceExport>;
   updateFortnoxInvoiceExport(id: string, tenantId: string, data: Partial<InsertFortnoxInvoiceExport>): Promise<FortnoxInvoiceExport | undefined>;
+  
+  // Manual Invoice Lines
+  getManualInvoiceLines(tenantId: string, customerId?: string, status?: string): Promise<ManualInvoiceLine[]>;
+  getManualInvoiceLine(id: string): Promise<ManualInvoiceLine | undefined>;
+  createManualInvoiceLine(line: InsertManualInvoiceLine): Promise<ManualInvoiceLine>;
+  updateManualInvoiceLine(id: string, tenantId: string, data: Partial<InsertManualInvoiceLine>): Promise<ManualInvoiceLine | undefined>;
+  deleteManualInvoiceLine(id: string, tenantId: string): Promise<void>;
   
   // Object Images
   getObjectImages(objectId: string): Promise<ObjectImage[]>;
@@ -3405,6 +3413,44 @@ export class DatabaseStorage implements IStorage {
       .where(and(eq(fortnoxInvoiceExports.id, id), eq(fortnoxInvoiceExports.tenantId, tenantId)))
       .returning();
     return result || undefined;
+  }
+
+  // ============================================
+  // Manual Invoice Lines
+  // ============================================
+
+  async getManualInvoiceLines(tenantId: string, customerId?: string, status?: string): Promise<ManualInvoiceLine[]> {
+    const conditions = [eq(manualInvoiceLines.tenantId, tenantId)];
+    if (customerId) {
+      conditions.push(eq(manualInvoiceLines.customerId, customerId));
+    }
+    if (status) {
+      conditions.push(eq(manualInvoiceLines.status, status));
+    }
+    return db.select().from(manualInvoiceLines).where(and(...conditions)).orderBy(desc(manualInvoiceLines.createdAt));
+  }
+
+  async getManualInvoiceLine(id: string): Promise<ManualInvoiceLine | undefined> {
+    const [result] = await db.select().from(manualInvoiceLines).where(eq(manualInvoiceLines.id, id));
+    return result || undefined;
+  }
+
+  async createManualInvoiceLine(line: InsertManualInvoiceLine): Promise<ManualInvoiceLine> {
+    const [result] = await db.insert(manualInvoiceLines).values(line).returning();
+    return result;
+  }
+
+  async updateManualInvoiceLine(id: string, tenantId: string, data: Partial<InsertManualInvoiceLine>): Promise<ManualInvoiceLine | undefined> {
+    const [result] = await db.update(manualInvoiceLines)
+      .set(data)
+      .where(and(eq(manualInvoiceLines.id, id), eq(manualInvoiceLines.tenantId, tenantId)))
+      .returning();
+    return result || undefined;
+  }
+
+  async deleteManualInvoiceLine(id: string, tenantId: string): Promise<void> {
+    await db.delete(manualInvoiceLines)
+      .where(and(eq(manualInvoiceLines.id, id), eq(manualInvoiceLines.tenantId, tenantId)));
   }
 
   // ============================================

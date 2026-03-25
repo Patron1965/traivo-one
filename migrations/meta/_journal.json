@@ -162,6 +162,13 @@
       "when": 1774274883878,
       "tag": "0022_pretty_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1774462168810,
+      "tag": "0023_rainy_shocker",
+      "breakpoints": true
     }
   ]
 }

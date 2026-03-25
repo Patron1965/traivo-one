@@ -5,6 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,11 +33,11 @@ import {
   Loader2, FileText, Receipt, Send, CheckCircle2, XCircle, Clock,
   ChevronDown, ChevronRight, Search, Eye,
   Building2, DollarSign, AlertTriangle,
-  RefreshCw, BarChart3
+  RefreshCw, BarChart3, Plus, Trash2, CreditCard, Undo2
 } from "lucide-react";
 import { format, subDays, startOfMonth, endOfMonth, subMonths } from "date-fns";
 import { sv } from "date-fns/locale";
-import type { Customer } from "@shared/schema";
+import type { Customer, Article } from "@shared/schema";
 
 interface InvoiceLine {
   workOrderId: string;
@@ -67,7 +69,7 @@ interface InvoicePreview {
 interface FortnoxExport {
   id: string;
   tenantId: string;
-  workOrderId: string;
+  workOrderId: string | null;
   fortnoxInvoiceNumber: string | null;
   status: string;
   costCenter: string | null;
@@ -75,7 +77,28 @@ interface FortnoxExport {
   payerId: string | null;
   totalAmount: number | null;
   errorMessage: string | null;
+  isCreditInvoice: boolean | null;
+  originalExportId: string | null;
+  creditedByExportId: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  customerId: string | null;
   exportedAt: string | null;
+  createdAt: string;
+}
+
+interface ManualLine {
+  id: string;
+  tenantId: string;
+  customerId: string;
+  articleId: string | null;
+  description: string;
+  quantity: number;
+  unitPrice: number;
+  costCenter: string | null;
+  project: string | null;
+  notes: string | null;
+  status: string;
   createdAt: string;
 }
 
@@ -104,6 +127,7 @@ const EXPORT_STATUS_LABELS: Record<string, string> = {
   exported: "Exporterad",
   failed: "Misslyckad",
   cancelled: "Avbruten",
+  credited: "Krediterad",
 };
 
 function formatCurrency(amount: number): string {
@@ -117,6 +141,7 @@ function ExportStatusBadge({ status }: { status: string }) {
     exported: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
     failed: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
     cancelled: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
+    credited: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
   };
   return (
     <Badge data-testid={`badge-export-status-${status}`} className={variants[status] || variants.pending}>
@@ -137,9 +162,29 @@ export default function InvoicingPage() {
   const [previewDialogInvoice, setPreviewDialogInvoice] = useState<InvoicePreview | null>(null);
   const [exportStatusFilter, setExportStatusFilter] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [manualLineDialogOpen, setManualLineDialogOpen] = useState(false);
+  const [creditDialogExport, setCreditDialogExport] = useState<FortnoxExport | null>(null);
+  const [manualLineForm, setManualLineForm] = useState({
+    customerId: "",
+    articleId: "",
+    description: "",
+    quantity: 1,
+    unitPrice: 0,
+    costCenter: "",
+    project: "",
+    notes: "",
+  });
 
   const { data: customers = [] } = useQuery<Customer[]>({
     queryKey: ["/api/customers"],
+  });
+
+  const { data: articles = [] } = useQuery<Article[]>({
+    queryKey: ["/api/articles"],
+  });
+
+  const { data: manualLines = [], refetch: refetchManualLines } = useQuery<ManualLine[]>({
+    queryKey: ["/api/manual-invoice-lines"],
   });
 
   const queryParams = useMemo(() => {
@@ -200,6 +245,52 @@ export default function InvoicingPage() {
     },
   });
 
+  const createManualLineMutation = useMutation({
+    mutationFn: async (data: typeof manualLineForm) => {
+      const res = await apiRequest("POST", "/api/manual-invoice-lines", data);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Manuell fakturarad skapad" });
+      setManualLineDialogOpen(false);
+      setManualLineForm({ customerId: "", articleId: "", description: "", quantity: 1, unitPrice: 0, costCenter: "", project: "", notes: "" });
+      refetchManualLines();
+      refetchPreviews();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa fakturarad", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const deleteManualLineMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/manual-invoice-lines/${id}`);
+    },
+    onSuccess: () => {
+      toast({ title: "Manuell fakturarad borttagen" });
+      refetchManualLines();
+      refetchPreviews();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte ta bort fakturarad", description: error.message, variant: "destructive" });
+    },
+  });
+
+  const creditInvoiceMutation = useMutation({
+    mutationFn: async (exportId: string) => {
+      const res = await apiRequest("POST", `/api/fortnox/exports/${exportId}/credit`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Kreditfaktura skapad" });
+      setCreditDialogExport(null);
+      refetchExports();
+    },
+    onError: (error: Error) => {
+      toast({ title: "Kunde inte skapa kreditfaktura", description: error.message, variant: "destructive" });
+    },
+  });
+
   const filteredPreviews = useMemo(() => {
     if (!searchQuery) return invoicePreviews;
     const q = searchQuery.toLowerCase();
@@ -228,8 +319,9 @@ export default function InvoicingPage() {
     const pending = fortnoxExports.filter(e => e.status === "pending").length;
     const exported = fortnoxExports.filter(e => e.status === "exported").length;
     const failed = fortnoxExports.filter(e => e.status === "failed").length;
+    const credited = fortnoxExports.filter(e => e.status === "credited").length;
     const totalAmount = fortnoxExports.filter(e => e.status === "exported").reduce((s, e) => s + (e.totalAmount || 0), 0);
-    return { pending, exported, failed, total: fortnoxExports.length, totalAmount };
+    return { pending, exported, failed, credited, total: fortnoxExports.length, totalAmount };
   }, [fortnoxExports]);
 
   const toggleInvoice = (customerId: string) => {
@@ -298,6 +390,8 @@ export default function InvoicingPage() {
     }
   };
 
+  const draftManualLines = manualLines.filter(ml => ml.status === "draft" || ml.status === "queued");
+
   return (
     <div className="min-h-screen bg-background" data-testid="invoicing-page">
       <div className="container mx-auto px-4 py-6 max-w-7xl">
@@ -362,6 +456,12 @@ export default function InvoicingPage() {
           <TabsList className="mb-4" data-testid="tabs-invoicing">
             <TabsTrigger value="preview" data-testid="tab-preview">
               <Eye className="h-4 w-4 mr-1" /> Förhandsgranskning
+            </TabsTrigger>
+            <TabsTrigger value="manual" data-testid="tab-manual">
+              <Plus className="h-4 w-4 mr-1" /> Manuella rader
+              {draftManualLines.length > 0 && (
+                <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">{draftManualLines.length}</Badge>
+              )}
             </TabsTrigger>
             <TabsTrigger value="exports" data-testid="tab-exports">
               <Send className="h-4 w-4 mr-1" /> Exporthistorik
@@ -451,7 +551,7 @@ export default function InvoicingPage() {
                   <FileText className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                   <h3 className="font-medium text-lg mb-1">Inga fakturor att visa</h3>
                   <p className="text-muted-foreground text-sm">
-                    Justera datumintervall eller kundfilter. Endast slutförda ordrar visas.
+                    Justera datumintervall eller kundfilter. Endast slutförda ordrar och manuella rader visas.
                   </p>
                 </CardContent>
               </Card>
@@ -489,6 +589,11 @@ export default function InvoicingPage() {
                               <Badge variant="secondary" className="text-xs">
                                 {INVOICE_TYPE_LABELS[invoice.invoiceType] || invoice.invoiceType}
                               </Badge>
+                              {invoice.lines.some(l => l.workOrderId.startsWith("manual:")) && (
+                                <Badge variant="outline" className="text-xs border-blue-300 text-blue-600">
+                                  Manuella rader
+                                </Badge>
+                              )}
                             </div>
                             <p className="text-sm text-muted-foreground mt-0.5">
                               {invoice.summary.orderCount} ordrar · {invoice.lines.length} rader
@@ -529,8 +634,13 @@ export default function InvoicingPage() {
                                 </TableHeader>
                                 <TableBody>
                                   {invoice.lines.map((line, idx) => (
-                                    <TableRow key={idx} data-testid={`row-invoice-line-${idx}`}>
-                                      <TableCell className="font-medium">{line.description}</TableCell>
+                                    <TableRow key={idx} data-testid={`row-invoice-line-${idx}`} className={line.workOrderId.startsWith("manual:") ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}>
+                                      <TableCell className="font-medium">
+                                        {line.description}
+                                        {line.workOrderId.startsWith("manual:") && (
+                                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 text-blue-600">Manuell</Badge>
+                                        )}
+                                      </TableCell>
                                       <TableCell className="text-muted-foreground text-sm">
                                         {line.objectName || "-"}
                                         {line.objectAddress && (
@@ -596,6 +706,89 @@ export default function InvoicingPage() {
             )}
           </TabsContent>
 
+          <TabsContent value="manual">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold">Manuella fakturarader</h2>
+                <p className="text-sm text-muted-foreground">Skapa fristående fakturarader utan koppling till arbetsordrar</p>
+              </div>
+              <Button onClick={() => setManualLineDialogOpen(true)} data-testid="button-add-manual-line">
+                <Plus className="h-4 w-4 mr-1" /> Ny manuell rad
+              </Button>
+            </div>
+
+            {draftManualLines.length === 0 ? (
+              <Card>
+                <CardContent className="py-16 text-center">
+                  <Receipt className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                  <h3 className="font-medium text-lg mb-1">Inga manuella rader</h3>
+                  <p className="text-muted-foreground text-sm mb-4">
+                    Skapa manuella fakturarader som inkluderas i fakturaförhandsgranskningen.
+                  </p>
+                  <Button onClick={() => setManualLineDialogOpen(true)} data-testid="button-add-manual-line-empty">
+                    <Plus className="h-4 w-4 mr-1" /> Skapa första raden
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <ScrollArea className="max-h-[600px]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Kund</TableHead>
+                        <TableHead>Beskrivning</TableHead>
+                        <TableHead className="text-right">Antal</TableHead>
+                        <TableHead className="text-right">À-pris</TableHead>
+                        <TableHead className="text-right">Belopp</TableHead>
+                        <TableHead>Kostnadsställe</TableHead>
+                        <TableHead>Skapad</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {draftManualLines.map(ml => {
+                        const customer = customers.find(c => c.id === ml.customerId);
+                        return (
+                          <TableRow key={ml.id} data-testid={`row-manual-line-${ml.id}`} className={ml.status === "queued" ? "opacity-60" : ""}>
+                            <TableCell className="font-medium" data-testid={`text-manual-customer-${ml.id}`}>
+                              {customer?.name || ml.customerId.slice(0, 8) + "..."}
+                            </TableCell>
+                            <TableCell data-testid={`text-manual-desc-${ml.id}`}>
+                              {ml.description}
+                              {ml.status === "queued" && (
+                                <Badge variant="outline" className="ml-2 text-xs border-yellow-300 text-yellow-600">Köad för export</Badge>
+                              )}
+                              {ml.notes && <span className="block text-xs text-muted-foreground">{ml.notes}</span>}
+                            </TableCell>
+                            <TableCell className="text-right">{ml.quantity}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(ml.unitPrice)}</TableCell>
+                            <TableCell className="text-right font-medium">{formatCurrency(ml.quantity * ml.unitPrice)}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">{ml.costCenter || "-"}</TableCell>
+                            <TableCell className="text-sm text-muted-foreground">
+                              {format(new Date(ml.createdAt), "d MMM HH:mm", { locale: sv })}
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => deleteManualLineMutation.mutate(ml.id)}
+                                disabled={deleteManualLineMutation.isPending}
+                                data-testid={`button-delete-manual-${ml.id}`}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </ScrollArea>
+              </Card>
+            )}
+          </TabsContent>
+
           <TabsContent value="exports">
             <div className="flex items-center gap-3 mb-4">
               <Select value={exportStatusFilter} onValueChange={setExportStatusFilter}>
@@ -607,6 +800,7 @@ export default function InvoicingPage() {
                   <SelectItem value="pending">Väntar</SelectItem>
                   <SelectItem value="exported">Exporterade</SelectItem>
                   <SelectItem value="failed">Misslyckade</SelectItem>
+                  <SelectItem value="credited">Krediterade</SelectItem>
                 </SelectContent>
               </Select>
               <Button variant="outline" onClick={() => refetchExports()} data-testid="button-refresh-exports">
@@ -614,7 +808,7 @@ export default function InvoicingPage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
               <Card data-testid="card-export-stat-pending">
                 <CardContent className="p-4 flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/30">
@@ -634,6 +828,17 @@ export default function InvoicingPage() {
                   <div>
                     <div className="text-2xl font-bold">{exportStats.exported}</div>
                     <p className="text-sm text-muted-foreground">Exporterade till Fortnox</p>
+                  </div>
+                </CardContent>
+              </Card>
+              <Card data-testid="card-export-stat-credited">
+                <CardContent className="p-4 flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/30">
+                    <CreditCard className="h-5 w-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{exportStats.credited}</div>
+                    <p className="text-sm text-muted-foreground">Krediterade</p>
                   </div>
                 </CardContent>
               </Card>
@@ -669,6 +874,7 @@ export default function InvoicingPage() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Order-ID</TableHead>
+                        <TableHead>Typ</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Fortnox-nr</TableHead>
                         <TableHead className="text-right">Belopp</TableHead>
@@ -681,9 +887,18 @@ export default function InvoicingPage() {
                     </TableHeader>
                     <TableBody>
                       {filteredExports.map(exp => (
-                        <TableRow key={exp.id} data-testid={`row-export-${exp.id}`}>
+                        <TableRow key={exp.id} data-testid={`row-export-${exp.id}`} className={exp.isCreditInvoice ? "bg-purple-50/50 dark:bg-purple-900/10" : ""}>
                           <TableCell className="font-mono text-sm" data-testid={`text-export-order-${exp.id}`}>
-                            {exp.workOrderId.slice(0, 8)}...
+                            {exp.sourceType === "manual" ? "Manuell" : exp.sourceType === "credit" ? "Kredit" : exp.workOrderId ? exp.workOrderId.slice(0, 8) + "..." : "-"}
+                          </TableCell>
+                          <TableCell>
+                            {exp.isCreditInvoice ? (
+                              <Badge variant="outline" className="border-purple-300 text-purple-600 gap-1">
+                                <Undo2 className="h-3 w-3" /> Kredit
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-xs">Faktura</Badge>
+                            )}
                           </TableCell>
                           <TableCell>
                             <ExportStatusBadge status={exp.status} />
@@ -693,7 +908,7 @@ export default function InvoicingPage() {
                               <span className="font-medium">{exp.fortnoxInvoiceNumber}</span>
                             ) : "-"}
                           </TableCell>
-                          <TableCell className="text-right font-medium">
+                          <TableCell className={`text-right font-medium ${(exp.totalAmount || 0) < 0 ? "text-red-600" : ""}`}>
                             {exp.totalAmount != null ? formatCurrency(exp.totalAmount) : "-"}
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">{exp.costCenter || "-"}</TableCell>
@@ -705,22 +920,45 @@ export default function InvoicingPage() {
                             {exp.exportedAt ? format(new Date(exp.exportedAt), "d MMM HH:mm", { locale: sv }) : "-"}
                           </TableCell>
                           <TableCell>
-                            {exp.status === "pending" && (
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => processExportMutation.mutate(exp.id)}
-                                disabled={processExportMutation.isPending || !fortnoxStatus?.connected}
-                                data-testid={`button-process-export-${exp.id}`}
-                              >
-                                <Send className="h-3 w-3 mr-1" /> Skicka
-                              </Button>
-                            )}
-                            {exp.status === "failed" && exp.errorMessage && (
-                              <span className="text-xs text-destructive" data-testid={`text-export-error-${exp.id}`}>
-                                {exp.errorMessage}
-                              </span>
-                            )}
+                            <div className="flex items-center gap-1">
+                              {exp.status === "pending" && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => processExportMutation.mutate(exp.id)}
+                                  disabled={processExportMutation.isPending || !fortnoxStatus?.connected}
+                                  data-testid={`button-process-export-${exp.id}`}
+                                >
+                                  <Send className="h-3 w-3 mr-1" /> Skicka
+                                </Button>
+                              )}
+                              {exp.status === "exported" && exp.fortnoxInvoiceNumber && !exp.isCreditInvoice && !exp.creditedByExportId && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => setCreditDialogExport(exp)}
+                                  className="text-purple-600 border-purple-300 hover:bg-purple-50"
+                                  data-testid={`button-credit-${exp.id}`}
+                                >
+                                  <Undo2 className="h-3 w-3 mr-1" /> Kreditera
+                                </Button>
+                              )}
+                              {exp.creditedByExportId && exp.status === "credited" && (
+                                <Badge variant="outline" className="text-xs border-purple-300 text-purple-600">
+                                  Krediterad
+                                </Badge>
+                              )}
+                              {exp.creditedByExportId && exp.status !== "credited" && (
+                                <Badge variant="outline" className="text-xs border-yellow-300 text-yellow-600">
+                                  Kredit väntar
+                                </Badge>
+                              )}
+                              {exp.status === "failed" && exp.errorMessage && (
+                                <span className="text-xs text-destructive" data-testid={`text-export-error-${exp.id}`}>
+                                  {exp.errorMessage}
+                                </span>
+                              )}
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -824,10 +1062,13 @@ export default function InvoicingPage() {
                 </TableHeader>
                 <TableBody>
                   {previewDialogInvoice.lines.map((line, idx) => (
-                    <TableRow key={idx}>
+                    <TableRow key={idx} className={line.workOrderId.startsWith("manual:") ? "bg-blue-50/50 dark:bg-blue-900/10" : ""}>
                       <TableCell className="text-muted-foreground">{idx + 1}</TableCell>
                       <TableCell>
                         <span className="font-medium">{line.description}</span>
+                        {line.workOrderId.startsWith("manual:") && (
+                          <Badge variant="outline" className="ml-2 text-xs border-blue-300 text-blue-600">Manuell</Badge>
+                        )}
                         {line.objectAddress && <span className="block text-xs text-muted-foreground">{line.objectAddress}</span>}
                       </TableCell>
                       <TableCell className="text-right">{line.quantity}</TableCell>
@@ -868,6 +1109,212 @@ export default function InvoicingPage() {
               data-testid="button-export-from-preview"
             >
               <Send className="h-4 w-4 mr-1" /> Exportera denna
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={manualLineDialogOpen} onOpenChange={setManualLineDialogOpen}>
+        <DialogContent data-testid="dialog-manual-line">
+          <DialogHeader>
+            <DialogTitle>Ny manuell fakturarad</DialogTitle>
+            <DialogDescription>
+              Skapa en fristående fakturarad utan koppling till en specifik arbetsorder.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div>
+              <Label>Kund *</Label>
+              <Select value={manualLineForm.customerId} onValueChange={v => setManualLineForm(f => ({ ...f, customerId: v }))}>
+                <SelectTrigger data-testid="select-manual-customer">
+                  <SelectValue placeholder="Välj kund" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map(c => (
+                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Artikel</Label>
+              <Select
+                value={manualLineForm.articleId || "none"}
+                onValueChange={v => {
+                  const artId = v === "none" ? "" : v;
+                  setManualLineForm(f => {
+                    const art = articles.find(a => a.id === artId);
+                    return {
+                      ...f,
+                      articleId: artId,
+                      description: art?.name && !f.description ? art.name : f.description,
+                      unitPrice: art?.listPrice && !f.unitPrice ? art.listPrice : f.unitPrice,
+                    };
+                  });
+                }}
+              >
+                <SelectTrigger data-testid="select-manual-article">
+                  <SelectValue placeholder="Välj artikel (valfritt)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Ingen artikel</SelectItem>
+                  {articles.map(a => (
+                    <SelectItem key={a.id} value={a.id}>{a.name}{a.listPrice ? ` (${formatCurrency(a.listPrice)})` : ""}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Beskrivning *</Label>
+              <Input
+                value={manualLineForm.description}
+                onChange={e => setManualLineForm(f => ({ ...f, description: e.target.value }))}
+                placeholder="Beskrivning av tjänst/vara"
+                data-testid="input-manual-description"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Antal</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  value={manualLineForm.quantity}
+                  onChange={e => setManualLineForm(f => ({ ...f, quantity: parseInt(e.target.value) || 1 }))}
+                  data-testid="input-manual-quantity"
+                />
+              </div>
+              <div>
+                <Label>À-pris (SEK)</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  value={manualLineForm.unitPrice}
+                  onChange={e => setManualLineForm(f => ({ ...f, unitPrice: parseFloat(e.target.value) || 0 }))}
+                  data-testid="input-manual-unit-price"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Kostnadsställe</Label>
+                <Input
+                  value={manualLineForm.costCenter}
+                  onChange={e => setManualLineForm(f => ({ ...f, costCenter: e.target.value }))}
+                  placeholder="T.ex. 100"
+                  data-testid="input-manual-cost-center"
+                />
+              </div>
+              <div>
+                <Label>Projekt</Label>
+                <Input
+                  value={manualLineForm.project}
+                  onChange={e => setManualLineForm(f => ({ ...f, project: e.target.value }))}
+                  placeholder="T.ex. P001"
+                  data-testid="input-manual-project"
+                />
+              </div>
+            </div>
+            <div>
+              <Label>Anteckningar</Label>
+              <Textarea
+                value={manualLineForm.notes}
+                onChange={e => setManualLineForm(f => ({ ...f, notes: e.target.value }))}
+                placeholder="Valfria anteckningar"
+                rows={2}
+                data-testid="input-manual-notes"
+              />
+            </div>
+            {manualLineForm.quantity > 0 && manualLineForm.unitPrice > 0 && (
+              <div className="p-3 bg-muted/50 rounded-lg text-sm">
+                <div className="flex justify-between">
+                  <span>Belopp ex. moms:</span>
+                  <span className="font-medium">{formatCurrency(manualLineForm.quantity * manualLineForm.unitPrice)}</span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span>Moms 25%:</span>
+                  <span>{formatCurrency(manualLineForm.quantity * manualLineForm.unitPrice * 0.25)}</span>
+                </div>
+                <Separator className="my-1" />
+                <div className="flex justify-between font-bold">
+                  <span>Totalt inkl. moms:</span>
+                  <span>{formatCurrency(manualLineForm.quantity * manualLineForm.unitPrice * 1.25)}</span>
+                </div>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setManualLineDialogOpen(false)} data-testid="button-cancel-manual">Avbryt</Button>
+            <Button
+              onClick={() => createManualLineMutation.mutate(manualLineForm)}
+              disabled={!manualLineForm.customerId || !manualLineForm.description || createManualLineMutation.isPending}
+              data-testid="button-save-manual"
+            >
+              {createManualLineMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Plus className="h-4 w-4 mr-1" />}
+              Skapa rad
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!creditDialogExport} onOpenChange={() => setCreditDialogExport(null)}>
+        <DialogContent data-testid="dialog-credit-confirm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Undo2 className="h-5 w-5 text-purple-600" />
+              Skapa kreditfaktura
+            </DialogTitle>
+            <DialogDescription>
+              En kreditfaktura skapas med negerat belopp och referens till originalfakturan.
+            </DialogDescription>
+          </DialogHeader>
+          {creditDialogExport && (
+            <div className="space-y-3">
+              <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
+                {creditDialogExport.workOrderId && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Order-ID:</span>
+                    <span className="font-mono">{creditDialogExport.workOrderId.slice(0, 8)}...</span>
+                  </div>
+                )}
+                {creditDialogExport.sourceType && creditDialogExport.sourceType !== "work_order" && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Typ:</span>
+                    <span>{creditDialogExport.sourceType === "manual" ? "Manuell rad" : "Arbetsorder"}</span>
+                  </div>
+                )}
+                {creditDialogExport.fortnoxInvoiceNumber && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Fortnox-fakturanr:</span>
+                    <span className="font-medium">{creditDialogExport.fortnoxInvoiceNumber}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Originalbelopp:</span>
+                  <span className="font-medium">{creditDialogExport.totalAmount != null ? formatCurrency(creditDialogExport.totalAmount) : "-"}</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between text-sm font-bold text-red-600">
+                  <span>Kreditbelopp:</span>
+                  <span>{creditDialogExport.totalAmount != null ? formatCurrency(-creditDialogExport.totalAmount) : "-"}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-3 bg-purple-50 dark:bg-purple-900/20 rounded-md text-sm">
+                <AlertTriangle className="h-4 w-4 text-purple-600 shrink-0" />
+                <span>Originalfakturan markeras som krediterad. Kreditfakturan skapas med status "Väntar" och kan skickas till Fortnox.</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreditDialogExport(null)} data-testid="button-cancel-credit">Avbryt</Button>
+            <Button
+              onClick={() => creditDialogExport && creditInvoiceMutation.mutate(creditDialogExport.id)}
+              disabled={creditInvoiceMutation.isPending}
+              className="bg-purple-600 hover:bg-purple-700"
+              data-testid="button-confirm-credit"
+            >
+              {creditInvoiceMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Undo2 className="h-4 w-4 mr-1" />}
+              Skapa kreditfaktura
             </Button>
           </DialogFooter>
         </DialogContent>
