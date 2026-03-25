@@ -39,7 +39,7 @@ Kodstatistik:
 - 75+ frontend-sidor
 - 65+ UI-komponenter
 - 21 backend-routerfiler
-- 77 genomförda utvecklingsuppgifter
+- 79 genomförda utvecklingsuppgifter
 
 
 GENOMFÖRDA UTVECKLINGSUPPGIFTER
@@ -580,6 +580,30 @@ Utökad fakturering utöver orderbaserad:
   - "Manuella rader"-flik i fakturavyn med artikelväljare
   - Kreditknapp synlig enbart på exporterade fakturor med Fortnox-nummer
 
+TASK #78 — Kinab Sprint 6: Kundportal Produktionsklar (P19)
+--------------------------------------------------------------
+Kundportalen uppgraderad till produktionskvalitet:
+  - Återkommande bokningsmönster (recurringSlotPatterns) med automatisk slotgenerering
+  - Admin-UI för mönster, slots och bokningar (BookingSlotsAdminPage)
+  - Avbokning med obligatorisk anledning och dialogbekräftelse
+  - Portalnavigering med sidebar och oläst-badges (polling var 30:e sekund)
+  - Personalmeddelanden (staff portal messages) med dedikerade endpoints
+  - Notifieringssammanfattning (GET /api/portal/notifications/summary)
+
+TASK #79 — Kinab Sprint 6: Import Mappning & Rollback (P20)
+--------------------------------------------------------------
+Avancerat importflöde med flexibel kolumnmappning:
+  - ImportColumnMapper: 4-stegs wizard (uppladdning → mappning → hierarkiträd → klar)
+  - Auto-förslag av kolumnmappningar baserat på CSV-headers och alias-lista
+  - Per-kolumn dropdown med alla systemfält + metadata-typer + ignorera-toggle
+  - Hierarkiträdförhandsvisning med förälderlös-detektion (orphan detection)
+  - Importhistorik med batchlista, statusindikator och tidsstämplar
+  - Batch-rollback: soft delete av objekt (deleted_at), ordrar (status avbruten), kunder (is_active)
+  - Rollback-bekräftelse med AlertDialog
+  - Detaljerade felmeddelanden med rad- och kolumnreferenser
+  - Kundauto-skapande vid mappad import när kundnamn finns men inte matchar befintlig
+  - Ny tabell: importColumnMappings (batchId, csvColumn, systemField, metadataType, isIgnored)
+
 
 ÖVRIGA GENOMFÖRDA ARBETEN
 =========================
@@ -667,8 +691,11 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
 
 6. KUNDHANTERING
    - Kundregister med kontaktpersoner
-   - Kundportal 2.0 (självbetjäning)
-   - Självbokning med tidsslots
+   - Kundportal 2.0 (självbetjäning, produktionsklar)
+   - Självbokning med tidsslots och återkommande mönster
+   - Avbokning med obligatorisk anledning
+   - Portalnavigering med sidebar och oläst-badges
+   - Personalmeddelanden till/från kunder
    - Orderhistorik och kommande besök
    - Realtids-chatt kundportal ↔ planerare
    - ROI-rapport per kund
@@ -766,6 +793,10 @@ SYSTEMFUNKTIONER — FULLSTÄNDIG ÖVERSIKT
     - Preview & Rename vid import (inline-redigering, sök & ersätt)
     - Selektiv modulär import (hoppa över/importera steg)
     - Importöversikt med datakvalitetsvarningar och Granska-länkar
+    - Flexibel kolumnmappning med auto-förslag och per-kolumn dropdown
+    - Hierarkiträdförhandsvisning med förälderlös-detektion
+    - Importhistorik med batch-rollback (soft delete)
+    - Detaljerade felmeddelanden med rad/kolumn-referens
     - Fortnox entitetsimport/export
     - Geoapify routing & VRP-optimering
     - Open-Meteo väderdata
@@ -795,7 +826,7 @@ Tenant:      tenants, tenant_features, tenant_branding, tenant_labels,
 Användare:   users, user_tenant_roles, teams, team_members, invitations
 Portal:      customer_portal_tokens, customer_portal_sessions,
              customer_portal_messages, portal_messages, self_bookings,
-             customer_change_requests
+             customer_change_requests, recurring_slot_patterns
 Orderkoncept: order_concepts, order_concept_articles, order_concept_objects,
               concept_filters, delivery_schedules, subscriptions
 Arbetspass:  work_sessions, work_entries, time_logs
@@ -807,7 +838,8 @@ Kommunikation: status_message_templates
              api_usage_logs, api_budgets, public_issue_reports,
              qr_code_links, checklist_templates, branding_templates,
              industry_packages, industry_package_data,
-             import_batches, offline_sync_log, conversations, messages
+             import_batches, import_column_mappings, offline_sync_log,
+             conversations, messages
 
 
 EXTERNA BEROENDEN
