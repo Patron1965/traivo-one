@@ -28,6 +28,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useMapConfig } from "@/hooks/use-map-config";
 import type { ServiceObject, WorkOrder } from "@shared/schema";
+import { PolylineEditor } from "@/components/PolylineEditor";
 
 const hierarchyLevelLabels: Record<string, { label: string; color: string }> = {
   koncern: { label: "Koncern", color: "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200" },
@@ -761,6 +762,10 @@ export default function ObjectDetailPage() {
               </div>
             </CardContent>
           </Card>
+
+          <div className="mt-4">
+            <PolylineEditor object={obj} />
+          </div>
         </TabsContent>
 
         {/* ==================== TILLGÅNG ==================== */}

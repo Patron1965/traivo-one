@@ -13,7 +13,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { Users, Plus, Trash2, Edit2, Save, X, Percent, Package } from "lucide-react";
+import { Users, Plus, Trash2, Edit2, Save, X, Percent, Package, Star, Tag } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -53,6 +53,8 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
   const [newPayer, setNewPayer] = useState({
     customerId: "",
     payerType: "primary",
+    isPrimary: false,
+    payerLabel: "",
     sharePercent: 100,
     articleTypes: [] as string[],
     invoiceReference: "",
@@ -80,6 +82,8 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
       setNewPayer({
         customerId: "",
         payerType: "primary",
+        isPrimary: false,
+        payerLabel: "",
         sharePercent: 100,
         articleTypes: [],
         invoiceReference: "",
@@ -183,10 +187,22 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
                 <Card key={payer.id}>
                   <CardHeader className="py-3 px-4">
                     <div className="flex items-center justify-between gap-2">
-                      <CardTitle className="text-sm font-medium">
+                      <CardTitle className="text-sm font-medium flex items-center gap-1">
+                        {payer.isPrimary && <Star className="w-4 h-4 text-yellow-500 fill-yellow-500" />}
                         {getCustomerName(payer.customerId)}
+                        {payer.payerLabel && (
+                          <Badge variant="outline" className="text-xs ml-1">
+                            <Tag className="w-3 h-3 mr-1" />
+                            {payer.payerLabel}
+                          </Badge>
+                        )}
                       </CardTitle>
                       <div className="flex items-center gap-1">
+                        {payer.isPrimary && (
+                          <Badge className="bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 text-xs">
+                            Primär
+                          </Badge>
+                        )}
                         <Badge variant="outline">
                           {getPayerTypeLabel(payer.payerType)}
                         </Badge>
@@ -285,6 +301,30 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="new-is-primary"
+                  checked={newPayer.isPrimary}
+                  onCheckedChange={(checked) => setNewPayer({ ...newPayer, isPrimary: !!checked })}
+                  data-testid="checkbox-is-primary"
+                />
+                <Label htmlFor="new-is-primary" className="text-sm font-normal flex items-center gap-1">
+                  <Star className="w-4 h-4" />
+                  Primär fakturakund
+                </Label>
+              </div>
+              <div className="space-y-2">
+                <Label className="flex items-center gap-1">
+                  <Tag className="w-4 h-4" />
+                  Betalarreferens
+                </Label>
+                <Input
+                  value={newPayer.payerLabel}
+                  onChange={(e) => setNewPayer({ ...newPayer, payerLabel: e.target.value })}
+                  placeholder="t.ex. Fastighetsägare, BRF, Hyresgäst"
+                  data-testid="input-payer-label"
+                />
               </div>
               <div className="space-y-2">
                 <Label>Andel (%)</Label>
@@ -400,6 +440,30 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
                     </SelectContent>
                   </Select>
                 </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="edit-is-primary"
+                    checked={editingPayer.isPrimary}
+                    onCheckedChange={(checked) => setEditingPayer({ ...editingPayer, isPrimary: !!checked })}
+                    data-testid="checkbox-edit-is-primary"
+                  />
+                  <Label htmlFor="edit-is-primary" className="text-sm font-normal flex items-center gap-1">
+                    <Star className="w-4 h-4" />
+                    Primär fakturakund
+                  </Label>
+                </div>
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-1">
+                    <Tag className="w-4 h-4" />
+                    Betalarreferens
+                  </Label>
+                  <Input
+                    value={editingPayer.payerLabel || ""}
+                    onChange={(e) => setEditingPayer({ ...editingPayer, payerLabel: e.target.value })}
+                    placeholder="t.ex. Fastighetsägare, BRF, Hyresgäst"
+                    data-testid="input-edit-payer-label"
+                  />
+                </div>
                 <div className="space-y-2">
                   <Label>Andel (%)</Label>
                   <Input
@@ -470,6 +534,8 @@ export function ObjectPayersPanel({ object, controlled, open: controlledOpen, on
                       data: {
                         customerId: editingPayer.customerId,
                         payerType: editingPayer.payerType,
+                        isPrimary: editingPayer.isPrimary,
+                        payerLabel: editingPayer.payerLabel,
                         sharePercent: editingPayer.sharePercent,
                         articleTypes: editingPayer.articleTypes,
                         invoiceReference: editingPayer.invoiceReference,

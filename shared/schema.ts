@@ -149,6 +149,8 @@ export const objects = pgTable("objects", {
   
   isInterimObject: boolean("is_interim_object").default(false).notNull(),
   
+  polylineData: jsonb("polyline_data"),
+  
   status: text("status").default("active").notNull(),
   notes: text("notes"),
   lastServiceDate: timestamp("last_service_date"),
@@ -1523,6 +1525,8 @@ export const objectPayers = pgTable("object_payers", {
   customerId: varchar("customer_id").references(() => customers.id).notNull(),
   // Typ av betalare: primary, secondary, split
   payerType: varchar("payer_type", { length: 20 }).default("primary").notNull(),
+  isPrimary: boolean("is_primary").default(false).notNull(),
+  payerLabel: text("payer_label"),
   // Andel i procent (för split-betalning)
   sharePercent: integer("share_percent").default(100),
   // Vilka artikeltyper denna betalare ansvarar för (tom = alla)

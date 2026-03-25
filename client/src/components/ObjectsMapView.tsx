@@ -1,5 +1,5 @@
-import { Fragment, memo } from "react";
-import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
+import { Fragment, memo, useMemo } from "react";
+import { MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { DoorOpen, Key, Keyboard, Users } from "lucide-react";
@@ -187,30 +187,45 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
           />
           {mapPositions.length > 0 && <MapFitBounds positions={mapPositions} />}
           {objectsWithCoords.map(obj => (
-            <Marker
-              key={obj.id}
-              position={[obj.latitude!, obj.longitude!]}
-              icon={createAccessIcon(obj.accessType || "open")}
-            >
-              <Popup>
-                <div className="p-1">
-                  <div className="font-medium">{obj.name}</div>
-                  <div className="text-sm text-gray-600">{obj.address}, {obj.city}</div>
-                  <div className="text-sm mt-1">
-                    <span className="font-medium">Typ:</span> {objectTypeLabels[obj.objectType]}
-                  </div>
-                  <div className="text-sm">
-                    <span className="font-medium">Tillgång:</span> {accessTypeLabels[obj.accessType || "open"]?.label}
-                    {obj.accessCode && ` (${obj.accessCode})`}
-                  </div>
-                  {obj.avgSetupTime && obj.avgSetupTime > 0 && (
-                    <div className="text-sm">
-                      <span className="font-medium">Ställtid:</span> {obj.avgSetupTime} min
+            <Fragment key={obj.id}>
+              <Marker
+                position={[obj.latitude!, obj.longitude!]}
+                icon={createAccessIcon(obj.accessType || "open")}
+              >
+                <Popup>
+                  <div className="p-1">
+                    <div className="font-medium">{obj.name}</div>
+                    <div className="text-sm text-gray-600">{obj.address}, {obj.city}</div>
+                    <div className="text-sm mt-1">
+                      <span className="font-medium">Typ:</span> {objectTypeLabels[obj.objectType]}
                     </div>
-                  )}
-                </div>
-              </Popup>
-            </Marker>
+                    <div className="text-sm">
+                      <span className="font-medium">Tillgång:</span> {accessTypeLabels[obj.accessType || "open"]?.label}
+                      {obj.accessCode && ` (${obj.accessCode})`}
+                    </div>
+                    {obj.avgSetupTime && obj.avgSetupTime > 0 && (
+                      <div className="text-sm">
+                        <span className="font-medium">Ställtid:</span> {obj.avgSetupTime} min
+                      </div>
+                    )}
+                  </div>
+                </Popup>
+              </Marker>
+              {obj.polylineData && (() => {
+                const geo = obj.polylineData as any;
+                if (!geo?.geometry) return null;
+                const { type, coordinates } = geo.geometry;
+                if (type === "Polygon" && coordinates?.[0]) {
+                  const positions = coordinates[0].map((c: number[]) => [c[1], c[0]] as [number, number]);
+                  return <Polygon positions={positions} pathOptions={{ color: "#4A9B9B", fillColor: "#4A9B9B", fillOpacity: 0.15, weight: 2 }} />;
+                }
+                if (type === "LineString" && coordinates) {
+                  const positions = coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]);
+                  return <Polyline positions={positions} pathOptions={{ color: "#4A9B9B", weight: 3 }} />;
+                }
+                return null;
+              })()}
+            </Fragment>
           ))}
         </MapContainer>
         <div className="absolute bottom-4 right-4 bg-background/90 backdrop-blur-sm rounded-md shadow-md p-3 space-y-1.5 z-[1000]">

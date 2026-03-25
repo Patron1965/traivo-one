@@ -19,8 +19,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import type { Customer, ServiceObject, Resource, Article, Team, TeamMember, PriceList } from "@shared/schema";
+import type { Customer, ServiceObject, Resource, Article, Team, TeamMember, PriceList, ObjectPayer } from "@shared/schema";
 import { ARTICLE_HOOK_LEVEL_LABELS } from "@shared/schema";
+import { BillingCustomerDialog } from "@/components/BillingCustomerDialog";
 
 interface JobModalProps {
   open: boolean;
@@ -62,6 +63,8 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   const [objectSearch, setObjectSearch] = useState("");
   const [objectPopoverOpen, setObjectPopoverOpen] = useState(false);
   const [selectedObjectName, setSelectedObjectName] = useState("");
+  const [showBillingDialog, setShowBillingDialog] = useState(false);
+  const [pendingObjectId, setPendingObjectId] = useState("");
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [teamPopoverOpen, setTeamPopoverOpen] = useState(false);
   const [competencyWarning, setCompetencyWarning] = useState<{ hasWarning: boolean; message?: string; missingArticles?: Array<{ id: string; name: string }> } | null>(null);
@@ -326,6 +329,7 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
   };
 
   return (
+    <>
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -409,10 +413,22 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
                             <CommandItem
                               key={obj.id}
                               value={obj.id}
-                              onSelect={() => {
-                                setFormData({...formData, objectId: obj.id});
+                              onSelect={async () => {
                                 setSelectedObjectName(obj.name);
                                 setObjectPopoverOpen(false);
+                                try {
+                                  const res = await fetch(`/api/objects/${obj.id}/billing-customers`);
+                                  const data = await res.json();
+                                  if (data.multiPayer) {
+                                    setPendingObjectId(obj.id);
+                                    setFormData(prev => ({...prev, objectId: obj.id}));
+                                    setShowBillingDialog(true);
+                                  } else {
+                                    setFormData(prev => ({...prev, objectId: obj.id}));
+                                  }
+                                } catch {
+                                  setFormData(prev => ({...prev, objectId: obj.id}));
+                                }
                               }}
                             >
                               <Check
@@ -830,5 +846,20 @@ export function JobModal({ open, onClose, onSubmit }: JobModalProps) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <BillingCustomerDialog
+      open={showBillingDialog}
+      onClose={() => {
+        setShowBillingDialog(false);
+        setPendingObjectId("");
+      }}
+      objectId={pendingObjectId}
+      onSelect={(customerId) => {
+        setFormData(prev => ({ ...prev, customerId }));
+        setShowBillingDialog(false);
+        setPendingObjectId("");
+      }}
+    />
+  </>
   );
 }

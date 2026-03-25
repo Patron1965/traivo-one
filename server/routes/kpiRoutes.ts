@@ -1451,6 +1451,8 @@ app.patch("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) => 
     const updateSchema = z.object({
       customerId: z.string().optional(),
       payerType: z.string().optional(),
+      isPrimary: z.boolean().optional(),
+      payerLabel: z.string().nullable().optional(),
       sharePercent: z.number().optional(),
       articleTypes: z.array(z.string()).optional(),
       priority: z.number().optional(),
@@ -1474,6 +1476,82 @@ app.delete("/api/objects/:objectId/payers/:id", asyncHandler(async (req, res) =>
     await storage.deleteObjectPayer(req.params.id, req.params.objectId, tenantId);
     res.status(204).send();
 }));
+
+// ============== BILLING CUSTOMER SELECTION ==============
+app.get("/api/objects/:objectId/billing-customers", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
+      throw new ForbiddenError("Åtkomst nekad");
+    }
+    const payers = await storage.getObjectPayers(req.params.objectId);
+    if (payers.length <= 1) {
+      const obj = await storage.getObject(req.params.objectId);
+      res.json({ multiPayer: false, defaultCustomerId: obj?.customerId || payers[0]?.customerId || null, payers });
+    } else {
+      const primaryPayer = payers.find(p => p.isPrimary);
+      res.json({
+        multiPayer: true,
+        defaultCustomerId: primaryPayer?.customerId || payers[0]?.customerId || null,
+        payers,
+      });
+    }
+}));
+
+// ============== POLYLINE DATA ==============
+app.get("/api/objects/:objectId/polyline", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
+      throw new ForbiddenError("Åtkomst nekad");
+    }
+    const obj = await storage.getObject(req.params.objectId);
+    if (!obj) throw new NotFoundError("Objekt hittades inte");
+    res.json({ polylineData: obj.polylineData || null });
+}));
+
+app.put("/api/objects/:objectId/polyline", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    if (!await verifyObjectTenant(req.params.objectId, tenantId)) {
+      throw new ForbiddenError("Åtkomst nekad");
+    }
+    const schema = z.object({
+      polylineData: z.any().nullable(),
+    });
+    const { polylineData } = schema.parse(req.body);
+    const updated = await storage.updateObject(req.params.objectId, { polylineData });
+    res.json({ polylineData: updated?.polylineData || null });
+}));
+
+app.post("/api/objects/find-in-polygon", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      polygon: z.array(z.tuple([z.number(), z.number()])),
+      coordinateFormat: z.enum(["lnglat", "latlng"]).default("lnglat"),
+    });
+    const { polygon, coordinateFormat } = schema.parse(req.body);
+
+    const normalizedPolygon: [number, number][] = coordinateFormat === "lnglat"
+      ? polygon.map(([lng, lat]) => [lat, lng])
+      : polygon;
+
+    const allObjects = await storage.getObjects(tenantId);
+    const insideObjects = allObjects.filter((obj) => {
+      if (!obj.latitude || !obj.longitude) return false;
+      return pointInPolygon([obj.latitude, obj.longitude], normalizedPolygon);
+    });
+    res.json(insideObjects);
+}));
+
+function pointInPolygon(point: [number, number], polygon: [number, number][]): boolean {
+  const [x, y] = point;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const [xi, yi] = polygon[i];
+    const [xj, yj] = polygon[j];
+    const intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
+}
 
 // ============================================
 // ROUTE FEEDBACK ENDPOINTS

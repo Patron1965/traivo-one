@@ -22,37 +22,37 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Backend:** Express.js with modular route architecture.
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
-- **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner. Includes budget enforcement and monitoring.
-- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename phase (rename objects/customers/metadata/resources before import), selective modular import (skip/import individual steps with summary view and localStorage persistence), and Import Health Overview with data quality warnings (4-stat grid: customers/objects/work orders/invoice lines), 5 issue types with severity levels (no-coords, no-address, no-customer, unassigned resources, empty-metadata), "Granska" links with server-side issue filtering on ObjectsPage and WeekPlannerPage, tenant-scoped accept/dismiss via localStorage, and filter banners with "Rensa filter" buttons. Trestegsimport (Kinab P5+P12+P13): Step 0 customer list CSV import with duplicate detection (skip/merge/create), What3words support in object import, Step 6 metadata assignment (bulk + CSV modes), object duplicate detection (by objectNumber/name+address/GPS proximity), 7-step flow (1=settings, 2=objects, 3=tasks, 4=invoices, 5=events, 6=metadata, 7=summary).
+- **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner, including budget enforcement.
+- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename, selective modular import, and Import Health Overview with data quality warnings.
 - **Geocoding:** Geoapify Geocoding API with Nominatim fallback.
 - **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.
 - **Offline Architecture:** Complete offline-first architecture for mobile field workers using IndexedDB.
 - **Automatic Anomaly Monitoring:** Background job for detecting operational anomalies and broadcasting alerts.
-- **Mobile API Endpoints:** Dedicated REST API for mobile features including login, order/resource retrieval, status updates, notes, deviations, material logging, signature, inspection, GPS tracking, weather, AI chat, transcription, and image analysis, with offline sync capabilities.
+- **Mobile API Endpoints:** Dedicated REST API for mobile features with offline sync capabilities.
 - **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, comprehensive work order management, and per-object article management with resolved pricing.
-- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, self-booking, dynamic widgets, and field documentation (QR scanning, photo capture, change reports).
-- **Customer Field Documentation:** Mobile-first portal feature allowing customers to document objects on-site via QR code scanning, photo capture with presigned URL uploads, and structured change reports with category system. Includes admin dashboard for planner review with status management. Mobile API for Traivo Go integration with category harmonization (Go→One mapping), severity field (low/medium/high/critical), presigned photo upload, WebSocket events for status updates, and resource-scoped history.
-- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality with cluster-aware resource assignment.
+- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, self-booking, dynamic widgets, and field documentation.
+- **Customer Field Documentation:** Mobile-first portal feature for object documentation via QR code, photo capture, and structured change reports, with admin review.
+- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
 - **Environmental Statistics & Certificates:** Tracking mileage, fuel, CO2, and generation of annual environmental certificates.
 - **Industry Packages System:** Predefined templates for different industries with configurable articles and metadata.
 - **SMS Infrastructure:** Unified multi-channel notification service supporting email and SMS.
-- **Route Feedback System:** Driver daily route ratings, reason categories, free text, and reporting UI with KPI cards and charts, with an AI field assistant for querying feedback.
-- **Planner Map:** Real-time driver/job map with real road geometry, per-route filtering, status filter chips, enhanced job popups, colored driver avatars, and route information.
+- **Route Feedback System:** Driver daily route ratings, reason categories, free text, and reporting UI with KPI cards and charts, with an AI field assistant.
+- **Planner Map:** Real-time driver/job map with real road geometry, filtering, status filter chips, enhanced job popups, colored driver avatars, and route information.
 - **Historical Map View:** Playback of daily GPS movement patterns per resource with timeline slider and KPI overlay.
 - **Reporting & KPI Dashboard:** Enhanced `/reporting` page with tabs for overview, productivity, completion, deviations, resources, areas, and customers, featuring Recharts diagrams.
-- **Execution Codes & Resource Profiles:** System for mapping resource capabilities to task requirements, and profile templates defining execution codes, equipment, cost centers, project codes, and service areas for auto-planning.
+- **Execution Codes & Resource Profiles:** System for mapping resource capabilities to task requirements, and profile templates for auto-planning.
 - **Work Sessions & Time Tracking (Snöret):** Complete work session management system with check-in/check-out, time entries, weekly time summaries, labor rule violation detection, and payroll CSV export.
 - **Annual Planning (Årsplanering):** Annual goal tracking per customer/object with AI-driven distribution proposing optimal monthly work order distribution.
 - **Equipment Sharing & Shift Collision Control:** Tracking vehicle/equipment bookings, collision detection, and availability timeline.
 - **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
-- **Association Tvåstegsfilter (Kinab P3):** Two-step article↔object matching via metadata labels. Articles can define `associationLabel` (metadata beteckning), `associationValue`, and `associationOperator` (equals/contains/starts_with/not_equals) to automatically match objects whose metadata values satisfy the filter. Backend service (`association-service.ts`) with 3 API endpoints: `GET /api/objects/:id/matching-articles`, `POST /api/articles/:id/test-association`, `GET /api/articles/:id/matched-objects`. Frontend: association section in ArticlesPage form with test button, and "Matchande artiklar" tab in ObjectDetailPage.
+- **Association Tvåstegsfilter (Kinab P3):** Two-step article↔object matching via metadata labels, with backend service and frontend integration.
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner.
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.
 - **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.
-- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard for building delivery schedules and subscription calculations.
-- **Smart AI Kontrollmallar & Field Validation:** AI-driven control templates (formerly "Checklista-mallar", renamed to "Kontrollmallar") for field workers suggesting steps based on order type and history, with mandatory field validation before completion.
+- **Orderkoncept System:** Scenario-based order automation (Avrop, Schema, Abonnemang) with a 9-step wizard.
+- **Smart AI Kontrollmallar & Field Validation:** AI-driven control templates for field workers suggesting steps based on order type and history, with mandatory field validation.
 - **Field Worker Task Dependency View & Photo Upload:** Mobile app displays task dependencies and supports two-step presigned URL photo uploads.
 - **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
 - **Team Management & User Administration:** User management with admin CRUD, team system, bulk actions, and invitation system.
@@ -74,17 +74,19 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Smart Navigation i Fältappen:** Travel distance/time display per job card, "Nästa stopp" navigation card with deep links, and 10-minute timer warning toast.
 - **Smart AI Resource Allocation:** AI-förslag button in JobModal suggests top 3 best-fit resources, competency warning banner, and "Auto-fördela idag" button for unplanned orders.
 - **Constraint Engine & Decision Trace:** Deterministic constraint validation layer for AI auto-schedule against hard and soft constraints, risk score calculation, and detailed `decisionTrace` logging for audit.
+- **Multi-Customer Billing (Flerkund-fakturering):** Extended `objectPayers` with `isPrimary` flag and `payerLabel` field, and billing customer selection in JobModal.
+- **Polyline/Polygon Support:** `polylineData` (GeoJSON) field on objects table for defining area boundaries, with PolylineEditor component and bulk find-objects-in-polygon endpoint.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
 - **External Optimization:** Route optimization is offloaded to a separate Traivo optimization service.
 - **Data Validation:** DataClean service handles external data validation and geocoding.
 - **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app.
-- **Article Service Constraints:** `maxPerAddress` field on articles for limiting service count per address (e.g., 1 etablering per address).
+- **Article Service Constraints:** `maxPerAddress` field on articles for limiting service count per address.
 - **Field Worker Task Summary:** Aggregated task type counts ("10 tvättar, 2 besiktningar") in SimpleFieldApp job list header.
-- **Route GPS Start:** Route optimizer uses live GPS position (if recent <30min) as start point instead of home coordinates.
-- **Carry-Over Logic:** `POST /api/work-orders/carry-over` endpoint and WeekPlanner "Flytta oavslutade" button for moving unfinished jobs from yesterday to today.
-- **Proactive Sales View:** `/proactive-sales` page showing inactive customers (configurable threshold), historical revenue, and contact information.
+- **Route GPS Start:** Route optimizer uses live GPS position as start point instead of home coordinates.
+- **Carry-Over Logic:** `POST /api/work-orders/carry-over` endpoint and WeekPlanner "Flytta oavslutade" button for moving unfinished jobs.
+- **Proactive Sales View:** `/proactive-sales` page showing inactive customers, historical revenue, and contact information.
 
 ## External Dependencies
 - **PostgreSQL:** Primary database.
