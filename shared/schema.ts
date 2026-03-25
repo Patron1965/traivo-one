@@ -430,8 +430,12 @@ export const articles = pgTable("articles", {
   fetchMetadataCode: text("fetch_metadata_code"),
   leaveMetadataCode: text("leave_metadata_code"),
   leaveMetadataFormat: text("leave_metadata_format"),
-  // Associations-kod för artikelhook mot metadata-typ
+  // Associations-kod för artikelhook mot metadata-typ (legacy)
   associationCode: text("association_code"),
+  // Kinab tvåstegsfilter: association via metadata-etikett + värde
+  associationLabel: text("association_label"),
+  associationValue: text("association_value"),
+  associationOperator: text("association_operator").default("equals"),
   maxPerAddress: integer("max_per_address"),
   // Intern beskrivning för utförare
   internalDescription: text("internal_description"),

@@ -1587,4 +1587,56 @@ app.post("/api/field/mobile-token", asyncHandler(async (req: any, res) => {
     res.json({ token, resourceId: userResourceId, expiresIn: 86400 });
 }));
 
+// ============================================
+// ASSOCIATION TVÅSTEGSFILTER API (Kinab P3)
+// ============================================
+
+app.get("/api/objects/:id/matching-articles", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const objectId = req.params.id;
+
+    const obj = await storage.getObject(objectId);
+    if (!obj || !verifyTenantOwnership(obj, tenantId)) {
+      throw new NotFoundError("Objekt hittades inte");
+    }
+
+    const { getMatchingArticlesForObject } = await import("../association-service");
+    const matches = await getMatchingArticlesForObject(objectId, tenantId);
+    res.json(matches);
+}));
+
+app.post("/api/articles/:id/test-association", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const articleId = req.params.id;
+    const { label, value, operator } = req.body;
+
+    if (!label || !value) {
+      throw new ValidationError("Etikett och värde krävs");
+    }
+
+    const { testArticleAssociation } = await import("../association-service");
+    const result = await testArticleAssociation(
+      articleId,
+      tenantId,
+      label,
+      value,
+      operator || "equals"
+    );
+    res.json(result);
+}));
+
+app.get("/api/articles/:id/matched-objects", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const articleId = req.params.id;
+
+    const { getMatchedObjectsForArticle } = await import("../association-service");
+    const result = await getMatchedObjectsForArticle(articleId, tenantId);
+
+    if (!result.article) {
+      throw new NotFoundError("Artikel hittades inte");
+    }
+
+    res.json(result);
+}));
+
 }

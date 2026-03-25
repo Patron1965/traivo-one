@@ -47,6 +47,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Annual Planning (Årsplanering):** Annual goal tracking per customer/object with AI-driven distribution proposing optimal monthly work order distribution.
 - **Equipment Sharing & Shift Collision Control:** Tracking vehicle/equipment bookings, collision detection, and availability timeline.
 - **Article Dependencies & Pickup Tasks:** Automatic pickup task generation for dependent articles.
+- **Association Tvåstegsfilter (Kinab P3):** Two-step article↔object matching via metadata labels. Articles can define `associationLabel` (metadata beteckning), `associationValue`, and `associationOperator` (equals/contains/starts_with/not_equals) to automatically match objects whose metadata values satisfy the filter. Backend service (`association-service.ts`) with 3 API endpoints: `GET /api/objects/:id/matching-articles`, `POST /api/articles/:id/test-association`, `GET /api/articles/:id/matched-objects`. Frontend: association section in ArticlesPage form with test button, and "Matchande artiklar" tab in ObjectDetailPage.
 - **Time Restrictions:** Object-level time restrictions impacting auto-planning and WeekPlanner.
 - **Structural Tasks:** Composite tasks composed of multiple sub-steps.
 - **Auto Metadata Writeback & Change History:** Automatic metadata updates and UI for viewing change history.

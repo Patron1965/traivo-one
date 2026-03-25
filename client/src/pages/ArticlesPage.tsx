@@ -71,6 +71,8 @@ import {
   CircleX,
   ChevronLeft,
   ChevronRight,
+  LinkIcon,
+  Beaker,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -156,6 +158,9 @@ interface ArticleFormData {
   leaveMetadataCode: string;
   leaveMetadataFormat: string;
   maxPerAddress: number | null;
+  associationLabel: string;
+  associationValue: string;
+  associationOperator: string;
 }
 
 const emptyFormData: ArticleFormData = {
@@ -175,6 +180,9 @@ const emptyFormData: ArticleFormData = {
   leaveMetadataCode: "",
   leaveMetadataFormat: "",
   maxPerAddress: null,
+  associationLabel: "",
+  associationValue: "",
+  associationOperator: "equals",
 };
 
 export default function ArticlesPage() {
@@ -194,6 +202,8 @@ export default function ArticlesPage() {
   const [formData, setFormData] = useState<ArticleFormData>(emptyFormData);
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const [assocTestResult, setAssocTestResult] = useState<{ matchCount: number; matches: Array<{ objectId: string; objectName: string; objectAddress: string; metadataValue: string | null }>; labelFound: boolean; labelName?: string } | null>(null);
+  const [assocTestLoading, setAssocTestLoading] = useState(false);
   const ITEMS_PER_PAGE = 25;
 
   const { data: articles = [], isLoading } = useQuery<Article[]>({
@@ -207,6 +217,34 @@ export default function ArticlesPage() {
   const { data: metadataTypes = [] } = useQuery<{ id: string; namn: string; datatyp: string }[]>({
     queryKey: ["/api/metadata/types"],
   });
+
+  const { data: metadataLabels = [] } = useQuery<{ id: string; namn: string; beteckning: string | null; datatyp: string }[]>({
+    queryKey: ["/api/metadata-labels"],
+    select: (data: any[]) => data.map((d: any) => ({ id: d.id, namn: d.namn, beteckning: d.beteckning, datatyp: d.datatyp })),
+  });
+
+  const handleTestAssociation = async () => {
+    if (!formData.associationLabel || !formData.associationValue) return;
+    setAssocTestLoading(true);
+    setAssocTestResult(null);
+    try {
+      const artId = editingArticle?.id || "new";
+      const res = await fetch(`/api/articles/${artId}/test-association`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          label: formData.associationLabel,
+          value: formData.associationValue,
+          operator: formData.associationOperator,
+        }),
+      });
+      if (res.ok) {
+        setAssocTestResult(await res.json());
+      }
+    } catch { /* ignore */ }
+    setAssocTestLoading(false);
+  };
 
   const { data: applicableArticles = [], isLoading: isLoadingApplicable } = useQuery<Article[]>({
     queryKey: ["/api/objects", selectedObjectId, "applicable-articles"],
@@ -292,6 +330,9 @@ export default function ArticlesPage() {
       leaveMetadataCode: (article as any).leaveMetadataCode || "",
       leaveMetadataFormat: (article as any).leaveMetadataFormat || "",
       maxPerAddress: (article as any).maxPerAddress ?? null,
+      associationLabel: (article as any).associationLabel || "",
+      associationValue: (article as any).associationValue || "",
+      associationOperator: (article as any).associationOperator || "equals",
     });
     setDialogOpen(true);
   };
@@ -1174,6 +1215,116 @@ export default function ArticlesPage() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">Hur metadata-värdet skapas vid utförande</p>
+                </div>
+              )}
+
+              <Separator />
+              <div className="space-y-1">
+                <h4 className="text-sm font-semibold flex items-center gap-2">
+                  <LinkIcon className="h-4 w-4" />
+                  Association (tvåstegsfilter)
+                </h4>
+                <p className="text-xs text-muted-foreground">
+                  Koppla artikeln till objekt via metadata-etikett och värde
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Etikett (beteckning)</Label>
+                  <Select
+                    value={formData.associationLabel || "_none"}
+                    onValueChange={(v) => {
+                      setFormData({ ...formData, associationLabel: v === "_none" ? "" : v });
+                      setAssocTestResult(null);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-association-label">
+                      <SelectValue placeholder="Ingen" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="_none">Ingen</SelectItem>
+                      {metadataLabels.map(ml => (
+                        <SelectItem key={ml.id} value={ml.beteckning || ml.namn}>
+                          {ml.beteckning ? `${ml.beteckning} — ${ml.namn}` : ml.namn}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Värde att matcha</Label>
+                  <Input
+                    value={formData.associationValue}
+                    onChange={(e) => {
+                      setFormData({ ...formData, associationValue: e.target.value });
+                      setAssocTestResult(null);
+                    }}
+                    placeholder="t.ex. Ja, Matavfall"
+                    data-testid="input-association-value"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Operator</Label>
+                  <Select
+                    value={formData.associationOperator || "equals"}
+                    onValueChange={(v) => {
+                      setFormData({ ...formData, associationOperator: v });
+                      setAssocTestResult(null);
+                    }}
+                  >
+                    <SelectTrigger data-testid="select-association-operator">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="equals">Lika med</SelectItem>
+                      <SelectItem value="contains">Innehåller</SelectItem>
+                      <SelectItem value="starts_with">Börjar med</SelectItem>
+                      <SelectItem value="not_equals">Inte lika med</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {formData.associationLabel && formData.associationValue && (
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleTestAssociation}
+                    disabled={assocTestLoading}
+                    data-testid="btn-test-association"
+                  >
+                    {assocTestLoading ? <Loader2 className="h-4 w-4 mr-1 animate-spin" /> : <Beaker className="h-4 w-4 mr-1" />}
+                    Testa koppling
+                  </Button>
+
+                  {assocTestResult && (
+                    <div className="rounded-md border p-3 text-sm space-y-2">
+                      {!assocTestResult.labelFound ? (
+                        <p className="text-destructive">Etiketten hittades inte i metadata-katalogen.</p>
+                      ) : (
+                        <>
+                          <p className="font-medium">
+                            {assocTestResult.matchCount} objekt matchar
+                            {assocTestResult.labelName && <span className="text-muted-foreground ml-1">({assocTestResult.labelName})</span>}
+                          </p>
+                          {assocTestResult.matches.length > 0 && (
+                            <div className="max-h-32 overflow-y-auto space-y-1">
+                              {assocTestResult.matches.map((m) => (
+                                <div key={m.objectId} className="flex items-center gap-2 text-xs">
+                                  <Badge variant="outline" className="font-mono text-xs">{m.metadataValue}</Badge>
+                                  <span>{m.objectName}</span>
+                                  {m.objectAddress && <span className="text-muted-foreground">— {m.objectAddress}</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 

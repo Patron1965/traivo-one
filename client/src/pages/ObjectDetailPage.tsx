@@ -21,7 +21,7 @@ import {
   Clock, Package, FileText, Image, Contact, GitFork, AlertTriangle,
   Calendar, Loader2, ChevronRight, ExternalLink, Wrench, Shield,
   Hash, Truck, Timer, Info, Box, Layers, ClipboardList, Plus,
-  Trash2, Pencil, Save, X, Phone, Mail
+  Trash2, Pencil, Save, X, Phone, Mail, LinkIcon
 } from "lucide-react";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
@@ -290,6 +290,23 @@ export default function ObjectDetailPage() {
       if (!res.ok) return [];
       return res.json();
     },
+  });
+
+  const { data: matchingArticles = [] } = useQuery<Array<{
+    article: { id: string; articleNumber: string; name: string; description?: string; associationLabel: string; associationValue: string; associationOperator: string };
+    matchedLabel: string;
+    matchedValue: string;
+    objectValue: string | null;
+    operator: string;
+    inherited: boolean;
+  }>>({
+    queryKey: ["/api/objects", objectId, "matching-articles"],
+    queryFn: async () => {
+      const res = await fetch(`/api/objects/${objectId}/matching-articles`, { credentials: "include" });
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!objectId,
   });
 
   const updateObjectMutation = useMutation({
@@ -582,6 +599,10 @@ export default function ObjectDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="restrictions" data-testid="tab-restrictions">
             SlotPreference {timeRestrictions.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{timeRestrictions.length}</Badge>}
+          </TabsTrigger>
+          <TabsTrigger value="matching-articles" data-testid="tab-matching-articles">
+            <LinkIcon className="h-3.5 w-3.5 mr-1" />
+            Matchande artiklar {matchingArticles.length > 0 && <Badge variant="secondary" className="ml-1 text-xs">{matchingArticles.length}</Badge>}
           </TabsTrigger>
         </TabsList>
 
@@ -1289,6 +1310,53 @@ export default function ObjectDetailPage() {
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">Inga tidsregler konfigurerade. Lägg till fördelaktiga eller ofördelaktiga tider.</p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ==================== MATCHANDE ARTIKLAR ==================== */}
+        <TabsContent value="matching-articles">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <LinkIcon className="h-4 w-4" /> Matchande artiklar via association
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {matchingArticles.length > 0 ? (
+                <div className="space-y-3">
+                  {matchingArticles.map((match, i) => (
+                    <div key={`${match.article.id}-${i}`} className="flex items-start gap-3 p-3 rounded-md border bg-muted/30">
+                      <Package className="h-5 w-5 mt-0.5 text-primary" />
+                      <div className="flex-1 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium">{match.article.name}</span>
+                          <Badge variant="outline" className="font-mono text-xs">{match.article.articleNumber}</Badge>
+                        </div>
+                        {match.article.description && (
+                          <p className="text-xs text-muted-foreground">{match.article.description}</p>
+                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="secondary" className="text-xs">
+                            {match.matchedLabel}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {match.operator === "equals" ? "=" : match.operator === "contains" ? "∋" : match.operator === "starts_with" ? "^" : "≠"}
+                          </span>
+                          <Badge variant="outline" className="font-mono text-xs">{match.matchedValue}</Badge>
+                          <span className="text-xs text-muted-foreground">→</span>
+                          <Badge variant="default" className="font-mono text-xs">{match.objectValue}</Badge>
+                          {match.inherited && (
+                            <Badge variant="secondary" className="text-xs italic">ärvd</Badge>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">Inga artiklar matchar detta objekt via association-filter.</p>
               )}
             </CardContent>
           </Card>
