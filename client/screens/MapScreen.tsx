@@ -244,8 +244,9 @@ export function MapScreen({ navigation }: any) {
 
   const roadPolyline = useMemo(() => {
     if (!effectiveRouteData?.trips?.[0]) return null;
+    if (effectiveRouteData.fallback) return null;
     const trip = effectiveRouteData.trips[0];
-    if (trip.geometry?.coordinates && trip.geometry.coordinates.length > 1) {
+    if (trip.geometry?.coordinates && trip.geometry.coordinates.length > 10) {
       return trip.geometry.coordinates.map((c: number[]) => ({
         latitude: c[1],
         longitude: c[0],
@@ -420,15 +421,6 @@ export function MapScreen({ navigation }: any) {
             strokeColor="#EA580C"
             strokeWidth={3}
             zIndex={2}
-          />
-        ) : null}
-        {Polyline && !displayPolyline && !roadPolyline && fallbackCoordinates.length > 1 ? (
-          <Polyline
-            coordinates={fallbackCoordinates}
-            strokeColor={Colors.primaryLight}
-            strokeWidth={3}
-            lineDashPattern={[10, 5]}
-            zIndex={1}
           />
         ) : null}
 
