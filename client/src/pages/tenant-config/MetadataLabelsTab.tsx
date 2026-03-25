@@ -235,7 +235,7 @@ export function MetadataLabelsTab() {
                       <div
                         key={label.id}
                         className="flex items-center justify-between p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                        data-testid={`label-row-${label.beteckning || label.id}`}
+                        data-testid={`label-row-${(label.beteckning || label.id).replace(/\s+/g, '-')}`}
                       >
                         <div className="flex items-center gap-3">
                           <div className="p-2 rounded-md bg-muted">
@@ -270,7 +270,7 @@ export function MetadataLabelsTab() {
                         </div>
                         <div className="flex items-center gap-1">
                           {!label.isSystem && (
-                            <Button variant="ghost" size="sm" onClick={() => openEdit(label)} data-testid={`button-edit-label-${label.beteckning || label.id}`}>
+                            <Button variant="ghost" size="sm" onClick={() => openEdit(label)} data-testid={`button-edit-label-${(label.beteckning || label.id).replace(/\s+/g, '-')}`}>
                               <Edit2 className="h-4 w-4" />
                             </Button>
                           )}
@@ -279,7 +279,7 @@ export function MetadataLabelsTab() {
                               variant="ghost"
                               size="sm"
                               onClick={() => deleteMutation.mutate(label.id)}
-                              data-testid={`button-delete-label-${label.beteckning || label.id}`}
+                              data-testid={`button-delete-label-${(label.beteckning || label.id).replace(/\s+/g, '-')}`}
                             >
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
@@ -294,7 +294,7 @@ export function MetadataLabelsTab() {
           })}
 
           {filtered.length === 0 && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-muted-foreground" data-testid="text-empty-labels">
               Inga etiketter hittades
             </div>
           )}
@@ -404,7 +404,7 @@ export function MetadataLabelsTab() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={closeDialog}>Avbryt</Button>
+            <Button variant="outline" onClick={closeDialog} data-testid="button-cancel-label">Avbryt</Button>
             <Button
               onClick={handleSubmit}
               disabled={!formData.namn || createMutation.isPending || updateMutation.isPending}

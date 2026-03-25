@@ -719,6 +719,7 @@ export async function seedDatabase() {
     }
   }
 
+  await seedSystemMetadataLabels();
   console.log("Database seeding complete!");
 }
 
