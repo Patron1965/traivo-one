@@ -14,6 +14,7 @@ import { JobCard, DragOverlayContent } from "./weekplanner/JobCard";
 import { UnscheduledSidebar } from "./weekplanner/UnscheduledSidebar";
 import { AssignDialog, SendScheduleDialog, ConflictDialog, ClearDialog, AutoFillDialog, DepChainDialog } from "./weekplanner/PlannerDialogs";
 import { PlannerToolbar, PlannerFooter } from "./weekplanner/PlannerToolbar";
+import { DisruptionPanel } from "./weekplanner/DisruptionPanel";
 import { DayTimelineView } from "./weekplanner/DayTimelineView";
 import { WeekGridView } from "./weekplanner/WeekGridView";
 import { MonthView } from "./weekplanner/MonthView";
@@ -107,6 +108,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             filteredScheduledCount={d.filteredScheduledJobs.length}
             unscheduledCount={d.unscheduledJobs.length}
           />
+
+          <DisruptionPanel />
 
           {d.viewMode === "day" && (
             <DayTimelineView

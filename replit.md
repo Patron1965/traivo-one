@@ -66,6 +66,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Interim Objects & Object Verification:** `isInterimObject` flag for public issue reports with admin UI for verification.
 - **IoT API & Automatic Order Generation:** Management of IoT devices, API keys, and signals, with auto-generation of work orders based on sensor signals.
 - **Predictive Maintenance:** AI-driven predictive maintenance using IoT signal history to forecast next service date with confidence scoring.
+- **Event-Driven Disruption Service:** Automated disruption detection and re-optimization suggestions for 4 trigger types: resource unavailable (sjukanmälan), emergency jobs, significant delays (>50%), and early completion (slack time). DisruptionPanel in WeekPlanner shows real-time alerts with scored suggestions and one-click application. All proposals include decision trace logging. WebSocket notifications broadcast disruptions to connected planners.
 - **ROI-rapport:** Generalized ROI report per customer calculated from real usage data.
 - **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields, UI for visualization, and aggregated preferences for order placement.
 - **Job Creation Price List Override:** Optional price list selector in JobModal allowing manual override of automatic price resolution hierarchy.

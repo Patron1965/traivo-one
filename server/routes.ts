@@ -36,6 +36,7 @@ import { registerIoTRoutes } from "./routes/iotRoutes";
 import { registerAnnualGoalRoutes } from "./routes/annualGoalRoutes";
 import { registerPredictiveRoutes } from "./routes/predictiveRoutes";
 import { registerRoiRoutes } from "./routes/roiRoutes";
+import { registerDisruptionRoutes } from "./routes/disruptionRoutes";
 import { registerFeatureRoutes } from "./routes/featureRoutes";
 
 async function ensureDefaultTenant() {
@@ -384,6 +385,7 @@ export async function registerRoutes(
   registerPredictiveRoutes(app);
   registerRoiRoutes(app);
   registerFeatureRoutes(app);
+  registerDisruptionRoutes(app);
 
   app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
     if (err instanceof z.ZodError) {
