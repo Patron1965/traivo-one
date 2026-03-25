@@ -1,5 +1,6 @@
 import { storage } from "./storage";
 import { sendETAUpdate } from "./ai-communication";
+import { getRoutingDistance, haversineDistanceKm } from "./distance-matrix-service";
 
 interface ETACalculation {
   workOrderId: string;
@@ -16,22 +17,6 @@ interface ETAOverview {
   totalDelayed: number;
   avgDelay: number;
   criticalDelays: ETACalculation[];
-}
-
-function haversineDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
-    Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
-function estimateTravelMinutes(distanceKm: number): number {
-  const avgSpeedKmh = 35;
-  return Math.round((distanceKm / avgSpeedKmh) * 60);
 }
 
 export async function calculateETAForTodaysOrders(tenantId: string): Promise<ETAOverview> {
@@ -64,12 +49,28 @@ export async function calculateETAForTodaysOrders(tenantId: string): Promise<ETA
 
     if (resource.currentLatitude && resource.currentLongitude &&
         order.taskLatitude && order.taskLongitude) {
-      const distance = haversineDistance(
+      const havDist = haversineDistanceKm(
         resource.currentLatitude, resource.currentLongitude,
         order.taskLatitude, order.taskLongitude
       );
-      estimatedMinutes = estimateTravelMinutes(distance);
-      reason = `${Math.round(distance)} km körsträcka`;
+      if (havDist < 100) {
+        try {
+          const routing = await getRoutingDistance(
+            resource.currentLatitude, resource.currentLongitude,
+            order.taskLatitude, order.taskLongitude
+          );
+          estimatedMinutes = routing.durationMin;
+          reason = routing.source === "geoapify"
+            ? `${routing.distanceKm.toFixed(1)} km verklig väg (${routing.durationMin} min)`
+            : `${Math.round(routing.distanceKm)} km körsträcka`;
+        } catch {
+          estimatedMinutes = Math.round((havDist / 35) * 60);
+          reason = `${Math.round(havDist)} km körsträcka`;
+        }
+      } else {
+        estimatedMinutes = Math.round((havDist / 35) * 60);
+        reason = `${Math.round(havDist)} km körsträcka`;
+      }
     } else if (order.scheduledStartTime) {
       const [hours, minutes] = order.scheduledStartTime.split(":").map(Number);
       const scheduledMs = hours * 60 + minutes;

@@ -11,6 +11,7 @@ import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, type WorkOrderLine } from "@shared/schema";
 import { getISOWeek } from "./helpers";
 import { notificationService } from "../notifications";
+import { getBatchDistances, haversineDistanceKm, type BatchPair } from "../distance-matrix-service";
 import {
   enforceBudgetAndRateLimit,
   acquireSchedulingLock,
@@ -2608,30 +2609,31 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
 
         if (objectLat && objectLng) {
           let minDist = Infinity;
+          let closestCoord: { lat: number; lng: number } | null = null;
           for (const o of dayOrders) {
             const oLat = o.taskLatitude || (o as any).objectLatitude;
             const oLng = o.taskLongitude || (o as any).objectLongitude;
             if (oLat && oLng) {
-              const dist = haversineDist(objectLat, objectLng, oLat, oLng);
-              if (dist < minDist) minDist = dist;
+              const dist = haversineDistanceKm(objectLat, objectLng, oLat, oLng);
+              if (dist < minDist) { minDist = dist; closestCoord = { lat: oLat, lng: oLng }; }
             }
           }
           if (minDist < 5) {
             score += 25;
-            reasons.push(`Nära befintligt jobb (${minDist.toFixed(1)} km)`);
+            reasons.push(`Nära befintligt jobb (${minDist.toFixed(1)} km fågelväg)`);
           } else if (minDist < 15) {
             score += 15;
-            reasons.push(`Relativt nära befintligt jobb (${minDist.toFixed(1)} km)`);
+            reasons.push(`Relativt nära befintligt jobb (${minDist.toFixed(1)} km fågelväg)`);
           } else if (minDist < 50) {
             score += 5;
-            reasons.push(`Inom rimligt avstånd (${minDist.toFixed(1)} km)`);
+            reasons.push(`Inom rimligt avstånd (${minDist.toFixed(1)} km fågelväg)`);
           }
 
           if (resource.homeLatitude && resource.homeLongitude) {
-            const homeDist = haversineDist(objectLat, objectLng, resource.homeLatitude, resource.homeLongitude);
+            const homeDist = haversineDistanceKm(objectLat, objectLng, resource.homeLatitude, resource.homeLongitude);
             if (homeDist < 10) {
               score += 10;
-              reasons.push(`Nära resursens utgångsplats (${homeDist.toFixed(1)} km)`);
+              reasons.push(`Nära resursens utgångsplats (${homeDist.toFixed(1)} km fågelväg)`);
             }
           }
         }
@@ -2663,6 +2665,88 @@ app.post("/api/ai/suggest-placement", isAuthenticated, asyncHandler(async (req: 
           score,
           reasons,
         });
+      }
+    }
+
+    if (objectLat && objectLng && suggestions.length > 0) {
+      const topCandidates = [...suggestions].sort((a, b) => b.score - a.score).slice(0, 15);
+      const distPairs: BatchPair[] = [];
+
+      for (const s of topCandidates) {
+        const resource = activeResources.find(r => r.id === s.resourceId);
+        if (!resource) continue;
+
+        const dayOrders = scheduledOrders.filter(o => o.resourceId === s.resourceId && o.scheduledDate === s.date);
+        let closestOrder: typeof dayOrders[0] | null = null;
+        let closestHav = Infinity;
+        for (const o of dayOrders) {
+          const oLat = o.taskLatitude || (o as any).objectLatitude;
+          const oLng = o.taskLongitude || (o as any).objectLongitude;
+          if (oLat && oLng) {
+            const d = haversineDistanceKm(objectLat, objectLng, oLat, oLng);
+            if (d < closestHav) { closestHav = d; closestOrder = o; }
+          }
+        }
+
+        if (closestOrder && closestHav < 50) {
+          const cLat = closestOrder.taskLatitude || (closestOrder as any).objectLatitude;
+          const cLng = closestOrder.taskLongitude || (closestOrder as any).objectLongitude;
+          if (cLat && cLng) {
+            distPairs.push({
+              id: `job-${s.resourceId}-${s.date}`,
+              fromLat: objectLat, fromLng: objectLng,
+              toLat: cLat, toLng: cLng,
+            });
+          }
+        }
+
+        if (resource.homeLatitude && resource.homeLongitude) {
+          distPairs.push({
+            id: `home-${s.resourceId}`,
+            fromLat: objectLat, fromLng: objectLng,
+            toLat: resource.homeLatitude, toLng: resource.homeLongitude,
+          });
+        }
+      }
+
+      if (distPairs.length > 0) {
+        const distances = await getBatchDistances(distPairs);
+
+        for (const s of topCandidates) {
+          const jobKey = `job-${s.resourceId}-${s.date}`;
+          const homeKey = `home-${s.resourceId}`;
+          const jobDist = distances.get(jobKey);
+          const homeDist = distances.get(homeKey);
+
+          let adjustment = 0;
+          if (jobDist && jobDist.source === "geoapify") {
+            const havDist = haversineDistanceKm(objectLat, objectLng,
+              distPairs.find(p => p.id === jobKey)!.toLat,
+              distPairs.find(p => p.id === jobKey)!.toLng);
+            const realVsHav = jobDist.distanceKm / Math.max(havDist, 0.1);
+            if (realVsHav > 1.8) {
+              adjustment -= 15;
+              s.reasons.push(`Verklig körtid ${jobDist.durationMin} min (${jobDist.distanceKm.toFixed(1)} km väg)`);
+            } else if (realVsHav < 1.2) {
+              adjustment += 5;
+              s.reasons.push(`Bra vägförbindelse (${jobDist.distanceKm.toFixed(1)} km, ${jobDist.durationMin} min)`);
+            } else {
+              s.reasons.push(`Körtid ${jobDist.durationMin} min (${jobDist.distanceKm.toFixed(1)} km väg)`);
+            }
+          }
+
+          if (homeDist && homeDist.source === "geoapify") {
+            const havHome = haversineDistanceKm(objectLat, objectLng,
+              distPairs.find(p => p.id === homeKey)!.toLat,
+              distPairs.find(p => p.id === homeKey)!.toLng);
+            const homeRatio = homeDist.distanceKm / Math.max(havHome, 0.1);
+            if (homeRatio > 2.0) {
+              adjustment -= 10;
+            }
+          }
+
+          s.score += adjustment;
+        }
       }
     }
 
@@ -2868,17 +2952,17 @@ app.post("/api/ai/suggest-resource-for-new-order", isAuthenticated, asyncHandler
             const oLat = o.taskLatitude;
             const oLng = o.taskLongitude;
             if (oLat && oLng) {
-              const dist = haversineDist(objectLat, objectLng, oLat, oLng);
+              const dist = haversineDistanceKm(objectLat, objectLng, oLat, oLng);
               if (dist < minDist) minDist = dist;
             }
           }
-          if (minDist < 5) { score += 25; reasons.push(`Nära befintligt jobb (${minDist.toFixed(1)} km)`); }
-          else if (minDist < 15) { score += 15; reasons.push(`Relativt nära (${minDist.toFixed(1)} km)`); }
-          else if (minDist < 50) { score += 5; reasons.push(`Inom rimligt avstånd (${minDist.toFixed(1)} km)`); }
+          if (minDist < 5) { score += 25; reasons.push(`Nära befintligt jobb (${minDist.toFixed(1)} km fågelväg)`); }
+          else if (minDist < 15) { score += 15; reasons.push(`Relativt nära (${minDist.toFixed(1)} km fågelväg)`); }
+          else if (minDist < 50) { score += 5; reasons.push(`Inom rimligt avstånd (${minDist.toFixed(1)} km fågelväg)`); }
 
           if (resource.homeLatitude && resource.homeLongitude) {
-            const homeDist = haversineDist(objectLat, objectLng, resource.homeLatitude, resource.homeLongitude);
-            if (homeDist < 10) { score += 10; reasons.push(`Nära utgångsplats (${homeDist.toFixed(1)} km)`); }
+            const homeDist = haversineDistanceKm(objectLat, objectLng, resource.homeLatitude, resource.homeLongitude);
+            if (homeDist < 10) { score += 10; reasons.push(`Nära utgångsplats (${homeDist.toFixed(1)} km fågelväg)`); }
           }
         }
 
@@ -3032,6 +3116,24 @@ app.post("/api/ai/auto-distribute-today", isAuthenticated, asyncHandler(async (r
       return (priorityOrder[a.priority || "normal"] ?? 2) - (priorityOrder[b.priority || "normal"] ?? 2);
     });
 
+    const preDistPairs: BatchPair[] = [];
+    for (const order of sortedOrders) {
+      const obj = order.objectId ? objectMap.get(order.objectId) : null;
+      if (!obj?.latitude || !obj?.longitude) continue;
+      for (const resource of activeResources) {
+        if (!resource.homeLatitude || !resource.homeLongitude) continue;
+        const havDist = haversineDistanceKm(obj.latitude, obj.longitude, resource.homeLatitude, resource.homeLongitude);
+        if (havDist < 50) {
+          preDistPairs.push({
+            id: `ad-${order.id}-${resource.id}`,
+            fromLat: obj.latitude, fromLng: obj.longitude,
+            toLat: resource.homeLatitude, toLng: resource.homeLongitude,
+          });
+        }
+      }
+    }
+    const realDistMap = preDistPairs.length > 0 ? await getBatchDistances(preDistPairs) : new Map();
+
     type Assignment = {
       workOrderId: string;
       workOrderTitle: string;
@@ -3076,9 +3178,17 @@ app.post("/api/ai/auto-distribute-today", isAuthenticated, asyncHandler(async (r
         else { score -= 5; reasons.push("Hög beläggning"); }
 
         if (obj?.latitude && obj?.longitude && resource.homeLatitude && resource.homeLongitude) {
-          const dist = haversineDist(obj.latitude, obj.longitude, resource.homeLatitude, resource.homeLongitude);
-          if (dist < 10) { score += 20; reasons.push(`Nära (${dist.toFixed(1)} km)`); }
-          else if (dist < 30) { score += 10; reasons.push(`Rimligt avstånd (${dist.toFixed(1)} km)`); }
+          const realKey = `ad-${order.id}-${resource.id}`;
+          const realDist = realDistMap.get(realKey);
+          if (realDist && realDist.source === "geoapify") {
+            if (realDist.distanceKm < 15) { score += 20; reasons.push(`Nära (${realDist.distanceKm.toFixed(1)} km, ${realDist.durationMin} min)`); }
+            else if (realDist.distanceKm < 40) { score += 10; reasons.push(`Rimligt avstånd (${realDist.distanceKm.toFixed(1)} km, ${realDist.durationMin} min)`); }
+            else { reasons.push(`Avstånd ${realDist.distanceKm.toFixed(1)} km (${realDist.durationMin} min)`); }
+          } else {
+            const havDist = haversineDistanceKm(obj.latitude, obj.longitude, resource.homeLatitude, resource.homeLongitude);
+            if (havDist < 10) { score += 20; reasons.push(`Nära (${havDist.toFixed(1)} km fågelväg)`); }
+            else if (havDist < 30) { score += 10; reasons.push(`Rimligt avstånd (${havDist.toFixed(1)} km fågelväg)`); }
+          }
         }
 
         if (resource.serviceArea && resource.serviceArea.length > 0 && order.clusterId) {
