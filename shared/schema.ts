@@ -4643,3 +4643,21 @@ export const REQUIRED_FIELDS_BY_ORDER_TYPE: Record<string, { field: string; labe
   ],
   default: [],
 };
+
+// === STATUS MESSAGE TEMPLATES (Statusmeddelanden) ===
+export const statusMessageTemplates = pgTable("status_message_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  triggerType: text("trigger_type").notNull(), // "incoming_call", "portal_chat", "manual"
+  templateText: text("template_text").notNull(), // e.g. "{resource.name} är ledig kl {resource.nextAvailable}"
+  isActive: boolean("is_active").default(true).notNull(),
+  priority: integer("priority").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_status_msg_templates_tenant").on(table.tenantId),
+]);
+
+export const insertStatusMessageTemplateSchema = createInsertSchema(statusMessageTemplates).omit({ id: true, createdAt: true });
+export type StatusMessageTemplate = typeof statusMessageTemplates.$inferSelect;
+export type InsertStatusMessageTemplate = z.infer<typeof insertStatusMessageTemplateSchema>;

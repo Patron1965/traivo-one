@@ -557,6 +557,33 @@ app.post("/api/portal/messages", asyncHandler(async (req, res) => {
       message: message.trim()
     });
 
+    const msgLower = message.trim().toLowerCase();
+    const isStatusQuery = msgLower.includes("status") || msgLower.includes("när") || msgLower.includes("ledig") || msgLower.includes("tillgänglig") || msgLower.includes("tid") || msgLower.includes("besök");
+    if (isStatusQuery) {
+      try {
+        const { getResourceAvailability, generateStatusMessage } = await import("../telephony-service");
+        const availability = await getResourceAvailability(session.tenantId!);
+        if (availability.length > 0) {
+          const messages: string[] = [];
+          for (const r of availability.slice(0, 3)) {
+            const msg = await generateStatusMessage(session.tenantId!, r.resourceId, "portal_chat");
+            if (msg) messages.push(msg);
+          }
+          if (messages.length > 0) {
+            const autoResponse = `Automatiskt svar:\n${messages.join("\n")}`;
+            await storage.createLegacyPortalMessage({
+              tenantId: session.tenantId!,
+              customerId: session.customerId!,
+              sender: "staff",
+              message: autoResponse
+            });
+          }
+        }
+      } catch (err) {
+        console.error("[portal-chat] Auto-response error:", err);
+      }
+    }
+
     res.json(newMessage);
 }));
 

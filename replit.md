@@ -87,6 +87,10 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Route GPS Start:** Route optimizer uses live GPS position as start point instead of home coordinates.
 - **Carry-Over Logic:** `POST /api/work-orders/carry-over` endpoint and WeekPlanner "Flytta oavslutade" button for moving unfinished jobs.
 - **Proactive Sales View:** `/proactive-sales` page showing inactive customers, historical revenue, and contact information.
+- **Telephony Lookup API (Växel-API):** GET /api/telephony/lookup?phone=... identifies customers by phone number (direct match + metadata search), returns customer info, objects, recent orders, cluster/area data.
+- **Status Message Templates:** Configurable message templates with variable substitution ({resource.name}, {resource.nextAvailable}, etc.) for auto-responses.
+- **Resource Availability Service:** Real-time resource schedule analysis computing next available time from today's work orders.
+- **Portal Chat Auto-Responses:** Automatic status messages in customer portal chat when keywords like "status", "när", "ledig" are detected.
 
 ## External Dependencies
 - **PostgreSQL:** Primary database.

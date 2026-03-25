@@ -1639,4 +1639,137 @@ app.get("/api/articles/:id/matched-objects", asyncHandler(async (req, res) => {
     res.json(result);
 }));
 
+// ============================================
+// TELEPHONY LOOKUP API (Växel-API P14)
+// ============================================
+
+app.get("/api/telephony/lookup", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const phone = req.query.phone as string;
+
+    if (!phone || phone.trim().length < 5) {
+      throw new ValidationError("Telefonnummer krävs (minst 5 siffror)");
+    }
+
+    const { lookupCustomerByPhone } = await import("../telephony-service");
+    const result = await lookupCustomerByPhone(tenantId, phone.trim());
+
+    res.json(result);
+}));
+
+// ============================================
+// RESOURCE AVAILABILITY API (Statusmeddelanden P15)
+// ============================================
+
+app.get("/api/resources/availability", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const resourceId = req.query.resourceId as string | undefined;
+
+    const { getResourceAvailability } = await import("../telephony-service");
+    const result = await getResourceAvailability(tenantId, resourceId);
+
+    res.json(result);
+}));
+
+app.get("/api/resources/:id/status-message", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const resourceId = req.params.id;
+    const triggerType = (req.query.triggerType as string) || "incoming_call";
+
+    const { generateStatusMessage } = await import("../telephony-service");
+    const message = await generateStatusMessage(tenantId, resourceId, triggerType);
+
+    res.json({ message, resourceId, triggerType });
+}));
+
+// ============================================
+// STATUS MESSAGE TEMPLATES CRUD
+// ============================================
+
+app.get("/api/status-message-templates", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { statusMessageTemplates } = await import("@shared/schema");
+    const templates = await db.select().from(statusMessageTemplates)
+      .where(eq(statusMessageTemplates.tenantId, tenantId))
+      .orderBy(statusMessageTemplates.priority);
+    res.json(templates);
+}));
+
+app.post("/api/status-message-templates", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { statusMessageTemplates, insertStatusMessageTemplateSchema } = await import("@shared/schema");
+    const validated = insertStatusMessageTemplateSchema.parse({ ...req.body, tenantId });
+    const [template] = await db.insert(statusMessageTemplates).values(validated).returning();
+    res.status(201).json(template);
+}));
+
+app.patch("/api/status-message-templates/:id", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { statusMessageTemplates } = await import("@shared/schema");
+    const [existing] = await db.select().from(statusMessageTemplates)
+      .where(and(eq(statusMessageTemplates.id, req.params.id), eq(statusMessageTemplates.tenantId, tenantId)));
+    if (!existing) throw new NotFoundError("Mall hittades inte");
+    const { name, templateText, triggerType, isActive, priority } = req.body;
+    const updates: any = {};
+    if (name !== undefined) updates.name = name;
+    if (templateText !== undefined) updates.templateText = templateText;
+    if (triggerType !== undefined) updates.triggerType = triggerType;
+    if (isActive !== undefined) updates.isActive = isActive;
+    if (priority !== undefined) updates.priority = priority;
+    const [updated] = await db.update(statusMessageTemplates)
+      .set(updates)
+      .where(eq(statusMessageTemplates.id, req.params.id))
+      .returning();
+    res.json(updated);
+}));
+
+app.delete("/api/status-message-templates/:id", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { statusMessageTemplates } = await import("@shared/schema");
+    const [existing] = await db.select().from(statusMessageTemplates)
+      .where(and(eq(statusMessageTemplates.id, req.params.id), eq(statusMessageTemplates.tenantId, tenantId)));
+    if (!existing) throw new NotFoundError("Mall hittades inte");
+    await db.delete(statusMessageTemplates).where(eq(statusMessageTemplates.id, req.params.id));
+    res.status(204).send();
+}));
+
+// ============================================
+// TELEPHONY + STATUS: Combined lookup with auto-response
+// ============================================
+
+app.get("/api/telephony/lookup-with-status", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const phone = req.query.phone as string;
+    const resourceId = req.query.resourceId as string | undefined;
+
+    if (!phone || phone.trim().length < 5) {
+      throw new ValidationError("Telefonnummer krävs");
+    }
+
+    const { lookupCustomerByPhone, getResourceAvailability, generateStatusMessage } = await import("../telephony-service");
+
+    const lookup = await lookupCustomerByPhone(tenantId, phone.trim());
+
+    let statusMessages: Array<{ resourceId: string; resourceName: string; message: string | null }> = [];
+
+    if (resourceId) {
+      const msg = await generateStatusMessage(tenantId, resourceId, "incoming_call");
+      const avail = await getResourceAvailability(tenantId, resourceId);
+      statusMessages = [{ resourceId, resourceName: avail[0]?.resourceName || "", message: msg }];
+    } else {
+      const allAvailability = await getResourceAvailability(tenantId);
+      statusMessages = await Promise.all(
+        allAvailability.slice(0, 5).map(async (r) => {
+          const msg = await generateStatusMessage(tenantId, r.resourceId, "incoming_call");
+          return { resourceId: r.resourceId, resourceName: r.resourceName, message: msg };
+        })
+      );
+    }
+
+    res.json({
+      ...lookup,
+      statusMessages,
+    });
+}));
+
 }
