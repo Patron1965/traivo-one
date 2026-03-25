@@ -20,6 +20,7 @@ import { sv } from "date-fns/locale";
 import { VisitFeedback } from "@/components/portal/VisitFeedback";
 import { WorkOrderChat } from "@/components/portal/WorkOrderChat";
 import { SelfBookingWidget } from "@/components/portal/SelfBookingWidget";
+import { LiveETAWidget } from "@/components/portal/LiveETAWidget";
 
 function getGreeting() {
   const hour = new Date().getHours();
@@ -676,6 +677,14 @@ export default function PortalDashboardPage() {
             </Card>
           </Link>
         </div>
+
+        {upcoming.length > 0 && upcoming.some((o: any) => o.executionStatus === "on_way") && (
+          <div className="space-y-2">
+            {upcoming.filter((o: any) => o.executionStatus === "on_way").slice(0, 3).map((o: any) => (
+              <LiveETAWidget key={o.id} workOrderId={o.id} objectAddress={o.objectAddress} />
+            ))}
+          </div>
+        )}
 
         {/* Next Visit Highlight Card */}
         {upcoming.length > 0 && (

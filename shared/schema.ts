@@ -4725,3 +4725,29 @@ export const importColumnMappings = pgTable("import_column_mappings", {
 }, (table) => [
   index("idx_import_col_map_batch").on(table.batchId),
 ]);
+
+export const etaNotifications = pgTable("eta_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  workOrderId: varchar("work_order_id").references(() => workOrders.id).notNull(),
+  customerId: varchar("customer_id").references(() => customers.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  channel: text("channel").notNull(),
+  notificationType: text("notification_type").notNull(),
+  recipientEmail: text("recipient_email"),
+  recipientPhone: text("recipient_phone"),
+  etaMinutes: integer("eta_minutes"),
+  etaTime: text("eta_time"),
+  marginMinutes: integer("margin_minutes").default(15),
+  status: text("status").default("sent").notNull(),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_eta_notif_tenant").on(table.tenantId),
+  index("idx_eta_notif_customer").on(table.customerId),
+  index("idx_eta_notif_order").on(table.workOrderId),
+]);
+
+export const insertEtaNotificationSchema = createInsertSchema(etaNotifications).omit({ id: true, createdAt: true });
+export type EtaNotification = typeof etaNotifications.$inferSelect;
+export type InsertEtaNotification = z.infer<typeof insertEtaNotificationSchema>;

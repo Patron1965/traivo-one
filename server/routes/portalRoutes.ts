@@ -223,6 +223,7 @@ app.get("/api/portal/orders", asyncHandler(async (req, res) => {
         title: order.title,
         description: order.description,
         status: order.orderStatus,
+        executionStatus: order.executionStatus,
         scheduledDate: order.scheduledDate,
         scheduledTime: order.scheduledStartTime,
         completedAt: order.completedAt,

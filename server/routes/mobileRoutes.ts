@@ -11,6 +11,7 @@ import { isAuthenticated } from "../replit_integrations/auth";
 import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
+import { triggerETANotification } from "../eta-notification-service";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
 
@@ -255,6 +256,11 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     } else if (status === 'en_route') {
       updateData.executionStatus = 'on_way';
       updateData.onWayAt = new Date();
+      if (order.tenantId && resourceId) {
+        triggerETANotification(orderId, resourceId, order.tenantId).catch(err =>
+          console.error("[eta-notification] Failed to trigger:", err)
+        );
+      }
     } else if (status === 'planned') {
       updateData.executionStatus = 'planned_fine';
     } else if (status === 'utford' || status === 'completed') {
@@ -1234,6 +1240,9 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
             } else if (newStatus === 'en_route') {
               updateData.executionStatus = 'on_way';
               updateData.onWayAt = new Date();
+              if (order.tenantId && order.resourceId) {
+                triggerETANotification(logEntry.entityId!, order.resourceId, order.tenantId).catch(() => {});
+              }
             } else if (newStatus === 'planned') {
               updateData.executionStatus = 'planned_fine';
             } else if (newStatus === 'utford' || newStatus === 'completed') {

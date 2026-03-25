@@ -38,6 +38,7 @@ import { registerPredictiveRoutes } from "./routes/predictiveRoutes";
 import { registerRoiRoutes } from "./routes/roiRoutes";
 import { registerDisruptionRoutes } from "./routes/disruptionRoutes";
 import { registerFeedbackLoopRoutes } from "./routes/feedbackLoopRoutes";
+import { registerETANotificationRoutes } from "./routes/etaNotificationRoutes";
 import { registerFeatureRoutes } from "./routes/featureRoutes";
 
 async function ensureDefaultTenant() {
@@ -388,6 +389,7 @@ export async function registerRoutes(
   registerFeatureRoutes(app);
   registerDisruptionRoutes(app);
   registerFeedbackLoopRoutes(app);
+  registerETANotificationRoutes(app);
 
   app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
     if (err instanceof z.ZodError) {
