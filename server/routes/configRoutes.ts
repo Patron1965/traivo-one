@@ -1640,13 +1640,28 @@ app.get("/api/break-config", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
     const settings = (tenant?.settings as Record<string, any>) || {};
-    const breakConfig = settings.breakConfig || {
+    const raw = settings.breakConfig || {
       enabled: true,
       durationMinutes: 30,
       earliestStart: 11 * 3600,
       latestEnd: 13 * 3600,
     };
-    res.json(breakConfig);
+    const earliestSec = raw.earliestStart ?? raw.earliestSeconds ?? 11 * 3600;
+    const latestSec = raw.latestEnd ?? raw.latestSeconds ?? 13 * 3600;
+    const toHHMM = (s: number) => {
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+    };
+    res.json({
+      ...raw,
+      earliestStart: earliestSec,
+      latestEnd: latestSec,
+      earliestSeconds: earliestSec,
+      latestSeconds: latestSec,
+      earliestTime: toHHMM(earliestSec),
+      latestTime: toHHMM(latestSec),
+    });
 }));
 
 app.patch("/api/break-config", asyncHandler(async (req, res) => {

@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import { triggerETANotification } from "../eta-notification-service";
@@ -128,7 +128,11 @@ app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: any, r
     if (!resource) {
       throw new NotFoundError("Resurs hittades inte");
     }
-    res.json(resource);
+    res.json({
+      ...resource,
+      startLatitude: resource.homeLatitude || null,
+      startLongitude: resource.homeLongitude || null,
+    });
 }));
 
 // Get work orders for the logged-in resource
@@ -165,7 +169,6 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
       return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
     });
     
-    // Enrich with object and customer info
     const enrichedOrders = await Promise.all(orders.map(async (order) => {
       const object = order.objectId ? await storage.getObject(order.objectId) : null;
       const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
@@ -176,6 +179,21 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         objectAddress: object?.address,
         customerName: customer?.name,
         customerPhone: customer?.phone,
+        enRouteAt: order.onWayAt?.toISOString?.() || (order as any).onWayAt || null,
+        actualStartTime: order.onSiteAt?.toISOString?.() || (order as any).onSiteAt || null,
+        objectAccessCode: object?.accessCode || null,
+        objectKeyNumber: object?.keyNumber || null,
+        objectLatitude: object?.latitude || null,
+        objectLongitude: object?.longitude || null,
+        latitude: object?.latitude || null,
+        longitude: object?.longitude || null,
+        address: object?.address || order.address || "",
+        city: object?.city || "",
+        postalCode: object?.postalCode || "",
+        plannedNotes: order.plannedNotes || null,
+        executionStatus: order.executionStatus || "not_started",
+        object: object ? { id: object.id, name: object.name, address: object.address, latitude: object.latitude, longitude: object.longitude } : null,
+        customer: customer ? { id: customer.id, name: customer.name, customerNumber: customer.customerNumber } : null,
       };
     }));
     
@@ -212,22 +230,42 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       throw new ForbiddenError("Ej behörig");
     }
     
-    // Enrich with object and customer info
     const object = order.objectId ? await storage.getObject(order.objectId) : null;
     const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
-    
+
+    const etaCheck = order.onWayAt ? await db.select().from(etaNotificationsTable)
+      .where(and(
+        eq(etaNotificationsTable.workOrderId, orderId),
+        eq(etaNotificationsTable.status, "sent"),
+      ))
+      .limit(1) : [];
+
     res.json({
       ...order,
       objectName: object?.name,
       objectAddress: object?.address,
       objectLatitude: object?.latitude,
       objectLongitude: object?.longitude,
+      latitude: object?.latitude || null,
+      longitude: object?.longitude || null,
+      address: object?.address || order.address || "",
+      city: object?.city || "",
+      postalCode: object?.postalCode || "",
       accessCode: object?.accessCode,
       keyNumber: object?.keyNumber,
+      objectAccessCode: object?.accessCode || null,
+      objectKeyNumber: object?.keyNumber || null,
       objectNotes: object?.notes,
       customerName: customer?.name,
       customerPhone: customer?.phone,
       customerEmail: customer?.email,
+      enRouteAt: order.onWayAt?.toISOString?.() || (order as any).onWayAt || null,
+      customerNotified: etaCheck.length > 0,
+      actualStartTime: order.onSiteAt?.toISOString?.() || (order as any).onSiteAt || null,
+      plannedNotes: order.plannedNotes || null,
+      executionStatus: order.executionStatus || "not_started",
+      object: object ? { id: object.id, name: object.name, address: object.address, latitude: object.latitude, longitude: object.longitude } : null,
+      customer: customer ? { id: customer.id, name: customer.name, customerNumber: customer.customerNumber } : null,
     });
 }));
 
@@ -235,7 +273,7 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
 app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
-    const { status, notes } = req.body;
+    const { status, notes, actualDuration: bodyActualDuration, enRouteAt: bodyEnRouteAt, impossibleReason } = req.body;
     
     const order = await storage.getWorkOrder(orderId);
     
@@ -253,20 +291,43 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       updateData.orderStatus = 'planerad_resurs';
       updateData.executionStatus = 'on_site';
       updateData.onSiteAt = new Date();
+    } else if (status === 'dispatched') {
+      updateData.executionStatus = 'dispatched';
+      if (!order.onWayAt) {
+        updateData.onWayAt = new Date();
+      }
+      if (order.tenantId && resourceId) {
+        triggerETANotification(orderId, resourceId, order.tenantId).catch(err =>
+          console.error("[eta-notification] Failed to trigger on dispatch:", err)
+        );
+      }
     } else if (status === 'en_route') {
       updateData.executionStatus = 'on_way';
-      updateData.onWayAt = new Date();
+      if (!order.onWayAt) {
+        updateData.onWayAt = bodyEnRouteAt ? new Date(bodyEnRouteAt) : new Date();
+      }
       if (order.tenantId && resourceId) {
         triggerETANotification(orderId, resourceId, order.tenantId).catch(err =>
           console.error("[eta-notification] Failed to trigger:", err)
         );
       }
-    } else if (status === 'planned') {
+    } else if (status === 'planned' || status === 'assigned') {
       updateData.executionStatus = 'planned_fine';
     } else if (status === 'utford' || status === 'completed') {
       updateData.orderStatus = 'utford';
       updateData.executionStatus = 'completed';
       updateData.completedAt = new Date();
+      if (bodyActualDuration !== undefined) {
+        updateData.actualDuration = bodyActualDuration;
+      } else if (order.onSiteAt) {
+        updateData.actualDuration = Math.round((Date.now() - new Date(order.onSiteAt).getTime()) / 60000);
+      }
+    } else if (status === 'impossible') {
+      updateData.orderStatus = 'avbruten';
+      updateData.executionStatus = 'impossible';
+      updateData.impossibleReason = impossibleReason || notes || null;
+      updateData.impossibleAt = new Date();
+      updateData.impossibleBy = resourceId;
     } else if (status === 'ej_utford' || status === 'deferred') {
       updateData.orderStatus = 'skapad';
       if (notes) {
@@ -294,7 +355,29 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       );
     }
 
-    res.json(updatedOrder);
+    const object = updatedOrder.objectId ? await storage.getObject(updatedOrder.objectId) : null;
+    const customer = updatedOrder.customerId ? await storage.getCustomer(updatedOrder.customerId) : null;
+
+    const etaCheck = updatedOrder.onWayAt ? await db.select().from(etaNotificationsTable)
+      .where(and(
+        eq(etaNotificationsTable.workOrderId, orderId),
+        eq(etaNotificationsTable.status, "sent"),
+      ))
+      .limit(1) : [];
+
+    const enriched = {
+      ...updatedOrder,
+      enRouteAt: updatedOrder.onWayAt?.toISOString?.() || (updatedOrder as any).onWayAt || null,
+      customerNotified: etaCheck.length > 0,
+      actualStartTime: updatedOrder.onSiteAt?.toISOString?.() || (updatedOrder as any).onSiteAt || null,
+      customerName: customer?.name || null,
+      objectName: object?.name || null,
+      objectAddress: object?.address || null,
+      objectAccessCode: object?.accessCode || null,
+      objectKeyNumber: object?.keyNumber || null,
+    };
+
+    res.json(enriched);
 
     broadcastPlannerEvent({
       type: 'status_changed',
@@ -373,14 +456,12 @@ app.post("/api/resources/position", isAuthenticated, asyncHandler(async (req: an
 // Update position from mobile app (also handled via WebSocket)
 app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
     const resourceId = req.mobileResourceId;
-    const { latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
+    const { latitude, longitude, speed, heading, accuracy, status, workOrderId, currentOrderId } = req.body;
     
-    // Validate coordinates - allow 0 values (equator/prime meridian)
     if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
       throw new ValidationError("Latitud och longitud krävs");
     }
     
-    // Use the notification service to handle position update (broadcasts to planners)
     await notificationService.handlePositionUpdate({
       resourceId,
       latitude,
@@ -389,7 +470,7 @@ app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req:
       heading,
       accuracy,
       status: status || "traveling",
-      workOrderId
+      workOrderId: workOrderId || currentOrderId,
     });
     
     res.json({ success: true });
@@ -2396,6 +2477,259 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
     console.log(`[mobile] Metadata updated: ${metadataLabel} = ${effectiveValue} on object ${order.objectId} by ${resourceId}`);
 
     res.json({ success: true, previousValue, newValue: effectiveValue });
+}));
+
+// ============================================
+// DISTANCE API — REST endpoints for distance calculations
+// ============================================
+app.post("/api/distance", asyncHandler(async (req: any, res) => {
+    const { getRoutingDistance } = await import("../distance-matrix-service");
+    const { fromLat, fromLng, toLat, toLng, origin, destination } = req.body;
+
+    const lat1 = fromLat ?? origin?.lat;
+    const lng1 = fromLng ?? origin?.lng;
+    const lat2 = toLat ?? destination?.lat;
+    const lng2 = toLng ?? destination?.lng;
+
+    if (lat1 == null || lng1 == null || lat2 == null || lng2 == null) {
+      throw new ValidationError("Koordinater krävs (fromLat/fromLng/toLat/toLng eller origin/destination)");
+    }
+
+    const result = await getRoutingDistance(lat1, lng1, lat2, lng2);
+    res.json({
+      distanceKm: result.distanceKm,
+      durationMin: result.durationMin,
+      distanceMeters: Math.round(result.distanceKm * 1000),
+      durationSeconds: result.durationMin * 60,
+      source: result.source === "geoapify" ? "road_network" : result.source,
+    });
+}));
+
+app.post("/api/distance/batch", asyncHandler(async (req: any, res) => {
+    const { getBatchDistances } = await import("../distance-matrix-service");
+    const { pairs } = req.body;
+
+    if (!pairs || !Array.isArray(pairs)) {
+      throw new ValidationError("pairs-array krävs");
+    }
+
+    const batchPairs = pairs.map((p: any, i: number) => ({
+      id: p.id || String(i),
+      fromLat: p.fromLat ?? p.origin?.lat,
+      fromLng: p.fromLng ?? p.origin?.lng,
+      toLat: p.toLat ?? p.destination?.lat,
+      toLng: p.toLng ?? p.destination?.lng,
+    }));
+
+    const resultMap = await getBatchDistances(batchPairs);
+    const resultsArray: any[] = [];
+    const resultsById: Record<string, any> = {};
+
+    for (const [id, r] of resultMap) {
+      const entry = {
+        id,
+        distanceKm: r.distanceKm,
+        durationMin: r.durationMin,
+        distanceMeters: Math.round(r.distanceKm * 1000),
+        durationSeconds: r.durationMin * 60,
+        source: r.source === "geoapify" ? "road_network" : r.source,
+      };
+      resultsArray.push(entry);
+      resultsById[id] = entry;
+    }
+
+    res.json({ results: resultsArray, resultsById });
+}));
+
+// ============================================
+// MISSING MOBILE ENDPOINTS — GO compatibility
+// ============================================
+
+app.get("/api/mobile/map-config", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    const tenantId = resource?.tenantId || getTenantIdWithFallback(req);
+    const tenant = await storage.getTenant(tenantId);
+    const settings = (tenant?.settings as any) || {};
+
+    res.json({
+      center: {
+        lat: settings.mapCenterLat || resource?.homeLatitude || 57.7089,
+        lng: settings.mapCenterLng || resource?.homeLongitude || 11.9746,
+      },
+      zoom: settings.mapDefaultZoom || 12,
+      maxZoom: 18,
+      minZoom: 5,
+    });
+}));
+
+app.get("/api/mobile/team-invites", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    try {
+      const invites = await db.execute(
+        sql`SELECT t.*, tm.role as member_role FROM teams t
+            JOIN team_members tm ON tm.team_id = t.id
+            WHERE tm.resource_id = ${resourceId} AND tm.status = 'invited'`
+      );
+      res.json(invites.rows || []);
+    } catch {
+      res.json([]);
+    }
+}));
+
+app.get("/api/mobile/team-orders", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const dateParam = req.query.date as string;
+
+    try {
+      const teamRows = await db.execute(
+        sql`SELECT DISTINCT t.id FROM teams t
+            JOIN team_members tm ON tm.team_id = t.id
+            WHERE tm.resource_id = ${resourceId} AND tm.status = 'active'`
+      );
+      const teamIds = (teamRows.rows || []).map((r: any) => r.id);
+      if (teamIds.length === 0) return res.json({ orders: [], total: 0 });
+
+      const memberRows = await db.execute(
+        sql`SELECT DISTINCT resource_id FROM team_members
+            WHERE team_id = ANY(${teamIds}::text[]) AND resource_id != ${resourceId} AND status = 'active'`
+      );
+      const memberResourceIds = (memberRows.rows || []).map((r: any) => r.resource_id);
+      if (memberResourceIds.length === 0) return res.json({ orders: [], total: 0 });
+
+      const tenantId = getTenantIdWithFallback(req);
+      const allOrders = await storage.getWorkOrders(tenantId);
+      let orders = allOrders.filter(o => memberResourceIds.includes(o.resourceId));
+
+      if (dateParam) {
+        const target = new Date(dateParam);
+        target.setHours(0, 0, 0, 0);
+        const next = new Date(target);
+        next.setDate(next.getDate() + 1);
+        orders = orders.filter(o => {
+          if (!o.scheduledDate) return false;
+          const d = new Date(o.scheduledDate);
+          return d >= target && d < next;
+        });
+      }
+
+      res.json({ orders, total: orders.length });
+    } catch {
+      res.json({ orders: [], total: 0 });
+    }
+}));
+
+app.post("/api/mobile/orders/:id/upload-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    const { photo, caption, type: photoType } = req.body;
+    if (!photo) throw new ValidationError("Photo-data krävs");
+
+    const metadata = (order.metadata as Record<string, unknown>) || {};
+    const photos = (metadata.photos as any[]) || [];
+    const newPhoto = {
+      id: `photo-${Date.now()}`,
+      uri: photo,
+      caption: caption || "",
+      type: photoType || "general",
+      uploadedAt: new Date().toISOString(),
+      uploadedBy: resourceId,
+    };
+    photos.push(newPhoto);
+    await storage.updateWorkOrder(orderId, { metadata: { ...metadata, photos } });
+    res.json({ success: true, photo: newPhoto });
+}));
+
+app.post("/api/mobile/orders/:id/confirm-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    const { photoId } = req.body;
+    const metadata = (order.metadata as Record<string, unknown>) || {};
+    const photos = (metadata.photos as any[]) || [];
+    const photo = photos.find((p: any) => p.id === photoId);
+    if (photo) {
+      photo.confirmed = true;
+      photo.confirmedAt = new Date().toISOString();
+      await storage.updateWorkOrder(orderId, { metadata: { ...metadata, photos } });
+    }
+    res.json({ success: true });
+}));
+
+app.post("/api/mobile/orders/:id/customer-signoff", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const orderId = req.params.id;
+    const resourceId = req.mobileResourceId;
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+    if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
+
+    const { customerName, signature, summary, materials, deviations } = req.body;
+    if (!signature) throw new ValidationError("Signatur krävs");
+
+    const metadata = (order.metadata as Record<string, unknown>) || {};
+    metadata.customerSignoff = {
+      customerName: customerName || "",
+      signature,
+      summary: summary || "",
+      materials: materials || [],
+      deviations: deviations || [],
+      signedAt: new Date().toISOString(),
+      signedBy: resourceId,
+    };
+
+    await storage.updateWorkOrder(orderId, {
+      metadata: { ...metadata },
+      executionStatus: "signed_off",
+    });
+    res.json({ success: true, signedAt: metadata.customerSignoff.signedAt });
+}));
+
+app.post("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const notification = await storage.markDriverNotificationRead(req.params.id, resourceId);
+    if (!notification) throw new NotFoundError("Avisering hittades inte");
+    res.json(notification);
+}));
+
+app.post("/api/mobile/notifications/read-all", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.mobileResourceId;
+    const count = await storage.markAllDriverNotificationsRead(resourceId);
+    res.json({ success: true, markedRead: count });
+}));
+
+app.get("/api/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.query.resourceId as string || req.mobileResourceId;
+    if (!resourceId) return res.json([]);
+
+    try {
+      const rows = await db.execute(
+        sql`SELECT * FROM resource_profile_assignments WHERE resource_id = ${resourceId}`
+      );
+      res.json(rows.rows || []);
+    } catch {
+      res.json([]);
+    }
+}));
+
+app.get("/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+    const resourceId = req.query.resourceId as string || req.mobileResourceId;
+    if (!resourceId) return res.json([]);
+
+    try {
+      const rows = await db.execute(
+        sql`SELECT * FROM resource_profile_assignments WHERE resource_id = ${resourceId}`
+      );
+      res.json(rows.rows || []);
+    } catch {
+      res.json([]);
+    }
 }));
 
 function getFallbackChecklist(orderType: string): string[] {

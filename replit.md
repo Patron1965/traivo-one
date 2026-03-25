@@ -67,7 +67,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
 - **External Optimization:** Route optimization is offloaded to a separate Traivo optimization service.
 - **Data Validation:** DataClean service handles external data validation and geocoding.
-- **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app.
+- **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app. Full Traivo GO compatibility layer with dual-format support on distance API (origin/destination + fromLat/toLat), disruption triggers (orderId + workOrderId, actualElapsed + actualDuration), break config (HH:mm strings + seconds), enriched order responses (enRouteAt, customerNotified, objectAccessCode, executionStatus), and missing GO endpoints (map-config, team-invites, team-orders, customer-signoff, upload-photo, confirm-photo, auto-eta-sms, resource_profile_assignments).
 - **Status Message Templates:** Configurable message templates with variable substitution for auto-responses.
 - **Resource Availability Service:** Real-time resource schedule analysis computing next available time from today's work orders.
 - **Portal Chat Auto-Responses:** Automatic status messages in customer portal chat when keywords like "status", "när", "ledig" are detected.

@@ -9,6 +9,7 @@ import {
   getETAForPortal,
   getNotificationHistory,
   DEFAULT_ETA_NOTIFICATION_CONFIG,
+  triggerETANotification,
 } from "../eta-notification-service";
 
 export async function registerETANotificationRoutes(app: Express) {
@@ -50,10 +51,47 @@ export async function registerETANotificationRoutes(app: Express) {
   app.get("/api/eta-notification/history", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const customerId = req.query.customerId as string | undefined;
+    const orderId = req.query.orderId as string | undefined;
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+
+    if (orderId) {
+      const rows = await db.select().from(etaNotifications)
+        .where(and(
+          eq(etaNotifications.tenantId, tenantId),
+          eq(etaNotifications.workOrderId, orderId),
+        ))
+        .orderBy(sql`created_at DESC`)
+        .limit(limit);
+      return res.json(rows);
+    }
 
     const notifications = await getNotificationHistory(tenantId, customerId, limit);
     res.json(notifications);
+  }));
+
+  app.post("/api/work-orders/:id/auto-eta-sms", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const workOrderId = req.params.id;
+
+    const order = await storage.getWorkOrder(workOrderId);
+    if (!order) {
+      return res.status(404).json({ success: false, message: "Order hittades inte" });
+    }
+
+    if (order.tenantId && order.tenantId !== tenantId) {
+      return res.status(403).json({ success: false, message: "Ej behörig" });
+    }
+
+    const resourceId = order.resourceId;
+    if (!resourceId) {
+      return res.status(400).json({ success: false, message: "Ingen resurs tilldelad ordern" });
+    }
+
+    const result = await triggerETANotification(workOrderId, resourceId, tenantId);
+    res.json({
+      success: result.sent,
+      message: result.sent ? "ETA SMS skickat till kund" : result.reason,
+    });
   }));
 
   app.get("/api/portal/eta/:workOrderId", asyncHandler(async (req, res) => {
