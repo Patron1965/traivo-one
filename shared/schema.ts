@@ -4690,3 +4690,38 @@ export const statusMessageTemplates = pgTable("status_message_templates", {
 export const insertStatusMessageTemplateSchema = createInsertSchema(statusMessageTemplates).omit({ id: true, createdAt: true });
 export type StatusMessageTemplate = typeof statusMessageTemplates.$inferSelect;
 export type InsertStatusMessageTemplate = z.infer<typeof insertStatusMessageTemplateSchema>;
+
+export const recurringSlotPatterns = pgTable("recurring_slot_patterns", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  name: text("name").notNull(),
+  dayOfWeek: integer("day_of_week").notNull(),
+  startTime: text("start_time").notNull(),
+  endTime: text("end_time").notNull(),
+  maxBookings: integer("max_bookings").default(1),
+  serviceTypes: jsonb("service_types").default([]),
+  resourceId: varchar("resource_id").references(() => resources.id),
+  isActive: boolean("is_active").default(true),
+  generatedUntil: timestamp("generated_until"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  createdBy: varchar("created_by").references(() => users.id),
+}, (table) => [
+  index("idx_recurring_slot_tenant").on(table.tenantId),
+]);
+
+export const insertRecurringSlotPatternSchema = createInsertSchema(recurringSlotPatterns).omit({ id: true, createdAt: true });
+export type RecurringSlotPattern = typeof recurringSlotPatterns.$inferSelect;
+export type InsertRecurringSlotPattern = z.infer<typeof insertRecurringSlotPatternSchema>;
+
+export const importColumnMappings = pgTable("import_column_mappings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  batchId: varchar("batch_id").notNull(),
+  csvColumn: text("csv_column").notNull(),
+  systemField: text("system_field"),
+  metadataType: text("metadata_type"),
+  isIgnored: boolean("is_ignored").default(false),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_import_col_map_batch").on(table.batchId),
+]);

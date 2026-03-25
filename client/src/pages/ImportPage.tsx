@@ -21,8 +21,11 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { ImportSummaryView } from "@/components/ImportSummaryView";
 import { ImportHealthOverview } from "@/components/ImportHealthOverview";
+import ImportColumnMapper from "@/components/ImportColumnMapper";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import Papa from "papaparse";
+import { format } from "date-fns";
+import { sv } from "date-fns/locale";
 import type { Customer, Resource, ServiceObject } from "@shared/schema";
 import { ImportPreviewPanel, ResourcePreviewPanel, type NameOverrides } from "@/components/ImportPreviewPanel";
 
@@ -260,6 +263,127 @@ const MODUS_EVENT_COLUMNS = [
   { name: "Beskrivning", required: false, description: "Statusbeskrivning" },
   { name: "Tid", required: true, description: "Tidsstämpel för händelsen" },
 ];
+
+function ImportHistorySection() {
+  const { toast } = useToast();
+  const historyQuery = useQuery<any[]>({
+    queryKey: ["/api/import/history"],
+  });
+
+  const rollbackMutation = useMutation({
+    mutationFn: (batchId: string) => apiRequest("POST", `/api/import/rollback/${batchId}`),
+    onSuccess: (data: any) => {
+      toast({
+        title: "Import ångrad",
+        description: `${data.rolledBack?.objects || 0} objekt, ${data.rolledBack?.workOrders || 0} ordrar, ${data.rolledBack?.customers || 0} kunder inaktiverade.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/import/history"] });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Fel vid ångring", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const [confirmBatchId, setConfirmBatchId] = useState<string | null>(null);
+  const batches = historyQuery.data || [];
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg flex items-center gap-2">
+            <History className="h-5 w-5" />
+            Importhistorik
+          </CardTitle>
+          <CardDescription>Visa och hantera tidigare importer. Du kan ångra en import genom att inaktivera alla poster i batchen.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {historyQuery.isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+            </div>
+          ) : batches.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>Ingen importhistorik hittades.</p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {batches.map((batch: any) => {
+                const isRolledBack = batch.metadata?.rolledBack === true;
+                return (
+                  <div key={batch.id} className={`flex items-center justify-between p-3 rounded-lg border ${isRolledBack ? "bg-muted/50 opacity-60" : "bg-background"}`} data-testid={`history-batch-${batch.batchId}`}>
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${isRolledBack ? "bg-gray-400" : batch.errors > 0 ? "bg-amber-500" : "bg-green-500"}`} />
+                      <div>
+                        <div className="font-medium text-sm">
+                          {batch.batchId}
+                          {isRolledBack && <Badge variant="outline" className="ml-2 text-xs">Ångrad</Badge>}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {batch.createdAt ? format(new Date(batch.createdAt), "d MMM yyyy HH:mm", { locale: sv }) : ""}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right text-xs">
+                        <span className="text-green-600 font-medium">{batch.created || 0} nya</span>
+                        <span className="text-muted-foreground mx-1">|</span>
+                        <span className="text-amber-600">{batch.updated || 0} uppdaterade</span>
+                        <span className="text-muted-foreground mx-1">|</span>
+                        <span className={batch.errors > 0 ? "text-destructive font-medium" : "text-muted-foreground"}>{batch.errors || 0} fel</span>
+                      </div>
+                      {!isRolledBack && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setConfirmBatchId(batch.batchId)}
+                          disabled={rollbackMutation.isPending}
+                          data-testid={`button-rollback-${batch.batchId}`}
+                        >
+                          <Undo2 className="h-3 w-3 mr-1" />
+                          Ångra
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <AlertDialog open={!!confirmBatchId} onOpenChange={(open) => { if (!open) setConfirmBatchId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Ångra import?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Alla objekt, ordrar och kunder som importerades i denna batch kommer att inaktiveras. 
+              Data raderas inte permanent men syns inte längre i systemet.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel data-testid="button-cancel-rollback">Avbryt</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (confirmBatchId) {
+                  rollbackMutation.mutate(confirmBatchId);
+                  setConfirmBatchId(null);
+                }
+              }}
+              data-testid="button-confirm-rollback"
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              <Undo2 className="h-4 w-4 mr-1" />
+              Ångra import
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
 
 function StepIndicator({ step, title, active, completed, skipped, onClick }: {
   step: number; title: string; active: boolean; completed: boolean; skipped?: boolean; onClick?: () => void;
@@ -509,7 +633,7 @@ export default function ImportPage() {
   const [showPreview, setShowPreview] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [activeTab, setActiveTab] = useState<"modus" | "manual">("modus");
+  const [activeTab, setActiveTab] = useState<"modus" | "manual" | "mapped" | "history">("modus");
   const [showObjectColumns, setShowObjectColumns] = useState(false);
   const [showTaskColumns, setShowTaskColumns] = useState(false);
   const [showEventColumns, setShowEventColumns] = useState(false);
@@ -1204,15 +1328,23 @@ export default function ImportPage() {
         <p className="text-muted-foreground">Importera kunddata, objekt och arbetsordrar från Modus 2.0 eller CSV-filer</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual")}>
-        <TabsList className="grid w-full grid-cols-2">
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "modus" | "manual" | "mapped" | "history")}>
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="modus" className="flex items-center gap-2" data-testid="tab-modus-import">
             <FileSpreadsheet className="h-4 w-4" />
-            Modus 2.0 Import
+            Modus 2.0
           </TabsTrigger>
           <TabsTrigger value="manual" className="flex items-center gap-2" data-testid="tab-manual-import">
             <Upload className="h-4 w-4" />
-            Manuell CSV-import
+            Manuell CSV
+          </TabsTrigger>
+          <TabsTrigger value="mapped" className="flex items-center gap-2" data-testid="tab-mapped-import">
+            <Database className="h-4 w-4" />
+            Mappad import
+          </TabsTrigger>
+          <TabsTrigger value="history" className="flex items-center gap-2" data-testid="tab-import-history">
+            <History className="h-4 w-4" />
+            Historik
           </TabsTrigger>
         </TabsList>
 
@@ -2781,6 +2913,28 @@ export default function ImportPage() {
               </TabsContent>
             ))}
           </Tabs>
+        </TabsContent>
+
+        <TabsContent value="mapped" className="space-y-6">
+          <Card className="border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20">
+            <CardContent className="pt-6">
+              <div className="flex items-start gap-3">
+                <Database className="h-5 w-5 text-green-600 mt-0.5 shrink-0" />
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">Mappad import med kolumnmappning</p>
+                  <p className="text-sm text-muted-foreground">
+                    Ladda upp en CSV-fil och mappa kolumner till systemfält manuellt. 
+                    Bra för filer som inte följer Modus-standarden. Systemet föreslår mappning automatiskt.
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+          <ImportColumnMapper />
+        </TabsContent>
+
+        <TabsContent value="history" className="space-y-6">
+          <ImportHistorySection />
         </TabsContent>
       </Tabs>
 

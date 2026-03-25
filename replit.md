@@ -23,7 +23,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
 - **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner, including budget enforcement.
-- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename, selective modular import, and Import Health Overview with data quality warnings.
+- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, Preview & Rename, selective modular import, Import Health Overview with data quality warnings, flexible column mapping with auto-suggestions, hierarchy tree preview, batch rollback (soft delete), and detailed error reporting with row/column references.
 - **Geocoding:** Geoapify Geocoding API with Nominatim fallback.
 - **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.
@@ -31,7 +31,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Automatic Anomaly Monitoring:** Background job for detecting operational anomalies and broadcasting alerts.
 - **Mobile API Endpoints:** Dedicated REST API for mobile features with offline sync capabilities.
 - **Advanced Task & Object Features:** Hierarchical object structure, article hook system, EAV metadata, multi-parent relations, comprehensive work order management, and per-object article management with resolved pricing.
-- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, self-booking, dynamic widgets, and field documentation.
+- **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, featuring upcoming visits, order history, real-time chat, self-booking with recurring slot patterns, dynamic widgets, sidebar navigation with unread badges, cancellation with reason, and field documentation.
 - **Customer Field Documentation:** Mobile-first portal feature for object documentation via QR code, photo capture, and structured change reports, with admin review.
 - **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Haversine-based Travel Time Calculation, and Auto-Fill Week functionality.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.

@@ -52,6 +52,7 @@ const WeatherPlanningPage = lazy(() => import("@/pages/WeatherPlanningPage"));
 const CustomerPortalPage = lazy(() => import("@/pages/CustomerPortalPage"));
 const CustomerReportsPage = lazy(() => import("@/pages/CustomerReportsPage"));
 const PortalMessagesPage = lazy(() => import("@/pages/PortalMessagesPage"));
+const BookingSlotsAdminPage = lazy(() => import("@/pages/BookingSlotsAdminPage"));
 const SystemDashboardPage = lazy(() => import("@/pages/SystemDashboardPage"));
 const IndustryPackagesPage = lazy(() => import("@/pages/IndustryPackagesPage"));
 const MobileFieldPage = lazy(() => import("@/pages/MobileFieldPage"));
@@ -148,6 +149,7 @@ function Router() {
         <Route path="/customer-portal">{() => <ProtectedRoute component={CustomerPortalPage} path="/customer-portal" />}</Route>
         <Route path="/customer-reports">{() => <ProtectedRoute component={CustomerReportsPage} path="/customer-reports" />}</Route>
         <Route path="/portal-messages">{() => <ProtectedRoute component={PortalMessagesPage} path="/portal-messages" />}</Route>
+        <Route path="/booking-slots">{() => <ProtectedRoute component={BookingSlotsAdminPage} path="/booking-slots" />}</Route>
         <Route path="/import">{() => <ProtectedRoute component={ImportPage} path="/import" />}</Route>
         <Route path="/system-overview">{() => <ProtectedRoute component={SystemOverviewPage} path="/system-overview" />}</Route>
         <Route path="/settings">{() => <ProtectedRoute component={SettingsPage} path="/settings" />}</Route>

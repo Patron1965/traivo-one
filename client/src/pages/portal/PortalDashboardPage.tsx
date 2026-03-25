@@ -11,7 +11,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera } from "lucide-react";
+import { Calendar, MapPin, Clock, User, LogOut, Plus, Loader2, CalendarDays, History, FileText, MessageCircle, Send, Grid3X3, Truck, AlertCircle, RefreshCw, CheckCircle2, ArrowRight, Sparkles, Package, Phone, Trash2, Recycle, TreeDeciduous, Star, Camera, Menu, X, Home, Settings, Bell, ChevronRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -107,6 +107,83 @@ function BookingRequestStatusBadge({ status }: { status: string }) {
   return <Badge variant={config.variant}>{config.label}</Badge>;
 }
 
+function PortalSidebar({ unreadCount, currentPath }: { unreadCount: number; currentPath: string }) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+  
+  const navItems = [
+    { href: "/portal/dashboard", label: "Översikt", icon: Home, badge: 0 },
+    { href: "/portal/clusters", label: "Mina platser", icon: TreeDeciduous, badge: 0 },
+    { href: "/portal/invoices", label: "Fakturor", icon: FileText, badge: 0 },
+    { href: "/portal/contracts", label: "Tjänsteavtal", icon: Package, badge: 0 },
+    { href: "/portal/issues", label: "Ärenden", icon: AlertCircle, badge: 0 },
+    { href: "/portal/field", label: "Fältdokumentation", icon: Camera, badge: 0 },
+    { href: "/portal/roi-report", label: "ROI-rapport", icon: Star, badge: 0 },
+    { href: "/portal/settings", label: "Inställningar", icon: Settings, badge: 0 },
+  ];
+
+  const NavContent = () => (
+    <nav className="flex flex-col gap-1 p-3">
+      {navItems.map((item) => {
+        const isActive = currentPath === item.href;
+        const Icon = item.icon;
+        return (
+          <Link key={item.href} href={item.href}>
+            <div
+              className={`flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors cursor-pointer ${
+                isActive 
+                  ? "bg-primary/10 text-primary font-medium" 
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground"
+              }`}
+              onClick={() => setMobileOpen(false)}
+              data-testid={`portal-nav-${item.href.split("/").pop()}`}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              <span className="text-sm flex-1">{item.label}</span>
+              {item.badge > 0 && (
+                <Badge variant="default" className="text-xs h-5 min-w-5 justify-center">{item.badge}</Badge>
+              )}
+              {isActive && <ChevronRight className="h-3 w-3 shrink-0" />}
+            </div>
+          </Link>
+        );
+      })}
+      {unreadCount > 0 && (
+        <div className="mt-2 p-3 rounded-lg bg-primary/5 border border-primary/20">
+          <div className="flex items-center gap-2 text-sm">
+            <Bell className="h-4 w-4 text-primary" />
+            <span className="font-medium text-primary">{unreadCount} olästa meddelanden</span>
+          </div>
+        </div>
+      )}
+    </nav>
+  );
+
+  return (
+    <>
+      <button 
+        className="lg:hidden fixed bottom-4 right-4 z-50 p-3 bg-primary text-primary-foreground rounded-full shadow-lg"
+        onClick={() => setMobileOpen(!mobileOpen)}
+        data-testid="button-portal-mobile-menu"
+      >
+        {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+      </button>
+      
+      {mobileOpen && (
+        <div className="lg:hidden fixed inset-0 z-40 bg-background/80 backdrop-blur-sm" onClick={() => setMobileOpen(false)}>
+          <div className="absolute right-0 top-0 bottom-0 w-72 bg-background border-l shadow-xl" onClick={e => e.stopPropagation()}>
+            <div className="p-4 border-b font-semibold">Meny</div>
+            <NavContent />
+          </div>
+        </div>
+      )}
+      
+      <aside className="hidden lg:block w-56 shrink-0 border-r bg-background/50 min-h-[calc(100vh-3.5rem)]">
+        <NavContent />
+      </aside>
+    </>
+  );
+}
+
 export default function PortalDashboardPage() {
   const { companyName, logoIconUrl, primaryColor } = useTenantBranding();
   const [, setLocation] = useLocation();
@@ -152,6 +229,13 @@ export default function PortalDashboardPage() {
     queryKey: ["/api/portal/booking-requests"],
     queryFn: () => portalFetch("/api/portal/booking-requests"),
     enabled: !!getSessionToken(),
+  });
+
+  const notificationsQuery = useQuery<{ unreadMessages: number }>({
+    queryKey: ["/api/portal/notifications/summary"],
+    queryFn: () => portalFetch("/api/portal/notifications/summary"),
+    enabled: !!getSessionToken(),
+    refetchInterval: 30000,
   });
 
   const messagesQuery = useQuery<Array<{ id: string; message: string; sender: "customer" | "staff"; createdAt: string }>>({
@@ -223,6 +307,7 @@ export default function PortalDashboardPage() {
   const history = ordersQuery.data?.history || [];
   const objects = objectsQuery.data || [];
   const bookingRequests = bookingRequestsQuery.data || [];
+  const unreadCount = notificationsQuery.data?.unreadMessages || 0;
 
   return (
     <div className="min-h-screen bg-background">
@@ -253,14 +338,26 @@ export default function PortalDashboardPage() {
               </div>
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
-            <LogOut className="h-4 w-4 mr-2" />
-            Logga ut
-          </Button>
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <div className="relative">
+                <Bell className="h-5 w-5 text-muted-foreground" />
+                <span className="absolute -top-1 -right-1 h-4 min-w-4 flex items-center justify-center rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold px-1">
+                  {unreadCount}
+                </span>
+              </div>
+            )}
+            <Button variant="ghost" size="sm" onClick={handleLogout} data-testid="button-logout">
+              <LogOut className="h-4 w-4 mr-2" />
+              Logga ut
+            </Button>
+          </div>
         </div>
       </header>
 
-      <main className="container py-8 space-y-8">
+      <div className="flex">
+        <PortalSidebar unreadCount={unreadCount} currentPath="/portal/dashboard" />
+        <main className="flex-1 container py-8 space-y-8">
         {/* Welcome Hero Section */}
         <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-primary/20 via-primary/10 to-background border border-primary/20 p-6 sm:p-8">
           <div className="absolute top-0 right-0 w-64 h-64 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
@@ -1189,7 +1286,6 @@ export default function PortalDashboardPage() {
             </CardContent>
           </Card>
         )}
-      </main>
 
       {/* Issue Report Dialog */}
       <Dialog open={issueDialogOpen} onOpenChange={setIssueDialogOpen}>
@@ -1364,6 +1460,8 @@ export default function PortalDashboardPage() {
           </div>
         </div>
       )}
+      </main>
+      </div>
     </div>
   );
 }

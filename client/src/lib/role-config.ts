@@ -51,6 +51,7 @@ const PLANNER_ROUTES = new Set([
   "/weather",
   "/customer-portal",
   "/portal-messages",
+  "/booking-slots",
   "/settings",
   "/mobile",
   "/field",

@@ -2042,4 +2042,208 @@ app.get("/api/customer-change-requests/counts-by-object", requireAdmin, asyncHan
     res.json(counts);
 }));
 
+// ============================================
+// P19: RECURRING BOOKING SLOTS
+// ============================================
+app.get("/api/recurring-slot-patterns", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { recurringSlotPatterns } = await import("@shared/schema");
+    const patterns = await db.select().from(recurringSlotPatterns).where(eq(recurringSlotPatterns.tenantId, tenantId));
+    res.json(patterns);
+}));
+
+app.post("/api/recurring-slot-patterns", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const user = (req as any).user;
+    const { recurringSlotPatterns, selfBookingSlots } = await import("@shared/schema");
+    
+    const { name, dayOfWeek, startTime, endTime, maxBookings, serviceTypes, resourceId, weeksAhead } = req.body;
+    if (!name || dayOfWeek === undefined || !startTime || !endTime) {
+      throw new ValidationError("Namn, veckodag, start- och sluttid krävs");
+    }
+    
+    const [pattern] = await db.insert(recurringSlotPatterns).values({
+      tenantId,
+      name,
+      dayOfWeek: parseInt(dayOfWeek),
+      startTime,
+      endTime,
+      maxBookings: maxBookings || 1,
+      serviceTypes: serviceTypes || [],
+      resourceId: resourceId || null,
+      isActive: true,
+      createdBy: user?.id,
+    }).returning();
+    
+    const weeks = weeksAhead || 8;
+    const generated: any[] = [];
+    const now = new Date();
+    for (let w = 0; w < weeks; w++) {
+      const date = new Date(now);
+      date.setDate(date.getDate() + (w * 7) + ((parseInt(dayOfWeek) - date.getDay() + 7) % 7));
+      if (date <= now) date.setDate(date.getDate() + 7);
+      
+      const [slot] = await db.insert(selfBookingSlots).values({
+        tenantId,
+        resourceId: resourceId || null,
+        slotDate: date,
+        startTime,
+        endTime,
+        maxBookings: maxBookings || 1,
+        serviceTypes: serviceTypes || [],
+        isActive: true,
+        createdBy: user?.id,
+      }).returning();
+      generated.push(slot);
+    }
+    
+    await db.update(recurringSlotPatterns)
+      .set({ generatedUntil: generated[generated.length - 1]?.slotDate })
+      .where(eq(recurringSlotPatterns.id, pattern.id));
+    
+    res.status(201).json({ pattern, generatedSlots: generated.length });
+}));
+
+app.delete("/api/recurring-slot-patterns/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { recurringSlotPatterns } = await import("@shared/schema");
+    
+    const [existing] = await db.select().from(recurringSlotPatterns)
+      .where(and(eq(recurringSlotPatterns.id, req.params.id), eq(recurringSlotPatterns.tenantId, tenantId)));
+    if (!existing) throw new NotFoundError("Mönster hittades inte");
+    
+    await db.delete(recurringSlotPatterns).where(eq(recurringSlotPatterns.id, req.params.id));
+    res.json({ success: true });
+}));
+
+app.patch("/api/recurring-slot-patterns/:id", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { recurringSlotPatterns } = await import("@shared/schema");
+    
+    const [existing] = await db.select().from(recurringSlotPatterns)
+      .where(and(eq(recurringSlotPatterns.id, req.params.id), eq(recurringSlotPatterns.tenantId, tenantId)));
+    if (!existing) throw new NotFoundError("Mönster hittades inte");
+    
+    const { isActive } = req.body;
+    const [updated] = await db.update(recurringSlotPatterns)
+      .set({ isActive })
+      .where(eq(recurringSlotPatterns.id, req.params.id))
+      .returning();
+    res.json(updated);
+}));
+
+// P19: Portal cancel booking with reason
+app.patch("/api/portal/self-bookings/:id/cancel", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+    
+    const { selfBookings } = await import("@shared/schema");
+    const { cancelReason } = req.body;
+    
+    const [booking] = await db.select().from(selfBookings)
+      .where(and(eq(selfBookings.id, req.params.id), eq(selfBookings.customerId, session.customerId!)));
+    if (!booking) throw new NotFoundError("Bokning hittades inte");
+    if (booking.status === "cancelled") throw new ValidationError("Bokningen är redan avbokad");
+    
+    const [updated] = await db.update(selfBookings)
+      .set({ 
+        status: "cancelled", 
+        cancelledAt: new Date(), 
+        cancelReason: cancelReason || "Ingen anledning angiven" 
+      })
+      .where(eq(selfBookings.id, req.params.id))
+      .returning();
+    
+    res.json(updated);
+}));
+
+// P19: Portal unread messages count (all channels)
+app.get("/api/portal/notifications/summary", asyncHandler(async (req, res) => {
+    const session = await requirePortalAuth(req, res);
+    if (!session) return;
+    
+    const { portalMessages } = await import("@shared/schema");
+    const unreadMessages = await db.select({ count: sql<number>`count(*)` })
+      .from(portalMessages)
+      .where(and(
+        eq(portalMessages.tenantId, session.tenantId!),
+        eq(portalMessages.customerId, session.customerId!),
+        eq(portalMessages.sender, "staff"),
+        isNull(portalMessages.readAt)
+      ));
+    
+    res.json({
+      unreadMessages: Number(unreadMessages[0]?.count || 0),
+    });
+}));
+
+// P19: Staff portal messages with unread counts
+app.get("/api/staff/portal-messages", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { portalMessages, customers: customersTable } = await import("@shared/schema");
+    
+    const conversations = await db.execute(sql`
+      SELECT 
+        pm.customer_id as "customerId",
+        c.name as "customerName",
+        c.email as "customerEmail",
+        COUNT(*) FILTER (WHERE pm.sender = 'customer' AND pm.read_at IS NULL) as "unreadCount",
+        COUNT(*) as "messageCount",
+        MAX(pm.message) as "lastMessage",
+        MAX(pm.created_at) as "lastMessageAt"
+      FROM portal_messages pm
+      JOIN customers c ON c.id = pm.customer_id
+      WHERE pm.tenant_id = ${tenantId}
+      GROUP BY pm.customer_id, c.name, c.email
+      ORDER BY MAX(pm.created_at) DESC
+    `);
+    
+    res.json(conversations.rows || conversations);
+}));
+
+app.get("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { portalMessages } = await import("@shared/schema");
+    
+    const messages = await db.select().from(portalMessages)
+      .where(and(
+        eq(portalMessages.tenantId, tenantId),
+        eq(portalMessages.customerId, req.params.customerId)
+      ))
+      .orderBy(portalMessages.createdAt);
+    
+    const customer = await storage.getCustomer(req.params.customerId);
+    
+    await db.update(portalMessages)
+      .set({ readAt: new Date() })
+      .where(and(
+        eq(portalMessages.tenantId, tenantId),
+        eq(portalMessages.customerId, req.params.customerId),
+        eq(portalMessages.sender, "customer"),
+        isNull(portalMessages.readAt)
+      ));
+    
+    res.json({
+      customer: customer ? { id: customer.id, name: customer.name, email: customer.email } : null,
+      messages,
+    });
+}));
+
+app.post("/api/staff/portal-messages/:customerId", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { portalMessages } = await import("@shared/schema");
+    const { message } = req.body;
+    
+    if (!message?.trim()) throw new ValidationError("Meddelande krävs");
+    
+    const [newMsg] = await db.insert(portalMessages).values({
+      tenantId,
+      customerId: req.params.customerId,
+      message: message.trim(),
+      sender: "staff",
+    }).returning();
+    
+    res.json(newMsg);
+}));
+
 }

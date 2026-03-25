@@ -4,7 +4,7 @@ import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, isNotNull, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID } from "./helpers";
-import { getTenantIdWithFallback } from "../tenant-middleware";
+import { getTenantIdWithFallback, requireAdmin } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import multer from "multer";
@@ -1891,6 +1891,414 @@ app.get("/api/import/health-stats", asyncHandler(async (req, res) => {
       emptyMetadata: emptyMetadataResult[0]?.count || 0,
       totalInvoiceLines: totalInvoiceLinesResult[0]?.count || 0,
     });
+}));
+
+// ============================================
+// P20: COLUMN MAPPING SUGGESTIONS
+// ============================================
+const SYSTEM_FIELDS: Record<string, { label: string; aliases: string[] }> = {
+  name: { label: "Namn", aliases: ["namn", "name", "benämning", "benamning", "objektnamn"] },
+  objectNumber: { label: "Objektnummer", aliases: ["id", "nummer", "objectnumber", "objektnummer", "modus_id", "modusid"] },
+  objectType: { label: "Typ", aliases: ["typ", "type", "kategori", "objekttyp", "object_type"] },
+  parentId: { label: "Parent (förälder)", aliases: ["parent", "parent_id", "förälder", "foralder", "overordnad"] },
+  customerId: { label: "Kund", aliases: ["kund", "customer", "kundnamn", "customer_name", "kundnummer"] },
+  address: { label: "Adress", aliases: ["adress", "address", "gatuadress", "adress 1", "adress1"] },
+  city: { label: "Stad", aliases: ["stad", "city", "ort", "postort"] },
+  postalCode: { label: "Postnummer", aliases: ["postnummer", "postalcode", "postal_code", "zip"] },
+  latitude: { label: "Latitud", aliases: ["latitud", "latitude", "lat"] },
+  longitude: { label: "Longitud", aliases: ["longitud", "longitude", "lng", "lon"] },
+  description: { label: "Beskrivning", aliases: ["beskrivning", "description", "kommentar", "notering"] },
+  accessInfo: { label: "Tillträdesinformation", aliases: ["tillträde", "access", "portkod", "tilltrade", "accessinfo"] },
+};
+
+app.post("/api/import/suggest-mapping", upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+    
+    const csvText = req.file.buffer.toString("utf-8");
+    const result = Papa.parse(csvText, { header: true, skipEmptyLines: true, preview: 5 });
+    
+    if (!result.meta?.fields?.length) {
+      throw new ValidationError("Kunde inte läsa kolumnnamn från CSV");
+    }
+    
+    const tenantId = getTenantIdWithFallback(req);
+    const metadataTypes = await getAllMetadataTypes(tenantId);
+    
+    const suggestions: Array<{
+      csvColumn: string;
+      suggestedField: string | null;
+      suggestedMetadata: string | null;
+      confidence: number;
+      sampleValues: string[];
+    }> = [];
+    
+    for (const col of result.meta.fields) {
+      const colLower = col.toLowerCase().trim();
+      let bestField: string | null = null;
+      let bestMeta: string | null = null;
+      let confidence = 0;
+      
+      if (colLower.startsWith("metadata - ") || colLower.startsWith("metadata-")) {
+        const metaName = col.replace(/^metadata\s*-\s*/i, "").trim();
+        bestMeta = metaName;
+        confidence = 0.95;
+      } else {
+        for (const [field, info] of Object.entries(SYSTEM_FIELDS)) {
+          for (const alias of info.aliases) {
+            if (colLower === alias || colLower.replace(/[\s_-]/g, "") === alias.replace(/[\s_-]/g, "")) {
+              bestField = field;
+              confidence = 1.0;
+              break;
+            }
+          }
+          if (bestField) break;
+          
+          for (const alias of info.aliases) {
+            if (colLower.includes(alias) || alias.includes(colLower)) {
+              if (!bestField || alias.length > (SYSTEM_FIELDS[bestField]?.aliases[0]?.length || 0)) {
+                bestField = field;
+                confidence = 0.7;
+              }
+            }
+          }
+        }
+        
+        if (!bestField) {
+          const matchingMeta = metadataTypes.find((m: any) => 
+            m.beteckning?.toLowerCase() === colLower || m.name?.toLowerCase() === colLower
+          );
+          if (matchingMeta) {
+            bestMeta = matchingMeta.beteckning || matchingMeta.name;
+            confidence = 0.8;
+          }
+        }
+      }
+      
+      const sampleValues = (result.data as Record<string, string>[])
+        .slice(0, 3)
+        .map(row => row[col] || "")
+        .filter(Boolean);
+      
+      suggestions.push({
+        csvColumn: col,
+        suggestedField: bestField,
+        suggestedMetadata: bestMeta,
+        confidence,
+        sampleValues,
+      });
+    }
+    
+    res.json({ 
+      columns: result.meta.fields,
+      suggestions,
+      availableFields: Object.entries(SYSTEM_FIELDS).map(([key, val]) => ({ key, label: val.label })),
+      availableMetadataTypes: metadataTypes.map((m: any) => ({ 
+        beteckning: m.beteckning, 
+        name: m.name 
+      })),
+      previewRows: (result.data as Record<string, string>[]).slice(0, 5),
+    });
+}));
+
+// P20: Save column mapping for a batch
+app.post("/api/import/column-mappings", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { importColumnMappings } = await import("@shared/schema");
+    const { batchId, mappings } = req.body;
+    
+    if (!batchId || !Array.isArray(mappings)) {
+      throw new ValidationError("batchId och mappings krävs");
+    }
+    
+    const saved = [];
+    for (const m of mappings) {
+      const [row] = await db.insert(importColumnMappings).values({
+        tenantId,
+        batchId,
+        csvColumn: m.csvColumn,
+        systemField: m.systemField || null,
+        metadataType: m.metadataType || null,
+        isIgnored: m.isIgnored || false,
+      }).returning();
+      saved.push(row);
+    }
+    
+    res.json(saved);
+}));
+
+// P20: Hierarchy preview from CSV
+app.post("/api/import/hierarchy-preview", upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+    
+    const csvText = req.file.buffer.toString("utf-8");
+    const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    const tenantId = getTenantIdWithFallback(req);
+    
+    const mappingStr = req.body.columnMapping;
+    const columnMapping: Record<string, string> = mappingStr ? JSON.parse(mappingStr) : {};
+    
+    const getField = (row: Record<string, string>, field: string): string => {
+      if (columnMapping[field]) return row[columnMapping[field]] || "";
+      const aliases = SYSTEM_FIELDS[field]?.aliases || [];
+      for (const alias of aliases) {
+        for (const col of Object.keys(row)) {
+          if (col.toLowerCase().trim() === alias) return row[col] || "";
+        }
+      }
+      return "";
+    };
+    
+    interface TreeNode {
+      id: string;
+      name: string;
+      parentId: string;
+      children: TreeNode[];
+      rowIndex: number;
+      hasParentMatch: boolean;
+      isExistingInDb: boolean;
+    }
+    
+    const rows = result.data as Record<string, string>[];
+    const nodeMap = new Map<string, TreeNode>();
+    const allIds = new Set<string>();
+    
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const id = getField(row, "objectNumber") || getField(row, "name") || `row-${i}`;
+      const name = getField(row, "name") || id;
+      const parentId = getField(row, "parentId") || "";
+      
+      allIds.add(id);
+      nodeMap.set(id, {
+        id,
+        name,
+        parentId,
+        children: [],
+        rowIndex: i + 1,
+        hasParentMatch: true,
+        isExistingInDb: false,
+      });
+    }
+    
+    const existingObjects = await db.select({ objectNumber: objects.objectNumber, id: objects.id })
+      .from(objects)
+      .where(eq(objects.tenantId, tenantId));
+    const existingIds = new Set(existingObjects.map(o => o.objectNumber).filter(Boolean));
+    
+    for (const node of nodeMap.values()) {
+      if (node.parentId && !allIds.has(node.parentId) && !existingIds.has(node.parentId)) {
+        node.hasParentMatch = false;
+      }
+      if (existingIds.has(node.id)) {
+        node.isExistingInDb = true;
+      }
+    }
+    
+    const roots: TreeNode[] = [];
+    for (const node of nodeMap.values()) {
+      if (node.parentId && nodeMap.has(node.parentId)) {
+        nodeMap.get(node.parentId)!.children.push(node);
+      } else {
+        roots.push(node);
+      }
+    }
+    
+    const orphanCount = Array.from(nodeMap.values()).filter(n => !n.hasParentMatch && n.parentId).length;
+    const updateCount = Array.from(nodeMap.values()).filter(n => n.isExistingInDb).length;
+    
+    res.json({
+      tree: roots,
+      totalRows: rows.length,
+      orphanCount,
+      updateCount,
+      newCount: rows.length - updateCount,
+    });
+}));
+
+// P20: Batch rollback (soft delete)
+app.post("/api/import/rollback/:batchId", requireAdmin, asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { batchId } = req.params;
+    const { importBatches } = await import("@shared/schema");
+    
+    const [batch] = await db.select().from(importBatches)
+      .where(and(eq(importBatches.batchId, batchId), eq(importBatches.tenantId, tenantId)));
+    if (!batch) throw new NotFoundError("Import-batch hittades inte");
+    
+    const deletedObjects = await db.execute(sql`
+      UPDATE objects SET deleted_at = NOW(), status = 'deleted'
+      WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+      RETURNING id
+    `);
+    
+    const deletedOrders = await db.execute(sql`
+      UPDATE work_orders SET deleted_at = NOW(), status = 'avbruten'
+      WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+      RETURNING id
+    `);
+    
+    const deletedCustomers = await db.execute(sql`
+      UPDATE customers SET is_active = false, deleted_at = NOW()
+      WHERE import_batch_id = ${batchId} AND tenant_id = ${tenantId} AND deleted_at IS NULL
+      RETURNING id
+    `);
+    
+    await db.update(importBatches)
+      .set({ metadata: sql`jsonb_set(COALESCE(metadata, '{}'::jsonb), '{rolledBack}', 'true')` })
+      .where(eq(importBatches.batchId, batchId));
+    
+    res.json({
+      success: true,
+      rolledBack: {
+        objects: (deletedObjects.rows || deletedObjects).length,
+        workOrders: (deletedOrders.rows || deletedOrders).length,
+        customers: (deletedCustomers.rows || deletedCustomers).length,
+      },
+    });
+}));
+
+// P20: Import with custom column mapping
+app.post("/api/import/modus/objects-mapped", upload.single("file"), asyncHandler(async (req, res) => {
+    if (!req.file) throw new ValidationError("Ingen fil uppladdad");
+    
+    const csvText = req.file.buffer.toString("utf-8");
+    const result = Papa.parse(csvText, { header: true, skipEmptyLines: true });
+    const tenantId = getTenantIdWithFallback(req);
+    
+    const mappingStr = req.body.columnMapping;
+    const columnMapping: Record<string, string> = mappingStr ? JSON.parse(mappingStr) : {};
+    
+    const getVal = (row: Record<string, string>, field: string): string => {
+      if (columnMapping[field]) return row[columnMapping[field]] || "";
+      const aliases = SYSTEM_FIELDS[field]?.aliases || [];
+      for (const alias of aliases) {
+        for (const col of Object.keys(row)) {
+          if (col.toLowerCase().trim() === alias) return row[col] || "";
+        }
+      }
+      return "";
+    };
+    
+    const batchId = `mapped-${Date.now()}`;
+    const rows = result.data as Record<string, string>[];
+    const imported: string[] = [];
+    const errors: Array<{ row: number; column: string; error: string }> = [];
+    
+    const metadataMappings = Object.entries(columnMapping)
+      .filter(([key]) => key.startsWith("meta:"))
+      .map(([key, csvCol]) => ({ metaType: key.replace("meta:", ""), csvCol }));
+    
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      try {
+        const name = getVal(row, "name");
+        if (!name) {
+          errors.push({ row: i + 2, column: "name", error: "Namn saknas" });
+          continue;
+        }
+        
+        const customerName = getVal(row, "customerId") || "";
+        let customerId: string | null = null;
+        if (customerName) {
+          const [existingCustomer] = await db.select().from(customers)
+            .where(and(eq(customers.tenantId, tenantId), eq(customers.name, customerName)));
+          if (existingCustomer) {
+            customerId = existingCustomer.id;
+          } else {
+            const [newCustomer] = await db.insert(customers).values({
+              tenantId,
+              name: customerName,
+              importBatchId: batchId,
+            }).returning();
+            customerId = newCustomer.id;
+          }
+        }
+        
+        if (!customerId) {
+          const [defaultCustomer] = await db.select().from(customers)
+            .where(eq(customers.tenantId, tenantId));
+          if (defaultCustomer) {
+            customerId = defaultCustomer.id;
+          } else {
+            errors.push({ row: i + 2, column: "customerName", error: "Ingen kund hittades eller angiven" });
+            continue;
+          }
+        }
+        
+        const objData: any = {
+          tenantId,
+          customerId,
+          name,
+          objectNumber: getVal(row, "objectNumber") || null,
+          objectType: getVal(row, "objectType") || getVal(row, "type") || "omrade",
+          address: getVal(row, "address") || null,
+          city: getVal(row, "city") || null,
+          postalCode: getVal(row, "postalCode") || null,
+          latitude: getVal(row, "latitude") ? parseFloat(getVal(row, "latitude")) : null,
+          longitude: getVal(row, "longitude") ? parseFloat(getVal(row, "longitude")) : null,
+          description: getVal(row, "description") || null,
+          importBatchId: batchId,
+        };
+        
+        const existing = objData.objectNumber 
+          ? await db.select().from(objects).where(and(
+              eq(objects.tenantId, tenantId),
+              eq(objects.objectNumber, objData.objectNumber)
+            ))
+          : [];
+        
+        let objId: string;
+        if (existing.length > 0) {
+          await db.update(objects).set(objData).where(eq(objects.id, existing[0].id));
+          objId = existing[0].id;
+        } else {
+          const [created] = await db.insert(objects).values(objData).returning();
+          objId = created.id;
+        }
+        
+        for (const mm of metadataMappings) {
+          const val = row[mm.csvCol];
+          if (val) {
+            await createMetadata(tenantId, mm.metaType, objId, val);
+          }
+        }
+        
+        imported.push(name);
+      } catch (err: any) {
+        errors.push({ row: i + 2, column: "", error: err.message || "Okänt fel" });
+      }
+    }
+    
+    const { importBatches } = await import("@shared/schema");
+    await db.insert(importBatches).values({
+      tenantId,
+      batchId,
+      totalRows: rows.length,
+      created: imported.length,
+      updated: 0,
+      errors: errors.length,
+      metadata: { source: "mapped-import", mappings: columnMapping },
+    });
+    
+    res.json({
+      batchId,
+      imported: imported.length,
+      errors,
+      total: rows.length,
+    });
+}));
+
+// P20: Import history with rollback status
+app.get("/api/import/history", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const { importBatches } = await import("@shared/schema");
+    
+    const batches = await db.select().from(importBatches)
+      .where(eq(importBatches.tenantId, tenantId))
+      .orderBy(desc(importBatches.createdAt))
+      .limit(50);
+    
+    res.json(batches);
 }));
 
 }
