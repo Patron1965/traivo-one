@@ -2285,9 +2285,9 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
 
     const relevantArticles = allArticles.filter(a =>
       a.status === "active" && (
-        (a as any).fetchMetadataLabel ||
-        (a as any).canUpdateMetadata ||
-        (a as any).isInfoCarrier
+        a.fetchMetadataLabel ||
+        a.canUpdateMetadata ||
+        a.isInfoCarrier
       ) && (
         orderArticleIds.includes(a.id) ||
         !a.hookLevel ||
@@ -2298,8 +2298,8 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     const objectMetadata = await getArticleMetadataForObject(order.objectId, tenantId);
 
     const result = relevantArticles.map(article => {
-      const fetchLabel = (article as any).fetchMetadataLabel;
-      const updateLabel = (article as any).updateMetadataLabel;
+      const fetchLabel = article.fetchMetadataLabel;
+      const updateLabel = article.updateMetadataLabel;
       let fetchedValue: string | null = null;
       let previousValue: string | null = null;
 
@@ -2312,7 +2312,7 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
         }
       }
 
-      if (updateLabel && (article as any).showPreviousValue && objectMetadata) {
+      if (updateLabel && article.showPreviousValue && objectMetadata) {
         const match = objectMetadata.find((m: any) =>
           m.katalog?.beteckning === updateLabel || m.katalog?.namn === updateLabel
         );
@@ -2325,14 +2325,14 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
         articleId: article.id,
         articleName: article.name,
         articleNumber: article.articleNumber,
-        isInfoCarrier: (article as any).isInfoCarrier || false,
+        isInfoCarrier: article.isInfoCarrier || false,
         fetchMetadataLabel: fetchLabel || null,
-        fetchMetadataLabelFormat: (article as any).fetchMetadataLabelFormat || null,
+        fetchMetadataLabelFormat: article.fetchMetadataLabelFormat || null,
         fetchedValue,
-        canUpdateMetadata: (article as any).canUpdateMetadata || false,
+        canUpdateMetadata: article.canUpdateMetadata || false,
         updateMetadataLabel: updateLabel || null,
-        updateMetadataFormat: (article as any).updateMetadataFormat || null,
-        showPreviousValue: (article as any).showPreviousValue || false,
+        updateMetadataFormat: article.updateMetadataFormat || null,
+        showPreviousValue: article.showPreviousValue || false,
         previousValue,
       };
     });

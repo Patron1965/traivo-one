@@ -342,21 +342,21 @@ export default function ArticlesPage() {
       listPrice: article.listPrice || 0,
       unit: article.unit || "st",
       status: article.status || "active",
-      fetchMetadataCode: (article as any).fetchMetadataCode || "",
-      leaveMetadataCode: (article as any).leaveMetadataCode || "",
-      leaveMetadataFormat: (article as any).leaveMetadataFormat || "",
-      maxPerAddress: (article as any).maxPerAddress ?? null,
-      associationLabel: (article as any).associationLabel || "",
-      associationValue: (article as any).associationValue || "",
-      associationOperator: (article as any).associationOperator || "equals",
-      fetchMetadataLabel: (article as any).fetchMetadataLabel || "",
-      fetchMetadataLabelFormat: (article as any).fetchMetadataLabelFormat || "",
-      canUpdateMetadata: (article as any).canUpdateMetadata || false,
-      updateMetadataLabel: (article as any).updateMetadataLabel || "",
-      updateMetadataFormat: (article as any).updateMetadataFormat || "",
-      showPreviousValue: (article as any).showPreviousValue || false,
-      isInfoCarrier: (article as any).isInfoCarrier || false,
-      limitationType: (article as any).limitationType || "unlimited",
+      fetchMetadataCode: article.fetchMetadataCode || "",
+      leaveMetadataCode: article.leaveMetadataCode || "",
+      leaveMetadataFormat: article.leaveMetadataFormat || "",
+      maxPerAddress: article.maxPerAddress ?? null,
+      associationLabel: article.associationLabel || "",
+      associationValue: article.associationValue || "",
+      associationOperator: article.associationOperator || "equals",
+      fetchMetadataLabel: article.fetchMetadataLabel || "",
+      fetchMetadataLabelFormat: article.fetchMetadataLabelFormat || "",
+      canUpdateMetadata: article.canUpdateMetadata || false,
+      updateMetadataLabel: article.updateMetadataLabel || "",
+      updateMetadataFormat: article.updateMetadataFormat || "",
+      showPreviousValue: article.showPreviousValue || false,
+      isInfoCarrier: article.isInfoCarrier || false,
+      limitationType: article.limitationType || "unlimited",
     });
     setDialogOpen(true);
   };
@@ -1385,9 +1385,9 @@ export default function ArticlesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="unlimited">Obegränsad</SelectItem>
-                    <SelectItem value="once_per_object">En gång per objekt</SelectItem>
-                    <SelectItem value="once_per_period">En gång per period</SelectItem>
-                    <SelectItem value="max_per_address">Max per adress (se ovan)</SelectItem>
+                    <SelectItem value="one_per_address">En gång per adress</SelectItem>
+                    <SelectItem value="one_per_object">En gång per objekt</SelectItem>
+                    <SelectItem value="one_per_customer">En gång per kund</SelectItem>
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">Styr hur ofta denna artikel får utföras</p>

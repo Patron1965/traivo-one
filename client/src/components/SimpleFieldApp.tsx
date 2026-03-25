@@ -592,7 +592,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     previousValue: string | null;
   }
 
-  const [metadataUpdates, setMetadataUpdates] = useState<Record<string, { value: string; status?: string; comment?: string }>>({});
+  const [metadataUpdates, setMetadataUpdates] = useState<Record<string, { value: string; status?: string; comment?: string; photo?: string }>>({});
   const [savingMetadata, setSavingMetadata] = useState<string | null>(null);
 
   const { data: metadataContext } = useQuery<{ articles: MetadataArticleContext[] }>({
@@ -606,7 +606,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
     staleTime: 30000,
   });
 
-  const handleMetadataUpdate = useCallback(async (articleId: string, metadataLabel: string, newValue: string, inspectionStatus?: string, inspectionComment?: string) => {
+  const handleMetadataUpdate = useCallback(async (articleId: string, metadataLabel: string, newValue: string, inspectionStatus?: string, inspectionComment?: string, inspectionPhoto?: string) => {
     if (!selectedJobId) return;
     setSavingMetadata(articleId);
     try {
@@ -616,6 +616,7 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
         newValue,
         inspectionStatus,
         inspectionComment,
+        inspectionPhoto,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/mobile/tasks", selectedJobId, "metadata-context"] });
       toast({ title: "Metadata uppdaterad", description: `${metadataLabel} = ${newValue}` });
@@ -1302,6 +1303,62 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                                   rows={2}
                                   data-testid={`textarea-inspection-comment-${article.articleId}`}
                                 />
+                                <div className="space-y-1">
+                                  {metadataUpdates[article.articleId]?.photo ? (
+                                    <div className="relative">
+                                      <img
+                                        src={metadataUpdates[article.articleId].photo}
+                                        alt="Avvikelsefoto"
+                                        className="w-full h-24 object-cover rounded border"
+                                      />
+                                      <Button
+                                        size="icon"
+                                        variant="destructive"
+                                        className="absolute top-1 right-1 h-6 w-6"
+                                        onClick={() => setMetadataUpdates(prev => ({
+                                          ...prev,
+                                          [article.articleId]: { ...prev[article.articleId], photo: undefined }
+                                        }))}
+                                      >
+                                        <X className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <label className="cursor-pointer">
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="outline"
+                                        className="w-full gap-2"
+                                        asChild
+                                      >
+                                        <span>
+                                          <Camera className="h-4 w-4" />
+                                          Lägg till foto
+                                        </span>
+                                      </Button>
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        capture="environment"
+                                        className="hidden"
+                                        data-testid={`input-inspection-photo-${article.articleId}`}
+                                        onChange={async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          const reader = new FileReader();
+                                          reader.onload = () => {
+                                            setMetadataUpdates(prev => ({
+                                              ...prev,
+                                              [article.articleId]: { ...prev[article.articleId], photo: reader.result as string }
+                                            }));
+                                          };
+                                          reader.readAsDataURL(file);
+                                        }}
+                                      />
+                                    </label>
+                                  )}
+                                </div>
                                 <Button
                                   size="sm"
                                   variant="destructive"
@@ -1314,7 +1371,8 @@ export function SimpleFieldApp({ resourceId }: SimpleFieldAppProps) {
                                       article.updateMetadataLabel!,
                                       "EJ OK",
                                       "EJ_OK",
-                                      update?.comment
+                                      update?.comment,
+                                      update?.photo
                                     );
                                   }}
                                   data-testid={`button-save-inspection-${article.articleId}`}

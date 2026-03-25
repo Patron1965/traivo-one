@@ -158,6 +158,41 @@ app.post("/api/work-orders", asyncHandler(async (req, res) => {
     ...bodyData,
     tenantId
   });
+
+  if (data.articleId && data.objectId) {
+    const article = await storage.getArticle(data.articleId);
+    if (article && article.limitationType && article.limitationType !== "unlimited") {
+      const allOrders = await storage.getWorkOrders(tenantId);
+      const existingForArticle = allOrders.filter(
+        wo => wo.articleId === data.articleId && wo.orderStatus !== "avbruten" && wo.deletedAt === null
+      );
+
+      if (article.limitationType === "one_per_object") {
+        const existing = existingForArticle.find(wo => wo.objectId === data.objectId);
+        if (existing) {
+          throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per objekt. En order finns redan.`);
+        }
+      } else if (article.limitationType === "one_per_address") {
+        const targetObj = await storage.getObject(data.objectId);
+        if (targetObj?.address) {
+          for (const wo of existingForArticle) {
+            if (wo.objectId) {
+              const woObj = await storage.getObject(wo.objectId);
+              if (woObj?.address === targetObj.address) {
+                throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per adress. En order finns redan på "${targetObj.address}".`);
+              }
+            }
+          }
+        }
+      } else if (article.limitationType === "one_per_customer") {
+        const existing = existingForArticle.find(wo => wo.customerId === data.customerId);
+        if (existing) {
+          throw new ValidationError(`Artikeln "${article.name}" får bara utföras en gång per kund.`);
+        }
+      }
+    }
+  }
+
   const workOrder = await storage.createWorkOrder(data);
 
   if (workOrder.resourceId) {
