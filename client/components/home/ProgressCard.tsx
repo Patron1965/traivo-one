@@ -58,7 +58,7 @@ export function ProgressCard({ completedCount, totalCount, progress, summary, lo
               <ThemedText variant="heading" color={Colors.warning}>
                 {lockedCount}
               </ThemedText>
-              <ThemedText variant="caption">{'\u00e5sta'}</ThemedText>
+              <ThemedText variant="caption">l{'\u00e5'}sta</ThemedText>
             </View>
           </>
         ) : null}

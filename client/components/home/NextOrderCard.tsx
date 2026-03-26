@@ -69,6 +69,13 @@ export function NextOrderCard({ nextOrder, nextOrderDistance, navigation, orders
                 ca {nextOrderDistance.durationMin} min ({nextOrderDistance.distanceKm} km)
               </ThemedText>
             </View>
+          ) : nextOrder.estimatedMinutes ? (
+            <View style={styles.nextOrderEta}>
+              <Feather name="clock" size={12} color={Colors.textMuted} />
+              <ThemedText variant="caption" color={Colors.textMuted}>
+                ca {nextOrder.estimatedMinutes} min
+              </ThemedText>
+            </View>
           ) : null}
         </View>
       ) : null}

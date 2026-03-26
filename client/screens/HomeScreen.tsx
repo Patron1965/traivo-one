@@ -32,7 +32,12 @@ import { formatWorkTime, computeBreakSuggestion } from './HomeScreen.utils';
 import type { TimeSummary } from './HomeScreen.utils';
 import type { Order, DaySummary, WeatherData } from '../types';
 
-export function HomeScreen({ navigation }: { navigation: { navigate: (screen: string, params?: Record<string, unknown>) => void } }) {
+interface HomeNavigation {
+  navigate: (screen: string, params?: Record<string, unknown>) => void;
+  setOptions: (opts: Record<string, unknown>) => void;
+}
+
+export function HomeScreen({ navigation }: { navigation: HomeNavigation }) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { user, isOnline, setIsOnline } = useAuth();
@@ -75,13 +80,29 @@ export function HomeScreen({ navigation }: { navigation: { navigate: (screen: st
     }).start();
   }, [pendingCount, syncBadgeOpacity]);
 
+  const unreadCount = notifData?.unreadCount || 0;
+
   useLayoutEffect(() => {
-    const unreadCount = notifData?.unreadCount || 0;
-    navigation.navigate && navigation;
-    if (unreadCount > 0) {
-      navigation.navigate;
-    }
-  }, [notifData, navigation]);
+    navigation.setOptions({
+      headerRight: () => (
+        <Pressable
+          onPress={() => navigation.navigate('Notifications')}
+          style={styles.headerBellBtn}
+          hitSlop={8}
+          testID="button-notifications"
+        >
+          <Feather name="bell" size={22} color={Colors.text} />
+          {unreadCount > 0 ? (
+            <View style={styles.bellBadge}>
+              <ThemedText variant="caption" color={Colors.textInverse} style={styles.bellBadgeText}>
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </ThemedText>
+            </View>
+          ) : null}
+        </Pressable>
+      ),
+    });
+  }, [navigation, unreadCount]);
 
   const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {

@@ -198,6 +198,7 @@ export interface Order {
   articles: Article[];
   contacts: Contact[];
   estimatedDuration: number;
+  estimatedMinutes?: number;
   actualStartTime?: string;
   actualEndTime?: string;
   completedAt?: string;
