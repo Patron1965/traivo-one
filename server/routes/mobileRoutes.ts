@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import { triggerETANotification } from "../eta-notification-service";
@@ -2859,6 +2859,493 @@ app.post("/api/mobile/disruptions/trigger/resource-unavailable", isMobileAuthent
     const event = await triggerResourceUnavailable(resource.tenantId, resourceId, resource.name, parsed.data.reason);
 
     res.json({ success: true, disruptionId: event?.id || null });
+}));
+
+// ========================================
+// FAS 2: Team, search, time, stats, route, distance, config endpoints
+// ========================================
+
+app.get("/api/mobile/my-profiles", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const rows = await db.select().from(resourceProfileAssignments).where(eq(resourceProfileAssignments.resourceId, resourceId));
+    res.json(rows);
+}));
+
+app.get("/api/mobile/my-team", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const memberships = await db.select().from(teamMembers)
+      .where(eq(teamMembers.resourceId, resourceId));
+    const teamIds = memberships.map(m => m.teamId);
+    if (teamIds.length === 0) return res.json([]);
+
+    const activeTeams = await db.select().from(teams)
+      .where(and(inArray(teams.id, teamIds), eq(teams.status, "active")));
+
+    const result = [];
+    for (const team of activeTeams) {
+      const members = await db.select().from(teamMembers).where(eq(teamMembers.teamId, team.id));
+      const memberDetails = [];
+      for (const m of members) {
+        const r = await storage.getResource(m.resourceId);
+        memberDetails.push({ id: m.id, resourceId: m.resourceId, name: r?.name || "", role: m.role });
+      }
+      result.push({ ...team, members: memberDetails });
+    }
+    res.json(result);
+}));
+
+app.post("/api/mobile/teams", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const schema = z.object({ name: z.string(), description: z.string().optional() });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const teamId = `team-${Date.now()}`;
+    await db.insert(teams).values({
+      id: teamId,
+      tenantId: resource.tenantId,
+      name: parsed.data.name,
+      description: parsed.data.description || null,
+      leaderId: resourceId,
+      status: "active",
+    });
+    await db.insert(teamMembers).values({
+      id: `tm-${Date.now()}`,
+      teamId,
+      resourceId,
+      role: "ledare",
+    });
+
+    res.json({ success: true, teamId });
+}));
+
+app.post("/api/mobile/teams/:id/invite", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const teamId = req.params.id;
+    const schema = z.object({ resourceId: z.string() });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const team = await db.select().from(teams).where(eq(teams.id, teamId));
+    if (!team.length) throw new NotFoundError("Team hittades inte");
+    if (team[0].leaderId !== resourceId) throw new ForbiddenError("Bara teamledare kan bjuda in");
+
+    const existing = await db.select().from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, parsed.data.resourceId)));
+    if (existing.length > 0) return res.json({ success: true, message: "Redan medlem" });
+
+    await db.insert(teamMembers).values({
+      id: `tm-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      teamId,
+      resourceId: parsed.data.resourceId,
+      role: "medlem",
+    });
+    res.json({ success: true });
+}));
+
+app.post("/api/mobile/teams/:id/accept", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const teamId = req.params.id;
+    const existing = await db.select().from(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, resourceId)));
+    if (existing.length === 0) throw new NotFoundError("Ingen inbjudan hittad");
+    res.json({ success: true });
+}));
+
+app.post("/api/mobile/teams/:id/leave", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const teamId = req.params.id;
+    await db.delete(teamMembers)
+      .where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.resourceId, resourceId)));
+    res.json({ success: true });
+}));
+
+app.delete("/api/mobile/teams/:id", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const teamId = req.params.id;
+    const team = await db.select().from(teams).where(eq(teams.id, teamId));
+    if (!team.length) throw new NotFoundError("Team hittades inte");
+    if (team[0].leaderId !== resourceId) throw new ForbiddenError("Bara teamledare kan ta bort teamet");
+
+    await db.delete(teamMembers).where(eq(teamMembers.teamId, teamId));
+    await db.update(teams).set({ status: "deleted", deletedAt: new Date() }).where(eq(teams.id, teamId));
+    res.json({ success: true });
+}));
+
+app.get("/api/mobile/resources/search", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const q = (req.query.q as string || "").toLowerCase().trim();
+    if (!q) return res.json([]);
+
+    const allResources = await storage.getResources(resource.tenantId);
+    const results = allResources
+      .filter(r => r.status === "active" && r.name.toLowerCase().includes(q))
+      .slice(0, 20)
+      .map(r => ({ id: r.id, name: r.name, role: r.resourceType || "driver", avatarUrl: null }));
+    res.json(results);
+}));
+
+app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const schema = z.object({
+      type: z.string(),
+      startTime: z.string(),
+      endTime: z.string().optional(),
+      note: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const entryId = `we-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const startTime = new Date(parsed.data.startTime);
+    const endTime = parsed.data.endTime ? new Date(parsed.data.endTime) : null;
+    const durationMinutes = endTime ? Math.round((endTime.getTime() - startTime.getTime()) / 60000) : null;
+
+    await db.insert(workEntries).values({
+      id: entryId,
+      tenantId: resource.tenantId,
+      workSessionId: req.params.id,
+      resourceId,
+      entryType: parsed.data.type,
+      startTime,
+      endTime,
+      durationMinutes,
+      notes: parsed.data.note || null,
+    });
+
+    res.json({ success: true, entryId });
+}));
+
+app.get("/api/mobile/orders/:id/time-entries", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const orderId = req.params.id;
+    const entries = await db.select().from(workEntries)
+      .where(eq(workEntries.workOrderId, orderId))
+      .orderBy(desc(workEntries.startTime));
+
+    res.json(entries.map(e => ({
+      id: e.id,
+      type: e.entryType,
+      startTime: e.startTime,
+      endTime: e.endTime,
+      duration: e.durationMinutes,
+      note: e.notes,
+    })));
+}));
+
+app.get("/api/mobile/time-summary", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
+    const dayStart = new Date(`${dateStr}T00:00:00`);
+    const dayEnd = new Date(`${dateStr}T23:59:59`);
+
+    const entries = await db.select().from(workEntries)
+      .where(and(
+        eq(workEntries.resourceId, resourceId),
+        gte(workEntries.startTime, dayStart),
+      ));
+
+    const filtered = entries.filter(e => e.startTime && e.startTime <= dayEnd);
+    let totalWork = 0, totalTravel = 0, totalBreak = 0;
+    for (const e of filtered) {
+      const mins = e.durationMinutes || 0;
+      if (e.entryType === "travel") totalTravel += mins;
+      else if (e.entryType === "break" || e.entryType === "rest") totalBreak += mins;
+      else totalWork += mins;
+    }
+
+    res.json({
+      totalWork, totalTravel, totalBreak,
+      totalHours: Math.round((totalWork + totalTravel + totalBreak) / 60 * 10) / 10,
+      date: dateStr,
+    });
+}));
+
+app.get("/api/mobile/statistics", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const period = (req.query.period as string) || "week";
+    let since: Date;
+    const now = new Date();
+    if (period === "month") {
+      since = new Date(now.getFullYear(), now.getMonth(), 1);
+    } else if (period === "all") {
+      since = new Date("2020-01-01");
+    } else {
+      const d = new Date();
+      d.setDate(d.getDate() - 7);
+      since = d;
+    }
+
+    const orders = await db.select().from(workOrders)
+      .where(and(
+        eq(workOrders.resourceId, resourceId),
+        gte(workOrders.createdAt, since),
+      ));
+
+    const completed = orders.filter(o => o.status === "completed" || o.status === "avslutad");
+    const deviations = await db.select().from(customerChangeRequests)
+      .where(and(
+        eq(customerChangeRequests.createdByResourceId, resourceId),
+        gte(customerChangeRequests.createdAt, since),
+      ));
+
+    const entries = await db.select().from(workEntries)
+      .where(and(
+        eq(workEntries.resourceId, resourceId),
+        gte(workEntries.startTime, since),
+      ));
+
+    const totalMinutes = entries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0);
+    const avgTime = completed.length > 0 ? Math.round(totalMinutes / completed.length) : 0;
+
+    res.json({
+      completedOrders: completed.length,
+      avgTimePerOrder: avgTime,
+      deviations: deviations.length,
+      totalHours: Math.round(totalMinutes / 60 * 10) / 10,
+      photos: 0,
+      period,
+    });
+}));
+
+app.get("/api/mobile/route", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
+
+    const orders = await db.select().from(workOrders)
+      .where(and(
+        eq(workOrders.resourceId, resourceId),
+        sql`DATE(${workOrders.scheduledDate}) = ${dateStr}`,
+      ))
+      .orderBy(workOrders.scheduledStartTime);
+
+    const orderList = [];
+    for (const o of orders) {
+      const obj = o.objectId ? await storage.getObject(o.objectId) : null;
+      orderList.push({
+        id: o.id,
+        title: o.title,
+        status: o.status,
+        scheduledDate: o.scheduledDate,
+        scheduledStartTime: o.scheduledStartTime,
+        estimatedDuration: o.estimatedDuration,
+        latitude: obj?.latitude || null,
+        longitude: obj?.longitude || null,
+        address: obj?.address || "",
+        objectName: obj?.name || "",
+      });
+    }
+
+    res.json({ orders: orderList, totalDistance: 0, estimatedDuration: 0 });
+}));
+
+app.get("/api/mobile/route-optimized", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
+
+    const orders = await db.select().from(workOrders)
+      .where(and(
+        eq(workOrders.resourceId, resourceId),
+        sql`DATE(${workOrders.scheduledDate}) = ${dateStr}`,
+      ))
+      .orderBy(workOrders.scheduledStartTime);
+
+    const orderList = [];
+    for (const o of orders) {
+      const obj = o.objectId ? await storage.getObject(o.objectId) : null;
+      orderList.push({
+        id: o.id,
+        title: o.title,
+        status: o.status,
+        latitude: obj?.latitude || null,
+        longitude: obj?.longitude || null,
+        address: obj?.address || "",
+        objectName: obj?.name || "",
+        estimatedDuration: o.estimatedDuration,
+      });
+    }
+
+    const withCoords = orderList.filter(o => o.latitude && o.longitude);
+    if (withCoords.length <= 1) {
+      return res.json({ orders: orderList, totalDistance: 0, estimatedDuration: 0, savings: 0 });
+    }
+
+    try {
+      const { getRoutingDistance } = await import("../distance-matrix-service");
+      let totalDistance = 0;
+      for (let i = 0; i < withCoords.length - 1; i++) {
+        const result = await getRoutingDistance(
+          withCoords[i].latitude!, withCoords[i].longitude!,
+          withCoords[i+1].latitude!, withCoords[i+1].longitude!
+        );
+        totalDistance += result.distanceKm;
+      }
+      res.json({ orders: orderList, totalDistance: Math.round(totalDistance), estimatedDuration: 0, savings: 0 });
+    } catch {
+      res.json({ orders: orderList, totalDistance: 0, estimatedDuration: 0, savings: 0 });
+    }
+}));
+
+app.post("/api/mobile/distance", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const schema = z.object({
+      from: z.object({ lat: z.number(), lng: z.number() }),
+      to: z.object({ lat: z.number(), lng: z.number() }),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const { getRoutingDistance } = await import("../distance-matrix-service");
+    const result = await getRoutingDistance(parsed.data.from.lat, parsed.data.from.lng, parsed.data.to.lat, parsed.data.to.lng);
+    res.json({ distance: result.distanceKm, duration: result.durationMin });
+}));
+
+app.post("/api/mobile/distance/batch", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const schema = z.object({
+      points: z.array(z.object({ lat: z.number(), lng: z.number() })).min(2),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const { getRoutingDistance } = await import("../distance-matrix-service");
+    const legs = [];
+    let totalDistance = 0, totalDuration = 0;
+
+    for (let i = 0; i < parsed.data.points.length - 1; i++) {
+      const p1 = parsed.data.points[i];
+      const p2 = parsed.data.points[i + 1];
+      const result = await getRoutingDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+      legs.push({
+        from: p1,
+        to: p2,
+        distance: result.distanceKm,
+        duration: result.durationMin,
+      });
+      totalDistance += result.distanceKm;
+      totalDuration += result.durationMin;
+    }
+
+    res.json({ legs, totalDistance, totalDuration });
+}));
+
+app.get("/api/mobile/break-config", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const tenant = await storage.getTenant(resource.tenantId);
+    const settings = (tenant?.settings as Record<string, any>) || {};
+    const breakConfig = settings.breakConfig || {};
+
+    res.json({
+      breakDuration: breakConfig.durationMinutes || 30,
+      autoPlace: breakConfig.autoPlace ?? true,
+      lunchStart: breakConfig.earliestStart || "11:00",
+      lunchEnd: breakConfig.latestEnd || "13:00",
+      breakType: breakConfig.breakType || "flexible",
+    });
+}));
+
+app.get("/api/mobile/eta-notification/history", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const notifications = await db.select().from(etaNotificationsTable)
+      .where(eq(etaNotificationsTable.tenantId, resource.tenantId))
+      .orderBy(desc(etaNotificationsTable.createdAt))
+      .limit(50);
+
+    res.json(notifications.map(n => ({
+      id: n.id,
+      orderId: n.workOrderId,
+      customerName: "",
+      sentAt: n.createdAt,
+      etaMinutes: n.etaTime ? parseInt(n.etaTime) : null,
+      status: n.status,
+    })));
+}));
+
+app.get("/api/mobile/eta-notification/config", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const tenant = await storage.getTenant(resource.tenantId);
+    const settings = (tenant?.settings as Record<string, any>) || {};
+    const etaConfig = settings.etaNotification || {};
+
+    res.json({
+      enabled: etaConfig.enabled ?? true,
+      autoSend: etaConfig.triggerOnEnRoute ?? true,
+      marginMinutes: etaConfig.marginMinutes || 15,
+    });
+}));
+
+app.post("/api/mobile/work-orders/carry-over", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const schema = z.object({
+      orderIds: z.array(z.string()),
+      targetDate: z.string(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    let movedCount = 0;
+    const targetDate = new Date(parsed.data.targetDate);
+
+    for (const orderId of parsed.data.orderIds) {
+      const order = await storage.getWorkOrder(orderId);
+      if (!order) continue;
+      if (order.resourceId !== resourceId) continue;
+      if (order.status === "completed" || order.status === "avslutad") continue;
+
+      await db.update(workOrders)
+        .set({ scheduledDate: targetDate })
+        .where(eq(workOrders.id, orderId));
+      movedCount++;
+    }
+
+    res.json({ success: true, movedCount });
+}));
+
+app.post("/api/mobile/work-orders/:id/auto-eta-sms", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const orderId = req.params.id;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const order = await storage.getWorkOrder(orderId);
+    if (!order) throw new NotFoundError("Order hittades inte");
+
+    try {
+      const result = await triggerETANotification(orderId, resource.tenantId, resourceId);
+      res.json({
+        success: true,
+        etaMinutes: (result as any)?.etaMinutes || null,
+        customerNotified: true,
+      });
+    } catch (err: any) {
+      res.json({
+        success: false,
+        etaMinutes: null,
+        customerNotified: false,
+        error: err.message || "Kunde inte skicka ETA-notis",
+      });
+    }
 }));
 
 function getFallbackChecklist(orderType: string): string[] {

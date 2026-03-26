@@ -72,6 +72,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Status Message Templates:** Configurable message templates with variable substitution for auto-responses.
 - **Resource Availability Service:** Real-time resource schedule analysis computing next available time from today's work orders.
 - **Portal Chat Auto-Responses:** Automatic status messages in customer portal chat when keywords like "status", "när", "ledig" are detected.
+- **Mobile API Fas 2 Endpoints:** Team management (my-profiles, my-team, CRUD, invite, accept, leave), resource search, work-session entries, time-entries/summary, statistics, route/route-optimized, distance/batch distance (Geoapify with Haversine fallback), break-config, ETA notification history/config, work order carry-over, auto-ETA-SMS.
 
 ## External Dependencies
 - **PostgreSQL:** Primary database.
