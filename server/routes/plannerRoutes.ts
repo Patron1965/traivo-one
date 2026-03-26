@@ -475,7 +475,7 @@ const map = L.map('map').setView([57.7089, 11.9746], 11);
 fetch('/api/system/map-config').then(r=>r.json()).then(function(cfg){L.tileLayer(cfg.tileUrl,{attribution:cfg.attribution,maxZoom:20}).addTo(map);}).catch(function(){L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);});
 
 const driverLayer = L.layerGroup().addTo(map);
-const jobCluster = L.markerClusterGroup({maxClusterRadius:40}).addTo(map);
+const jobCluster = (typeof L.markerClusterGroup === 'function') ? L.markerClusterGroup({maxClusterRadius:40}).addTo(map) : L.layerGroup().addTo(map);
 const routeLayer = L.layerGroup().addTo(map);
 let currentRange = 'today';
 let jobsVisible = true;
@@ -969,7 +969,7 @@ updateInfoBar();
 }
 
 renderStatusFilters();
-refresh();
+refresh().catch(function(err){ console.error('Planner refresh error:', err); document.getElementById('info-bar').textContent = 'Fel vid laddning: ' + err.message; });
 setInterval(loadDrivers, 15000);
 setInterval(function(){ loadJobs(); updateInfoBar(); }, 30000);
 setInterval(loadRoutes, 60000);
