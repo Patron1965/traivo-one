@@ -1,19 +1,13 @@
 import type { Express } from "express";
   import {
-    MobileAuthenticatedRequest, enrichOrderForMobile, broadcastPlannerEvent, handleQuickAction, getFallbackChecklist,
-    storage, db, eq, sql, desc, and, gte, isNull, inArray, z,
-    formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
+    MobileAuthenticatedRequest,
+    storage, isMobileAuthenticated,
     getTenantIdWithFallback, asyncHandler,
-    NotFoundError, ValidationError, ForbiddenError,
-    isAuthenticated,
-    routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions,
-    mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
-    notificationService, triggerETANotification,
-    OpenAI,
-    getArticleMetadataForObject, writeArticleMetadataOnObject,
+    NotFoundError, ValidationError,
+    notificationService,
     handleWorkOrderStatusChange,
   } from "./shared";
-  import type { Request, Response } from "express";
+  import type { Response } from "express";
   
   export function registerSyncRoutes(app: Express) {
   // ============================================

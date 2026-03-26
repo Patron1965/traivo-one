@@ -1,19 +1,12 @@
 import type { Express } from "express";
   import {
-    MobileAuthenticatedRequest, enrichOrderForMobile, broadcastPlannerEvent, handleQuickAction, getFallbackChecklist,
-    storage, db, eq, sql, desc, and, gte, isNull, inArray, z,
-    formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
+    MobileAuthenticatedRequest,
+    storage, db, eq, resources,
+    mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
     getTenantIdWithFallback, asyncHandler,
-    NotFoundError, ValidationError, ForbiddenError,
-    isAuthenticated,
-    routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions,
-    mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
-    notificationService, triggerETANotification,
-    OpenAI,
-    getArticleMetadataForObject, writeArticleMetadataOnObject,
-    handleWorkOrderStatusChange,
+    NotFoundError, ValidationError,
   } from "./shared";
-  import type { Request, Response } from "express";
+  import type { Response } from "express";
   
   export function registerAuthRoutes(app: Express) {
   const loginAttempts = new Map<string, { count: number; resetAt: number }>();
@@ -116,6 +109,18 @@ app.post("/api/mobile/logout", isMobileAuthenticated, asyncHandler(async (req: M
     const token = authHeader.substring(7);
     mobileTokens.delete(token);
     res.json({ success: true });
+}));
+
+app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+    const resource = await storage.getResource(req.mobileResourceId);
+    if (!resource) {
+      throw new NotFoundError("Resurs hittades inte");
+    }
+    res.json({
+      ...resource,
+      startLatitude: resource.homeLatitude || null,
+      startLongitude: resource.homeLongitude || null,
+    });
 }));
 
   }

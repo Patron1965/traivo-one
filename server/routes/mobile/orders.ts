@@ -1,34 +1,20 @@
 import type { Express } from "express";
   import {
-    MobileAuthenticatedRequest, enrichOrderForMobile, broadcastPlannerEvent, handleQuickAction, getFallbackChecklist,
+    MobileAuthenticatedRequest,
     storage, db, eq, sql, desc, and, gte, isNull, inArray, z,
-    formatZodError, verifyTenantOwnership, DEFAULT_TENANT_ID, mobileTokens, generateMobileToken, validateMobileToken, isMobileAuthenticated,
+    formatZodError, isMobileAuthenticated,
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError, ForbiddenError,
-    isAuthenticated,
-    routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions,
+    routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable,
     mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES,
     notificationService, triggerETANotification,
     OpenAI,
     getArticleMetadataForObject, writeArticleMetadataOnObject,
     handleWorkOrderStatusChange,
   } from "./shared";
-  import type { Request, Response } from "express";
+  import type { Response } from "express";
   
   export function registerOrderRoutes(app: Express) {
-  // Get current resource info
-app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resource = await storage.getResource(req.mobileResourceId);
-    if (!resource) {
-      throw new NotFoundError("Resurs hittades inte");
-    }
-    res.json({
-      ...resource,
-      startLatitude: resource.homeLatitude || null,
-      startLongitude: resource.homeLongitude || null,
-    });
-}));
-
 // Get work orders for the logged-in resource
 app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
@@ -376,215 +362,6 @@ app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, asyncHandler(asy
     
     res.json(updatedOrder);
 }));
-
-// ============================================
-// POSITION TRACKING API ENDPOINTS
-// ============================================
-
-app.post("/api/resources/position", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
-    const { resourceId, latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
-    
-    if (!resourceId) {
-      throw new ValidationError("resourceId is required");
-    }
-    if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
-      throw new ValidationError("Latitud och longitud krävs");
-    }
-
-    const resource = await storage.getResource(resourceId);
-    if (!resource) {
-      throw new NotFoundError("Resurs hittades inte");
-    }
-    const tenantId = getTenantIdWithFallback(req);
-    if (resource.tenantId && resource.tenantId !== tenantId) {
-      throw new ForbiddenError("Åtkomst nekad");
-    }
-
-    await notificationService.handlePositionUpdate({
-      resourceId,
-      latitude,
-      longitude,
-      speed: speed || 0,
-      heading: heading || 0,
-      accuracy: accuracy || 0,
-      status: status || "traveling",
-      workOrderId
-    });
-    
-    res.json({ success: true });
-}));
-
-// Update position from mobile app (also handled via WebSocket)
-app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.mobileResourceId;
-    const { latitude, longitude, speed, heading, accuracy, status, workOrderId, currentOrderId } = req.body;
-    
-    if (latitude === undefined || latitude === null || longitude === undefined || longitude === null) {
-      throw new ValidationError("Latitud och longitud krävs");
-    }
-    
-    await notificationService.handlePositionUpdate({
-      resourceId,
-      latitude,
-      longitude,
-      speed,
-      heading,
-      accuracy,
-      status: status || "traveling",
-      workOrderId: workOrderId || currentOrderId,
-    });
-    
-    res.json({ success: true });
-}));
-
-// ============================================
-// WORK SESSION API
-// ============================================
-
-app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.mobileResourceId;
-    const resource = await storage.getResource(resourceId);
-    if (!resource) throw new NotFoundError("Resurs hittades inte");
-
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
-    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | undefined;
-
-    if (activeSession && (activeSession as { status?: string }).status === 'active') {
-      return res.json(activeSession);
-    }
-
-    const session = {
-      id: `ws-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`,
-      startTime: new Date().toISOString(),
-      endTime: null,
-      status: 'active' as const,
-      pausedAt: null,
-      totalPauseMinutes: 0,
-    };
-
-    await storage.updateResource(resourceId, {
-      metadata: { ...existingMeta, activeWorkSession: session },
-    } as any);
-
-    console.log(`[mobile] Work session started for resource ${resourceId}`);
-    res.json(session);
-
-    notificationService.broadcastToAll({
-      type: "schedule_changed",
-      title: "Arbetspass startat",
-      message: `${resource.name || resourceId} har startat sitt arbetspass`,
-      data: { resourceId, sessionId: session.id, event: "work_session_started" }
-    });
-}));
-
-app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.mobileResourceId;
-    const resource = await storage.getResource(resourceId);
-    if (!resource) throw new NotFoundError("Resurs hittades inte");
-
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
-    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
-
-    if (activeSession && (activeSession as { status?: string }).status !== 'completed') {
-      res.json(activeSession);
-    } else {
-      res.json(null);
-    }
-}));
-
-const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.mobileResourceId;
-    const resource = await storage.getResource(resourceId);
-    if (!resource) throw new NotFoundError("Resurs hittades inte");
-
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
-    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
-
-    if (!activeSession) {
-      return res.json({ success: false, error: "Inget aktivt arbetspass" });
-    }
-
-    const updatedSession = {
-      ...activeSession,
-      endTime: new Date().toISOString(),
-      status: 'completed',
-    };
-
-    await storage.updateResource(resourceId, {
-      metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as any);
-
-    console.log(`[mobile] Work session stopped for resource ${resourceId}`);
-    res.json(updatedSession);
-
-    notificationService.broadcastToAll({
-      type: "schedule_changed",
-      title: "Arbetspass avslutat",
-      message: `${resource.name || resourceId} har avslutat sitt arbetspass`,
-      data: { resourceId, event: "work_session_stopped" }
-    });
-});
-app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
-app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
-
-const workSessionPauseHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.mobileResourceId;
-    const resource = await storage.getResource(resourceId);
-    if (!resource) throw new NotFoundError("Resurs hittades inte");
-
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
-    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
-
-    if (!activeSession) {
-      return res.json({ success: false, error: "Inget aktivt arbetspass" });
-    }
-
-    const updatedSession = {
-      ...activeSession,
-      status: 'paused',
-      pausedAt: new Date().toISOString(),
-    };
-
-    await storage.updateResource(resourceId, {
-      metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as any);
-
-    res.json(updatedSession);
-});
-app.patch("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
-app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
-
-const workSessionResumeHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const resourceId = req.mobileResourceId;
-    const resource = await storage.getResource(resourceId);
-    if (!resource) throw new NotFoundError("Resurs hittades inte");
-
-    const existingMeta: Record<string, unknown> = (resource.metadata as Record<string, unknown>) || {};
-    const activeSession = existingMeta.activeWorkSession as Record<string, unknown> | null;
-
-    if (!activeSession) {
-      return res.json({ success: false, error: "Inget aktivt arbetspass" });
-    }
-
-    const pausedAt = (activeSession as { pausedAt?: string }).pausedAt;
-    const totalPause = ((activeSession as { totalPauseMinutes?: number }).totalPauseMinutes || 0) +
-      (pausedAt ? Math.round((Date.now() - new Date(pausedAt).getTime()) / 60000) : 0);
-
-    const updatedSession = {
-      ...activeSession,
-      status: 'active',
-      pausedAt: null,
-      totalPauseMinutes: totalPause,
-    };
-
-    await storage.updateResource(resourceId, {
-      metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as any);
-
-    res.json(updatedSession);
-});
-app.patch("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSessionResumeHandler);
-app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSessionResumeHandler);
 
 // ============================================
 // PHOTO DOCUMENTATION API
