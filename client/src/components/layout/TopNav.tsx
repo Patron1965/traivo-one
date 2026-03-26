@@ -171,7 +171,7 @@ function TenantLogo() {
         <img
           src={displayLogo}
           alt={displayName}
-          className={`h-14 w-auto object-contain ${isDefaultLogo ? "dark:brightness-0 dark:invert" : ""}`}
+          className={`h-14 w-auto object-contain mix-blend-multiply dark:mix-blend-screen ${isDefaultLogo ? "dark:brightness-150 dark:contrast-200" : ""}`}
           style={{ maxWidth: "180px" }}
           data-testid="img-tenant-logo"
         />

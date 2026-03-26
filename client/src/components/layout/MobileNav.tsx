@@ -150,7 +150,7 @@ export function MobileNav() {
       <SheetContent side="left" className="w-80 p-0" data-testid="mobile-nav-sheet">
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center gap-3">
-            <img src={traivoLogo} alt="Traivo" className="h-14 w-auto object-contain dark:brightness-0 dark:invert" data-testid="img-mobile-nav-logo" />
+            <img src={traivoLogo} alt="Traivo" className="h-14 w-auto object-contain mix-blend-multiply dark:mix-blend-screen dark:brightness-150 dark:contrast-200" data-testid="img-mobile-nav-logo" />
             <SheetTitle className="sr-only">Traivo</SheetTitle>
           </div>
         </SheetHeader>
