@@ -3,7 +3,7 @@ set -e
 
 echo "Building static bundles for Expo Go..."
 
-DIST_DIR="dist"
+DIST_DIR="dist-metro"
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR/ios" "$DIST_DIR/android"
 
