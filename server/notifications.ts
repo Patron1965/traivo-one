@@ -31,7 +31,7 @@ export type NotificationType =
   | "position_update"
   | "route_update"
   | "notification"
-  | "order_updated";
+  | "order:updated";
 
 export interface Notification {
   id: string;

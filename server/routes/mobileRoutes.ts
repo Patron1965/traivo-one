@@ -391,7 +391,7 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     });
 
     notificationService.sendToResource(resourceId, {
-      type: "order_updated",
+      type: "order:updated",
       title: "Order uppdaterad",
       message: `${updatedOrder.title || orderId} — status: ${status}`,
       orderId,
@@ -1382,9 +1382,22 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
               const validOrderStatuses: readonly string[] = ORDER_STATUSES;
               updateData.orderStatus = validOrderStatuses.includes(newStatus) ? newStatus : 'skapad';
             }
-            await storage.updateWorkOrder(orderId, updateData);
+            const syncUpdated = await storage.updateWorkOrder(orderId, updateData);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
+
+            notificationService.sendToResource(resourceId, {
+              type: "order:updated",
+              title: "Order uppdaterad (sync)",
+              message: `${syncUpdated.title || orderId} — status: ${newStatus}`,
+              orderId,
+              data: { status: newStatus, executionStatus: updateData.executionStatus, source: "sync" }
+            });
+
+            broadcastPlannerEvent({
+              type: 'status_changed',
+              data: { orderId, orderNumber: syncUpdated.title || `WO-${orderId.substring(0,8)}`, oldStatus: order.orderStatus || 'unknown', newStatus, driverName: resource?.name || '', timestamp: new Date().toISOString() }
+            });
             break;
           }
           case "note": {
