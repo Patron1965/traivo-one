@@ -23,7 +23,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // server/app.ts
-var import_express4 = __toESM(require("express"));
+var import_express9 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_path = __toESM(require("path"));
 var import_fs = __toESM(require("fs"));
@@ -32,8 +32,8 @@ var import_http = __toESM(require("http"));
 var import_qrcode = __toESM(require("qrcode"));
 var import_socket = require("socket.io");
 
-// server/routes/mobile.ts
-var import_express = require("express");
+// server/routes/mobile/index.ts
+var import_express6 = require("express");
 
 // server/db.ts
 var import_pg = require("pg");
@@ -147,34 +147,9 @@ async function sendPushNotification(driverId, title, body, data) {
   }
 }
 
-// server/routes/mobile.ts
-var router = (0, import_express.Router)();
+// server/routes/mobile/proxyHelper.ts
 var TRAIVO_API_URL = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL || "";
 var IS_MOCK_MODE = !TRAIVO_API_URL || process.env.TRAIVO_MOCK_MODE === "true" || process.env.KINAB_MOCK_MODE === "true";
-router.use((req, _res, next) => {
-  const mode = IS_MOCK_MODE ? "MOCK" : "LIVE";
-  console.log(`[${mode}] ${req.method} ${req.baseUrl}${req.path}`);
-  next();
-});
-router.use((_req, res, next) => {
-  if (IS_MOCK_MODE) {
-    res.setHeader("X-Traivo-Mock", "true");
-    const originalJson = res.json.bind(res);
-    res.json = function(body) {
-      if (body && typeof body === "object" && !Array.isArray(body)) {
-        body._mock = true;
-      }
-      return originalJson(body);
-    };
-  }
-  next();
-});
-router.get("/server-mode", (_req, res) => {
-  res.json({
-    mode: IS_MOCK_MODE ? "mock" : "live",
-    backendUrl: IS_MOCK_MODE ? null : TRAIVO_API_URL
-  });
-});
 async function traivoFetch(path2, options = {}) {
   const url = `${TRAIVO_API_URL}${path2}`;
   const method = (options.method || "GET").toUpperCase();
@@ -215,6 +190,221 @@ function getAuthHeader(req) {
   const auth = req.headers.authorization;
   return auth ? { "Authorization": auth } : {};
 }
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+function mapTraivoStatus(traivoStatus, orderStatus) {
+  const statusMap = {
+    "draft": "planned",
+    "scheduled": "planned",
+    "dispatched": "dispatched",
+    "on_site": "on_site",
+    "in_progress": "in_progress",
+    "completed": "completed",
+    "failed": "failed",
+    "cancelled": "cancelled",
+    "impossible": "failed"
+  };
+  return statusMap[traivoStatus] || statusMap[orderStatus || ""] || "planned";
+}
+function parseAddressParts(fullAddress) {
+  if (!fullAddress) return { address: "", city: "", postalCode: "" };
+  const parts = fullAddress.split(",").map((s) => s.trim());
+  return {
+    address: parts[0] || fullAddress,
+    city: parts[1] || "",
+    postalCode: parts[2] || ""
+  };
+}
+function transformTraivoOrder(raw) {
+  const addrParts = parseAddressParts(raw.objectAddress || "");
+  return {
+    id: raw.id,
+    orderNumber: raw.title || raw.externalReference || `ORD-${(raw.id || "").toString().slice(0, 8)}`,
+    status: mapTraivoStatus(raw.status, raw.orderStatus),
+    customerName: raw.customerName || "Ok\xE4nd kund",
+    address: addrParts.address,
+    city: addrParts.city,
+    postalCode: addrParts.postalCode,
+    latitude: raw.taskLatitude || 0,
+    longitude: raw.taskLongitude || 0,
+    what3words: raw.what3words || void 0,
+    scheduledDate: raw.scheduledDate ? raw.scheduledDate.split("T")[0] : (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
+    scheduledTimeStart: raw.scheduledStartTime || void 0,
+    scheduledTimeEnd: void 0,
+    scheduledStartTime: raw.scheduledStartTime || void 0,
+    scheduledEndTime: void 0,
+    title: raw.title || "",
+    description: raw.description || "",
+    notes: raw.notes || raw.plannedNotes || "",
+    objectType: raw.orderType || "",
+    objectId: raw.objectId || "",
+    clusterId: raw.clusterId || void 0,
+    clusterName: void 0,
+    priority: raw.priority || "normal",
+    articles: [],
+    contacts: raw.customerPhone ? [{ id: "c1", name: raw.customerName || "", phone: raw.customerPhone, role: "Kund" }] : [],
+    estimatedDuration: raw.estimatedDuration || 30,
+    actualStartTime: raw.onSiteAt || void 0,
+    actualEndTime: void 0,
+    completedAt: raw.completedAt || void 0,
+    signatureUrl: void 0,
+    photos: [],
+    deviations: [],
+    sortOrder: 0,
+    executionCodes: raw.executionCode ? [{ id: raw.executionCode, code: raw.executionCode, name: raw.executionCode }] : [],
+    timeRestrictions: [],
+    subSteps: [],
+    dependencies: [],
+    isLocked: raw.lockedAt ? true : false,
+    orderNotes: [],
+    inspections: [],
+    executionStatus: raw.executionStatus || raw.execution_status || "not_started",
+    creationMethod: raw.creationMethod || raw.creation_method || "manual",
+    object: raw.objectName ? {
+      id: raw.objectId,
+      name: raw.objectName,
+      address: raw.objectAddress || "",
+      latitude: raw.taskLatitude || 0,
+      longitude: raw.taskLongitude || 0,
+      what3words: raw.what3words || void 0
+    } : void 0,
+    customer: raw.customerName ? {
+      id: raw.customerId,
+      name: raw.customerName
+    } : void 0,
+    resourceId: raw.resourceId,
+    tenantId: raw.tenantId,
+    metadata: raw.metadata
+  };
+}
+function parseCoordPoints(coords) {
+  const points = coords.split(";");
+  const parsed = [];
+  for (const point of points) {
+    const parts = point.split(",");
+    if (parts.length !== 2) return null;
+    const lon = parseFloat(parts[0]);
+    const lat = parseFloat(parts[1]);
+    if (isNaN(lon) || isNaN(lat) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
+    parsed.push({ lon, lat });
+  }
+  return parsed;
+}
+function perpendicularDistance(point, lineStart, lineEnd) {
+  const dx = lineEnd[0] - lineStart[0];
+  const dy = lineEnd[1] - lineStart[1];
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) {
+    const ex2 = point[0] - lineStart[0];
+    const ey2 = point[1] - lineStart[1];
+    return Math.sqrt(ex2 * ex2 + ey2 * ey2);
+  }
+  const t = Math.max(0, Math.min(1, ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / lenSq));
+  const projX = lineStart[0] + t * dx;
+  const projY = lineStart[1] + t * dy;
+  const ex = point[0] - projX;
+  const ey = point[1] - projY;
+  return Math.sqrt(ex * ex + ey * ey);
+}
+function rdpSimplify(coords, epsilon) {
+  if (coords.length <= 2) return coords;
+  let maxDist = 0;
+  let maxIdx = 0;
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  for (let i = 1; i < coords.length - 1; i++) {
+    const d = perpendicularDistance(coords[i], first, last);
+    if (d > maxDist) {
+      maxDist = d;
+      maxIdx = i;
+    }
+  }
+  if (maxDist > epsilon) {
+    const left = rdpSimplify(coords.slice(0, maxIdx + 1), epsilon);
+    const right = rdpSimplify(coords.slice(maxIdx), epsilon);
+    return left.slice(0, -1).concat(right);
+  }
+  return [first, last];
+}
+function simplifyCoordinates(coords, maxPoints) {
+  if (coords.length <= maxPoints) return coords;
+  let lo = 0;
+  let hi = 0.01;
+  let result = coords;
+  for (let iter = 0; iter < 20; iter++) {
+    const mid = (lo + hi) / 2;
+    result = rdpSimplify(coords, mid);
+    if (result.length > maxPoints) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+  if (result.length > maxPoints) {
+    result = rdpSimplify(coords, hi);
+  }
+  return result;
+}
+function buildFallbackResponse(parsed) {
+  return {
+    waypoints: parsed.map((p, i) => ({ location: [p.lon, p.lat], waypointIndex: i, tripsIndex: 0 })),
+    trips: [{
+      geometry: { type: "LineString", coordinates: parsed.map((p) => [p.lon, p.lat]) },
+      distance: 0,
+      duration: 0,
+      legs: []
+    }],
+    fallback: true
+  };
+}
+async function handleTimeEntries(orderId, driverId, newStatus) {
+  const now2 = /* @__PURE__ */ new Date();
+  try {
+    if (newStatus === "dispatched") {
+      await pool.query(
+        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'travel', $3)`,
+        [orderId, driverId, now2]
+      );
+    } else if (newStatus === "on_site") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'travel' AND ended_at IS NULL`,
+        [now2, orderId, driverId]
+      );
+      await pool.query(
+        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'on_site', $3)`,
+        [orderId, driverId, now2]
+      );
+    } else if (newStatus === "in_progress") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'on_site' AND ended_at IS NULL`,
+        [now2, orderId, driverId]
+      );
+      await pool.query(
+        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'working', $3)`,
+        [orderId, driverId, now2]
+      );
+    } else if (newStatus === "completed" || newStatus === "utford") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
+        [now2, orderId, driverId]
+      );
+    } else if (newStatus === "failed" || newStatus === "impossible" || newStatus === "cancelled") {
+      await pool.query(
+        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
+        [now2, orderId, driverId]
+      );
+    }
+  } catch (err) {
+    console.error("Error managing time entries:", err.message);
+  }
+}
+
+// server/routes/mobile/mockData.ts
 var MOCK_RESOURCE = {
   id: 101,
   tenantId: "traivo-demo",
@@ -316,9 +506,6 @@ var MOCK_NOTIFICATIONS_LEGACY = [
   { id: "n2", type: "urgent", title: "Br\xE5dskande uppdrag", message: "Nytt h\xE4mtuppdrag tillagt: S\xF6dert\xE4lje Hamn AB", isRead: false, createdAt: new Date(Date.now() - 72e5).toISOString(), orderId: "5" },
   { id: "n3", type: "info", title: "Systeminformation", message: "Ny version av appen tillg\xE4nglig", isRead: true, createdAt: new Date(Date.now() - 864e5).toISOString() }
 ];
-function findMockOrder(idParam) {
-  return MOCK_ORDERS.find((o) => o.id === parseInt(idParam) || o.orderNumber === idParam || o.id.toString() === idParam);
-}
 var MOCK_ORDERS = [
   {
     id: 1,
@@ -670,98 +857,103 @@ var MOCK_CHECKLIST_TEMPLATES = {
     ]
   }
 };
-function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-function mapTraivoStatus(traivoStatus, orderStatus) {
-  const statusMap = {
-    "draft": "planned",
-    "scheduled": "planned",
-    "dispatched": "dispatched",
-    "on_site": "on_site",
-    "in_progress": "in_progress",
-    "completed": "completed",
-    "failed": "failed",
-    "cancelled": "cancelled",
-    "impossible": "failed"
-  };
-  return statusMap[traivoStatus] || statusMap[orderStatus || ""] || "planned";
-}
-function parseAddressParts(fullAddress) {
-  if (!fullAddress) return { address: "", city: "", postalCode: "" };
-  const parts = fullAddress.split(",").map((s) => s.trim());
-  return {
-    address: parts[0] || fullAddress,
-    city: parts[1] || "",
-    postalCode: parts[2] || ""
-  };
-}
-function transformTraivoOrder(raw) {
-  const addrParts = parseAddressParts(raw.objectAddress || "");
-  return {
-    id: raw.id,
-    orderNumber: raw.title || raw.externalReference || `ORD-${(raw.id || "").toString().slice(0, 8)}`,
-    status: mapTraivoStatus(raw.status, raw.orderStatus),
-    customerName: raw.customerName || "Ok\xE4nd kund",
-    address: addrParts.address,
-    city: addrParts.city,
-    postalCode: addrParts.postalCode,
-    latitude: raw.taskLatitude || 0,
-    longitude: raw.taskLongitude || 0,
-    what3words: raw.what3words || void 0,
-    scheduledDate: raw.scheduledDate ? raw.scheduledDate.split("T")[0] : (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
-    scheduledTimeStart: raw.scheduledStartTime || void 0,
-    scheduledTimeEnd: void 0,
-    scheduledStartTime: raw.scheduledStartTime || void 0,
-    scheduledEndTime: void 0,
-    title: raw.title || "",
-    description: raw.description || "",
-    notes: raw.notes || raw.plannedNotes || "",
-    objectType: raw.orderType || "",
-    objectId: raw.objectId || "",
-    clusterId: raw.clusterId || void 0,
-    clusterName: void 0,
-    priority: raw.priority || "normal",
-    articles: [],
-    contacts: raw.customerPhone ? [{ id: "c1", name: raw.customerName || "", phone: raw.customerPhone, role: "Kund" }] : [],
-    estimatedDuration: raw.estimatedDuration || 30,
-    actualStartTime: raw.onSiteAt || void 0,
-    actualEndTime: void 0,
-    completedAt: raw.completedAt || void 0,
-    signatureUrl: void 0,
+var MOCK_WORK_SESSION = null;
+var MOCK_WORK_SESSION_ENTRIES = [];
+var CHANGE_REQUEST_CATEGORIES = [
+  { id: "antal_karl_andrat", name: "Antal k\xE4rl \xE4ndrat", icon: "package" },
+  { id: "skadat_material", name: "Skadat material", icon: "alert-triangle" },
+  { id: "tillganglighet", name: "Tillg\xE4nglighetsproblem", icon: "map-pin" },
+  { id: "skador", name: "Skador", icon: "alert-circle" },
+  { id: "rengorings_behov", name: "Reng\xF6ringsbehov", icon: "droplet" },
+  { id: "ovrigt", name: "\xD6vrigt", icon: "more-horizontal" }
+];
+var MOCK_CHANGE_REQUESTS = [
+  {
+    id: "cr-1",
+    category: "skadat_material",
+    description: "K\xE4rlet har spricka i sidan, l\xE4cker vid regn.",
+    severity: "high",
+    status: "new",
+    objectId: "obj-101",
+    objectName: "K\xE4rl 240L - BRF Solsidan",
+    customerId: "cust-1",
+    customerName: "BRF Solsidan",
     photos: [],
-    deviations: [],
-    sortOrder: 0,
-    executionCodes: raw.executionCode ? [{ id: raw.executionCode, code: raw.executionCode, name: raw.executionCode }] : [],
-    timeRestrictions: [],
-    subSteps: [],
-    dependencies: [],
-    isLocked: raw.lockedAt ? true : false,
-    orderNotes: [],
-    inspections: [],
-    executionStatus: raw.executionStatus || raw.execution_status || "not_started",
-    creationMethod: raw.creationMethod || raw.creation_method || "manual",
-    object: raw.objectName ? {
-      id: raw.objectId,
-      name: raw.objectName,
-      address: raw.objectAddress || "",
-      latitude: raw.taskLatitude || 0,
-      longitude: raw.taskLongitude || 0,
-      what3words: raw.what3words || void 0
-    } : void 0,
-    customer: raw.customerName ? {
-      id: raw.customerId,
-      name: raw.customerName
-    } : void 0,
-    resourceId: raw.resourceId,
-    tenantId: raw.tenantId,
-    metadata: raw.metadata
-  };
+    reportedByName: "Erik Lindqvist",
+    reportedByResourceId: "101",
+    createdAt: new Date(Date.now() - 864e5 * 2).toISOString()
+  },
+  {
+    id: "cr-2",
+    category: "tillganglighet",
+    description: "Parkerade bilar blockerar regelbundet infartsv\xE4gen till k\xE4rlutrymmet.",
+    severity: "medium",
+    status: "reviewed",
+    objectId: "obj-202",
+    objectName: "Container 8m\xB3 - Fastighets AB Norden",
+    customerId: "cust-2",
+    customerName: "Fastighets AB Norden",
+    photos: [],
+    reportedByName: "Erik Lindqvist",
+    reportedByResourceId: "101",
+    reviewedBy: "Lisa Plansson",
+    reviewedAt: new Date(Date.now() - 864e5).toISOString(),
+    reviewNotes: "Kontaktat fastighets\xE4garen, skyltar best\xE4llda.",
+    createdAt: new Date(Date.now() - 864e5 * 5).toISOString()
+  },
+  {
+    id: "cr-3",
+    category: "antal_karl_andrat",
+    description: "Beh\xF6ver ett extra 370L k\xE4rl f\xF6r tr\xE4dg\xE5rdsavfall.",
+    severity: "low",
+    status: "resolved",
+    objectId: "obj-101",
+    objectName: "K\xE4rl 240L - BRF Solsidan",
+    customerId: "cust-1",
+    customerName: "BRF Solsidan",
+    photos: [],
+    reportedByName: "Erik Lindqvist",
+    reportedByResourceId: "101",
+    reviewedBy: "Lisa Plansson",
+    reviewedAt: new Date(Date.now() - 864e5 * 3).toISOString(),
+    reviewNotes: "Arbetsorder skapad: WO-2026-0500",
+    createdAt: new Date(Date.now() - 864e5 * 10).toISOString()
+  }
+];
+var MOCK_DISRUPTIONS = [];
+var now = /* @__PURE__ */ new Date();
+var h = (hoursAgo) => new Date(now.getTime() - hoursAgo * 36e5).toISOString();
+var MOCK_NOTIFICATIONS = [
+  { id: 1, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0456 \u2014 Volvo Lundby har tilldelats dig.", read: false, createdAt: h(0.5), relatedOrderId: 1 },
+  { id: 2, type: "schedule_change", title: "Schema \xE4ndrat", body: "Ordningen p\xE5 dina uppdrag har uppdaterats av planeraren.", read: false, createdAt: h(1.2) },
+  { id: 3, type: "team_invite", title: "Teaminbjudan", body: "Anna Svensson har bjudit in dig till Team S\xF6dert\xE4lje \xD6st.", read: false, createdAt: h(2) },
+  { id: 4, type: "deviation_reviewed", title: "Avvikelse granskad", body: 'Din avvikelse "Blockerad infart" p\xE5 WO-2026-0452 har godk\xE4nts.', read: true, createdAt: h(5), relatedOrderId: 2 },
+  { id: 5, type: "status_change", title: "Order uppdaterad", body: 'WO-2026-0453 har \xE4ndrats till "P\xE5g\xE5r" av planeraren.', read: true, createdAt: h(8), relatedOrderId: 3 },
+  { id: 6, type: "sign_off_complete", title: "Kundkvittering mottagen", body: "Kunden har signerat WO-2026-0451.", read: true, createdAt: h(24), relatedOrderId: 1 },
+  { id: 7, type: "material_update", title: "Materiallager uppdaterat", body: 'Artikeln "Plastk\xE4rl 370L" har fyllts p\xE5 i lagret.', read: true, createdAt: h(26) },
+  { id: 8, type: "system", title: "Appuppdatering tillg\xE4nglig", body: "Traivo Go v2.4 finns nu tillg\xE4nglig med f\xF6rb\xE4ttrad GPS-precision.", read: true, createdAt: h(48) },
+  { id: 9, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0455 \u2014 S\xF6dert\xE4lje Hamn har tilldelats dig.", read: true, createdAt: h(50), relatedOrderId: 5 },
+  { id: 10, type: "schedule_change", title: "Prioritet \xE4ndrad", body: "WO-2026-0454 har f\xE5tt h\xF6gre prioritet.", read: true, createdAt: h(72), relatedOrderId: 4 }
+];
+function findMockOrder(idParam) {
+  return MOCK_ORDERS.find((o) => o.id === parseInt(idParam) || o.orderNumber === idParam || o.id.toString() === idParam);
 }
+function setMockWorkSession(val) {
+  MOCK_WORK_SESSION = val;
+}
+function setMockWorkSessionEntries(val) {
+  MOCK_WORK_SESSION_ENTRIES = val;
+}
+function getMockWorkSession() {
+  return MOCK_WORK_SESSION;
+}
+function getMockWorkSessionEntries() {
+  return MOCK_WORK_SESSION_ENTRIES;
+}
+
+// server/routes/mobile/auth.ts
+var import_express = require("express");
+var router = (0, import_express.Router)();
 router.post("/login", async (req, res) => {
   if (IS_MOCK_MODE) {
     const { username, password, pin, email } = req.body;
@@ -902,7 +1094,11 @@ router.get("/my-profiles", async (req, res) => {
     });
   }
 });
-router.get("/my-team", async (req, res) => {
+
+// server/routes/mobile/teams.ts
+var import_express2 = require("express");
+var router2 = (0, import_express2.Router)();
+router2.get("/my-team", async (req, res) => {
   if (IS_MOCK_MODE) {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.includes(MOCK_TOKEN)) {
@@ -941,7 +1137,7 @@ router.get("/my-team", async (req, res) => {
     });
   }
 });
-router.post("/teams", async (req, res) => {
+router2.post("/teams", async (req, res) => {
   if (IS_MOCK_MODE) {
     const { name, description, color, memberId } = req.body;
     if (!name) {
@@ -971,7 +1167,7 @@ router.post("/teams", async (req, res) => {
     res.status(503).json({ error: "Kunde inte skapa team." });
   }
 });
-router.post("/teams/:id/invite", async (req, res) => {
+router2.post("/teams/:id/invite", async (req, res) => {
   if (IS_MOCK_MODE) {
     const { resourceId } = req.body;
     const resource = MOCK_RESOURCES.find((r) => r.id === resourceId);
@@ -995,7 +1191,7 @@ router.post("/teams/:id/invite", async (req, res) => {
     res.status(503).json({ error: "Kunde inte skicka inbjudan." });
   }
 });
-router.post("/teams/:id/accept", async (req, res) => {
+router2.post("/teams/:id/accept", async (req, res) => {
   if (IS_MOCK_MODE) {
     const invite = MOCK_TEAM_INVITES.find((i) => i.teamId === req.params.id && i.status === "pending");
     if (invite) {
@@ -1015,7 +1211,7 @@ router.post("/teams/:id/accept", async (req, res) => {
     res.status(503).json({ error: "Kunde inte acceptera inbjudan." });
   }
 });
-router.post("/teams/:id/leave", async (req, res) => {
+router2.post("/teams/:id/leave", async (req, res) => {
   if (IS_MOCK_MODE) {
     MOCK_TEAM.members = MOCK_TEAM.members.filter((m) => m.resourceId !== MOCK_RESOURCE.id);
     if (MOCK_TEAM.members.length === 0) {
@@ -1035,7 +1231,7 @@ router.post("/teams/:id/leave", async (req, res) => {
     res.status(503).json({ error: "Kunde inte l\xE4mna teamet." });
   }
 });
-router.delete("/teams/:id", async (req, res) => {
+router2.delete("/teams/:id", async (req, res) => {
   if (IS_MOCK_MODE) {
     MOCK_TEAM.status = "inactive";
     MOCK_TEAM.members = [];
@@ -1049,7 +1245,7 @@ router.delete("/teams/:id", async (req, res) => {
     res.status(503).json({ error: "Kunde inte ta bort teamet." });
   }
 });
-router.get("/resources/search", async (req, res) => {
+router2.get("/resources/search", async (req, res) => {
   if (IS_MOCK_MODE) {
     const q = (req.query.q || "").toLowerCase();
     const results = MOCK_RESOURCES.filter((r) => r.id !== MOCK_RESOURCE.id && r.name.toLowerCase().includes(q));
@@ -1063,7 +1259,7 @@ router.get("/resources/search", async (req, res) => {
     res.status(503).json({ error: "Kunde inte s\xF6ka resurser." });
   }
 });
-router.get("/team-invites", async (req, res) => {
+router2.get("/team-invites", async (req, res) => {
   if (IS_MOCK_MODE) {
     const pending = MOCK_TEAM_INVITES.filter((i) => i.resourceId === MOCK_RESOURCE.id && i.status === "pending");
     res.json(pending);
@@ -1076,7 +1272,7 @@ router.get("/team-invites", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta inbjudningar." });
   }
 });
-router.get("/team-orders", async (req, res) => {
+router2.get("/team-orders", async (req, res) => {
   if (IS_MOCK_MODE) {
     if (MOCK_TEAM.status !== "active" || MOCK_TEAM.members.length === 0) {
       res.json([]);
@@ -1109,7 +1305,11 @@ router.get("/team-orders", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta teamordrar." });
   }
 });
-router.get("/my-orders", async (req, res) => {
+
+// server/routes/mobile/orders.ts
+var import_express3 = require("express");
+var router3 = (0, import_express3.Router)();
+router3.get("/my-orders", async (req, res) => {
   if (IS_MOCK_MODE) {
     const date = req.query.date || (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const orders = MOCK_ORDERS.filter((o) => o.scheduledDate === date);
@@ -1140,7 +1340,7 @@ router.get("/my-orders", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta ordrar. F\xF6rs\xF6k igen." });
   }
 });
-router.get("/orders/:id", async (req, res) => {
+router3.get("/orders/:id", async (req, res) => {
   if (IS_MOCK_MODE) {
     const order = findMockOrder(req.params.id);
     if (order) {
@@ -1164,7 +1364,7 @@ router.get("/orders/:id", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta order. F\xF6rs\xF6k igen." });
   }
 });
-router.get("/orders/:id/checklist", async (req, res) => {
+router3.get("/orders/:id/checklist", async (req, res) => {
   if (IS_MOCK_MODE) {
     const idParam = req.params.id;
     const order = MOCK_ORDERS.find((o) => o.id === parseInt(idParam) || o.orderNumber === idParam || o.id.toString() === idParam);
@@ -1188,48 +1388,7 @@ router.get("/orders/:id/checklist", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta checklista. F\xF6rs\xF6k igen." });
   }
 });
-async function handleTimeEntries(orderId, driverId, newStatus) {
-  const now2 = /* @__PURE__ */ new Date();
-  try {
-    if (newStatus === "dispatched") {
-      await pool.query(
-        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'travel', $3)`,
-        [orderId, driverId, now2]
-      );
-    } else if (newStatus === "on_site") {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'travel' AND ended_at IS NULL`,
-        [now2, orderId, driverId]
-      );
-      await pool.query(
-        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'on_site', $3)`,
-        [orderId, driverId, now2]
-      );
-    } else if (newStatus === "in_progress") {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND status = 'on_site' AND ended_at IS NULL`,
-        [now2, orderId, driverId]
-      );
-      await pool.query(
-        `INSERT INTO time_entries (order_id, driver_id, status, started_at) VALUES ($1, $2, 'working', $3)`,
-        [orderId, driverId, now2]
-      );
-    } else if (newStatus === "completed" || newStatus === "utford") {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
-        [now2, orderId, driverId]
-      );
-    } else if (newStatus === "failed" || newStatus === "impossible" || newStatus === "cancelled") {
-      await pool.query(
-        `UPDATE time_entries SET ended_at = $1, duration_seconds = EXTRACT(EPOCH FROM ($1 - started_at))::integer WHERE order_id = $2 AND driver_id = $3 AND ended_at IS NULL`,
-        [now2, orderId, driverId]
-      );
-    }
-  } catch (err) {
-    console.error("Error managing time entries:", err.message);
-  }
-}
-router.post("/quick-action", async (req, res) => {
+router3.post("/quick-action", async (req, res) => {
   const { orderId, actionType } = req.body;
   const validActions = ["needs_part", "customer_absent", "takes_longer"];
   if (!orderId || !actionType || !validActions.includes(actionType)) {
@@ -1271,7 +1430,7 @@ router.post("/quick-action", async (req, res) => {
     res.status(503).json({ error: "Kunde inte utf\xF6ra snabb\xE5tg\xE4rd" });
   }
 });
-router.post("/travel-times", async (req, res) => {
+router3.post("/travel-times", async (req, res) => {
   const { latitude, longitude, destinations } = req.body;
   if (!latitude || !longitude || !Array.isArray(destinations) || destinations.length === 0) {
     return res.status(400).json({ error: "latitude, longitude och destinations[] kr\xE4vs" });
@@ -1321,7 +1480,7 @@ router.post("/travel-times", async (req, res) => {
   });
   res.json({ results, source: "haversine" });
 });
-router.patch("/orders/:id/status", async (req, res) => {
+router3.patch("/orders/:id/status", async (req, res) => {
   const { status: newStatus } = req.body;
   const allowedStatuses = ["planned", "dispatched", "en_route", "on_site", "in_progress", "completed", "failed", "cancelled", "deferred", "planerad_pre", "planerad_resurs", "planerad_las", "utford", "fakturerad", "impossible"];
   if (!newStatus || typeof newStatus !== "string") {
@@ -1430,7 +1589,7 @@ router.patch("/orders/:id/status", async (req, res) => {
     res.status(503).json({ error: "Kunde inte uppdatera status. F\xF6rs\xF6k igen." });
   }
 });
-router.get("/orders/:id/time-entries", async (req, res) => {
+router3.get("/orders/:id/time-entries", async (req, res) => {
   const orderId = req.params.id;
   try {
     const result = await pool.query(
@@ -1452,7 +1611,7 @@ router.get("/orders/:id/time-entries", async (req, res) => {
     res.status(500).json({ error: "Kunde inte h\xE4mta tidrapport" });
   }
 });
-router.get("/time-summary", async (req, res) => {
+router3.get("/time-summary", async (req, res) => {
   const driverId = String(MOCK_RESOURCE.id);
   const today = /* @__PURE__ */ new Date();
   const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
@@ -1485,7 +1644,7 @@ router.get("/time-summary", async (req, res) => {
     res.status(500).json({ error: "Kunde inte h\xE4mta tidssammanfattning" });
   }
 });
-router.get("/statistics", async (req, res) => {
+router3.get("/statistics", async (req, res) => {
   const driverId = String(MOCK_RESOURCE.id);
   const period = req.query.period || "week";
   const offset = parseInt(req.query.offset) || 0;
@@ -1620,7 +1779,7 @@ router.get("/statistics", async (req, res) => {
     res.status(500).json({ error: "Kunde inte h\xE4mta statistik" });
   }
 });
-router.post("/orders/:id/deviations", async (req, res) => {
+router3.post("/orders/:id/deviations", async (req, res) => {
   if (IS_MOCK_MODE) {
     const orderId = parseInt(req.params.id);
     const deviation = { id: Date.now(), orderId, ...req.body, createdAt: (/* @__PURE__ */ new Date()).toISOString() };
@@ -1641,7 +1800,7 @@ router.post("/orders/:id/deviations", async (req, res) => {
     res.status(503).json({ error: "Kunde inte rapportera avvikelse." });
   }
 });
-router.get("/orders/:id/materials", async (req, res) => {
+router3.get("/orders/:id/materials", async (req, res) => {
   if (IS_MOCK_MODE) {
     const orderId = parseInt(req.params.id);
     const logs = MOCK_MATERIAL_LOGS.filter((m) => m.orderId === orderId);
@@ -1658,7 +1817,7 @@ router.get("/orders/:id/materials", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta material." });
   }
 });
-router.post("/orders/:id/materials", async (req, res) => {
+router3.post("/orders/:id/materials", async (req, res) => {
   if (IS_MOCK_MODE) {
     const io2 = req.app.io;
     const entry = {
@@ -1689,7 +1848,7 @@ router.post("/orders/:id/materials", async (req, res) => {
     res.status(503).json({ error: "Kunde inte logga material." });
   }
 });
-router.post("/orders/:id/signature", async (req, res) => {
+router3.post("/orders/:id/signature", async (req, res) => {
   if (IS_MOCK_MODE) {
     const order = findMockOrder(req.params.id);
     if (order) {
@@ -1710,7 +1869,7 @@ router.post("/orders/:id/signature", async (req, res) => {
     res.status(503).json({ error: "Kunde inte spara signatur." });
   }
 });
-router.post("/orders/:id/notes", async (req, res) => {
+router3.post("/orders/:id/notes", async (req, res) => {
   if (IS_MOCK_MODE) {
     const orderId = parseInt(req.params.id);
     const order = MOCK_ORDERS.find((o) => o.id === orderId);
@@ -1733,7 +1892,7 @@ router.post("/orders/:id/notes", async (req, res) => {
     res.status(503).json({ error: "Kunde inte spara anteckning." });
   }
 });
-router.patch("/orders/:id/substeps/:stepId", async (req, res) => {
+router3.patch("/orders/:id/substeps/:stepId", async (req, res) => {
   if (IS_MOCK_MODE) {
     const order = findMockOrder(req.params.id);
     if (order && order.subSteps) {
@@ -1756,7 +1915,7 @@ router.patch("/orders/:id/substeps/:stepId", async (req, res) => {
     res.status(503).json({ error: "Kunde inte uppdatera delsteg." });
   }
 });
-router.post("/orders/:id/inspections", async (req, res) => {
+router3.post("/orders/:id/inspections", async (req, res) => {
   if (IS_MOCK_MODE) {
     const order = findMockOrder(req.params.id);
     if (order) {
@@ -1776,7 +1935,7 @@ router.post("/orders/:id/inspections", async (req, res) => {
     res.status(503).json({ error: "Kunde inte spara inspektion." });
   }
 });
-router.post("/inspections/:orderId/photos", async (req, res) => {
+router3.post("/inspections/:orderId/photos", async (req, res) => {
   const { orderId } = req.params;
   const { photos } = req.body;
   if (!photos || !Array.isArray(photos) || photos.length === 0) {
@@ -1817,7 +1976,7 @@ router.post("/inspections/:orderId/photos", async (req, res) => {
     res.status(500).json({ error: "Kunde inte spara inspektionsfoton" });
   }
 });
-router.get("/inspections/:orderId/photos", async (req, res) => {
+router3.get("/inspections/:orderId/photos", async (req, res) => {
   const { orderId } = req.params;
   try {
     const result = await pool.query(
@@ -1837,7 +1996,7 @@ router.get("/inspections/:orderId/photos", async (req, res) => {
     res.status(500).json({ error: "Kunde inte h\xE4mta inspektionsfoton" });
   }
 });
-router.post("/orders/:id/upload-photo", async (req, res) => {
+router3.post("/orders/:id/upload-photo", async (req, res) => {
   if (IS_MOCK_MODE) {
     const orderId = parseInt(req.params.id);
     const order = MOCK_ORDERS.find((o) => o.id === orderId);
@@ -1860,7 +2019,7 @@ router.post("/orders/:id/upload-photo", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta uppladdnings-URL." });
   }
 });
-router.post("/orders/:id/confirm-photo", async (req, res) => {
+router3.post("/orders/:id/confirm-photo", async (req, res) => {
   if (IS_MOCK_MODE) {
     const order = findMockOrder(req.params.id);
     if (order) {
@@ -1881,7 +2040,155 @@ router.post("/orders/:id/confirm-photo", async (req, res) => {
     res.status(503).json({ error: "Kunde inte bekr\xE4fta foto." });
   }
 });
-router.get("/notifications/count", async (req, res) => {
+router3.post("/orders/:id/customer-signoff", async (req, res) => {
+  const { id } = req.params;
+  const { customerName, signatureData, signedAt } = req.body;
+  if (!customerName || !signatureData) {
+    return res.status(400).json({ error: "customerName och signatureData kr\xE4vs" });
+  }
+  if (IS_MOCK_MODE) {
+    const order = MOCK_ORDERS.find((o) => String(o.id) === String(id));
+    if (!order) {
+      return res.status(404).json({ error: "Order hittades inte" });
+    }
+    order.customerSignOff = {
+      customerName,
+      signatureData,
+      signedAt: signedAt || (/* @__PURE__ */ new Date()).toISOString()
+    };
+    return res.json({ success: true, signOff: order.customerSignOff });
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/orders/${id}/customer-signoff`, {
+      method: "POST",
+      headers: getAuthHeader(req),
+      body: JSON.stringify({ customerName, signatureData, signedAt })
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("[customer-signoff] Upstream error:", error.message);
+    return res.status(503).json({
+      error: "Kunde inte spara kundkvittering. F\xF6rs\xF6k igen."
+    });
+  }
+});
+
+// server/routes/mobile/workSessions.ts
+var import_express4 = require("express");
+var router4 = (0, import_express4.Router)();
+router4.post("/work-sessions/start", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const session = {
+      id: "ws-" + Date.now(),
+      resourceId: MOCK_RESOURCE.id,
+      teamId: req.body.teamId || null,
+      status: "active",
+      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
+      pausedAt: null,
+      endedAt: null,
+      notes: req.body.notes || "",
+      totalWorkMinutes: 0,
+      totalBreakMinutes: 0
+    };
+    setMockWorkSession(session);
+    setMockWorkSessionEntries([]);
+    res.json({ success: true, session });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/work-sessions/start", { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte starta arbetspass." });
+  }
+});
+router4.get("/work-sessions/active", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    res.json({ session: getMockWorkSession() });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/work-sessions/active", { method: "GET", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte h\xE4mta aktivt arbetspass." });
+  }
+});
+router4.post("/work-sessions/:id/stop", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const session = getMockWorkSession();
+    if (session && session.id === req.params.id) {
+      session.status = "completed";
+      session.endedAt = (/* @__PURE__ */ new Date()).toISOString();
+      setMockWorkSession(session);
+    }
+    res.json({ success: true, session: getMockWorkSession() });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/stop`, { method: "POST", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte avsluta arbetspass." });
+  }
+});
+router4.post("/work-sessions/:id/pause", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const session = getMockWorkSession();
+    if (session && session.id === req.params.id) {
+      session.status = "paused";
+      session.pausedAt = (/* @__PURE__ */ new Date()).toISOString();
+      setMockWorkSession(session);
+    }
+    res.json({ success: true, session: getMockWorkSession() });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/pause`, { method: "POST", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte pausa arbetspass." });
+  }
+});
+router4.post("/work-sessions/:id/resume", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const session = getMockWorkSession();
+    if (session && session.id === req.params.id) {
+      session.status = "active";
+      session.pausedAt = null;
+      setMockWorkSession(session);
+    }
+    res.json({ success: true, session: getMockWorkSession() });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/resume`, { method: "POST", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte \xE5teruppta arbetspass." });
+  }
+});
+router4.post("/work-sessions/:id/entries", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const entry = { id: "wse-" + Date.now(), sessionId: req.params.id, ...req.body, createdAt: (/* @__PURE__ */ new Date()).toISOString() };
+    const entries = getMockWorkSessionEntries();
+    entries.push(entry);
+    setMockWorkSessionEntries(entries);
+    res.json({ success: true, entry });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/entries`, { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte logga tidspost." });
+  }
+});
+
+// server/routes/mobile/misc.ts
+var import_express5 = require("express");
+var router5 = (0, import_express5.Router)();
+router5.get("/notifications/count", async (req, res) => {
   if (IS_MOCK_MODE) {
     const unread = MOCK_NOTIFICATIONS_LEGACY.filter((n) => !n.isRead).length;
     res.json({ count: unread });
@@ -1895,7 +2202,57 @@ router.get("/notifications/count", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta antal aviseringar. F\xF6rs\xF6k igen." });
   }
 });
-router.get("/map-config", async (req, res) => {
+router5.get("/notifications", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.read).length;
+    res.json({ notifications: MOCK_NOTIFICATIONS, unreadCount });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/notifications", { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    console.error("Notifications fetch error:", error?.message);
+    res.status(503).json({ error: "Kunde inte h\xE4mta aviseringar." });
+  }
+});
+router5.post("/notifications/:id/read", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const id = parseInt(req.params.id);
+    const notif = MOCK_NOTIFICATIONS.find((n) => n.id === id);
+    if (notif) notif.read = true;
+    res.json({ success: true });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
+      method: "POST",
+      headers: getAuthHeader(req)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte markera som l\xE4st." });
+  }
+});
+router5.post("/notifications/read-all", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    MOCK_NOTIFICATIONS.forEach((n) => {
+      n.read = true;
+    });
+    res.json({ success: true, count: MOCK_NOTIFICATIONS.length });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/notifications/read-all", {
+      method: "POST",
+      headers: getAuthHeader(req)
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    res.status(503).json({ error: "Kunde inte markera alla som l\xE4sta." });
+  }
+});
+router5.get("/map-config", async (req, res) => {
   if (IS_MOCK_MODE) {
     res.json({
       defaultCenter: { latitude: 59.195, longitude: 17.626 },
@@ -1916,7 +2273,7 @@ router.get("/map-config", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta kartkonfiguration. F\xF6rs\xF6k igen." });
   }
 });
-router.post("/sync", async (req, res) => {
+router5.post("/sync", async (req, res) => {
   if (IS_MOCK_MODE) {
     const { actions } = req.body;
     if (!Array.isArray(actions)) {
@@ -1938,10 +2295,10 @@ router.post("/sync", async (req, res) => {
     res.status(503).json({ error: "Synkronisering misslyckades." });
   }
 });
-router.get("/sync/status", async (req, res) => {
+router5.get("/sync/status", async (req, res) => {
   res.json({ lastSync: (/* @__PURE__ */ new Date()).toISOString(), pendingActions: 0 });
 });
-router.get("/articles", (req, res) => {
+router5.get("/articles", (req, res) => {
   const search = (req.query.search || "").toLowerCase();
   if (search) {
     res.json(MOCK_ARTICLES.filter((a) => a.name.toLowerCase().includes(search)));
@@ -1949,215 +2306,7 @@ router.get("/articles", (req, res) => {
     res.json(MOCK_ARTICLES);
   }
 });
-var MOCK_WORK_SESSION = null;
-var MOCK_WORK_SESSION_ENTRIES = [];
-router.post("/work-sessions/start", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    MOCK_WORK_SESSION = {
-      id: "ws-" + Date.now(),
-      resourceId: MOCK_RESOURCE.id,
-      teamId: req.body.teamId || null,
-      status: "active",
-      startedAt: (/* @__PURE__ */ new Date()).toISOString(),
-      pausedAt: null,
-      endedAt: null,
-      notes: req.body.notes || "",
-      totalWorkMinutes: 0,
-      totalBreakMinutes: 0
-    };
-    MOCK_WORK_SESSION_ENTRIES = [];
-    res.json({ success: true, session: MOCK_WORK_SESSION });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/mobile/work-sessions/start", { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte starta arbetspass." });
-  }
-});
-router.get("/work-sessions/active", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    res.json({ session: MOCK_WORK_SESSION });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/mobile/work-sessions/active", { method: "GET", headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte h\xE4mta aktivt arbetspass." });
-  }
-});
-router.post("/work-sessions/:id/stop", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    if (MOCK_WORK_SESSION && MOCK_WORK_SESSION.id === req.params.id) {
-      MOCK_WORK_SESSION.status = "completed";
-      MOCK_WORK_SESSION.endedAt = (/* @__PURE__ */ new Date()).toISOString();
-    }
-    res.json({ success: true, session: MOCK_WORK_SESSION });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/stop`, { method: "POST", headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte avsluta arbetspass." });
-  }
-});
-router.post("/work-sessions/:id/pause", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    if (MOCK_WORK_SESSION && MOCK_WORK_SESSION.id === req.params.id) {
-      MOCK_WORK_SESSION.status = "paused";
-      MOCK_WORK_SESSION.pausedAt = (/* @__PURE__ */ new Date()).toISOString();
-    }
-    res.json({ success: true, session: MOCK_WORK_SESSION });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/pause`, { method: "POST", headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte pausa arbetspass." });
-  }
-});
-router.post("/work-sessions/:id/resume", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    if (MOCK_WORK_SESSION && MOCK_WORK_SESSION.id === req.params.id) {
-      MOCK_WORK_SESSION.status = "active";
-      MOCK_WORK_SESSION.pausedAt = null;
-    }
-    res.json({ success: true, session: MOCK_WORK_SESSION });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/resume`, { method: "POST", headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte \xE5teruppta arbetspass." });
-  }
-});
-router.post("/work-sessions/:id/entries", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const entry = { id: "wse-" + Date.now(), sessionId: req.params.id, ...req.body, createdAt: (/* @__PURE__ */ new Date()).toISOString() };
-    MOCK_WORK_SESSION_ENTRIES.push(entry);
-    res.json({ success: true, entry });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch(`/api/mobile/work-sessions/${req.params.id}/entries`, { method: "POST", headers: getAuthHeader(req), body: JSON.stringify(req.body) });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte logga tidspost." });
-  }
-});
-router.post("/position", async (req, res) => {
-  const { latitude, longitude, speed, heading, accuracy } = req.body;
-  if (latitude == null || longitude == null || typeof latitude !== "number" || typeof longitude !== "number") {
-    return res.status(400).json({ error: "Giltiga latitude och longitude kr\xE4vs" });
-  }
-  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-    return res.status(400).json({ error: "Koordinater utanf\xF6r giltigt intervall" });
-  }
-  if (!IS_MOCK_MODE) {
-    try {
-      await traivoFetch("/api/mobile/position", {
-        method: "POST",
-        headers: getAuthHeader(req),
-        body: JSON.stringify(req.body)
-      });
-    } catch (e) {
-      console.error("[LIVE] Position proxy error:", e.message);
-    }
-  }
-  try {
-    if (latitude != null && longitude != null) {
-      const driverId = IS_MOCK_MODE ? MOCK_RESOURCE.id : "unknown";
-      const driverName = IS_MOCK_MODE ? MOCK_RESOURCE.name : "Ok\xE4nd";
-      const vehicleRegNo = IS_MOCK_MODE ? MOCK_RESOURCE.vehicleRegNo : "";
-      await pool.query(
-        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, speed, heading, accuracy, status, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NOW())
-         ON CONFLICT (driver_id) DO UPDATE SET
-           driver_name = EXCLUDED.driver_name,
-           vehicle_reg_no = EXCLUDED.vehicle_reg_no,
-           latitude = EXCLUDED.latitude,
-           longitude = EXCLUDED.longitude,
-           speed = COALESCE(EXCLUDED.speed, driver_locations.speed),
-           heading = COALESCE(EXCLUDED.heading, driver_locations.heading),
-           accuracy = COALESCE(EXCLUDED.accuracy, driver_locations.accuracy),
-           status = 'active',
-           updated_at = NOW()`,
-        [driverId, driverName, vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0]
-      );
-    }
-    res.json({ received: true, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
-  } catch (error) {
-    console.error("Error saving GPS position:", error);
-    res.json({ received: true, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
-  }
-});
-router.post("/status", async (req, res) => {
-  const { online } = req.body;
-  try {
-    const driverId = IS_MOCK_MODE ? MOCK_RESOURCE.id : "unknown";
-    const driverName = IS_MOCK_MODE ? MOCK_RESOURCE.name : "Ok\xE4nd";
-    const vehicleRegNo = IS_MOCK_MODE ? MOCK_RESOURCE.vehicleRegNo : "";
-    if (online) {
-      await pool.query(
-        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, status, updated_at)
-         VALUES ($1, $2, $3, 0, 0, 'active', NOW())
-         ON CONFLICT (driver_id) DO UPDATE SET
-           status = 'active',
-           updated_at = NOW()`,
-        [driverId, driverName, vehicleRegNo]
-      );
-    } else {
-      await pool.query(
-        `UPDATE driver_locations SET status = 'offline', updated_at = NOW() WHERE driver_id = $1`,
-        [driverId]
-      );
-    }
-    res.json({ success: true, online });
-  } catch (error) {
-    console.error("Error updating driver status:", error);
-    res.json({ success: true, online });
-  }
-});
-router.post("/gps", async (req, res) => {
-  const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
-  if (latitude == null || longitude == null || !driverId) {
-    return res.status(400).json({ error: "latitude, longitude och driverId kr\xE4vs" });
-  }
-  if (typeof latitude !== "number" || typeof longitude !== "number") {
-    return res.status(400).json({ error: "Koordinater m\xE5ste vara nummer" });
-  }
-  try {
-    if (latitude != null && longitude != null && driverId) {
-      await pool.query(
-        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, speed, heading, accuracy, current_order_id, current_order_number, status, updated_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW())
-         ON CONFLICT (driver_id) DO UPDATE SET
-           driver_name = EXCLUDED.driver_name,
-           vehicle_reg_no = EXCLUDED.vehicle_reg_no,
-           latitude = EXCLUDED.latitude,
-           longitude = EXCLUDED.longitude,
-           speed = COALESCE(EXCLUDED.speed, driver_locations.speed),
-           heading = COALESCE(EXCLUDED.heading, driver_locations.heading),
-           accuracy = COALESCE(EXCLUDED.accuracy, driver_locations.accuracy),
-           current_order_id = EXCLUDED.current_order_id,
-           current_order_number = EXCLUDED.current_order_number,
-           status = 'active',
-           updated_at = NOW()`,
-        [driverId, driverName || "Ok\xE4nd", vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0, currentOrderId, currentOrderNumber]
-      );
-    }
-    res.json({ received: true });
-  } catch (error) {
-    console.error("Error saving GPS position:", error);
-    res.json({ received: true });
-  }
-});
-router.get("/weather", async (_req, res) => {
+router5.get("/weather", async (_req, res) => {
   try {
     const response = await fetch(
       "https://api.open-meteo.com/v1/forecast?latitude=59.1950&longitude=17.6260&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Stockholm&forecast_days=1"
@@ -2243,7 +2392,7 @@ router.get("/weather", async (_req, res) => {
     });
   }
 });
-router.get("/summary", async (req, res) => {
+router5.get("/summary", async (req, res) => {
   if (IS_MOCK_MODE) {
     const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
     const todayOrders = MOCK_ORDERS.filter((o) => o.scheduledDate === today);
@@ -2306,87 +2455,7 @@ router.get("/summary", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta sammanfattning. F\xF6rs\xF6k igen." });
   }
 });
-function parseCoordPoints(coords) {
-  const points = coords.split(";");
-  const parsed = [];
-  for (const point of points) {
-    const parts = point.split(",");
-    if (parts.length !== 2) return null;
-    const lon = parseFloat(parts[0]);
-    const lat = parseFloat(parts[1]);
-    if (isNaN(lon) || isNaN(lat) || lat < -90 || lat > 90 || lon < -180 || lon > 180) return null;
-    parsed.push({ lon, lat });
-  }
-  return parsed;
-}
-function perpendicularDistance(point, lineStart, lineEnd) {
-  const dx = lineEnd[0] - lineStart[0];
-  const dy = lineEnd[1] - lineStart[1];
-  const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) {
-    const ex2 = point[0] - lineStart[0];
-    const ey2 = point[1] - lineStart[1];
-    return Math.sqrt(ex2 * ex2 + ey2 * ey2);
-  }
-  const t = Math.max(0, Math.min(1, ((point[0] - lineStart[0]) * dx + (point[1] - lineStart[1]) * dy) / lenSq));
-  const projX = lineStart[0] + t * dx;
-  const projY = lineStart[1] + t * dy;
-  const ex = point[0] - projX;
-  const ey = point[1] - projY;
-  return Math.sqrt(ex * ex + ey * ey);
-}
-function rdpSimplify(coords, epsilon) {
-  if (coords.length <= 2) return coords;
-  let maxDist = 0;
-  let maxIdx = 0;
-  const first = coords[0];
-  const last = coords[coords.length - 1];
-  for (let i = 1; i < coords.length - 1; i++) {
-    const d = perpendicularDistance(coords[i], first, last);
-    if (d > maxDist) {
-      maxDist = d;
-      maxIdx = i;
-    }
-  }
-  if (maxDist > epsilon) {
-    const left = rdpSimplify(coords.slice(0, maxIdx + 1), epsilon);
-    const right = rdpSimplify(coords.slice(maxIdx), epsilon);
-    return left.slice(0, -1).concat(right);
-  }
-  return [first, last];
-}
-function simplifyCoordinates(coords, maxPoints) {
-  if (coords.length <= maxPoints) return coords;
-  let lo = 0;
-  let hi = 0.01;
-  let result = coords;
-  for (let iter = 0; iter < 20; iter++) {
-    const mid = (lo + hi) / 2;
-    result = rdpSimplify(coords, mid);
-    if (result.length > maxPoints) {
-      lo = mid;
-    } else {
-      hi = mid;
-    }
-  }
-  if (result.length > maxPoints) {
-    result = rdpSimplify(coords, hi);
-  }
-  return result;
-}
-function buildFallbackResponse(parsed) {
-  return {
-    waypoints: parsed.map((p, i) => ({ location: [p.lon, p.lat], waypointIndex: i, tripsIndex: 0 })),
-    trips: [{
-      geometry: { type: "LineString", coordinates: parsed.map((p) => [p.lon, p.lat]) },
-      distance: 0,
-      duration: 0,
-      legs: []
-    }],
-    fallback: true
-  };
-}
-router.get("/route", async (req, res) => {
+router5.get("/route", async (req, res) => {
   const rawCoords = req.query.coords;
   const coords = typeof rawCoords === "string" ? decodeURIComponent(rawCoords).trim() : "";
   console.log("[route] raw coords type:", typeof rawCoords, "value:", JSON.stringify(rawCoords), "decoded length:", coords.length, "hasApiKey:", !!process.env.GEOAPIFY_API_KEY);
@@ -2468,7 +2537,7 @@ router.get("/route", async (req, res) => {
     res.json(buildFallbackResponse(parsed));
   }
 });
-router.get("/route-optimized", async (req, res) => {
+router5.get("/route-optimized", async (req, res) => {
   const coords = req.query.coords;
   if (!coords) {
     return res.status(400).json({ error: "coords parameter required (lon1,lat1;lon2,lat2;...)" });
@@ -2637,39 +2706,114 @@ router.get("/route-optimized", async (req, res) => {
     res.json(buildFallbackResponse(parsed));
   }
 });
-router.post("/orders/:id/customer-signoff", async (req, res) => {
-  const { id } = req.params;
-  const { customerName, signatureData, signedAt } = req.body;
-  if (!customerName || !signatureData) {
-    return res.status(400).json({ error: "customerName och signatureData kr\xE4vs" });
+router5.post("/position", async (req, res) => {
+  const { latitude, longitude, speed, heading, accuracy } = req.body;
+  if (latitude == null || longitude == null || typeof latitude !== "number" || typeof longitude !== "number") {
+    return res.status(400).json({ error: "Giltiga latitude och longitude kr\xE4vs" });
   }
-  if (IS_MOCK_MODE) {
-    const order = MOCK_ORDERS.find((o) => String(o.id) === String(id));
-    if (!order) {
-      return res.status(404).json({ error: "Order hittades inte" });
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+    return res.status(400).json({ error: "Koordinater utanf\xF6r giltigt intervall" });
+  }
+  if (!IS_MOCK_MODE) {
+    try {
+      await traivoFetch("/api/mobile/position", {
+        method: "POST",
+        headers: getAuthHeader(req),
+        body: JSON.stringify(req.body)
+      });
+    } catch (e) {
+      console.error("[LIVE] Position proxy error:", e.message);
     }
-    order.customerSignOff = {
-      customerName,
-      signatureData,
-      signedAt: signedAt || (/* @__PURE__ */ new Date()).toISOString()
-    };
-    return res.json({ success: true, signOff: order.customerSignOff });
   }
   try {
-    const { status, data } = await traivoFetch(`/api/mobile/orders/${id}/customer-signoff`, {
-      method: "POST",
-      headers: getAuthHeader(req),
-      body: JSON.stringify({ customerName, signatureData, signedAt })
-    });
-    res.status(status).json(data);
+    if (latitude != null && longitude != null) {
+      const driverId = IS_MOCK_MODE ? MOCK_RESOURCE.id : "unknown";
+      const driverName = IS_MOCK_MODE ? MOCK_RESOURCE.name : "Ok\xE4nd";
+      const vehicleRegNo = IS_MOCK_MODE ? MOCK_RESOURCE.vehicleRegNo : "";
+      await pool.query(
+        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, speed, heading, accuracy, status, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'active', NOW())
+         ON CONFLICT (driver_id) DO UPDATE SET
+           driver_name = EXCLUDED.driver_name,
+           vehicle_reg_no = EXCLUDED.vehicle_reg_no,
+           latitude = EXCLUDED.latitude,
+           longitude = EXCLUDED.longitude,
+           speed = COALESCE(EXCLUDED.speed, driver_locations.speed),
+           heading = COALESCE(EXCLUDED.heading, driver_locations.heading),
+           accuracy = COALESCE(EXCLUDED.accuracy, driver_locations.accuracy),
+           status = 'active',
+           updated_at = NOW()`,
+        [driverId, driverName, vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0]
+      );
+    }
+    res.json({ received: true, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
   } catch (error) {
-    console.error("[customer-signoff] Upstream error:", error.message);
-    return res.status(503).json({
-      error: "Kunde inte spara kundkvittering. F\xF6rs\xF6k igen."
-    });
+    console.error("Error saving GPS position:", error);
+    res.json({ received: true, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
   }
 });
-router.post("/push-token", async (req, res) => {
+router5.post("/status", async (req, res) => {
+  const { online } = req.body;
+  try {
+    const driverId = IS_MOCK_MODE ? MOCK_RESOURCE.id : "unknown";
+    const driverName = IS_MOCK_MODE ? MOCK_RESOURCE.name : "Ok\xE4nd";
+    const vehicleRegNo = IS_MOCK_MODE ? MOCK_RESOURCE.vehicleRegNo : "";
+    if (online) {
+      await pool.query(
+        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, status, updated_at)
+         VALUES ($1, $2, $3, 0, 0, 'active', NOW())
+         ON CONFLICT (driver_id) DO UPDATE SET
+           status = 'active',
+           updated_at = NOW()`,
+        [driverId, driverName, vehicleRegNo]
+      );
+    } else {
+      await pool.query(
+        `UPDATE driver_locations SET status = 'offline', updated_at = NOW() WHERE driver_id = $1`,
+        [driverId]
+      );
+    }
+    res.json({ success: true, online });
+  } catch (error) {
+    console.error("Error updating driver status:", error);
+    res.json({ success: true, online });
+  }
+});
+router5.post("/gps", async (req, res) => {
+  const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
+  if (latitude == null || longitude == null || !driverId) {
+    return res.status(400).json({ error: "latitude, longitude och driverId kr\xE4vs" });
+  }
+  if (typeof latitude !== "number" || typeof longitude !== "number") {
+    return res.status(400).json({ error: "latitude och longitude m\xE5ste vara nummer" });
+  }
+  try {
+    if (latitude != null && longitude != null && driverId) {
+      await pool.query(
+        `INSERT INTO driver_locations (driver_id, driver_name, vehicle_reg_no, latitude, longitude, speed, heading, accuracy, current_order_id, current_order_number, status, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'active', NOW())
+         ON CONFLICT (driver_id) DO UPDATE SET
+           driver_name = EXCLUDED.driver_name,
+           vehicle_reg_no = EXCLUDED.vehicle_reg_no,
+           latitude = EXCLUDED.latitude,
+           longitude = EXCLUDED.longitude,
+           speed = COALESCE(EXCLUDED.speed, driver_locations.speed),
+           heading = COALESCE(EXCLUDED.heading, driver_locations.heading),
+           accuracy = COALESCE(EXCLUDED.accuracy, driver_locations.accuracy),
+           current_order_id = EXCLUDED.current_order_id,
+           current_order_number = EXCLUDED.current_order_number,
+           status = 'active',
+           updated_at = NOW()`,
+        [driverId, driverName || "Ok\xE4nd", vehicleRegNo, latitude, longitude, speed || 0, heading || 0, accuracy || 0, currentOrderId, currentOrderNumber]
+      );
+    }
+    res.json({ received: true });
+  } catch (error) {
+    console.error("Error saving GPS position:", error);
+    res.json({ received: true });
+  }
+});
+router5.post("/push-token", async (req, res) => {
   const { expoPushToken, platform } = req.body;
   const token = expoPushToken || req.body.token;
   if (!token) {
@@ -2690,7 +2834,7 @@ router.post("/push-token", async (req, res) => {
     res.status(500).json({ error: "Kunde inte registrera push-token" });
   }
 });
-router.delete("/push-token", async (req, res) => {
+router5.delete("/push-token", async (req, res) => {
   const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : String(req.body.driverId || req.query.driverId || MOCK_RESOURCE.id);
   try {
     await pool.query("DELETE FROM push_tokens WHERE driver_id = $1", [driverId]);
@@ -2700,7 +2844,7 @@ router.delete("/push-token", async (req, res) => {
     res.status(500).json({ error: "Kunde inte ta bort push-token" });
   }
 });
-router.get("/route-feedback/mine", async (req, res) => {
+router5.get("/route-feedback/mine", async (req, res) => {
   const driverId = MOCK_RESOURCE.id;
   try {
     const result = await pool.query(
@@ -2713,7 +2857,7 @@ router.get("/route-feedback/mine", async (req, res) => {
     res.json({ success: true, feedback: [] });
   }
 });
-router.post("/route-feedback", async (req, res) => {
+router5.post("/route-feedback", async (req, res) => {
   const driverId = MOCK_RESOURCE.id;
   const { rating, reasons, comment, date } = req.body;
   if (!rating || rating < 1 || rating > 5) {
@@ -2732,7 +2876,7 @@ router.post("/route-feedback", async (req, res) => {
     res.status(500).json({ error: "Kunde inte spara ruttbetyg" });
   }
 });
-router.get("/terminology", async (req, res) => {
+router5.get("/terminology", async (req, res) => {
   const terminology = {
     order: "Order",
     work_order: "Arbetsorder",
@@ -2786,71 +2930,10 @@ router.get("/terminology", async (req, res) => {
   }
   res.json({ success: true, terminology });
 });
-var CHANGE_REQUEST_CATEGORIES = [
-  { id: "antal_karl_andrat", name: "Antal k\xE4rl \xE4ndrat", icon: "package" },
-  { id: "skadat_material", name: "Skadat material", icon: "alert-triangle" },
-  { id: "tillganglighet", name: "Tillg\xE4nglighetsproblem", icon: "map-pin" },
-  { id: "skador", name: "Skador", icon: "alert-circle" },
-  { id: "rengorings_behov", name: "Reng\xF6ringsbehov", icon: "droplet" },
-  { id: "ovrigt", name: "\xD6vrigt", icon: "more-horizontal" }
-];
-var MOCK_CHANGE_REQUESTS = [
-  {
-    id: "cr-1",
-    category: "skadat_material",
-    description: "K\xE4rlet har spricka i sidan, l\xE4cker vid regn.",
-    severity: "high",
-    status: "new",
-    objectId: "obj-101",
-    objectName: "K\xE4rl 240L - BRF Solsidan",
-    customerId: "cust-1",
-    customerName: "BRF Solsidan",
-    photos: [],
-    reportedByName: "Erik Lindqvist",
-    reportedByResourceId: "101",
-    createdAt: new Date(Date.now() - 864e5 * 2).toISOString()
-  },
-  {
-    id: "cr-2",
-    category: "tillganglighet",
-    description: "Parkerade bilar blockerar regelbundet infartsv\xE4gen till k\xE4rlutrymmet.",
-    severity: "medium",
-    status: "reviewed",
-    objectId: "obj-202",
-    objectName: "Container 8m\xB3 - Fastighets AB Norden",
-    customerId: "cust-2",
-    customerName: "Fastighets AB Norden",
-    photos: [],
-    reportedByName: "Erik Lindqvist",
-    reportedByResourceId: "101",
-    reviewedBy: "Lisa Plansson",
-    reviewedAt: new Date(Date.now() - 864e5).toISOString(),
-    reviewNotes: "Kontaktat fastighets\xE4garen, skyltar best\xE4llda.",
-    createdAt: new Date(Date.now() - 864e5 * 5).toISOString()
-  },
-  {
-    id: "cr-3",
-    category: "antal_karl_andrat",
-    description: "Beh\xF6ver ett extra 370L k\xE4rl f\xF6r tr\xE4dg\xE5rdsavfall.",
-    severity: "low",
-    status: "resolved",
-    objectId: "obj-101",
-    objectName: "K\xE4rl 240L - BRF Solsidan",
-    customerId: "cust-1",
-    customerName: "BRF Solsidan",
-    photos: [],
-    reportedByName: "Erik Lindqvist",
-    reportedByResourceId: "101",
-    reviewedBy: "Lisa Plansson",
-    reviewedAt: new Date(Date.now() - 864e5 * 3).toISOString(),
-    reviewNotes: "Arbetsorder skapad: WO-2026-0500",
-    createdAt: new Date(Date.now() - 864e5 * 10).toISOString()
-  }
-];
-router.get("/customer-change-requests/categories", async (_req, res) => {
+router5.get("/customer-change-requests/categories", async (_req, res) => {
   res.json({ success: true, categories: CHANGE_REQUEST_CATEGORIES });
 });
-router.get("/customer-change-requests/mine", async (req, res) => {
+router5.get("/customer-change-requests/mine", async (req, res) => {
   if (IS_MOCK_MODE) {
     const resourceId = String(req.mobileResourceId || MOCK_RESOURCE.id);
     const mine = MOCK_CHANGE_REQUESTS.filter((r) => r.reportedByResourceId === resourceId);
@@ -2867,7 +2950,7 @@ router.get("/customer-change-requests/mine", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta kundrapporter." });
   }
 });
-router.post("/customer-change-requests", async (req, res) => {
+router5.post("/customer-change-requests", async (req, res) => {
   if (IS_MOCK_MODE) {
     const newReport = {
       id: `cr-${Date.now()}`,
@@ -2894,7 +2977,7 @@ router.post("/customer-change-requests", async (req, res) => {
     res.status(503).json({ error: "Kunde inte skapa kundrapport." });
   }
 });
-router.get("/deviations/mine", async (req, res) => {
+router5.get("/deviations/mine", async (req, res) => {
   if (IS_MOCK_MODE) {
     const allDeviations = [];
     for (const order of MOCK_ORDERS) {
@@ -2923,7 +3006,7 @@ router.get("/deviations/mine", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta avvikelser." });
   }
 });
-router.post("/work-orders/carry-over", async (req, res) => {
+router5.post("/work-orders/carry-over", async (req, res) => {
   if (IS_MOCK_MODE) {
     const yesterday = /* @__PURE__ */ new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -2952,7 +3035,7 @@ router.post("/work-orders/carry-over", async (req, res) => {
     res.status(503).json({ error: "Kunde inte flytta ordrar." });
   }
 });
-router.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
+router5.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
   if (IS_MOCK_MODE) {
     const order = findMockOrder(req.params.id);
     if (!order) {
@@ -2978,72 +3061,7 @@ router.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
     res.status(503).json({ error: "Kunde inte skicka ETA-SMS." });
   }
 });
-var now = /* @__PURE__ */ new Date();
-var h = (hoursAgo) => new Date(now.getTime() - hoursAgo * 36e5).toISOString();
-var MOCK_NOTIFICATIONS = [
-  { id: 1, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0456 \u2014 Volvo Lundby har tilldelats dig.", read: false, createdAt: h(0.5), relatedOrderId: 1 },
-  { id: 2, type: "schedule_change", title: "Schema \xE4ndrat", body: "Ordningen p\xE5 dina uppdrag har uppdaterats av planeraren.", read: false, createdAt: h(1.2) },
-  { id: 3, type: "team_invite", title: "Teaminbjudan", body: "Anna Svensson har bjudit in dig till Team S\xF6dert\xE4lje \xD6st.", read: false, createdAt: h(2) },
-  { id: 4, type: "deviation_reviewed", title: "Avvikelse granskad", body: 'Din avvikelse "Blockerad infart" p\xE5 WO-2026-0452 har godk\xE4nts.', read: true, createdAt: h(5), relatedOrderId: 2 },
-  { id: 5, type: "status_change", title: "Order uppdaterad", body: 'WO-2026-0453 har \xE4ndrats till "P\xE5g\xE5r" av planeraren.', read: true, createdAt: h(8), relatedOrderId: 3 },
-  { id: 6, type: "sign_off_complete", title: "Kundkvittering mottagen", body: "Kunden har signerat WO-2026-0451.", read: true, createdAt: h(24), relatedOrderId: 1 },
-  { id: 7, type: "material_update", title: "Materiallager uppdaterat", body: 'Artikeln "Plastk\xE4rl 370L" har fyllts p\xE5 i lagret.', read: true, createdAt: h(26) },
-  { id: 8, type: "system", title: "Appuppdatering tillg\xE4nglig", body: "Traivo Go v2.4 finns nu tillg\xE4nglig med f\xF6rb\xE4ttrad GPS-precision.", read: true, createdAt: h(48) },
-  { id: 9, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0455 \u2014 S\xF6dert\xE4lje Hamn har tilldelats dig.", read: true, createdAt: h(50), relatedOrderId: 5 },
-  { id: 10, type: "schedule_change", title: "Prioritet \xE4ndrad", body: "WO-2026-0454 har f\xE5tt h\xF6gre prioritet.", read: true, createdAt: h(72), relatedOrderId: 4 }
-];
-router.get("/notifications", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const unreadCount = MOCK_NOTIFICATIONS.filter((n) => !n.read).length;
-    res.json({ notifications: MOCK_NOTIFICATIONS, unreadCount });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/mobile/notifications", { headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch (error) {
-    console.error("Notifications fetch error:", error?.message);
-    res.status(503).json({ error: "Kunde inte h\xE4mta aviseringar." });
-  }
-});
-router.post("/notifications/:id/read", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const id = parseInt(req.params.id);
-    const notif = MOCK_NOTIFICATIONS.find((n) => n.id === id);
-    if (notif) notif.read = true;
-    res.json({ success: true });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch(`/api/mobile/notifications/${req.params.id}/read`, {
-      method: "POST",
-      headers: getAuthHeader(req)
-    });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte markera som l\xE4st." });
-  }
-});
-router.post("/notifications/read-all", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    MOCK_NOTIFICATIONS.forEach((n) => {
-      n.read = true;
-    });
-    res.json({ success: true, count: MOCK_NOTIFICATIONS.length });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/mobile/notifications/read-all", {
-      method: "POST",
-      headers: getAuthHeader(req)
-    });
-    res.status(status).json(data);
-  } catch (error) {
-    res.status(503).json({ error: "Kunde inte markera alla som l\xE4sta." });
-  }
-});
-var MOCK_DISRUPTIONS = [];
-router.post("/distance", async (req, res) => {
+router5.post("/distance", async (req, res) => {
   const { fromLat, fromLng, toLat, toLng } = req.body;
   if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
     return res.status(400).json({ error: "fromLat, fromLng, toLat, toLng kr\xE4vs" });
@@ -3065,7 +3083,7 @@ router.post("/distance", async (req, res) => {
     res.status(503).json({ error: "Kunde inte ber\xE4kna avst\xE5nd. F\xF6rs\xF6k igen." });
   }
 });
-router.post("/distance/batch", async (req, res) => {
+router5.post("/distance/batch", async (req, res) => {
   const { pairs } = req.body;
   if (!Array.isArray(pairs)) {
     return res.status(400).json({ error: "pairs array kr\xE4vs" });
@@ -3077,7 +3095,7 @@ router.post("/distance/batch", async (req, res) => {
   }
   res.json({ results });
 });
-router.post("/disruptions/trigger/delay", async (req, res) => {
+router5.post("/disruptions/trigger/delay", async (req, res) => {
   const { workOrderId, workOrderTitle, resourceId, resourceName, estimatedDuration, actualDuration } = req.body;
   if (!workOrderId || !resourceId || estimatedDuration == null || actualDuration == null) {
     return res.status(400).json({ error: "workOrderId, resourceId, estimatedDuration, actualDuration kr\xE4vs" });
@@ -3115,7 +3133,7 @@ router.post("/disruptions/trigger/delay", async (req, res) => {
     res.status(503).json({ error: "Kunde inte trigga st\xF6rning." });
   }
 });
-router.post("/disruptions/trigger/early-completion", async (req, res) => {
+router5.post("/disruptions/trigger/early-completion", async (req, res) => {
   const { resourceId, resourceName, slackMinutes } = req.body;
   if (!resourceId || slackMinutes == null) {
     return res.status(400).json({ error: "resourceId, slackMinutes kr\xE4vs" });
@@ -3152,7 +3170,7 @@ router.post("/disruptions/trigger/early-completion", async (req, res) => {
     res.status(503).json({ error: "Kunde inte trigga st\xF6rning." });
   }
 });
-router.post("/disruptions/trigger/resource-unavailable", async (req, res) => {
+router5.post("/disruptions/trigger/resource-unavailable", async (req, res) => {
   const { resourceId, resourceName, reason } = req.body;
   if (!resourceId || !reason) {
     return res.status(400).json({ error: "resourceId, reason kr\xE4vs" });
@@ -3186,7 +3204,7 @@ router.post("/disruptions/trigger/resource-unavailable", async (req, res) => {
     res.status(503).json({ error: "Kunde inte trigga st\xF6rning." });
   }
 });
-router.get("/break-config", async (req, res) => {
+router5.get("/break-config", async (req, res) => {
   if (IS_MOCK_MODE) {
     return res.json({
       enabled: true,
@@ -3202,7 +3220,7 @@ router.get("/break-config", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta rastkonfiguration." });
   }
 });
-router.get("/eta-notification/history", async (req, res) => {
+router5.get("/eta-notification/history", async (req, res) => {
   const { workOrderId, customerId } = req.query;
   if (IS_MOCK_MODE) {
     const notifications = [];
@@ -3233,7 +3251,7 @@ router.get("/eta-notification/history", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta notifieringshistorik." });
   }
 });
-router.get("/eta-notification/config", async (req, res) => {
+router5.get("/eta-notification/config", async (req, res) => {
   if (IS_MOCK_MODE) {
     return res.json({ enabled: true, marginMinutes: 15, channel: "email", triggerOnEnRoute: true });
   }
@@ -3245,15 +3263,47 @@ router.get("/eta-notification/config", async (req, res) => {
   }
 });
 
+// server/routes/mobile/index.ts
+var router6 = (0, import_express6.Router)();
+router6.use((req, _res, next) => {
+  const mode = IS_MOCK_MODE ? "MOCK" : "LIVE";
+  console.log(`[${mode}] ${req.method} ${req.baseUrl}${req.path}`);
+  next();
+});
+router6.use((_req, res, next) => {
+  if (IS_MOCK_MODE) {
+    res.setHeader("X-Traivo-Mock", "true");
+    const originalJson = res.json.bind(res);
+    res.json = function(body) {
+      if (body && typeof body === "object" && !Array.isArray(body)) {
+        body._mock = true;
+      }
+      return originalJson(body);
+    };
+  }
+  next();
+});
+router6.get("/server-mode", (_req, res) => {
+  res.json({
+    mode: IS_MOCK_MODE ? "mock" : "live",
+    backendUrl: IS_MOCK_MODE ? null : TRAIVO_API_URL
+  });
+});
+router6.use(router);
+router6.use(router2);
+router6.use(router3);
+router6.use(router4);
+router6.use(router5);
+
 // server/routes/ai.ts
-var import_express2 = require("express");
+var import_express7 = require("express");
 var import_openai = __toESM(require("openai"));
 var openai = new import_openai.default({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
 });
-var router2 = (0, import_express2.Router)();
-router2.post("/chat", async (req, res) => {
+var router7 = (0, import_express7.Router)();
+router7.post("/chat", async (req, res) => {
   try {
     const { message, context } = req.body;
     if (!message) {
@@ -3301,7 +3351,7 @@ ${contextInfo}` : ""}`;
     res.status(500).json({ error: "Kunde inte generera svar fr\xE5n AI" });
   }
 });
-router2.post("/chat/stream", async (req, res) => {
+router7.post("/chat/stream", async (req, res) => {
   try {
     const { message, context } = req.body;
     if (!message) {
@@ -3370,7 +3420,7 @@ ${contextInfo}` : ""}`;
   }
 });
 var MAX_BASE64_SIZE = 10 * 1024 * 1024;
-router2.post("/transcribe", async (req, res) => {
+router7.post("/transcribe", async (req, res) => {
   try {
     const { audio } = req.body;
     if (!audio) {
@@ -3391,7 +3441,7 @@ router2.post("/transcribe", async (req, res) => {
     res.status(500).json({ error: "Kunde inte transkribera ljudet" });
   }
 });
-router2.post("/voice-command", async (req, res) => {
+router7.post("/voice-command", async (req, res) => {
   try {
     const { audio } = req.body;
     if (!audio) {
@@ -3468,7 +3518,7 @@ Svara ENBART i JSON-format:
     res.status(500).json({ error: "Kunde inte bearbeta r\xF6stkommandot" });
   }
 });
-router2.post("/analyze-image", async (req, res) => {
+router7.post("/analyze-image", async (req, res) => {
   try {
     const { image, context } = req.body;
     if (!image) {
@@ -3547,8 +3597,8 @@ Ytterligare kontext: ${context}` : ""}`;
 });
 
 // server/routes/planner.ts
-var import_express3 = require("express");
-var router3 = (0, import_express3.Router)();
+var import_express8 = require("express");
+var router8 = (0, import_express8.Router)();
 function getWeekDates() {
   const dates = [];
   const now2 = /* @__PURE__ */ new Date();
@@ -3670,7 +3720,7 @@ var EXTRA_WEEK_ORDERS = [
   }
 ];
 var ALL_ORDERS = [...MOCK_ORDERS, ...EXTRA_WEEK_ORDERS];
-router3.get("/drivers/locations", async (_req, res) => {
+router8.get("/drivers/locations", async (_req, res) => {
   try {
     const result = await pool.query(
       `SELECT 
@@ -3697,7 +3747,7 @@ router3.get("/drivers/locations", async (_req, res) => {
     res.status(500).json({ error: "Kunde inte h\xE4mta positioner" });
   }
 });
-router3.get("/orders", (req, res) => {
+router8.get("/orders", (req, res) => {
   const range = req.query.range || "today";
   const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   let filteredOrders;
@@ -3902,7 +3952,7 @@ function getBridgeStatus() {
 }
 
 // server/app.ts
-var app = (0, import_express4.default)();
+var app = (0, import_express9.default)();
 var server = import_http.default.createServer(app);
 var io = new import_socket.Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
@@ -3935,10 +3985,10 @@ io.on("connection", (socket) => {
 });
 app.io = io;
 app.use((0, import_cors.default)());
-app.use(import_express4.default.json({ limit: "10mb" }));
-app.use("/api/mobile", router);
-app.use("/api/mobile/ai", router2);
-app.use("/api/planner", router3);
+app.use(import_express9.default.json({ limit: "10mb" }));
+app.use("/api/mobile", router6);
+app.use("/api/mobile/ai", router7);
+app.use("/api/planner", router8);
 app.get("/api/health", (_req, res) => {
   const bridge = getBridgeStatus();
   res.json({ status: "ok", service: "traivo-go-api", wsBridge: bridge });
@@ -4095,7 +4145,7 @@ app.get("/bundles/:platform/index.bundle", (req, res) => {
     res.status(500).send("Failed to serve bundle");
   }
 });
-app.use("/assets", import_express4.default.static(import_path.default.join(projectRoot, "assets"), {
+app.use("/assets", import_express9.default.static(import_path.default.join(projectRoot, "assets"), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".ttf")) {
       res.setHeader("Content-Type", "font/ttf");
@@ -4144,7 +4194,7 @@ app.get("/api/qrcode/:platform", async (req, res) => {
 app.get("/status", (_req, res) => {
   res.send("packager-status:running");
 });
-app.use(import_express4.default.static(templatesDir));
+app.use(import_express9.default.static(templatesDir));
 app.get("/planner/map", (_req, res) => {
   res.sendFile(import_path.default.join(templatesDir, "planner-map.html"));
 });

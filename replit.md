@@ -54,6 +54,10 @@ The application is built using React Native with Expo SDK 54 and TypeScript for 
 - **Feedback Loop (R5):** `actualDuration` auto-calculated (actualStartTime → now) and sent on order completion via PATCH status. Server stores `actualDuration` on order and `enRouteAt`/`customerNotified` flags on dispatched/en_route status.
 - **Customer Notifications (R6):** Server auto-sets `customerNotified=true` on en_route/dispatched status. OrderDetailScreen shows "Kund notifierad" green badge. `GET /api/mobile/eta-notification/history` and `GET /api/mobile/eta-notification/config` endpoints available.
 
+**Code Architecture (Modular Structure):**
+- **Server routes** split into `server/routes/mobile/` with separate modules: `mockData.ts` (all mock constants), `proxyHelper.ts` (shared utilities, Traivo API proxy, geospatial helpers), `auth.ts` (login/logout/me), `teams.ts` (team CRUD), `orders.ts` (order CRUD & sub-resources), `workSessions.ts` (work session lifecycle), `misc.ts` (notifications, weather, sync, routing, disruptions, etc.), `index.ts` (assembles sub-routers). Entry point `server/routes/mobile.ts` re-exports from `./mobile/index`.
+- **HomeScreen** split into: `HomeScreen.tsx` (~480 lines, layout orchestration), `HomeScreen.styles.ts` (StyleSheet), `HomeScreen.utils.ts` (helper functions), `client/hooks/useVoiceCommands.ts` (voice command hook), `client/components/home/` (VoiceCommandOverlay, WeatherWidget, WorkTimeCard, NextOrderCard, OrderPreviewList).
+
 **Deployment:**
 Static bundles are built for iOS and Android using `bash scripts/build.sh` and served via Express. Expo Go access is provided via a QR code on a landing page, connecting through the `exps://` protocol.
 
