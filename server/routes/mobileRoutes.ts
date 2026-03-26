@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../tenant-middleware";
 import { asyncHandler } from "../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../errors";
 import { isAuthenticated } from "../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable } from "@shared/schema";
+import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../notifications";
 import { triggerETANotification } from "../eta-notification-service";
@@ -524,7 +524,7 @@ app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(
     }
 }));
 
-app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+const workSessionStopHandler = asyncHandler(async (req: any, res: any) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -548,9 +548,11 @@ app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, asyncHand
 
     console.log(`[mobile] Work session stopped for resource ${resourceId}`);
     res.json(updatedSession);
-}));
+});
+app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
+app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
 
-app.patch("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+const workSessionPauseHandler = asyncHandler(async (req: any, res: any) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -573,9 +575,11 @@ app.patch("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, asyncHan
     } as any);
 
     res.json(updatedSession);
-}));
+});
+app.patch("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
+app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
 
-app.patch("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+const workSessionResumeHandler = asyncHandler(async (req: any, res: any) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -603,7 +607,9 @@ app.patch("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, asyncHa
     } as any);
 
     res.json(updatedSession);
-}));
+});
+app.patch("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSessionResumeHandler);
+app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSessionResumeHandler);
 
 // ============================================
 // PHOTO DOCUMENTATION API
@@ -2730,6 +2736,124 @@ app.get("/resource_profile_assignments", isMobileAuthenticated, asyncHandler(asy
     } catch {
       res.json([]);
     }
+}));
+
+app.post("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const schema = z.object({
+      expoPushToken: z.string(),
+      platform: z.string(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const existing = await db.select().from(pushTokens)
+      .where(and(eq(pushTokens.resourceId, resourceId), eq(pushTokens.expoPushToken, parsed.data.expoPushToken)));
+
+    if (existing.length > 0) {
+      await db.update(pushTokens)
+        .set({ platform: parsed.data.platform, updatedAt: new Date() })
+        .where(eq(pushTokens.id, existing[0].id));
+    } else {
+      await db.insert(pushTokens).values({
+        tenantId: resource.tenantId,
+        resourceId,
+        expoPushToken: parsed.data.expoPushToken,
+        platform: parsed.data.platform,
+      });
+    }
+
+    res.json({ success: true });
+}));
+
+app.delete("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    await db.delete(pushTokens).where(eq(pushTokens.resourceId, resourceId));
+    res.json({ success: true });
+}));
+
+app.post("/api/mobile/status", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const schema = z.object({
+      online: z.boolean(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    await db.update(resources)
+      .set({
+        isOnline: parsed.data.online,
+        lastSeenAt: new Date(),
+      })
+      .where(eq(resources.id, resourceId));
+
+    res.json({ success: true, status: parsed.data.online ? "online" : "offline" });
+}));
+
+app.post("/api/mobile/disruptions/trigger/delay", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const schema = z.object({
+      orderId: z.union([z.number(), z.string()]),
+      estimatedDelay: z.number(),
+      reason: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const { triggerSignificantDelay } = await import("../disruption-service");
+    const woId = String(parsed.data.orderId);
+    const order = await storage.getWorkOrder(woId);
+    const woTitle = order?.title || woId;
+
+    const event = await triggerSignificantDelay(
+      resource.tenantId, woId, woTitle,
+      resourceId, resource.name,
+      parsed.data.estimatedDelay, parsed.data.estimatedDelay * 2
+    );
+
+    res.json({ success: true, disruptionId: event?.id || null });
+}));
+
+app.post("/api/mobile/disruptions/trigger/early-completion", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const schema = z.object({
+      orderId: z.union([z.number(), z.string()]).optional(),
+      savedMinutes: z.number(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const { triggerEarlyCompletion } = await import("../disruption-service");
+    const event = await triggerEarlyCompletion(resource.tenantId, resourceId, resource.name, parsed.data.savedMinutes);
+
+    res.json({ success: true, disruptionId: event?.id || null });
+}));
+
+app.post("/api/mobile/disruptions/trigger/resource-unavailable", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+    const resourceId = req.mobileResourceId;
+    const resource = await storage.getResource(resourceId);
+    if (!resource) throw new NotFoundError("Resurs hittades inte");
+
+    const schema = z.object({
+      reason: z.string().optional(),
+      estimatedReturn: z.string().optional(),
+    });
+    const parsed = schema.safeParse(req.body);
+    if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
+
+    const { triggerResourceUnavailable } = await import("../disruption-service");
+    const event = await triggerResourceUnavailable(resource.tenantId, resourceId, resource.name, parsed.data.reason);
+
+    res.json({ success: true, disruptionId: event?.id || null });
 }));
 
 function getFallbackChecklist(orderType: string): string[] {

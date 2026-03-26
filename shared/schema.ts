@@ -205,6 +205,8 @@ export const resources = pgTable("resources", {
   costCenter: text("cost_center"),
   // Projekt i ekonomisystem
   projectCode: text("project_code"),
+  isOnline: boolean("is_online").default(false),
+  lastSeenAt: timestamp("last_seen_at"),
   status: text("status").default("active").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   deletedAt: timestamp("deleted_at"),
@@ -4751,3 +4753,19 @@ export const etaNotifications = pgTable("eta_notifications", {
 export const insertEtaNotificationSchema = createInsertSchema(etaNotifications).omit({ id: true, createdAt: true });
 export type EtaNotification = typeof etaNotifications.$inferSelect;
 export type InsertEtaNotification = z.infer<typeof insertEtaNotificationSchema>;
+
+export const pushTokens = pgTable("push_tokens", {
+  id: serial("id").primaryKey(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  expoPushToken: text("expo_push_token").notNull(),
+  platform: text("platform").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("idx_push_tokens_resource").on(table.resourceId),
+]);
+
+export const insertPushTokenSchema = createInsertSchema(pushTokens).omit({ id: true, createdAt: true, updatedAt: true });
+export type PushToken = typeof pushTokens.$inferSelect;
+export type InsertPushToken = z.infer<typeof insertPushTokenSchema>;
