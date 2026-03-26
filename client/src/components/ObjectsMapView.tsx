@@ -71,6 +71,12 @@ const vertexIcon = L.divIcon({
   iconAnchor: [5, 5],
 });
 
+function escapeHtml(str: string): string {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 function createPolylineLabelIcon(name: string) {
   return L.divIcon({
     className: "polyline-label",
@@ -84,7 +90,7 @@ function createPolylineLabelIcon(name: string) {
       white-space: nowrap;
       box-shadow: 0 1px 3px rgba(0,0,0,0.3);
       pointer-events: none;
-    ">${name}</div>`,
+    ">${escapeHtml(name)}</div>`,
     iconSize: [0, 0],
     iconAnchor: [0, -4],
   });
@@ -205,6 +211,15 @@ export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: 
 
 type DrawMode = "polygon" | "polyline";
 
+interface GeoJSONFeature {
+  type: "Feature";
+  geometry: {
+    type: "Polygon" | "LineString";
+    coordinates: number[][] | number[][][];
+  };
+  properties: Record<string, unknown>;
+}
+
 function DrawClickHandler({ onAddPoint }: { onAddPoint: (latlng: L.LatLng) => void }) {
   useMapEvents({
     click(e) {
@@ -254,11 +269,11 @@ function DrawToggleControl({ active, onClick }: { active: boolean; onClick: () =
     L.DomEvent.disableClickPropagation(btn);
     L.DomEvent.on(btn, "click", () => onClick());
 
-    zoomControl.parentElement?.insertBefore(btn, zoomControl.nextSibling);
+    const zoomParent = zoomControl.parentElement;
+    if (!zoomParent) return;
+    zoomParent.insertBefore(btn, zoomControl.nextSibling);
     btn.style.marginTop = "-2px";
     btn.style.position = "relative";
-    const zoomParent = zoomControl.parentElement!;
-    zoomParent.appendChild(btn);
 
     return () => {
       btn.remove();
@@ -271,15 +286,17 @@ function DrawToggleControl({ active, onClick }: { active: boolean; onClick: () =
 function PolylineLabels({ objects }: { objects: ServiceObject[] }) {
   const labeled = useMemo(() => {
     return objects.filter(o => o.polylineData).map(obj => {
-      const geo = obj.polylineData as any;
+      const geo = obj.polylineData as GeoJSONFeature | null;
       if (!geo?.geometry) return null;
       const { type, coordinates } = geo.geometry;
       let center: [number, number] | null = null;
       if (type === "Polygon" && coordinates?.[0]) {
-        center = getPolygonCenter(coordinates[0]);
+        const polyCoords = coordinates as number[][][];
+        center = getPolygonCenter(polyCoords[0]);
       } else if (type === "LineString" && coordinates?.length > 0) {
-        const mid = Math.floor(coordinates.length / 2);
-        center = [coordinates[mid][1], coordinates[mid][0]];
+        const lineCoords = coordinates as number[][];
+        const mid = Math.floor(lineCoords.length / 2);
+        center = [lineCoords[mid][1], lineCoords[mid][0]];
       }
       if (!center) return null;
       return { id: obj.id, name: obj.name, center };
@@ -370,7 +387,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   }, [drawing, handleUndo]);
 
   const saveMutation = useMutation({
-    mutationFn: async ({ objectId, geoJson }: { objectId: string; geoJson: any }) => {
+    mutationFn: async ({ objectId, geoJson }: { objectId: string; geoJson: GeoJSONFeature }) => {
       return apiRequest("PUT", `/api/objects/${objectId}/polyline`, { polylineData: geoJson });
     },
     onSuccess: () => {
@@ -464,7 +481,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
           </div>
         </div>
       )}
-      <div className={drawing ? "h-[500px]" : "h-[500px]"}>
+      <div className="h-[500px]">
         <div className="p-0 h-full relative">
           <MapContainer
             center={defaultCenter}
@@ -506,15 +523,17 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
                   </Popup>
                 </Marker>
                 {obj.polylineData && (() => {
-                  const geo = obj.polylineData as any;
+                  const geo = obj.polylineData as GeoJSONFeature | null;
                   if (!geo?.geometry) return null;
                   const { type, coordinates } = geo.geometry;
                   if (type === "Polygon" && coordinates?.[0]) {
-                    const positions = coordinates[0].map((c: number[]) => [c[1], c[0]] as [number, number]);
+                    const polyCoords = coordinates as number[][][];
+                    const positions = polyCoords[0].map((c) => [c[1], c[0]] as [number, number]);
                     return <Polygon positions={positions} pathOptions={{ color: "#4A9B9B", fillColor: "#4A9B9B", fillOpacity: 0.15, weight: 2 }} />;
                   }
                   if (type === "LineString" && coordinates) {
-                    const positions = coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]);
+                    const lineCoords = coordinates as number[][];
+                    const positions = lineCoords.map((c) => [c[1], c[0]] as [number, number]);
                     return <Polyline positions={positions} pathOptions={{ color: "#4A9B9B", weight: 3 }} />;
                   }
                   return null;
