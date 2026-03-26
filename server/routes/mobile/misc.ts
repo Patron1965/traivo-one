@@ -6,6 +6,7 @@ import type { Express } from "express";
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError, ForbiddenError,
     routeFeedbackTable, orderChecklistItems, workOrders, customerChangeRequests, taskMetadataUpdates, etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments,
+    mapGoCategory, ONE_CATEGORIES, GO_CATEGORY_MAP,
     notificationService, triggerETANotification,
     OpenAI,
     getArticleMetadataForObject, writeArticleMetadataOnObject,
@@ -1383,7 +1384,7 @@ app.post("/api/mobile/work-orders/:id/auto-eta-sms", isMobileAuthenticated, asyn
     if (!order) throw new NotFoundError("Order hittades inte");
 
     try {
-      const result = await triggerETANotification(orderId, resource.tenantId, resourceId);
+      const result = await triggerETANotification(orderId, resourceId, resource.tenantId);
       res.json({
         success: true,
         etaMinutes: (result as any)?.etaMinutes || null,
