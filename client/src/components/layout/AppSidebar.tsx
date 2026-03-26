@@ -100,13 +100,9 @@ export function AppSidebar() {
           <img 
             src={traivoLogo} 
             alt="Traivo" 
-            className="h-14 w-auto object-contain"
+            className="h-14 w-auto object-contain dark:brightness-0 dark:invert"
             data-testid="img-traivo-logo"
           />
-          <div>
-            <h1 className="text-base font-semibold">Traivo</h1>
-            <p className="text-xs text-muted-foreground">Traivo</p>
-          </div>
         </div>
       </SidebarHeader>
       

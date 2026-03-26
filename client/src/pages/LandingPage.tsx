@@ -1,6 +1,5 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import traivoLogo from "@assets/traivo_logo_transparent.png";
 import { 
   Truck, 
@@ -30,7 +29,6 @@ export default function LandingPage() {
         <div className="container mx-auto px-4 py-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <img src={traivoLogo} alt="Traivo" className="h-20 w-auto object-contain" data-testid="img-landing-logo" />
-            <Badge variant="secondary" className="text-xs">Beta</Badge>
           </div>
           <div className="flex items-center gap-3">
             <Button asChild data-testid="button-login">
@@ -331,7 +329,6 @@ export default function LandingPage() {
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <img src={traivoLogo} alt="Traivo" className="h-12 w-auto object-contain" data-testid="img-landing-footer-logo" />
-              <Badge variant="outline" className="text-xs">Beta</Badge>
             </div>
             <p className="text-sm text-muted-foreground">
               Flerföretagsstöd — fältserviceplattform för nordiska företag
