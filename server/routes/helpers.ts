@@ -95,7 +95,7 @@ export function validateMobileToken(token: string): string | null {
   return tokenData.resourceId;
 }
 
-export function isMobileAuthenticated(req: any, res: any, next: any) {
+export function isMobileAuthenticated(req: ExpressRequest, res: ExpressResponse, next: () => void) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -108,7 +108,7 @@ export function isMobileAuthenticated(req: any, res: any, next: any) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
   
-  req.mobileResourceId = resourceId;
+  (req as any).mobileResourceId = resourceId;
   next();
 }
 

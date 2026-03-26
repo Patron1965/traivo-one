@@ -29,7 +29,9 @@ export type NotificationType =
   | "schedule_changed"
   | "priority_changed"
   | "position_update"
-  | "route_update";
+  | "route_update"
+  | "notification"
+  | "order_updated";
 
 export interface Notification {
   id: string;

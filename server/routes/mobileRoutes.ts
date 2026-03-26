@@ -1,4 +1,4 @@
-import type { Express } from "express";
+import type { Express, Request, Response } from "express";
 import { storage } from "../storage";
 import { db } from "../db";
 import { eq, sql, desc, and, gte, isNull, inArray } from "drizzle-orm";
@@ -14,6 +14,11 @@ import { notificationService } from "../notifications";
 import { triggerETANotification } from "../eta-notification-service";
 import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
+import { handleWorkOrderStatusChange } from "../ai-communication";
+
+interface MobileAuthenticatedRequest extends Request {
+  mobileResourceId: string;
+}
 
 export async function registerMobileRoutes(app: Express) {
 // ========================================
@@ -115,7 +120,7 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
 }));
 
 // Mobile logout
-app.post("/api/mobile/logout", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/logout", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const authHeader = req.headers.authorization;
     const token = authHeader.substring(7);
     mobileTokens.delete(token);
@@ -123,7 +128,7 @@ app.post("/api/mobile/logout", isMobileAuthenticated, asyncHandler(async (req: a
 }));
 
 // Get current resource info
-app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resource = await storage.getResource(req.mobileResourceId);
     if (!resource) {
       throw new NotFoundError("Resurs hittades inte");
@@ -136,7 +141,7 @@ app.get("/api/mobile/me", isMobileAuthenticated, asyncHandler(async (req: any, r
 }));
 
 // Get work orders for the logged-in resource
-app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const dateParam = req.query.date as string;
     
@@ -215,7 +220,7 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
 }));
 
 // Get single work order details
-app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     
@@ -270,7 +275,7 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
 }));
 
 // Update work order status from mobile
-app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { status, notes, actualDuration: bodyActualDuration, enRouteAt: bodyEnRouteAt, impossibleReason } = req.body;
@@ -381,12 +386,20 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
 
     broadcastPlannerEvent({
       type: 'status_changed',
-      data: { orderId, orderNumber: updatedOrder.title || `WO-${orderId.substring(0,8)}`, oldStatus: 'unknown', newStatus: status, driverName: '', timestamp: new Date().toISOString() }
+      data: { orderId, orderNumber: updatedOrder.title || `WO-${orderId.substring(0,8)}`, oldStatus: order.orderStatus || 'unknown', newStatus: status, driverName: '', timestamp: new Date().toISOString() }
+    });
+
+    notificationService.sendToResource(resourceId, {
+      type: "job_updated",
+      title: "Order uppdaterad",
+      message: `${updatedOrder.title || orderId} — status: ${status}`,
+      orderId,
+      data: { status, executionStatus: updateData.executionStatus }
     });
 }));
 
 // Add note to work order
-app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { note } = req.body;
@@ -420,7 +433,7 @@ app.post("/api/mobile/orders/:id/notes", isMobileAuthenticated, asyncHandler(asy
 // POSITION TRACKING API ENDPOINTS
 // ============================================
 
-app.post("/api/resources/position", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/resources/position", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const { resourceId, latitude, longitude, speed, heading, accuracy, status, workOrderId } = req.body;
     
     if (!resourceId) {
@@ -454,7 +467,7 @@ app.post("/api/resources/position", isAuthenticated, asyncHandler(async (req: an
 }));
 
 // Update position from mobile app (also handled via WebSocket)
-app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const { latitude, longitude, speed, heading, accuracy, status, workOrderId, currentOrderId } = req.body;
     
@@ -480,7 +493,7 @@ app.post("/api/mobile/position", isMobileAuthenticated, asyncHandler(async (req:
 // WORK SESSION API
 // ============================================
 
-app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -507,9 +520,16 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
 
     console.log(`[mobile] Work session started for resource ${resourceId}`);
     res.json(session);
+
+    notificationService.broadcastToAll({
+      type: "schedule_changed",
+      title: "Arbetspass startat",
+      message: `${resource.name || resourceId} har startat sitt arbetspass`,
+      data: { resourceId, sessionId: session.id, event: "work_session_started" }
+    });
 }));
 
-app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -524,7 +544,7 @@ app.get("/api/mobile/work-sessions/active", isMobileAuthenticated, asyncHandler(
     }
 }));
 
-const workSessionStopHandler = asyncHandler(async (req: any, res: any) => {
+const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -548,11 +568,18 @@ const workSessionStopHandler = asyncHandler(async (req: any, res: any) => {
 
     console.log(`[mobile] Work session stopped for resource ${resourceId}`);
     res.json(updatedSession);
+
+    notificationService.broadcastToAll({
+      type: "schedule_changed",
+      title: "Arbetspass avslutat",
+      message: `${resource.name || resourceId} har avslutat sitt arbetspass`,
+      data: { resourceId, event: "work_session_stopped" }
+    });
 });
 app.patch("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
 app.post("/api/mobile/work-sessions/:id/stop", isMobileAuthenticated, workSessionStopHandler);
 
-const workSessionPauseHandler = asyncHandler(async (req: any, res: any) => {
+const workSessionPauseHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -579,7 +606,7 @@ const workSessionPauseHandler = asyncHandler(async (req: any, res: any) => {
 app.patch("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
 app.post("/api/mobile/work-sessions/:id/pause", isMobileAuthenticated, workSessionPauseHandler);
 
-const workSessionResumeHandler = asyncHandler(async (req: any, res: any) => {
+const workSessionResumeHandler = asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -615,7 +642,7 @@ app.post("/api/mobile/work-sessions/:id/resume", isMobileAuthenticated, workSess
 // PHOTO DOCUMENTATION API
 // ============================================
 
-app.post("/api/mobile/orders/:id/photos", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/photos", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { photos } = req.body;
@@ -653,7 +680,7 @@ app.post("/api/mobile/orders/:id/photos", isMobileAuthenticated, asyncHandler(as
 // CHECKLIST SUBMISSION API (mobile)
 // ============================================
 
-app.post("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { checklist } = req.body;
@@ -796,7 +823,7 @@ async function enrichOrderForMobile(order: any, storage: any) {
   };
 }
 
-app.get("/api/mobile/orders", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/orders", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -827,7 +854,7 @@ app.get("/api/mobile/orders", isMobileAuthenticated, asyncHandler(async (req: an
     res.json(enriched);
 }));
 
-app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { id: orderId, stepId } = req.params;
     const resourceId = req.mobileResourceId;
     const { completed } = req.body;
@@ -848,7 +875,7 @@ app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, asyn
     res.json({ success: true, stepId, completed });
 }));
 
-app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { type, description, latitude, longitude, photos } = req.body;
@@ -934,7 +961,7 @@ app.post("/api/mobile/orders/:id/deviations", isMobileAuthenticated, asyncHandle
     });
 }));
 
-app.get("/api/mobile/deviations/mine", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/deviations/mine", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new ForbiddenError("Resurs hittades inte");
@@ -964,7 +991,7 @@ const materialLogSchema = z.object({
   message: "articleId eller articleNumber krävs",
 });
 
-app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const parsed = materialLogSchema.safeParse(req.body);
@@ -1001,7 +1028,7 @@ app.post("/api/mobile/orders/:id/materials", isMobileAuthenticated, asyncHandler
     res.json({ success: true, line });
 }));
 
-app.get("/api/mobile/articles", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/articles", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -1026,7 +1053,7 @@ app.get("/api/mobile/articles", isMobileAuthenticated, asyncHandler(async (req: 
     })));
 }));
 
-app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { signature } = req.body;
@@ -1055,7 +1082,7 @@ app.post("/api/mobile/orders/:id/signature", isMobileAuthenticated, asyncHandler
     res.json({ success: true, protocol });
 }));
 
-app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { inspections } = req.body;
@@ -1087,7 +1114,7 @@ app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandl
     res.json({ success: true, inspections: results });
 }));
 
-app.post("/api/mobile/gps", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/gps", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const { latitude, longitude, speed, heading, accuracy, currentOrderId, currentOrderNumber, vehicleRegNo, driverName } = req.body;
 
@@ -1109,7 +1136,7 @@ app.post("/api/mobile/gps", isMobileAuthenticated, asyncHandler(async (req: any,
     res.json({ success: true });
 }));
 
-app.get("/api/mobile/summary", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/summary", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -1151,7 +1178,7 @@ app.get("/api/mobile/weather", asyncHandler(async (req, res) => {
     res.json(data);
 }));
 
-app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { message, context } = req.body;
     if (!message) throw new ValidationError("Meddelande krävs");
 
@@ -1185,7 +1212,7 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
     res.json({ response: completion.choices[0]?.message?.content || "Inget svar" });
 }));
 
-app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { audio } = req.body;
     if (!audio) throw new ValidationError("Ljuddata krävs");
 
@@ -1216,7 +1243,7 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
     res.json({ text: transcription.text });
 }));
 
-app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { image, context } = req.body;
     if (!image) throw new ValidationError("Image data required");
 
@@ -1266,7 +1293,7 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
 // OFFLINE SYNC API (Mobile Field App)
 // ============================================
 
-app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -1581,7 +1608,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: any
     });
 }));
 
-app.get("/api/mobile/sync/status", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/sync/status", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const status = (req.query.status as string) || undefined;
     const logs = await storage.getOfflineSyncLogs(resourceId, status);
@@ -1614,19 +1641,19 @@ app.get("/api/mobile/sync/status", isMobileAuthenticated, asyncHandler(async (re
 // CHECKLIST TEMPLATES API
 // ============================================
 
-app.get("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
     const templates = await storage.getChecklistTemplates(tenantId);
     res.json(templates);
 }));
 
-app.get("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const template = await storage.getChecklistTemplate(req.params.id);
     if (!template) throw new NotFoundError("Mall hittades inte");
     res.json(template);
 }));
 
-app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const tenantId = getTenantIdWithFallback(req);
     const { name, articleType, questions, isActive } = req.body;
 
@@ -1646,18 +1673,18 @@ app.post("/api/checklist-templates", isAuthenticated, asyncHandler(async (req: a
     res.json(template);
 }));
 
-app.patch("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.patch("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const template = await storage.updateChecklistTemplate(req.params.id, req.body);
     if (!template) throw new NotFoundError("Mall hittades inte");
     res.json(template);
 }));
 
-app.delete("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.delete("/api/checklist-templates/:id", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     await storage.deleteChecklistTemplate(req.params.id);
     res.json({ success: true });
 }));
 
-app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
 
@@ -1707,7 +1734,7 @@ app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(
 // DRIVER PUSH NOTIFICATIONS API
 // ============================================
 
-app.get("/api/mobile/notifications", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/notifications", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const unreadOnly = req.query.unread === "true";
     const limit = parseInt(req.query.limit as string) || 50;
@@ -1722,20 +1749,20 @@ app.get("/api/mobile/notifications", isMobileAuthenticated, asyncHandler(async (
     });
 }));
 
-app.patch("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.patch("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const notification = await storage.markDriverNotificationRead(req.params.id, resourceId);
     if (!notification) throw new NotFoundError("Avisering hittades inte");
     res.json(notification);
 }));
 
-app.patch("/api/mobile/notifications/read-all", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.patch("/api/mobile/notifications/read-all", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const count = await storage.markAllDriverNotificationsRead(resourceId);
     res.json({ success: true, markedRead: count });
 }));
 
-app.get("/api/mobile/notifications/count", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/notifications/count", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const unreadCount = await storage.getUnreadNotificationCount(resourceId);
     res.json({ unreadCount });
@@ -1744,7 +1771,7 @@ app.get("/api/mobile/notifications/count", isMobileAuthenticated, asyncHandler(a
 // ============================================
 // ROUTE FEEDBACK — drivers rate daily routes
 // ============================================
-app.get("/api/mobile/route-feedback/mine", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/route-feedback/mine", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -1760,7 +1787,7 @@ app.get("/api/mobile/route-feedback/mine", isMobileAuthenticated, asyncHandler(a
     res.json(feedback);
 }));
 
-app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -1820,7 +1847,7 @@ app.post("/api/mobile/route-feedback", isMobileAuthenticated, asyncHandler(async
     res.status(existing.length > 0 ? 200 : 201).json(feedback);
 }));
 
-app.get("/api/mobile/terminology", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/terminology", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) {
@@ -2005,7 +2032,7 @@ const mobileChangeRequestSchema = z.object({
   severity: z.enum(["low", "medium", "high", "critical"]).optional().nullable(),
 });
 
-app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new ForbiddenError("Resurs hittades inte");
@@ -2063,7 +2090,7 @@ app.post("/api/mobile/customer-change-requests", isMobileAuthenticated, asyncHan
     res.status(201).json(created);
 }));
 
-app.get("/api/mobile/customer-change-requests/mine", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/customer-change-requests/mine", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new ForbiddenError("Resurs hittades inte");
@@ -2097,7 +2124,7 @@ app.get("/api/mobile/customer-change-requests/mine", isMobileAuthenticated, asyn
     res.json({ items: enriched, total });
 }));
 
-app.post("/api/mobile/customer-change-requests/upload-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/customer-change-requests/upload-photo", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
     const objectStorageService = new ObjectStorageService();
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
@@ -2105,7 +2132,7 @@ app.post("/api/mobile/customer-change-requests/upload-photo", isMobileAuthentica
     res.json({ uploadURL, objectPath });
 }));
 
-app.post("/api/mobile/customer-change-requests/confirm-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/customer-change-requests/confirm-photo", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { objectPath } = req.body;
     if (!objectPath || typeof objectPath !== "string") {
       throw new ValidationError("objectPath krävs");
@@ -2130,7 +2157,7 @@ app.post("/api/mobile/customer-change-requests/confirm-photo", isMobileAuthentic
     res.json({ confirmed: true, objectPath, downloadURL });
 }));
 
-app.get("/api/mobile/customer-change-requests/categories", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/customer-change-requests/categories", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { GO_CATEGORY_MAP: goMap, ONE_CATEGORIES: oneCats, GO_CATEGORIES: goCats, ALL_CATEGORIES: allCats, CATEGORY_LABELS: labels, SEVERITY_LEVELS: sevs } = await import("@shared/changeRequestCategories");
     res.json({
       oneCategories: oneCats,
@@ -2154,7 +2181,7 @@ function broadcastPlannerEvent(event: { type: string; data: any }) {
   });
 }
 
-app.post("/api/travel-distances", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/travel-distances", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const { originLat, originLng, destinations } = req.body;
     if (originLat == null || originLng == null || !Array.isArray(destinations)) {
       throw new ValidationError("originLat, originLng och destinations krävs");
@@ -2271,7 +2298,7 @@ async function handleQuickAction(orderId: string, actionType: string) {
     };
 }
 
-app.post("/api/mobile/quick-action", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/quick-action", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const { orderId, actionType } = req.body;
 
@@ -2284,13 +2311,13 @@ app.post("/api/mobile/quick-action", isMobileAuthenticated, asyncHandler(async (
     res.json(result);
 }));
 
-app.post("/api/quick-action", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/quick-action", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const { orderId, actionType } = req.body;
     const result = await handleQuickAction(orderId, actionType);
     res.json(result);
 }));
 
-app.post("/api/mobile/travel-times", isAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/travel-times", isAuthenticated, asyncHandler(async (req: Request, res: Response) => {
     const { latitude, longitude, destinations } = req.body;
 
     if (latitude == null || longitude == null || !Array.isArray(destinations) || destinations.length === 0) {
@@ -2364,7 +2391,7 @@ app.post("/api/mobile/travel-times", isAuthenticated, asyncHandler(async (req: a
     }
 }));
 
-app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
 
@@ -2436,7 +2463,7 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
     res.json({ articles: result });
 }));
 
-app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const { articleId, metadataLabel, newValue, inspectionStatus, inspectionComment, inspectionPhoto } = req.body;
@@ -2488,7 +2515,7 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
 // ============================================
 // DISTANCE API — REST endpoints for distance calculations
 // ============================================
-app.post("/api/distance", asyncHandler(async (req: any, res) => {
+app.post("/api/distance", asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { getRoutingDistance } = await import("../distance-matrix-service");
     const { fromLat, fromLng, toLat, toLng, origin, destination } = req.body;
 
@@ -2511,7 +2538,7 @@ app.post("/api/distance", asyncHandler(async (req: any, res) => {
     });
 }));
 
-app.post("/api/distance/batch", asyncHandler(async (req: any, res) => {
+app.post("/api/distance/batch", asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const { getBatchDistances } = await import("../distance-matrix-service");
     const { pairs } = req.body;
 
@@ -2551,7 +2578,7 @@ app.post("/api/distance/batch", asyncHandler(async (req: any, res) => {
 // MISSING MOBILE ENDPOINTS — GO compatibility
 // ============================================
 
-app.get("/api/mobile/map-config", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/map-config", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     const tenantId = resource?.tenantId || getTenantIdWithFallback(req);
@@ -2569,7 +2596,7 @@ app.get("/api/mobile/map-config", isMobileAuthenticated, asyncHandler(async (req
     });
 }));
 
-app.get("/api/mobile/team-invites", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/team-invites", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     try {
       const invites = await db.execute(
@@ -2583,7 +2610,7 @@ app.get("/api/mobile/team-invites", isMobileAuthenticated, asyncHandler(async (r
     }
 }));
 
-app.get("/api/mobile/team-orders", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/mobile/team-orders", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const dateParam = req.query.date as string;
 
@@ -2625,7 +2652,7 @@ app.get("/api/mobile/team-orders", isMobileAuthenticated, asyncHandler(async (re
     }
 }));
 
-app.post("/api/mobile/orders/:id/upload-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/upload-photo", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const order = await storage.getWorkOrder(orderId);
@@ -2650,7 +2677,7 @@ app.post("/api/mobile/orders/:id/upload-photo", isMobileAuthenticated, asyncHand
     res.json({ success: true, photo: newPhoto });
 }));
 
-app.post("/api/mobile/orders/:id/confirm-photo", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/confirm-photo", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const order = await storage.getWorkOrder(orderId);
@@ -2669,7 +2696,7 @@ app.post("/api/mobile/orders/:id/confirm-photo", isMobileAuthenticated, asyncHan
     res.json({ success: true });
 }));
 
-app.post("/api/mobile/orders/:id/customer-signoff", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/orders/:id/customer-signoff", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const resourceId = req.mobileResourceId;
     const order = await storage.getWorkOrder(orderId);
@@ -2697,20 +2724,20 @@ app.post("/api/mobile/orders/:id/customer-signoff", isMobileAuthenticated, async
     res.json({ success: true, signedAt: metadata.customerSignoff.signedAt });
 }));
 
-app.post("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/notifications/:id/read", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const notification = await storage.markDriverNotificationRead(req.params.id, resourceId);
     if (!notification) throw new NotFoundError("Avisering hittades inte");
     res.json(notification);
 }));
 
-app.post("/api/mobile/notifications/read-all", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.post("/api/mobile/notifications/read-all", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const count = await storage.markAllDriverNotificationsRead(resourceId);
     res.json({ success: true, markedRead: count });
 }));
 
-app.get("/api/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/api/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.query.resourceId as string || req.mobileResourceId;
     if (!resourceId) return res.json([]);
 
@@ -2724,7 +2751,7 @@ app.get("/api/resource_profile_assignments", isMobileAuthenticated, asyncHandler
     }
 }));
 
-app.get("/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: any, res) => {
+app.get("/resource_profile_assignments", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.query.resourceId as string || req.mobileResourceId;
     if (!resourceId) return res.json([]);
 
@@ -2738,7 +2765,7 @@ app.get("/resource_profile_assignments", isMobileAuthenticated, asyncHandler(asy
     }
 }));
 
-app.post("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -2769,7 +2796,7 @@ app.post("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (re
     res.json({ success: true });
 }));
 
-app.delete("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.delete("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const { expoPushToken } = req.body || {};
     if (expoPushToken) {
@@ -2780,7 +2807,7 @@ app.delete("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (
     res.json({ success: true });
 }));
 
-app.post("/api/mobile/status", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/status", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const schema = z.object({
       online: z.boolean(),
@@ -2798,7 +2825,7 @@ app.post("/api/mobile/status", isMobileAuthenticated, asyncHandler(async (req: a
     res.json({ success: true, status: parsed.data.online ? "online" : "offline" });
 }));
 
-app.post("/api/mobile/disruptions/trigger/delay", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/disruptions/trigger/delay", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -2825,7 +2852,7 @@ app.post("/api/mobile/disruptions/trigger/delay", isMobileAuthenticated, asyncHa
     res.json({ success: true, disruptionId: event?.id || null });
 }));
 
-app.post("/api/mobile/disruptions/trigger/early-completion", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/disruptions/trigger/early-completion", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -2843,7 +2870,7 @@ app.post("/api/mobile/disruptions/trigger/early-completion", isMobileAuthenticat
     res.json({ success: true, disruptionId: event?.id || null });
 }));
 
-app.post("/api/mobile/disruptions/trigger/resource-unavailable", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/disruptions/trigger/resource-unavailable", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -2865,13 +2892,13 @@ app.post("/api/mobile/disruptions/trigger/resource-unavailable", isMobileAuthent
 // FAS 2: Team, search, time, stats, route, distance, config endpoints
 // ========================================
 
-app.get("/api/mobile/my-profiles", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/my-profiles", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const rows = await db.select().from(resourceProfileAssignments).where(eq(resourceProfileAssignments.resourceId, resourceId));
     res.json(rows);
 }));
 
-app.get("/api/mobile/my-team", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/my-team", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -2897,7 +2924,7 @@ app.get("/api/mobile/my-team", isMobileAuthenticated, asyncHandler(async (req: a
     res.json(result);
 }));
 
-app.post("/api/mobile/teams", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/teams", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -2925,7 +2952,7 @@ app.post("/api/mobile/teams", isMobileAuthenticated, asyncHandler(async (req: an
     res.json({ success: true, teamId });
 }));
 
-app.post("/api/mobile/teams/:id/invite", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/teams/:id/invite", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const teamId = req.params.id;
     const schema = z.object({ resourceId: z.string() });
@@ -2949,7 +2976,7 @@ app.post("/api/mobile/teams/:id/invite", isMobileAuthenticated, asyncHandler(asy
     res.json({ success: true });
 }));
 
-app.post("/api/mobile/teams/:id/accept", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/teams/:id/accept", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const teamId = req.params.id;
     const existing = await db.select().from(teamMembers)
@@ -2958,7 +2985,7 @@ app.post("/api/mobile/teams/:id/accept", isMobileAuthenticated, asyncHandler(asy
     res.json({ success: true });
 }));
 
-app.post("/api/mobile/teams/:id/leave", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/teams/:id/leave", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const teamId = req.params.id;
     await db.delete(teamMembers)
@@ -2966,7 +2993,7 @@ app.post("/api/mobile/teams/:id/leave", isMobileAuthenticated, asyncHandler(asyn
     res.json({ success: true });
 }));
 
-app.delete("/api/mobile/teams/:id", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.delete("/api/mobile/teams/:id", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const teamId = req.params.id;
     const team = await db.select().from(teams).where(eq(teams.id, teamId));
@@ -2978,7 +3005,7 @@ app.delete("/api/mobile/teams/:id", isMobileAuthenticated, asyncHandler(async (r
     res.json({ success: true });
 }));
 
-app.get("/api/mobile/resources/search", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/resources/search", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -2994,7 +3021,7 @@ app.get("/api/mobile/resources/search", isMobileAuthenticated, asyncHandler(asyn
     res.json(results);
 }));
 
-app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -3028,7 +3055,7 @@ app.post("/api/mobile/work-sessions/:id/entries", isMobileAuthenticated, asyncHa
     res.json({ success: true, entryId });
 }));
 
-app.get("/api/mobile/orders/:id/time-entries", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/orders/:id/time-entries", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const orderId = req.params.id;
     const entries = await db.select().from(workEntries)
       .where(eq(workEntries.workOrderId, orderId))
@@ -3044,7 +3071,7 @@ app.get("/api/mobile/orders/:id/time-entries", isMobileAuthenticated, asyncHandl
     })));
 }));
 
-app.get("/api/mobile/time-summary", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/time-summary", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
     const dayStart = new Date(`${dateStr}T00:00:00`);
@@ -3072,7 +3099,7 @@ app.get("/api/mobile/time-summary", isMobileAuthenticated, asyncHandler(async (r
     });
 }));
 
-app.get("/api/mobile/statistics", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/statistics", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -3122,7 +3149,7 @@ app.get("/api/mobile/statistics", isMobileAuthenticated, asyncHandler(async (req
     });
 }));
 
-app.get("/api/mobile/route", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/route", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
 
@@ -3153,7 +3180,7 @@ app.get("/api/mobile/route", isMobileAuthenticated, asyncHandler(async (req: any
     res.json({ orders: orderList, totalDistance: 0, estimatedDuration: 0 });
 }));
 
-app.get("/api/mobile/route-optimized", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/route-optimized", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const dateStr = req.query.date as string || new Date().toISOString().slice(0, 10);
 
@@ -3200,7 +3227,7 @@ app.get("/api/mobile/route-optimized", isMobileAuthenticated, asyncHandler(async
     }
 }));
 
-app.post("/api/mobile/distance", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/distance", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const schema = z.object({
       from: z.object({ lat: z.number(), lng: z.number() }),
       to: z.object({ lat: z.number(), lng: z.number() }),
@@ -3213,7 +3240,7 @@ app.post("/api/mobile/distance", isMobileAuthenticated, asyncHandler(async (req:
     res.json({ distance: result.distanceKm, duration: result.durationMin });
 }));
 
-app.post("/api/mobile/distance/batch", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/distance/batch", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const schema = z.object({
       points: z.array(z.object({ lat: z.number(), lng: z.number() })).min(2),
     });
@@ -3241,7 +3268,7 @@ app.post("/api/mobile/distance/batch", isMobileAuthenticated, asyncHandler(async
     res.json({ legs, totalDistance, totalDuration });
 }));
 
-app.get("/api/mobile/break-config", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/break-config", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -3259,7 +3286,7 @@ app.get("/api/mobile/break-config", isMobileAuthenticated, asyncHandler(async (r
     });
 }));
 
-app.get("/api/mobile/eta-notification/history", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/eta-notification/history", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -3279,7 +3306,7 @@ app.get("/api/mobile/eta-notification/history", isMobileAuthenticated, asyncHand
     })));
 }));
 
-app.get("/api/mobile/eta-notification/config", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.get("/api/mobile/eta-notification/config", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const resource = await storage.getResource(resourceId);
     if (!resource) throw new NotFoundError("Resurs hittades inte");
@@ -3295,7 +3322,7 @@ app.get("/api/mobile/eta-notification/config", isMobileAuthenticated, asyncHandl
     });
 }));
 
-app.post("/api/mobile/work-orders/carry-over", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/work-orders/carry-over", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const schema = z.object({
       orderIds: z.array(z.string()),
@@ -3320,9 +3347,18 @@ app.post("/api/mobile/work-orders/carry-over", isMobileAuthenticated, asyncHandl
     }
 
     res.json({ success: true, movedCount });
+
+    if (movedCount > 0) {
+      notificationService.sendToResource(resourceId, {
+        type: "schedule_changed",
+        title: "Schema ändrat",
+        message: `${movedCount} order(s) flyttade till ${parsed.data.targetDate}`,
+        data: { event: "carry_over", movedCount, targetDate: parsed.data.targetDate }
+      });
+    }
 }));
 
-app.post("/api/mobile/work-orders/:id/auto-eta-sms", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
+app.post("/api/mobile/work-orders/:id/auto-eta-sms", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
     const orderId = req.params.id;
     const resource = await storage.getResource(resourceId);
