@@ -1,7 +1,21 @@
-modules = ["nodejs-20", "postgresql-16"]
+modules = ["nodejs-20", "web", "postgresql-16"]
+run = "npm run dev"
+hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
-channel = "stable-25_05"
+channel = "stable-24_05"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[env]
+PORT = "5000"
+
+[deployment]
+deploymentTarget = "autoscale"
+run = ["node", "./dist/index.cjs"]
+build = ["npm", "run", "build"]
 
 [workflows]
 runButton = "Project"
@@ -13,51 +27,13 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "workflow.run"
-args = "Start Backend"
+args = "Start application"
 
 [[workflows.workflow]]
-name = "Start Backend"
+name = "Start application"
 author = "agent"
-
-[workflows.workflow.metadata]
-outputType = "console"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "node server-dist/index.js"
+args = "npm run dev"
 waitForPort = 5000
-
-[userenv]
-
-[userenv.shared]
-EXPO_PUBLIC_DOMAIN = "143744bc-0950-40ae-a71f-7334bd02d088-00-2jqn3h1bml74q.kirk.replit.dev"
-KINAB_API_URL = "https://8a66c250-81a0-4795-8b10-d7e5288aac2f-00-31xofz3v62pfu.worf.replit.dev"
-KINAB_MOCK_MODE = "true"
-
-[agent]
-integrations = ["javascript_openai_ai_integrations:2.0.0"]
-
-[deployment]
-deploymentTarget = "autoscale"
-build = ["sh", "-c", "npm install && npx esbuild server/index.ts --bundle --platform=node --target=node20 --outfile=server-dist/index.js --external:pg-native --packages=external && bash scripts/build.sh"]
-run = ["node", "server-dist/index.js"]
-
-[[ports]]
-localPort = 5000
-externalPort = 80
-
-[[ports]]
-localPort = 5001
-externalPort = 3001
-
-[[ports]]
-localPort = 8081
-externalPort = 8081
-
-[[ports]]
-localPort = 8082
-externalPort = 3000
-
-[postMerge]
-path = "scripts/post-merge.sh"
-timeoutMs = 120000

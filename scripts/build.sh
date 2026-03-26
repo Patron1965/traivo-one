@@ -1,40 +1,30 @@
 #!/bin/bash
 set -e
 
-echo "Building Driver Core..."
+echo "Building static bundles for Expo Go..."
 
-METRO_URL="http://localhost:8081"
-OUTPUT_DIR="dist-metro"
+DIST_DIR="dist"
+rm -rf "$DIST_DIR"
+mkdir -p "$DIST_DIR/ios" "$DIST_DIR/android"
 
-echo "Step 1: Metro JS bundles..."
-if curl -s --max-time 5 "$METRO_URL/status" 2>/dev/null | grep -q "packager-status:running"; then
-  echo "  Metro dev server detected, fetching fresh bundles..."
-  mkdir -p "$OUTPUT_DIR/ios" "$OUTPUT_DIR/android"
+echo "Exporting iOS bundle..."
+npx expo export:embed \
+  --platform ios \
+  --entry-file node_modules/expo/AppEntry.js \
+  --bundle-output "$DIST_DIR/ios/index.bundle" \
+  --assets-dest "$DIST_DIR/ios" \
+  --dev false \
+  --reset-cache 2>&1
 
-  echo "  Fetching iOS bundle..."
-  curl -s --max-time 180 "$METRO_URL/index.bundle?platform=ios&dev=false&minify=false&lazy=true" -o "$OUTPUT_DIR/ios/index.bundle"
-  IOS_SIZE=$(wc -c < "$OUTPUT_DIR/ios/index.bundle")
-  echo "    iOS bundle: $IOS_SIZE bytes"
+echo "Exporting Android bundle..."
+npx expo export:embed \
+  --platform android \
+  --entry-file node_modules/expo/AppEntry.js \
+  --bundle-output "$DIST_DIR/android/index.bundle" \
+  --assets-dest "$DIST_DIR/android" \
+  --dev false \
+  --reset-cache 2>&1
 
-  echo "  Fetching Android bundle..."
-  curl -s --max-time 180 "$METRO_URL/index.bundle?platform=android&dev=false&minify=false&lazy=true" -o "$OUTPUT_DIR/android/index.bundle"
-  ANDROID_SIZE=$(wc -c < "$OUTPUT_DIR/android/index.bundle")
-  echo "    Android bundle: $ANDROID_SIZE bytes"
-
-  if [ "$IOS_SIZE" -lt 1000 ] || [ "$ANDROID_SIZE" -lt 1000 ]; then
-    echo "  Warning: Bundle sizes too small. Metro may have returned an error."
-  fi
-else
-  echo "  Metro dev server not running."
-  if [ -f "$OUTPUT_DIR/ios/index.bundle" ] && [ -f "$OUTPUT_DIR/android/index.bundle" ]; then
-    echo "  Using existing pre-built bundles:"
-    echo "    iOS: $(wc -c < "$OUTPUT_DIR/ios/index.bundle") bytes"
-    echo "    Android: $(wc -c < "$OUTPUT_DIR/android/index.bundle") bytes"
-  else
-    echo "  No pre-built bundles found. Expo Go mobile access will be unavailable."
-    echo "  To build bundles, start Metro (npx expo start --web --port 8081) and re-run this script."
-    mkdir -p "$OUTPUT_DIR/ios" "$OUTPUT_DIR/android"
-  fi
-fi
-
-echo "Build complete!"
+echo "Build complete! Bundles saved to $DIST_DIR/"
+ls -la "$DIST_DIR/ios/"
+ls -la "$DIST_DIR/android/"

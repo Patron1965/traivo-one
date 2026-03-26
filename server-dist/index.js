@@ -23,13 +23,14 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // server/app.ts
-var import_express12 = __toESM(require("express"));
-var import_cors = __toESM(require("cors"));
-var import_path = __toESM(require("path"));
-var import_fs = __toESM(require("fs"));
-var import_crypto = __toESM(require("crypto"));
-var import_http = __toESM(require("http"));
-var import_qrcode = __toESM(require("qrcode"));
+var import_express12 = __toESM(require("express"), 1);
+var import_cors = __toESM(require("cors"), 1);
+var import_path = __toESM(require("path"), 1);
+var import_fs = __toESM(require("fs"), 1);
+var import_crypto = __toESM(require("crypto"), 1);
+var import_http = __toESM(require("http"), 1);
+var import_url = require("url");
+var import_qrcode = __toESM(require("qrcode"), 1);
 var import_socket = require("socket.io");
 
 // server/routes/mobile/index.ts
@@ -3333,7 +3334,7 @@ router9.use(router8);
 
 // server/routes/ai.ts
 var import_express10 = require("express");
-var import_openai = __toESM(require("openai"));
+var import_openai = __toESM(require("openai"), 1);
 var openai = new import_openai.default({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
@@ -3988,6 +3989,9 @@ function getBridgeStatus() {
 }
 
 // server/app.ts
+var import_meta = {};
+var __filename = (0, import_url.fileURLToPath)(import_meta.url);
+var __dirname = import_path.default.dirname(__filename);
 var app = (0, import_express12.default)();
 var server = import_http.default.createServer(app);
 var io = new import_socket.Server(server, {

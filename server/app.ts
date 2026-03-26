@@ -4,12 +4,16 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import http from 'http';
+import { fileURLToPath } from 'url';
 import QRCode from 'qrcode';
 import { Server as SocketIOServer } from 'socket.io';
 import { mobileRoutes } from './routes/mobile';
 import { aiRoutes } from './routes/ai';
 import { plannerRoutes } from './routes/planner';
 import { startWebSocketBridge, stopWebSocketBridge, getBridgeStatus } from './websocketBridge';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
