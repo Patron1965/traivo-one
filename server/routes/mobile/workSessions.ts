@@ -5,7 +5,7 @@ import type { Express } from "express";
     formatZodError, isMobileAuthenticated, isAuthenticated,
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError, ForbiddenError,
-    workOrders, workEntries, workSessions,
+    workOrders, workEntries, workSessions, customerChangeRequests,
     notificationService,
   } from "./shared";
   import type { Request, Response } from "express";
