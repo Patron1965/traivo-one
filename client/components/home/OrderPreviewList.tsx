@@ -32,7 +32,7 @@ function getStatusBorderColor(status: OrderStatus): string {
 interface OrderPreviewListProps {
   orders: Order[];
   ordersLoading: boolean;
-  navigation: any;
+  navigation: { navigate: (screen: string, params?: Record<string, unknown>) => void };
   currentPosition: { latitude: number; longitude: number } | null | undefined;
 }
 

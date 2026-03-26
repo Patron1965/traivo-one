@@ -27,7 +27,7 @@ import { formatWorkTime, computeBreakSuggestion } from './HomeScreen.utils';
 import type { TimeSummary } from './HomeScreen.utils';
 import type { Order, DaySummary, WeatherData } from '../types';
 
-export function HomeScreen({ navigation }: any) {
+export function HomeScreen({ navigation }: { navigation: { navigate: (screen: string, params?: Record<string, unknown>) => void } }) {
   const headerHeight = useHeaderHeight();
   const tabBarHeight = useBottomTabBarHeight();
   const { user, isOnline, setIsOnline } = useAuth();
@@ -52,7 +52,7 @@ export function HomeScreen({ navigation }: any) {
 
   const { data: notifData } = useQuery<{ unreadCount: number }>({
     queryKey: ['/api/mobile/notifications'],
-    select: (d: any) => ({ unreadCount: d?.unreadCount || 0 }),
+    select: (d: { unreadCount?: number }) => ({ unreadCount: d?.unreadCount || 0 }),
     refetchInterval: 30000,
   });
 

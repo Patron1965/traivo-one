@@ -11,7 +11,7 @@ import type { DistanceResult } from '../../lib/travel-time';
 interface NextOrderCardProps {
   nextOrder: Order | undefined;
   nextOrderDistance: DistanceResult | null | undefined;
-  navigation: any;
+  navigation: { navigate: (screen: string, params?: Record<string, unknown>) => void };
   ordersLoading: boolean;
   activeOrdersLength: number;
 }
@@ -67,13 +67,6 @@ export function NextOrderCard({ nextOrder, nextOrderDistance, navigation, orders
               <Feather name="clock" size={12} color={Colors.textMuted} />
               <ThemedText variant="caption" color={Colors.textMuted}>
                 ca {nextOrderDistance.durationMin} min ({nextOrderDistance.distanceKm} km)
-              </ThemedText>
-            </View>
-          ) : (nextOrder as any).estimatedMinutes ? (
-            <View style={styles.nextOrderEta}>
-              <Feather name="clock" size={12} color={Colors.textMuted} />
-              <ThemedText variant="caption" color={Colors.textMuted}>
-                ca {(nextOrder as any).estimatedMinutes} min
               </ThemedText>
             </View>
           ) : null}

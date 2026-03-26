@@ -10,7 +10,7 @@ import type { Order } from '../types';
 import type { QueryClient } from '@tanstack/react-query';
 
 interface UseVoiceCommandsArgs {
-  navigation: any;
+  navigation: { navigate: (screen: string, params?: Record<string, unknown>) => void };
   activeOrders: Order[];
   isOnline: boolean;
   queryClient: QueryClient;
@@ -74,18 +74,18 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
   const [voiceTranscript, setVoiceTranscript] = useState<string>('');
   const [voiceError, setVoiceError] = useState(false);
   const [offlineQuickActions, setOfflineQuickActions] = useState(false);
-  const voiceRecorderRef = useRef<any>(null);
+  const voiceRecorderRef = useRef<Audio.Recording | MediaRecorder | null>(null);
   const isStoppingVoiceRef = useRef(false);
-  const voiceChunksRef = useRef<any[]>([]);
+  const voiceChunksRef = useRef<Blob[]>([]);
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const audioContextRef = useRef<any>(null);
-  const analyserRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const silenceCheckRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const overlayPulseAnim = useRef(new Animated.Value(1)).current;
   const localTranscriptRef = useRef<string>('');
-  const speechRecognitionRef = useRef<any>(null);
+  const speechRecognitionRef = useRef<SpeechRecognition | null>(null);
 
   useEffect(() => {
     return () => {
@@ -281,13 +281,13 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
   function startLocalSpeechRecognition() {
     if (Platform.OS !== 'web') return;
     try {
-      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-      if (!SpeechRecognition) return;
-      const recognition = new SpeechRecognition();
+      const SpeechRecognitionCtor = (window as unknown as Record<string, unknown>).SpeechRecognition || (window as unknown as Record<string, unknown>).webkitSpeechRecognition;
+      if (!SpeechRecognitionCtor) return;
+      const recognition = new (SpeechRecognitionCtor as { new(): SpeechRecognition })();
       recognition.lang = 'sv-SE';
       recognition.continuous = false;
       recognition.interimResults = true;
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event: SpeechRecognitionEvent) => {
         let transcript = '';
         for (let i = 0; i < event.results.length; i++) {
           transcript += event.results[i][0].transcript;
@@ -311,7 +311,8 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
 
   function startSilenceDetectionWeb(stream: MediaStream) {
     try {
-      const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const AudioContextCtor = window.AudioContext || (window as unknown as Record<string, unknown>).webkitAudioContext as typeof AudioContext;
+      const audioContext = new AudioContextCtor();
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
@@ -373,7 +374,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm;codecs=opus' });
         voiceChunksRef.current = [];
-        mediaRecorder.ondataavailable = (e: any) => {
+        mediaRecorder.ondataavailable = (e: BlobEvent) => {
           if (e.data.size > 0) voiceChunksRef.current.push(e.data);
         };
         mediaRecorder.onstop = async () => {
@@ -444,7 +445,7 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
             stopVoiceRecording();
           }
         }, 15000);
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error('Voice recording error:', err);
         showVoiceFeedback('Kunde inte starta inspelning.');
         setVoiceOverlayVisible(false);
