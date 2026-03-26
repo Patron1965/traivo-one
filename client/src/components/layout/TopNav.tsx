@@ -167,14 +167,8 @@ function TenantLogo() {
 
   return (
     <Link href="/">
-      <div className="flex items-center cursor-pointer hover-elevate rounded-md px-1 py-0.5" data-testid="link-home-logo">
-        <img
-          src={displayLogo}
-          alt={displayName}
-          className={`h-14 w-auto object-contain mix-blend-multiply dark:mix-blend-screen ${isDefaultLogo ? "dark:brightness-150 dark:contrast-200" : ""}`}
-          style={{ maxWidth: "180px" }}
-          data-testid="img-tenant-logo"
-        />
+      <div className="flex items-center cursor-pointer hover-elevate rounded-md px-2 py-1" data-testid="link-home-logo">
+        <span className="text-xl font-bold tracking-tight text-foreground" data-testid="text-tenant-name">{displayName}</span>
       </div>
     </Link>
   );
