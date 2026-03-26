@@ -140,6 +140,34 @@ app.get("/api/clusters/:id/object-contacts", asyncHandler(async (req, res) => {
     res.json(contactsByObject);
 }));
 
+app.post("/api/objects/bulk-assign-cluster", asyncHandler(async (req, res) => {
+    const tenantId = getTenantIdWithFallback(req);
+    const schema = z.object({
+      objectIds: z.array(z.string()).min(1),
+      clusterId: z.string().min(1),
+    });
+    const { objectIds, clusterId } = schema.parse(req.body);
+    const cluster = await storage.getCluster(clusterId);
+    if (!verifyTenantOwnership(cluster, tenantId)) {
+      throw new NotFoundError("Kluster hittades inte");
+    }
+    const batchSize = 500;
+    for (let i = 0; i < objectIds.length; i += batchSize) {
+      const batch = objectIds.slice(i, i + batchSize);
+      await db.update(objects)
+        .set({ clusterId })
+        .where(and(inArray(objects.id, batch), eq(objects.tenantId, tenantId), isNull(objects.deletedAt)));
+    }
+    for (let i = 0; i < objectIds.length; i += batchSize) {
+      const batch = objectIds.slice(i, i + batchSize);
+      await db.update(workOrders)
+        .set({ clusterId })
+        .where(and(inArray(workOrders.objectId, batch), eq(workOrders.tenantId, tenantId), isNull(workOrders.deletedAt)));
+    }
+    await storage.updateClusterCaches(clusterId);
+    res.json({ success: true, count: objectIds.length });
+}));
+
 app.post("/api/clusters/:id/refresh-cache", asyncHandler(async (req, res) => {
     const tenantId = getTenantIdWithFallback(req);
     const existing = await storage.getCluster(req.params.id);

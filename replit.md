@@ -62,6 +62,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Constraint Engine & Decision Trace:** Deterministic constraint validation layer for AI auto-schedule against hard and soft constraints, risk score calculation, and detailed `decisionTrace` logging for audit.
 - **Multi-Customer Billing (Flerkund-fakturering):** Extended `objectPayers` with `isPrimary` flag and `payerLabel` field, and billing customer selection in JobModal.
 - **Polyline/Polygon Support:** `polylineData` (GeoJSON) field on objects table for defining area boundaries, with PolylineEditor component, bulk find-objects-in-polygon endpoint, and inline map draw control (polygon icon button next to zoom controls in ObjectsMapTab) with toolbar, object selector, labels, and real-time drawing.
+- **Map Cluster Selection Tool:** Draw polygon on objects map to spatially select objects and bulk-assign them to a new or existing cluster. Highlighted markers (amber) for selected objects, cluster creation panel with name input, and dropdown for assigning to existing clusters. Endpoint: `POST /api/objects/bulk-assign-cluster`.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

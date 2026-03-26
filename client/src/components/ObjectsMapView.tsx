@@ -2,13 +2,14 @@ import { Fragment, memo, useMemo, useState, useCallback, useEffect } from "react
 import { MapContainer, TileLayer, Marker, Popup, Polygon, Polyline, useMap, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { DoorOpen, Key, Keyboard, Users, PenTool, Save, Undo, X, MapPin } from "lucide-react";
-import type { ServiceObject } from "@shared/schema";
+import { DoorOpen, Key, Keyboard, Users, PenTool, Save, Undo, X, MapPin, Check, FolderPlus } from "lucide-react";
+import type { ServiceObject, Cluster } from "@shared/schema";
 import { useMapConfig } from "@/hooks/use-map-config";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 
@@ -63,6 +64,28 @@ const createAccessIcon = (accessType: string) => {
     iconAnchor: [12, 12],
   });
 };
+
+function createHighlightedIcon() {
+  return L.divIcon({
+    className: "custom-marker-highlighted",
+    html: `<div style="
+      background-color: #f59e0b;
+      color: white;
+      border-radius: 50%;
+      width: 18px;
+      height: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      font-weight: bold;
+      border: 3px solid white;
+      box-shadow: 0 0 0 2px #f59e0b, 0 2px 6px rgba(0,0,0,0.4);
+    ">✓</div>`,
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+  });
+}
 
 const vertexIcon = L.divIcon({
   className: "polyline-vertex",
@@ -209,8 +232,6 @@ export const GeocodedObjectsMap = memo(function GeocodedObjectsMap({ objects }: 
   );
 });
 
-type DrawMode = "polygon" | "polyline";
-
 interface GeoJSONFeature {
   type: "Feature";
   geometry: {
@@ -218,6 +239,17 @@ interface GeoJSONFeature {
     coordinates: number[][] | number[][][];
   };
   properties: Record<string, unknown>;
+}
+
+function pointInPolygon(lat: number, lng: number, polygon: L.LatLng[]): boolean {
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const yi = polygon[i].lat, xi = polygon[i].lng;
+    const yj = polygon[j].lat, xj = polygon[j].lng;
+    const intersect = ((yi > lat) !== (yj > lat)) && (lng < (xj - xi) * (lat - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }
 
 function DrawClickHandler({ onAddPoint }: { onAddPoint: (latlng: L.LatLng) => void }) {
@@ -331,37 +363,31 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
   const mapConfig = useMapConfig();
   const { toast } = useToast();
   const [drawing, setDrawing] = useState(false);
-  const [drawMode, setDrawMode] = useState<DrawMode>("polygon");
   const [points, setPoints] = useState<L.LatLng[]>([]);
-  const [targetObjectId, setTargetObjectId] = useState<string>("");
+  const [capturedObjects, setCapturedObjects] = useState<ServiceObject[]>([]);
+  const [showClusterPanel, setShowClusterPanel] = useState(false);
+  const [clusterName, setClusterName] = useState("");
+  const [assignToExisting, setAssignToExisting] = useState("");
 
-  const autoTargetId = useMemo(() => {
-    if (selectedObjectIds && selectedObjectIds.size === 1) {
-      return Array.from(selectedObjectIds)[0];
-    }
-    return "";
-  }, [selectedObjectIds]);
-
-  useEffect(() => {
-    if (autoTargetId) {
-      setTargetObjectId(autoTargetId);
-    }
-  }, [autoTargetId]);
+  const { data: existingClusters = [] } = useQuery<Cluster[]>({
+    queryKey: ["/api/clusters"],
+  });
 
   const handleToggleDraw = useCallback(() => {
     if (drawing) {
       setDrawing(false);
       setPoints([]);
+      setCapturedObjects([]);
+      setShowClusterPanel(false);
     } else {
       setDrawing(true);
       setPoints([]);
-      if (autoTargetId) {
-        setTargetObjectId(autoTargetId);
-      } else {
-        setTargetObjectId("");
-      }
+      setCapturedObjects([]);
+      setShowClusterPanel(false);
+      setClusterName("");
+      setAssignToExisting("");
     }
-  }, [drawing, autoTargetId]);
+  }, [drawing]);
 
   const handleAddPoint = useCallback((latlng: L.LatLng) => {
     setPoints(prev => [...prev, latlng]);
@@ -380,104 +406,177 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
       if (e.key === "Escape") {
         setDrawing(false);
         setPoints([]);
+        setCapturedObjects([]);
+        setShowClusterPanel(false);
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [drawing, handleUndo]);
 
-  const saveMutation = useMutation({
-    mutationFn: async ({ objectId, geoJson }: { objectId: string; geoJson: GeoJSONFeature }) => {
-      return apiRequest("PUT", `/api/objects/${objectId}/polyline`, { polylineData: geoJson });
+  const handleConfirmSelection = useCallback(() => {
+    if (points.length < 3) {
+      toast({ title: "Minst 3 punkter krävs", description: "Rita en polygon med minst 3 punkter för att markera objekt.", variant: "destructive" });
+      return;
+    }
+    const found = objectsWithCoords.filter(obj => {
+      if (!obj.latitude || !obj.longitude) return false;
+      return pointInPolygon(obj.latitude, obj.longitude, points);
+    });
+    if (found.length === 0) {
+      toast({ title: "Inga objekt hittades", description: "Inga objekt finns inom det markerade området.", variant: "destructive" });
+      return;
+    }
+    setCapturedObjects(found);
+    setShowClusterPanel(true);
+  }, [points, objectsWithCoords, toast]);
+
+  const createClusterMutation = useMutation({
+    mutationFn: async ({ name, objectIds }: { name: string; objectIds: string[] }) => {
+      const cluster = await apiRequest("POST", "/api/clusters", { name, tenantId: "default-tenant" });
+      const clusterData = await cluster.json();
+      await apiRequest("POST", "/api/objects/bulk-assign-cluster", { objectIds, clusterId: clusterData.id });
+      return clusterData;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
-      toast({ title: "Yta sparad", description: "Polylinjen har sparats på objektet." });
+      queryClient.invalidateQueries({ queryKey: ["/api/clusters"] });
+      toast({ title: "Kluster skapat", description: `"${data.name}" med ${capturedObjects.length} objekt.` });
       setDrawing(false);
       setPoints([]);
+      setCapturedObjects([]);
+      setShowClusterPanel(false);
     },
     onError: () => {
-      toast({ title: "Kunde inte spara", variant: "destructive" });
+      toast({ title: "Kunde inte skapa kluster", variant: "destructive" });
     },
   });
 
-  const handleSave = useCallback(() => {
-    if (!targetObjectId) {
-      toast({ title: "Välj ett objekt", description: "Du måste välja vilket objekt ytan ska kopplas till.", variant: "destructive" });
+  const assignClusterMutation = useMutation({
+    mutationFn: async ({ clusterId, objectIds }: { clusterId: string; objectIds: string[] }) => {
+      return apiRequest("POST", "/api/objects/bulk-assign-cluster", { objectIds, clusterId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/objects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/clusters"] });
+      const clusterLabel = existingClusters.find(c => c.id === assignToExisting)?.name || "kluster";
+      toast({ title: "Objekt tilldelade", description: `${capturedObjects.length} objekt tilldelade till "${clusterLabel}".` });
+      setDrawing(false);
+      setPoints([]);
+      setCapturedObjects([]);
+      setShowClusterPanel(false);
+    },
+    onError: () => {
+      toast({ title: "Kunde inte tilldela kluster", variant: "destructive" });
+    },
+  });
+
+  const handleCreateCluster = useCallback(() => {
+    if (!clusterName.trim()) {
+      toast({ title: "Ange ett klusternamn", variant: "destructive" });
       return;
     }
-    if (drawMode === "polygon" && points.length < 3) {
-      toast({ title: "Minst 3 punkter krävs för polygon", variant: "destructive" });
+    createClusterMutation.mutate({ name: clusterName.trim(), objectIds: capturedObjects.map(o => o.id) });
+  }, [clusterName, capturedObjects, createClusterMutation, toast]);
+
+  const handleAssignExisting = useCallback(() => {
+    if (!assignToExisting) {
+      toast({ title: "Välj ett kluster", variant: "destructive" });
       return;
     }
-    if (drawMode === "polyline" && points.length < 2) {
-      toast({ title: "Minst 2 punkter krävs för polylinje", variant: "destructive" });
-      return;
-    }
+    assignClusterMutation.mutate({ clusterId: assignToExisting, objectIds: capturedObjects.map(o => o.id) });
+  }, [assignToExisting, capturedObjects, assignClusterMutation, toast]);
 
-    const coords = points.map(p => [p.lng, p.lat]);
-    const targetObj = objectsWithCoords.find(o => o.id === targetObjectId);
-
-    const geoJson = {
-      type: "Feature",
-      geometry: drawMode === "polygon"
-        ? { type: "Polygon", coordinates: [[...coords, coords[0]]] }
-        : { type: "LineString", coordinates: coords },
-      properties: { objectId: targetObjectId, objectName: targetObj?.name || "" },
-    };
-
-    saveMutation.mutate({ objectId: targetObjectId, geoJson });
-  }, [targetObjectId, drawMode, points, objectsWithCoords, saveMutation, toast]);
-
-  const canSave = drawMode === "polygon" ? points.length >= 3 : points.length >= 2;
+  const capturedIds = useMemo(() => new Set(capturedObjects.map(o => o.id)), [capturedObjects]);
+  const isPending = createClusterMutation.isPending || assignClusterMutation.isPending;
 
   return (
     <div className="overflow-hidden rounded-md border bg-card">
-      {drawing && (
+      {drawing && !showClusterPanel && (
         <div className="px-3 py-2 bg-muted/60 border-b flex items-center gap-2 flex-wrap" data-testid="draw-toolbar">
           <div className="flex items-center gap-1.5">
             <PenTool className="w-4 h-4 text-primary" />
-            <span className="text-sm font-medium">Ritläge</span>
+            <span className="text-sm font-medium">Markera objekt</span>
           </div>
-          <Select value={drawMode} onValueChange={(v) => setDrawMode(v as DrawMode)}>
-            <SelectTrigger className="w-[120px] h-7 text-xs" data-testid="select-draw-mode">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="polygon">Polygon</SelectItem>
-              <SelectItem value="polyline">Polylinje</SelectItem>
-            </SelectContent>
-          </Select>
           <Badge variant="secondary" className="text-xs">
             {points.length} punkter
           </Badge>
-          <div className="h-4 w-px bg-border" />
-          <Select value={targetObjectId} onValueChange={setTargetObjectId}>
-            <SelectTrigger className="w-[200px] h-7 text-xs" data-testid="select-target-object">
-              <SelectValue placeholder="Välj objekt..." />
-            </SelectTrigger>
-            <SelectContent>
-              {objectsWithCoords.map(obj => (
-                <SelectItem key={obj.id} value={obj.id}>{obj.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <div className="h-4 w-px bg-border" />
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={handleUndo} disabled={points.length === 0} data-testid="button-undo-point">
             <Undo className="w-3 h-3 mr-1" />
             Ångra
           </Button>
-          <Button size="sm" className="h-7 text-xs" onClick={handleSave} disabled={!canSave || saveMutation.isPending || !targetObjectId} data-testid="button-save-polyline">
-            <Save className="w-3 h-3 mr-1" />
-            Spara
+          <Button size="sm" className="h-7 text-xs" onClick={handleConfirmSelection} disabled={points.length < 3} data-testid="button-confirm-selection">
+            <Check className="w-3 h-3 mr-1" />
+            Markera
           </Button>
-          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setDrawing(false); setPoints([]); }} data-testid="button-cancel-draw">
+          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setDrawing(false); setPoints([]); setCapturedObjects([]); setShowClusterPanel(false); }} data-testid="button-cancel-draw">
             <X className="w-3 h-3 mr-1" />
             Avbryt
           </Button>
           <div className="ml-auto text-xs text-muted-foreground flex items-center gap-1">
             <MapPin className="w-3 h-3" />
-            Klicka på kartan · Ctrl+Z ångra · Esc avbryt
+            Rita polygon runt objekt · Ctrl+Z ångra · Esc avbryt
+          </div>
+        </div>
+      )}
+      {showClusterPanel && capturedObjects.length > 0 && (
+        <div className="px-3 py-3 bg-muted/60 border-b space-y-3" data-testid="cluster-panel">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <FolderPlus className="w-4 h-4 text-primary" />
+              <span className="text-sm font-medium">{capturedObjects.length} objekt markerade</span>
+            </div>
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => { setShowClusterPanel(false); setCapturedObjects([]); setPoints([]); setDrawing(false); }} data-testid="button-close-cluster-panel">
+              <X className="w-3 h-3 mr-1" />
+              Stäng
+            </Button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {capturedObjects.map(obj => (
+              <Badge key={obj.id} variant="outline" className="text-xs" data-testid={`badge-selected-${obj.id}`}>
+                {obj.name}
+              </Badge>
+            ))}
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <div className="flex-1 space-y-1.5">
+              <div className="text-xs font-medium text-muted-foreground">Skapa nytt kluster</div>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Klusternamn..."
+                  value={clusterName}
+                  onChange={(e) => setClusterName(e.target.value)}
+                  className="h-8 text-sm"
+                  data-testid="input-cluster-name"
+                />
+                <Button size="sm" className="h-8 text-xs whitespace-nowrap" onClick={handleCreateCluster} disabled={!clusterName.trim() || isPending} data-testid="button-create-cluster">
+                  <FolderPlus className="w-3 h-3 mr-1" />
+                  Skapa
+                </Button>
+              </div>
+            </div>
+            {existingClusters.length > 0 && (
+              <div className="flex-1 space-y-1.5">
+                <div className="text-xs font-medium text-muted-foreground">Eller tilldela befintligt</div>
+                <div className="flex gap-2">
+                  <Select value={assignToExisting} onValueChange={setAssignToExisting}>
+                    <SelectTrigger className="h-8 text-sm" data-testid="select-existing-cluster">
+                      <SelectValue placeholder="Välj kluster..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {existingClusters.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button size="sm" variant="outline" className="h-8 text-xs whitespace-nowrap" onClick={handleAssignExisting} disabled={!assignToExisting || isPending} data-testid="button-assign-cluster">
+                    <Check className="w-3 h-3 mr-1" />
+                    Tilldela
+                  </Button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -486,7 +585,7 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
           <MapContainer
             center={defaultCenter}
             zoom={13}
-            style={{ height: "100%", width: "100%", cursor: drawing ? "crosshair" : "" }}
+            style={{ height: "100%", width: "100%", cursor: drawing && !showClusterPanel ? "crosshair" : "" }}
             scrollWheelZoom={true}
           >
             <TileLayer
@@ -494,14 +593,14 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
               url={mapConfig.tileUrl}
             />
             <DrawToggleControl active={drawing} onClick={handleToggleDraw} />
-            {drawing && <DrawClickHandler onAddPoint={handleAddPoint} />}
+            {drawing && !showClusterPanel && <DrawClickHandler onAddPoint={handleAddPoint} />}
             {!drawing && mapPositions.length > 0 && <MapFitBounds positions={mapPositions} />}
 
             {objectsWithCoords.map(obj => (
               <Fragment key={obj.id}>
                 <Marker
                   position={[obj.latitude!, obj.longitude!]}
-                  icon={createAccessIcon(obj.accessType || "open")}
+                  icon={capturedIds.has(obj.id) ? createHighlightedIcon() : createAccessIcon(obj.accessType || "open")}
                 >
                   <Popup>
                     <div className="p-1">
@@ -543,13 +642,19 @@ export const ObjectsMapTab = memo(function ObjectsMapTab({
 
             <PolylineLabels objects={objectsWithCoords} />
 
-            {drawing && points.length > 0 && drawMode === "polygon" && points.length >= 3 && (
+            {points.length >= 3 && (
               <Polygon
                 positions={points.map(p => [p.lat, p.lng])}
-                pathOptions={{ color: "#4A9B9B", fillColor: "#4A9B9B", fillOpacity: 0.2, weight: 2, dashArray: "6 4" }}
+                pathOptions={{
+                  color: showClusterPanel ? "#f59e0b" : "#4A9B9B",
+                  fillColor: showClusterPanel ? "#f59e0b" : "#4A9B9B",
+                  fillOpacity: showClusterPanel ? 0.1 : 0.2,
+                  weight: 2,
+                  dashArray: showClusterPanel ? undefined : "6 4",
+                }}
               />
             )}
-            {drawing && points.length > 0 && (drawMode === "polyline" || points.length < 3) && (
+            {drawing && points.length > 0 && points.length < 3 && (
               <Polyline
                 positions={points.map(p => [p.lat, p.lng])}
                 pathOptions={{ color: "#4A9B9B", weight: 3, dashArray: "6 4" }}
