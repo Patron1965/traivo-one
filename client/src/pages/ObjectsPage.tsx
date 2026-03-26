@@ -419,7 +419,12 @@ export default function ObjectsPage() {
     window.history.replaceState({}, "", window.location.pathname);
   };
 
-  const objectsWithCoords = useMemo(() => filteredObjects.filter(o => o.latitude && o.longitude), [filteredObjects]);
+  const objectsWithCoords = useMemo(() => {
+    const base = selectedIds.size > 0
+      ? filteredObjects.filter(o => selectedIds.has(o.id))
+      : filteredObjects;
+    return base.filter(o => o.latitude && o.longitude);
+  }, [filteredObjects, selectedIds]);
   const mapPositions = useMemo<[number, number][]>(() => objectsWithCoords.map(o => [o.latitude!, o.longitude!]), [objectsWithCoords]);
 
   const objectSetupLogs = useMemo(() => {
