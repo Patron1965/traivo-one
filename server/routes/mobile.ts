@@ -717,8 +717,9 @@ router.post('/logout', async (req, res) => {
       headers: getAuthHeader(req),
     });
     res.status(status).json(data);
-  } catch {
-    res.json({ success: true });
+  } catch (error: any) {
+    console.error('[LIVE] Logout proxy error:', error.message);
+    res.status(503).json({ success: false, error: 'Kunde inte nå servern vid utloggning.' });
   }
 });
 
@@ -1774,7 +1775,10 @@ router.get('/notifications/count', async (req, res) => {
   try {
     const { status, data } = await traivoFetch('/api/mobile/notifications/count', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
-  } catch { res.json({ count: 0 }); }
+  } catch (error: any) {
+    console.error('[LIVE] Notifications count proxy error:', error.message);
+    res.status(503).json({ error: 'Kunde inte hämta antal aviseringar. Försök igen.' });
+  }
 });
 
 router.get('/map-config', async (req, res) => {
@@ -1793,7 +1797,10 @@ router.get('/map-config', async (req, res) => {
   try {
     const { status, data } = await traivoFetch('/api/mobile/map-config', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
-  } catch { res.json({ defaultCenter: { latitude: 59.1950, longitude: 17.6260 }, defaultZoom: 12, clusterRadius: 50, showTraffic: false, mapStyle: 'standard', refreshIntervalMs: 30000, maxMarkersVisible: 200 }); }
+  } catch (error: any) {
+    console.error('[LIVE] Map-config proxy error:', error.message);
+    res.status(503).json({ error: 'Kunde inte hämta kartkonfiguration. Försök igen.' });
+  }
 });
 
 router.post('/sync', async (req, res) => {
@@ -1937,7 +1944,7 @@ router.post('/position', async (req, res) => {
         method: 'POST', headers: getAuthHeader(req), body: JSON.stringify(req.body),
       });
     } catch (e: any) {
-      console.error('Traivo position proxy error:', e.message);
+      console.error('[LIVE] Position proxy error:', e.message);
     }
   }
 
@@ -2151,8 +2158,9 @@ router.get('/summary', async (req, res) => {
     } else {
       res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
     }
-  } catch {
-    res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
+  } catch (error: any) {
+    console.error('[LIVE] Summary proxy error:', error.message);
+    res.status(503).json({ error: 'Kunde inte hämta sammanfattning. Försök igen.' });
   }
 });
 
@@ -2673,13 +2681,16 @@ router.get('/terminology', async (req, res) => {
 
   if (!IS_MOCK_MODE) {
     try {
-      const { data } = await traivoFetch('/api/mobile/terminology', {
+      const { status, data } = await traivoFetch('/api/mobile/terminology', {
         headers: getAuthHeader(req),
       });
-      if (data && typeof data === 'object') {
+      if (status === 200 && data && typeof data === 'object') {
         return res.json({ success: true, terminology: data.terminology || data });
       }
-    } catch {
+      return res.status(status).json(data);
+    } catch (error: any) {
+      console.error('[LIVE] Terminology proxy error:', error.message);
+      return res.status(503).json({ error: 'Kunde inte hämta terminologi. Försök igen.' });
     }
   }
   res.json({ success: true, terminology });
@@ -2956,9 +2967,9 @@ router.post('/distance', async (req, res) => {
       body: JSON.stringify({ fromLat, fromLng, toLat, toLng }),
     });
     res.status(status).json(data);
-  } catch {
-    const distKm = haversineDistance(fromLat, fromLng, toLat, toLng);
-    res.json({ distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, Math.round(distKm * 1.4)), source: 'haversine' as const });
+  } catch (error: any) {
+    console.error('[LIVE] Distance proxy error:', error.message);
+    res.status(503).json({ error: 'Kunde inte beräkna avstånd. Försök igen.' });
   }
 });
 
