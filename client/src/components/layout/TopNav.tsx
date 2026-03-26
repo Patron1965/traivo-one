@@ -168,7 +168,7 @@ function TenantLogo() {
   return (
     <Link href="/">
       <div className="flex items-center cursor-pointer hover-elevate rounded-md px-2 py-1" data-testid="link-home-logo">
-        <span className="text-xl font-bold tracking-tight text-foreground" data-testid="text-tenant-name">Traivo One</span>
+        <span className="text-lg font-semibold tracking-tight text-foreground whitespace-nowrap" data-testid="text-tenant-name">Traivo <span className="font-light">One</span></span>
       </div>
     </Link>
   );
