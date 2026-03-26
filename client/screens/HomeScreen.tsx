@@ -69,7 +69,7 @@ export function HomeScreen({ navigation }: { navigation: HomeNavigation }) {
   const { currentPosition } = useGpsTracking();
   const { partner } = useTeam();
   const pendingCount = useOfflinePendingCount();
-  useDisruptionMonitor(orders || [], currentPosition);
+  useDisruptionMonitor();
 
   const syncBadgeOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
