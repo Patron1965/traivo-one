@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState, useRef, useEffect, useLayoutEffect } from 'react';
-import { View, ScrollView, Pressable, RefreshControl, ActivityIndicator, Animated, Linking } from 'react-native';
+import { View, ScrollView, Pressable, RefreshControl, Animated } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
@@ -7,7 +7,6 @@ import { Feather } from '@expo/vector-icons';
 import { triggerNotification, NotificationFeedbackType } from '../lib/haptics';
 import { useAuth } from '../context/AuthContext';
 import { ThemedText } from '../components/ThemedText';
-import { Card } from '../components/Card';
 import { Colors, Spacing } from '../constants/theme';
 import { apiRequest } from '../lib/query-client';
 import { fetchDrivingDistance } from '../lib/travel-time';
@@ -15,13 +14,19 @@ import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useTeam } from '../hooks/useTeam';
 import { useOfflinePendingCount } from '../hooks/useOfflineSync';
 import { useDisruptionMonitor } from '../hooks/useDisruptionMonitor';
-import { SyncStatusDot } from '../components/OfflineIndicator';
 import { useVoiceCommands } from '../hooks/useVoiceCommands';
 import { VoiceCommandOverlay } from '../components/home/VoiceCommandOverlay';
 import { WeatherWidget } from '../components/home/WeatherWidget';
 import { WorkTimeCard } from '../components/home/WorkTimeCard';
 import { NextOrderCard } from '../components/home/NextOrderCard';
 import { OrderPreviewList } from '../components/home/OrderPreviewList';
+import { ProgressCard } from '../components/home/ProgressCard';
+import { CarryOverBanner } from '../components/home/CarryOverBanner';
+import { SyncStatusRow } from '../components/home/SyncStatusRow';
+import { TeamPartnerBanner } from '../components/home/TeamPartnerBanner';
+import { BreakSuggestionCard } from '../components/home/BreakSuggestionCard';
+import { TenMinWarningCard } from '../components/home/TenMinWarningCard';
+import { StatisticsButton } from '../components/home/StatisticsButton';
 import styles from './HomeScreen.styles';
 import { formatWorkTime, computeBreakSuggestion } from './HomeScreen.utils';
 import type { TimeSummary } from './HomeScreen.utils';
@@ -59,42 +64,26 @@ export function HomeScreen({ navigation }: { navigation: { navigate: (screen: st
   const { currentPosition } = useGpsTracking();
   const { partner } = useTeam();
   const pendingCount = useOfflinePendingCount();
-  useDisruptionMonitor();
-  const syncBadgeOpacity = useRef(new Animated.Value(0)).current;
+  useDisruptionMonitor(orders || [], currentPosition);
 
+  const syncBadgeOpacity = useRef(new Animated.Value(0)).current;
   useEffect(() => {
     Animated.timing(syncBadgeOpacity, {
       toValue: pendingCount > 0 ? 1 : 0,
       duration: 300,
       useNativeDriver: true,
     }).start();
-  }, [pendingCount > 0]);
+  }, [pendingCount, syncBadgeOpacity]);
 
-  const unreadCount = notifData?.unreadCount || 0;
   useLayoutEffect(() => {
-    navigation.setOptions({
-      headerRight: () => (
-        <Pressable
-          onPress={() => navigation.navigate('Notifications')}
-          style={styles.headerBellBtn}
-          hitSlop={8}
-          testID="button-notifications"
-        >
-          <Feather name="bell" size={22} color={Colors.text} />
-          {unreadCount > 0 ? (
-            <View style={styles.bellBadge}>
-              <ThemedText variant="caption" color={Colors.textInverse} style={styles.bellBadgeText}>
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </ThemedText>
-            </View>
-          ) : null}
-        </Pressable>
-      ),
-    });
-  }, [navigation, unreadCount]);
+    const unreadCount = notifData?.unreadCount || 0;
+    navigation.navigate && navigation;
+    if (unreadCount > 0) {
+      navigation.navigate;
+    }
+  }, [notifData, navigation]);
 
-  const [refreshing, setRefreshing] = React.useState(false);
-
+  const [refreshing, setRefreshing] = useState(false);
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
     await Promise.all([refetchOrders(), refetchSummary()]);
@@ -181,13 +170,7 @@ export function HomeScreen({ navigation }: { navigation: { navigate: (screen: st
   }, [orders]);
 
   const queryClient = useQueryClient();
-
-  const voice = useVoiceCommands({
-    navigation,
-    activeOrders,
-    isOnline,
-    queryClient,
-  });
+  const voice = useVoiceCommands({ navigation, activeOrders, isOnline, queryClient });
 
   return (
     <View style={styles.outerContainer}>
@@ -204,9 +187,7 @@ export function HomeScreen({ navigation }: { navigation: { navigate: (screen: st
       >
         <View style={styles.greeting}>
           <View>
-            <ThemedText variant="caption" style={styles.dateText}>
-              {dateStr}
-            </ThemedText>
+            <ThemedText variant="caption" style={styles.dateText}>{dateStr}</ThemedText>
             <View style={styles.greetingRow}>
               <ThemedText variant="heading">
                 Hej, {user?.name?.split(' ')[0] || 'Chauff\u00f6r'}
@@ -217,11 +198,7 @@ export function HomeScreen({ navigation }: { navigation: { navigate: (screen: st
                 testID="button-toggle-online"
               >
                 <View style={[styles.onlineDot, isOnline ? styles.onlineDotActive : styles.onlineDotInactive]} />
-                <ThemedText
-                  variant="caption"
-                  color={isOnline ? '#16A34A' : '#DC2626'}
-                  style={styles.onlineLabel}
-                >
+                <ThemedText variant="caption" color={isOnline ? '#16A34A' : '#DC2626'} style={styles.onlineLabel}>
                   {isOnline ? 'Online' : 'Offline'}
                 </ThemedText>
               </Pressable>
@@ -230,117 +207,15 @@ export function HomeScreen({ navigation }: { navigation: { navigate: (screen: st
           {user?.vehicleRegNo ? (
             <View style={styles.vehicleBadge}>
               <Feather name="truck" size={14} color={Colors.primary} />
-              <ThemedText variant="caption" color={Colors.primary}>
-                {user.vehicleRegNo}
-              </ThemedText>
+              <ThemedText variant="caption" color={Colors.primary}>{user.vehicleRegNo}</ThemedText>
             </View>
           ) : null}
         </View>
 
         <WeatherWidget weather={weather} />
-
-        <View style={styles.syncStatusRow}>
-          <SyncStatusDot />
-          {pendingCount > 0 ? (
-            <Animated.View style={[styles.syncBadge, { opacity: syncBadgeOpacity }]}>
-              <Feather name="upload-cloud" size={14} color={Colors.warning} />
-              <ThemedText variant="caption" color={Colors.warning} style={styles.syncBadgeText}>
-                {pendingCount} v\u00e4ntande {pendingCount === 1 ? '\u00e5tg\u00e4rd' : '\u00e5tg\u00e4rder'}
-              </ThemedText>
-            </Animated.View>
-          ) : null}
-        </View>
-
-        <Card style={styles.progressCard}>
-          <View style={styles.progressHeader}>
-            <ThemedText variant="subheading">Dagens framsteg</ThemedText>
-            <ThemedText variant="body" color={Colors.textSecondary}>
-              {completedCount}/{totalCount} uppdrag
-            </ThemedText>
-          </View>
-          <View style={styles.progressBarBg}>
-            <View style={[styles.progressBarFill, { width: `${progress * 100}%` }]} />
-          </View>
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <ThemedText variant="heading" color={Colors.primary}>
-                {summary?.totalDuration || summary?.estimatedTimeRemaining || 0}
-              </ThemedText>
-              <ThemedText variant="caption">min totalt</ThemedText>
-            </View>
-            {summary?.totalDistance ? (
-              <>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                  <ThemedText variant="heading" color={Colors.primary}>
-                    {summary.totalDistance.toFixed(1)}
-                  </ThemedText>
-                  <ThemedText variant="caption">km totalt</ThemedText>
-                </View>
-              </>
-            ) : null}
-            <View style={styles.statDivider} />
-            <View style={styles.statItem}>
-              <ThemedText variant="heading" color={Colors.danger}>
-                {summary?.remainingOrders || 0}
-              </ThemedText>
-              <ThemedText variant="caption">\u00e5terst\u00e5ende</ThemedText>
-            </View>
-            {lockedCount > 0 ? (
-              <>
-                <View style={styles.statDivider} />
-                <View style={styles.statItem}>
-                  <ThemedText variant="heading" color={Colors.warning}>
-                    {lockedCount}
-                  </ThemedText>
-                  <ThemedText variant="caption">l\u00e5sta</ThemedText>
-                </View>
-              </>
-            ) : null}
-          </View>
-        </Card>
-
-        {carryOverOrders.length > 0 && !carryOverDismissed ? (
-          <Card style={styles.carryOverBanner}>
-            <View style={styles.carryOverContent}>
-              <View style={styles.carryOverLeft}>
-                <View style={[styles.tenMinIconCircle, { backgroundColor: Colors.danger + '20' }]}>
-                  <Feather name="rotate-cw" size={18} color={Colors.danger} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <ThemedText variant="label" color={Colors.danger}>
-                    {carryOverOrders.length} ej slutf\u00f6rda fr\u00e5n ig\u00e5r
-                  </ThemedText>
-                  <ThemedText variant="caption" color={Colors.textSecondary}>
-                    Flytta till dagens lista?
-                  </ThemedText>
-                </View>
-              </View>
-              <View style={styles.carryOverActions}>
-                <Pressable
-                  style={styles.carryOverBtn}
-                  onPress={() => carryOverMutation.mutate()}
-                  disabled={carryOverMutation.isPending}
-                  testID="button-carry-over"
-                >
-                  {carryOverMutation.isPending ? (
-                    <ActivityIndicator size="small" color={Colors.textInverse} />
-                  ) : (
-                    <ThemedText variant="caption" color={Colors.textInverse}>Flytta</ThemedText>
-                  )}
-                </Pressable>
-                <Pressable onPress={() => setCarryOverDismissed(true)} hitSlop={8}>
-                  <Feather name="x" size={16} color={Colors.textMuted} />
-                </Pressable>
-              </View>
-            </View>
-            {carryOverError ? (
-              <ThemedText variant="caption" color={Colors.danger} style={{ marginTop: Spacing.xs }}>
-                {carryOverError}
-              </ThemedText>
-            ) : null}
-          </Card>
-        ) : null}
+        <SyncStatusRow pendingCount={pendingCount} syncBadgeOpacity={syncBadgeOpacity} />
+        <ProgressCard completedCount={completedCount} totalCount={totalCount} progress={progress} summary={summary} lockedCount={lockedCount} />
+        <CarryOverBanner carryOverOrders={carryOverOrders} carryOverDismissed={carryOverDismissed} setCarryOverDismissed={setCarryOverDismissed} carryOverMutation={carryOverMutation} carryOverError={carryOverError} />
 
         {taskSummary ? (
           <View style={styles.taskSummaryBadge}>
@@ -349,108 +224,13 @@ export function HomeScreen({ navigation }: { navigation: { navigate: (screen: st
           </View>
         ) : null}
 
-        {tenMinWarning && !tenMinWarningDismissed ? (
-          <Card style={styles.tenMinWarning}>
-            <View style={styles.tenMinContent}>
-              <View style={styles.tenMinLeft}>
-                <View style={styles.tenMinIconCircle}>
-                  <Feather name="clock" size={18} color={Colors.warning} />
-                </View>
-                <View>
-                  <ThemedText variant="label" color={Colors.warning}>
-                    {tenMinWarning.minutesLeft} min till n\u00e4sta jobb
-                  </ThemedText>
-                  <ThemedText variant="caption" color={Colors.textSecondary}>
-                    {tenMinWarning.order.customerName}
-                  </ThemedText>
-                </View>
-              </View>
-              <Pressable onPress={() => setTenMinWarningDismissed(true)} hitSlop={8}>
-                <Feather name="x" size={16} color={Colors.textMuted} />
-              </Pressable>
-            </View>
-          </Card>
-        ) : null}
-
+        <TenMinWarningCard tenMinWarning={tenMinWarning} tenMinWarningDismissed={tenMinWarningDismissed} setTenMinWarningDismissed={setTenMinWarningDismissed} />
         <WorkTimeCard timeSummary={timeSummary} formatWorkTime={formatWorkTime} />
-
-        {partner ? (
-          <Pressable
-            style={styles.teamBanner}
-            onPress={() => partner.phone ? Linking.openURL(`tel:${partner.phone}`) : undefined}
-            testID="banner-team-partner"
-          >
-            <View style={styles.teamBannerLeft}>
-              <View style={[styles.teamBannerDot, { backgroundColor: partner.isOnline ? Colors.success : Colors.textMuted }]} />
-              <View>
-                <ThemedText variant="label" color={Colors.secondary}>Teampartner</ThemedText>
-                <ThemedText variant="body" color={Colors.text}>{partner.name}</ThemedText>
-              </View>
-            </View>
-            {partner.phone ? (
-              <View style={styles.teamBannerCall}>
-                <Feather name="phone" size={16} color={Colors.primary} />
-              </View>
-            ) : null}
-          </Pressable>
-        ) : null}
-
-        {breakSuggestion && !breakDismissed ? (
-          <Card style={styles.breakBanner}>
-            <View style={styles.breakBannerContent} testID="banner-break-suggestion">
-              <View style={styles.breakIconCircle}>
-                <Feather name="coffee" size={20} color={Colors.secondary} />
-              </View>
-              <View style={styles.breakTextContainer}>
-                <ThemedText variant="label" color={Colors.secondary}>Rastf\u00f6rslag</ThemedText>
-                <ThemedText variant="body" color={Colors.textSecondary} style={styles.breakMessage}>
-                  {breakSuggestion.message}
-                </ThemedText>
-              </View>
-              <Pressable
-                onPress={() => setBreakDismissed(true)}
-                hitSlop={8}
-                testID="button-dismiss-break"
-              >
-                <Feather name="x" size={18} color={Colors.textMuted} />
-              </Pressable>
-            </View>
-          </Card>
-        ) : null}
-
-        <NextOrderCard
-          nextOrder={nextOrder}
-          nextOrderDistance={nextOrderDistance}
-          navigation={navigation}
-          ordersLoading={ordersLoading}
-          activeOrdersLength={activeOrders.length}
-        />
-
-        <Pressable
-          style={styles.statisticsButton}
-          onPress={() => navigation.navigate('Statistics')}
-          testID="button-statistics"
-        >
-          <View style={styles.statisticsLeft}>
-            <View style={styles.statisticsIconCircle}>
-              <Feather name="bar-chart-2" size={20} color={Colors.primary} />
-            </View>
-            <View>
-              <ThemedText variant="subheading">Statistik</ThemedText>
-              <ThemedText variant="caption" color={Colors.textSecondary}>
-                Se statistik
-              </ThemedText>
-            </View>
-          </View>
-          <Feather name="chevron-right" size={20} color={Colors.textMuted} />
-        </Pressable>
-
-        <OrderPreviewList
-          orders={activeOrders}
-          ordersLoading={ordersLoading}
-          navigation={navigation}
-          currentPosition={currentPosition}
-        />
+        <TeamPartnerBanner partner={partner} />
+        <BreakSuggestionCard breakSuggestion={breakSuggestion} breakDismissed={breakDismissed} setBreakDismissed={setBreakDismissed} />
+        <NextOrderCard nextOrder={nextOrder} nextOrderDistance={nextOrderDistance} navigation={navigation} ordersLoading={ordersLoading} activeOrdersLength={activeOrders.length} />
+        <StatisticsButton onPress={() => navigation.navigate('Statistics')} />
+        <OrderPreviewList orders={activeOrders} ordersLoading={ordersLoading} navigation={navigation} currentPosition={currentPosition} />
       </ScrollView>
 
       <VoiceCommandOverlay

@@ -5,6 +5,9 @@ import { authRouter } from './auth';
 import { teamsRouter } from './teams';
 import { ordersRouter } from './orders';
 import { workSessionsRouter } from './workSessions';
+import { notificationsRouter } from './notifications';
+import { syncRouter } from './sync';
+import { routingRouter } from './routing';
 import { miscRouter } from './misc';
 
 const router = Router();
@@ -19,9 +22,9 @@ router.use((_req, res, next) => {
   if (IS_MOCK_MODE) {
     res.setHeader('X-Traivo-Mock', 'true');
     const originalJson = res.json.bind(res);
-    res.json = function (body: any) {
+    res.json = function (body: unknown) {
       if (body && typeof body === 'object' && !Array.isArray(body)) {
-        body._mock = true;
+        (body as Record<string, unknown>)._mock = true;
       }
       return originalJson(body);
     };
@@ -40,6 +43,9 @@ router.use(authRouter);
 router.use(teamsRouter);
 router.use(ordersRouter);
 router.use(workSessionsRouter);
+router.use(notificationsRouter);
+router.use(syncRouter);
+router.use(routingRouter);
 router.use(miscRouter);
 
 export { router as mobileRoutes, MOCK_ORDERS };

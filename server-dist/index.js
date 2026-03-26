@@ -23,7 +23,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 
 // server/app.ts
-var import_express9 = __toESM(require("express"));
+var import_express12 = __toESM(require("express"));
 var import_cors = __toESM(require("cors"));
 var import_path = __toESM(require("path"));
 var import_fs = __toESM(require("fs"));
@@ -33,7 +33,7 @@ var import_qrcode = __toESM(require("qrcode"));
 var import_socket = require("socket.io");
 
 // server/routes/mobile/index.ts
-var import_express6 = require("express");
+var import_express9 = require("express");
 
 // server/db.ts
 var import_pg = require("pg");
@@ -2185,7 +2185,7 @@ router4.post("/work-sessions/:id/entries", async (req, res) => {
   }
 });
 
-// server/routes/mobile/misc.ts
+// server/routes/mobile/notifications.ts
 var import_express5 = require("express");
 var router5 = (0, import_express5.Router)();
 router5.get("/notifications/count", async (req, res) => {
@@ -2198,7 +2198,8 @@ router5.get("/notifications/count", async (req, res) => {
     const { status, data } = await traivoFetch("/api/mobile/notifications/count", { method: "GET", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error) {
-    console.error("[LIVE] Notifications count proxy error:", error.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("[LIVE] Notifications count proxy error:", msg);
     res.status(503).json({ error: "Kunde inte h\xE4mta antal aviseringar. F\xF6rs\xF6k igen." });
   }
 });
@@ -2212,7 +2213,8 @@ router5.get("/notifications", async (req, res) => {
     const { status, data } = await traivoFetch("/api/mobile/notifications", { headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch (error) {
-    console.error("Notifications fetch error:", error?.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("Notifications fetch error:", msg);
     res.status(503).json({ error: "Kunde inte h\xE4mta aviseringar." });
   }
 });
@@ -2252,28 +2254,11 @@ router5.post("/notifications/read-all", async (req, res) => {
     res.status(503).json({ error: "Kunde inte markera alla som l\xE4sta." });
   }
 });
-router5.get("/map-config", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    res.json({
-      defaultCenter: { latitude: 59.195, longitude: 17.626 },
-      defaultZoom: 12,
-      clusterRadius: 50,
-      showTraffic: false,
-      mapStyle: "standard",
-      refreshIntervalMs: 3e4,
-      maxMarkersVisible: 200
-    });
-    return;
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/mobile/map-config", { method: "GET", headers: getAuthHeader(req) });
-    res.status(status).json(data);
-  } catch (error) {
-    console.error("[LIVE] Map-config proxy error:", error.message);
-    res.status(503).json({ error: "Kunde inte h\xE4mta kartkonfiguration. F\xF6rs\xF6k igen." });
-  }
-});
-router5.post("/sync", async (req, res) => {
+
+// server/routes/mobile/sync.ts
+var import_express6 = require("express");
+var router6 = (0, import_express6.Router)();
+router6.post("/sync", async (req, res) => {
   if (IS_MOCK_MODE) {
     const { actions } = req.body;
     if (!Array.isArray(actions)) {
@@ -2295,167 +2280,14 @@ router5.post("/sync", async (req, res) => {
     res.status(503).json({ error: "Synkronisering misslyckades." });
   }
 });
-router5.get("/sync/status", async (req, res) => {
+router6.get("/sync/status", async (_req, res) => {
   res.json({ lastSync: (/* @__PURE__ */ new Date()).toISOString(), pendingActions: 0 });
 });
-router5.get("/articles", (req, res) => {
-  const search = (req.query.search || "").toLowerCase();
-  if (search) {
-    res.json(MOCK_ARTICLES.filter((a) => a.name.toLowerCase().includes(search)));
-  } else {
-    res.json(MOCK_ARTICLES);
-  }
-});
-router5.get("/weather", async (_req, res) => {
-  try {
-    const response = await fetch(
-      "https://api.open-meteo.com/v1/forecast?latitude=59.1950&longitude=17.6260&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Stockholm&forecast_days=1"
-    );
-    const data = await response.json();
-    const current = data.current;
-    const weatherDescriptions = {
-      0: "Klart",
-      1: "Mestadels klart",
-      2: "Delvis molnigt",
-      3: "Mulet",
-      45: "Dimma",
-      48: "Dimma med rimfrost",
-      51: "L\xE4tt duggregn",
-      53: "M\xE5ttligt duggregn",
-      55: "Kraftigt duggregn",
-      61: "L\xE4tt regn",
-      63: "M\xE5ttligt regn",
-      65: "Kraftigt regn",
-      71: "L\xE4tt sn\xF6fall",
-      73: "M\xE5ttligt sn\xF6fall",
-      75: "Kraftigt sn\xF6fall",
-      77: "Sn\xF6korn",
-      80: "L\xE4tta regnskurar",
-      81: "M\xE5ttliga regnskurar",
-      82: "Kraftiga regnskurar",
-      85: "L\xE4tta sn\xF6byar",
-      86: "Kraftiga sn\xF6byar",
-      95: "\xC5skv\xE4der",
-      96: "\xC5skv\xE4der med hagel",
-      99: "\xC5skv\xE4der med kraftigt hagel"
-    };
-    const weatherIcons = {
-      0: "sun",
-      1: "sun",
-      2: "cloud",
-      3: "cloud",
-      45: "cloud",
-      48: "cloud",
-      51: "cloud-drizzle",
-      53: "cloud-drizzle",
-      55: "cloud-drizzle",
-      61: "cloud-rain",
-      63: "cloud-rain",
-      65: "cloud-rain",
-      71: "cloud-snow",
-      73: "cloud-snow",
-      75: "cloud-snow",
-      77: "cloud-snow",
-      80: "cloud-rain",
-      81: "cloud-rain",
-      82: "cloud-rain",
-      85: "cloud-snow",
-      86: "cloud-snow",
-      95: "cloud-lightning",
-      96: "cloud-lightning",
-      99: "cloud-lightning"
-    };
-    const code = current.weather_code;
-    const warnings = [];
-    if (current.wind_speed_10m > 15) warnings.push("Bl\xE5sigt v\xE4der");
-    if (current.precipitation > 5) warnings.push("Kraftig nederb\xF6rd");
-    if (current.temperature_2m < 0) warnings.push("Minusgrader - halkrisk");
-    if (code >= 95) warnings.push("\xC5skvarning");
-    res.json({
-      temperature: Math.round(current.temperature_2m),
-      feelsLike: Math.round(current.apparent_temperature),
-      description: weatherDescriptions[code] || "Ok\xE4nt",
-      icon: weatherIcons[code] || "cloud",
-      windSpeed: Math.round(current.wind_speed_10m),
-      precipitation: current.precipitation,
-      warnings
-    });
-  } catch (error) {
-    res.json({
-      temperature: 8,
-      feelsLike: 5,
-      description: "Delvis molnigt",
-      icon: "cloud",
-      windSpeed: 12,
-      precipitation: 0,
-      warnings: []
-    });
-  }
-});
-router5.get("/summary", async (req, res) => {
-  if (IS_MOCK_MODE) {
-    const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
-    const todayOrders = MOCK_ORDERS.filter((o) => o.scheduledDate === today);
-    const remaining = todayOrders.filter((o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "failed");
-    let totalDistance = 0;
-    const sortedOrders = [...todayOrders].sort((a, b) => a.sortOrder - b.sortOrder);
-    for (let i = 1; i < sortedOrders.length; i++) {
-      const prev = sortedOrders[i - 1];
-      const curr = sortedOrders[i];
-      if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
-        totalDistance += haversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
-      }
-    }
-    res.json({
-      totalOrders: todayOrders.length,
-      completedOrders: todayOrders.filter((o) => o.status === "completed").length,
-      remainingOrders: remaining.length,
-      failedOrders: todayOrders.filter((o) => o.status === "failed").length,
-      totalDuration: todayOrders.reduce((sum, o) => sum + o.estimatedDuration, 0),
-      estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0),
-      totalDistance: Math.round(totalDistance * 10) / 10
-    });
-    return;
-  }
-  try {
-    const { status: summaryStatus, data: summaryData } = await traivoFetch("/api/mobile/summary", {
-      method: "GET",
-      headers: getAuthHeader(req)
-    });
-    if (summaryStatus === 200 && summaryData && summaryData.totalOrders !== void 0) {
-      res.json(summaryData);
-      return;
-    }
-  } catch {
-  }
-  try {
-    const { status: ordersStatus, data: ordersData } = await traivoFetch("/api/mobile/my-orders", {
-      method: "GET",
-      headers: getAuthHeader(req)
-    });
-    if (ordersStatus === 200) {
-      const rawOrders = Array.isArray(ordersData) ? ordersData : ordersData.orders || [];
-      const completed = rawOrders.filter((o) => o.status === "completed").length;
-      const failed = rawOrders.filter((o) => o.status === "failed" || o.status === "impossible").length;
-      const cancelled = rawOrders.filter((o) => o.status === "cancelled").length;
-      const remaining = rawOrders.length - completed - failed - cancelled;
-      res.json({
-        totalOrders: rawOrders.length,
-        completedOrders: completed,
-        remainingOrders: remaining,
-        failedOrders: failed,
-        totalDuration: rawOrders.reduce((sum, o) => sum + (o.estimatedDuration || 0), 0),
-        estimatedTimeRemaining: rawOrders.filter((o) => o.status !== "completed" && o.status !== "failed" && o.status !== "cancelled").reduce((sum, o) => sum + (o.estimatedDuration || 0), 0)
-      });
-    } else {
-      res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
-    }
-  } catch (error) {
-    console.error("[LIVE] Summary proxy error:", error.message);
-    res.status(503).json({ error: "Kunde inte h\xE4mta sammanfattning. F\xF6rs\xF6k igen." });
-  }
-});
-router5.get("/route", async (req, res) => {
+
+// server/routes/mobile/routing.ts
+var import_express7 = require("express");
+var router7 = (0, import_express7.Router)();
+router7.get("/route", async (req, res) => {
   const rawCoords = req.query.coords;
   const coords = typeof rawCoords === "string" ? decodeURIComponent(rawCoords).trim() : "";
   console.log("[route] raw coords type:", typeof rawCoords, "value:", JSON.stringify(rawCoords), "decoded length:", coords.length, "hasApiKey:", !!process.env.GEOAPIFY_API_KEY);
@@ -2533,11 +2365,12 @@ router5.get("/route", async (req, res) => {
     });
   } catch (error) {
     clearTimeout(timeout);
-    console.error("[route] Geoapify fetch error:", error.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("[route] Geoapify fetch error:", msg);
     res.json(buildFallbackResponse(parsed));
   }
 });
-router5.get("/route-optimized", async (req, res) => {
+router7.get("/route-optimized", async (req, res) => {
   const coords = req.query.coords;
   if (!coords) {
     return res.status(400).json({ error: "coords parameter required (lon1,lat1;lon2,lat2;...)" });
@@ -2674,7 +2507,8 @@ router5.get("/route-optimized", async (req, res) => {
       }
     } catch (routeErr) {
       clearTimeout(timeout2);
-      console.warn("Geoapify routing for optimized order failed:", routeErr.message);
+      const msg = routeErr instanceof Error ? routeErr.message : "unknown";
+      console.warn("Geoapify routing for optimized order failed:", msg);
     }
     const fallbackTrafficDur = props.time || 0;
     const fallbackDist = props.distance || 0;
@@ -2702,11 +2536,231 @@ router5.get("/route-optimized", async (req, res) => {
     });
   } catch (error) {
     clearTimeout(timeout);
-    console.error("Geoapify planner fetch error:", error.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("Geoapify planner fetch error:", msg);
     res.json(buildFallbackResponse(parsed));
   }
 });
-router5.post("/position", async (req, res) => {
+router7.post("/distance", async (req, res) => {
+  const { fromLat, fromLng, toLat, toLng } = req.body;
+  if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
+    return res.status(400).json({ error: "fromLat, fromLng, toLat, toLng kr\xE4vs" });
+  }
+  if (IS_MOCK_MODE) {
+    const distKm = haversineDistance(fromLat, fromLng, toLat, toLng);
+    const durationMin = Math.round(distKm * 1.4);
+    return res.json({ distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, durationMin), source: "haversine" });
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/distance", {
+      method: "POST",
+      headers: getAuthHeader(req),
+      body: JSON.stringify({ fromLat, fromLng, toLat, toLng })
+    });
+    res.status(status).json(data);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("[LIVE] Distance proxy error:", msg);
+    res.status(503).json({ error: "Kunde inte ber\xE4kna avst\xE5nd. F\xF6rs\xF6k igen." });
+  }
+});
+router7.post("/distance/batch", async (req, res) => {
+  const { pairs } = req.body;
+  if (!Array.isArray(pairs)) {
+    return res.status(400).json({ error: "pairs array kr\xE4vs" });
+  }
+  const results = {};
+  for (const p of pairs) {
+    const distKm = haversineDistance(p.fromLat, p.fromLng, p.toLat, p.toLng);
+    results[p.id] = { distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, Math.round(distKm * 1.4)), source: "haversine" };
+  }
+  res.json({ results });
+});
+
+// server/routes/mobile/misc.ts
+var import_express8 = require("express");
+var router8 = (0, import_express8.Router)();
+router8.get("/map-config", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    res.json({
+      defaultCenter: { latitude: 59.195, longitude: 17.626 },
+      defaultZoom: 12,
+      clusterRadius: 50,
+      showTraffic: false,
+      mapStyle: "standard",
+      refreshIntervalMs: 3e4,
+      maxMarkersVisible: 200
+    });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch("/api/mobile/map-config", { method: "GET", headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("[LIVE] Map-config proxy error:", msg);
+    res.status(503).json({ error: "Kunde inte h\xE4mta kartkonfiguration. F\xF6rs\xF6k igen." });
+  }
+});
+router8.get("/articles", (_req, res) => {
+  const search = (_req.query.search || "").toLowerCase();
+  if (search) {
+    res.json(MOCK_ARTICLES.filter((a) => a.name.toLowerCase().includes(search)));
+  } else {
+    res.json(MOCK_ARTICLES);
+  }
+});
+router8.get("/weather", async (_req, res) => {
+  try {
+    const response = await fetch(
+      "https://api.open-meteo.com/v1/forecast?latitude=59.1950&longitude=17.6260&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Stockholm&forecast_days=1"
+    );
+    const data = await response.json();
+    const current = data.current;
+    const weatherDescriptions = {
+      0: "Klart",
+      1: "Mestadels klart",
+      2: "Delvis molnigt",
+      3: "Mulet",
+      45: "Dimma",
+      48: "Dimma med rimfrost",
+      51: "L\xE4tt duggregn",
+      53: "M\xE5ttligt duggregn",
+      55: "Kraftigt duggregn",
+      61: "L\xE4tt regn",
+      63: "M\xE5ttligt regn",
+      65: "Kraftigt regn",
+      71: "L\xE4tt sn\xF6fall",
+      73: "M\xE5ttligt sn\xF6fall",
+      75: "Kraftigt sn\xF6fall",
+      77: "Sn\xF6korn",
+      80: "L\xE4tta regnskurar",
+      81: "M\xE5ttliga regnskurar",
+      82: "Kraftiga regnskurar",
+      85: "L\xE4tta sn\xF6byar",
+      86: "Kraftiga sn\xF6byar",
+      95: "\xC5skv\xE4der",
+      96: "\xC5skv\xE4der med hagel",
+      99: "\xC5skv\xE4der med kraftigt hagel"
+    };
+    const weatherIcons = {
+      0: "sun",
+      1: "sun",
+      2: "cloud",
+      3: "cloud",
+      45: "cloud",
+      48: "cloud",
+      51: "cloud-drizzle",
+      53: "cloud-drizzle",
+      55: "cloud-drizzle",
+      61: "cloud-rain",
+      63: "cloud-rain",
+      65: "cloud-rain",
+      71: "cloud-snow",
+      73: "cloud-snow",
+      75: "cloud-snow",
+      77: "cloud-snow",
+      80: "cloud-rain",
+      81: "cloud-rain",
+      82: "cloud-rain",
+      85: "cloud-snow",
+      86: "cloud-snow",
+      95: "cloud-lightning",
+      96: "cloud-lightning",
+      99: "cloud-lightning"
+    };
+    const code = current.weather_code;
+    const warnings = [];
+    if (current.wind_speed_10m > 15) warnings.push("Bl\xE5sigt v\xE4der");
+    if (current.precipitation > 5) warnings.push("Kraftig nederb\xF6rd");
+    if (current.temperature_2m < 0) warnings.push("Minusgrader - halkrisk");
+    if (code >= 95) warnings.push("\xC5skvarning");
+    res.json({
+      temperature: Math.round(current.temperature_2m),
+      feelsLike: Math.round(current.apparent_temperature),
+      description: weatherDescriptions[code] || "Ok\xE4nt",
+      icon: weatherIcons[code] || "cloud",
+      windSpeed: Math.round(current.wind_speed_10m),
+      precipitation: current.precipitation,
+      warnings
+    });
+  } catch {
+    res.json({
+      temperature: 8,
+      feelsLike: 5,
+      description: "Delvis molnigt",
+      icon: "cloud",
+      windSpeed: 12,
+      precipitation: 0,
+      warnings: []
+    });
+  }
+});
+router8.get("/summary", async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
+    const todayOrders = MOCK_ORDERS.filter((o) => o.scheduledDate === today);
+    const remaining = todayOrders.filter((o) => o.status !== "completed" && o.status !== "cancelled" && o.status !== "failed");
+    let totalDistance = 0;
+    const sortedOrders = [...todayOrders].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (let i = 1; i < sortedOrders.length; i++) {
+      const prev = sortedOrders[i - 1];
+      const curr = sortedOrders[i];
+      if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
+        totalDistance += haversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+      }
+    }
+    res.json({
+      totalOrders: todayOrders.length,
+      completedOrders: todayOrders.filter((o) => o.status === "completed").length,
+      remainingOrders: remaining.length,
+      failedOrders: todayOrders.filter((o) => o.status === "failed").length,
+      totalDuration: todayOrders.reduce((sum, o) => sum + o.estimatedDuration, 0),
+      estimatedTimeRemaining: remaining.reduce((sum, o) => sum + o.estimatedDuration, 0),
+      totalDistance: Math.round(totalDistance * 10) / 10
+    });
+    return;
+  }
+  try {
+    const { status: summaryStatus, data: summaryData } = await traivoFetch("/api/mobile/summary", {
+      method: "GET",
+      headers: getAuthHeader(req)
+    });
+    if (summaryStatus === 200 && summaryData && summaryData.totalOrders !== void 0) {
+      res.json(summaryData);
+      return;
+    }
+  } catch {
+  }
+  try {
+    const { status: ordersStatus, data: ordersData } = await traivoFetch("/api/mobile/my-orders", {
+      method: "GET",
+      headers: getAuthHeader(req)
+    });
+    if (ordersStatus === 200) {
+      const rawOrders = Array.isArray(ordersData) ? ordersData : ordersData.orders || [];
+      const completed = rawOrders.filter((o) => o.status === "completed").length;
+      const failed = rawOrders.filter((o) => o.status === "failed" || o.status === "impossible").length;
+      const cancelled = rawOrders.filter((o) => o.status === "cancelled").length;
+      const remainingCount = rawOrders.length - completed - failed - cancelled;
+      res.json({
+        totalOrders: rawOrders.length,
+        completedOrders: completed,
+        remainingOrders: remainingCount,
+        failedOrders: failed,
+        totalDuration: rawOrders.reduce((sum, o) => sum + (o.estimatedDuration || 0), 0),
+        estimatedTimeRemaining: rawOrders.filter((o) => o.status !== "completed" && o.status !== "failed" && o.status !== "cancelled").reduce((sum, o) => sum + (o.estimatedDuration || 0), 0)
+      });
+    } else {
+      res.json({ totalOrders: 0, completedOrders: 0, remainingOrders: 0, failedOrders: 0, totalDuration: 0, estimatedTimeRemaining: 0 });
+    }
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("[LIVE] Summary proxy error:", msg);
+    res.status(503).json({ error: "Kunde inte h\xE4mta sammanfattning. F\xF6rs\xF6k igen." });
+  }
+});
+router8.post("/position", async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy } = req.body;
   if (latitude == null || longitude == null || typeof latitude !== "number" || typeof longitude !== "number") {
     return res.status(400).json({ error: "Giltiga latitude och longitude kr\xE4vs" });
@@ -2722,7 +2776,8 @@ router5.post("/position", async (req, res) => {
         body: JSON.stringify(req.body)
       });
     } catch (e) {
-      console.error("[LIVE] Position proxy error:", e.message);
+      const msg = e instanceof Error ? e.message : "unknown";
+      console.error("[LIVE] Position proxy error:", msg);
     }
   }
   try {
@@ -2752,7 +2807,7 @@ router5.post("/position", async (req, res) => {
     res.json({ received: true, timestamp: (/* @__PURE__ */ new Date()).toISOString() });
   }
 });
-router5.post("/status", async (req, res) => {
+router8.post("/status", async (req, res) => {
   const { online } = req.body;
   try {
     const driverId = IS_MOCK_MODE ? MOCK_RESOURCE.id : "unknown";
@@ -2779,7 +2834,7 @@ router5.post("/status", async (req, res) => {
     res.json({ success: true, online });
   }
 });
-router5.post("/gps", async (req, res) => {
+router8.post("/gps", async (req, res) => {
   const { latitude, longitude, speed, heading, accuracy, driverId, driverName, vehicleRegNo, currentOrderId, currentOrderNumber } = req.body;
   if (latitude == null || longitude == null || !driverId) {
     return res.status(400).json({ error: "latitude, longitude och driverId kr\xE4vs" });
@@ -2813,7 +2868,7 @@ router5.post("/gps", async (req, res) => {
     res.json({ received: true });
   }
 });
-router5.post("/push-token", async (req, res) => {
+router8.post("/push-token", async (req, res) => {
   const { expoPushToken, platform } = req.body;
   const token = expoPushToken || req.body.token;
   if (!token) {
@@ -2830,21 +2885,24 @@ router5.post("/push-token", async (req, res) => {
     );
     res.json({ success: true });
   } catch (err) {
-    console.error("Push token registration error:", err.message);
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error("Push token registration error:", msg);
     res.status(500).json({ error: "Kunde inte registrera push-token" });
   }
 });
-router5.delete("/push-token", async (req, res) => {
+router8.delete("/push-token", async (req, res) => {
+  const mobileReq = req;
   const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : String(req.body.driverId || req.query.driverId || MOCK_RESOURCE.id);
   try {
     await pool.query("DELETE FROM push_tokens WHERE driver_id = $1", [driverId]);
     res.json({ success: true });
   } catch (err) {
-    console.error("Push token removal error:", err.message);
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error("Push token removal error:", msg);
     res.status(500).json({ error: "Kunde inte ta bort push-token" });
   }
 });
-router5.get("/route-feedback/mine", async (req, res) => {
+router8.get("/route-feedback/mine", async (_req, res) => {
   const driverId = MOCK_RESOURCE.id;
   try {
     const result = await pool.query(
@@ -2853,11 +2911,12 @@ router5.get("/route-feedback/mine", async (req, res) => {
     );
     res.json({ success: true, feedback: result.rows });
   } catch (err) {
-    console.error("Route feedback fetch error:", err.message);
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error("Route feedback fetch error:", msg);
     res.json({ success: true, feedback: [] });
   }
 });
-router5.post("/route-feedback", async (req, res) => {
+router8.post("/route-feedback", async (req, res) => {
   const driverId = MOCK_RESOURCE.id;
   const { rating, reasons, comment, date } = req.body;
   if (!rating || rating < 1 || rating > 5) {
@@ -2872,11 +2931,12 @@ router5.post("/route-feedback", async (req, res) => {
     );
     res.json({ success: true, feedback: result.rows[0] });
   } catch (err) {
-    console.error("Route feedback save error:", err.message);
+    const msg = err instanceof Error ? err.message : "unknown";
+    console.error("Route feedback save error:", msg);
     res.status(500).json({ error: "Kunde inte spara ruttbetyg" });
   }
 });
-router5.get("/terminology", async (req, res) => {
+router8.get("/terminology", async (req, res) => {
   const terminology = {
     order: "Order",
     work_order: "Arbetsorder",
@@ -2924,18 +2984,20 @@ router5.get("/terminology", async (req, res) => {
       }
       return res.status(status).json(data);
     } catch (error) {
-      console.error("[LIVE] Terminology proxy error:", error.message);
+      const msg = error instanceof Error ? error.message : "unknown";
+      console.error("[LIVE] Terminology proxy error:", msg);
       return res.status(503).json({ error: "Kunde inte h\xE4mta terminologi. F\xF6rs\xF6k igen." });
     }
   }
   res.json({ success: true, terminology });
 });
-router5.get("/customer-change-requests/categories", async (_req, res) => {
+router8.get("/customer-change-requests/categories", async (_req, res) => {
   res.json({ success: true, categories: CHANGE_REQUEST_CATEGORIES });
 });
-router5.get("/customer-change-requests/mine", async (req, res) => {
+router8.get("/customer-change-requests/mine", async (req, res) => {
   if (IS_MOCK_MODE) {
-    const resourceId = String(req.mobileResourceId || MOCK_RESOURCE.id);
+    const mobileReq = req;
+    const resourceId = String(mobileReq.mobileResourceId || MOCK_RESOURCE.id);
     const mine = MOCK_CHANGE_REQUESTS.filter((r) => r.reportedByResourceId === resourceId);
     res.json({ success: true, items: mine, total: mine.length });
     return;
@@ -2946,11 +3008,12 @@ router5.get("/customer-change-requests/mine", async (req, res) => {
     });
     res.status(status).json(data);
   } catch (error) {
-    console.error("Customer change requests mine error:", error?.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("Customer change requests mine error:", msg);
     res.status(503).json({ error: "Kunde inte h\xE4mta kundrapporter." });
   }
 });
-router5.post("/customer-change-requests", async (req, res) => {
+router8.post("/customer-change-requests", async (req, res) => {
   if (IS_MOCK_MODE) {
     const newReport = {
       id: `cr-${Date.now()}`,
@@ -2973,11 +3036,12 @@ router5.post("/customer-change-requests", async (req, res) => {
     });
     res.status(status).json(data);
   } catch (error) {
-    console.error("Customer change request create error:", error?.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("Customer change request create error:", msg);
     res.status(503).json({ error: "Kunde inte skapa kundrapport." });
   }
 });
-router5.get("/deviations/mine", async (req, res) => {
+router8.get("/deviations/mine", async (req, res) => {
   if (IS_MOCK_MODE) {
     const allDeviations = [];
     for (const order of MOCK_ORDERS) {
@@ -3002,11 +3066,12 @@ router5.get("/deviations/mine", async (req, res) => {
     });
     res.status(status).json(data);
   } catch (error) {
-    console.error("My deviations error:", error?.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("My deviations error:", msg);
     res.status(503).json({ error: "Kunde inte h\xE4mta avvikelser." });
   }
 });
-router5.post("/work-orders/carry-over", async (req, res) => {
+router8.post("/work-orders/carry-over", async (req, res) => {
   if (IS_MOCK_MODE) {
     const yesterday = /* @__PURE__ */ new Date();
     yesterday.setDate(yesterday.getDate() - 1);
@@ -3031,11 +3096,12 @@ router5.post("/work-orders/carry-over", async (req, res) => {
     });
     res.status(status).json(data);
   } catch (error) {
-    console.error("Carry-over error:", error?.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("Carry-over error:", msg);
     res.status(503).json({ error: "Kunde inte flytta ordrar." });
   }
 });
-router5.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
+router8.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
   if (IS_MOCK_MODE) {
     const order = findMockOrder(req.params.id);
     if (!order) {
@@ -3057,45 +3123,12 @@ router5.post("/work-orders/:id/auto-eta-sms", async (req, res) => {
     });
     res.status(status).json(data);
   } catch (error) {
-    console.error("Auto ETA SMS error:", error?.message);
+    const msg = error instanceof Error ? error.message : "unknown";
+    console.error("Auto ETA SMS error:", msg);
     res.status(503).json({ error: "Kunde inte skicka ETA-SMS." });
   }
 });
-router5.post("/distance", async (req, res) => {
-  const { fromLat, fromLng, toLat, toLng } = req.body;
-  if (fromLat == null || fromLng == null || toLat == null || toLng == null) {
-    return res.status(400).json({ error: "fromLat, fromLng, toLat, toLng kr\xE4vs" });
-  }
-  if (IS_MOCK_MODE) {
-    const distKm = haversineDistance(fromLat, fromLng, toLat, toLng);
-    const durationMin = Math.round(distKm * 1.4);
-    return res.json({ distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, durationMin), source: "haversine" });
-  }
-  try {
-    const { status, data } = await traivoFetch("/api/distance", {
-      method: "POST",
-      headers: getAuthHeader(req),
-      body: JSON.stringify({ fromLat, fromLng, toLat, toLng })
-    });
-    res.status(status).json(data);
-  } catch (error) {
-    console.error("[LIVE] Distance proxy error:", error.message);
-    res.status(503).json({ error: "Kunde inte ber\xE4kna avst\xE5nd. F\xF6rs\xF6k igen." });
-  }
-});
-router5.post("/distance/batch", async (req, res) => {
-  const { pairs } = req.body;
-  if (!Array.isArray(pairs)) {
-    return res.status(400).json({ error: "pairs array kr\xE4vs" });
-  }
-  const results = {};
-  for (const p of pairs) {
-    const distKm = haversineDistance(p.fromLat, p.fromLng, p.toLat, p.toLng);
-    results[p.id] = { distanceKm: Math.round(distKm * 10) / 10, durationMin: Math.max(1, Math.round(distKm * 1.4)), source: "haversine" };
-  }
-  res.json({ results });
-});
-router5.post("/disruptions/trigger/delay", async (req, res) => {
+router8.post("/disruptions/trigger/delay", async (req, res) => {
   const { workOrderId, workOrderTitle, resourceId, resourceName, estimatedDuration, actualDuration } = req.body;
   if (!workOrderId || !resourceId || estimatedDuration == null || actualDuration == null) {
     return res.status(400).json({ error: "workOrderId, resourceId, estimatedDuration, actualDuration kr\xE4vs" });
@@ -3133,7 +3166,7 @@ router5.post("/disruptions/trigger/delay", async (req, res) => {
     res.status(503).json({ error: "Kunde inte trigga st\xF6rning." });
   }
 });
-router5.post("/disruptions/trigger/early-completion", async (req, res) => {
+router8.post("/disruptions/trigger/early-completion", async (req, res) => {
   const { resourceId, resourceName, slackMinutes } = req.body;
   if (!resourceId || slackMinutes == null) {
     return res.status(400).json({ error: "resourceId, slackMinutes kr\xE4vs" });
@@ -3170,7 +3203,7 @@ router5.post("/disruptions/trigger/early-completion", async (req, res) => {
     res.status(503).json({ error: "Kunde inte trigga st\xF6rning." });
   }
 });
-router5.post("/disruptions/trigger/resource-unavailable", async (req, res) => {
+router8.post("/disruptions/trigger/resource-unavailable", async (req, res) => {
   const { resourceId, resourceName, reason } = req.body;
   if (!resourceId || !reason) {
     return res.status(400).json({ error: "resourceId, reason kr\xE4vs" });
@@ -3204,7 +3237,7 @@ router5.post("/disruptions/trigger/resource-unavailable", async (req, res) => {
     res.status(503).json({ error: "Kunde inte trigga st\xF6rning." });
   }
 });
-router5.get("/break-config", async (req, res) => {
+router8.get("/break-config", async (req, res) => {
   if (IS_MOCK_MODE) {
     return res.json({
       enabled: true,
@@ -3220,7 +3253,7 @@ router5.get("/break-config", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta rastkonfiguration." });
   }
 });
-router5.get("/eta-notification/history", async (req, res) => {
+router8.get("/eta-notification/history", async (req, res) => {
   const { workOrderId, customerId } = req.query;
   if (IS_MOCK_MODE) {
     const notifications = [];
@@ -3251,7 +3284,7 @@ router5.get("/eta-notification/history", async (req, res) => {
     res.status(503).json({ error: "Kunde inte h\xE4mta notifieringshistorik." });
   }
 });
-router5.get("/eta-notification/config", async (req, res) => {
+router8.get("/eta-notification/config", async (req, res) => {
   if (IS_MOCK_MODE) {
     return res.json({ enabled: true, marginMinutes: 15, channel: "email", triggerOnEnRoute: true });
   }
@@ -3264,13 +3297,13 @@ router5.get("/eta-notification/config", async (req, res) => {
 });
 
 // server/routes/mobile/index.ts
-var router6 = (0, import_express6.Router)();
-router6.use((req, _res, next) => {
+var router9 = (0, import_express9.Router)();
+router9.use((req, _res, next) => {
   const mode = IS_MOCK_MODE ? "MOCK" : "LIVE";
   console.log(`[${mode}] ${req.method} ${req.baseUrl}${req.path}`);
   next();
 });
-router6.use((_req, res, next) => {
+router9.use((_req, res, next) => {
   if (IS_MOCK_MODE) {
     res.setHeader("X-Traivo-Mock", "true");
     const originalJson = res.json.bind(res);
@@ -3283,27 +3316,30 @@ router6.use((_req, res, next) => {
   }
   next();
 });
-router6.get("/server-mode", (_req, res) => {
+router9.get("/server-mode", (_req, res) => {
   res.json({
     mode: IS_MOCK_MODE ? "mock" : "live",
     backendUrl: IS_MOCK_MODE ? null : TRAIVO_API_URL
   });
 });
-router6.use(router);
-router6.use(router2);
-router6.use(router3);
-router6.use(router4);
-router6.use(router5);
+router9.use(router);
+router9.use(router2);
+router9.use(router3);
+router9.use(router4);
+router9.use(router5);
+router9.use(router6);
+router9.use(router7);
+router9.use(router8);
 
 // server/routes/ai.ts
-var import_express7 = require("express");
+var import_express10 = require("express");
 var import_openai = __toESM(require("openai"));
 var openai = new import_openai.default({
   apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
   baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL
 });
-var router7 = (0, import_express7.Router)();
-router7.post("/chat", async (req, res) => {
+var router10 = (0, import_express10.Router)();
+router10.post("/chat", async (req, res) => {
   try {
     const { message, context } = req.body;
     if (!message) {
@@ -3351,7 +3387,7 @@ ${contextInfo}` : ""}`;
     res.status(500).json({ error: "Kunde inte generera svar fr\xE5n AI" });
   }
 });
-router7.post("/chat/stream", async (req, res) => {
+router10.post("/chat/stream", async (req, res) => {
   try {
     const { message, context } = req.body;
     if (!message) {
@@ -3420,7 +3456,7 @@ ${contextInfo}` : ""}`;
   }
 });
 var MAX_BASE64_SIZE = 10 * 1024 * 1024;
-router7.post("/transcribe", async (req, res) => {
+router10.post("/transcribe", async (req, res) => {
   try {
     const { audio } = req.body;
     if (!audio) {
@@ -3441,7 +3477,7 @@ router7.post("/transcribe", async (req, res) => {
     res.status(500).json({ error: "Kunde inte transkribera ljudet" });
   }
 });
-router7.post("/voice-command", async (req, res) => {
+router10.post("/voice-command", async (req, res) => {
   try {
     const { audio } = req.body;
     if (!audio) {
@@ -3518,7 +3554,7 @@ Svara ENBART i JSON-format:
     res.status(500).json({ error: "Kunde inte bearbeta r\xF6stkommandot" });
   }
 });
-router7.post("/analyze-image", async (req, res) => {
+router10.post("/analyze-image", async (req, res) => {
   try {
     const { image, context } = req.body;
     if (!image) {
@@ -3597,8 +3633,8 @@ Ytterligare kontext: ${context}` : ""}`;
 });
 
 // server/routes/planner.ts
-var import_express8 = require("express");
-var router8 = (0, import_express8.Router)();
+var import_express11 = require("express");
+var router11 = (0, import_express11.Router)();
 function getWeekDates() {
   const dates = [];
   const now2 = /* @__PURE__ */ new Date();
@@ -3720,7 +3756,7 @@ var EXTRA_WEEK_ORDERS = [
   }
 ];
 var ALL_ORDERS = [...MOCK_ORDERS, ...EXTRA_WEEK_ORDERS];
-router8.get("/drivers/locations", async (_req, res) => {
+router11.get("/drivers/locations", async (_req, res) => {
   try {
     const result = await pool.query(
       `SELECT 
@@ -3747,7 +3783,7 @@ router8.get("/drivers/locations", async (_req, res) => {
     res.status(500).json({ error: "Kunde inte h\xE4mta positioner" });
   }
 });
-router8.get("/orders", (req, res) => {
+router11.get("/orders", (req, res) => {
   const range = req.query.range || "today";
   const today = (/* @__PURE__ */ new Date()).toISOString().split("T")[0];
   let filteredOrders;
@@ -3952,7 +3988,7 @@ function getBridgeStatus() {
 }
 
 // server/app.ts
-var app = (0, import_express9.default)();
+var app = (0, import_express12.default)();
 var server = import_http.default.createServer(app);
 var io = new import_socket.Server(server, {
   cors: { origin: "*", methods: ["GET", "POST"] },
@@ -3985,10 +4021,10 @@ io.on("connection", (socket) => {
 });
 app.io = io;
 app.use((0, import_cors.default)());
-app.use(import_express9.default.json({ limit: "10mb" }));
-app.use("/api/mobile", router6);
-app.use("/api/mobile/ai", router7);
-app.use("/api/planner", router8);
+app.use(import_express12.default.json({ limit: "10mb" }));
+app.use("/api/mobile", router9);
+app.use("/api/mobile/ai", router10);
+app.use("/api/planner", router11);
 app.get("/api/health", (_req, res) => {
   const bridge = getBridgeStatus();
   res.json({ status: "ok", service: "traivo-go-api", wsBridge: bridge });
@@ -4145,7 +4181,7 @@ app.get("/bundles/:platform/index.bundle", (req, res) => {
     res.status(500).send("Failed to serve bundle");
   }
 });
-app.use("/assets", import_express9.default.static(import_path.default.join(projectRoot, "assets"), {
+app.use("/assets", import_express12.default.static(import_path.default.join(projectRoot, "assets"), {
   setHeaders: (res, filePath) => {
     if (filePath.endsWith(".ttf")) {
       res.setHeader("Content-Type", "font/ttf");
@@ -4194,7 +4230,7 @@ app.get("/api/qrcode/:platform", async (req, res) => {
 app.get("/status", (_req, res) => {
   res.send("packager-status:running");
 });
-app.use(import_express9.default.static(templatesDir));
+app.use(import_express12.default.static(templatesDir));
 app.get("/planner/map", (_req, res) => {
   res.sendFile(import_path.default.join(templatesDir, "planner-map.html"));
 });
