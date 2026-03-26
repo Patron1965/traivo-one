@@ -2771,7 +2771,12 @@ app.post("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (re
 
 app.delete("/api/mobile/push-token", isMobileAuthenticated, asyncHandler(async (req: any, res: any) => {
     const resourceId = req.mobileResourceId;
-    await db.delete(pushTokens).where(eq(pushTokens.resourceId, resourceId));
+    const { expoPushToken } = req.body || {};
+    if (expoPushToken) {
+      await db.delete(pushTokens).where(and(eq(pushTokens.resourceId, resourceId), eq(pushTokens.expoPushToken, expoPushToken)));
+    } else {
+      await db.delete(pushTokens).where(eq(pushTokens.resourceId, resourceId));
+    }
     res.json({ success: true });
 }));
 
