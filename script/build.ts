@@ -14,7 +14,6 @@ await esbuild.build({
   outfile,
   format: 'cjs',
   external: ['pg-native'],
-  packages: 'external',
 });
 
 console.log(`Built ${outfile}`);
