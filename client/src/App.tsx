@@ -284,7 +284,7 @@ function AppContent() {
     );
   }
 
-  if (location.startsWith("/portal")) {
+  if (location.startsWith("/portal") && !location.startsWith("/portal-messages")) {
     return (
       <ErrorBoundary>
         <PortalRouter />
