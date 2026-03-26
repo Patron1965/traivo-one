@@ -87,7 +87,7 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
     const token = generateMobileToken();
     const expiresAt = Date.now() + (24 * 60 * 60 * 1000);
     
-    mobileTokens.set(token, { resourceId: resource.id, expiresAt });
+    mobileTokens.set(token, { resourceId: resource.id, tenantId: resource.tenantId, expiresAt });
     
     console.log(`[mobile] Login successful for resource ${resource.name} (${resource.id})`);
     

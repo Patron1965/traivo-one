@@ -86,7 +86,7 @@ export function notifyImportProgress(jobId: string) {
   }
 }
 
-export const mobileTokens = new Map<string, { resourceId: string; expiresAt: number }>();
+export const mobileTokens = new Map<string, { resourceId: string; tenantId?: string; expiresAt: number }>();
 
 export function generateMobileToken(): string {
   return Array.from({ length: 64 }, () => 
@@ -94,14 +94,14 @@ export function generateMobileToken(): string {
   ).join('');
 }
 
-export function validateMobileToken(token: string): string | null {
+export function validateMobileToken(token: string): { resourceId: string; tenantId?: string } | null {
   const tokenData = mobileTokens.get(token);
   if (!tokenData) return null;
   if (Date.now() > tokenData.expiresAt) {
     mobileTokens.delete(token);
     return null;
   }
-  return tokenData.resourceId;
+  return { resourceId: tokenData.resourceId, tenantId: tokenData.tenantId };
 }
 
 export function isMobileAuthenticated(req: ExpressRequest, res: ExpressResponse, next: NextFunction) {
@@ -111,13 +111,14 @@ export function isMobileAuthenticated(req: ExpressRequest, res: ExpressResponse,
   }
   
   const token = authHeader.substring(7);
-  const resourceId = validateMobileToken(token);
+  const result = validateMobileToken(token);
   
-  if (!resourceId) {
+  if (!result) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
   
-  req.mobileResourceId = resourceId;
+  req.mobileResourceId = result.resourceId;
+  req.mobileTenantId = result.tenantId;
   next();
 }
 
