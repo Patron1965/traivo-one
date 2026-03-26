@@ -570,7 +570,7 @@ if(container.children.length > 5) container.children[0].remove();
 }
 
 function connectSSE() {
-const evtSource = new EventSource('/api/planner/events');
+const evtSource = new EventSource('/api/planner/events', {withCredentials:true});
 evtSource.onmessage = function(e) {
   try {
     const event = JSON.parse(e.data);
@@ -623,7 +623,7 @@ document.getElementById('btn-cancel-reassign').onclick = function() { modal.remo
 document.getElementById('btn-do-reassign').onclick = async function() {
   try {
     var resp = await fetch('/api/planner/orders/'+jobId+'/reassign', {
-      method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({resourceId:driverId})
+      method:'PATCH', headers:{'Content-Type':'application/json'}, body:JSON.stringify({resourceId:driverId}), credentials:'include'
     });
     if(resp.ok) {
       showToast('order_reassigned','Omplanerad',jobTitle+' \\u2192 '+driverName);
@@ -645,7 +645,8 @@ try {
   var resp = await fetch('/api/routes/directions', {
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({coordinates: waypoints.map(function(w){return [w.lng,w.lat]})})
+    body:JSON.stringify({coordinates: waypoints.map(function(w){return [w.lng,w.lat]})}),
+    credentials:'include'
   });
   if(!resp.ok) return null;
   var data = await resp.json();
@@ -676,7 +677,7 @@ return (meters/1000).toFixed(1)+' km';
 
 async function loadDrivers() {
 try {
-  var res = await fetch('/api/planner/drivers/locations');
+  var res = await fetch('/api/planner/drivers/locations', {credentials:'include'});
   driversData = await res.json();
   driverLayer.clearLayers();
   driversData.forEach(function(d) {
@@ -782,7 +783,7 @@ renderRoutes();
 
 async function loadJobs() {
 try {
-  var res = await fetch('/api/planner/orders?range='+currentRange);
+  var res = await fetch('/api/planner/orders?range='+currentRange, {credentials:'include'});
   jobsData = await res.json();
   renderJobs();
   updateDriverPanel();
@@ -829,7 +830,7 @@ jobsData.forEach(function(j) {
 
 async function loadRoutes() {
 try {
-  var res = await fetch('/api/planner/routes');
+  var res = await fetch('/api/planner/routes', {credentials:'include'});
   routesData = await res.json();
   routesData.forEach(function(r,i){ r._color = r.color || ROUTE_COLORS[i%ROUTE_COLORS.length]; });
   if(Object.keys(visibleRoutes).length === 0) {
