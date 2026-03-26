@@ -90,8 +90,8 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
 
       if (connectionIdRef.current !== connId) return;
 
-      const apiUrl = getApiUrl();
-      const socket = io(apiUrl, {
+      const wsUrl = process.env.EXPO_PUBLIC_WS_URL || getApiUrl();
+      const socket = io(wsUrl, {
         path: '/ws',
         transports: ['websocket', 'polling'],
         reconnection: false,
@@ -249,9 +249,9 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
 
   const sendPositionUpdate = useCallback((position: { latitude: number; longitude: number; speed?: number; heading?: number; accuracy?: number; status?: string; workOrderId?: string }) => {
     if (socketRef.current?.connected) {
-      socketRef.current.emit('position_update', { type: 'position_update', ...position });
+      socketRef.current.emit('position_update', { type: 'position_update', resourceId: resourceId ? String(resourceId) : undefined, ...position });
     }
-  }, []);
+  }, [resourceId]);
 
   useEffect(() => {
     if (resourceId) {

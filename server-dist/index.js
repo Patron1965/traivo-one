@@ -3781,7 +3781,7 @@ async function connectUpstream(localIo, upstreamUrl) {
   if (upstreamSocket) {
     try {
       upstreamSocket.disconnect();
-    } catch {
+    } catch (_e) {
     }
     upstreamSocket = null;
   }
@@ -3800,10 +3800,10 @@ async function connectUpstream(localIo, upstreamUrl) {
       timeout: 1e4
     });
     upstreamSocket.on("connect", () => {
-      logBridge(`Ansluten till Traivo One (socket: ${upstreamSocket.id})`);
+      logBridge(`Ansluten till Traivo One (socket: ${upstreamSocket?.id})`);
       backoffMs = INITIAL_BACKOFF_MS;
       eventCounts = {};
-      upstreamSocket.emit("join", {
+      upstreamSocket?.emit("join", {
         tenantId: process.env.TRAIVO_TENANT_ID || "traivo-demo",
         role: "bridge"
       });
@@ -3844,7 +3844,8 @@ async function connectUpstream(localIo, upstreamUrl) {
       });
     }
   } catch (err) {
-    logBridgeError(`Kunde inte skapa anslutning: ${err.message}`);
+    const message = err instanceof Error ? err.message : String(err);
+    logBridgeError(`Kunde inte skapa anslutning: ${message}`);
     if (bridgeActive) {
       scheduleReconnect(localIo, upstreamUrl);
     }
@@ -3887,7 +3888,7 @@ function stopWebSocketBridge() {
     logBridge("Stoppar bridge...");
     try {
       upstreamSocket.disconnect();
-    } catch {
+    } catch (_e) {
     }
     upstreamSocket = null;
   }

@@ -1,4 +1,18 @@
-import { Server as SocketIOServer } from 'socket.io';
+import { Server as SocketIOServer, Socket as LocalSocket } from 'socket.io';
+
+interface BridgeEventData {
+  teamId?: string | number;
+  resourceId?: string | number;
+  tenantId?: string;
+  orderId?: string | number;
+  [key: string]: unknown;
+}
+
+interface BridgeStatus {
+  active: boolean;
+  connected: boolean;
+  eventCounts: Record<string, number>;
+}
 
 const BRIDGE_EVENTS = [
   'order:updated',
@@ -15,13 +29,13 @@ const BRIDGE_EVENTS = [
   'team:member_left',
   'team:invite',
   'position_update',
-];
+] as const;
 
 const INITIAL_BACKOFF_MS = 2000;
 const MAX_BACKOFF_MS = 60000;
 const BACKOFF_MULTIPLIER = 2;
 
-let upstreamSocket: any = null;
+let upstreamSocket: ReturnType<typeof import('socket.io-client').io> | null = null;
 let backoffMs = INITIAL_BACKOFF_MS;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let bridgeActive = false;
@@ -60,7 +74,7 @@ function scheduleReconnect(localIo: SocketIOServer, upstreamUrl: string) {
 
 async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
   if (upstreamSocket) {
-    try { upstreamSocket.disconnect(); } catch {}
+    try { upstreamSocket.disconnect(); } catch (_e: unknown) { /* ignore */ }
     upstreamSocket = null;
   }
 
@@ -83,11 +97,11 @@ async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
     });
 
     upstreamSocket.on('connect', () => {
-      logBridge(`Ansluten till Traivo One (socket: ${upstreamSocket.id})`);
+      logBridge(`Ansluten till Traivo One (socket: ${upstreamSocket?.id})`);
       backoffMs = INITIAL_BACKOFF_MS;
       eventCounts = {};
 
-      upstreamSocket.emit('join', {
+      upstreamSocket?.emit('join', {
         tenantId: process.env.TRAIVO_TENANT_ID || 'traivo-demo',
         role: 'bridge',
       });
@@ -108,7 +122,7 @@ async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
     });
 
     for (const eventName of BRIDGE_EVENTS) {
-      upstreamSocket.on(eventName, (data: any) => {
+      upstreamSocket.on(eventName, (data: BridgeEventData) => {
         eventCounts[eventName] = (eventCounts[eventName] || 0) + 1;
         const total = Object.values(eventCounts).reduce((s, c) => s + c, 0);
         if (total <= 10 || total % 50 === 0) {
@@ -132,8 +146,9 @@ async function connectUpstream(localIo: SocketIOServer, upstreamUrl: string) {
       });
     }
 
-  } catch (err: any) {
-    logBridgeError(`Kunde inte skapa anslutning: ${err.message}`);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    logBridgeError(`Kunde inte skapa anslutning: ${message}`);
     if (bridgeActive) {
       scheduleReconnect(localIo, upstreamUrl);
     }
@@ -158,8 +173,8 @@ export function startWebSocketBridge(localIo: SocketIOServer, upstreamUrl: strin
   logBridge('Startar WebSocket-bridge mot Traivo One...');
   connectUpstream(localIo, upstreamUrl);
 
-  const positionHandler = (socket: any) => {
-    socket.on('position_update', (data: any) => {
+  const positionHandler = (socket: LocalSocket) => {
+    socket.on('position_update', (data: BridgeEventData) => {
       if (upstreamSocket?.connected && data.resourceId) {
         upstreamSocket.emit('position_update', data);
       }
@@ -180,12 +195,12 @@ export function stopWebSocketBridge() {
   }
   if (upstreamSocket) {
     logBridge('Stoppar bridge...');
-    try { upstreamSocket.disconnect(); } catch {}
+    try { upstreamSocket.disconnect(); } catch (_e: unknown) { /* ignore */ }
     upstreamSocket = null;
   }
 }
 
-export function getBridgeStatus(): { active: boolean; connected: boolean; eventCounts: Record<string, number> } {
+export function getBridgeStatus(): BridgeStatus {
   return {
     active: bridgeActive,
     connected: upstreamSocket?.connected || false,
