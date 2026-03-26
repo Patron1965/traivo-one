@@ -33,20 +33,6 @@ router.get('/server-mode', (_req, res) => {
   });
 });
 
-function swedishHttpError(status: number, context: string): string {
-  switch (status) {
-    case 401: return 'Du är inte inloggad. Logga in igen.';
-    case 403: return 'Du har inte behörighet för denna åtgärd.';
-    case 404: return `${context} hittades inte.`;
-    case 408: return 'Servern svarade inte i tid. Försök igen.';
-    case 429: return 'För många förfrågningar. Vänta en stund och försök igen.';
-    case 500: return 'Ett internt serverfel uppstod. Försök igen senare.';
-    case 502: return 'Traivo-servern är tillfälligt otillgänglig. Försök igen.';
-    case 503: return 'Traivo-servern är otillgänglig just nu. Försök igen om en stund.';
-    default: return `Något gick fel (${status}). Försök igen.`;
-  }
-}
-
 async function traivoFetch(path: string, options: RequestInit = {}): Promise<{ status: number; data: any }> {
   const url = `${TRAIVO_API_URL}${path}`;
   const method = (options.method || 'GET').toUpperCase();
