@@ -39,6 +39,11 @@ describe("Mobile Orders API", () => {
     expect(order.customerNotified).toBe(false);
     expect(order.isTeamOrder).toBe(false);
     expect(order.executionStatus).toBeDefined();
+    expect(order).toHaveProperty("enRouteAt");
+    expect(order).toHaveProperty("actualStartTime");
+    expect(order).toHaveProperty("objectAccessCode");
+    expect(order).toHaveProperty("objectKeyNumber");
+    expect(order).toHaveProperty("plannedNotes");
   });
 
   it("GET /api/mobile/orders/:id — returns single order with Go field values", async () => {
