@@ -192,7 +192,7 @@ describe("API Endpoints", () => {
       });
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty("error");
-      expect(res.body.error).toBe("Invalid credentials");
+      expect(res.body.error).toBe("Ogiltiga inloggningsuppgifter");
     });
 
     it("POST /api/mobile/login med felaktig e-post och PIN returnerar 401", async () => {

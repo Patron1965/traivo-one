@@ -25,7 +25,7 @@ import { registerImportRoutes } from "./routes/importRoutes";
 import { registerConfigRoutes } from "./routes/configRoutes";
 import { registerClusterRoutes } from "./routes/clusterRoutes";
 import { registerAIRoutes } from "./routes/aiRoutes";
-import { registerMobileRoutes } from "./routes/mobileRoutes";
+import { registerMobileRoutes } from "./routes/mobile";
 import { registerPlannerRoutes } from "./routes/plannerRoutes";
 import { registerKPIRoutes } from "./routes/kpiRoutes";
 import { registerFortnoxRoutes } from "./routes/fortnoxRoutes";
