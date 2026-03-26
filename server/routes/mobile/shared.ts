@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../../tenant-middleware";
 import { asyncHandler } from "../../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../../errors";
 import { isAuthenticated } from "../../replit_integrations/auth";
-import { type ServiceObject, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions } from "@shared/schema";
+import { type ServiceObject, type WorkOrder, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../../notifications";
 import { triggerETANotification } from "../../eta-notification-service";
@@ -33,7 +33,7 @@ export function broadcastPlannerEvent(event: { type: string; data: any }) {
   });
 }
 
-export async function enrichOrderForMobile(order: any, storageRef: any) {
+export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof storage) {
   const object = order.objectId ? await storageRef.getObject(order.objectId) : null;
   const customer = order.customerId ? await storageRef.getCustomer(order.customerId) : null;
 
@@ -69,8 +69,8 @@ export async function enrichOrderForMobile(order: any, storageRef: any) {
     })
   );
 
-  const metadata: any = order.metadata || {};
-  const completedSubSteps: string[] = metadata.completedSubSteps || [];
+  const metadata = (order.metadata as Record<string, unknown>) || {};
+  const completedSubSteps: string[] = (metadata.completedSubSteps as string[]) || [];
 
   const structuralArticles = order.structuralArticleId
     ? await storageRef.getStructuralArticlesByParent(order.structuralArticleId).catch(() => [])
@@ -110,8 +110,8 @@ export async function enrichOrderForMobile(order: any, storageRef: any) {
     ))
     .limit(1) : [];
 
-  const inspections = metadata.inspections || [];
-  const plannedNotes = metadata.plannedNotes || null;
+  const inspections = (metadata.inspections as unknown[]) || [];
+  const plannedNotes = (metadata.plannedNotes as string) || null;
 
   return {
     id: order.id,
@@ -149,12 +149,12 @@ export async function enrichOrderForMobile(order: any, storageRef: any) {
     customerId: order.customerId,
     resourceId: order.resourceId,
     notes: order.notes,
-    enRouteAt: order.onWayAt?.toISOString?.() || (order as any).onWayAt || null,
+    enRouteAt: order.onWayAt instanceof Date ? order.onWayAt.toISOString() : (order.onWayAt as string | null) || null,
     customerNotified: etaCheck.length > 0,
     isTeamOrder: !!order.teamId,
     inspections,
     plannedNotes,
-    actualStartTime: order.onSiteAt?.toISOString?.() || (order as any).onSiteAt || null,
+    actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
     objectAccessCode: object?.accessCode || null,
     objectKeyNumber: object?.keyNumber || null,
   };

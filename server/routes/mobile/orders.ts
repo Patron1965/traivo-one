@@ -1,6 +1,6 @@
 import type { Express } from "express";
   import {
-    MobileAuthenticatedRequest, broadcastPlannerEvent,
+    MobileAuthenticatedRequest, broadcastPlannerEvent, enrichOrderForMobile,
     storage, db, eq, sql, desc, and, gte, isNull, inArray, z,
     formatZodError, isMobileAuthenticated,
     getTenantIdWithFallback, asyncHandler,
@@ -438,123 +438,6 @@ app.post("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler
 // ============================================
 // DRIVER CORE FIELD APP API - Extended Endpoints
 // ============================================
-
-async function enrichOrderForMobile(order: any, storage: any) {
-  const object = order.objectId ? await storage.getObject(order.objectId) : null;
-  const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
-
-  const [dependencies, lines, timeRestrictions] = await Promise.all([
-    storage.getTaskDependencies(order.id).catch(() => []),
-    storage.getWorkOrderLines(order.id).catch(() => []),
-    order.objectId ? storage.getObjectTimeRestrictions(order.objectId).catch(() => []) : Promise.resolve([]),
-  ]);
-
-  const depDetails = await Promise.all(
-    dependencies.map(async (dep: any) => {
-      const depOrder = await storage.getWorkOrder(dep.dependsOnWorkOrderId).catch(() => null);
-      return {
-        orderId: dep.dependsOnWorkOrderId,
-        orderNumber: depOrder?.title || dep.dependsOnWorkOrderId,
-        status: depOrder?.orderStatus || "unknown",
-        type: dep.dependencyType === "sequential" ? "must_complete_first" : dep.dependencyType,
-      };
-    })
-  );
-
-  const enrichedLines = await Promise.all(
-    lines.map(async (line: any) => {
-      const article = await storage.getArticle(line.articleId).catch(() => null);
-      return {
-        id: line.id,
-        articleId: line.articleId,
-        articleNumber: article?.articleNumber || "",
-        articleName: article?.name || "",
-        quantity: line.quantity,
-        completed: false,
-      };
-    })
-  );
-
-  const metadata: any = order.metadata || {};
-  const completedSubSteps: string[] = metadata.completedSubSteps || [];
-
-  const structuralArticles = order.structuralArticleId
-    ? await storage.getStructuralArticlesByParent(order.structuralArticleId).catch(() => [])
-    : [];
-  const subSteps = structuralArticles.map((sa: any, idx: number) => ({
-    id: sa.id,
-    label: sa.stepLabel || `Steg ${idx + 1}`,
-    completed: completedSubSteps.includes(sa.id),
-  }));
-
-  const noteParts = order.notes
-    ? order.notes.split("\n").filter((n: string) => n.trim()).map((n: string, idx: number) => ({
-        id: `n${idx + 1}`,
-        text: n.trim(),
-        createdAt: order.createdAt,
-        author: "System",
-      }))
-    : [];
-
-  const restrictions = timeRestrictions.length > 0
-    ? {
-        earliestPickup: timeRestrictions.find((r: any) => r.startTime)?.startTime || null,
-        latestPickup: timeRestrictions.find((r: any) => r.endTime)?.endTime || null,
-        earliestDelivery: null,
-        latestDelivery: null,
-      }
-    : null;
-
-  const executionCodes = order.executionCode
-    ? [{ id: order.executionCode, code: (order.executionCode as string).toUpperCase().substring(0, 4), name: order.executionCode }]
-    : [];
-
-  return {
-    id: order.id,
-    orderNumber: order.title || `WO-${order.id.substring(0, 8)}`,
-    status: order.orderStatus,
-    executionStatus: order.executionStatus || "not_started",
-    customerName: customer?.name || "",
-    address: object?.address || "",
-    city: object?.city || "",
-    postalCode: object?.postalCode || "",
-    latitude: object?.latitude || order.taskLatitude,
-    longitude: object?.longitude || order.taskLongitude,
-    contactName: customer?.contactPerson || customer?.name || "",
-    contactPhone: customer?.phone || "",
-    scheduledDate: order.scheduledDate,
-    scheduledTimeStart: order.scheduledStartTime || null,
-    scheduledTimeEnd: order.plannedWindowEnd || null,
-    description: order.description || "",
-    priority: order.priority || "normal",
-    estimatedDuration: order.estimatedDuration || 60,
-    wasteType: object?.objectType || "",
-    containerType: object?.name || "",
-    containerCount: object?.containerCount || 0,
-    what3words: order.what3words || "",
-    enRouteAt: order.onWayAt?.toISOString?.() || (order as any).onWayAt || null,
-    customerNotified: false,
-    isTeamOrder: !!order.teamId,
-    actualStartTime: order.onSiteAt?.toISOString?.() || (order as any).onSiteAt || null,
-    objectAccessCode: object?.accessCode || null,
-    objectKeyNumber: object?.keyNumber || null,
-    plannedNotes: order.plannedNotes || null,
-    inspections: metadata.inspections || [],
-    executionCodes,
-    dependencies: depDetails,
-    timeRestrictions: restrictions,
-    subSteps: subSteps.length > 0 ? subSteps : enrichedLines.map((l: any) => ({
-      id: l.id,
-      label: l.articleName || `Artikel ${l.articleNumber}`,
-      completed: completedSubSteps.includes(l.id),
-    })),
-    orderNotes: noteParts,
-    objectId: order.objectId,
-    customerId: order.customerId,
-    resourceId: order.resourceId,
-    notes: order.notes,
-  };
-}
 
 app.get("/api/mobile/orders", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
     const resourceId = req.mobileResourceId;
