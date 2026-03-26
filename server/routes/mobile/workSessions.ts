@@ -2,7 +2,7 @@ import type { Express } from "express";
   import {
     MobileAuthenticatedRequest,
     storage, db, eq, and, gte, sql, desc, z,
-    isMobileAuthenticated, isAuthenticated,
+    formatZodError, isMobileAuthenticated, isAuthenticated,
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError, ForbiddenError,
     workOrders, workEntries, workSessions,
