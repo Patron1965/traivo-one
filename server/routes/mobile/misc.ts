@@ -353,7 +353,7 @@ Svara ENBART med JSON-array av strängar, t.ex. ["Steg 1", "Steg 2"]. Skriv på 
         response_format: { type: "json_object" },
       });
 
-      const { trackOpenAIResponse } = await import("../api-usage-tracker");
+      const { trackOpenAIResponse } = await import("../../api-usage-tracker");
       trackOpenAIResponse(response);
 
       const content = response.choices[0]?.message?.content || "{}";
@@ -502,7 +502,7 @@ app.get("/api/mobile/customer-change-requests/mine", isMobileAuthenticated, asyn
 }));
 
 app.post("/api/mobile/customer-change-requests/upload-photo", isMobileAuthenticated, asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
-    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const { ObjectStorageService } = await import("../../replit_integrations/object_storage/objectStorage");
     const objectStorageService = new ObjectStorageService();
     const uploadURL = await objectStorageService.getObjectEntityUploadURL();
     const objectPath = objectStorageService.normalizeObjectEntityPath(uploadURL);
@@ -521,14 +521,14 @@ app.post("/api/mobile/customer-change-requests/confirm-photo", isMobileAuthentic
     }
 
     try {
-      const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+      const { ObjectStorageService } = await import("../../replit_integrations/object_storage/objectStorage");
       const oss = new ObjectStorageService();
       await oss.getObjectEntityFile(objectPath);
     } catch {
       throw new ValidationError("Filen hittades inte eller kunde inte verifieras");
     }
 
-    const { ObjectStorageService } = await import("../replit_integrations/object_storage/objectStorage");
+    const { ObjectStorageService } = await import("../../replit_integrations/object_storage/objectStorage");
     const oss = new ObjectStorageService();
     const downloadURL = await oss.getObjectEntityDownloadURL(objectPath);
     res.json({ confirmed: true, objectPath, downloadURL });
@@ -792,7 +792,7 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
 // DISTANCE API — REST endpoints for distance calculations
 // ============================================
 app.post("/api/distance", asyncHandler(async (req: Request, res: Response) => {
-    const { getRoutingDistance } = await import("../distance-matrix-service");
+    const { getRoutingDistance } = await import("../../distance-matrix-service");
     const { fromLat, fromLng, toLat, toLng, origin, destination } = req.body;
 
     const lat1 = fromLat ?? origin?.lat;
@@ -815,7 +815,7 @@ app.post("/api/distance", asyncHandler(async (req: Request, res: Response) => {
 }));
 
 app.post("/api/distance/batch", asyncHandler(async (req: Request, res: Response) => {
-    const { getBatchDistances } = await import("../distance-matrix-service");
+    const { getBatchDistances } = await import("../../distance-matrix-service");
     const { pairs } = req.body;
 
     if (!pairs || !Array.isArray(pairs)) {
@@ -1114,7 +1114,7 @@ app.post("/api/mobile/disruptions/trigger/delay", isMobileAuthenticated, asyncHa
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
 
-    const { triggerSignificantDelay } = await import("../disruption-service");
+    const { triggerSignificantDelay } = await import("../../disruption-service");
     const woId = String(parsed.data.orderId);
     const order = await storage.getWorkOrder(woId);
     const woTitle = order?.title || woId;
@@ -1140,7 +1140,7 @@ app.post("/api/mobile/disruptions/trigger/early-completion", isMobileAuthenticat
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
 
-    const { triggerEarlyCompletion } = await import("../disruption-service");
+    const { triggerEarlyCompletion } = await import("../../disruption-service");
     const event = await triggerEarlyCompletion(resource.tenantId, resourceId, resource.name, parsed.data.savedMinutes);
 
     res.json({ success: true, disruptionId: event?.id || null });
@@ -1158,7 +1158,7 @@ app.post("/api/mobile/disruptions/trigger/resource-unavailable", isMobileAuthent
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
 
-    const { triggerResourceUnavailable } = await import("../disruption-service");
+    const { triggerResourceUnavailable } = await import("../../disruption-service");
     const event = await triggerResourceUnavailable(resource.tenantId, resourceId, resource.name, parsed.data.reason);
 
     res.json({ success: true, disruptionId: event?.id || null });
@@ -1228,7 +1228,7 @@ app.get("/api/mobile/route-optimized", isMobileAuthenticated, asyncHandler(async
     }
 
     try {
-      const { getRoutingDistance } = await import("../distance-matrix-service");
+      const { getRoutingDistance } = await import("../../distance-matrix-service");
       let totalDistance = 0;
       for (let i = 0; i < withCoords.length - 1; i++) {
         const result = await getRoutingDistance(
@@ -1251,7 +1251,7 @@ app.post("/api/mobile/distance", isMobileAuthenticated, asyncHandler(async (req:
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
 
-    const { getRoutingDistance } = await import("../distance-matrix-service");
+    const { getRoutingDistance } = await import("../../distance-matrix-service");
     const result = await getRoutingDistance(parsed.data.from.lat, parsed.data.from.lng, parsed.data.to.lat, parsed.data.to.lng);
     res.json({ distance: result.distanceKm, duration: result.durationMin });
 }));
@@ -1263,7 +1263,7 @@ app.post("/api/mobile/distance/batch", isMobileAuthenticated, asyncHandler(async
     const parsed = schema.safeParse(req.body);
     if (!parsed.success) throw new ValidationError(formatZodError(parsed.error).error);
 
-    const { getRoutingDistance } = await import("../distance-matrix-service");
+    const { getRoutingDistance } = await import("../../distance-matrix-service");
     const legs = [];
     let totalDistance = 0, totalDuration = 0;
 

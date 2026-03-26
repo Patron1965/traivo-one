@@ -81,7 +81,7 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
     if (!message) throw new ValidationError("Meddelande krävs");
 
     const tenantId = req.tenantId || "default-tenant";
-    const { enforceBudgetAndRateLimit, withRetry } = await import("../ai-budget-service");
+    const { enforceBudgetAndRateLimit, withRetry } = await import("../../ai-budget-service");
     const enforcement = await enforceBudgetAndRateLimit(tenantId, "chat");
     if (!enforcement.allowed) {
       if (enforcement.errorType === "ratelimit") {
@@ -104,7 +104,7 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
       max_tokens: 500,
     }), { label: "mobile-chat" });
 
-    const { trackOpenAIResponse } = await import("../api-usage-tracker");
+    const { trackOpenAIResponse } = await import("../../api-usage-tracker");
     trackOpenAIResponse(completion, tenantId);
     res.json({ response: completion.choices[0]?.message?.content || "Inget svar" });
 }));
@@ -114,7 +114,7 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
     if (!audio) throw new ValidationError("Ljuddata krävs");
 
     const transcribeTenantId = req.tenantId || "default-tenant";
-    const { enforceBudgetAndRateLimit: transcribeEnforce, withRetry: transcribeRetry } = await import("../ai-budget-service");
+    const { enforceBudgetAndRateLimit: transcribeEnforce, withRetry: transcribeRetry } = await import("../../ai-budget-service");
     const transcribeCheck = await transcribeEnforce(transcribeTenantId, "chat");
     if (!transcribeCheck.allowed) {
       if (transcribeCheck.errorType === "ratelimit") {
@@ -134,7 +134,7 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
       language: "sv",
     }), { label: "mobile-transcribe" });
 
-    const { trackApiUsage } = await import("../api-usage-tracker");
+    const { trackApiUsage } = await import("../../api-usage-tracker");
     trackApiUsage({ tenantId: transcribeTenantId, service: "openai", method: "audio.transcriptions", endpoint: "/v1/audio/transcriptions", model: "whisper-1", inputTokens: 0, outputTokens: 0, totalTokens: 0 });
     res.json({ text: transcription.text });
 }));
@@ -144,7 +144,7 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
     if (!image) throw new ValidationError("Image data required");
 
     const imgTenantId = req.tenantId || "default-tenant";
-    const { enforceBudgetAndRateLimit: imgEnforce, withRetry: imgRetry } = await import("../ai-budget-service");
+    const { enforceBudgetAndRateLimit: imgEnforce, withRetry: imgRetry } = await import("../../ai-budget-service");
     const imgCheck = await imgEnforce(imgTenantId, "analysis");
     if (!imgCheck.allowed) {
       if (imgCheck.errorType === "ratelimit") {
@@ -172,7 +172,7 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
       max_tokens: 300,
     }), { label: "mobile-analyze-image" });
 
-    const { trackOpenAIResponse: trackImg } = await import("../api-usage-tracker");
+    const { trackOpenAIResponse: trackImg } = await import("../../api-usage-tracker");
     trackImg(completion, imgTenantId);
     const responseText = completion.choices[0]?.message?.content || "";
     try {
