@@ -782,9 +782,12 @@ async function refreshDemoWorkOrderDates() {
   }).where(sql`id = 'res-tomas'`);
 
   await db.update(resources).set({
-    currentLatitude: 59.2369, currentLongitude: 17.9812,
+    currentLatitude: 59.1950, currentLongitude: 17.6400,
     trackingStatus: "active", lastPositionUpdate: new Date(),
   }).where(sql`id = 'res-anna'`);
+
+  await db.update(objects).set({ latitude: 59.2045, longitude: 17.6150, address: "Järnagatan 4", city: "Södertälje", postalCode: "151 04", name: "Järnagatan 4 - Tvättstuga" }).where(sql`id = 'obj-7'`);
+  await db.update(objects).set({ latitude: 59.1912, longitude: 17.6380, address: "Turingegatan 10", city: "Södertälje", postalCode: "151 72", name: "Turingegatan 10 - Källare" }).where(sql`id = 'obj-8'`);
 
   const annaOrders = await db.select().from(workOrders).where(sql`id = 'wo-anna-1'`);
   if (annaOrders.length === 0) {
@@ -830,8 +833,8 @@ async function seedFieldAppDemoData(tomasResourceId: string) {
     { id: "obj-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", name: "Strandvägen 17 - Soprum", objectNumber: "OBJ-004", objectType: "rum", objectLevel: 3, address: "Strandvägen 17", city: "Södertälje", postalCode: "151 38", latitude: 59.1981, longitude: 17.6351, accessType: "code", accessCode: "4567", hierarchyLevel: "rum", avgSetupTime: 8 },
     { id: "obj-5", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", name: "Torekällbergets Skola", objectNumber: "OBJ-005", objectType: "fastighet", objectLevel: 2, address: "Torekällgatan 40", city: "Södertälje", postalCode: "151 72", latitude: 59.2012, longitude: 17.6287, accessType: "key", hierarchyLevel: "fastighet", avgSetupTime: 15 },
     { id: "obj-6", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", name: "Brunnsängsparken - Container", objectNumber: "OBJ-006", objectType: "karl", objectLevel: 4, address: "Brunnsängsvägen 8", city: "Södertälje", postalCode: "151 45", latitude: 59.1834, longitude: 17.6512, accessType: "open", hierarchyLevel: "karl", avgSetupTime: 5 },
-    { id: "obj-7", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Sturegatan 22 - Tvättstuga", objectNumber: "OBJ-007", objectType: "rum", objectLevel: 3, address: "Sturegatan 22", city: "Sundbyberg", postalCode: "172 31", latitude: 59.3614, longitude: 17.9724, accessType: "code", accessCode: "8901", hierarchyLevel: "rum", avgSetupTime: 10 },
-    { id: "obj-8", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Esplanaden 5 - Källare", objectNumber: "OBJ-008", objectType: "rum", objectLevel: 3, address: "Esplanaden 5", city: "Sundbyberg", postalCode: "172 67", latitude: 59.3589, longitude: 17.9681, accessType: "key", hierarchyLevel: "rum", avgSetupTime: 12 },
+    { id: "obj-7", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Järnagatan 4 - Tvättstuga", objectNumber: "OBJ-007", objectType: "rum", objectLevel: 3, address: "Järnagatan 4", city: "Södertälje", postalCode: "151 04", latitude: 59.2045, longitude: 17.6150, accessType: "code", accessCode: "8901", hierarchyLevel: "rum", avgSetupTime: 10 },
+    { id: "obj-8", tenantId: DEFAULT_TENANT_ID, customerId: "cust-fastighet", name: "Turingegatan 10 - Källare", objectNumber: "OBJ-008", objectType: "rum", objectLevel: 3, address: "Turingegatan 10", city: "Södertälje", postalCode: "151 72", latitude: 59.1912, longitude: 17.6380, accessType: "key", hierarchyLevel: "rum", avgSetupTime: 12 },
   ]);
 
   await db.insert(workOrders).values([
