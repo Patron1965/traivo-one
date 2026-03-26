@@ -4,16 +4,12 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import http from 'http';
-import { fileURLToPath } from 'url';
 import QRCode from 'qrcode';
 import { Server as SocketIOServer } from 'socket.io';
 import { mobileRoutes } from './routes/mobile';
 import { aiRoutes } from './routes/ai';
 import { plannerRoutes } from './routes/planner';
 import { startWebSocketBridge, stopWebSocketBridge, getBridgeStatus } from './websocketBridge';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 const server = http.createServer(app);
@@ -67,9 +63,7 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', service: 'traivo-go-api', wsBridge: bridge });
 });
 
-const projectRoot = fs.existsSync(path.resolve(__dirname, '..', 'app.json'))
-  ? path.resolve(__dirname, '..')
-  : process.cwd();
+const projectRoot = process.cwd();
 const metroDir = path.join(projectRoot, 'dist-metro');
 const templatesDir = path.join(projectRoot, 'server', 'templates');
 console.log(`[init] projectRoot=${projectRoot}, templatesDir=${templatesDir}, exists=${fs.existsSync(templatesDir)}`);
