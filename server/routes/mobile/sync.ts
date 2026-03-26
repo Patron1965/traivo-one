@@ -77,7 +77,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
               updateData.executionStatus = 'on_way';
               updateData.onWayAt = new Date();
               if (order.tenantId && order.resourceId) {
-                triggerETANotification(logEntry.entityId!, order.resourceId, order.tenantId).catch(() => {});
+                triggerETANotification(orderId, order.resourceId, order.tenantId).catch(() => {});
               }
             } else if (newStatus === 'planned') {
               updateData.executionStatus = 'planned_fine';
