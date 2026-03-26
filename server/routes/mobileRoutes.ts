@@ -16,7 +16,7 @@ import OpenAI from "openai";
 import { getArticleMetadataForObject, writeArticleMetadataOnObject } from "../metadata-queries";
 import { handleWorkOrderStatusChange } from "../ai-communication";
 
-interface MobileAuthenticatedRequest extends Request {
+export interface MobileAuthenticatedRequest extends Request {
   mobileResourceId: string;
   mobileTenantId?: string;
 }
