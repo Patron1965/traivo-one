@@ -61,7 +61,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Smart AI Resource Allocation:** AI-förslag button in JobModal suggests top 3 best-fit resources, competency warning banner, and "Auto-fördela idag" button for unplanned orders.
 - **Constraint Engine & Decision Trace:** Deterministic constraint validation layer for AI auto-schedule against hard and soft constraints, risk score calculation, and detailed `decisionTrace` logging for audit.
 - **Multi-Customer Billing (Flerkund-fakturering):** Extended `objectPayers` with `isPrimary` flag and `payerLabel` field, and billing customer selection in JobModal.
-- **Polyline/Polygon Support:** `polylineData` (GeoJSON) field on objects table for defining area boundaries, with PolylineEditor component and bulk find-objects-in-polygon endpoint.
+- **Polyline/Polygon Support:** `polylineData` (GeoJSON) field on objects table for defining area boundaries, with PolylineEditor component, bulk find-objects-in-polygon endpoint, and inline map draw control (polygon icon button next to zoom controls in ObjectsMapTab) with toolbar, object selector, labels, and real-time drawing.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

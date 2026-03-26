@@ -1251,6 +1251,7 @@ export default function ObjectsPage() {
             objectsWithCoords={objectsWithCoords}
             mapPositions={mapPositions}
             defaultCenter={defaultCenter}
+            selectedObjectIds={selectedIds}
           />
         </TabsContent>
       </Tabs>
