@@ -87,7 +87,7 @@ app.get("/api/mobile/orders/:id/checklist", isMobileAuthenticated, asyncHandler(
       articleTypes = ["tjanst"];
     }
 
-    const allTemplates: any[] = [];
+    const allTemplates: Record<string, unknown>[] = [];
     for (const at of articleTypes) {
       const templates = await storage.getChecklistTemplatesByArticleType(resource.tenantId, at);
       allTemplates.push(...templates);
@@ -603,7 +603,7 @@ app.post("/api/mobile/travel-times", isAuthenticated, asyncHandler(async (req: R
       throw new ValidationError("Ogiltiga koordinater");
     }
 
-    const validDestinations = destinations.filter((dest: any) =>
+    const validDestinations = destinations.filter((dest: Record<string, unknown>) =>
       dest && typeof dest.id === "string" &&
       typeof dest.lat === "number" && typeof dest.lng === "number" &&
       dest.lat >= -90 && dest.lat <= 90 && dest.lng >= -180 && dest.lng <= 180
@@ -703,7 +703,7 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
       let previousValue: string | null = null;
 
       if (fetchLabel && objectMetadata) {
-        const match = objectMetadata.find((m: any) =>
+        const match = objectMetadata.find((m: Record<string, unknown>) =>
           m.katalog?.beteckning === fetchLabel || m.katalog?.namn === fetchLabel
         );
         if (match) {
@@ -712,7 +712,7 @@ app.get("/api/mobile/tasks/:id/metadata-context", isMobileAuthenticated, asyncHa
       }
 
       if (updateLabel && article.showPreviousValue && objectMetadata) {
-        const match = objectMetadata.find((m: any) =>
+        const match = objectMetadata.find((m: Record<string, unknown>) =>
           m.katalog?.beteckning === updateLabel || m.katalog?.namn === updateLabel
         );
         if (match) {
@@ -758,8 +758,8 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
     let previousValue: string | null = null;
 
     if (objectMetadata) {
-      const match = objectMetadata.find((m: any) =>
-        m.katalog?.beteckning === metadataLabel || m.katalog?.namn === metadataLabel
+      const match = objectMetadata.find((m: Record<string, unknown>) =>
+        (m.katalog as Record<string, unknown>)?.beteckning === metadataLabel || (m.katalog as Record<string, unknown>)?.namn === metadataLabel
       );
       if (match) {
         previousValue = match.vardeString ?? (match.vardeInteger != null ? String(match.vardeInteger) : null) ?? null;
@@ -822,7 +822,7 @@ app.post("/api/distance/batch", asyncHandler(async (req: Request, res: Response)
       throw new ValidationError("pairs-array krävs");
     }
 
-    const batchPairs = pairs.map((p: any, i: number) => ({
+    const batchPairs = pairs.map((p: Record<string, unknown>, i: number) => ({
       id: p.id || String(i),
       fromLat: p.fromLat ?? p.origin?.lat,
       fromLng: p.fromLng ?? p.origin?.lng,
@@ -831,8 +831,8 @@ app.post("/api/distance/batch", asyncHandler(async (req: Request, res: Response)
     }));
 
     const resultMap = await getBatchDistances(batchPairs);
-    const resultsArray: any[] = [];
-    const resultsById: Record<string, any> = {};
+    const resultsArray: Record<string, unknown>[] = [];
+    const resultsById: Record<string, Record<string, unknown>> = {};
 
     for (const [id, r] of resultMap) {
       const entry = {
@@ -859,7 +859,7 @@ app.get("/api/mobile/map-config", isMobileAuthenticated, asyncHandler(async (req
     const resource = await storage.getResource(resourceId);
     const tenantId = resource?.tenantId || getTenantIdWithFallback(req);
     const tenant = await storage.getTenant(tenantId);
-    const settings = (tenant?.settings as any) || {};
+    const settings = (tenant?.settings as Record<string, unknown>) || {};
 
     res.json({
       center: {
@@ -896,14 +896,14 @@ app.get("/api/mobile/team-orders", isMobileAuthenticated, asyncHandler(async (re
             JOIN team_members tm ON tm.team_id = t.id
             WHERE tm.resource_id = ${resourceId} AND tm.status = 'active'`
       );
-      const teamIds = (teamRows.rows || []).map((r: any) => r.id);
+      const teamIds = (teamRows.rows || []).map((r: Record<string, unknown>) => r.id as string);
       if (teamIds.length === 0) return res.json({ orders: [], total: 0 });
 
       const memberRows = await db.execute(
         sql`SELECT DISTINCT resource_id FROM team_members
             WHERE team_id = ANY(${teamIds}::text[]) AND resource_id != ${resourceId} AND status = 'active'`
       );
-      const memberResourceIds = (memberRows.rows || []).map((r: any) => r.resource_id);
+      const memberResourceIds = (memberRows.rows || []).map((r: Record<string, unknown>) => r.resource_id as string);
       if (memberResourceIds.length === 0) return res.json({ orders: [], total: 0 });
 
       const tenantId = getTenantIdWithFallback(req);
@@ -939,7 +939,7 @@ app.post("/api/mobile/orders/:id/upload-photo", isMobileAuthenticated, asyncHand
     if (!photo) throw new ValidationError("Photo-data krävs");
 
     const metadata = (order.metadata as Record<string, unknown>) || {};
-    const photos = (metadata.photos as any[]) || [];
+    const photos = (metadata.photos as Record<string, unknown>[]) || [];
     const newPhoto = {
       id: `photo-${Date.now()}`,
       uri: photo,
@@ -962,8 +962,8 @@ app.post("/api/mobile/orders/:id/confirm-photo", isMobileAuthenticated, asyncHan
 
     const { photoId } = req.body;
     const metadata = (order.metadata as Record<string, unknown>) || {};
-    const photos = (metadata.photos as any[]) || [];
-    const photo = photos.find((p: any) => p.id === photoId);
+    const photos = (metadata.photos as Record<string, unknown>[]) || [];
+    const photo = photos.find((p: Record<string, unknown>) => p.id === photoId);
     if (photo) {
       photo.confirmed = true;
       photo.confirmedAt = new Date().toISOString();
@@ -1290,7 +1290,7 @@ app.get("/api/mobile/break-config", isMobileAuthenticated, asyncHandler(async (r
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
     const tenant = await storage.getTenant(resource.tenantId);
-    const settings = (tenant?.settings as Record<string, any>) || {};
+    const settings = (tenant?.settings as Record<string, unknown>) || {};
     const breakConfig = settings.breakConfig || {};
 
     res.json({
@@ -1328,7 +1328,7 @@ app.get("/api/mobile/eta-notification/config", isMobileAuthenticated, asyncHandl
     if (!resource) throw new NotFoundError("Resurs hittades inte");
 
     const tenant = await storage.getTenant(resource.tenantId);
-    const settings = (tenant?.settings as Record<string, any>) || {};
+    const settings = (tenant?.settings as Record<string, unknown>) || {};
     const etaConfig = settings.etaNotification || {};
 
     res.json({
@@ -1387,10 +1387,10 @@ app.post("/api/mobile/work-orders/:id/auto-eta-sms", isMobileAuthenticated, asyn
       const result = await triggerETANotification(orderId, resourceId, resource.tenantId);
       res.json({
         success: true,
-        etaMinutes: (result as any)?.etaMinutes || null,
+        etaMinutes: (result as Record<string, unknown>)?.etaMinutes || null,
         customerNotified: true,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
       res.json({
         success: false,
         etaMinutes: null,

@@ -8,6 +8,7 @@ import type { Express } from "express";
     notificationService, triggerETANotification, broadcastPlannerEvent,
     handleWorkOrderStatusChange,
   } from "./shared";
+  import type { WorkOrder } from "./shared";
   import type { Response } from "express";
   
   export function registerSyncRoutes(app: Express) {
@@ -44,7 +45,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
         status: "processing",
       });
 
-      const verifyOrder = async (orderId: string): Promise<{ order: any; error?: string }> => {
+      const verifyOrder = async (orderId: string): Promise<{ order: WorkOrder | null; error?: string }> => {
         if (!orderId) return { order: null, error: "orderId required" };
         const order = await storage.getWorkOrder(orderId);
         if (!order) return { order: null, error: "Order hittades inte" };
@@ -68,7 +69,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
               results.push({ clientId, status: "error", error });
               break;
             }
-            const updateData: Record<string, any> = {};
+            const updateData: Record<string, unknown> = {};
             if (newStatus === 'paborjad' || newStatus === 'in_progress') {
               updateData.orderStatus = 'planerad_resurs';
               updateData.executionStatus = 'on_site';
@@ -164,8 +165,8 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
                 category: category || "other",
                 reportedBy: resourceId,
                 reportedAt: new Date().toISOString(),
-              }] as any,
-            });
+              }],
+            } as Partial<WorkOrder>);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;
@@ -191,8 +192,8 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
                 comment: comment || "",
                 loggedBy: resourceId,
                 loggedAt: new Date().toISOString(),
-              }] as any,
-            });
+              }],
+            } as Partial<WorkOrder>);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;
@@ -231,7 +232,7 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
               break;
             }
             if (Array.isArray(inspections)) {
-              await Promise.all(inspections.map((insp: any) =>
+              await Promise.all(inspections.map((insp: Record<string, unknown>) =>
                 storage.createInspectionMetadata({
                   tenantId,
                   workOrderId: orderId,
@@ -305,15 +306,15 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
             }
             const meta = (order.metadata as Record<string, unknown>) || {};
             const existingPhotos = (meta.photos as Array<unknown>) || [];
-            const newPhotos = (Array.isArray(photos) ? photos : []).map((p: any) => ({
-              uri: p.uri,
-              caption: p.caption || '',
+            const newPhotos = (Array.isArray(photos) ? photos : []).map((p: Record<string, unknown>) => ({
+              uri: p.uri as string,
+              caption: (p.caption as string) || '',
               uploadedAt: new Date().toISOString(),
               uploadedBy: resourceId,
             }));
             await storage.updateWorkOrder(orderId, {
               metadata: { ...meta, photos: [...existingPhotos, ...newPhotos] },
-            } as any);
+            } as Partial<WorkOrder>);
             await storage.updateOfflineSyncLogStatus(logEntry.id, "completed");
             results.push({ clientId, status: "completed" });
             break;
@@ -323,9 +324,10 @@ app.post("/api/mobile/sync", isMobileAuthenticated, asyncHandler(async (req: Mob
             results.push({ clientId, status: "error", error: `Unknown actionType: ${actionType}` });
           }
         }
-      } catch (err: any) {
-        await storage.updateOfflineSyncLogStatus(logEntry.id, "error", err.message || "Processing failed");
-        results.push({ clientId, status: "error", error: err.message || "Processing failed" });
+      } catch (err: unknown) {
+        const errMsg = err instanceof Error ? err.message : "Processing failed";
+        await storage.updateOfflineSyncLogStatus(logEntry.id, "error", errMsg);
+        results.push({ clientId, status: "error", error: errMsg });
       }
     }
 

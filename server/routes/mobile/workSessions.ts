@@ -8,6 +8,7 @@ import type { Express } from "express";
     workOrders, workEntries, workSessions, customerChangeRequests,
     notificationService,
   } from "./shared";
+  import type { Resource } from "./shared";
   import type { Request, Response } from "express";
   
   export function registerWorkSessionRoutes(app: Express) {
@@ -98,7 +99,7 @@ app.post("/api/mobile/work-sessions/start", isMobileAuthenticated, asyncHandler(
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: session },
-    } as any);
+    } as Partial<Resource>);
 
     console.log(`[mobile] Work session started for resource ${resourceId}`);
     res.json(session);
@@ -146,7 +147,7 @@ const workSessionStopHandler = asyncHandler(async (req: MobileAuthenticatedReque
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as any);
+    } as Partial<Resource>);
 
     console.log(`[mobile] Work session stopped for resource ${resourceId}`);
     res.json(updatedSession);
@@ -181,7 +182,7 @@ const workSessionPauseHandler = asyncHandler(async (req: MobileAuthenticatedRequ
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as any);
+    } as Partial<Resource>);
 
     res.json(updatedSession);
 });
@@ -213,7 +214,7 @@ const workSessionResumeHandler = asyncHandler(async (req: MobileAuthenticatedReq
 
     await storage.updateResource(resourceId, {
       metadata: { ...existingMeta, activeWorkSession: updatedSession },
-    } as any);
+    } as Partial<Resource>);
 
     res.json(updatedSession);
 });

@@ -6,6 +6,7 @@ import type { Express } from "express";
     getTenantIdWithFallback, asyncHandler,
     NotFoundError, ValidationError,
   } from "./shared";
+  import type { Resource } from "./shared";
   import type { Response } from "express";
   
   export function registerAuthRoutes(app: Express) {
@@ -28,7 +29,7 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
     
     const tenantId = getTenantIdWithFallback(req);
     const resources = await storage.getResources(tenantId);
-    let resource: any = null;
+    let resource: Resource | undefined;
 
     if (pin && !email && !username) {
       resource = resources.find(r => r.pin === pin && r.status === 'active');
@@ -37,7 +38,7 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
         (r.email?.toLowerCase() === username.toLowerCase() || r.name?.toLowerCase() === username.toLowerCase()) && r.status === 'active'
       );
       if (resource && resource.pin && resource.pin !== password) {
-        resource = null;
+        resource = undefined;
       }
     } else if (email && pin) {
       resource = resources.find(r =>
@@ -45,7 +46,7 @@ app.post("/api/mobile/login", asyncHandler(async (req, res) => {
       );
       if (resource) {
         if (resource.pin) {
-          if (resource.pin !== pin) resource = null;
+          if (resource.pin !== pin) resource = undefined;
         } else {
           if (pin.length < 4 || pin.length > 6) {
             return res.status(401).json({ error: "PIN must be 4-6 digits" });

@@ -12,6 +12,7 @@ import type { Express } from "express";
     getArticleMetadataForObject, writeArticleMetadataOnObject,
     handleWorkOrderStatusChange,
   } from "./shared";
+  import type { WorkOrder } from "./shared";
   import type { Response } from "express";
   
   export function registerOrderRoutes(app: Express) {
@@ -53,7 +54,7 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
       const object = order.objectId ? await storage.getObject(order.objectId) : null;
       const customer = order.customerId ? await storage.getCustomer(order.customerId) : null;
       
-      const metadata: any = order.metadata || {};
+      const metadata = (order.metadata as Record<string, unknown>) || {};
       const executionCodes = order.executionCode
         ? [{ id: order.executionCode, code: (order.executionCode as string).toUpperCase().substring(0, 4), name: order.executionCode }]
         : [];
@@ -64,10 +65,10 @@ app.get("/api/mobile/my-orders", isMobileAuthenticated, asyncHandler(async (req:
         objectAddress: object?.address,
         customerName: customer?.name,
         customerPhone: customer?.phone,
-        enRouteAt: order.onWayAt?.toISOString?.() || (order as any).onWayAt || null,
+        enRouteAt: order.onWayAt instanceof Date ? order.onWayAt.toISOString() : (order.onWayAt as string | null) || null,
         customerNotified: false,
         isTeamOrder: !!order.teamId,
-        actualStartTime: order.onSiteAt?.toISOString?.() || (order as any).onSiteAt || null,
+        actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
         objectAccessCode: object?.accessCode || null,
         objectKeyNumber: object?.keyNumber || null,
         objectLatitude: object?.latitude || null,
@@ -132,8 +133,8 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       ))
       .limit(1) : [];
 
-    const orderMetadata: any = order.metadata || {};
-    const completedSubSteps: string[] = orderMetadata.completedSubSteps || [];
+    const orderMetadata = (order.metadata as Record<string, unknown>) || {};
+    const completedSubSteps: string[] = (orderMetadata.completedSubSteps as string[]) || [];
     const executionCodes = order.executionCode
       ? [{ id: order.executionCode, code: (order.executionCode as string).toUpperCase().substring(0, 4), name: order.executionCode }]
       : [];
@@ -144,21 +145,22 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
     ]);
 
     const depDetails = await Promise.all(
-      dependencies.map(async (dep: any) => {
-        const depOrder = await storage.getWorkOrder(dep.dependsOnWorkOrderId).catch(() => null);
+      dependencies.map(async (dep: Record<string, unknown>) => {
+        const depOrderId = dep.dependsOnWorkOrderId as string;
+        const depOrder = await storage.getWorkOrder(depOrderId).catch(() => null);
         return {
-          orderId: dep.dependsOnWorkOrderId,
-          orderNumber: depOrder?.title || dep.dependsOnWorkOrderId,
+          orderId: depOrderId,
+          orderNumber: depOrder?.title || depOrderId,
           status: depOrder?.orderStatus || "unknown",
-          type: dep.dependencyType === "sequential" ? "must_complete_first" : dep.dependencyType,
+          type: dep.dependencyType === "sequential" ? "must_complete_first" : dep.dependencyType as string,
         };
       })
     );
 
     const restrictions = timeRestrictions.length > 0
       ? {
-          earliestPickup: timeRestrictions.find((r: any) => r.startTime)?.startTime || null,
-          latestPickup: timeRestrictions.find((r: any) => r.endTime)?.endTime || null,
+          earliestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.startTime)?.startTime as string || null,
+          latestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.endTime)?.endTime as string || null,
           earliestDelivery: null,
           latestDelivery: null,
         }
@@ -167,7 +169,7 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
     const structuralArticles = order.structuralArticleId
       ? await storage.getStructuralArticlesByParent(order.structuralArticleId).catch(() => [])
       : [];
-    const subSteps = structuralArticles.map((sa: any, idx: number) => ({
+    const subSteps = structuralArticles.map((sa: Record<string, unknown>, idx: number) => ({
       id: sa.id,
       label: sa.stepLabel || `Steg ${idx + 1}`,
       completed: completedSubSteps.includes(sa.id),
@@ -192,10 +194,10 @@ app.get("/api/mobile/orders/:id", isMobileAuthenticated, asyncHandler(async (req
       customerName: customer?.name,
       customerPhone: customer?.phone,
       customerEmail: customer?.email,
-      enRouteAt: order.onWayAt?.toISOString?.() || (order as any).onWayAt || null,
+      enRouteAt: order.onWayAt instanceof Date ? order.onWayAt.toISOString() : (order.onWayAt as string | null) || null,
       customerNotified: etaCheck.length > 0,
       isTeamOrder: !!order.teamId,
-      actualStartTime: order.onSiteAt?.toISOString?.() || (order as any).onSiteAt || null,
+      actualStartTime: order.onSiteAt instanceof Date ? order.onSiteAt.toISOString() : (order.onSiteAt as string | null) || null,
       plannedNotes: order.plannedNotes || null,
       executionStatus: order.executionStatus || "not_started",
       subSteps,
@@ -224,7 +226,7 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
       throw new ForbiddenError("Ej behörig");
     }
     
-    const updateData: any = {};
+    const updateData: Record<string, unknown> = {};
     
     if (status === 'paborjad' || status === 'in_progress') {
       updateData.orderStatus = 'planerad_resurs';
@@ -306,9 +308,9 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
 
     const enriched = {
       ...updatedOrder,
-      enRouteAt: updatedOrder.onWayAt?.toISOString?.() || (updatedOrder as any).onWayAt || null,
+      enRouteAt: updatedOrder.onWayAt instanceof Date ? updatedOrder.onWayAt.toISOString() : (updatedOrder.onWayAt as string | null) || null,
       customerNotified: etaCheck.length > 0,
-      actualStartTime: updatedOrder.onSiteAt?.toISOString?.() || (updatedOrder as any).onSiteAt || null,
+      actualStartTime: updatedOrder.onSiteAt instanceof Date ? updatedOrder.onSiteAt.toISOString() : (updatedOrder.onSiteAt as string | null) || null,
       customerName: customer?.name || null,
       objectName: object?.name || null,
       objectAddress: object?.address || null,
@@ -395,7 +397,7 @@ app.post("/api/mobile/orders/:id/photos", isMobileAuthenticated, asyncHandler(as
         ...existingMetadata,
         photos: [...existingPhotos, ...newPhotos],
       },
-    } as any);
+    } as Partial<WorkOrder>);
 
     console.log(`[mobile] ${photos.length} photos uploaded for order ${orderId} by resource ${resourceId}`);
     res.json({ success: true, count: photos.length });
@@ -479,12 +481,13 @@ app.patch("/api/mobile/orders/:id/substeps/:stepId", isMobileAuthenticated, asyn
     if (!order) throw new NotFoundError("Order hittades inte");
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
-    const metadata: any = order.metadata || {};
+    const metadata = (order.metadata as Record<string, unknown>) || {};
     if (!metadata.completedSubSteps) metadata.completedSubSteps = [];
-    if (completed && !metadata.completedSubSteps.includes(stepId)) {
-      metadata.completedSubSteps.push(stepId);
+    const completedSubSteps = metadata.completedSubSteps as string[];
+    if (completed && !completedSubSteps.includes(stepId)) {
+      completedSubSteps.push(stepId);
     } else if (!completed) {
-      metadata.completedSubSteps = metadata.completedSubSteps.filter((s: string) => s !== stepId);
+      metadata.completedSubSteps = completedSubSteps.filter((s: string) => s !== stepId);
     }
 
     await storage.updateWorkOrder(orderId, { metadata });
@@ -712,7 +715,7 @@ app.post("/api/mobile/orders/:id/inspections", isMobileAuthenticated, asyncHandl
     if (order.resourceId !== resourceId) throw new ForbiddenError("Ej behörig");
 
     const results = await Promise.all(
-      inspections.map((insp: any) =>
+      inspections.map((insp: Record<string, unknown>) =>
         storage.createInspectionMetadata({
           tenantId: order.tenantId,
           workOrderId: orderId,

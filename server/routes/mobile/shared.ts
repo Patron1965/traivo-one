@@ -8,7 +8,7 @@ import { getTenantIdWithFallback } from "../../tenant-middleware";
 import { asyncHandler } from "../../asyncHandler";
 import { NotFoundError, ValidationError, ForbiddenError } from "../../errors";
 import { isAuthenticated } from "../../replit_integrations/auth";
-import { type ServiceObject, type WorkOrder, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions } from "@shared/schema";
+import { type ServiceObject, type WorkOrder, type Resource, routeFeedback as routeFeedbackTable, orderChecklistItems, workOrders, ORDER_STATUSES, customerChangeRequests, taskMetadataUpdates, etaNotifications as etaNotificationsTable, pushTokens, resources, teams, teamMembers, resourceProfileAssignments, workEntries, workSessions } from "@shared/schema";
 import { mapGoCategory, ONE_CATEGORIES, SEVERITY_LEVELS, GO_CATEGORY_MAP, AUTO_LINK_DEVIATION_TYPES } from "@shared/changeRequestCategories";
 import { notificationService } from "../../notifications";
 import { triggerETANotification } from "../../eta-notification-service";
@@ -21,13 +21,13 @@ export interface MobileAuthenticatedRequest extends Request {
   mobileTenantId?: string;
 }
 
-export function broadcastPlannerEvent(event: { type: string; data: any }) {
-  const clients: Map<string, any> = (global as any).__plannerEventClients || new Map();
+export function broadcastPlannerEvent(event: { type: string; data: Record<string, unknown> }) {
+  const clients: Map<string, Response> = (global as Record<string, unknown>).__plannerEventClients as Map<string, Response> || new Map();
   const msg = `data: ${JSON.stringify(event)}\n\n`;
   const eventTenantId = event.data?.tenantId;
-  clients.forEach((res: any, id: string) => {
+  clients.forEach((res: Response & { __tenantId?: string }, id: string) => {
     try {
-      if (eventTenantId && (res as any).__tenantId && (res as any).__tenantId !== eventTenantId) return;
+      if (eventTenantId && res.__tenantId && res.__tenantId !== eventTenantId) return;
       res.write(msg);
     } catch(e) { clients.delete(id); }
   });
@@ -44,7 +44,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
   ]);
 
   const depDetails = await Promise.all(
-    dependencies.map(async (dep: any) => {
+    dependencies.map(async (dep: Record<string, unknown>) => {
       const depOrder = await storageRef.getWorkOrder(dep.dependsOnWorkOrderId).catch(() => null);
       return {
         orderId: dep.dependsOnWorkOrderId,
@@ -56,7 +56,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
   );
 
   const enrichedLines = await Promise.all(
-    lines.map(async (line: any) => {
+    lines.map(async (line: Record<string, unknown>) => {
       const article = await storageRef.getArticle(line.articleId).catch(() => null);
       return {
         id: line.id,
@@ -75,7 +75,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
   const structuralArticles = order.structuralArticleId
     ? await storageRef.getStructuralArticlesByParent(order.structuralArticleId).catch(() => [])
     : [];
-  const subSteps = structuralArticles.map((sa: any, idx: number) => ({
+  const subSteps = structuralArticles.map((sa: Record<string, unknown>, idx: number) => ({
     id: sa.id,
     label: sa.stepLabel || `Steg ${idx + 1}`,
     completed: completedSubSteps.includes(sa.id),
@@ -92,8 +92,8 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
 
   const restrictions = timeRestrictions.length > 0
     ? {
-        earliestPickup: timeRestrictions.find((r: any) => r.startTime)?.startTime || null,
-        latestPickup: timeRestrictions.find((r: any) => r.endTime)?.endTime || null,
+        earliestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.startTime)?.startTime as string || null,
+        latestPickup: timeRestrictions.find((r: Record<string, unknown>) => r.endTime)?.endTime as string || null,
         earliestDelivery: null,
         latestDelivery: null,
       }
@@ -139,7 +139,7 @@ export async function enrichOrderForMobile(order: WorkOrder, storageRef: typeof 
     executionCodes,
     dependencies: depDetails,
     timeRestrictions: restrictions,
-    subSteps: subSteps.length > 0 ? subSteps : enrichedLines.map((l: any) => ({
+    subSteps: subSteps.length > 0 ? subSteps : enrichedLines.map((l: Record<string, unknown>) => ({
       id: l.id,
       label: l.articleName || `Artikel ${l.articleNumber}`,
       completed: completedSubSteps.includes(l.id),
@@ -187,7 +187,7 @@ export async function handleQuickAction(orderId: string, actionType: string) {
       ? `${order.notes}\n${noteText}`
       : noteText;
 
-    const updateData: any = { notes: updatedNotes };
+    const updateData: Record<string, unknown> = { notes: updatedNotes };
 
     if (actionType === "customer_absent") {
       updateData.status = "deferred";
@@ -260,4 +260,4 @@ export {
   handleWorkOrderStatusChange,
 };
 
-export type { ServiceObject, Request, Response };
+export type { ServiceObject, WorkOrder, Resource, Request, Response };
