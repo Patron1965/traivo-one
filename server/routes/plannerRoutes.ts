@@ -269,6 +269,7 @@ app.get("/api/planner/routes", isAuthenticated, asyncHandler(async (req, res) =>
       };
     }).filter(r => r.waypoints.length >= 2);
 
+    console.log(`[planner/routes] ${todayOrders.length} today orders, ${Object.keys(byResource).length} resources, ${routes.length} routes: ${routes.map(r => r.resourceName + '(' + r.waypoints.length + 'wp)').join(', ')}`);
     res.json(routes);
 }));
 
@@ -728,11 +729,17 @@ return '#3B82F6';
 
 function focusDriver(id,lat,lng) {
 selectedDriverId = selectedDriverId === id ? null : id;
-if(lat && lng && selectedDriverId) map.setView([lat,lng], 14);
 updateDriverPanel();
-var hasRoute = selectedDriverId && routesData.some(function(r){return r.resourceId===selectedDriverId});
-focusedRouteId = hasRoute ? selectedDriverId : null;
+var route = selectedDriverId ? routesData.find(function(r){return r.resourceId===selectedDriverId}) : null;
+focusedRouteId = route ? selectedDriverId : null;
 renderRoutes();
+if(route && route.waypoints.length) {
+  var bounds = L.latLngBounds(route.waypoints.map(function(w){return [w.lat,w.lng]}));
+  if(lat && lng) bounds.extend([lat,lng]);
+  map.fitBounds(bounds, {padding:[50,50]});
+} else if(lat && lng && selectedDriverId) {
+  map.setView([lat,lng], 14);
+}
 }
 
 function updateRoutePanel() {
