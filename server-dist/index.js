@@ -151,11 +151,37 @@ async function sendPushNotification(driverId, title, body, data) {
 var router = (0, import_express.Router)();
 var TRAIVO_API_URL = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL || "";
 var IS_MOCK_MODE = !TRAIVO_API_URL || process.env.TRAIVO_MOCK_MODE === "true" || process.env.KINAB_MOCK_MODE === "true";
+router.use((req, _res, next) => {
+  const mode = IS_MOCK_MODE ? "MOCK" : "LIVE";
+  console.log(`[${mode}] ${req.method} ${req.baseUrl}${req.path}`);
+  next();
+});
+router.use((_req, res, next) => {
+  if (IS_MOCK_MODE) {
+    res.setHeader("X-Traivo-Mock", "true");
+    const originalJson = res.json.bind(res);
+    res.json = function(body) {
+      if (body && typeof body === "object" && !Array.isArray(body)) {
+        body._mock = true;
+      }
+      return originalJson(body);
+    };
+  }
+  next();
+});
+router.get("/server-mode", (_req, res) => {
+  res.json({
+    mode: IS_MOCK_MODE ? "mock" : "live",
+    backendUrl: IS_MOCK_MODE ? null : TRAIVO_API_URL
+  });
+});
 async function traivoFetch(path2, options = {}) {
   const url = `${TRAIVO_API_URL}${path2}`;
+  const method = (options.method || "GET").toUpperCase();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5e3);
+  const timeout = setTimeout(() => controller.abort(), 8e3);
   try {
+    console.log(`  [PROXY] ${method} ${url}`);
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
@@ -166,16 +192,22 @@ async function traivoFetch(path2, options = {}) {
       }
     });
     clearTimeout(timeout);
+    console.log(`  [PROXY] ${method} ${path2} \u2192 ${response.status}`);
     const contentType = response.headers.get("content-type") || "";
     if (!contentType.includes("application/json")) {
-      console.error(`Traivo API returned non-JSON (${contentType}) for ${path2}`);
+      console.error(`  [PROXY] Traivo API svarade med ${contentType} ist\xE4llet f\xF6r JSON: ${path2}`);
       throw new Error("Traivo-servern svarade inte med JSON (kan vara nere)");
     }
     const data = await response.json().catch(() => ({}));
     return { status: response.status, data };
   } catch (error) {
     clearTimeout(timeout);
-    console.error(`Traivo API error (${path2}):`, error.message);
+    const isTimeout = error.name === "AbortError";
+    const reason = isTimeout ? "timeout (8s)" : error.message;
+    console.error(`  [PROXY] FEL ${method} ${path2}: ${reason}`);
+    if (isTimeout) {
+      throw new Error("Traivo-servern svarade inte i tid. F\xF6rs\xF6k igen.");
+    }
     throw new Error(`Kunde inte n\xE5 Traivo-servern: ${error.message}`);
   }
 }
@@ -771,18 +803,11 @@ router.post("/login", async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Login proxy error, falling back to mock login:", error.message);
-    const { username, password, pin, email } = req.body;
-    if (email && pin && (pin.length === 4 || pin.length === 6) || pin && (pin.length === 4 || pin.length === 6)) {
-      res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
-    } else if (username && password) {
-      res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
-    } else {
-      res.status(503).json({
-        success: false,
-        error: "Kunde inte n\xE5 inloggningsservern. F\xF6rs\xF6k igen om en stund."
-      });
-    }
+    console.error("[LIVE] Login proxy error:", error.message);
+    res.status(503).json({
+      success: false,
+      error: "Kunde inte n\xE5 inloggningsservern. F\xF6rs\xF6k igen om en stund."
+    });
   }
 });
 router.post("/logout", async (req, res) => {
@@ -3989,8 +4014,20 @@ var PORT = 5e3;
 server.listen(PORT, "0.0.0.0", () => {
   const traivoUrl = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL;
   const mockMode = !traivoUrl || process.env.TRAIVO_MOCK_MODE === "true" || process.env.KINAB_MOCK_MODE === "true";
-  console.log(`Nordnav Go API running on port ${PORT}`);
-  console.log(`Traivo backend: ${mockMode ? "MOCK MODE (no TRAIVO_API_URL set)" : `LIVE \u2192 ${traivoUrl}`}`);
+  console.log("");
+  console.log("=============================================");
+  console.log(`  TRAIVO GO SERVER \u2014 ${mockMode ? "MOCK-LAGE" : "LIVE-LAGE"}`);
+  console.log("=============================================");
+  console.log(`  Port: ${PORT}`);
+  if (mockMode) {
+    console.log("  Lage: MOCK (returnerar testdata)");
+    console.log("  Tips: Satt TRAIVO_API_URL for att ansluta till Traivo One");
+  } else {
+    console.log(`  Lage: LIVE`);
+    console.log(`  Backend: ${traivoUrl}`);
+  }
+  console.log("=============================================");
+  console.log("");
   const iosBundle = import_path.default.join(metroDir, "ios", "index.bundle");
   const androidBundle = import_path.default.join(metroDir, "android", "index.bundle");
   const hasIos = import_fs.default.existsSync(iosBundle);

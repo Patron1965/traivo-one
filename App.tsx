@@ -18,6 +18,7 @@ import { RootNavigator } from './client/navigation/RootNavigator';
 import { queryClient } from './client/lib/query-client';
 import { loadGlobalSettings } from './client/lib/settings';
 import { OfflineIndicator } from './client/components/OfflineIndicator';
+import { MockIndicator } from './client/components/MockIndicator';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -48,6 +49,7 @@ export default function App() {
             <QueryClientProvider client={queryClient}>
               <AuthProvider>
                 <NavigationContainer>
+                  <MockIndicator />
                   <OfflineIndicator />
                   <RootNavigator />
                   <StatusBar style="auto" />

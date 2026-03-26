@@ -337,8 +337,22 @@ const PORT = 5000;
 server.listen(PORT, '0.0.0.0', () => {
   const traivoUrl = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL;
   const mockMode = !traivoUrl || process.env.TRAIVO_MOCK_MODE === 'true' || process.env.KINAB_MOCK_MODE === 'true';
-  console.log(`Nordnav Go API running on port ${PORT}`);
-  console.log(`Traivo backend: ${mockMode ? 'MOCK MODE (no TRAIVO_API_URL set)' : `LIVE → ${traivoUrl}`}`);
+
+  console.log('');
+  console.log('=============================================');
+  console.log(`  TRAIVO GO SERVER — ${mockMode ? 'MOCK-LAGE' : 'LIVE-LAGE'}`);
+  console.log('=============================================');
+  console.log(`  Port: ${PORT}`);
+  if (mockMode) {
+    console.log('  Lage: MOCK (returnerar testdata)');
+    console.log('  Tips: Satt TRAIVO_API_URL for att ansluta till Traivo One');
+  } else {
+    console.log(`  Lage: LIVE`);
+    console.log(`  Backend: ${traivoUrl}`);
+  }
+  console.log('=============================================');
+  console.log('');
+
   const iosBundle = path.join(metroDir, 'ios', 'index.bundle');
   const androidBundle = path.join(metroDir, 'android', 'index.bundle');
   const hasIos = fs.existsSync(iosBundle);

@@ -6,11 +6,54 @@ const router = Router();
 const TRAIVO_API_URL = process.env.TRAIVO_API_URL || process.env.KINAB_API_URL || '';
 const IS_MOCK_MODE = !TRAIVO_API_URL || process.env.TRAIVO_MOCK_MODE === 'true' || process.env.KINAB_MOCK_MODE === 'true';
 
+router.use((req, _res, next) => {
+  const mode = IS_MOCK_MODE ? 'MOCK' : 'LIVE';
+  console.log(`[${mode}] ${req.method} ${req.baseUrl}${req.path}`);
+  next();
+});
+
+router.use((_req, res, next) => {
+  if (IS_MOCK_MODE) {
+    res.setHeader('X-Traivo-Mock', 'true');
+    const originalJson = res.json.bind(res);
+    res.json = function (body: any) {
+      if (body && typeof body === 'object' && !Array.isArray(body)) {
+        body._mock = true;
+      }
+      return originalJson(body);
+    };
+  }
+  next();
+});
+
+router.get('/server-mode', (_req, res) => {
+  res.json({
+    mode: IS_MOCK_MODE ? 'mock' : 'live',
+    backendUrl: IS_MOCK_MODE ? null : TRAIVO_API_URL,
+  });
+});
+
+function swedishHttpError(status: number, context: string): string {
+  switch (status) {
+    case 401: return 'Du är inte inloggad. Logga in igen.';
+    case 403: return 'Du har inte behörighet för denna åtgärd.';
+    case 404: return `${context} hittades inte.`;
+    case 408: return 'Servern svarade inte i tid. Försök igen.';
+    case 429: return 'För många förfrågningar. Vänta en stund och försök igen.';
+    case 500: return 'Ett internt serverfel uppstod. Försök igen senare.';
+    case 502: return 'Traivo-servern är tillfälligt otillgänglig. Försök igen.';
+    case 503: return 'Traivo-servern är otillgänglig just nu. Försök igen om en stund.';
+    default: return `Något gick fel (${status}). Försök igen.`;
+  }
+}
+
 async function traivoFetch(path: string, options: RequestInit = {}): Promise<{ status: number; data: any }> {
   const url = `${TRAIVO_API_URL}${path}`;
+  const method = (options.method || 'GET').toUpperCase();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+  const timeout = setTimeout(() => controller.abort(), 8000);
   try {
+    console.log(`  [PROXY] ${method} ${url}`);
     const response = await fetch(url, {
       ...options,
       signal: controller.signal,
@@ -21,16 +64,22 @@ async function traivoFetch(path: string, options: RequestInit = {}): Promise<{ s
       },
     });
     clearTimeout(timeout);
+    console.log(`  [PROXY] ${method} ${path} → ${response.status}`);
     const contentType = response.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
-      console.error(`Traivo API returned non-JSON (${contentType}) for ${path}`);
+      console.error(`  [PROXY] Traivo API svarade med ${contentType} istället för JSON: ${path}`);
       throw new Error('Traivo-servern svarade inte med JSON (kan vara nere)');
     }
     const data = await response.json().catch(() => ({}));
     return { status: response.status, data };
   } catch (error: any) {
     clearTimeout(timeout);
-    console.error(`Traivo API error (${path}):`, error.message);
+    const isTimeout = error.name === 'AbortError';
+    const reason = isTimeout ? 'timeout (8s)' : error.message;
+    console.error(`  [PROXY] FEL ${method} ${path}: ${reason}`);
+    if (isTimeout) {
+      throw new Error('Traivo-servern svarade inte i tid. Försök igen.');
+    }
     throw new Error(`Kunde inte nå Traivo-servern: ${error.message}`);
   }
 }
@@ -648,18 +697,11 @@ router.post('/login', async (req, res) => {
       });
     }
   } catch (error: any) {
-    console.error('Login proxy error, falling back to mock login:', error.message);
-    const { username, password, pin, email } = req.body;
-    if ((email && pin && (pin.length === 4 || pin.length === 6)) || (pin && (pin.length === 4 || pin.length === 6))) {
-      res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
-    } else if (username && password) {
-      res.json({ success: true, token: MOCK_TOKEN, resource: MOCK_RESOURCE });
-    } else {
-      res.status(503).json({
-        success: false,
-        error: 'Kunde inte nå inloggningsservern. Försök igen om en stund.',
-      });
-    }
+    console.error('[LIVE] Login proxy error:', error.message);
+    res.status(503).json({
+      success: false,
+      error: 'Kunde inte nå inloggningsservern. Försök igen om en stund.',
+    });
   }
 });
 

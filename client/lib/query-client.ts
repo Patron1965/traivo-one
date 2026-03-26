@@ -37,6 +37,20 @@ async function getStoredToken(): Promise<string | null> {
   return null;
 }
 
+function httpStatusMessage(status: number): string {
+  switch (status) {
+    case 401: return 'Du är inte inloggad. Logga in igen.';
+    case 403: return 'Du har inte behörighet för denna åtgärd.';
+    case 404: return 'Resursen hittades inte.';
+    case 408: return 'Servern svarade inte i tid. Försök igen.';
+    case 429: return 'För många förfrågningar. Vänta en stund.';
+    case 500: return 'Serverfel. Försök igen senare.';
+    case 502: return 'Servern är tillfälligt otillgänglig.';
+    case 503: return 'Servern är otillgänglig. Försök igen om en stund.';
+    default: return `Något gick fel (${status}). Försök igen.`;
+  }
+}
+
 export async function apiRequest(
   method: string,
   path: string,
@@ -52,14 +66,26 @@ export async function apiRequest(
     headers['Authorization'] = `Bearer ${authToken}`;
   }
   AsyncStorage.setItem('@last_activity_timestamp', String(Date.now())).catch(() => {});
-  const res = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (networkErr: any) {
+    throw new Error('Nätverksfel — kontrollera din internetanslutning och försök igen.');
+  }
   if (!res.ok) {
-    const errText = await res.text().catch(() => 'Unknown error');
-    throw new Error(`${res.status}: ${errText}`);
+    let errBody: any;
+    try {
+      errBody = await res.json();
+    } catch {
+      const errText = await res.text().catch(() => '');
+      errBody = { error: errText };
+    }
+    const message = errBody?.error || errBody?.message || httpStatusMessage(res.status);
+    throw new Error(message);
   }
   return res.json();
 }
@@ -72,10 +98,21 @@ async function defaultQueryFn({ queryKey }: { queryKey: readonly unknown[] }) {
   if (authToken) {
     headers['Authorization'] = `Bearer ${authToken}`;
   }
-  const res = await fetch(url, { headers });
+  let res: Response;
+  try {
+    res = await fetch(url, { headers });
+  } catch {
+    throw new Error('Nätverksfel — kontrollera din internetanslutning och försök igen.');
+  }
   if (!res.ok) {
-    const errText = await res.text().catch(() => 'Unknown error');
-    throw new Error(`${res.status}: ${errText}`);
+    let errBody: any;
+    try {
+      errBody = await res.json();
+    } catch {
+      errBody = {};
+    }
+    const message = errBody?.error || errBody?.message || httpStatusMessage(res.status);
+    throw new Error(message);
   }
   return res.json();
 }
