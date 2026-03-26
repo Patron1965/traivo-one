@@ -131,6 +131,8 @@ async function sendPositionGlobal(position: GpsPosition, retries = MAX_SEND_RETR
       speed: position.speed,
       heading: position.heading,
       accuracy: position.accuracy,
+      trackingStatus: globalState.trackingStatus || 'active',
+      lastPositionUpdate: new Date().toISOString(),
     });
   } catch (err) {
     console.error('[GPS] Failed to send position:', err);

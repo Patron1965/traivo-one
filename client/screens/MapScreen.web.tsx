@@ -10,9 +10,9 @@ import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
 import type { Order } from '../types';
 
 function getMarkerColor(order: Order): string {
-  if (order.status === 'completed') return Colors.success;
-  if (order.status === 'in_progress' || order.status === 'on_site') return Colors.secondary;
-  if (order.status === 'dispatched') return Colors.warning;
+  if (order.status === 'completed' || order.status === 'utford' || order.status === 'avslutad') return Colors.success;
+  if (order.status === 'in_progress' || order.status === 'on_site' || order.status === 'paborjad') return Colors.secondary;
+  if (order.status === 'dispatched' || order.status === 'en_route') return Colors.warning;
   if (order.status === 'failed') return Colors.danger;
   if (order.priority === 'urgent') return Colors.danger;
   return Colors.primary;

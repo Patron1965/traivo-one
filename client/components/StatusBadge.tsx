@@ -4,16 +4,21 @@ import { OrderStatus, ORDER_STATUS_LABELS } from '../types';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string }> = {
+  ny: { bg: '#F2F3F4', text: Colors.statusNy },
   skapad: { bg: '#F2F3F4', text: Colors.statusSkapad },
+  planerad: { bg: '#F4ECF7', text: Colors.statusPlanerad },
   planerad_pre: { bg: '#F4ECF7', text: Colors.statusPlaneradPre },
   planerad_resurs: { bg: Colors.infoLight, text: Colors.statusPlaneradResurs },
   planerad_las: { bg: '#FDEBD0', text: Colors.statusPlaneradLas },
+  paborjad: { bg: Colors.infoLight, text: Colors.statusPaborjad },
   utford: { bg: Colors.successLight, text: Colors.statusUtford },
+  avslutad: { bg: Colors.successLight, text: Colors.statusAvslutad },
   fakturerad: { bg: '#E8F8F5', text: Colors.statusFakturerad },
   impossible: { bg: Colors.dangerLight, text: Colors.statusImpossible },
 
   planned: { bg: '#F4ECF7', text: Colors.statusPlanned },
   dispatched: { bg: Colors.infoLight, text: Colors.statusDispatched },
+  en_route: { bg: '#FFF3E0', text: Colors.statusEnRoute },
   on_site: { bg: '#FDEBD0', text: Colors.statusOnSite },
   in_progress: { bg: Colors.successLight, text: Colors.statusInProgress },
   completed: { bg: Colors.successLight, text: Colors.statusCompleted },

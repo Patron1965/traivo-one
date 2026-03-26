@@ -7,7 +7,8 @@ Traivo Go is a native mobile application built with React Native/Expo, designed 
 - **Language:** Swedish (sv) for all UI
 - **Design:** Clean Nordic minimalism with Inter font
 - **Colors:** Primary #1B4B6B (Deep Ocean Blue), Secondary #4A9B9B (Northern Teal), Accent #7DBFB0 (Aurora Green), Background #E8F4F8 (Arctic Ice), Text #2C3E50 (Midnight Navy), Muted #6B7C8C (Mountain Gray)
-- **Brand:** Traivo Go with Traivo logo, Traivo backend integration
+- **Brand:** Traivo Go with Traivo logo, Traivo One backend integration
+- **Demo Area:** Södertälje (2 resources, 12 orders)
 
 ## System Architecture
 The application is built using React Native with Expo SDK 54 and TypeScript for the frontend, and an Express.js backend. Navigation is handled by React Navigation 7, and state management is powered by `@tanstack/react-query`. The system supports both PIN-based and username/password authentication.

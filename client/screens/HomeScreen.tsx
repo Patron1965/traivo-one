@@ -67,7 +67,7 @@ function computeBreakSuggestion(orders: Order[] | undefined): BreakSuggestion | 
   if (hoursWorked < 4) return null;
 
   const remaining = orders.filter(
-    o => o.status !== 'completed' && o.status !== 'cancelled' && o.status !== 'failed'
+    o => o.status !== 'completed' && o.status !== 'utford' && o.status !== 'avslutad' && o.status !== 'cancelled' && o.status !== 'failed'
   );
 
   let nextJobTime: string | null = null;
@@ -106,8 +106,15 @@ function computeBreakSuggestion(orders: Order[] | undefined): BreakSuggestion | 
 
 function getStatusBorderColor(status: OrderStatus): string {
   switch (status) {
+    case 'ny': return Colors.statusNy;
+    case 'planerad': return Colors.statusPlanerad;
+    case 'planerad_resurs': return Colors.statusPlaneradResurs;
+    case 'paborjad': return Colors.statusPaborjad;
+    case 'utford': return Colors.statusUtford;
+    case 'avslutad': return Colors.statusAvslutad;
     case 'planned': return Colors.statusPlanned;
     case 'dispatched': return Colors.statusDispatched;
+    case 'en_route': return Colors.statusEnRoute;
     case 'on_site': return Colors.statusOnSite;
     case 'in_progress': return Colors.statusInProgress;
     case 'completed': return Colors.statusCompleted;
@@ -191,7 +198,7 @@ export function HomeScreen({ navigation }: any) {
     setRefreshing(false);
   }, [refetchOrders, refetchSummary]);
 
-  const activeOrders = orders?.filter(o => o.status !== 'completed' && o.status !== 'cancelled') || [];
+  const activeOrders = orders?.filter(o => o.status !== 'completed' && o.status !== 'utford' && o.status !== 'avslutad' && o.status !== 'cancelled') || [];
   const nextOrder = useMemo(() => activeOrders.find(o => !o.isLocked) || activeOrders[0], [activeOrders]);
 
   const { data: nextOrderDistance } = useQuery({
@@ -205,7 +212,7 @@ export function HomeScreen({ navigation }: any) {
     refetchInterval: 5 * 60 * 1000,
   });
 
-  const completedCount = orders?.filter(o => o.status === 'completed').length || 0;
+  const completedCount = orders?.filter(o => o.status === 'completed' || o.status === 'utford' || o.status === 'avslutad').length || 0;
   const totalCount = orders?.length || 0;
   const progress = totalCount > 0 ? completedCount / totalCount : 0;
   const lockedCount = orders?.filter(o => o.isLocked).length || 0;
@@ -223,7 +230,7 @@ export function HomeScreen({ navigation }: any) {
     return orders.filter(o => {
       if (!o.scheduledDate) return false;
       const scheduled = typeof o.scheduledDate === 'string' ? o.scheduledDate.split('T')[0] : '';
-      return scheduled < today && !['completed', 'utford', 'fakturerad', 'cancelled', 'impossible'].includes(o.status);
+      return scheduled < today && !['completed', 'utford', 'avslutad', 'fakturerad', 'cancelled', 'impossible'].includes(o.status);
     });
   }, [orders]);
 
@@ -256,7 +263,7 @@ export function HomeScreen({ navigation }: any) {
     if (!orders || orders.length === 0) return null;
     const now = Date.now();
     for (const o of orders) {
-      if (o.status === 'completed' || o.status === 'cancelled') continue;
+      if (o.status === 'completed' || o.status === 'utford' || o.status === 'avslutad' || o.status === 'cancelled') continue;
       const timeStr = o.scheduledTimeStart || o.scheduledStartTime;
       if (!timeStr) continue;
       const dateStr = o.scheduledDate ? o.scheduledDate.split('T')[0] : new Date().toISOString().split('T')[0];

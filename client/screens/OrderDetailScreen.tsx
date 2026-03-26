@@ -67,6 +67,7 @@ const TRAIVO_STATUS_SEQUENCE: OrderStatus[] = ORDER_STATUS_SEQUENCE;
 const DRIVER_STATUS_SEQUENCE: OrderStatus[] = [
   'planned',
   'dispatched',
+  'en_route',
   'on_site',
   'in_progress',
   'completed',
@@ -341,7 +342,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
       queryClient.invalidateQueries({ queryKey: [`/api/mobile/orders/${orderId}/time-entries`] });
       queryClient.invalidateQueries({ queryKey: ['/api/mobile/time-summary'] });
       triggerNotification(NotificationFeedbackType.Success);
-      const finishStatuses: OrderStatus[] = ['completed', 'utford', 'fakturerad', 'impossible'];
+      const finishStatuses: OrderStatus[] = ['completed', 'utford', 'avslutad', 'fakturerad', 'impossible'];
       if (finishStatuses.includes(variables.status)) {
         navigation.navigate('MainTabs', { screen: 'OrdersTab' });
       }
@@ -383,12 +384,16 @@ export function OrderDetailScreen({ route, navigation }: any) {
 
   function getNextStatusLabel(status: OrderStatus): string {
     const labels: Record<string, string> = {
+      ny: 'Starta',
       skapad: 'Förplanera',
+      planerad: 'Tilldela',
       planerad_pre: 'Tilldela resurs',
-      planerad_resurs: 'Lasta in',
-      planerad_las: 'Slutför',
+      planerad_resurs: 'Starta',
+      planerad_las: 'Starta',
+      paborjad: 'Slutför',
       planned: 'Starta körning',
-      dispatched: 'På plats',
+      dispatched: 'På väg',
+      en_route: 'På plats',
       on_site: 'Utför',
       in_progress: 'Slutför',
     };
@@ -398,21 +403,27 @@ export function OrderDetailScreen({ route, navigation }: any) {
   function getNextStatusSubLabel(status: OrderStatus): string | null {
     const subLabels: Record<string, string> = {
       planned: 'Navigera till uppdraget',
-      dispatched: 'Tidsregistrering börjar när du anländer',
+      dispatched: 'Påbörja körning till kund',
+      en_route: 'Tidsregistrering börjar när du anländer',
       on_site: 'Gör jobbet, logga material och anteckningar',
       in_progress: 'Markera uppdraget som klart',
+      paborjad: 'Slutför och markera som utförd',
     };
     return subLabels[status] || null;
   }
 
   function getNextStatusIcon(status: OrderStatus): string {
     const icons: Record<string, string> = {
+      ny: 'play',
       skapad: 'clipboard',
+      planerad: 'user-check',
       planerad_pre: 'user-check',
       planerad_resurs: 'truck',
-      planerad_las: 'check-circle',
+      planerad_las: 'truck',
+      paborjad: 'check-circle',
       planned: 'navigation',
-      dispatched: 'map-pin',
+      dispatched: 'truck',
+      en_route: 'map-pin',
       on_site: 'play',
       in_progress: 'check-circle',
     };
@@ -440,7 +451,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
     if (!order) return;
     const next = getNextStatus(order.status);
     if (!next) return;
-    if (next === 'utford' || next === 'fakturerad' || next === 'completed') {
+    if (next === 'utford' || next === 'avslutad' || next === 'fakturerad' || next === 'completed') {
       setConfirmAction('complete');
     } else {
       statusMutation.mutate({ status: next });
@@ -562,7 +573,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
 
   const nextStatus = getNextStatus(order.status);
   const isFinished = order.status === 'completed' || order.status === 'cancelled' || order.status === 'failed'
-    || order.status === 'utford' || order.status === 'fakturerad' || order.status === 'impossible';
+    || order.status === 'utford' || order.status === 'avslutad' || order.status === 'fakturerad' || order.status === 'impossible';
   const activeRestrictions = order.timeRestrictions?.filter(r => r.isActive) || [];
   const subSteps = order.subSteps || [];
   const completedSteps = subSteps.filter(s => s.completed).length;
@@ -831,7 +842,7 @@ export function OrderDetailScreen({ route, navigation }: any) {
         <ActionButtons
           orderId={order.id}
           articles={order.articles}
-          showCustomerSignOff={order.status === 'in_progress' || order.status === 'completed'}
+          showCustomerSignOff={order.status === 'in_progress' || order.status === 'paborjad' || order.status === 'completed' || order.status === 'utford'}
           onDeviation={handleNavigateDeviation}
           onMaterial={handleNavigateMaterial}
           onInspection={handleNavigateInspection}

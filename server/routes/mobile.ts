@@ -49,8 +49,8 @@ const MOCK_RESOURCE = {
   phone: '070-111 22 33',
   email: 'erik.lindqvist@traivo.se',
   vehicleRegNo: 'ABC 123',
-  homeLatitude: 57.7089,
-  homeLongitude: 11.9746,
+  homeLatitude: 59.1950,
+  homeLongitude: 17.6260,
   competencies: ['ADR', 'YKB', 'C-körkort'],
   executionCodes: ['TÖM', 'HÄMT', 'FARL'],
 };
@@ -96,8 +96,8 @@ const MOCK_PROFILES = [
 
 const MOCK_TEAM: any = {
   id: 'team-1',
-  name: 'Team Göteborg Väst',
-  description: 'Kranbilsteam för västra Göteborg',
+  name: 'Team Södertälje',
+  description: 'Kranbilsteam för Södertälje',
   color: '#4A9B9B',
   leaderId: MOCK_RESOURCE.id,
   clusterId: 'cluster-gw',
@@ -114,8 +114,8 @@ const MOCK_TEAM: any = {
       phone: MOCK_RESOURCE.phone,
       email: MOCK_RESOURCE.email,
       isOnline: true,
-      latitude: 57.7089,
-      longitude: 11.9746,
+      latitude: 59.1950,
+      longitude: 17.6260,
     },
     {
       id: 'tm-2',
@@ -125,8 +125,8 @@ const MOCK_TEAM: any = {
       phone: '070-222 33 44',
       email: 'anna.johansson@traivo.se',
       isOnline: true,
-      latitude: 57.7055,
-      longitude: 11.9690,
+      latitude: 59.1900,
+      longitude: 17.6350,
     },
   ],
 };
@@ -145,7 +145,7 @@ const MOCK_MAX_LOGS = 500;
 
 const MOCK_NOTIFICATIONS_LEGACY: any[] = [
   { id: 'n1', type: 'schedule_change', title: 'Ruttändring', message: 'Order WO-2026-0453 har flyttats till kl 10:00', isRead: false, createdAt: new Date(Date.now() - 3600000).toISOString(), orderId: '3' },
-  { id: 'n2', type: 'urgent', title: 'Brådskande uppdrag', message: 'Nytt hämtuppdrag tillagt: Göteborgs Hamn AB', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString(), orderId: '5' },
+  { id: 'n2', type: 'urgent', title: 'Brådskande uppdrag', message: 'Nytt hämtuppdrag tillagt: Södertälje Hamn AB', isRead: false, createdAt: new Date(Date.now() - 7200000).toISOString(), orderId: '5' },
   { id: 'n3', type: 'info', title: 'Systeminformation', message: 'Ny version av appen tillgänglig', isRead: true, createdAt: new Date(Date.now() - 86400000).toISOString() },
 ];
 
@@ -157,13 +157,13 @@ const MOCK_ORDERS: any[] = [
   {
     id: 1,
     orderNumber: 'WO-2026-0451',
-    status: 'planned',
-    customerName: 'BRF Solsidan',
-    address: 'Storgatan 12',
-    city: 'Göteborg',
-    postalCode: '411 01',
-    latitude: 57.7089,
-    longitude: 11.9746,
+    status: 'planerad_resurs',
+    customerName: 'BRF Sjöutsikten',
+    address: 'Storgatan 15',
+    city: 'Södertälje',
+    postalCode: '151 72',
+    latitude: 59.1955,
+    longitude: 17.6253,
     what3words: 'fest.lampa.skog',
     scheduledDate: new Date().toISOString().split('T')[0],
     scheduledTimeStart: '08:00',
@@ -173,17 +173,17 @@ const MOCK_ORDERS: any[] = [
     objectType: 'Kärl',
     objectId: 501,
     clusterId: 10,
-    clusterName: 'Centrum Norr',
+    clusterName: 'Södertälje Centrum',
     priority: 'normal',
     executionStatus: 'not_started',
-    object: { id: 501, name: 'Sopstation Storgatan 12', address: 'Storgatan 12', latitude: 57.7089, longitude: 11.9746, what3words: 'fest.lampa.skog' },
-    customer: { id: 201, name: 'BRF Solsidan', customerNumber: 'KN-2201' },
+    object: { id: 501, name: 'Sopstation Storgatan 15', address: 'Storgatan 15', latitude: 59.1955, longitude: 17.6253, what3words: 'fest.lampa.skog' },
+    customer: { id: 201, name: 'BRF Sjöutsikten', customerNumber: 'KN-2201' },
     articles: [
       { id: 1, name: 'Hushållsavfall 370L', articleNumber: 'ART-001', unit: 'st', quantity: 4, category: 'Avfall', isSeasonal: false },
       { id: 2, name: 'Matavfall 140L', articleNumber: 'ART-002', unit: 'st', quantity: 2, category: 'Avfall', isSeasonal: false },
     ],
     contacts: [
-      { id: 1, name: 'Anna Karlsson', phone: '070-123 45 67', email: 'anna@brfsolsidan.se', role: 'Fastighetsskötare' },
+      { id: 1, name: 'Anna Karlsson', phone: '070-123 45 67', email: 'anna@brfsjoutsikten.se', role: 'Fastighetsskötare' },
     ],
     estimatedDuration: 15,
     photos: [],
@@ -208,8 +208,8 @@ const MOCK_ORDERS: any[] = [
     resourceId: 101,
     tenantId: 'traivo-demo',
     plannedNotes: 'Porten har ny kod sedan 15 mars. Ring kunden om den inte fungerar.',
-    taskLatitude: 57.7089,
-    taskLongitude: 11.9746,
+    taskLatitude: 59.1955,
+    taskLongitude: 17.6253,
     objectAccessCode: '1234',
     objectKeyNumber: null,
     metadata: { fieldNotes: [], materialNeeds: [] },
@@ -217,13 +217,13 @@ const MOCK_ORDERS: any[] = [
   {
     id: 2,
     orderNumber: 'WO-2026-0452',
-    status: 'planned',
-    customerName: 'Fastighets AB Norden',
-    address: 'Vasagatan 28',
-    city: 'Göteborg',
-    postalCode: '411 37',
-    latitude: 57.7045,
-    longitude: 11.9664,
+    status: 'planerad_resurs',
+    customerName: 'Telge Bostäder AB',
+    address: 'Nyköpingsvägen 42',
+    city: 'Södertälje',
+    postalCode: '151 73',
+    latitude: 59.1872,
+    longitude: 17.6318,
     scheduledDate: new Date().toISOString().split('T')[0],
     scheduledTimeStart: '09:15',
     scheduledTimeEnd: '09:45',
@@ -232,11 +232,11 @@ const MOCK_ORDERS: any[] = [
     objectType: 'Kärl',
     objectId: 502,
     clusterId: 10,
-    clusterName: 'Centrum Norr',
+    clusterName: 'Södertälje Centrum',
     priority: 'normal',
     executionStatus: 'not_started',
-    object: { id: 502, name: 'Soprum Vasagatan', address: 'Vasagatan 28', latitude: 57.7045, longitude: 11.9664 },
-    customer: { id: 202, name: 'Fastighets AB Norden', customerNumber: 'KN-2202' },
+    object: { id: 502, name: 'Soprum Nyköpingsvägen', address: 'Nyköpingsvägen 42', latitude: 59.1872, longitude: 17.6318 },
+    customer: { id: 202, name: 'Telge Bostäder AB', customerNumber: 'KN-2202' },
     articles: [
       { id: 3, name: 'Restavfall 660L', articleNumber: 'ART-003', unit: 'st', quantity: 2, category: 'Avfall', isSeasonal: false },
       { id: 4, name: 'Kartong 660L', articleNumber: 'ART-004', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
@@ -263,8 +263,8 @@ const MOCK_ORDERS: any[] = [
     resourceId: 101,
     tenantId: 'traivo-demo',
     plannedNotes: null,
-    taskLatitude: 57.7045,
-    taskLongitude: 11.9664,
+    taskLatitude: 59.1872,
+    taskLongitude: 17.6318,
     objectAccessCode: null,
     objectKeyNumber: 'N-42',
     metadata: { fieldNotes: [], materialNeeds: [] },
@@ -272,13 +272,13 @@ const MOCK_ORDERS: any[] = [
   {
     id: 3,
     orderNumber: 'WO-2026-0453',
-    status: 'planned',
-    customerName: 'Chalmers Tekniska Högskola',
-    address: 'Chalmersängen 4',
-    city: 'Göteborg',
-    postalCode: '412 96',
-    latitude: 57.6896,
-    longitude: 11.9770,
+    status: 'planerad_resurs',
+    customerName: 'AstraZeneca Södertälje',
+    address: 'Forskargatan 18',
+    city: 'Södertälje',
+    postalCode: '151 85',
+    latitude: 59.1783,
+    longitude: 17.6456,
     what3words: 'böcker.glas.rikt',
     scheduledDate: new Date().toISOString().split('T')[0],
     scheduledTimeStart: '10:00',
@@ -288,17 +288,17 @@ const MOCK_ORDERS: any[] = [
     objectType: 'Container',
     objectId: 503,
     clusterId: 11,
-    clusterName: 'Centrum Söder',
+    clusterName: 'Södertälje Syd',
     priority: 'high',
     executionStatus: 'not_started',
-    object: { id: 503, name: 'Chalmers Leveransentré', address: 'Chalmersängen 4', latitude: 57.6896, longitude: 11.9770, what3words: 'böcker.glas.rikt' },
-    customer: { id: 203, name: 'Chalmers Tekniska Högskola', customerNumber: 'KN-2203' },
+    object: { id: 503, name: 'AstraZeneca Leveransentré', address: 'Forskargatan 18', latitude: 59.1783, longitude: 17.6456, what3words: 'böcker.glas.rikt' },
+    customer: { id: 203, name: 'AstraZeneca Södertälje', customerNumber: 'KN-2203' },
     articles: [
       { id: 5, name: 'Byggavfall container 8m³', articleNumber: 'ART-005', unit: 'st', quantity: 1, category: 'Bygg', isSeasonal: false },
       { id: 6, name: 'Verksamhetsavfall 1100L', articleNumber: 'ART-006', unit: 'st', quantity: 3, category: 'Avfall', isSeasonal: false },
     ],
     contacts: [
-      { id: 3, name: 'Maria Berg', phone: '031-772 10 00', email: 'maria.berg@chalmers.se', role: 'Miljösamordnare' },
+      { id: 3, name: 'Maria Berg', phone: '08-553 260 00', email: 'maria.berg@astrazeneca.com', role: 'Miljösamordnare' },
       { id: 4, name: 'Johan Ek', phone: '070-987 65 43', role: 'Vaktmästare' },
     ],
     estimatedDuration: 30,
@@ -310,7 +310,7 @@ const MOCK_ORDERS: any[] = [
       { id: 3, code: 'FARL', name: 'Farligt avfall' },
     ],
     timeRestrictions: [
-      { id: 2, type: 'quiet_hours', description: 'Tysta timmar 22-07, föreläsningar pågår', startTime: '22:00', endTime: '07:00', isActive: false },
+      { id: 2, type: 'quiet_hours', description: 'Tysta timmar 22-07', startTime: '22:00', endTime: '07:00', isActive: false },
       { id: 3, type: 'access_restriction', description: 'Kräver passerkort vardagar', isActive: true },
     ],
     subSteps: [
@@ -329,8 +329,8 @@ const MOCK_ORDERS: any[] = [
     resourceId: 101,
     tenantId: 'traivo-demo',
     plannedNotes: 'Ny parkeringsplats vid leveransentrén från mars. Använd södra infarten.',
-    taskLatitude: 57.6896,
-    taskLongitude: 11.9770,
+    taskLatitude: 59.1783,
+    taskLongitude: 17.6456,
     objectAccessCode: null,
     objectKeyNumber: null,
     metadata: { fieldNotes: [], materialNeeds: [] },
@@ -338,13 +338,13 @@ const MOCK_ORDERS: any[] = [
   {
     id: 4,
     orderNumber: 'WO-2026-0454',
-    status: 'planned',
-    customerName: 'ICA Maxi Mölndal',
-    address: 'Göteborgsvägen 88',
-    city: 'Mölndal',
-    postalCode: '431 37',
-    latitude: 57.6557,
-    longitude: 12.0134,
+    status: 'planerad_resurs',
+    customerName: 'ICA Maxi Södertälje',
+    address: 'Morabergsvägen 25',
+    city: 'Södertälje',
+    postalCode: '151 48',
+    latitude: 59.2018,
+    longitude: 17.6147,
     scheduledDate: new Date().toISOString().split('T')[0],
     scheduledTimeStart: '11:00',
     scheduledTimeEnd: '11:30',
@@ -352,11 +352,11 @@ const MOCK_ORDERS: any[] = [
     objectType: 'Komprimator',
     objectId: 504,
     clusterId: 12,
-    clusterName: 'Mölndal',
+    clusterName: 'Södertälje Norr',
     priority: 'normal',
     executionStatus: 'not_started',
-    object: { id: 504, name: 'ICA Maxi Komprimator', address: 'Göteborgsvägen 88', latitude: 57.6557, longitude: 12.0134 },
-    customer: { id: 204, name: 'ICA Maxi Mölndal', customerNumber: 'KN-2204' },
+    object: { id: 504, name: 'ICA Maxi Komprimator', address: 'Morabergsvägen 25', latitude: 59.2018, longitude: 17.6147 },
+    customer: { id: 204, name: 'ICA Maxi Södertälje', customerNumber: 'KN-2204' },
     articles: [
       { id: 7, name: 'Kartongkomprimator', articleNumber: 'ART-007', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
       { id: 8, name: 'Plastkomprimator', articleNumber: 'ART-008', unit: 'st', quantity: 1, category: 'Återvinning', isSeasonal: false },
@@ -392,13 +392,13 @@ const MOCK_ORDERS: any[] = [
   {
     id: 5,
     orderNumber: 'WO-2026-0455',
-    status: 'planned',
-    customerName: 'Göteborgs Hamn AB',
-    address: 'Terminalgatan 2',
-    city: 'Göteborg',
-    postalCode: '403 14',
-    latitude: 57.7148,
-    longitude: 11.9414,
+    status: 'planerad_resurs',
+    customerName: 'Södertälje Hamn AB',
+    address: 'Slussvägen 8',
+    city: 'Södertälje',
+    postalCode: '151 38',
+    latitude: 59.2092,
+    longitude: 17.6382,
     scheduledDate: new Date().toISOString().split('T')[0],
     scheduledTimeStart: '13:00',
     scheduledTimeEnd: '14:00',
@@ -408,14 +408,14 @@ const MOCK_ORDERS: any[] = [
     objectId: 505,
     priority: 'urgent',
     executionStatus: 'not_started',
-    object: { id: 505, name: 'Hamn Terminal 2', address: 'Terminalgatan 2', latitude: 57.7148, longitude: 11.9414 },
-    customer: { id: 205, name: 'Göteborgs Hamn AB', customerNumber: 'KN-2205' },
+    object: { id: 505, name: 'Hamn Slussen', address: 'Slussvägen 8', latitude: 59.2092, longitude: 17.6382 },
+    customer: { id: 205, name: 'Södertälje Hamn AB', customerNumber: 'KN-2205' },
     articles: [
       { id: 9, name: 'Spillolja 200L fat', articleNumber: 'ART-009', unit: 'st', quantity: 2, category: 'Farligt avfall', isSeasonal: false },
       { id: 10, name: 'Kemikaliecontainer', articleNumber: 'ART-010', unit: 'st', quantity: 1, category: 'Farligt avfall', isSeasonal: false },
     ],
     contacts: [
-      { id: 6, name: 'Karin Holm', phone: '031-368 75 00', email: 'karin.holm@port.goteborg.se', role: 'Hamnchef' },
+      { id: 6, name: 'Karin Holm', phone: '08-550 222 00', email: 'karin.holm@sodertaljehamn.se', role: 'Hamnchef' },
     ],
     estimatedDuration: 45,
     photos: [],
@@ -444,8 +444,8 @@ const MOCK_ORDERS: any[] = [
     resourceId: 101,
     tenantId: 'traivo-demo',
     plannedNotes: 'ADR-certifikat krävs. Kontakta hamnchef Karin Holm 30 min innan ankomst.',
-    taskLatitude: 57.6836,
-    taskLongitude: 11.9078,
+    taskLatitude: 59.2092,
+    taskLongitude: 17.6382,
     objectAccessCode: null,
     objectKeyNumber: 'H-99',
     metadata: { fieldNotes: [], materialNeeds: [] },
@@ -1738,7 +1738,7 @@ router.get('/notifications/count', async (req, res) => {
 router.get('/map-config', async (req, res) => {
   if (IS_MOCK_MODE) {
     res.json({
-      defaultCenter: { latitude: 57.7089, longitude: 11.9746 },
+      defaultCenter: { latitude: 59.1950, longitude: 17.6260 },
       defaultZoom: 12,
       clusterRadius: 50,
       showTraffic: false,
@@ -1751,7 +1751,7 @@ router.get('/map-config', async (req, res) => {
   try {
     const { status, data } = await traivoFetch('/api/mobile/map-config', { method: 'GET', headers: getAuthHeader(req) });
     res.status(status).json(data);
-  } catch { res.json({ defaultCenter: { latitude: 57.7089, longitude: 11.9746 }, defaultZoom: 12, clusterRadius: 50, showTraffic: false, mapStyle: 'standard', refreshIntervalMs: 30000, maxMarkersVisible: 200 }); }
+  } catch { res.json({ defaultCenter: { latitude: 59.1950, longitude: 17.6260 }, defaultZoom: 12, clusterRadius: 50, showTraffic: false, mapStyle: 'standard', refreshIntervalMs: 30000, maxMarkersVisible: 200 }); }
 });
 
 router.post('/sync', async (req, res) => {
@@ -1995,7 +1995,7 @@ router.post('/gps', async (req, res) => {
 router.get('/weather', async (_req, res) => {
   try {
     const response = await fetch(
-      'https://api.open-meteo.com/v1/forecast?latitude=57.7089&longitude=11.9746&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Stockholm&forecast_days=1'
+      'https://api.open-meteo.com/v1/forecast?latitude=59.1950&longitude=17.6260&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Stockholm&forecast_days=1'
     );
     const data = await response.json();
     const current = data.current;
@@ -2836,13 +2836,13 @@ const h = (hoursAgo: number) => new Date(now.getTime() - hoursAgo * 3600000).toI
 const MOCK_NOTIFICATIONS: MockNotification[] = [
   { id: 1, type: 'order_assigned', title: 'Nytt uppdrag tilldelat', body: 'WO-2026-0456 — Volvo Lundby har tilldelats dig.', read: false, createdAt: h(0.5), relatedOrderId: 1 },
   { id: 2, type: 'schedule_change', title: 'Schema ändrat', body: 'Ordningen på dina uppdrag har uppdaterats av planeraren.', read: false, createdAt: h(1.2) },
-  { id: 3, type: 'team_invite', title: 'Teaminbjudan', body: 'Anna Svensson har bjudit in dig till Team Göteborg Öst.', read: false, createdAt: h(2) },
+  { id: 3, type: 'team_invite', title: 'Teaminbjudan', body: 'Anna Svensson har bjudit in dig till Team Södertälje Öst.', read: false, createdAt: h(2) },
   { id: 4, type: 'deviation_reviewed', title: 'Avvikelse granskad', body: 'Din avvikelse "Blockerad infart" på WO-2026-0452 har godkänts.', read: true, createdAt: h(5), relatedOrderId: 2 },
   { id: 5, type: 'status_change', title: 'Order uppdaterad', body: 'WO-2026-0453 har ändrats till "Pågår" av planeraren.', read: true, createdAt: h(8), relatedOrderId: 3 },
   { id: 6, type: 'sign_off_complete', title: 'Kundkvittering mottagen', body: 'Kunden har signerat WO-2026-0451.', read: true, createdAt: h(24), relatedOrderId: 1 },
   { id: 7, type: 'material_update', title: 'Materiallager uppdaterat', body: 'Artikeln "Plastkärl 370L" har fyllts på i lagret.', read: true, createdAt: h(26) },
   { id: 8, type: 'system', title: 'Appuppdatering tillgänglig', body: 'Traivo Go v2.4 finns nu tillgänglig med förbättrad GPS-precision.', read: true, createdAt: h(48) },
-  { id: 9, type: 'order_assigned', title: 'Nytt uppdrag tilldelat', body: 'WO-2026-0455 — Göteborgs Hamn har tilldelats dig.', read: true, createdAt: h(50), relatedOrderId: 5 },
+  { id: 9, type: 'order_assigned', title: 'Nytt uppdrag tilldelat', body: 'WO-2026-0455 — Södertälje Hamn har tilldelats dig.', read: true, createdAt: h(50), relatedOrderId: 5 },
   { id: 10, type: 'schedule_change', title: 'Prioritet ändrad', body: 'WO-2026-0454 har fått högre prioritet.', read: true, createdAt: h(72), relatedOrderId: 4 },
 ];
 

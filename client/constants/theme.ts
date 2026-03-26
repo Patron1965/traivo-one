@@ -37,16 +37,21 @@ export const Colors = {
 
   overlay: 'rgba(0,0,0,0.5)',
 
+  statusNy: '#6B7C8C',
   statusSkapad: '#95A5A6',
+  statusPlanerad: '#7DBFB0',
   statusPlaneradPre: '#7DBFB0',
   statusPlaneradResurs: '#4A9B9B',
   statusPlaneradLas: '#1B4B6B',
+  statusPaborjad: '#2A6496',
   statusUtford: '#4A9B9B',
+  statusAvslutad: '#4A9B9B',
   statusFakturerad: '#7DBFB0',
   statusImpossible: '#C0392B',
 
   statusPlanned: '#6B7C8C',
   statusDispatched: '#2A6496',
+  statusEnRoute: '#E67E22',
   statusOnSite: '#4A9B9B',
   statusInProgress: '#7DBFB0',
   statusCompleted: '#4A9B9B',

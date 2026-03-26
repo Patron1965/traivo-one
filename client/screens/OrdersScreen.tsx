@@ -30,11 +30,11 @@ import type { Order, OrderStatus } from '../types';
 
 function getStatusProgress(status: OrderStatus): number {
   const map: Record<string, number> = {
-    planned: 0, skapad: 0,
-    dispatched: 0.25, planerad_pre: 0.15, planerad_resurs: 0.25, planerad_las: 0.35,
-    on_site: 0.5,
+    ny: 0, planned: 0, skapad: 0, planerad: 0.1,
+    dispatched: 0.2, en_route: 0.3, planerad_pre: 0.15, planerad_resurs: 0.25, planerad_las: 0.35,
+    on_site: 0.5, paborjad: 0.5,
     in_progress: 0.75,
-    completed: 1, utford: 1, fakturerad: 1,
+    completed: 1, utford: 1, avslutad: 1, fakturerad: 1,
     failed: 0, cancelled: 0, impossible: 0,
   };
   return map[status] ?? 0;
@@ -85,8 +85,14 @@ const FILTER_OPTIONS: { label: string; value: OrderStatus | 'all' }[] = [
 
 function getStatusBorderColor(status: OrderStatus): string {
   switch (status) {
+    case 'ny': return Colors.statusNy;
+    case 'planerad': return Colors.statusPlanerad;
+    case 'planerad_resurs': return Colors.statusPlaneradResurs;
+    case 'paborjad': return Colors.statusPaborjad;
+    case 'avslutad': return Colors.statusAvslutad;
     case 'planned': return Colors.statusPlanned;
     case 'dispatched': return Colors.statusDispatched;
+    case 'en_route': return Colors.statusEnRoute;
     case 'on_site': return Colors.statusOnSite;
     case 'in_progress': return Colors.statusInProgress;
     case 'completed': return Colors.statusCompleted;
@@ -98,38 +104,46 @@ function getStatusBorderColor(status: OrderStatus): string {
 
 function getNextStatus(current: OrderStatus): OrderStatus | null {
   const flow: Record<string, OrderStatus> = {
+    ny: 'planerad_resurs',
+    planerad: 'planerad_resurs',
     planned: 'dispatched',
-    dispatched: 'on_site',
+    dispatched: 'en_route',
+    en_route: 'on_site',
     on_site: 'in_progress',
     in_progress: 'completed',
     skapad: 'planerad_pre',
     planerad_pre: 'planerad_resurs',
-    planerad_resurs: 'planerad_las',
-    planerad_las: 'utford',
+    planerad_resurs: 'paborjad',
+    planerad_las: 'paborjad',
+    paborjad: 'utford',
   };
   return flow[current] || null;
 }
 
 function getNextStatusLabel(current: OrderStatus): string {
   const labels: Record<string, string> = {
+    ny: 'Starta',
+    planerad: 'Starta',
     planned: 'Starta',
-    dispatched: 'På plats',
+    dispatched: 'På väg',
+    en_route: 'På plats',
     on_site: 'Börja',
     in_progress: 'Klar',
     skapad: 'Starta',
     planerad_pre: 'Starta',
     planerad_resurs: 'Starta',
-    planerad_las: 'Utför',
+    planerad_las: 'Starta',
+    paborjad: 'Utför',
   };
   return labels[current] || 'Starta';
 }
 
 function isFinishedOrder(status: OrderStatus): boolean {
-  return ['completed', 'utford', 'fakturerad'].includes(status);
+  return ['completed', 'utford', 'avslutad', 'fakturerad'].includes(status);
 }
 
 function canSwipe(order: Order): boolean {
-  const terminalStatuses: OrderStatus[] = ['completed', 'failed', 'cancelled', 'utford', 'fakturerad', 'impossible'];
+  const terminalStatuses: OrderStatus[] = ['completed', 'failed', 'cancelled', 'utford', 'avslutad', 'fakturerad', 'impossible'];
   if (terminalStatuses.includes(order.status)) return false;
   if (order.isLocked) return false;
   return true;

@@ -1,13 +1,18 @@
 export type OrderStatus =
   | 'skapad'
+  | 'ny'
+  | 'planerad'
   | 'planerad_pre'
   | 'planerad_resurs'
   | 'planerad_las'
+  | 'paborjad'
   | 'utford'
+  | 'avslutad'
   | 'fakturerad'
   | 'impossible'
   | 'planned'
   | 'dispatched'
+  | 'en_route'
   | 'on_site'
   | 'in_progress'
   | 'completed'
@@ -17,14 +22,19 @@ export type OrderStatus =
 
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   skapad: 'Skapad',
+  ny: 'Ny',
+  planerad: 'Planerad',
   planerad_pre: 'Förplanerad',
   planerad_resurs: 'Tilldelad',
   planerad_las: 'Inlastad',
+  paborjad: 'Påbörjad',
   utford: 'Utförd',
+  avslutad: 'Avslutad',
   fakturerad: 'Fakturerad',
   impossible: 'Omöjlig',
   planned: 'Planerad',
   dispatched: 'Skickad',
+  en_route: 'På väg',
   on_site: 'På plats',
   in_progress: 'Pågår',
   completed: 'Slutförd',
@@ -34,11 +44,15 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 };
 
 export const ORDER_STATUS_SEQUENCE: OrderStatus[] = [
+  'ny',
   'skapad',
+  'planerad',
   'planerad_pre',
   'planerad_resurs',
   'planerad_las',
+  'paborjad',
   'utford',
+  'avslutad',
   'fakturerad',
 ];
 

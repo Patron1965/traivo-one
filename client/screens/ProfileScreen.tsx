@@ -57,7 +57,7 @@ export function ProfileScreen() {
     queryKey: ['/api/mobile/my-orders'],
   });
 
-  const completedToday = orders?.filter(o => o.status === 'completed' || o.status === 'utford').length || 0;
+  const completedToday = orders?.filter(o => o.status === 'completed' || o.status === 'utford' || o.status === 'avslutad').length || 0;
   const totalToday = orders?.length || 0;
   const initials = getInitials(user?.name);
 

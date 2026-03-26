@@ -192,8 +192,8 @@ var MOCK_RESOURCE = {
   phone: "070-111 22 33",
   email: "erik.lindqvist@traivo.se",
   vehicleRegNo: "ABC 123",
-  homeLatitude: 57.7089,
-  homeLongitude: 11.9746,
+  homeLatitude: 59.195,
+  homeLongitude: 17.626,
   competencies: ["ADR", "YKB", "C-k\xF6rkort"],
   executionCodes: ["T\xD6M", "H\xC4MT", "FARL"]
 };
@@ -236,8 +236,8 @@ var MOCK_PROFILES = [
 ];
 var MOCK_TEAM = {
   id: "team-1",
-  name: "Team G\xF6teborg V\xE4st",
-  description: "Kranbilsteam f\xF6r v\xE4stra G\xF6teborg",
+  name: "Team S\xF6dert\xE4lje",
+  description: "Kranbilsteam f\xF6r S\xF6dert\xE4lje",
   color: "#4A9B9B",
   leaderId: MOCK_RESOURCE.id,
   clusterId: "cluster-gw",
@@ -254,8 +254,8 @@ var MOCK_TEAM = {
       phone: MOCK_RESOURCE.phone,
       email: MOCK_RESOURCE.email,
       isOnline: true,
-      latitude: 57.7089,
-      longitude: 11.9746
+      latitude: 59.195,
+      longitude: 17.626
     },
     {
       id: "tm-2",
@@ -265,8 +265,8 @@ var MOCK_TEAM = {
       phone: "070-222 33 44",
       email: "anna.johansson@traivo.se",
       isOnline: true,
-      latitude: 57.7055,
-      longitude: 11.969
+      latitude: 59.19,
+      longitude: 17.635
     }
   ]
 };
@@ -281,7 +281,7 @@ var MOCK_MATERIAL_LOGS = [];
 var MOCK_MAX_LOGS = 500;
 var MOCK_NOTIFICATIONS_LEGACY = [
   { id: "n1", type: "schedule_change", title: "Rutt\xE4ndring", message: "Order WO-2026-0453 har flyttats till kl 10:00", isRead: false, createdAt: new Date(Date.now() - 36e5).toISOString(), orderId: "3" },
-  { id: "n2", type: "urgent", title: "Br\xE5dskande uppdrag", message: "Nytt h\xE4mtuppdrag tillagt: G\xF6teborgs Hamn AB", isRead: false, createdAt: new Date(Date.now() - 72e5).toISOString(), orderId: "5" },
+  { id: "n2", type: "urgent", title: "Br\xE5dskande uppdrag", message: "Nytt h\xE4mtuppdrag tillagt: S\xF6dert\xE4lje Hamn AB", isRead: false, createdAt: new Date(Date.now() - 72e5).toISOString(), orderId: "5" },
   { id: "n3", type: "info", title: "Systeminformation", message: "Ny version av appen tillg\xE4nglig", isRead: true, createdAt: new Date(Date.now() - 864e5).toISOString() }
 ];
 function findMockOrder(idParam) {
@@ -291,13 +291,13 @@ var MOCK_ORDERS = [
   {
     id: 1,
     orderNumber: "WO-2026-0451",
-    status: "planned",
-    customerName: "BRF Solsidan",
-    address: "Storgatan 12",
-    city: "G\xF6teborg",
-    postalCode: "411 01",
-    latitude: 57.7089,
-    longitude: 11.9746,
+    status: "planerad_resurs",
+    customerName: "BRF Sj\xF6utsikten",
+    address: "Storgatan 15",
+    city: "S\xF6dert\xE4lje",
+    postalCode: "151 72",
+    latitude: 59.1955,
+    longitude: 17.6253,
     what3words: "fest.lampa.skog",
     scheduledDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
     scheduledTimeStart: "08:00",
@@ -307,17 +307,17 @@ var MOCK_ORDERS = [
     objectType: "K\xE4rl",
     objectId: 501,
     clusterId: 10,
-    clusterName: "Centrum Norr",
+    clusterName: "S\xF6dert\xE4lje Centrum",
     priority: "normal",
     executionStatus: "not_started",
-    object: { id: 501, name: "Sopstation Storgatan 12", address: "Storgatan 12", latitude: 57.7089, longitude: 11.9746, what3words: "fest.lampa.skog" },
-    customer: { id: 201, name: "BRF Solsidan", customerNumber: "KN-2201" },
+    object: { id: 501, name: "Sopstation Storgatan 15", address: "Storgatan 15", latitude: 59.1955, longitude: 17.6253, what3words: "fest.lampa.skog" },
+    customer: { id: 201, name: "BRF Sj\xF6utsikten", customerNumber: "KN-2201" },
     articles: [
       { id: 1, name: "Hush\xE5llsavfall 370L", articleNumber: "ART-001", unit: "st", quantity: 4, category: "Avfall", isSeasonal: false },
       { id: 2, name: "Matavfall 140L", articleNumber: "ART-002", unit: "st", quantity: 2, category: "Avfall", isSeasonal: false }
     ],
     contacts: [
-      { id: 1, name: "Anna Karlsson", phone: "070-123 45 67", email: "anna@brfsolsidan.se", role: "Fastighetssk\xF6tare" }
+      { id: 1, name: "Anna Karlsson", phone: "070-123 45 67", email: "anna@brfsjoutsikten.se", role: "Fastighetssk\xF6tare" }
     ],
     estimatedDuration: 15,
     photos: [],
@@ -342,8 +342,8 @@ var MOCK_ORDERS = [
     resourceId: 101,
     tenantId: "traivo-demo",
     plannedNotes: "Porten har ny kod sedan 15 mars. Ring kunden om den inte fungerar.",
-    taskLatitude: 57.7089,
-    taskLongitude: 11.9746,
+    taskLatitude: 59.1955,
+    taskLongitude: 17.6253,
     objectAccessCode: "1234",
     objectKeyNumber: null,
     metadata: { fieldNotes: [], materialNeeds: [] }
@@ -351,13 +351,13 @@ var MOCK_ORDERS = [
   {
     id: 2,
     orderNumber: "WO-2026-0452",
-    status: "planned",
-    customerName: "Fastighets AB Norden",
-    address: "Vasagatan 28",
-    city: "G\xF6teborg",
-    postalCode: "411 37",
-    latitude: 57.7045,
-    longitude: 11.9664,
+    status: "planerad_resurs",
+    customerName: "Telge Bost\xE4der AB",
+    address: "Nyk\xF6pingsv\xE4gen 42",
+    city: "S\xF6dert\xE4lje",
+    postalCode: "151 73",
+    latitude: 59.1872,
+    longitude: 17.6318,
     scheduledDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
     scheduledTimeStart: "09:15",
     scheduledTimeEnd: "09:45",
@@ -366,11 +366,11 @@ var MOCK_ORDERS = [
     objectType: "K\xE4rl",
     objectId: 502,
     clusterId: 10,
-    clusterName: "Centrum Norr",
+    clusterName: "S\xF6dert\xE4lje Centrum",
     priority: "normal",
     executionStatus: "not_started",
-    object: { id: 502, name: "Soprum Vasagatan", address: "Vasagatan 28", latitude: 57.7045, longitude: 11.9664 },
-    customer: { id: 202, name: "Fastighets AB Norden", customerNumber: "KN-2202" },
+    object: { id: 502, name: "Soprum Nyk\xF6pingsv\xE4gen", address: "Nyk\xF6pingsv\xE4gen 42", latitude: 59.1872, longitude: 17.6318 },
+    customer: { id: 202, name: "Telge Bost\xE4der AB", customerNumber: "KN-2202" },
     articles: [
       { id: 3, name: "Restavfall 660L", articleNumber: "ART-003", unit: "st", quantity: 2, category: "Avfall", isSeasonal: false },
       { id: 4, name: "Kartong 660L", articleNumber: "ART-004", unit: "st", quantity: 1, category: "\xC5tervinning", isSeasonal: false }
@@ -397,8 +397,8 @@ var MOCK_ORDERS = [
     resourceId: 101,
     tenantId: "traivo-demo",
     plannedNotes: null,
-    taskLatitude: 57.7045,
-    taskLongitude: 11.9664,
+    taskLatitude: 59.1872,
+    taskLongitude: 17.6318,
     objectAccessCode: null,
     objectKeyNumber: "N-42",
     metadata: { fieldNotes: [], materialNeeds: [] }
@@ -406,13 +406,13 @@ var MOCK_ORDERS = [
   {
     id: 3,
     orderNumber: "WO-2026-0453",
-    status: "planned",
-    customerName: "Chalmers Tekniska H\xF6gskola",
-    address: "Chalmers\xE4ngen 4",
-    city: "G\xF6teborg",
-    postalCode: "412 96",
-    latitude: 57.6896,
-    longitude: 11.977,
+    status: "planerad_resurs",
+    customerName: "AstraZeneca S\xF6dert\xE4lje",
+    address: "Forskargatan 18",
+    city: "S\xF6dert\xE4lje",
+    postalCode: "151 85",
+    latitude: 59.1783,
+    longitude: 17.6456,
     what3words: "b\xF6cker.glas.rikt",
     scheduledDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
     scheduledTimeStart: "10:00",
@@ -422,17 +422,17 @@ var MOCK_ORDERS = [
     objectType: "Container",
     objectId: 503,
     clusterId: 11,
-    clusterName: "Centrum S\xF6der",
+    clusterName: "S\xF6dert\xE4lje Syd",
     priority: "high",
     executionStatus: "not_started",
-    object: { id: 503, name: "Chalmers Leveransentr\xE9", address: "Chalmers\xE4ngen 4", latitude: 57.6896, longitude: 11.977, what3words: "b\xF6cker.glas.rikt" },
-    customer: { id: 203, name: "Chalmers Tekniska H\xF6gskola", customerNumber: "KN-2203" },
+    object: { id: 503, name: "AstraZeneca Leveransentr\xE9", address: "Forskargatan 18", latitude: 59.1783, longitude: 17.6456, what3words: "b\xF6cker.glas.rikt" },
+    customer: { id: 203, name: "AstraZeneca S\xF6dert\xE4lje", customerNumber: "KN-2203" },
     articles: [
       { id: 5, name: "Byggavfall container 8m\xB3", articleNumber: "ART-005", unit: "st", quantity: 1, category: "Bygg", isSeasonal: false },
       { id: 6, name: "Verksamhetsavfall 1100L", articleNumber: "ART-006", unit: "st", quantity: 3, category: "Avfall", isSeasonal: false }
     ],
     contacts: [
-      { id: 3, name: "Maria Berg", phone: "031-772 10 00", email: "maria.berg@chalmers.se", role: "Milj\xF6samordnare" },
+      { id: 3, name: "Maria Berg", phone: "08-553 260 00", email: "maria.berg@astrazeneca.com", role: "Milj\xF6samordnare" },
       { id: 4, name: "Johan Ek", phone: "070-987 65 43", role: "Vaktm\xE4stare" }
     ],
     estimatedDuration: 30,
@@ -444,7 +444,7 @@ var MOCK_ORDERS = [
       { id: 3, code: "FARL", name: "Farligt avfall" }
     ],
     timeRestrictions: [
-      { id: 2, type: "quiet_hours", description: "Tysta timmar 22-07, f\xF6rel\xE4sningar p\xE5g\xE5r", startTime: "22:00", endTime: "07:00", isActive: false },
+      { id: 2, type: "quiet_hours", description: "Tysta timmar 22-07", startTime: "22:00", endTime: "07:00", isActive: false },
       { id: 3, type: "access_restriction", description: "Kr\xE4ver passerkort vardagar", isActive: true }
     ],
     subSteps: [
@@ -463,8 +463,8 @@ var MOCK_ORDERS = [
     resourceId: 101,
     tenantId: "traivo-demo",
     plannedNotes: "Ny parkeringsplats vid leveransentr\xE9n fr\xE5n mars. Anv\xE4nd s\xF6dra infarten.",
-    taskLatitude: 57.6896,
-    taskLongitude: 11.977,
+    taskLatitude: 59.1783,
+    taskLongitude: 17.6456,
     objectAccessCode: null,
     objectKeyNumber: null,
     metadata: { fieldNotes: [], materialNeeds: [] }
@@ -472,13 +472,13 @@ var MOCK_ORDERS = [
   {
     id: 4,
     orderNumber: "WO-2026-0454",
-    status: "planned",
-    customerName: "ICA Maxi M\xF6lndal",
-    address: "G\xF6teborgsv\xE4gen 88",
-    city: "M\xF6lndal",
-    postalCode: "431 37",
-    latitude: 57.6557,
-    longitude: 12.0134,
+    status: "planerad_resurs",
+    customerName: "ICA Maxi S\xF6dert\xE4lje",
+    address: "Morabergsv\xE4gen 25",
+    city: "S\xF6dert\xE4lje",
+    postalCode: "151 48",
+    latitude: 59.2018,
+    longitude: 17.6147,
     scheduledDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
     scheduledTimeStart: "11:00",
     scheduledTimeEnd: "11:30",
@@ -486,11 +486,11 @@ var MOCK_ORDERS = [
     objectType: "Komprimator",
     objectId: 504,
     clusterId: 12,
-    clusterName: "M\xF6lndal",
+    clusterName: "S\xF6dert\xE4lje Norr",
     priority: "normal",
     executionStatus: "not_started",
-    object: { id: 504, name: "ICA Maxi Komprimator", address: "G\xF6teborgsv\xE4gen 88", latitude: 57.6557, longitude: 12.0134 },
-    customer: { id: 204, name: "ICA Maxi M\xF6lndal", customerNumber: "KN-2204" },
+    object: { id: 504, name: "ICA Maxi Komprimator", address: "Morabergsv\xE4gen 25", latitude: 59.2018, longitude: 17.6147 },
+    customer: { id: 204, name: "ICA Maxi S\xF6dert\xE4lje", customerNumber: "KN-2204" },
     articles: [
       { id: 7, name: "Kartongkomprimator", articleNumber: "ART-007", unit: "st", quantity: 1, category: "\xC5tervinning", isSeasonal: false },
       { id: 8, name: "Plastkomprimator", articleNumber: "ART-008", unit: "st", quantity: 1, category: "\xC5tervinning", isSeasonal: false }
@@ -526,13 +526,13 @@ var MOCK_ORDERS = [
   {
     id: 5,
     orderNumber: "WO-2026-0455",
-    status: "planned",
-    customerName: "G\xF6teborgs Hamn AB",
-    address: "Terminalgatan 2",
-    city: "G\xF6teborg",
-    postalCode: "403 14",
-    latitude: 57.7148,
-    longitude: 11.9414,
+    status: "planerad_resurs",
+    customerName: "S\xF6dert\xE4lje Hamn AB",
+    address: "Slussv\xE4gen 8",
+    city: "S\xF6dert\xE4lje",
+    postalCode: "151 38",
+    latitude: 59.2092,
+    longitude: 17.6382,
     scheduledDate: (/* @__PURE__ */ new Date()).toISOString().split("T")[0],
     scheduledTimeStart: "13:00",
     scheduledTimeEnd: "14:00",
@@ -542,14 +542,14 @@ var MOCK_ORDERS = [
     objectId: 505,
     priority: "urgent",
     executionStatus: "not_started",
-    object: { id: 505, name: "Hamn Terminal 2", address: "Terminalgatan 2", latitude: 57.7148, longitude: 11.9414 },
-    customer: { id: 205, name: "G\xF6teborgs Hamn AB", customerNumber: "KN-2205" },
+    object: { id: 505, name: "Hamn Slussen", address: "Slussv\xE4gen 8", latitude: 59.2092, longitude: 17.6382 },
+    customer: { id: 205, name: "S\xF6dert\xE4lje Hamn AB", customerNumber: "KN-2205" },
     articles: [
       { id: 9, name: "Spillolja 200L fat", articleNumber: "ART-009", unit: "st", quantity: 2, category: "Farligt avfall", isSeasonal: false },
       { id: 10, name: "Kemikaliecontainer", articleNumber: "ART-010", unit: "st", quantity: 1, category: "Farligt avfall", isSeasonal: false }
     ],
     contacts: [
-      { id: 6, name: "Karin Holm", phone: "031-368 75 00", email: "karin.holm@port.goteborg.se", role: "Hamnchef" }
+      { id: 6, name: "Karin Holm", phone: "08-550 222 00", email: "karin.holm@sodertaljehamn.se", role: "Hamnchef" }
     ],
     estimatedDuration: 45,
     photos: [],
@@ -578,8 +578,8 @@ var MOCK_ORDERS = [
     resourceId: 101,
     tenantId: "traivo-demo",
     plannedNotes: "ADR-certifikat kr\xE4vs. Kontakta hamnchef Karin Holm 30 min innan ankomst.",
-    taskLatitude: 57.6836,
-    taskLongitude: 11.9078,
+    taskLatitude: 59.2092,
+    taskLongitude: 17.6382,
     objectAccessCode: null,
     objectKeyNumber: "H-99",
     metadata: { fieldNotes: [], materialNeeds: [] }
@@ -1871,7 +1871,7 @@ router.get("/notifications/count", async (req, res) => {
 router.get("/map-config", async (req, res) => {
   if (IS_MOCK_MODE) {
     res.json({
-      defaultCenter: { latitude: 57.7089, longitude: 11.9746 },
+      defaultCenter: { latitude: 59.195, longitude: 17.626 },
       defaultZoom: 12,
       clusterRadius: 50,
       showTraffic: false,
@@ -1885,7 +1885,7 @@ router.get("/map-config", async (req, res) => {
     const { status, data } = await traivoFetch("/api/mobile/map-config", { method: "GET", headers: getAuthHeader(req) });
     res.status(status).json(data);
   } catch {
-    res.json({ defaultCenter: { latitude: 57.7089, longitude: 11.9746 }, defaultZoom: 12, clusterRadius: 50, showTraffic: false, mapStyle: "standard", refreshIntervalMs: 3e4, maxMarkersVisible: 200 });
+    res.json({ defaultCenter: { latitude: 59.195, longitude: 17.626 }, defaultZoom: 12, clusterRadius: 50, showTraffic: false, mapStyle: "standard", refreshIntervalMs: 3e4, maxMarkersVisible: 200 });
   }
 });
 router.post("/sync", async (req, res) => {
@@ -2132,7 +2132,7 @@ router.post("/gps", async (req, res) => {
 router.get("/weather", async (_req, res) => {
   try {
     const response = await fetch(
-      "https://api.open-meteo.com/v1/forecast?latitude=57.7089&longitude=11.9746&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Stockholm&forecast_days=1"
+      "https://api.open-meteo.com/v1/forecast?latitude=59.1950&longitude=17.6260&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=Europe/Stockholm&forecast_days=1"
     );
     const data = await response.json();
     const current = data.current;
@@ -2951,13 +2951,13 @@ var h = (hoursAgo) => new Date(now.getTime() - hoursAgo * 36e5).toISOString();
 var MOCK_NOTIFICATIONS = [
   { id: 1, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0456 \u2014 Volvo Lundby har tilldelats dig.", read: false, createdAt: h(0.5), relatedOrderId: 1 },
   { id: 2, type: "schedule_change", title: "Schema \xE4ndrat", body: "Ordningen p\xE5 dina uppdrag har uppdaterats av planeraren.", read: false, createdAt: h(1.2) },
-  { id: 3, type: "team_invite", title: "Teaminbjudan", body: "Anna Svensson har bjudit in dig till Team G\xF6teborg \xD6st.", read: false, createdAt: h(2) },
+  { id: 3, type: "team_invite", title: "Teaminbjudan", body: "Anna Svensson har bjudit in dig till Team S\xF6dert\xE4lje \xD6st.", read: false, createdAt: h(2) },
   { id: 4, type: "deviation_reviewed", title: "Avvikelse granskad", body: 'Din avvikelse "Blockerad infart" p\xE5 WO-2026-0452 har godk\xE4nts.', read: true, createdAt: h(5), relatedOrderId: 2 },
   { id: 5, type: "status_change", title: "Order uppdaterad", body: 'WO-2026-0453 har \xE4ndrats till "P\xE5g\xE5r" av planeraren.', read: true, createdAt: h(8), relatedOrderId: 3 },
   { id: 6, type: "sign_off_complete", title: "Kundkvittering mottagen", body: "Kunden har signerat WO-2026-0451.", read: true, createdAt: h(24), relatedOrderId: 1 },
   { id: 7, type: "material_update", title: "Materiallager uppdaterat", body: 'Artikeln "Plastk\xE4rl 370L" har fyllts p\xE5 i lagret.', read: true, createdAt: h(26) },
   { id: 8, type: "system", title: "Appuppdatering tillg\xE4nglig", body: "Traivo Go v2.4 finns nu tillg\xE4nglig med f\xF6rb\xE4ttrad GPS-precision.", read: true, createdAt: h(48) },
-  { id: 9, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0455 \u2014 G\xF6teborgs Hamn har tilldelats dig.", read: true, createdAt: h(50), relatedOrderId: 5 },
+  { id: 9, type: "order_assigned", title: "Nytt uppdrag tilldelat", body: "WO-2026-0455 \u2014 S\xF6dert\xE4lje Hamn har tilldelats dig.", read: true, createdAt: h(50), relatedOrderId: 5 },
   { id: 10, type: "schedule_change", title: "Prioritet \xE4ndrad", body: "WO-2026-0454 har f\xE5tt h\xF6gre prioritet.", read: true, createdAt: h(72), relatedOrderId: 4 }
 ];
 router.get("/notifications", async (req, res) => {

@@ -62,9 +62,9 @@ function formatRouteDuration(seconds: number): string {
 }
 
 function getMarkerColor(order: Order): string {
-  if (order.status === 'completed') return Colors.success;
-  if (order.status === 'in_progress' || order.status === 'on_site') return Colors.secondary;
-  if (order.status === 'dispatched') return Colors.warning;
+  if (order.status === 'completed' || order.status === 'utford' || order.status === 'avslutad') return Colors.success;
+  if (order.status === 'in_progress' || order.status === 'on_site' || order.status === 'paborjad') return Colors.secondary;
+  if (order.status === 'dispatched' || order.status === 'en_route') return Colors.warning;
   if (order.status === 'failed') return Colors.danger;
   if (order.priority === 'urgent') return Colors.danger;
   return Colors.primary;
@@ -401,8 +401,8 @@ export function MapScreen({ navigation }: any) {
         rotateEnabled={true}
         pitchEnabled={true}
         initialRegion={{
-          latitude: 57.7089,
-          longitude: 11.9746,
+          latitude: 59.1950,
+          longitude: 17.6260,
           latitudeDelta: 0.1,
           longitudeDelta: 0.1,
         }}
