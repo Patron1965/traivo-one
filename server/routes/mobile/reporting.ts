@@ -89,7 +89,6 @@ app.post("/api/mobile/ai/chat", isMobileAuthenticated, asyncHandler(async (req: 
       }
       return res.status(429).json({ error: enforcement.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden", response: "AI-tjänsten är tillfälligt otillgänglig." });
     }
-    const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
 
     const completion = await withRetry(() => openai.chat.completions.create({
@@ -128,7 +127,6 @@ app.post("/api/mobile/ai/transcribe", isMobileAuthenticated, asyncHandler(async 
     const blob = new Blob([buffer], { type: "audio/webm" });
     const file = new File([blob], "audio.webm", { type: "audio/webm" });
 
-    const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
     const transcription = await transcribeRetry(() => openai.audio.transcriptions.create({
       file,
@@ -154,7 +152,6 @@ app.post("/api/mobile/ai/analyze-image", isMobileAuthenticated, asyncHandler(asy
       }
       return res.status(429).json({ error: imgCheck.errorType === "ratelimit" ? "AI-anropsgräns nådd" : "AI-budget överskriden" });
     }
-    const OpenAI = (await import("openai")).default;
     const openai = new OpenAI();
     const completion = await imgRetry(() => openai.chat.completions.create({
       model: imgCheck.model,
