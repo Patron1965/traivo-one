@@ -49,7 +49,6 @@ import {
   Loader2,
   Download,
   Users,
-  UserCheck,
   Lock,
   Unlock,
   XCircle,
@@ -59,7 +58,6 @@ import {
   X,
   Search
 } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AICard } from "@/components/AICard";
 import { ExecutionStatusTracker } from "@/components/ExecutionStatusTracker";
 import { TaskTimewindowsEditor } from "@/components/TaskTimewindowsEditor";
@@ -823,7 +821,7 @@ export default function OrderStockPage() {
                 const customer = customerMap.get(order.customerId);
                 const object = objectMap.get(order.objectId);
                 const status = (order.orderStatus || 'skapad') as OrderStatus;
-                const StatusIcon = STATUS_ICONS[status];
+                const StatusIcon = STATUS_ICONS[status] || AlertCircle;
                 const nextStatus = getNextStatus(status);
 
                 return (
@@ -888,9 +886,9 @@ export default function OrderStockPage() {
                       <div className="text-muted-foreground">{formatMinutes(order.cachedProductionMinutes)}</div>
                     </div>
 
-                    <Badge className={`${STATUS_COLORS[status]} gap-1 shrink-0`}>
+                    <Badge className={`${STATUS_COLORS[status] || STATUS_COLORS.skapad} gap-1 shrink-0`}>
                       <StatusIcon className="h-3 w-3" />
-                      {STATUS_LABELS[status]}
+                      {STATUS_LABELS[status] || status}
                     </Badge>
 
                     <div className="flex items-center gap-2">
@@ -1311,7 +1309,6 @@ export default function OrderStockPage() {
               {selectedOrderForLines && (
                 <TaskDependenciesView
                   workOrderId={selectedOrderForLines.id}
-                  tenantId={selectedOrderForLines.tenantId}
                 />
               )}
             </TabsContent>
