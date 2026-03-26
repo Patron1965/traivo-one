@@ -18,6 +18,7 @@ import { handleWorkOrderStatusChange } from "../ai-communication";
 
 interface MobileAuthenticatedRequest extends Request {
   mobileResourceId: string;
+  mobileTenantId?: string;
 }
 
 export async function registerMobileRoutes(app: Express) {
@@ -390,7 +391,7 @@ app.patch("/api/mobile/orders/:id/status", isMobileAuthenticated, asyncHandler(a
     });
 
     notificationService.sendToResource(resourceId, {
-      type: "job_updated",
+      type: "order_updated",
       title: "Order uppdaterad",
       message: `${updatedOrder.title || orderId} — status: ${status}`,
       orderId,
@@ -2515,7 +2516,7 @@ app.post("/api/mobile/tasks/:id/metadata-update", isMobileAuthenticated, asyncHa
 // ============================================
 // DISTANCE API — REST endpoints for distance calculations
 // ============================================
-app.post("/api/distance", asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+app.post("/api/distance", asyncHandler(async (req: Request, res: Response) => {
     const { getRoutingDistance } = await import("../distance-matrix-service");
     const { fromLat, fromLng, toLat, toLng, origin, destination } = req.body;
 
@@ -2538,7 +2539,7 @@ app.post("/api/distance", asyncHandler(async (req: MobileAuthenticatedRequest, r
     });
 }));
 
-app.post("/api/distance/batch", asyncHandler(async (req: MobileAuthenticatedRequest, res: Response) => {
+app.post("/api/distance/batch", asyncHandler(async (req: Request, res: Response) => {
     const { getBatchDistances } = await import("../distance-matrix-service");
     const { pairs } = req.body;
 

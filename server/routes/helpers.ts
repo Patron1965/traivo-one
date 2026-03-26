@@ -1,6 +1,15 @@
-import type { Request as ExpressRequest, Response as ExpressResponse } from "express";
+import type { Request as ExpressRequest, Response as ExpressResponse, NextFunction } from "express";
 import { z } from "zod";
 import { getTenantIdWithFallback } from "../tenant-middleware";
+
+declare global {
+  namespace Express {
+    interface Request {
+      mobileResourceId?: string;
+      mobileTenantId?: string;
+    }
+  }
+}
 
 export const DEFAULT_TENANT_ID = "default-tenant";
 
@@ -95,7 +104,7 @@ export function validateMobileToken(token: string): string | null {
   return tokenData.resourceId;
 }
 
-export function isMobileAuthenticated(req: ExpressRequest, res: ExpressResponse, next: () => void) {
+export function isMobileAuthenticated(req: ExpressRequest, res: ExpressResponse, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -108,7 +117,7 @@ export function isMobileAuthenticated(req: ExpressRequest, res: ExpressResponse,
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
   
-  (req as any).mobileResourceId = resourceId;
+  req.mobileResourceId = resourceId;
   next();
 }
 
