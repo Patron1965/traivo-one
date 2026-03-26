@@ -760,6 +760,7 @@ async function refreshDemoWorkOrderDates() {
       status: "active",
       homeLatitude: 59.2369,
       homeLongitude: 17.9812,
+      color: "#E74C3C",
     });
     console.log("Created resource res-anna");
   }
@@ -775,12 +776,35 @@ async function refreshDemoWorkOrderDates() {
     await seedFieldAppDemoData("res-tomas");
   }
 
+  await db.update(resources).set({
+    currentLatitude: 59.1955, currentLongitude: 17.6253,
+    trackingStatus: "active", lastPositionUpdate: new Date(),
+  }).where(sql`id = 'res-tomas'`);
+
+  await db.update(resources).set({
+    currentLatitude: 59.2369, currentLongitude: 17.9812,
+    trackingStatus: "active", lastPositionUpdate: new Date(),
+  }).where(sql`id = 'res-anna'`);
+
+  const annaOrders = await db.select().from(workOrders).where(sql`id = 'wo-anna-1'`);
+  if (annaOrders.length === 0) {
+    const today2 = new Date();
+    today2.setHours(0, 0, 0, 0);
+    await db.insert(workOrders).values([
+      { id: "wo-anna-1", tenantId: DEFAULT_TENANT_ID, customerId: "cust-telge", objectId: "obj-1", resourceId: "res-anna", title: "Tvätt soprum B", description: "Tvätt av soprum B, Stensätravägen", orderType: "tvatt", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "08:00", estimatedDuration: 40 },
+      { id: "wo-anna-2", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-5", resourceId: "res-anna", title: "Kontroll skola", description: "Kontroll av avfallshantering", orderType: "kontroll", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "09:00", estimatedDuration: 50 },
+      { id: "wo-anna-3", tenantId: DEFAULT_TENANT_ID, customerId: "cust-kommun", objectId: "obj-6", resourceId: "res-anna", title: "Tvätt container park", description: "Högtryckstvätt av container", orderType: "tvatt", priority: "high", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "10:30", estimatedDuration: 35 },
+      { id: "wo-anna-4", tenantId: DEFAULT_TENANT_ID, customerId: "cust-brf", objectId: "obj-4", resourceId: "res-anna", title: "Service soprum", description: "Service och underhåll", orderType: "service", priority: "normal", orderStatus: "planerad_resurs", scheduledDate: today2, scheduledStartTime: "12:00", estimatedDuration: 60 },
+    ]).onConflictDoNothing();
+    console.log("Created 4 demo work orders for Anna");
+  }
+
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
   const result = await db.update(workOrders)
     .set({ scheduledDate: today })
-    .where(sql`id IN ('wo-1','wo-2','wo-3','wo-4','wo-5','wo-6','wo-7','wo-8') AND (scheduled_date IS NULL OR scheduled_date != ${today})`)
+    .where(sql`id IN ('wo-1','wo-2','wo-3','wo-4','wo-5','wo-6','wo-7','wo-8','wo-anna-1','wo-anna-2','wo-anna-3','wo-anna-4') AND (scheduled_date IS NULL OR scheduled_date != ${today})`)
     .returning({ id: workOrders.id });
   
   if (result.length > 0) {
