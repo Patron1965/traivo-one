@@ -9,6 +9,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { mobileRoutes } from './routes/mobile';
 import { aiRoutes } from './routes/ai';
 import { plannerRoutes } from './routes/planner';
+import { startWebSocketBridge, stopWebSocketBridge, getBridgeStatus } from './websocketBridge';
 
 const app = express();
 const server = http.createServer(app);
@@ -58,7 +59,8 @@ app.use('/api/mobile/ai', aiRoutes);
 app.use('/api/planner', plannerRoutes);
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'nordnav-api' });
+  const bridge = getBridgeStatus();
+  res.json({ status: 'ok', service: 'traivo-go-api', wsBridge: bridge });
 });
 
 const projectRoot = fs.existsSync(path.resolve(__dirname, '..', 'app.json'))
@@ -324,11 +326,13 @@ process.on('unhandledRejection', (err) => {
 });
 process.on('SIGTERM', () => {
   console.log('Received SIGTERM, shutting down gracefully');
+  stopWebSocketBridge();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000);
 });
 process.on('SIGINT', () => {
   console.log('Received SIGINT, shutting down gracefully');
+  stopWebSocketBridge();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000);
 });
@@ -362,6 +366,12 @@ server.listen(PORT, '0.0.0.0', () => {
   if (hasAndroid) console.log(`  Android: ${(fs.statSync(androidBundle).size / 1024 / 1024).toFixed(1)} MB`);
   if (!hasIos || !hasAndroid) {
     console.log('Warning: Bundles missing. Run: bash scripts/build.sh');
+  }
+
+  if (!mockMode && traivoUrl) {
+    startWebSocketBridge(io, traivoUrl);
+  } else {
+    console.log('[WS-BRIDGE] Ingen TRAIVO_API_URL — bridge inaktiv (mock-lage)');
   }
 });
 

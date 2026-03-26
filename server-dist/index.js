@@ -3727,6 +3727,179 @@ router3.get("/orders", (req, res) => {
   res.json(mapped);
 });
 
+// server/websocketBridge.ts
+var BRIDGE_EVENTS = [
+  "order:updated",
+  "order:assigned",
+  "job_assigned",
+  "job_updated",
+  "job_cancelled",
+  "schedule_changed",
+  "priority_changed",
+  "anomaly_alert",
+  "notification",
+  "team:order_updated",
+  "team:material_logged",
+  "team:member_left",
+  "team:invite",
+  "position_update"
+];
+var INITIAL_BACKOFF_MS = 2e3;
+var MAX_BACKOFF_MS = 6e4;
+var BACKOFF_MULTIPLIER = 2;
+var upstreamSocket = null;
+var backoffMs = INITIAL_BACKOFF_MS;
+var reconnectTimer = null;
+var bridgeActive = false;
+var eventCounts = {};
+var connectionListenerCleanup = null;
+function logBridge(message) {
+  console.log(`[WS-BRIDGE] ${message}`);
+}
+function logBridgeError(message) {
+  console.error(`[WS-BRIDGE] ${message}`);
+}
+function clearReconnectTimer() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+function scheduleReconnect(localIo, upstreamUrl) {
+  clearReconnectTimer();
+  if (!bridgeActive) return;
+  const delay = backoffMs;
+  backoffMs = Math.min(backoffMs * BACKOFF_MULTIPLIER, MAX_BACKOFF_MS);
+  logBridge(`Ateransluter om ${Math.round(delay / 1e3)}s...`);
+  reconnectTimer = setTimeout(() => {
+    if (bridgeActive) {
+      connectUpstream(localIo, upstreamUrl);
+    }
+  }, delay);
+}
+async function connectUpstream(localIo, upstreamUrl) {
+  if (upstreamSocket) {
+    try {
+      upstreamSocket.disconnect();
+    } catch {
+    }
+    upstreamSocket = null;
+  }
+  try {
+    const { io: ioClient } = await import("socket.io-client");
+    if (!bridgeActive) {
+      logBridge("Bridge stoppades under import \u2014 avbryter anslutning");
+      return;
+    }
+    const wsUrl = upstreamUrl.replace(/\/+$/, "");
+    logBridge(`Ansluter till Traivo One: ${wsUrl}`);
+    upstreamSocket = ioClient(wsUrl, {
+      path: "/ws",
+      transports: ["websocket", "polling"],
+      reconnection: false,
+      timeout: 1e4
+    });
+    upstreamSocket.on("connect", () => {
+      logBridge(`Ansluten till Traivo One (socket: ${upstreamSocket.id})`);
+      backoffMs = INITIAL_BACKOFF_MS;
+      eventCounts = {};
+      upstreamSocket.emit("join", {
+        tenantId: process.env.TRAIVO_TENANT_ID || "traivo-demo",
+        role: "bridge"
+      });
+    });
+    upstreamSocket.on("disconnect", (reason) => {
+      logBridge(`Frankopplad fran Traivo One: ${reason}`);
+      if (bridgeActive && reason !== "io client disconnect") {
+        scheduleReconnect(localIo, upstreamUrl);
+      }
+    });
+    upstreamSocket.on("connect_error", (err) => {
+      logBridgeError(`Anslutningsfel: ${err.message}`);
+      if (bridgeActive) {
+        scheduleReconnect(localIo, upstreamUrl);
+      }
+    });
+    for (const eventName of BRIDGE_EVENTS) {
+      upstreamSocket.on(eventName, (data) => {
+        eventCounts[eventName] = (eventCounts[eventName] || 0) + 1;
+        const total = Object.values(eventCounts).reduce((s, c) => s + c, 0);
+        if (total <= 10 || total % 50 === 0) {
+          logBridge(`Vidarebefordrar ${eventName} (totalt: ${total} events)`);
+        }
+        if (eventName.startsWith("team:")) {
+          if (data?.teamId) {
+            localIo.to(`team:${data.teamId}`).emit(eventName, data);
+          } else {
+            logBridge(`Droppar ${eventName} \u2014 saknar teamId`);
+          }
+        } else if (data?.resourceId) {
+          localIo.to(`resource:${data.resourceId}`).emit(eventName, data);
+          localIo.to(`tenant:${data.tenantId || "traivo-demo"}`).emit(eventName, data);
+        } else if (data?.tenantId) {
+          localIo.to(`tenant:${data.tenantId}`).emit(eventName, data);
+        } else {
+          logBridge(`Droppar ${eventName} \u2014 saknar resourceId/tenantId`);
+        }
+      });
+    }
+  } catch (err) {
+    logBridgeError(`Kunde inte skapa anslutning: ${err.message}`);
+    if (bridgeActive) {
+      scheduleReconnect(localIo, upstreamUrl);
+    }
+  }
+}
+function startWebSocketBridge(localIo, upstreamUrl) {
+  if (!upstreamUrl) {
+    logBridge("Ingen TRAIVO_API_URL \u2014 bridge inaktiv (mock-lage)");
+    return;
+  }
+  if (bridgeActive) {
+    logBridge("Bridge redan aktiv \u2014 stoppar forst");
+    stopWebSocketBridge();
+  }
+  bridgeActive = true;
+  backoffMs = INITIAL_BACKOFF_MS;
+  eventCounts = {};
+  logBridge("Startar WebSocket-bridge mot Traivo One...");
+  connectUpstream(localIo, upstreamUrl);
+  const positionHandler = (socket) => {
+    socket.on("position_update", (data) => {
+      if (upstreamSocket?.connected && data.resourceId) {
+        upstreamSocket.emit("position_update", data);
+      }
+    });
+  };
+  localIo.on("connection", positionHandler);
+  connectionListenerCleanup = () => {
+    localIo.removeListener("connection", positionHandler);
+  };
+}
+function stopWebSocketBridge() {
+  bridgeActive = false;
+  clearReconnectTimer();
+  if (connectionListenerCleanup) {
+    connectionListenerCleanup();
+    connectionListenerCleanup = null;
+  }
+  if (upstreamSocket) {
+    logBridge("Stoppar bridge...");
+    try {
+      upstreamSocket.disconnect();
+    } catch {
+    }
+    upstreamSocket = null;
+  }
+}
+function getBridgeStatus() {
+  return {
+    active: bridgeActive,
+    connected: upstreamSocket?.connected || false,
+    eventCounts: { ...eventCounts }
+  };
+}
+
 // server/app.ts
 var app = (0, import_express4.default)();
 var server = import_http.default.createServer(app);
@@ -3766,7 +3939,8 @@ app.use("/api/mobile", router);
 app.use("/api/mobile/ai", router2);
 app.use("/api/planner", router3);
 app.get("/api/health", (_req, res) => {
-  res.json({ status: "ok", service: "nordnav-api" });
+  const bridge = getBridgeStatus();
+  res.json({ status: "ok", service: "traivo-go-api", wsBridge: bridge });
 });
 var projectRoot = import_fs.default.existsSync(import_path.default.resolve(__dirname, "..", "app.json")) ? import_path.default.resolve(__dirname, "..") : process.cwd();
 var metroDir = import_path.default.join(projectRoot, "dist-metro");
@@ -4009,11 +4183,13 @@ process.on("unhandledRejection", (err) => {
 });
 process.on("SIGTERM", () => {
   console.log("Received SIGTERM, shutting down gracefully");
+  stopWebSocketBridge();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3e3);
 });
 process.on("SIGINT", () => {
   console.log("Received SIGINT, shutting down gracefully");
+  stopWebSocketBridge();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3e3);
 });
@@ -4044,6 +4220,11 @@ server.listen(PORT, "0.0.0.0", () => {
   if (hasAndroid) console.log(`  Android: ${(import_fs.default.statSync(androidBundle).size / 1024 / 1024).toFixed(1)} MB`);
   if (!hasIos || !hasAndroid) {
     console.log("Warning: Bundles missing. Run: bash scripts/build.sh");
+  }
+  if (!mockMode && traivoUrl) {
+    startWebSocketBridge(io, traivoUrl);
+  } else {
+    console.log("[WS-BRIDGE] Ingen TRAIVO_API_URL \u2014 bridge inaktiv (mock-lage)");
   }
 });
 server.on("error", (err) => {
