@@ -477,17 +477,12 @@ const STATUS_COLORS = ${JSON.stringify(STATUS_COLORS)};
 const STATUS_LABELS = ${JSON.stringify(STATUS_LABELS)};
 const ROUTE_COLORS = ${JSON.stringify(ROUTE_COLORS)};
 
-var map, driverLayer, jobCluster, routeLayer;
-try {
-  map = L.map('map').setView([57.7089, 11.9746], 11);
-  fetch('/api/system/map-config',{credentials:'include'}).then(r=>r.json()).then(function(cfg){L.tileLayer(cfg.tileUrl,{attribution:cfg.attribution,maxZoom:20}).addTo(map);}).catch(function(){L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);});
-  driverLayer = L.layerGroup().addTo(map);
-  jobCluster = (typeof L.markerClusterGroup === 'function') ? L.markerClusterGroup({maxClusterRadius:40}).addTo(map) : L.layerGroup().addTo(map);
-  routeLayer = L.layerGroup().addTo(map);
-} catch(initErr) {
-  document.getElementById('info-bar').innerHTML = '<span style="color:#ef4444">Kartfel: ' + initErr.message + '</span>';
-  console.error('Map init error:', initErr);
-}
+var map = L.map('map').setView([57.7089, 11.9746], 11);
+fetch('/api/system/map-config',{credentials:'include'}).then(r=>r.json()).then(function(cfg){L.tileLayer(cfg.tileUrl,{attribution:cfg.attribution,maxZoom:20}).addTo(map);}).catch(function(){L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);});
+var driverLayer = L.layerGroup().addTo(map);
+var jobCluster;
+try { jobCluster = L.markerClusterGroup({maxClusterRadius:40}).addTo(map); } catch(e) { jobCluster = L.layerGroup().addTo(map); }
+var routeLayer = L.layerGroup().addTo(map);
 let currentRange = 'today';
 let jobsVisible = true;
 let routesVisible = true;
