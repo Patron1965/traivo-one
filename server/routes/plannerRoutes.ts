@@ -468,15 +468,26 @@ body{font-family:Inter,system-ui,sans-serif;background:#1a1a2e}
 <div class="loading-routes" id="loading-routes"><div class="spinner"></div>H&auml;mtar v&auml;ggeometri...</div>
 <div class="toast-container" id="toast-container"></div>
 <script>
+window.onerror = function(msg, url, line, col, err) {
+  var bar = document.getElementById('info-bar');
+  if(bar) bar.innerHTML = '<span style="color:#ef4444">JS-fel: ' + msg + ' (rad ' + line + ')</span>';
+  console.error('Planner error:', msg, url, line, col, err);
+};
 const STATUS_COLORS = ${JSON.stringify(STATUS_COLORS)};
 const STATUS_LABELS = ${JSON.stringify(STATUS_LABELS)};
 const ROUTE_COLORS = ${JSON.stringify(ROUTE_COLORS)};
-const map = L.map('map').setView([57.7089, 11.9746], 11);
-fetch('/api/system/map-config').then(r=>r.json()).then(function(cfg){L.tileLayer(cfg.tileUrl,{attribution:cfg.attribution,maxZoom:20}).addTo(map);}).catch(function(){L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);});
 
-const driverLayer = L.layerGroup().addTo(map);
-const jobCluster = (typeof L.markerClusterGroup === 'function') ? L.markerClusterGroup({maxClusterRadius:40}).addTo(map) : L.layerGroup().addTo(map);
-const routeLayer = L.layerGroup().addTo(map);
+var map, driverLayer, jobCluster, routeLayer;
+try {
+  map = L.map('map').setView([57.7089, 11.9746], 11);
+  fetch('/api/system/map-config',{credentials:'include'}).then(r=>r.json()).then(function(cfg){L.tileLayer(cfg.tileUrl,{attribution:cfg.attribution,maxZoom:20}).addTo(map);}).catch(function(){L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap'}).addTo(map);});
+  driverLayer = L.layerGroup().addTo(map);
+  jobCluster = (typeof L.markerClusterGroup === 'function') ? L.markerClusterGroup({maxClusterRadius:40}).addTo(map) : L.layerGroup().addTo(map);
+  routeLayer = L.layerGroup().addTo(map);
+} catch(initErr) {
+  document.getElementById('info-bar').innerHTML = '<span style="color:#ef4444">Kartfel: ' + initErr.message + '</span>';
+  console.error('Map init error:', initErr);
+}
 let currentRange = 'today';
 let jobsVisible = true;
 let routesVisible = true;
