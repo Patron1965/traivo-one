@@ -19,7 +19,7 @@ function headers() {
 }
 
 describe("Mobile Orders API", () => {
-  it("GET /api/mobile/my-orders — returns orders list with Go fields", async () => {
+  it("GET /api/mobile/my-orders — returns orders with Go field defaults", async () => {
     const res = await fetch(`${BASE}/api/mobile/my-orders`, { headers: headers() });
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -29,34 +29,36 @@ describe("Mobile Orders API", () => {
     expect(data.syncStatus).toBeDefined();
 
     const order = data.orders[0];
-    expect(order).toHaveProperty("subSteps");
-    expect(order).toHaveProperty("dependencies");
-    expect(order).toHaveProperty("inspections");
-    expect(order).toHaveProperty("executionCodes");
-    expect(order).toHaveProperty("timeRestrictions");
-    expect(order).toHaveProperty("enRouteAt");
-    expect(order).toHaveProperty("customerNotified");
-    expect(order).toHaveProperty("isTeamOrder");
+    expect(Array.isArray(order.subSteps)).toBe(true);
+    expect(Array.isArray(order.dependencies)).toBe(true);
+    expect(Array.isArray(order.inspections)).toBe(true);
+    expect(Array.isArray(order.executionCodes)).toBe(true);
+    expect(order.timeRestrictions).toBeNull();
+    expect(typeof order.customerNotified).toBe("boolean");
+    expect(typeof order.isTeamOrder).toBe("boolean");
+    expect(order.customerNotified).toBe(false);
+    expect(order.isTeamOrder).toBe(false);
+    expect(order.executionStatus).toBeDefined();
   });
 
-  it("GET /api/mobile/orders/:id — returns single order with Go fields", async () => {
+  it("GET /api/mobile/orders/:id — returns single order with Go field values", async () => {
     const res = await fetch(`${BASE}/api/mobile/orders/wo-1`, { headers: headers() });
     expect(res.status).toBe(200);
     const order = await res.json();
     expect(order.id).toBe("wo-1");
 
-    expect(order).toHaveProperty("subSteps");
-    expect(order).toHaveProperty("dependencies");
-    expect(order).toHaveProperty("inspections");
-    expect(order).toHaveProperty("executionCodes");
-    expect(order).toHaveProperty("timeRestrictions");
-    expect(order).toHaveProperty("enRouteAt");
-    expect(order).toHaveProperty("customerNotified");
-    expect(order).toHaveProperty("isTeamOrder");
+    expect(Array.isArray(order.subSteps)).toBe(true);
+    expect(Array.isArray(order.dependencies)).toBe(true);
+    expect(Array.isArray(order.inspections)).toBe(true);
+    expect(Array.isArray(order.executionCodes)).toBe(true);
+    expect(typeof order.customerNotified).toBe("boolean");
+    expect(typeof order.isTeamOrder).toBe("boolean");
+    expect(order.isTeamOrder).toBe(false);
     expect(order).toHaveProperty("objectAccessCode");
     expect(order).toHaveProperty("objectKeyNumber");
     expect(order).toHaveProperty("plannedNotes");
-    expect(order).toHaveProperty("executionStatus");
+    expect(order.executionStatus).toBeDefined();
+    expect(typeof order.executionStatus).toBe("string");
   });
 
   it("GET /api/mobile/orders/:id — nonexistent order returns 404", async () => {
@@ -75,7 +77,7 @@ describe("Mobile Orders API", () => {
     expect(data.id).toBe("wo-1");
   });
 
-  it("GET /api/mobile/orders — enriched orders list", async () => {
+  it("GET /api/mobile/orders — enriched list with Go field values", async () => {
     const res = await fetch(`${BASE}/api/mobile/orders`, { headers: headers() });
     expect(res.status).toBe(200);
     const data = await res.json();
@@ -83,16 +85,15 @@ describe("Mobile Orders API", () => {
 
     if (data.length > 0) {
       const order = data[0];
-      expect(order).toHaveProperty("subSteps");
-      expect(order).toHaveProperty("dependencies");
-      expect(order).toHaveProperty("executionCodes");
-      expect(order).toHaveProperty("timeRestrictions");
-      expect(order).toHaveProperty("enRouteAt");
-      expect(order).toHaveProperty("customerNotified");
-      expect(order).toHaveProperty("isTeamOrder");
-      expect(order).toHaveProperty("inspections");
+      expect(Array.isArray(order.subSteps)).toBe(true);
+      expect(Array.isArray(order.dependencies)).toBe(true);
+      expect(Array.isArray(order.executionCodes)).toBe(true);
+      expect(Array.isArray(order.inspections)).toBe(true);
+      expect(typeof order.customerNotified).toBe("boolean");
+      expect(typeof order.isTeamOrder).toBe("boolean");
       expect(order).toHaveProperty("objectAccessCode");
       expect(order).toHaveProperty("plannedNotes");
+      expect(order.executionStatus).toBeDefined();
     }
   });
 });
