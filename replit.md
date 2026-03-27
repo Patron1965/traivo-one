@@ -75,6 +75,9 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Resource Availability Service:** Real-time resource schedule analysis computing next available time.
 - **Portal Chat Auto-Responses:** Automatic status messages in customer portal chat when keywords are detected.
 - **Mobile API Fas 2 Endpoints:** Team management, resource search, work-session entries, time-entries/summary, statistics, route/route-optimized, distance/batch distance, break-config, ETA notification history/config, work order carry-over, auto-ETA-SMS.
+- **Mobile User Preferences API:** Server-synced user preferences (`mobileUserPreferences` table) with GET/PUT/PATCH `/api/mobile/preferences` — dark mode, font size, haptic feedback, push categories, map type, traffic overlay, break reminders, menu order, language. Auto-creates defaults on first access.
+- **Mobile App Configuration API:** Server-driven app config via GET `/api/mobile/app-config` (maintenance mode, feature flags, navigation structure, tenant info) and GET `/api/mobile/version-check?version=X.Y.Z` (required/recommended update detection).
+- **Mobile Statistics Summary:** Lightweight GET `/api/mobile/statistics/summary` returning today's/week's completed orders, total orders, hours worked, and work streak (consecutive weekdays with completions).
 
 ## External Dependencies
 - **PostgreSQL:** Primary database.

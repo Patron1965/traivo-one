@@ -4808,3 +4808,27 @@ export const optimizationJobs = pgTable("optimization_jobs", {
 export const insertOptimizationJobSchema = createInsertSchema(optimizationJobs).omit({ id: true, createdAt: true, startedAt: true, completedAt: true });
 export type OptimizationJob = typeof optimizationJobs.$inferSelect;
 export type InsertOptimizationJob = z.infer<typeof insertOptimizationJobSchema>;
+
+export const mobileUserPreferences = pgTable("mobile_user_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  darkMode: boolean("dark_mode").default(false).notNull(),
+  fontSize: varchar("font_size", { length: 20 }).default("medium").notNull(),
+  hapticFeedback: boolean("haptic_feedback").default(true).notNull(),
+  pushEnabled: boolean("push_enabled").default(true).notNull(),
+  pushCategories: jsonb("push_categories").default({ orders: true, team: true, system: true }).notNull(),
+  mapType: varchar("map_type", { length: 20 }).default("standard").notNull(),
+  showTraffic: boolean("show_traffic").default(true).notNull(),
+  breakReminders: boolean("break_reminders").default(true).notNull(),
+  menuOrder: jsonb("menu_order").default(["ai", "notifications", "team", "statistics", "settings"]).notNull(),
+  language: varchar("language", { length: 10 }).default("sv").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  uniqueIndex("idx_mobile_prefs_resource").on(table.resourceId),
+  index("idx_mobile_prefs_tenant").on(table.tenantId),
+]);
+
+export const insertMobileUserPreferencesSchema = createInsertSchema(mobileUserPreferences).omit({ id: true, updatedAt: true });
+export type MobileUserPreference = typeof mobileUserPreferences.$inferSelect;
+export type InsertMobileUserPreference = z.infer<typeof insertMobileUserPreferencesSchema>;

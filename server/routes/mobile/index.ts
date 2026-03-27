@@ -6,6 +6,8 @@ import { registerWorkSessionRoutes } from "./workSessions";
 import { registerSyncRoutes } from "./sync";
 import { registerTeamRoutes } from "./team";
 import { registerMiscRoutes } from "./misc";
+import { registerPreferencesRoutes } from "./preferences";
+import { registerAppConfigRoutes } from "./appConfig";
 
 export type { MobileAuthenticatedRequest } from "./shared";
 
@@ -17,4 +19,6 @@ export async function registerMobileRoutes(app: Express) {
   registerSyncRoutes(app);
   registerTeamRoutes(app);
   registerMiscRoutes(app);
+  registerPreferencesRoutes(app);
+  registerAppConfigRoutes(app);
 }
