@@ -18,3 +18,9 @@ id = "SJe1m9a-6yLJnRpqY4H1W"
 uri = "file://Traivo_Go_Integration_Report.md"
 type = "text"
 title = "Traivo Go ↔ Traivo One — Integrationsrapport"
+
+[[outputs]]
+id = "cBsAEaFYh8P3RHL2sjDik"
+uri = "file://attached_assets/TRAIVO_GO_URGENT_JOBS_INTEGRATION_RAPPORT.md"
+type = "text"
+title = "Traivo Go → Traivo One: Integrationsrapport Akut Jobbhantering"
