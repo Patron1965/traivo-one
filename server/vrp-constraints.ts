@@ -1,3 +1,26 @@
+/**
+ * VRP Constraint Enrichment for Geoapify Route Planner API
+ *
+ * Known Geoapify API limitations affecting constraint modeling:
+ *
+ * 1. EFFICIENCY: Geoapify has ONE duration per job — no per-agent-per-job
+ *    durations. Multi-agent scenarios use the mean of per-resource factors
+ *    as the best approximation. Single-agent scenarios apply exact factors.
+ *
+ * 2. PREFERENCES: Geoapify only supports hard time_windows. Preferred times
+ *    are modeled as priority boosts (higher priority = solver prefers scheduling
+ *    these jobs in better slots) rather than hard feasibility constraints.
+ *
+ * 3. PRECEDENCE: Geoapify has no native precedence/ordering constraints.
+ *    Dependencies are enforced via time_window shifting: child jobs get their
+ *    earliest start time set to parent's computed end time (topological order).
+ *    This is deterministic but does not account for dynamic travel time between
+ *    parent and child.
+ *
+ * 4. CAPACITY: Only agents with known vehicle data get capacity vectors.
+ *    Agents without vehicles remain unconstrained (no zero-capacity blocking).
+ *    Capacity is opt-in (disabled by default) for backward compatibility.
+ */
 import type {
   WorkOrder,
   Resource,
@@ -112,7 +135,7 @@ export async function enrichVRPRequestWithConstraints(
   if (options.respectTimeWindows !== false) {
     applyTimeRestrictions(jobs, workOrders, timeRestrictions, objectMap);
     applyTaskTimewindows(jobs, taskTimewindows);
-    applyPreferredTimesAsSoftWindows(jobs, workOrders, objectMap, slotPreferences);
+    applyPreferredTimesAsSoftConstraints(jobs, workOrders, objectMap, slotPreferences);
     constraintsApplied.push("time_windows");
   }
 
@@ -254,7 +277,7 @@ async function loadSlotPreferences(
   return result;
 }
 
-function applyPreferredTimesAsSoftWindows(
+function applyPreferredTimesAsSoftConstraints(
   jobs: EnrichedGeoapifyJob[],
   workOrders: WorkOrder[],
   objectMap: Map<string, ServiceObject>,
@@ -269,49 +292,24 @@ function applyPreferredTimesAsSoftWindows(
     const obj = objectMap.get(order.objectId);
     if (!obj) continue;
 
-    const windows: [number, number][] = [];
-
     const objRecord = obj as Record<string, unknown>;
     const pref1 = (objRecord.resolvedPreferredTime1 as string | null)
       || (objRecord.preferredTime1 as string | null);
     const pref2 = (objRecord.resolvedPreferredTime2 as string | null)
       || (objRecord.preferredTime2 as string | null);
 
-    if (pref1) {
-      const startSec = parseTimeToSeconds(pref1);
-      if (startSec !== null) {
-        const endSec = Math.min(startSec + PREFERRED_TIME_WINDOW_DURATION, DEFAULT_WORK_HOURS[1]);
-        if (endSec > startSec) windows.push([startSec, endSec]);
-      }
-    }
-
-    if (pref2) {
-      const startSec = parseTimeToSeconds(pref2);
-      if (startSec !== null) {
-        const endSec = Math.min(startSec + PREFERRED_TIME_WINDOW_DURATION, DEFAULT_WORK_HOURS[1]);
-        if (endSec > startSec) windows.push([startSec, endSec]);
-      }
-    }
+    let prefCount = 0;
+    if (pref1) prefCount++;
+    if (pref2) prefCount++;
 
     const objSlots = slotPreferences.get(order.objectId);
-    if (objSlots && objSlots.length > 0) {
-      for (const slot of objSlots) {
-        if (slot.preference !== "preferred") continue;
-        const startSec = parseTimeToSeconds(slot.preferredTime);
-        if (startSec !== null) {
-          const endSec = Math.min(startSec + PREFERRED_TIME_WINDOW_DURATION, DEFAULT_WORK_HOURS[1]);
-          if (endSec > startSec) {
-            const alreadyIncluded = windows.some(
-              ([s, e]) => Math.abs(s - startSec) < 60 && Math.abs(e - endSec) < 60,
-            );
-            if (!alreadyIncluded) windows.push([startSec, endSec]);
-          }
-        }
-      }
+    if (objSlots) {
+      prefCount += objSlots.filter(s => s.preference === "preferred").length;
     }
 
-    if (windows.length > 0) {
-      job.time_windows = windows;
+    if (prefCount > 0) {
+      const boost = Math.min(prefCount * 5, 20);
+      job.priority = Math.min(100, (job.priority || 50) + boost);
     }
   }
 }
