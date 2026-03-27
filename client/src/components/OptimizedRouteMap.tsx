@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { MapContainer, TileLayer, Marker, Polyline, Popup, CircleMarker, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -84,6 +84,21 @@ function MapFitBounds({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
+async function fetchRouteGeometry(waypoints: { lat: number; lng: number }[]): Promise<[number, number][]> {
+  try {
+    const response = await fetch("/api/route-geometry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ waypoints }),
+    });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return data.coordinates || [];
+  } catch {
+    return [];
+  }
+}
+
 export function OptimizedRouteMap({
   stops,
   vrpRoutes,
@@ -94,6 +109,8 @@ export function OptimizedRouteMap({
   showClusters = false,
 }: OptimizedRouteMapProps) {
   const mapConfig = useMapConfig();
+  const [roadGeometries, setRoadGeometries] = useState<Record<string, [number, number][]>>({});
+  const [loadingGeometry, setLoadingGeometry] = useState(false);
 
   const vrpPositions = useMemo(() => {
     if (!vrpRoutes) return [];
@@ -115,6 +132,39 @@ export function OptimizedRouteMap({
 
   const allPositions = vrpRoutes ? vrpPositions : legacyPositions;
   const skippedCount = stops ? stops.length - legacyValidStops.length : 0;
+
+  const fetchAllGeometries = useCallback(async () => {
+    setLoadingGeometry(true);
+    const geometries: Record<string, [number, number][]> = {};
+
+    if (vrpRoutes) {
+      const promises = vrpRoutes.map(async (route) => {
+        const routeStops = route.stops.filter((s) => !s.isBreak && s.location);
+        if (routeStops.length < 2) return;
+        const waypoints = routeStops.map((s) => ({ lat: s.location.lat, lng: s.location.lng }));
+        const coords = await fetchRouteGeometry(waypoints);
+        if (coords.length > 0) {
+          geometries[route.resourceId] = coords;
+        }
+      });
+      await Promise.all(promises);
+    } else if (legacyValidStops.length >= 2) {
+      const waypoints = legacyValidStops.map((s) => ({ lat: s.latitude!, lng: s.longitude! }));
+      const coords = await fetchRouteGeometry(waypoints);
+      if (coords.length > 0) {
+        geometries["legacy"] = coords;
+      }
+    }
+
+    setRoadGeometries(geometries);
+    setLoadingGeometry(false);
+  }, [vrpRoutes, legacyValidStops]);
+
+  useEffect(() => {
+    if (allPositions.length >= 2) {
+      fetchAllGeometries();
+    }
+  }, [allPositions.length, fetchAllGeometries]);
 
   if (allPositions.length === 0) {
     return (
@@ -153,6 +203,11 @@ export function OptimizedRouteMap({
         )}
       </div>
       <div className="absolute top-2 left-2 z-[1000] flex flex-wrap gap-1">
+        {loadingGeometry && (
+          <Badge variant="secondary" className="text-xs animate-pulse">
+            Hämtar väggeometri...
+          </Badge>
+        )}
         {vrpRoutes ? (
           vrpRoutes.map((route, idx) => (
             <Badge
@@ -201,15 +256,21 @@ export function OptimizedRouteMap({
           ? vrpRoutes.map((route, routeIdx) => {
               const color = CLUSTER_COLORS[routeIdx % CLUSTER_COLORS.length];
               const routeStops = route.stops.filter((s) => !s.isBreak && s.location);
-              const routePositions = routeStops.map(
+              const straightPositions = routeStops.map(
                 (s) => [s.location.lat, s.location.lng] as [number, number]
               );
+              const roadPositions = roadGeometries[route.resourceId];
 
               return (
                 <span key={route.resourceId}>
                   <Polyline
-                    positions={routePositions}
-                    pathOptions={{ color, weight: 3, opacity: 0.8, dashArray: "8, 4" }}
+                    positions={roadPositions || straightPositions}
+                    pathOptions={{
+                      color,
+                      weight: roadPositions ? 4 : 3,
+                      opacity: 0.8,
+                      dashArray: roadPositions ? undefined : "8, 4",
+                    }}
                   />
                   {showClusters && routeStops.length > 0 && (
                     <CircleMarker
@@ -248,8 +309,13 @@ export function OptimizedRouteMap({
           : (
             <>
               <Polyline
-                positions={legacyPositions}
-                pathOptions={{ color: "#3b82f6", weight: 3, opacity: 0.8, dashArray: "8, 4" }}
+                positions={roadGeometries["legacy"] || legacyPositions}
+                pathOptions={{
+                  color: "#3b82f6",
+                  weight: roadGeometries["legacy"] ? 4 : 3,
+                  opacity: 0.8,
+                  dashArray: roadGeometries["legacy"] ? undefined : "8, 4",
+                }}
               />
               {legacyValidStops.map((stop, idx) => (
                 <Marker

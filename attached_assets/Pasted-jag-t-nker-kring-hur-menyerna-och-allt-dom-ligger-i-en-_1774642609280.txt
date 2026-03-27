@@ -1,0 +1,644 @@
+jag tänker kring hur menyerna och allt dom ligger i en naturlig följd efter hur brukarna skall jobba med systemet. https://github.com/Patron1965/traivo-one
+
+Deep Agent
+Innan jag fortsätter behöver jag förtydliga några saker:
+
+Vad vill du att jag ska göra?
+Analysera den nuvarande menystrukturen och ge förslag på förbättringar?
+Faktiskt omstrukturera menyerna i koden?
+Skapa en rapport om användarflödet?
+Vad är systemet för typ av applikation? (t.ex. webbapp, admin-panel, e-handel, etc.)
+Vilka är huvudanvändarna och vad är deras typiska arbetsflöde? (t.ex. "användare loggar in → skapar projekt → lägger till uppgifter → följer upp")
+Finns det specifika områden i menystrukturen som du känner är problematiska just nu?
+Feel free to answer one or more questions. Or just ask me to choose the appropriate answers and move forward!
+
+
+Jag vill att du ser över menyerna och funktionerna under och analysera utifrån hur man skall jobb så dom ligger i logisk ordning. länk till github. https://github.com/Patron1965/traivo-one
+
+Deep Agent
+Running:cd /home/ubuntu && git clone https://github.com/Patron1965/traivo-one.git traivo-one 2>&1
+Running:find /home/ubuntu/traivo-one -type f | head -80 && echo "---" && ls -la /home/ubuntu/traivo-one/
+Running:find /home/ubuntu/traivo-one/client -type f -name "*.tsx" -o -name "*.ts" | sort
+Running:find /home/ubuntu/traivo-one/server -type f -name "*.ts" | sort
+Now let me read the key navigation and menu files:
+
+Now let me read the key screens to understand functionality:
+
+Running:for f in /home/ubuntu/traivo-one/client/screens/*.tsx; do echo "=== $(basename $f) ==="; head -30 "$f"; echo ""; done
+Running:head -80 /home/ubuntu/traivo-one/client/types/index.ts
+Now I have a thorough understanding of the codebase. Let me create the report:
+
+Running:cd /home/ubuntu/traivo-one && git add MENYSTRUKTUR_ANALYS.md && git commit -m "Lägg till analys av menystruktur och arbetsflöde"
+Running:cd /home/ubuntu/traivo-one && git config user.email "deepagent@abacus.ai" && git config user.name "DeepAgent" && git add MENYSTRUKTUR_ANALYS.md && git commit -m "Lägg till analys av menystruktur och arbetsflöde"
+
+Progress
+5/5
+100%
+COMPLETED (5)
+Klona GitHub-repositoryt
+Completed
+Utforska kodbasen och identifiera menystruktur
+Completed
+Analysera användararbetsflödet
+Completed
+Skapa detaljerad rapport på svenska
+Completed
+Git commit
+Completed
+Code
+Analysen är klar! Här är en sammanfattning av vad jag hittade:
+
+Traivo Go – Översikt
+Traivo Go är en mobilapp (React Native/Expo) för chaufförer inom avfallshantering och transportlogistik.
+
+Nuvarande struktur
+3 bottenflikar: Hem, Uppdrag, Karta
+11 poster i hamburgermenyn (inkl. Logga ut)
+7 underordnade skärmar som nås via uppdragsflödet (Inspektion, Material, Foto, Signatur, Kundkvittering, Avvikelse)
+Viktiga fynd och rekommendationer
+Problem	Rekommendation
+AI-Assistent ligger överst trots att den är ett stödverktyg	Flytta Aviseringar överst – mest tidsbrådskande
+"Om Traivo Go" pekar på samma skärm som Inställningar	Ta bort dubbletten eller skapa en egen AboutScreen
+Ingen tydlig gruppering efter arbetsmoment	Lägg till sektionsrubriker: "Dagligt arbete", "Uppföljning & rapporter", "Konto"
+Aviseringar borde vara mer tillgängliga	Överväg att lägga Aviseringar i bottenfältet
+Rapporten finns sparad som MENYSTRUKTUR_ANALYS.md i projektkatalogen med fullständig analys, detaljerade tabeller och konkreta förslag på förbättringar.
+
+Jag har genomfört en fullständig analys av menystrukturen i ditt traivo-one projekt! 🎯
+
+Vad jag har gjort:
+✅ Klonat och analyserat GitHub-repositoryt
+✅ Kartlagt alla menyer och funktioner i appen
+✅ Analyserat användararbetsflödet för chaufförer inom avfallshantering
+✅ Skapat en detaljerad rapport med konkreta rekommendationer
+
+Huvudsakliga fynd:
+Din app är en mobilapplikation för fältpersonal med fokus på:
+
+Ruttplanering och orderhantering
+Inspektion och materialloggning
+Signaturinsamling och dokumentation
+Viktiga rekommendationer:
+Prioritera tidskritiska funktioner - Aviseringar bör ligga överst i menyn
+Gruppera logiskt - Dela upp menyn i sektioner som "Dagligt arbete", "Uppföljning & rapporter" och "Konto"
+Åtgärda redundans - "Om Traivo Go" och "Inställningar" pekar just nu på samma skärm
+Flytta AI-assistenten - Bör vara ett stödverktyg längre ner, inte i toppen
+Rapporten finns här:
+📄 /home/ubuntu/traivo-one/MENYSTRUKTUR_ANALYS.md
+
+Rapporten innehåller detaljerad analys av nuvarande struktur, användarflöde och konkreta förslag på hur menyerna kan omorganiseras för att bättre stödja chaufförernas dagliga arbete.
+
+Vill du att jag implementerar någon av dessa förändringar i koden?
+
+Credits Used: 809
+traivo-one/MENYSTRUKTUR_ANALYS.md
+traivo-one
+
+Jag har ett projekt kallat **Traivo One** – ett huvudsystem (inte en mobilapp). Traivo Go är den separata mobilapplikationen för fältpersonal. Din uppgift är att analysera Traivo Ones menystruktur och funktioner direkt från GitHub-repot: **https://github.com/Patron1965/traivo-one**
+
+Gör följande:
+
+1. **Inventera** alla befintliga menyer, rubriker och funktioner i systemet genom att granska kodbasen i repot.
+2. **Analysera** den nuvarande strukturen utifrån hur användare faktiskt arbetar i ett huvudsystem – identifiera vad som är logiskt placerat och vad som är problematiskt.
+3. **Reorganisera** menyerna och funktionerna under varje rubrik i en logisk arbetsflödesordning – det vill säga, placera allt i den ordning en användare naturligt rör sig genom systemet under sin arbetsdag.
+4. **Motivera** varje förändring du föreslår med ett tydligt resonemang om varför den nya placeringen är mer intuitiv eller effektiv.
+
+Utgå från perspektivet att Traivo One är ett administrativt huvudsystem, skilt från Traivo Go (fältpersonalens mobilapp). Strukturen ska spegla ett kontorsbaserat eller administrativt arbetsflöde, inte ett fältarbetsflöde.
+
+Deep Agent
+Running:find /home/ubuntu/traivo-one -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | head -80
+Running:find /home/ubuntu/traivo-one -type f -name "*.tsx" -o -name "*.ts" -o -name "*.jsx" -o -name "*.js" | grep -v node_modules | grep -v server-dist | grep -v static-web | grep -v ".expo" | sort
+Now let me read the key screens to understand their content:
+
+Now let me check server-side routes and the planner route (which might be the admin interface):
+
+Now let me check the HTML templates for the admin/planner interface:
+
+Running:find /home/ubuntu/traivo-one/server/templates -type f | sort
+Running:wc -l /home/ubuntu/traivo-one/server/templates/planner-map.html /home/ubuntu/traivo-one/server/templates/support.html /home/ubuntu/traivo-one/server/templates/landing-page.html
+Now let me also check the SettingsScreen more fully and the remaining parts of key screens:
+
+Now I have a comprehensive understanding of the codebase. Let me also check the package.json and app.json for project naming:
+
+Running:cat /home/ubuntu/traivo-one/app.json 2>/dev/null; echo "---"; head -20 /home/ubuntu/traivo-one/package.json 2>/dev/null
+Now I have a thorough understanding of the entire codebase. Let me create the comprehensive analysis report:
+
+Running:cd /home/ubuntu/traivo-one && git add TRAIVO_ONE_MENYANALYS.md && git commit -m "Lägg till komplett menystrukturanalys av Traivo One som administrativt huvudsystem - Fullständig inventering av alla skärmar, menyer och funktioner - Identifierar 10 problem med nuvarande struktur (namnfel, fältapp-mentalitet, saknad integration) - Föreslår ny menystruktur med sektionsrubriker och arbetsflödeslogik - Arbetsflödesanalys för en typisk administratörs arbetsdag - Prioriterad åtgärdslista i 4 nivåer - Tekniska åtgärdspunkter med specifika filer och radnummer"
+
+Progress
+5/5
+100%
+COMPLETED (5)
+Inventera kodbasen
+Completed
+Analysera nuvarande struktur
+Completed
+Föreslå ny reorganiserad menystruktur
+Completed
+Skapa detaljerad rapport TRAIVO_ONE_MENYANALYS.md
+Completed
+Git commit
+Completed
+Code
+Rapporten TRAIVO_ONE_MENYANALYS.md är nu skapad och committad. Här är en sammanfattning av de viktigaste fynden:
+
+Huvudproblem identifierade (10 st)
+🔴 Kritiska:
+
+Felaktiga namn överallt — "Nordnav Go", "Traivo Go" istället för "Traivo One" (HamburgerMenu, landningssida, planner-map, support, server-kod)
+"Om Traivo Go" pekar till samma skärm som Inställningar (dubblett)
+Planerarkartan (den viktigaste adminfunktionen!) är helt separerad som extern HTML-sida
+⚠️ Strukturella:
+
+AI-Assistenten har högsta prioritet i menyn — borde vara ett stödverktyg, inte primärt
+Fältapp-mentalitet genomsyrar hela strukturen (röstkommandon, haptik, GPS för egen position)
+Inga sektionsrubriker — bara separatorer utan text
+Föreslagen ny struktur
+Menyn reorganiseras efter arbetsflödeslogik med fyra tydliga sektioner:
+
+PLANERING & DRIFT — Aviseringar, Team, Chaufförskarta
+UPPFÖLJNING & RAPPORTER — Statistik, Kundrapporter, Avvikelser, Ruttbetyg
+VERKTYG — AI-Assistent
+KONTO & SYSTEM — Profil, Inställningar, Om Traivo One
+Rapporten innehåller även specifika filreferenser med radnummer för alla ändringar och en prioriterad åtgärdslista i 4 nivåer.
+
+Perfekt! Jag har nu genomfört en komplett ny analys av Traivo One som det administrativa huvudsystem det faktiskt är. 🎯
+
+Genomfört arbete:
+1️⃣ Inventering av systemet
+✅ Kartlagt alla menyer och funktioner i det administrativa gränssnittet
+✅ Identifierat både mobilkomponenter och webbaserade administrativa vyer
+✅ Analyserat navigationsstrukturen i /client/navigation/ och /client/components/HamburgerMenu.tsx
+
+2️⃣ Identifierade huvudproblem
+🔴 Namnkonflikter - Systemet refereras felaktigt till som "Traivo Go" eller "Nordnav Go" istället för Traivo One
+
+🔴 Felprioritering - AI-assistenten ligger överst i menyn trots att den är ett stödverktyg, inte en primär funktion
+
+🔴 Splittrad navigation - Den kritiska planerarkartan (/planner/map) är separerad från huvudgränssnittet
+
+🔴 "Fältapp-mentalitet" - Funktioner för chaufförer prioriteras högre än administrativa verktyg
+
+🔴 Dubbletter - "Om Traivo Go" pekar på samma skärm som inställningar
+
+3️⃣ Föreslagen ny menystruktur
+📋 PLANERING & DRIFT
+
+Aviseringar (tidskritiskt)
+Team (personalöversikt)
+Chaufförskarta (fältöversikt)
+📊 UPPFÖLJNING & RAPPORTER
+
+Statistik
+Kundrapporter
+Avvikelser
+Ruttbetyg
+🔧 VERKTYG
+
+AI-Assistent (stödverktyg)
+⚙️ KONTO & SYSTEM
+
+Profil
+Inställningar
+Om Traivo One
+4️⃣ Detaljerade motiveringar
+Varje förändring är motiverad utifrån administrativt arbetsflöde:
+
+Planering först - Administratörer börjar dagen med att planera och fördela arbete
+Uppföljning centralt - Rapporter och statistik är kärnan i administrativt arbete
+Verktyg nedprioriterade - AI-assistenten är ett stöd, inte en primär funktion
+📄 Fullständig rapport:
+TRAIVO_ONE_MENYANALYS.md innehåller:
+
+Detaljerad inventering av alla funktioner
+Analys av nuvarande struktur
+Komplett reorganiseringsförslag
+Motiveringar för varje förändring
+Prioriterad åtgärdslista
+Du kan öppna rapporten från "Files"-knappen uppe till höger!
+
+Vill du att jag implementerar dessa förändringar i koden?
+
+Credits Used: 1 719
+traivo-one/TRAIVO_ONE_MENYANALYS.md
+traivo-one
+
+Agent  
+Initiate new tasks by clicking on the compose button at the top.Read Help and How-To.
+traivo-one/TRAIVO_ONE_MENYANALYS.md
+TRAIVO ONE — Menystrukturanalys (Administrativt Huvudsystem)
+Datum: 2026-03-27
+Typ: Komplett systemanalys av Traivo One som administrativt huvudsystem
+Fokus: Menystruktur, arbetsflöden och reorganisering för kontorsbaserade användare
+
+1. Systembeskrivning och Kontext
+1.1 Vad är Traivo One?
+Traivo One är det administrativa huvudsystemet för avfallshantering och fältservice. Det är avsett att användas av kontorsbaserad personal — planerare, arbetsledare, administratörer och driftchefer — som styr och övervakar den dagliga verksamheten.
+
+Viktigt: Traivo One är INTE en mobilapp. Traivo Go är den separata mobilapplikationen för fältpersonal (chaufförer). Traivo One ska ses som det centrala navet som styr, planerar och följer upp all operativ verksamhet.
+
+1.2 Identifierade användarroller
+Baserat på kodbasen (FIELD_APP_ALLOWED_ROLES, rollhantering i AuthContext, ProfileScreen):
+
+Roll	Beskrivning	Primärt behov
+Planerare	Skapar rutter, tilldelar uppdrag	Kartvy, orderhantering, resursöversikt
+Arbetsledare	Övervakar daglig drift	Realtidsövervakning, avvikelser, teamstatus
+Administratör	Systemkonfiguration, rapporter	Inställningar, statistik, kundrapporter
+Driftchef	Strategisk uppföljning	Statistik, trender, kundnöjdhet
+2. Inventering av Nuvarande Struktur
+2.1 Navigationsarkitektur
+Systemet är byggt med React Native (Expo) och använder tre navigationsnivåer:
+
+Nivå 1: Bottom Tab Navigator (3 flikar)
+Flik	Skärm	Ikon	Etikett
+1	HomeScreen	home	Hem
+2	OrdersScreen	clipboard	Uppdrag
+3	MapScreen	map	Karta
+Nivå 2: Hamburgermenyn (sidopanel, 12 menyval)
+Nuvarande ordning i HamburgerMenu.tsx (rad 148–161):
+
+#	ID	Etikett	Ikon	Skärm	Grupp
+1	ai	AI-Assistent	cpu	AIAssistant	—
+2	notifications	Aviseringar	bell	Notifications	—
+3	team	Mitt team	users	Team	—
+—	separator	—	—	—	—
+4	statistics	Statistik	bar-chart-2	Statistics	—
+5	customerReports	Kundrapporter	file-text	CustomerReports	—
+6	deviations	Mina avvikelser	alert-triangle	MyDeviations	—
+7	routeFeedback	Ruttbetyg	star	RouteFeedback	—
+—	separator	—	—	—	—
+8	profile	Min profil	user	Profile	—
+9	settings	Inställningar	settings	Settings	—
+10	about	Om Traivo Go	info	Settings	—
+—	separator	—	—	—	—
+11	—	Logga ut	log-out	—	—
+Övrigt i hamburgermenyn:
+
+Användarprofil-sektion (avatar, namn, roll, online/offline-toggle)
+QuickStatsWidget (klara/kvar-räknare för uppdrag)
+Versionstext: "Traivo Go v2.0"
+Nivå 3: Stack-navigerade skärmar (via RootNavigator)
+Skärm	Rubriktitel	Åtkomst
+OrderDetail	Uppdrag	Klick på order i lista/karta
+ReportDeviation	Avvikelse	Från OrderDetail
+MaterialLog	Material	Från OrderDetail
+CameraCapture	Foto	Från deviation/inspektion
+Signature	Signatur	Från OrderDetail
+CustomerSignOff	Kundkvittering	Från OrderDetail
+Inspection	Inspektion	Från OrderDetail
+2.2 Webbaserade administrativa vyer
+Utöver den React Native-baserade appen finns tre HTML-baserade sidor serverade från backend:
+
+URL-sökväg	Fil	Funktion
+/	landing-page.html	Landningssida — QR-kod för Expo Go, länk till planerarkartan
+/planner/map	planner-map.html	Chaufförskarta — realtidspositioner, ordervisualisering, filterbar, sidopanel
+/support	support.html	Supportsida — FAQ och kontaktinformation
+2.3 API-struktur (server-routes)
+Route-prefix	Fil	Funktion
+/api/mobile/*	server/routes/mobile/	All mobilapp-funktionalitet (ordrar, synk, notiser, team, etc.)
+/api/mobile/ai/*	server/routes/ai.ts	AI-assistentens backend
+/api/planner/*	server/routes/planner.ts	Planerarspecifika endpoints (förarpositioner, ordrar)
+2.4 Detaljerad funktionsinventering per skärm
+HomeScreen (Hem)
+Dagens uppdragsöversikt (antal klara/kvar)
+Dagssammanfattning med statistik
+Väderwidget
+Arbetstidskort (arbetspass-spårning)
+Nästa uppdrag-kort
+Orderlista (förhandsgranskning)
+Framstegskort (progress)
+Överföringsbanner (carry-over)
+Synkstatusbanner
+Teampartner-banner
+Rastförslag
+10-minutersvarning
+Statistik-knapp
+Röstkommando-overlay
+OrdersScreen (Uppdrag)
+Filtrerbar orderlista med statusar
+Swipe-gester för snabbåtgärder
+Statusframstegsindikatorer
+GPS-baserade tidsuppskattningar
+Realtidsuppdateringar
+MapScreen (Karta)
+Leaflet/React Native Maps-karta
+Ordermarkörer med popup-info
+Ruttoptimering och polyline-visning
+GPS-spårning
+Team-positioner
+Offline-stöd
+WebSocket-realtidsuppdateringar
+OrderDetailScreen (Uppdragsdetalj)
+Fullständig orderinfo (kund, adress, tidsfönster)
+Statusflöde med stegvis progression
+Tidregistrering (körning, på plats, arbete)
+Navigering till extern kartapp
+Avvikelserapportering
+Materialloggning
+Fotodokumentation
+Digital signatur
+Kundkvittering
+Inspektionsformulär
+StatisticsScreen (Statistik)
+Vecko-/månadsvy med periodväljare
+Orderstatistik (totalt, klara, misslyckade)
+Avvikelsestatistik
+Kundkvitteringsgrad
+Genomsnittstider (per order, resa, på plats)
+Daglig nedbrytning
+Trendanalys
+TeamScreen (Mitt team)
+Teammedlemslista med status
+Skapa team / Bjud in
+Sök efter teammedlemmar
+Visa teamets ordrar
+Teamfärger
+CustomerReportsScreen (Kundrapporter)
+Lista över kundens ändringsförfrågningar
+Skapa ny rapport (kategori, allvarlighetsgrad, beskrivning)
+Statusfiltrering (ny, granskad, löst, avvisad)
+Detaljvisning
+MyDeviationsScreen (Mina avvikelser)
+Lista över rapporterade avvikelser
+Sammanfattning med kategori-räknare
+Detaljvisning med tidsinfo
+NotificationsScreen (Aviseringar)
+Grupperade notiser (Idag, Igår, Tidigare)
+Läs/oläst-status
+Markera alla som lästa
+Push-notifikationshistorik
+AIAssistantScreen (AI-Assistent)
+Chattgränssnitt med AI
+Snabbåtgärder (mina uppdrag, rutt, avvikelse, nästa steg, hjälp)
+Röstinput-stöd
+Kontextmedveten (har tillgång till ordrar)
+ProfileScreen (Min profil)
+Personlig info (namn, roll)
+Resursprofiler (fordon, utrustning)
+Teaminfo
+Dagens statistik
+Sjukfrånvaro-rapportering
+Online/offline-toggle
+Utloggning
+SettingsScreen (Inställningar)
+GPS-spårning on/off
+Push-notiser on/off
+Haptisk feedback on/off
+Mörkt läge (planerad)
+Kartapp-val (Google Maps, Apple Maps, Waze)
+Cache-rensning
+RouteFeedbackScreen (Ruttbetyg)
+Stjärnbetyg (1-5)
+Fördefinierade orsaker
+Fritextkommentar
+Planner Map (Webbaserad chaufförskarta)
+Leaflet-baserad fullskärmskarta
+Realtid förarpositioner via API
+Ordermarkörer (filtrerbara: idag/vecka)
+Sidopanel med förarlista
+Statusfiltrering
+Kluster-gruppering av markörer
+Auto-uppdatering (15s intervall)
+3. Analys av Nuvarande Struktur ur Administrativt Perspektiv
+3.1 Grundläggande problem: Fältapp-mentalitet i ett adminsystem
+Den nuvarande strukturen är tydligt designad med en fältanvändare (chaufför) i åtanke, inte en kontorsadministratör. Specifika problem:
+
+Problem 1: AI-Assistenten har högsta prioritet i menyn
+Nuvarande: Första menyval i hamburgaren
+Problem: En AI-chatbot är ett stödverktyg, inte det primära arbetsverktyget för en administratör. Administratörer behöver snabb tillgång till planering och övervakning, inte en chattbot.
+Allvarlighetsgrad: ⚠️ Medel
+Problem 2: "Mitt team" och "Aviseringar" saknar sektionslogik
+Nuvarande: Aviseringar och Team ligger sida vid sida utan tydlig gruppering
+Problem: Team-hantering är en organisatorisk funktion, aviseringar är ett kommunikationsverktyg. De bör grupperas med sina respektive funktionsgrupper.
+Allvarlighetsgrad: ⚠️ Medel
+Problem 3: Rapportfunktioner är splittrade
+Nuvarande: Statistik, Kundrapporter, Mina avvikelser och Ruttbetyg ligger i samma sektion men saknar hierarkisk struktur
+Problem: En administratör som arbetar med uppföljning behöver snabbt nå alla rapportrelaterade funktioner. Dessa borde vara tydligt grupperade och namngivna.
+Allvarlighetsgrad: ⚠️ Medel
+Problem 4: "Om Traivo Go" pekar till Settings-skärmen
+Nuvarande: { id: 'about', label: 'Om Traivo Go', icon: 'info', screen: 'Settings' }
+Problem: (a) Namnet säger "Traivo Go" men systemet heter "Traivo One", (b) den leder till samma skärm som "Inställningar" — dubblett utan mervärde.
+Allvarlighetsgrad: 🔴 Hög
+Problem 5: Versionstext visar "Traivo Go v2.0"
+Nuvarande: Hårdkodad text i hamburgermenyn
+Problem: Felaktigt systemnamn. Ska vara "Traivo One".
+Allvarlighetsgrad: 🔴 Hög
+Problem 6: Landningssida refererar till "Nordnav Go"
+Nuvarande: HTML-titeln och fallback-texten säger "Nordnav Go"
+Problem: Inkonsekvent namngivning — blandning av "Nordnav Go", "Traivo Go" och det korrekta "Traivo One".
+Allvarlighetsgrad: 🔴 Hög
+Problem 7: Planerarkartan saknar integration i huvudnavigationen
+Nuvarande: Planerarkartan (/planner/map) är en separat HTML-sida som nås via landningssidans länk
+Problem: En av de viktigaste administrativa funktionerna (realtidsövervakning av chaufförer) är helt separerad från huvudgränssnittet och nås bara via en weblänk.
+Allvarlighetsgrad: 🔴 Hög
+Problem 8: Chaufförsspecifika funktioner i ett administrativt system
+Nuvarande: Röstkommandon, haptisk feedback, GPS-spårning (egna position), offline-köer
+Problem: Dessa funktioner är designade för en chaufför i fält, inte en kontorsanvändare. De tar plats och skapar förvirring.
+Allvarlighetsgrad: ⚠️ Medel
+Problem 9: Bottom-tab-navigationen speglar fältappens logik
+Nuvarande: Hem / Uppdrag / Karta
+Problem: Ur ett administrativt perspektiv borde flikarna reflektera administrativa arbetsflöden: Planering, Övervakning, Ordrar, Rapporter — inte "Hem" (som visar chaufförens dag).
+Allvarlighetsgrad: ⚠️ Medel
+Problem 10: Avsaknad av sektionsrubriker i hamburgermenyn
+Nuvarande: Enbart separatorer (linjer) mellan grupper
+Problem: Utan textrubriker (t.ex. "DAGLIGT ARBETE", "RAPPORTER") måste användaren själv tolka grupperingarna.
+Allvarlighetsgrad: ⚠️ Låg-Medel
+3.2 Vad som fungerar bra
+Element	Bedömning
+Hamburgermenyns visuella design	✅ Ren, modern design med ikoner och färgkodning
+QuickStatsWidget	✅ Snabb överblick direkt i menyn
+Online/Offline-toggle	✅ Tydlig statusindikator
+Notis-badge	✅ Bra synlighet för olästa meddelanden
+Orderfiltreringssystem	✅ Kraftfullt med svenska statusetiketter
+Planerarkartan	✅ Bra funktionalitet (realtid, filter, sidopanel)
+Statistikskärmen	✅ Bra periodjämförelser och trender
+4. Föreslagen ny menystruktur
+4.1 Ny Bottom Tab Navigator (4 flikar)
+#	Flik	Ikon	Etikett	Motivering
+1	Dashboard	layout	Översikt	Ersätter "Hem" — adminanpassad dagöversikt med KPI:er
+2	Orders	clipboard	Uppdrag	Bibehålls — kärnan i systemet
+3	Map/Planner	map	Karta	Bibehålls men bör integreras med planerarkartan
+4	Reports	bar-chart-2	Rapporter	NY — samlar all rapportering (idag gömd i meny)
+Motivering: En administratör börjar dagen med att se en översikt (Dashboard), hanterar sedan ordrar, övervakar kartan och följer upp med rapporter. Dessa fyra flikar speglar det faktiska arbetsflödet.
+
+4.2 Ny Hamburgermenystruktur
+┌─────────────────────────────────────────┐
+│  [Avatar]  Användarnamn                 │
+│            Roll           [Online/Offline]│
+├─────────────────────────────────────────┤
+│  ▸ QuickStatsWidget                      │
+├─────────────────────────────────────────┤
+│  PLANERING & DRIFT                       │
+│  ├── 🔔 Aviseringar           [badge]    │
+│  ├── 👥 Team & Personal                  │
+│  └── 🗺️ Chaufförskarta                   │
+├─────────────────────────────────────────┤
+│  UPPFÖLJNING & RAPPORTER                 │
+│  ├── 📊 Statistik                        │
+│  ├── 📋 Kundrapporter                    │
+│  ├── ⚠️ Avvikelser                       │
+│  └── ⭐ Ruttbetyg                        │
+├─────────────────────────────────────────┤
+│  VERKTYG                                 │
+│  └── 🤖 AI-Assistent                    │
+├─────────────────────────────────────────┤
+│  KONTO & SYSTEM                          │
+│  ├── 👤 Min profil                       │
+│  ├── ⚙️ Inställningar                    │
+│  └── ℹ️ Om Traivo One                    │
+├─────────────────────────────────────────┤
+│  🚪 Logga ut                             │
+├─────────────────────────────────────────┤
+│         Traivo One v2.0                  │
+└─────────────────────────────────────────┘
+4.3 Detaljerade förändringar
+#	Förändring	Före	Efter	Motivering
+1	Aviseringar flyttas upp	Plats 2 (ingen rubrik)	Plats 1 under "PLANERING & DRIFT"	Aviseringar om nya uppdrag, ruttändringar etc. är det första en administratör vill se vid dagens start.
+2	Team & Personal grupperas under Planering	Plats 3 (ingen rubrik)	Plats 2 under "PLANERING & DRIFT"	Team-hantering är en organisatorisk/planeringsuppgift, inte en social funktion.
+3	Chaufförskarta läggs till i menyn	Separat HTML-sida (ej i menyn)	Plats 3 under "PLANERING & DRIFT"	Den viktigaste administrativa funktionen bör vara direkt tillgänglig, inte gömd bakom en extern länk.
+4	AI-Assistent flyttas ned	Plats 1 (allra högst)	Under "VERKTYG"	AI-assistenten är ett stödverktyg, inte det primära. Den ska vara lätt att nå men inte dominera menyn.
+5	Rapportsektionen får tydlig rubrik	Separator utan text	Rubrik "UPPFÖLJNING & RAPPORTER"	Administratörer som arbetar med uppföljning ska omedelbart se var rapportfunktionerna finns.
+6	"Om Traivo Go" → "Om Traivo One"	Felaktigt namn, pekar till Settings	Korrekt namn, egen enkel info-vy eller modal	Rätt produktnamn och dedikerad info istället för omdirigering till Settings.
+7	Versionstexten korrigeras	"Traivo Go v2.0"	"Traivo One v2.0"	Korrekt systemnamn.
+8	Sektionsrubriker införs	Bara separatorer	Textrubriker per sektion	Förbättrar visuell orientering och minskar kognitiv belastning.
+9	"Mina avvikelser" byter namn	"Mina avvikelser"	"Avvikelser"	I ett administrativt system ser man allas avvikelser, inte bara "mina".
+5. Arbetsflödesanalys — En Administratörs Dag
+5.1 Morgon: Starta dagen (07:00–08:00)
+1. Logga in → Dashboard (Översikt)
+   ↳ Se dagens KPI:er, antal uppdrag, pågående ordrar
+   
+2. Aviseringar (🔔 med badge)
+   ↳ Nya uppdrag, ruttändringar från nattens planering
+   
+3. Chaufförskarta
+   ↳ Se vilka chaufförer som loggat in, realtidspositioner
+Nuvarande problem: Planerarkartan nås bara via en extern HTML-sida. Aviseringar ligger som andra val efter AI-assistenten.
+
+Med ny struktur: Allt nås direkt under "PLANERING & DRIFT" i hamburgermenyn, eller via bottom-flikarna.
+
+5.2 Förmiddag: Hantera den dagliga driften (08:00–12:00)
+4. Uppdrag (bottom-flik)
+   ↳ Övervaka orderstatus, tilldela om vid behov
+   
+5. Team & Personal
+   ↳ Hantera sjukfrånvaro, omfördela resurser
+   
+6. Karta (bottom-flik)
+   ↳ Följa rutter i realtid, identifiera förseningar
+Nuvarande problem: Team-skärmen är bra men ligger bland allmänna menyval utan kontext.
+
+5.3 Eftermiddag: Uppföljning (13:00–16:00)
+7. Statistik
+   ↳ Granska dagens genomförande mot mål
+   
+8. Avvikelser
+   ↳ Granska rapporterade avvikelser, prioritera åtgärder
+   
+9. Kundrapporter
+   ↳ Hantera kundärenden och ändringsförfrågningar
+   
+10. Ruttbetyg
+    ↳ Analysera chaufförers ruttfeedback
+Nuvarande problem: Alla dessa funktioner ligger utspridda utan tydlig gruppering.
+
+Med ny struktur: Allt samlat under "UPPFÖLJNING & RAPPORTER".
+
+5.4 Vid behov: Stödverktyg
+11. AI-Assistent
+    ↳ Fråga om sammanfattningar, sök information
+    
+12. Inställningar
+    ↳ Justera systemkonfiguration
+6. Tekniska Åtgärdspunkter
+6.1 Kritiska namnkorrigeringar
+Fil	Rad	Nuvarande	Korrekt
+HamburgerMenu.tsx	161	'Om Traivo Go'	'Om Traivo One'
+HamburgerMenu.tsx	257	'Traivo Go v2.0'	'Traivo One v2.0'
+landing-page.html	6	Nordnav Go - Fältapp	Traivo One - Administrativt system
+landing-page.html	33–34	Nordnav Go	Traivo One
+planner-map.html	6	Nordnav Go - Chaufförskarta	Traivo One - Chaufförskarta
+support.html	5	Support — Nordnav Go	Support — Traivo One
+server/app.ts	89	'traivo-go-api'	'traivo-one-api'
+server/app.ts	105	'Nordnav Go'	'Traivo One'
+server/app.ts	333	'Nordnav Go'	'Traivo One'
+server/app.ts	371	TRAIVO GO SERVER	TRAIVO ONE SERVER
+AIAssistantScreen.tsx	28	'Nordnav Assist'	'Traivo Assist'
+6.2 Hamburgermenyn — Kodändring
+Nuvarande menuItems-array (HamburgerMenu.tsx, rad 148–161):
+
+Bör ändras till:
+
+typescript
+Copy
+const menuItems: MenuItem[] = [
+  // PLANERING & DRIFT
+  { id: 'section-planning', label: 'PLANERING & DRIFT', icon: 'layout', color: '', bgColor: '', sectionHeader: true },
+  { id: 'notifications', label: 'Aviseringar', icon: 'bell', screen: 'Notifications', color: '#2196F3', bgColor: '#E3F2FD', badge: unreadCount },
+  { id: 'team', label: 'Team & Personal', icon: 'users', screen: 'Team', color: Colors.secondary, bgColor: Colors.secondaryLight + '40' },
+  { id: 'plannerMap', label: 'Chaufförskarta', icon: 'map', color: '#EA580C', bgColor: '#FFF3E0', onPress: () => openPlannerMap() },
+  { id: 'sep1', label: '', icon: 'minus', color: '', bgColor: '', separator: true },
+
+  // UPPFÖLJNING & RAPPORTER
+  { id: 'section-reports', label: 'UPPFÖLJNING & RAPPORTER', icon: 'bar-chart-2', color: '', bgColor: '', sectionHeader: true },
+  { id: 'statistics', label: 'Statistik', icon: 'bar-chart-2', screen: 'Statistics', color: Colors.primary, bgColor: Colors.primaryLight + '20' },
+  { id: 'customerReports', label: 'Kundrapporter', icon: 'file-text', screen: 'CustomerReports', color: Colors.success, bgColor: '#E8F5E9' },
+  { id: 'deviations', label: 'Avvikelser', icon: 'alert-triangle', screen: 'MyDeviations', color: '#E67E22', bgColor: '#FFF3E0' },
+  { id: 'routeFeedback', label: 'Ruttbetyg', icon: 'star', screen: 'RouteFeedback', color: Colors.warning, bgColor: '#FFF8E1' },
+  { id: 'sep2', label: '', icon: 'minus', color: '', bgColor: '', separator: true },
+
+  // VERKTYG
+  { id: 'section-tools', label: 'VERKTYG', icon: 'tool', color: '', bgColor: '', sectionHeader: true },
+  { id: 'ai', label: 'AI-Assistent', icon: 'cpu', screen: 'AIAssistant', color: '#7C3AED', bgColor: '#F0E6FF' },
+  { id: 'sep3', label: '', icon: 'minus', color: '', bgColor: '', separator: true },
+
+  // KONTO & SYSTEM
+  { id: 'section-account', label: 'KONTO & SYSTEM', icon: 'settings', color: '', bgColor: '', sectionHeader: true },
+  { id: 'profile', label: 'Min profil', icon: 'user', screen: 'Profile', color: Colors.info, bgColor: Colors.infoLight },
+  { id: 'settings', label: 'Inställningar', icon: 'settings', screen: 'Settings', color: '#7B1FA2', bgColor: '#F3E5F5' },
+  { id: 'about', label: 'Om Traivo One', icon: 'info', screen: 'About', color: Colors.info, bgColor: Colors.infoLight },
+];
+6.3 "Om Traivo Go"-dubbletten
+Problem: { id: 'about', screen: 'Settings' } — pekar till samma skärm som Inställningar.
+
+Lösning: Antingen:
+
+(a) Skapa en dedikerad AboutScreen med systeminformation, versionsnummer, kontaktinfo, och licens
+(b) Ta bort "Om Traivo One" helt och visa versioninfo i botten av Inställningar (som redan görs implicit)
+Rekommendation: Alternativ (a) — en enkel info-modal eller skärm ger mer professionellt intryck.
+
+7. Prioriterad åtgärdslista
+🔴 Prioritet 1 — Kritiska namnfel (Omedelbart)
+Ändra "Om Traivo Go" → "Om Traivo One" i HamburgerMenu.tsx
+Ändra "Traivo Go v2.0" → "Traivo One v2.0" i HamburgerMenu.tsx
+Korrigera alla "Nordnav Go"-förekomster i HTML-templates och server-kod
+Korrigera AI-assistentens välkomstmeddelande ("Nordnav Assist" → "Traivo Assist")
+🟠 Prioritet 2 — Menyreorganisering (Kort sikt)
+Inför sektionsrubriker i hamburgermenyn
+Flytta Aviseringar till toppen av menyn
+Flytta AI-Assistent nedåt under "VERKTYG"
+Lägg till "Chaufförskarta" som menyval under "PLANERING & DRIFT"
+Ta bort dubbletten "Om Traivo Go" (eller skapa dedikerad About-skärm)
+Byt namn "Mina avvikelser" → "Avvikelser"
+🟡 Prioritet 3 — Strukturella förbättringar (Medellång sikt)
+Omdesigna HomeScreen till en Dashboard-vy anpassad för administratörer
+Lägg till en fjärde bottom-tab "Rapporter"
+Integrera planerarkartan i huvudnavigationen (istället för separat HTML-sida)
+Anpassa SettingsScreen för administrativa inställningar (ta bort haptisk feedback, kartapp-val etc.)
+🟢 Prioritet 4 — Avancerade förbättringar (Lång sikt)
+Rollbaserade menyer (visa olika menyval beroende på roll: planerare, arbetsledare, admin)
+Dashboard-widgetar som kan konfigureras per användare
+Notis-center i header (istället för separat skärm)
+Sidnavigering (permanent sidmeny) istället för hamburgermeny på desktop
+8. Sammanfattning
+Nuvarande tillstånd
+Traivo One:s nuvarande menystruktur är funktionellt komplett men organisatoriskt felstrukturerad för sitt syfte som administrativt huvudsystem. Strukturen bär tydliga spår av att ha designats som en fältapplikation (mobilapp för chaufförer), med:
+
+AI-assistenten som högsta prioritet i menyn
+Chaufförsspecifika funktioner (röstkommandon, haptik)
+Planerarkartan avskärmad från huvudgränssnittet
+Inkonsekvent namngivning (Nordnav Go / Traivo Go / Traivo One)
+Rekommenderad riktning
+Omedelbart: Korrigera alla namnfel till "Traivo One" (tar ~30 min)
+Kort sikt: Reorganisera hamburgermenyn med sektionsrubriker och arbetsflödeslogik (tar ~2–4 tim)
+Medellång sikt: Omdesigna bottom-navigation och dashboard för administratörer (tar ~1–2 veckor)
+Lång sikt: Rollbaserat gränssnitt och desktop-optimering (tar ~1–2 månader)
+Den föreslagna nya strukturen följer principen att menyn ska spegla arbetsflödet, där de mest använda funktionerna för kontorsbaserade administratörer (planering → drift → uppföljning → verktyg → konto) presenteras i den ordning de naturligt används under en arbetsdag.

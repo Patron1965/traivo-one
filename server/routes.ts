@@ -393,6 +393,58 @@ export async function registerRoutes(
   registerFeedbackLoopRoutes(app);
   registerETANotificationRoutes(app);
 
+  app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
+    try {
+      const { waypoints } = req.body;
+      if (!waypoints || !Array.isArray(waypoints) || waypoints.length < 2) {
+        return res.status(400).json({ error: "Minst 2 waypoints krävs" });
+      }
+
+      if (waypoints.length > 25) {
+        return res.status(400).json({ error: "Max 25 waypoints" });
+      }
+
+      const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
+      if (!GEOAPIFY_API_KEY) {
+        return res.status(500).json({ error: "Geoapify API-nyckel saknas" });
+      }
+
+      const waypointStr = waypoints
+        .map((wp: { lat: number; lng: number }) => `${wp.lat},${wp.lng}`)
+        .join("|");
+
+      const response = await fetch(
+        `https://api.geoapify.com/v1/routing?waypoints=${waypointStr}&mode=drive&details=route_details&apiKey=${GEOAPIFY_API_KEY}`
+      );
+
+      if (!response.ok) {
+        return res.status(502).json({ error: "Geoapify routing-fel" });
+      }
+
+      const data = await response.json();
+      const feature = data.features?.[0];
+      const geometry = feature?.geometry;
+
+      if (!geometry) {
+        return res.json({ coordinates: [] });
+      }
+
+      let coords: [number, number][] = [];
+      if (geometry.type === "MultiLineString") {
+        coords = geometry.coordinates.flatMap((line: number[][]) =>
+          line.map((c: number[]) => [c[1], c[0]] as [number, number])
+        );
+      } else if (geometry.type === "LineString") {
+        coords = geometry.coordinates.map((c: number[]) => [c[1], c[0]] as [number, number]);
+      }
+
+      res.json({ coordinates: coords });
+    } catch (error) {
+      console.error("[route-geometry] Error:", error);
+      res.status(500).json({ error: "Kunde inte hämta ruttgeometri" });
+    }
+  });
+
   app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
     if (err instanceof z.ZodError) {
       return res.status(400).json(formatZodError(err));
