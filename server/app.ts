@@ -69,7 +69,7 @@ const templatesDir = path.join(projectRoot, 'server', 'templates');
 console.log(`[init] projectRoot=${projectRoot}, templatesDir=${templatesDir}, exists=${fs.existsSync(templatesDir)}`);
 
 let cachedAppJson: any = null;
-let cachedSdkVersion: string = '52.0.0';
+let cachedSdkVersion: string = '54.0.0';
 
 function loadAppJson() {
   try {
@@ -84,7 +84,7 @@ function loadSdkVersion() {
   try {
     cachedSdkVersion = JSON.parse(fs.readFileSync(path.join(projectRoot, 'node_modules', 'expo', 'package.json'), 'utf-8')).version;
   } catch {
-    cachedSdkVersion = '52.0.0';
+    cachedSdkVersion = '54.0.0';
   }
 }
 
