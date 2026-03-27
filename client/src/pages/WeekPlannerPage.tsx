@@ -3,9 +3,10 @@ import { WeekPlanner } from "@/components/WeekPlanner";
 import { JobModal } from "@/components/JobModal";
 import { JobDetailModal } from "@/components/JobDetailModal";
 import { AISuggestionsPanel } from "@/components/AISuggestionsPanel";
+import { RouteOptimizationPanel } from "@/components/RouteOptimizationPanel";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Sparkles, X, AlertTriangle } from "lucide-react";
+import { Sparkles, X, AlertTriangle, Route } from "lucide-react";
 import { format, startOfWeek, addDays } from "date-fns";
 
 export default function WeekPlannerPage() {
@@ -19,6 +20,7 @@ export default function WeekPlannerPage() {
     const saved = localStorage.getItem('weekplanner-ai-panel-open');
     return saved === 'true';
   });
+  const [aiPanelTab, setAiPanelTab] = useState<"ai" | "vrp">("ai");
   
   useEffect(() => {
     localStorage.setItem('weekplanner-ai-panel-open', String(showAIPanel));
@@ -56,10 +58,28 @@ export default function WeekPlannerPage() {
       {showAIPanel && (
         <div className="w-80 max-w-[320px] border-l bg-background flex flex-col shrink-0 overflow-hidden">
           <div className="flex items-center justify-between p-3 border-b shrink-0">
-            <span className="text-sm font-medium flex items-center gap-2">
-              <Sparkles className="h-4 w-4 text-purple-500" />
-              AI stöd
-            </span>
+            <div className="flex items-center gap-1">
+              <Button
+                size="sm"
+                variant={aiPanelTab === "ai" ? "default" : "ghost"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setAiPanelTab("ai")}
+                data-testid="button-tab-ai"
+              >
+                <Sparkles className="h-3 w-3" />
+                AI stöd
+              </Button>
+              <Button
+                size="sm"
+                variant={aiPanelTab === "vrp" ? "default" : "ghost"}
+                className="h-7 text-xs gap-1"
+                onClick={() => setAiPanelTab("vrp")}
+                data-testid="button-tab-vrp"
+              >
+                <Route className="h-3 w-3" />
+                VRP
+              </Button>
+            </div>
             <Button 
               size="icon" 
               variant="ghost" 
@@ -70,11 +90,17 @@ export default function WeekPlannerPage() {
             </Button>
           </div>
           <div className="flex-1 overflow-auto bg-background">
-            <AISuggestionsPanel
-              weekStart={weekDates.start}
-              weekEnd={weekDates.end}
-              onScheduleApplied={() => {}}
-            />
+            {aiPanelTab === "ai" ? (
+              <AISuggestionsPanel
+                weekStart={weekDates.start}
+                weekEnd={weekDates.end}
+                onScheduleApplied={() => {}}
+              />
+            ) : (
+              <RouteOptimizationPanel
+                selectedDate={format(startOfWeek(new Date(), { weekStartsOn: 1 }), "yyyy-MM-dd")}
+              />
+            )}
           </div>
         </div>
       )}

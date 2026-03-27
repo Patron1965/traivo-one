@@ -1,7 +1,7 @@
 # Traivo - AI-Driven Field Service Planning Platform
 
 ## Overview
-Traivo is an AI-driven platform optimizing field service operations for Nordic waste management companies. It aims to transform manual processes into AI-driven optimization, offering real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's vision is to become the leading commercial SaaS platform for Nordic field service with comprehensive multi-tenant capabilities.
+Traivo is an AI-driven platform designed to optimize field service operations for Nordic waste management companies. It aims to transform manual processes into AI-driven optimization, offering real-time decision support for route planning, resource allocation, economic control, productivity, and predictive analytics. The project's vision is to become the leading commercial SaaS platform for Nordic field service with comprehensive multi-tenant capabilities.
 
 ## User Preferences
 - **Language:** Swedish (sv) for UI
@@ -22,59 +22,58 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Backend:** Express.js with modular route architecture.
 - **Database:** PostgreSQL with Drizzle ORM.
 - **Multi-tenancy:** Full tenant isolation at database and API level with middleware and role-based access control.
-- **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, and a Conversational AI Planner, including budget enforcement. Predictive maintenance uses AI to forecast service dates from IoT data.
-- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, Data Health Scorecard, flexible column mapping, and detailed error reporting.
+- **AI Integration:** AI-first approach with OpenAI for AI Cards, AI Planning Assistant, AI Auto-Scheduling, Conversational AI Planner, predictive maintenance, and smart AI resource allocation.
+- **Modus 2.0 Import System:** Step-by-step CSV data migration with validation, real-time progress, and flexible column mapping.
 - **Geocoding:** Geoapify Geocoding API with Nominatim fallback.
 - **Performance:** Database indexes, server-side pagination, optimized loading, lazy object loading, and address search/autocomplete.
 - **Real-time Capabilities:** Real-time Notifications (WebSocket) and Real-time GPS Position Tracking.
 - **Offline Architecture:** Complete offline-first architecture for mobile field workers using IndexedDB.
 - **Automatic Anomaly Monitoring:** Background job for detecting operational anomalies and broadcasting alerts.
 - **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, upcoming visits, order history, real-time chat, self-booking, and field documentation.
-- **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Geoapify Routing API distance calculations with Haversine fallback, and Auto-Fill Week functionality with Geographic Day-Clustering.
-- **Distance Matrix Service:** Two-level caching (L1 in-memory LRU + L2 PostgreSQL `distance_cache` table with 24h TTL) for Geoapify Routing API calls with automatic Haversine fallback. Includes `precomputeDistanceMatrix()` for N×N matrices and `geographicPreCluster()` for GPS-based k-means clustering with balanced group sizes. Admin endpoints: `GET/DELETE /api/admin/distance-cache`, `POST /api/admin/distance-cache/cleanup`.
-- **Async Optimization Jobs:** PostgreSQL-based `optimization_jobs` table for running heavy VRP optimizations asynchronously. VRP requests with >30 orders are queued automatically and return `{ jobId, status: "queued" }`. Polling endpoint `GET /api/ai/optimization-job/:jobId` for status/progress/result. Jobs run in-process via `setImmediate()` with 5-min timeout, max 2 retry attempts. WebSocket notification on job completion/failure. Automatic cleanup of jobs older than 24h every 6 hours. Stale running jobs reset on server startup.
+- **Scheduling & Reporting:** Flexible scheduling, protocol/deviation report generation, Weekly Goal Progress Bars, Geoapify Routing API distance calculations with Haversine fallback, and Auto-Fill Week functionality with Geographic Day-Clustering.
+- **Distance Matrix Service:** Two-level caching for Geoapify Routing API calls with automatic Haversine fallback, including precomputation and geographic pre-clustering.
+- **Async Optimization Jobs:** PostgreSQL-based `optimization_jobs` for running heavy VRP optimizations asynchronously, with polling, WebSocket notifications, and automatic cleanup.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
 - **Environmental Statistics & Certificates:** Tracking mileage, fuel, CO2, and generation of annual environmental certificates.
 - **SMS Infrastructure:** Unified multi-channel notification service supporting email and SMS.
 - **Route Feedback System:** Driver daily route ratings, reason categories, free text, and reporting UI with KPI cards and charts, with an AI field assistant.
-- **Planner Map:** Real-time driver/job map with real road geometry, filtering, and status updates.
-- **Historical Map View:** Playback of daily GPS movement patterns per resource with timeline slider and KPI overlay.
+- **Map Views:** Real-time planner map with driver/job visualization and historical map view for GPS movement playback.
 - **Reporting & KPI Dashboard:** Enhanced `/reporting` page with tabs for overview, productivity, completion, deviations, resources, areas, and customers, featuring Recharts diagrams.
-- **Work Sessions & Time Tracking (Snöret):** Complete work session management system with check-in/check-out, time entries, weekly time summaries, labor rule violation detection, and payroll CSV export.
-- **Annual Planning (Årsplanering):** Annual goal tracking per customer/object with AI-driven distribution proposing optimal monthly work order distribution.
+- **Work Sessions & Time Tracking (Snöret):** Complete work session management system with check-in/check-out, time entries, and payroll CSV export.
+- **Annual Planning (Årsplanering):** Annual goal tracking per customer/object with AI-driven distribution.
 - **Equipment Sharing & Shift Collision Control:** Tracking vehicle/equipment bookings, collision detection, and availability timeline.
 - **Smart AI Kontrollmallar & Field Validation:** AI-driven control templates for field workers suggesting steps based on order type and history, with mandatory field validation.
-- **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, Fortnox export, and export history.
+- **Invoice Preview/Generation & Fortnox Export:** Full invoicing page with preview, filtering, batch selection, and Fortnox export.
 - **Team Management & User Administration:** User management with admin CRUD, team system, bulk actions, and invitation system.
 - **Företagsinställningar (Tenant Configuration):** Dedicated `/tenant-config` page for company setup, articles, execution codes, price lists, resources, permissions, and branded demo configuration.
 - **Branded Demo Experience:** Quick branding editor in tenant settings with live preview and auto-scrape feature.
 - **Fleet Management:** Comprehensive fleet management page with vehicle dashboard, maintenance planning, and fuel tracking.
 - **IoT API & Automatic Order Generation:** Management of IoT devices, API keys, and signals, with auto-generation of work orders based on sensor signals.
-- **Event-Driven Disruption Service:** Automated disruption detection and re-optimization suggestions for resource unavailability, emergency jobs, significant delays, and early completion. DisruptionPanel shows real-time alerts with scored suggestions and one-click application.
-- **Intelligent Break Placement in VRP:** Break constraints included in Geoapify Route Planner API VRP requests, placing breaks at natural route turning points.
-- **Feedback-loop — Beräknat vs Faktiskt:** Analytics comparing estimated vs actual service durations. Weekly accuracy trends, article-type deviation, per-resource accuracy, carry-over analysis, and suggested duration adjustments with planner approval. "Prediktionsnoggrannhet" tab in Reporting page with MAPE, accuracy rate, MAE KPIs.
-- **Kundnotifieringar — Vi är på väg:** Automatic ETA notifications to customers when field worker marks order as "en route". Per-tenant configurable (margin, channel, trigger). LiveETAWidget in customer portal with 5-minute auto-refresh. Notification history in `eta_notifications` table. Uses existing `customerNotificationSettings` for opt-in/out. Geoapify routing for real ETA calculation.
-- **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields, UI for visualization, and aggregated preferences for order placement.
+- **Event-Driven Disruption Service:** Automated disruption detection and re-optimization suggestions for resource unavailability, emergency jobs, significant delays, and early completion.
+- **Intelligent Break Placement in VRP:** Break constraints included in Geoapify Route Planner API VRP requests.
+- **Feedback-loop — Beräknat vs Faktiskt:** Analytics comparing estimated vs actual service durations, with weekly accuracy trends and suggested duration adjustments.
+- **Kundnotifieringar — Vi är på väg:** Automatic ETA notifications to customers when field worker marks order as "en route", with configurable settings.
+- **SlotPreference System:** Extended object time restrictions with `preference` and `reason` fields and UI for visualization.
 - **Planned Notes (Meddelande till utförare):** Planner can write messages to field workers, displayed prominently in the SimpleFieldApp.
 - **Tenant Feature Flags:** Module-based feature packaging system with 4 tiers, allowing per-tenant module enablement.
-- **WeekPlanner Drag-and-Drop Improvements:** Inline conflict indicators, multi-select bulk-move, and AI "Föreslå optimal tid" per order with scoring algorithm.
-- **Smart Navigation i Fältappen:** Travel distance/time display per job card, "Nästa stopp" navigation card with deep links, and 10-minute timer warning toast.
-- **Smart AI Resource Allocation:** AI-förslag button in JobModal suggests top 3 best-fit resources, competency warning banner, and "Auto-fördela idag" button for unplanned orders.
-- **Constraint Engine & Decision Trace:** Deterministic constraint validation layer for AI auto-schedule against hard and soft constraints, risk score calculation, and detailed `decisionTrace` logging for audit.
+- **WeekPlanner Drag-and-Drop Improvements:** Inline conflict indicators, multi-select bulk-move, and AI "Föreslå optimal tid" per order.
+- **Smart Navigation i Fältappen:** Travel distance/time display per job card, "Nästa stopp" navigation card with deep links, and timer warning.
+- **Constraint Engine & Decision Trace:** Deterministic constraint validation layer for AI auto-schedule, risk score calculation, and detailed `decisionTrace` logging.
 - **Multi-Customer Billing (Flerkund-fakturering):** Extended `objectPayers` with `isPrimary` flag and `payerLabel` field, and billing customer selection in JobModal.
-- **Polyline/Polygon Support:** `polylineData` (GeoJSON) field on objects table for defining area boundaries, with PolylineEditor component, bulk find-objects-in-polygon endpoint, and inline map draw control (polygon icon button next to zoom controls in ObjectsMapTab) with toolbar, object selector, labels, and real-time drawing.
-- **Map Cluster Selection Tool:** Draw polygon on objects map to spatially select objects and bulk-assign them to a new or existing cluster. Highlighted markers (amber) for selected objects, cluster creation panel with name input, and dropdown for assigning to existing clusters. Endpoint: `POST /api/objects/bulk-assign-cluster`.
-- **VRP Constraint Integration:** Enhanced VRP optimization with real constraint enrichment from database tables. `enrichVRPRequestWithConstraints()` in `server/vrp-constraints.ts` fetches and applies: time windows from `object_time_restrictions` and `task_desired_timewindows`, competency matching via `executionCodes` (mapped to Geoapify skills), vehicle capacity from `resource_vehicles`+`vehicles`, task dependencies from `task_dependency_instances` (precedence constraints), object preferred times, and per-resource efficiency factor adjustments from `resource_articles`. The VRP endpoint accepts an optional `constraints` parameter with toggles for each constraint type. Backward compatible — omitting `constraints` activates defaults (time windows + skills + dependencies enabled, capacity disabled).
+- **Polyline/Polygon Support:** `polylineData` (GeoJSON) field on objects table for defining area boundaries, with PolylineEditor component, bulk find-objects-in-polygon endpoint, and inline map draw control.
+- **Map Cluster Selection Tool:** Draw polygon on objects map to spatially select objects and bulk-assign them to a new or existing cluster.
+- **VRP Constraint Integration:** Enhanced VRP optimization with real constraint enrichment from database tables (time windows, competency, vehicle capacity, task dependencies, preferred times, resource efficiency factors).
+- **VRP Route Optimization UI (Fas 4):** Enhanced `RouteOptimizationPanel.tsx` with constraint toggles, async job progress, decision trace per order, multi-day planning mode, what-if simulation, and cluster visualization.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.
 - **External Optimization:** Route optimization is offloaded to a separate Traivo optimization service.
 - **Data Validation:** DataClean service handles external data validation and geocoding.
-- **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app. Full Traivo GO compatibility layer with dual-format support on distance API (origin/destination + fromLat/toLat), disruption triggers (orderId + workOrderId, actualElapsed + actualDuration), break config (HH:mm strings + seconds), enriched order responses (enRouteAt, customerNotified, objectAccessCode, executionStatus), and missing GO endpoints (map-config, team-invites, team-orders, customer-signoff, upload-photo, confirm-photo, auto-eta-sms, resource_profile_assignments). POST+PATCH dual-method support for work-sessions (stop/pause/resume) and notifications (read/read-all). Push token registration/removal via push_tokens table. Online/offline status tracking (isOnline, lastSeenAt on resources). Mobile disruption triggers (delay, early-completion, resource-unavailable).
+- **Mobile Field App API (Driver Core Integration):** Complete REST API for the Driver Core mobile field app, ensuring full Traivo GO compatibility layer with dual-format support.
 - **Status Message Templates:** Configurable message templates with variable substitution for auto-responses.
-- **Resource Availability Service:** Real-time resource schedule analysis computing next available time from today's work orders.
-- **Portal Chat Auto-Responses:** Automatic status messages in customer portal chat when keywords like "status", "när", "ledig" are detected.
-- **Mobile API Fas 2 Endpoints:** Team management (my-profiles, my-team, CRUD, invite, accept, leave), resource search, work-session entries, time-entries/summary, statistics, route/route-optimized, distance/batch distance (Geoapify with Haversine fallback), break-config, ETA notification history/config, work order carry-over, auto-ETA-SMS.
+- **Resource Availability Service:** Real-time resource schedule analysis computing next available time.
+- **Portal Chat Auto-Responses:** Automatic status messages in customer portal chat when keywords are detected.
+- **Mobile API Fas 2 Endpoints:** Team management, resource search, work-session entries, time-entries/summary, statistics, route/route-optimized, distance/batch distance, break-config, ETA notification history/config, work order carry-over, auto-ETA-SMS.
 
 ## External Dependencies
 - **PostgreSQL:** Primary database.
