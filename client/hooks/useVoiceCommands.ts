@@ -504,14 +504,9 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
     setVoiceOverlayVisible(true);
     setVoiceError(true);
     triggerHaptic('error');
-    const msg = 'Kommandot k\u00e4ndes inte igen.';
+    const msg = 'Kommandot k\u00e4ndes inte igen. Tryck f\u00f6r att f\u00f6rs\u00f6ka igen.';
     showVoiceFeedback(msg);
-    speakConfirmation(msg + ' F\u00f6rs\u00f6k igen.');
-    silenceTimerRef.current = setTimeout(() => {
-      setVoiceError(false);
-      setVoiceOverlayVisible(false);
-      startVoiceRecording();
-    }, 1500);
+    speakConfirmation(msg);
   }
 
   function tryLocalKeywordMatch(spokenText: string): boolean {
@@ -569,6 +564,10 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
         executeVoiceAction(result.action, result.displayMessage);
       }
     } catch {
+      if (localText && tryLocalKeywordMatch(localText)) {
+        setVoiceProcessing(false);
+        return;
+      }
       try {
         const transcribeResult = await apiRequest('POST', '/api/mobile/ai/transcribe', { audio: base64 });
         const transcript = transcribeResult.text || '';
@@ -578,7 +577,13 @@ export function useVoiceCommands({ navigation, activeOrders, isOnline, queryClie
         }
         handleUnknownCommand();
       } catch {
-        handleUnknownCommand();
+        setVoiceOverlayVisible(true);
+        setVoiceError(true);
+        triggerHaptic('error');
+        const msg = 'R\u00f6stkommando \u00e4r inte tillg\u00e4ngligt just nu. F\u00f6rs\u00f6k igen senare.';
+        setVoiceTranscript(msg);
+        showVoiceFeedback(msg);
+        speakConfirmation(msg);
       }
     } finally {
       setVoiceProcessing(false);

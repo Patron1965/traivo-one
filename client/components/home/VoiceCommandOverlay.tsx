@@ -130,10 +130,13 @@ export function VoiceCommandOverlay({
                   <Feather name="alert-circle" size={48} color={Colors.danger} />
                 </View>
                 <ThemedText variant="subheading" color={Colors.textInverse} style={styles.voiceOverlayTitle}>
-                  Kommandot k\u00e4ndes inte igen
+                  {voiceTranscript && voiceTranscript.length > 30 ? voiceTranscript : 'Kommandot k\u00e4ndes inte igen'}
                 </ThemedText>
                 <ThemedText variant="body" color="rgba(255,255,255,0.7)" style={styles.voiceOverlaySubtitle}>
-                  F\u00f6rs\u00f6k igen eller s\u00e4g "hj\u00e4lp" f\u00f6r att h\u00f6ra tillg\u00e4ngliga kommandon
+                  {voiceTranscript && voiceTranscript.length > 30
+                    ? 'Kontrollera anslutningen och f\u00f6rs\u00f6k igen'
+                    : 'F\u00f6rs\u00f6k igen eller s\u00e4g "hj\u00e4lp" f\u00f6r att h\u00f6ra tillg\u00e4ngliga kommandon'
+                  }
                 </ThemedText>
                 <View style={styles.voiceOverlayActions}>
                   <Pressable style={styles.voiceOverlayRetryBtn} onPress={retryVoiceCommand} testID="button-voice-retry">
