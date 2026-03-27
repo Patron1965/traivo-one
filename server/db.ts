@@ -71,9 +71,59 @@ async function initInspectionPhotosTable() {
   }
 }
 
+async function initRouteFeedbackTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS route_feedback (
+        id SERIAL PRIMARY KEY,
+        driver_id VARCHAR(255) NOT NULL,
+        rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+        reasons TEXT,
+        comment TEXT,
+        feedback_date DATE NOT NULL DEFAULT CURRENT_DATE,
+        optimization_job_id VARCHAR(255),
+        actual_distance_km DOUBLE PRECISION,
+        actual_duration_min DOUBLE PRECISION,
+        stops_completed INTEGER,
+        stops_reordered INTEGER,
+        created_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    console.log('route_feedback table ready');
+  } catch (err: any) {
+    console.error('Failed to create route_feedback table:', err.message);
+  }
+}
+
+async function initDriverLocationHistoryTable() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS driver_location_history (
+        id SERIAL PRIMARY KEY,
+        driver_id VARCHAR(255) NOT NULL,
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL,
+        speed DOUBLE PRECISION DEFAULT 0,
+        heading DOUBLE PRECISION DEFAULT 0,
+        accuracy DOUBLE PRECISION DEFAULT 0,
+        recorded_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    await pool.query(`
+      CREATE INDEX IF NOT EXISTS idx_driver_loc_history_driver
+      ON driver_location_history (driver_id, recorded_at)
+    `);
+    console.log('driver_location_history table ready');
+  } catch (err: any) {
+    console.error('Failed to create driver_location_history table:', err.message);
+  }
+}
+
 initPushTokensTable();
 initTimeEntriesTable();
 initInspectionPhotosTable();
+initRouteFeedbackTable();
+initDriverLocationHistoryTable();
 
 async function sendPushNotification(
   driverId: string,

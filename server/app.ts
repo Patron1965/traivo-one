@@ -50,8 +50,22 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('route_optimized', (data: any) => {
+    if (data.resourceId) {
+      socket.to(`resource:${data.resourceId}`).emit('route_optimized', data);
+      socket.to(`resource:${data.resourceId}`).emit('route:optimized', data);
+    }
+  });
+
   socket.on('route:reoptimizing', (data: any) => {
     if (data.resourceId) {
+      socket.to(`resource:${data.resourceId}`).emit('route:reoptimizing', data);
+    }
+  });
+
+  socket.on('route_reoptimizing', (data: any) => {
+    if (data.resourceId) {
+      socket.to(`resource:${data.resourceId}`).emit('route_reoptimizing', data);
       socket.to(`resource:${data.resourceId}`).emit('route:reoptimizing', data);
     }
   });

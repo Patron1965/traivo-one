@@ -142,7 +142,7 @@ export function MapScreen({ navigation }: any) {
     queryKey: ['/api/mobile/break-config'],
   });
   const { cacheRouteData, getCachedRouteData, cacheOrderData, getCachedOrderData } = useOfflineSync();
-  const { status: optStatus, progress: optProgress, isOptimizing } = useRouteOptimization();
+  const { status: optStatus, progress: optProgress, isOptimizing, submitOptimization } = useRouteOptimization();
   const { user } = useAuth();
   const hasFittedForOptRef = useRef(false);
   const { addHandler } = useWebSocket(user?.id, user?.tenantId);
@@ -171,7 +171,12 @@ export function MapScreen({ navigation }: any) {
   });
 
   const liveActiveOrders = useMemo(
-    () => (orders?.filter(o => o.status !== 'cancelled') || []).sort((a, b) => a.sortOrder - b.sortOrder),
+    () => (orders?.filter(o => o.status !== 'cancelled') || []).sort((a, b) => {
+      if (a.scheduledStartTime && b.scheduledStartTime) {
+        return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
+      }
+      return a.sortOrder - b.sortOrder;
+    }),
     [orders]
   );
 
@@ -491,6 +496,26 @@ export function MapScreen({ navigation }: any) {
             Optimerar rutt...{optProgress > 0 ? ` ${optProgress}%` : ''}
           </Text>
         </View>
+      ) : null}
+
+      {!isOptimizing && activeOrders.length >= 2 ? (
+        <Pressable
+          testID="button-optimize-route"
+          style={[styles.optimizeButton, { top: headerHeight + Spacing.md + (usingCachedData ? 36 : 0) }]}
+          onPress={() => {
+            const orderIds = activeOrders.map(o => String(o.id));
+            submitOptimization({
+              resourceId: String(user?.id || ''),
+              date: new Date().toISOString().split('T')[0],
+              orderIds,
+              startLat: routeOrigin?.latitude,
+              startLng: routeOrigin?.longitude,
+            });
+          }}
+        >
+          <Feather name="zap" size={14} color={Colors.textInverse} />
+          <Text style={styles.optimizeButtonText}>Optimera rutt</Text>
+        </Pressable>
       ) : null}
 
       <View style={[styles.legend, { bottom: tabBarHeight + Spacing.lg }]} pointerEvents="box-none">
@@ -966,6 +991,28 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   offlineBadgeText: {
+    color: Colors.textInverse,
+    fontSize: FontSize.xs,
+    fontFamily: 'Inter_600SemiBold',
+  },
+  optimizeButton: {
+    position: 'absolute',
+    right: Spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: Spacing.xs,
+    backgroundColor: Colors.secondary,
+    paddingHorizontal: Spacing.md,
+    paddingVertical: Spacing.sm,
+    borderRadius: BorderRadius.round,
+    zIndex: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  optimizeButtonText: {
     color: Colors.textInverse,
     fontSize: FontSize.xs,
     fontFamily: 'Inter_600SemiBold',

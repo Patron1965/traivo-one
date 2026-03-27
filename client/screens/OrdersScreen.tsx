@@ -498,7 +498,12 @@ export function OrdersScreen({ navigation }: any) {
   }, [startPosition, currentPosition?.latitude, currentPosition?.longitude]);
 
   const activeOrders = useMemo(
-    () => (orders?.filter(o => o.status !== 'cancelled') || []).sort((a, b) => a.sortOrder - b.sortOrder),
+    () => (orders?.filter(o => o.status !== 'cancelled') || []).sort((a, b) => {
+      if (a.scheduledStartTime && b.scheduledStartTime) {
+        return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
+      }
+      return a.sortOrder - b.sortOrder;
+    }),
     [orders]
   );
 

@@ -221,7 +221,17 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/route'] });
       });
 
+      socket.on('route_optimized', (data: any) => {
+        emitEvent(connId, 'route:optimized', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/route'] });
+      });
+
       socket.on('route:reoptimizing', (data: any) => {
+        emitEvent(connId, 'route:reoptimizing', data);
+      });
+
+      socket.on('route_reoptimizing', (data: any) => {
         emitEvent(connId, 'route:reoptimizing', data);
       });
 
