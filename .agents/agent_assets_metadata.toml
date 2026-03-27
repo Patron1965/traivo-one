@@ -24,3 +24,9 @@ id = "Uo3MQOocf3xIVwyBdL1zj"
 uri = "file://TRAIVO_GO_INTEGRATION_R1-R6.md"
 type = "text"
 title = "Traivo GO — Integrationsinstruktion R1–R6"
+
+[[outputs]]
+id = "7XHbuFyWmQc5SZy4CUk3Y"
+uri = "file://TRAIVO_GO_AKUT_JOBB_INTEGRATION.md"
+type = "text"
+title = "Traivo Go — Integrationsrapport Akut Jobbhantering"
