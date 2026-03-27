@@ -200,26 +200,26 @@ async function updateProgress(jobId: string, progress: number) {
   }
 }
 
-function broadcastJobComplete(tenantId: string, jobId: string, result: VRPOptimizationResult) {
+function broadcastJobComplete(_tenantId: string, jobId: string, _result: VRPOptimizationResult) {
   import("./notifications").then(({ notificationService }) => {
-    notificationService.broadcastSystemAlert({
+    notificationService.broadcastToAll({
       type: "optimization_complete",
       title: "Ruttoptimering klar",
-      message: `Optimering slutförd: ${result.summary.assignedOrders}/${result.summary.totalOrders} ordrar tilldelade`,
-      data: { jobId, tenantId, summary: result.summary },
+      message: "Ruttoptimering slutförd. Hämta resultat via jobbstatus.",
+      data: { jobId },
     });
   }).catch(err => {
     console.warn("[optimization-job] WebSocket broadcast failed:", err instanceof Error ? err.message : err);
   });
 }
 
-function broadcastJobFailed(tenantId: string, jobId: string, error: string) {
+function broadcastJobFailed(_tenantId: string, jobId: string, _error: string) {
   import("./notifications").then(({ notificationService }) => {
-    notificationService.broadcastSystemAlert({
+    notificationService.broadcastToAll({
       type: "optimization_failed",
       title: "Ruttoptimering misslyckades",
-      message: `Optimering kunde inte slutföras: ${error}`,
-      data: { jobId, tenantId },
+      message: "Ruttoptimering kunde inte slutföras. Kontrollera jobbstatus.",
+      data: { jobId },
     });
   }).catch(err => {
     console.warn("[optimization-job] WebSocket broadcast failed:", err instanceof Error ? err.message : err);
