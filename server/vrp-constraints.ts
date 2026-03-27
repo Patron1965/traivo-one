@@ -421,12 +421,6 @@ async function applyCapacityConstraints(
   }
 
   if (anyAgentHasCapacity) {
-    for (const agent of agents) {
-      if (!agent.capacity) {
-        agent.capacity = new Array(CAPACITY_DIMS).fill(0);
-      }
-    }
-
     for (const job of jobs) {
       if (!job.pickup || job.pickup.length === 0) {
         job.pickup = new Array(CAPACITY_DIMS).fill(DEFAULT_JOB_DEMAND);
@@ -446,7 +440,7 @@ function applyDependencyConstraints(
   const jobIdSet = new Set(jobs.map(j => j.id));
   const jobMap = new Map(jobs.map(j => [j.id, j]));
 
-  const orderedDeps: Array<{ firstId: string; secondId: string }> = [];
+  const edges: Array<{ firstId: string; secondId: string }> = [];
   for (const dep of dependencies) {
     const parentId = dep.parentWorkOrderId;
     const childId = dep.childWorkOrderId;
@@ -454,72 +448,79 @@ function applyDependencyConstraints(
     if (!jobIdSet.has(parentId) || !jobIdSet.has(childId)) continue;
 
     if (dep.dependencyType === "before" || dep.dependencyType === "sequential") {
-      orderedDeps.push({ firstId: parentId, secondId: childId });
+      edges.push({ firstId: parentId, secondId: childId });
     } else if (dep.dependencyType === "after") {
-      orderedDeps.push({ firstId: childId, secondId: parentId });
+      edges.push({ firstId: childId, secondId: parentId });
     }
   }
 
+  if (edges.length === 0) return sequences;
+
   const graph = new Map<string, string[]>();
-  for (const { firstId, secondId } of orderedDeps) {
+  const inDegree = new Map<string, number>();
+  const allNodes = new Set<string>();
+
+  for (const { firstId, secondId } of edges) {
+    allNodes.add(firstId);
+    allNodes.add(secondId);
     const children = graph.get(firstId) || [];
     children.push(secondId);
     graph.set(firstId, children);
+    inDegree.set(secondId, (inDegree.get(secondId) || 0) + 1);
+    if (!inDegree.has(firstId)) inDegree.set(firstId, 0);
   }
 
-  const roots = orderedDeps
-    .map(d => d.firstId)
-    .filter(id => !orderedDeps.some(d => d.secondId === id));
+  const sorted: string[] = [];
+  const queue = [...allNodes].filter(n => (inDegree.get(n) || 0) === 0);
+
+  while (queue.length > 0) {
+    const node = queue.shift()!;
+    sorted.push(node);
+    const children = graph.get(node) || [];
+    for (const child of children) {
+      const deg = (inDegree.get(child) || 1) - 1;
+      inDegree.set(child, deg);
+      if (deg === 0) queue.push(child);
+    }
+  }
 
   const resolvedEndTimes = new Map<string, number>();
 
-  function resolveChain(jobId: string, visited: Set<string>): number {
-    if (resolvedEndTimes.has(jobId)) return resolvedEndTimes.get(jobId)!;
-    if (visited.has(jobId)) return DEFAULT_WORK_HOURS[1];
-
-    visited.add(jobId);
-    const job = jobMap.get(jobId);
-    if (!job) return DEFAULT_WORK_HOURS[0];
+  for (const nodeId of sorted) {
+    const job = jobMap.get(nodeId);
+    if (!job) continue;
 
     const earliestStart = job.time_windows && job.time_windows.length > 0
       ? job.time_windows[0][0]
       : DEFAULT_WORK_HOURS[0];
 
-    const endTime = earliestStart + job.duration;
-    resolvedEndTimes.set(jobId, endTime);
-    return endTime;
-  }
+    resolvedEndTimes.set(nodeId, earliestStart + job.duration);
 
-  for (const rootId of roots) {
-    resolveChain(rootId, new Set());
-  }
+    const children = graph.get(nodeId) || [];
+    for (const childId of children) {
+      const childJob = jobMap.get(childId);
+      if (!childJob) continue;
 
-  for (const { firstId, secondId } of orderedDeps) {
-    sequences.push({ beforeOrderId: firstId, afterOrderId: secondId });
+      sequences.push({ beforeOrderId: nodeId, afterOrderId: childId });
 
-    const firstJob = jobMap.get(firstId);
-    const secondJob = jobMap.get(secondId);
+      job.priority = Math.min(100, Math.max(job.priority || 0, (childJob.priority || 50) + 10));
 
-    if (!firstJob || !secondJob) continue;
+      const parentEndTime = resolvedEndTimes.get(nodeId)!;
 
-    firstJob.priority = Math.min(100, Math.max(firstJob.priority || 0, (secondJob.priority || 50) + 10));
-
-    const firstEndTime = resolvedEndTimes.get(firstId)
-      ?? (DEFAULT_WORK_HOURS[0] + firstJob.duration);
-
-    if (!secondJob.time_windows || secondJob.time_windows.length === 0) {
-      secondJob.time_windows = [[firstEndTime, DEFAULT_WORK_HOURS[1]]];
-    } else {
-      secondJob.time_windows = secondJob.time_windows
-        .map(([s, e]) => [Math.max(s, firstEndTime), e] as [number, number])
-        .filter(([s, e]) => e > s);
-      if (secondJob.time_windows.length === 0) {
-        secondJob.time_windows = [[firstEndTime, DEFAULT_WORK_HOURS[1]]];
+      if (!childJob.time_windows || childJob.time_windows.length === 0) {
+        childJob.time_windows = [[parentEndTime, DEFAULT_WORK_HOURS[1]]];
+      } else {
+        childJob.time_windows = childJob.time_windows
+          .map(([s, e]) => [Math.max(s, parentEndTime), e] as [number, number])
+          .filter(([s, e]) => e > s);
+        if (childJob.time_windows.length === 0) {
+          childJob.time_windows = [[parentEndTime, DEFAULT_WORK_HOURS[1]]];
+        }
       }
-    }
 
-    resolvedEndTimes.set(secondId,
-      (secondJob.time_windows[0][0]) + secondJob.duration);
+      const childStart = childJob.time_windows[0][0];
+      resolvedEndTimes.set(childId, childStart + childJob.duration);
+    }
   }
 
   return sequences;
@@ -534,25 +535,20 @@ function applyEfficiencyFactors(
 ): boolean {
   if (resourceArticles.length === 0) return false;
   if (agents.length === 0) return false;
-  if (agents.length > 1) return false;
 
-  const agentResourceId = agents[0].id;
-  if (!agentResourceId) return false;
-
-  const resource = resources.find(r => r.id === agentResourceId);
-  if (!resource) return false;
-
-  const articleEfficiency = new Map<string, number>();
+  const articleEffByResource = new Map<string, Map<string, number>>();
   for (const ra of resourceArticles) {
-    if (ra.resourceId !== agentResourceId) continue;
     const effFactor = ra.efficiencyFactor || 1.0;
-    if (effFactor !== 1.0 && ra.articleId) {
-      articleEfficiency.set(ra.articleId, effFactor);
-    }
+    if (effFactor === 1.0 || !ra.articleId) continue;
+    const map = articleEffByResource.get(ra.resourceId) || new Map();
+    map.set(ra.articleId, effFactor);
+    articleEffByResource.set(ra.resourceId, map);
   }
 
-  const baseEff = resource.efficiencyFactor || 1.0;
-  if (baseEff === 1.0 && articleEfficiency.size === 0) return false;
+  const resourceBaseEff = new Map<string, number>();
+  for (const resource of resources) {
+    resourceBaseEff.set(resource.id, resource.efficiencyFactor || 1.0);
+  }
 
   const orderArticleMap = new Map<string, string | null>();
   for (const order of workOrders) {
@@ -563,11 +559,32 @@ function applyEfficiencyFactors(
 
   for (const job of jobs) {
     const articleId = orderArticleMap.get(job.id);
-    const articleEff = (articleId && articleEfficiency.get(articleId)) || 1.0;
-    const combined = baseEff * articleEff;
+    const perAgentFactors: number[] = [];
 
-    if (Math.abs(combined - 1.0) > 0.01) {
-      const adjusted = Math.round(job.duration * combined);
+    for (const agent of agents) {
+      if (!agent.id) continue;
+      const baseEff = resourceBaseEff.get(agent.id) || 1.0;
+      const artMap = articleEffByResource.get(agent.id);
+      const articleEff = (articleId && artMap?.get(articleId)) || 1.0;
+      perAgentFactors.push(baseEff * articleEff);
+    }
+
+    if (perAgentFactors.length === 0) continue;
+
+    let effectiveFactor: number;
+    if (perAgentFactors.length === 1) {
+      effectiveFactor = perAgentFactors[0];
+    } else {
+      const allSame = perAgentFactors.every(f => Math.abs(f - perAgentFactors[0]) < 0.01);
+      if (allSame) {
+        effectiveFactor = perAgentFactors[0];
+      } else {
+        effectiveFactor = perAgentFactors.reduce((a, b) => a + b, 0) / perAgentFactors.length;
+      }
+    }
+
+    if (Math.abs(effectiveFactor - 1.0) > 0.01) {
+      const adjusted = Math.round(job.duration * effectiveFactor);
       if (adjusted > 0) {
         job.duration = adjusted;
         anyAdjusted = true;
