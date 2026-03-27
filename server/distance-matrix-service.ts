@@ -76,7 +76,8 @@ async function getL2(key: string): Promise<DistanceResult | null> {
       durationMin: row.durationMin,
       source: row.source as "geoapify" | "haversine",
     };
-  } catch {
+  } catch (err) {
+    console.warn("[distance-cache] L2 read error:", err instanceof Error ? err.message : err);
     return null;
   }
 }
@@ -101,7 +102,8 @@ async function setL2(key: string, lat1: number, lng1: number, lat2: number, lng2
         createdAt: new Date(),
       },
     });
-  } catch {
+  } catch (err) {
+    console.warn("[distance-cache] L2 write error:", err instanceof Error ? err.message : err);
   }
 }
 
@@ -275,6 +277,10 @@ export async function precomputeDistanceMatrix(
 
   const results = await getBatchDistances(pairs);
   const matrix: DistanceMatrixEntry[] = [];
+
+  for (const stop of stops) {
+    matrix.push({ fromId: stop.id, toId: stop.id, distanceKm: 0, durationMin: 0 });
+  }
 
   for (const [pairId, result] of results) {
     const [fromId, toId] = pairId.split("|");

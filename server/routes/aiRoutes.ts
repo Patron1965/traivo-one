@@ -1366,20 +1366,20 @@ app.post("/api/ai/optimize-vrp/apply", asyncHandler(async (req, res) => {
     });
 }));
 
-app.get("/api/admin/distance-cache", asyncHandler(async (_req, res) => {
+app.get("/api/admin/distance-cache", isAuthenticated, asyncHandler(async (_req, res) => {
     const { getDistanceCacheStats, getL2CacheStats } = await import("../distance-matrix-service");
     const l1Stats = getDistanceCacheStats();
     const l2Stats = await getL2CacheStats();
     res.json({ ...l1Stats, ...l2Stats });
 }));
 
-app.delete("/api/admin/distance-cache", asyncHandler(async (_req, res) => {
+app.delete("/api/admin/distance-cache", isAuthenticated, asyncHandler(async (_req, res) => {
     const { clearDistanceCache } = await import("../distance-matrix-service");
     const result = await clearDistanceCache();
     res.json({ message: "Distance cache cleared", ...result });
 }));
 
-app.post("/api/admin/distance-cache/cleanup", asyncHandler(async (_req, res) => {
+app.post("/api/admin/distance-cache/cleanup", isAuthenticated, asyncHandler(async (_req, res) => {
     const { cleanupExpiredL2 } = await import("../distance-matrix-service");
     const removed = await cleanupExpiredL2();
     res.json({ message: "Expired L2 entries removed", removed });
