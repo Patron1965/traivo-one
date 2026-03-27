@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -78,11 +78,52 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
     return L.latLngBounds(points);
   }, [orderedJobs]);
 
-  const routePolyline = useMemo(() => {
+  const fallbackPolyline = useMemo(() => {
     return orderedJobs
       .filter(j => j.taskLatitude && j.taskLongitude)
       .map(j => [j.taskLatitude!, j.taskLongitude!] as [number, number]);
   }, [orderedJobs]);
+
+  const [roadGeometry, setRoadGeometry] = useState<[number, number][] | null>(null);
+  const [isLoadingGeometry, setIsLoadingGeometry] = useState(false);
+
+  const fetchRoadGeometry = useCallback(async () => {
+    const positions = orderedJobs
+      .filter(j => j.taskLatitude && j.taskLongitude)
+      .map(j => ({ lat: j.taskLatitude!, lng: j.taskLongitude! }));
+    if (positions.length < 2) {
+      setRoadGeometry(null);
+      return;
+    }
+    setIsLoadingGeometry(true);
+    try {
+      const response = await fetch("/api/route-geometry", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ waypoints: positions.slice(0, 25) }),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.coordinates && data.coordinates.length > 0) {
+          setRoadGeometry(data.coordinates);
+        } else {
+          setRoadGeometry(null);
+        }
+      } else {
+        setRoadGeometry(null);
+      }
+    } catch {
+      setRoadGeometry(null);
+    } finally {
+      setIsLoadingGeometry(false);
+    }
+  }, [orderedJobs]);
+
+  useEffect(() => {
+    fetchRoadGeometry();
+  }, [fetchRoadGeometry]);
+
+  const routePolyline = roadGeometry || fallbackPolyline;
 
   const routeStats = useMemo(() => {
     let totalMinutes = 0;
@@ -250,7 +291,15 @@ export const RouteMapView = memo(function RouteMapView(props: RouteMapViewProps)
           />
           {mapBounds && <MapFitBounds bounds={mapBounds} />}
           {routePolyline.length > 1 && (
-            <Polyline positions={routePolyline} color="#3B82F6" weight={3} opacity={0.7} />
+            <Polyline
+              positions={routePolyline}
+              pathOptions={{
+                color: "#3B82F6",
+                weight: 3,
+                opacity: 0.7,
+                dashArray: roadGeometry ? undefined : "8, 4",
+              }}
+            />
           )}
           {orderedJobs.map((job, index) => {
             if (!job.taskLatitude || !job.taskLongitude) return null;
