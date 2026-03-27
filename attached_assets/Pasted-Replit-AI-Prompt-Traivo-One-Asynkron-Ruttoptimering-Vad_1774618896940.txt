@@ -1,0 +1,113 @@
+Replit AI Prompt — Traivo One: Asynkron Ruttoptimering
+Vad som redan har implementerats
+Jag har lagt till ett komplett asynkront ruttoptimeringssystem i traivo-one. Här är vad som finns:
+
+Nya filer
+optimization-service/main.py — Fristående Python FastAPI-mikrotjänst som löser CVRPTW (Capacitated Vehicle Routing Problem with Time Windows) med Google OR-Tools.
+Endpoint: POST /optimize tar emot stops (id, lat, lng, time_window, duration, required_skills, demand, priority) och vehicles (id, capacity, skills, home_lat, home_lng, start_time, end_time)
+Returnerar routes[] med vehicle_id, stops[] (stop_id, sequence, arrival_time, departure_time), total_distance_km, total_duration_seconds, plus unassigned_stop_ids
+Kör K-Means preklustring via pre_cluster() vid >50 stopp
+Hälsocheck: GET /health
+Lyssnar på port 8090
+optimization-service/requirements.txt — ortools, fastapi, uvicorn, scikit-learn, numpy, pydantic
+optimization-service/Dockerfile — Python 3.11-slim, exponerar port 8090
+server/services/optimizationQueue.ts — BullMQ-kö (route-optimization) som kopplar Node.js till Python-tjänsten.
+Exporterar: addOptimizationJob(data), getJobStatus(jobId), getJobResult(jobId), startOptimizationWorker(), isQueueAvailable()
+Worker anropar OPTIMIZATION_SERVICE_URL/optimize via fetch()
+TypeScript-interfaces: OptimizationStop, OptimizationVehicle, OptimizationJobData, OptimizationJobResult
+Redis-connection via REDIS_HOST/REDIS_PORT env vars
+server/routes/optimizationRoutes.ts — Express-routes med Zod-validering:
+POST /api/optimization/jobs — submittar jobb, returnerar { jobId, status: "pending" }
+GET /api/optimization/jobs/:id/status — returnerar { jobId, status }
+GET /api/optimization/jobs/:id/result — returnerar resultat + broadcastar WebSocket route_optimized
+POST /api/optimization/apply/:id — applicerar resultat på workOrders i DB (uppdaterar resourceId och scheduledStartTime), broadcastar schedule_changed
+Funktion: registerOptimizationRoutes(app: Express)
+docker-compose.yml — Tre tjänster: redis (port 6379), optimization-service (port 8090), app (port 5000). Env: REDIS_HOST=redis, OPTIMIZATION_SERVICE_URL=http://optimization-service:8090
+Modifierade filer
+server/route-optimizer.ts — Ny funktion optimizeAsync(stops, vehicles, constraints, requestedBy) som automatiskt väljer:
+≤20 stopp → synkron nearest-neighbor (befintlig logik)
+>20 stopp → asynkron via BullMQ → Python OR-Tools
+Fallback till synkron om isQueueAvailable() returnerar false
+Konstant: ASYNC_THRESHOLD = 20
+Re-exporterar getJobStatus, getJobResult, isQueueAvailable
+server/routes.ts — Importerar och registrerar registerOptimizationRoutes(app) + startar startOptimizationWorker() vid serverstart (try/catch)
+server/distance-matrix-service.ts — Ny Redis-cache (24h TTL) med SHA-256 nyckel (prefix dist:), plus befintlig in-memory cache. Lazy Redis-anslutning med graceful fallback. Ny funktion getDistanceCacheStats() returnerar redisAvailable.
+package.json — Nya dependencies: bullmq ^5.12.0, ioredis ^5.4.1
+Vad Replit AI behöver göra
+1. Frontend-integration i veckoplaneraren
+Bygg en "Optimera rutter"-knapp i planeringsvyn (troligen client/src/pages/WeeklyPlanner.tsx eller liknande). Flödet:
+
+1. Användaren klickar "Optimera rutter" → samlar ihop work_orders + resources för vald dag/vecka
+2. POST /api/optimization/jobs med stops[] och vehicles[]
+3. Visa loading-spinner, polla GET /api/optimization/jobs/:id/status var 3:e sekund
+4. När status === "completed" → hämta GET /api/optimization/jobs/:id/result
+5. Visa resultat i kartan/listan — vilka ordrar som tilldelats vilken resurs, i vilken ordning
+6. Knapp "Tillämpa" → POST /api/optimization/apply/:id
+Viktigt: stops ska mappas från workOrders-tabellen:
+
+stop.id = work_order.id (som sträng)
+stop.lat/lng från objektets koordinater
+stop.time_window = [earliest_sec, latest_sec] från task_desired_timewindows eller object_time_restrictions
+stop.duration = estimerad tid i sekunder
+stop.required_skills från article_competences
+Och vehicles ska mappas från resources-tabellen:
+
+vehicle.id = resource.id (som sträng)
+vehicle.home_lat/lng från resursens hemposition
+vehicle.capacity från vehicles-tabellen (om kopplad)
+vehicle.skills från resource_skills
+2. WebSocket-lyssnare i frontend
+Lyssna på route_optimized och schedule_changed events via befintlig WebSocket-uppsättning (se notificationService.broadcastToAll i optimizationRoutes.ts). Vid schedule_changed → invalidera relevanta queries.
+
+3. Koppla befintlig data till optimeringsmodellen
+I optimizationRoutes.ts rad 87-92 skickas stops och vehicles direkt från request body. Skapa en hjälpfunktion som automatiskt bygger optimerings-payload från DB:
+
+typescript
+Copy
+async function buildOptimizationPayload(date: string, tenantId: string) {
+  // Hämta work_orders för datumet
+  // Hämta tillgängliga resources
+  // Mappa till OptimizationStop[] och OptimizationVehicle[]
+}
+4. Verifiera Redis + Python-tjänst i Replit-miljön
+Replit har inte Docker Compose. Alternativen:
+
+Redis: Använd Replit's inbyggda key-value store ELLER starta Redis via nix package. Alternativt: allt fungerar utan Redis (graceful degradation till synkron optimering).
+Python-tjänsten: Kan antingen köras som separat Replit-process (port 8090) eller integreras direkt i Node via child_process. Enklast: skippa Python-tjänsten i dev och använd synkron optimering (allt under ASYNC_THRESHOLD=20 körs synkront ändå).
+5. Testa endpoints
+Kör följande curl-kommandon för att verifiera:
+
+bash
+Copy
+# Submitt jobb
+curl -X POST http://localhost:5000/api/optimization/jobs \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "stops": [{"id": "wo-1", "lat": 59.33, "lng": 18.07}, {"id": "wo-2", "lat": 59.34, "lng": 18.08}],
+    "vehicles": [{"id": "res-1", "home_lat": 59.32, "home_lng": 18.06}]
+  }'
+
+# Polla status
+curl http://localhost:5000/api/optimization/jobs/JOB_ID/status
+
+# Hämta resultat
+curl http://localhost:5000/api/optimization/jobs/JOB_ID/result
+
+# Tillämpa
+curl -X POST http://localhost:5000/api/optimization/apply/JOB_ID
+6. Kontrollera att befintliga routes fortfarande fungerar
+Ingen breaking change har gjorts. Befintliga funktioner optimizeResourceDayRoute(), optimizeDayRoutes(), optimizeRoutesVRP() i route-optimizer.ts är helt oförändrade. optimizeAsync() är en ny funktion som adderar funktionalitet.
+
+Sammanfattning av filer att titta på
+Fil	Status	Syfte
+optimization-service/main.py	NY	Python OR-Tools solver
+optimization-service/requirements.txt	NY	Python-beroenden
+optimization-service/Dockerfile	NY	Docker-build
+server/services/optimizationQueue.ts	NY	BullMQ-kö + worker
+server/routes/optimizationRoutes.ts	NY	API-endpoints
+docker-compose.yml	NY	Multi-service Docker
+server/route-optimizer.ts	ÄNDRAD	optimizeAsync(), ASYNC_THRESHOLD
+server/routes.ts	ÄNDRAD	Registrerar optimization routes + worker
+server/distance-matrix-service.ts	ÄNDRAD	Redis-cache layer
+package.json	ÄNDRAD	bullmq, ioredis
+Branch: feat/async-route-optimization

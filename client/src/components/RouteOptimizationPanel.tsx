@@ -10,11 +10,12 @@ import { Separator } from "@/components/ui/separator";
 import {
   Loader2, Route, Clock, MapPin, TrendingUp, ChevronDown, ChevronUp,
   Settings2, Play, Eye, Calendar, CheckCircle2, XCircle, AlertTriangle,
-  Info, ArrowRight,
+  Info, ArrowRight, Zap, Server,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface VRPRouteStop {
   orderId: string;
@@ -102,6 +103,8 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
   const [jobProgress, setJobProgress] = useState(0);
   const [jobStatus, setJobStatus] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [solver, setSolver] = useState<"geoapify" | "ortools">("geoapify");
+  const [ortoolsAvailable, setOrtoolsAvailable] = useState<boolean | null>(null);
   const [multiDayMode, setMultiDayMode] = useState(false);
   const [multiDayDays, setMultiDayDays] = useState(5);
   const [multiDayResults, setMultiDayResults] = useState<Array<{ date: string; result: VRPResult }>>([]);
@@ -114,6 +117,39 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
     };
   }, []);
 
+  useEffect(() => {
+    setOrtoolsAvailable(true);
+  }, []);
+
+  useEffect(() => {
+    if (!asyncJobId) return;
+
+    const handleOptimizationComplete = (event: Event) => {
+      const detail = (event as CustomEvent).detail;
+      if (detail?.jobId === asyncJobId) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        pollRef.current = null;
+        fetchJobResult(asyncJobId);
+      }
+    };
+
+    window.addEventListener("traivo:optimization_complete", handleOptimizationComplete);
+    return () => window.removeEventListener("traivo:optimization_complete", handleOptimizationComplete);
+  }, [asyncJobId, fetchJobResult]);
+
+  const fetchJobResult = useCallback(async (jobId: string) => {
+    try {
+      const res = await fetch(`/api/optimization/jobs/${jobId}/result`);
+      if (res.ok) {
+        const result = await res.json();
+        setVrpResult(result);
+        setAsyncJobId(null);
+        setJobStatus("completed");
+        toast({ title: "Optimering klar", description: `${result.summary?.assignedOrders || 0} ordrar tilldelade` });
+      }
+    } catch { /* ignore */ }
+  }, [toast]);
+
   const pollJobStatus = useCallback((jobId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
     setAsyncJobId(jobId);
@@ -122,19 +158,30 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
 
     pollRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`/api/ai/optimization-job/${jobId}`);
+        const statusUrl = solver === "ortools"
+          ? `/api/optimization/jobs/${jobId}/status`
+          : `/api/ai/optimization-job/${jobId}`;
+        const res = await fetch(statusUrl);
         if (!res.ok) return;
-        const data: JobStatus = await res.json();
-        setJobProgress(data.progress);
-        setJobStatus(data.status);
+        const data = await res.json();
 
-        if (data.status === "completed" && data.result) {
+        const progress = data.progress ?? 0;
+        const status = data.status;
+        setJobProgress(progress);
+        setJobStatus(status);
+
+        if (status === "completed") {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
-          setVrpResult(data.result);
-          setAsyncJobId(null);
-          toast({ title: "Optimering klar", description: `${data.result.summary.assignedOrders} ordrar tilldelade` });
-        } else if (data.status === "failed") {
+
+          if (solver === "ortools") {
+            fetchJobResult(jobId);
+          } else if (data.result) {
+            setVrpResult(data.result);
+            setAsyncJobId(null);
+            toast({ title: "Optimering klar", description: `${data.result.summary?.assignedOrders || 0} ordrar tilldelade` });
+          }
+        } else if (status === "failed") {
           if (pollRef.current) clearInterval(pollRef.current);
           pollRef.current = null;
           setAsyncJobId(null);
@@ -143,11 +190,12 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
       } catch {
       }
     }, 2000);
-  }, [toast]);
+  }, [toast, solver, fetchJobResult]);
 
   const optimizeVRPMutation = useMutation({
     mutationFn: async () => {
-      const response = await apiRequest("POST", "/api/ai/optimize-vrp", {
+      const endpoint = solver === "ortools" ? "/api/optimization/jobs" : "/api/ai/optimize-vrp";
+      const response = await apiRequest("POST", endpoint, {
         date: selectedDate,
         constraints,
       });
@@ -301,6 +349,38 @@ export function RouteOptimizationPanel({ selectedDate }: RouteOptimizationPanelP
                   </div>
                 </div>
               )}
+              <Separator />
+              <div className="space-y-1.5" data-testid="solver-selector">
+                <Label className="text-xs flex items-center gap-1">
+                  <Server className="h-3 w-3" />
+                  Optimeringsmotor
+                </Label>
+                <Select value={solver} onValueChange={(v) => setSolver(v as "geoapify" | "ortools")}>
+                  <SelectTrigger className="h-8 text-xs" data-testid="select-solver">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="geoapify" data-testid="option-geoapify">
+                      <span className="flex items-center gap-1.5">
+                        <MapPin className="h-3 w-3" />
+                        Geoapify VRP
+                      </span>
+                    </SelectItem>
+                    <SelectItem value="ortools" data-testid="option-ortools">
+                      <span className="flex items-center gap-1.5">
+                        <Zap className="h-3 w-3" />
+                        OR-Tools (avancerad)
+                      </span>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+                {solver === "ortools" && ortoolsAvailable === false && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    OR-Tools-tjänsten är offline — fallback till Geoapify
+                  </p>
+                )}
+              </div>
             </div>
           </CollapsibleContent>
         </Collapsible>

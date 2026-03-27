@@ -85,6 +85,12 @@ export function useNotifications({
             };
             setNotifications((prev) => [notification, ...prev].slice(0, 50));
             onNotification?.(notification);
+
+            if (data.notificationType === "optimization_complete" || data.notificationType === "route_optimized") {
+              window.dispatchEvent(new CustomEvent("traivo:optimization_complete", {
+                detail: { jobId: data.data?.jobId },
+              }));
+            }
           }
         } catch (err) {
           console.error("[Notifications] Failed to parse message:", err);

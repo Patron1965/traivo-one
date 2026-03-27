@@ -25,6 +25,7 @@ import { registerImportRoutes } from "./routes/importRoutes";
 import { registerConfigRoutes } from "./routes/configRoutes";
 import { registerClusterRoutes } from "./routes/clusterRoutes";
 import { registerAIRoutes } from "./routes/aiRoutes";
+import { registerOptimizationRoutes } from "./routes/optimizationRoutes";
 import { registerMobileRoutes } from "./routes/mobile";
 import { registerPlannerRoutes } from "./routes/plannerRoutes";
 import { registerKPIRoutes } from "./routes/kpiRoutes";
@@ -375,6 +376,7 @@ export async function registerRoutes(
   registerConfigRoutes(app);
   registerClusterRoutes(app);
   registerAIRoutes(app);
+  registerOptimizationRoutes(app);
   registerMobileRoutes(app);
   registerPlannerRoutes(app);
   registerKPIRoutes(app);

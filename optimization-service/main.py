@@ -1,0 +1,365 @@
+"""
+Traivo OR-Tools Optimization Service
+Fristående Python FastAPI-mikrotjänst som löser CVRPTW
+(Capacitated Vehicle Routing Problem with Time Windows) med Google OR-Tools.
+
+Endpoint: POST /optimize
+Health:  GET /health
+Port:    8090
+"""
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+from typing import Optional
+import math
+import time
+
+app = FastAPI(title="Traivo Optimization Service", version="1.0.0")
+
+try:
+    from ortools.constraint_solver import routing_enums_pb2, pywrapcp
+    HAS_ORTOOLS = True
+except ImportError:
+    HAS_ORTOOLS = False
+
+try:
+    from sklearn.cluster import KMeans
+    import numpy as np
+    HAS_SKLEARN = True
+except ImportError:
+    HAS_SKLEARN = False
+
+
+class Stop(BaseModel):
+    id: str
+    lat: float
+    lng: float
+    time_window: Optional[list[int]] = None
+    duration: int = 1800
+    required_skills: Optional[list[str]] = None
+    demand: int = 1
+    priority: int = 1
+
+
+class Vehicle(BaseModel):
+    id: str
+    capacity: int = 100
+    skills: Optional[list[str]] = None
+    home_lat: float = 59.33
+    home_lng: float = 18.07
+    start_time: int = 28800
+    end_time: int = 61200
+
+
+class OptimizeRequest(BaseModel):
+    stops: list[Stop]
+    vehicles: list[Vehicle]
+    max_solve_seconds: int = Field(default=30, ge=1, le=300)
+
+
+class RouteStopResult(BaseModel):
+    stop_id: str
+    sequence: int
+    arrival_time: int
+    departure_time: int
+
+
+class RouteResult(BaseModel):
+    vehicle_id: str
+    stops: list[RouteStopResult]
+    total_distance_km: float
+    total_duration_seconds: int
+
+
+class OptimizeResponse(BaseModel):
+    success: bool
+    routes: list[RouteResult]
+    unassigned_stop_ids: list[str]
+    solve_time_ms: int
+    solver: str
+
+
+def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    R = 6371.0
+    dlat = math.radians(lat2 - lat1)
+    dlng = math.radians(lng2 - lng1)
+    a = math.sin(dlat / 2) ** 2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng / 2) ** 2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def build_distance_matrix(locations: list[tuple[float, float]]) -> list[list[int]]:
+    n = len(locations)
+    matrix = [[0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(n):
+            if i != j:
+                dist_km = haversine_km(locations[i][0], locations[i][1], locations[j][0], locations[j][1])
+                matrix[i][j] = int(dist_km * 1000)
+    return matrix
+
+
+def pre_cluster(stops: list[Stop], n_clusters: int) -> list[list[Stop]]:
+    if not HAS_SKLEARN or len(stops) <= n_clusters:
+        return [stops]
+
+    coords = np.array([[s.lat, s.lng] for s in stops])
+    kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+    labels = kmeans.fit_predict(coords)
+
+    clusters: dict[int, list[Stop]] = {}
+    for i, label in enumerate(labels):
+        clusters.setdefault(int(label), []).append(stops[i])
+    return list(clusters.values())
+
+
+def solve_nearest_neighbor(stops: list[Stop], vehicles: list[Vehicle]) -> OptimizeResponse:
+    start_time = time.time()
+    routes: list[RouteResult] = []
+    assigned_ids: set[str] = set()
+
+    remaining = list(stops)
+
+    for vehicle in vehicles:
+        if not remaining:
+            break
+
+        route_stops: list[RouteStopResult] = []
+        current_lat, current_lng = vehicle.home_lat, vehicle.home_lng
+        current_time = vehicle.start_time
+        total_dist = 0.0
+        sequence = 1
+        unvisited = list(remaining)
+
+        while unvisited:
+            best_idx = -1
+            best_dist = float("inf")
+            for idx, stop in enumerate(unvisited):
+                d = haversine_km(current_lat, current_lng, stop.lat, stop.lng)
+                if d < best_dist:
+                    travel_seconds = int(d / 40 * 3600)
+                    arrival = current_time + travel_seconds
+                    if stop.time_window and arrival > stop.time_window[1]:
+                        continue
+                    departure = max(arrival, stop.time_window[0] if stop.time_window else arrival) + stop.duration
+                    if departure > vehicle.end_time:
+                        continue
+                    best_dist = d
+                    best_idx = idx
+
+            if best_idx == -1:
+                break
+
+            stop = unvisited.pop(best_idx)
+            travel_seconds = int(best_dist / 40 * 3600)
+            arrival = current_time + travel_seconds
+            effective_arrival = max(arrival, stop.time_window[0] if stop.time_window else arrival)
+            departure = effective_arrival + stop.duration
+
+            route_stops.append(RouteStopResult(
+                stop_id=stop.id,
+                sequence=sequence,
+                arrival_time=effective_arrival,
+                departure_time=departure,
+            ))
+
+            total_dist += best_dist
+            current_lat, current_lng = stop.lat, stop.lng
+            current_time = departure
+            assigned_ids.add(stop.id)
+            sequence += 1
+
+        remaining = [s for s in remaining if s.id not in assigned_ids]
+
+        if route_stops:
+            return_dist = haversine_km(current_lat, current_lng, vehicle.home_lat, vehicle.home_lng)
+            total_dist += return_dist
+            routes.append(RouteResult(
+                vehicle_id=vehicle.id,
+                stops=route_stops,
+                total_distance_km=round(total_dist, 2),
+                total_duration_seconds=current_time - vehicle.start_time + int(return_dist / 40 * 3600),
+            ))
+
+    unassigned = [s.id for s in stops if s.id not in assigned_ids]
+    solve_ms = int((time.time() - start_time) * 1000)
+
+    return OptimizeResponse(
+        success=True,
+        routes=routes,
+        unassigned_stop_ids=unassigned,
+        solve_time_ms=solve_ms,
+        solver="nearest_neighbor",
+    )
+
+
+def solve_ortools(stops: list[Stop], vehicles: list[Vehicle], max_seconds: int) -> OptimizeResponse:
+    if not HAS_ORTOOLS:
+        return solve_nearest_neighbor(stops, vehicles)
+
+    start_time = time.time()
+
+    locations: list[tuple[float, float]] = []
+    depot_indices: list[int] = []
+
+    for v in vehicles:
+        depot_indices.append(len(locations))
+        locations.append((v.home_lat, v.home_lng))
+
+    stop_start_index = len(locations)
+    for s in stops:
+        locations.append((s.lat, s.lng))
+
+    distance_matrix = build_distance_matrix(locations)
+
+    manager = pywrapcp.RoutingIndexManager(len(locations), len(vehicles), depot_indices, depot_indices)
+    routing = pywrapcp.RoutingModel(manager)
+
+    def distance_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        return distance_matrix[from_node][to_node]
+
+    transit_callback_index = routing.RegisterTransitCallback(distance_callback)
+    routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
+
+    time_per_m = 3600 / (40 * 1000)
+
+    def time_callback(from_index, to_index):
+        from_node = manager.IndexToNode(from_index)
+        to_node = manager.IndexToNode(to_index)
+        travel = int(distance_matrix[from_node][to_node] * time_per_m)
+        service = 0
+        if to_node >= stop_start_index:
+            service = stops[to_node - stop_start_index].duration
+        return travel + service
+
+    time_callback_index = routing.RegisterTransitCallback(time_callback)
+
+    routing.AddDimension(time_callback_index, 3600, 36000, False, "Time")
+    time_dimension = routing.GetDimensionOrDie("Time")
+
+    for i, v in enumerate(vehicles):
+        idx = routing.Start(i)
+        time_dimension.CumulVar(idx).SetRange(v.start_time, v.end_time)
+        idx_end = routing.End(i)
+        time_dimension.CumulVar(idx_end).SetRange(v.start_time, v.end_time)
+
+    for si, stop in enumerate(stops):
+        node = stop_start_index + si
+        idx = manager.NodeToIndex(node)
+        if stop.time_window:
+            time_dimension.CumulVar(idx).SetRange(stop.time_window[0], stop.time_window[1])
+
+    for node in range(stop_start_index, stop_start_index + len(stops)):
+        routing.AddDisjunction([manager.NodeToIndex(node)], 100000)
+
+    search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+    search_parameters.first_solution_strategy = routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+    search_parameters.local_search_metaheuristic = routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+    search_parameters.time_limit.seconds = max_seconds
+
+    solution = routing.SolveWithParameters(search_parameters)
+
+    if not solution:
+        return solve_nearest_neighbor(stops, vehicles)
+
+    routes: list[RouteResult] = []
+    assigned_ids: set[str] = set()
+
+    for vi in range(len(vehicles)):
+        route_stops: list[RouteStopResult] = []
+        index = routing.Start(vi)
+        total_dist = 0.0
+        prev_node = manager.IndexToNode(index)
+        sequence = 1
+
+        while not routing.IsEnd(index):
+            next_index = solution.Value(routing.NextVar(index))
+            node = manager.IndexToNode(next_index)
+            if node >= stop_start_index and not routing.IsEnd(next_index):
+                stop_idx = node - stop_start_index
+                arrival = solution.Value(time_dimension.CumulVar(next_index))
+                departure = arrival + stops[stop_idx].duration
+                route_stops.append(RouteStopResult(
+                    stop_id=stops[stop_idx].id,
+                    sequence=sequence,
+                    arrival_time=arrival,
+                    departure_time=departure,
+                ))
+                assigned_ids.add(stops[stop_idx].id)
+                sequence += 1
+
+            total_dist += distance_matrix[prev_node][node] / 1000
+            prev_node = node
+            index = next_index
+
+        if route_stops:
+            end_time = solution.Value(time_dimension.CumulVar(index))
+            start_t = vehicles[vi].start_time
+            routes.append(RouteResult(
+                vehicle_id=vehicles[vi].id,
+                stops=route_stops,
+                total_distance_km=round(total_dist, 2),
+                total_duration_seconds=end_time - start_t,
+            ))
+
+    unassigned = [s.id for s in stops if s.id not in assigned_ids]
+    solve_ms = int((time.time() - start_time) * 1000)
+
+    return OptimizeResponse(
+        success=True,
+        routes=routes,
+        unassigned_stop_ids=unassigned,
+        solve_time_ms=solve_ms,
+        solver="ortools",
+    )
+
+
+@app.get("/health")
+def health():
+    return {
+        "status": "ok",
+        "ortools_available": HAS_ORTOOLS,
+        "sklearn_available": HAS_SKLEARN,
+    }
+
+
+@app.post("/optimize", response_model=OptimizeResponse)
+def optimize(req: OptimizeRequest):
+    if not req.stops:
+        raise HTTPException(status_code=400, detail="No stops provided")
+    if not req.vehicles:
+        raise HTTPException(status_code=400, detail="No vehicles provided")
+
+    if len(req.stops) > 50 and HAS_SKLEARN:
+        n_clusters = max(len(req.vehicles), len(req.stops) // 20)
+        clusters = pre_cluster(req.stops, n_clusters)
+        all_routes: list[RouteResult] = []
+        all_unassigned: list[str] = []
+        total_solve_ms = 0
+
+        for cluster_stops in clusters:
+            if HAS_ORTOOLS:
+                result = solve_ortools(cluster_stops, req.vehicles, req.max_solve_seconds)
+            else:
+                result = solve_nearest_neighbor(cluster_stops, req.vehicles)
+            all_routes.extend(result.routes)
+            all_unassigned.extend(result.unassigned_stop_ids)
+            total_solve_ms += result.solve_time_ms
+
+        return OptimizeResponse(
+            success=True,
+            routes=all_routes,
+            unassigned_stop_ids=all_unassigned,
+            solve_time_ms=total_solve_ms,
+            solver="ortools_clustered" if HAS_ORTOOLS else "nearest_neighbor_clustered",
+        )
+
+    if HAS_ORTOOLS:
+        return solve_ortools(req.stops, req.vehicles, req.max_solve_seconds)
+    return solve_nearest_neighbor(req.stops, req.vehicles)
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8090)

@@ -1019,3 +1019,66 @@ export async function optimizeDayRoutes(
     summary,
   };
 }
+
+const OPTIMIZE_ASYNC_THRESHOLD = 20;
+
+export async function optimizeAsync(
+  stops: Array<{ id: string; lat: number; lng: number; duration: number; time_window?: [number, number]; required_skills?: string[]; demand?: number; priority?: number }>,
+  vehicles: Array<{ id: string; home_lat: number; home_lng: number; capacity?: number; skills?: string[]; start_time?: number; end_time?: number }>,
+  _constraints?: Record<string, unknown>,
+  _requestedBy?: string,
+): Promise<VRPOptimizationResult | { jobId: string; status: "queued" }> {
+  const { isServiceAvailable, callOptimizationService, convertORToolsToVRPResult } = await import("./services/optimizationQueue");
+
+  const serviceUp = await isServiceAvailable();
+
+  if (serviceUp && stops.length <= OPTIMIZE_ASYNC_THRESHOLD) {
+    const orResult = await callOptimizationService({
+      stops: stops.map(s => ({
+        id: s.id,
+        lat: s.lat,
+        lng: s.lng,
+        time_window: s.time_window,
+        duration: s.duration,
+        required_skills: s.required_skills,
+        demand: s.demand ?? 1,
+        priority: s.priority ?? 1,
+      })),
+      vehicles: vehicles.map(v => ({
+        id: v.id,
+        capacity: v.capacity ?? 100,
+        skills: v.skills,
+        home_lat: v.home_lat,
+        home_lng: v.home_lng,
+        start_time: v.start_time ?? 28800,
+        end_time: v.end_time ?? 61200,
+      })),
+    });
+
+    const stopMap = new Map(stops.map(s => [s.id, {
+      title: s.id,
+      lat: s.lat,
+      lng: s.lng,
+      durationMin: Math.round(s.duration / 60),
+    }]));
+    const vehicleMap = new Map(vehicles.map(v => [v.id, v.id]));
+
+    return convertORToolsToVRPResult(orResult, stopMap, vehicleMap);
+  }
+
+  return {
+    success: false,
+    routes: [],
+    unassignedOrders: stops.map(s => ({ orderId: s.id, reason: "OR-Tools tjänsten inte tillgänglig, använd Geoapify VRP" })),
+    summary: {
+      totalOrders: stops.length,
+      assignedOrders: 0,
+      totalDurationMinutes: 0,
+      totalDistanceKm: 0,
+      avgEfficiency: 0,
+    },
+    error: "OR-Tools tjänsten inte tillgänglig. Optimering sker via Geoapify VRP.",
+  };
+}
+
+export { OPTIMIZE_ASYNC_THRESHOLD };
