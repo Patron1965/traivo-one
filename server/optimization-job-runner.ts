@@ -139,15 +139,17 @@ async function processNextJob() {
 
 async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRPOptimizationResult> {
   const { isServiceAvailable, callOptimizationService, convertORToolsToVRPResult } = await import("./services/optimizationQueue");
+  const { enrichVRPRequestWithConstraints } = await import("./vrp-constraints");
   const { storage } = await import("./storage");
 
   const tenantId = input.tenantId;
   await updateProgress(jobId, 10);
 
-  const [workOrders, resources, objects] = await Promise.all([
+  const [workOrders, resources, objects, clusters] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
     storage.getObjects(tenantId),
+    storage.getClusters(tenantId),
   ]);
 
   await updateProgress(jobId, 20);
@@ -166,48 +168,79 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
       return orderDate === input.date;
     });
   }
+  if (input.clusterId) {
+    filteredOrders = filteredOrders.filter(o => o.clusterId === input.clusterId);
+  }
 
-  const stops = filteredOrders
-    .filter(o => {
-      const obj = objectMap.get(o.objectId);
-      return obj?.latitude && obj?.longitude;
-    })
-    .map(o => {
-      const obj = objectMap.get(o.objectId)!;
-      const durationSec = (o.estimatedDuration || 30) * 60;
-      let timeWindow: [number, number] | undefined;
-      if (o.scheduledStartTime) {
-        const match = String(o.scheduledStartTime).match(/^(\d{1,2}):(\d{2})/);
-        if (match) {
-          const startSec = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60;
-          timeWindow = [startSec, Math.min(startSec + 7200, 61200)];
-        }
-      }
-      return {
-        id: o.id,
-        lat: obj.latitude!,
-        lng: obj.longitude!,
-        time_window: timeWindow,
-        duration: durationSec,
-        required_skills: [] as string[],
-        demand: 1,
-        priority: o.priority === "hög" ? 3 : o.priority === "medel" ? 2 : 1,
-      };
-    });
+  const validOrders = filteredOrders.filter(o => {
+    const obj = objectMap.get(o.objectId);
+    return obj?.latitude && obj?.longitude;
+  });
 
-  const vehicles = resources
+  await updateProgress(jobId, 30);
+
+  const baseJobs = validOrders.map(o => {
+    const obj = objectMap.get(o.objectId)!;
+    const durationSec = (o.estimatedDuration || 30) * 60;
+    return {
+      location: [obj.longitude!, obj.latitude!] as [number, number],
+      duration: durationSec,
+      priority: o.priority === "hög" ? 80 : o.priority === "medel" ? 50 : 30,
+      id: o.id,
+      description: o.orderTitle || o.id,
+    };
+  });
+
+  const baseAgents = resources
     .filter(r => r.resourceType === "person" || r.resourceType === "vehicle" || !r.resourceType)
     .map(r => ({
+      start_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
+      end_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
+      time_windows: [[28800, 61200]] as [number, number][],
       id: r.id,
-      capacity: 100,
-      skills: [] as string[],
-      home_lat: r.homeLatitude || 59.33,
-      home_lng: r.homeLongitude || 18.07,
-      start_time: 28800,
-      end_time: 61200,
+      description: r.name,
     }));
 
   await updateProgress(jobId, 40);
+
+  const constraintResult = await enrichVRPRequestWithConstraints(
+    baseJobs,
+    baseAgents,
+    validOrders,
+    resources,
+    objects,
+    input.constraintOptions,
+  );
+
+  await updateProgress(jobId, 50);
+
+  const stops = constraintResult.jobs.map(j => {
+    const tw = j.time_windows && j.time_windows.length > 0
+      ? j.time_windows[0] as [number, number]
+      : undefined;
+    return {
+      id: j.id,
+      lat: j.location[1],
+      lng: j.location[0],
+      time_window: tw,
+      duration: j.duration,
+      required_skills: j.required_skills?.map(String) || [],
+      demand: j.pickup && j.pickup.length > 0 ? j.pickup[0] : 1,
+      priority: j.priority,
+    };
+  });
+
+  const vehicles = constraintResult.agents.map(a => ({
+    id: a.id || "unknown",
+    capacity: a.capacity && a.capacity.length > 0 ? a.capacity[0] : 100,
+    skills: a.skills?.map(String) || [],
+    home_lat: a.start_location[1],
+    home_lng: a.start_location[0],
+    start_time: a.time_windows && a.time_windows.length > 0 ? a.time_windows[0][0] : 28800,
+    end_time: a.time_windows && a.time_windows.length > 0 ? a.time_windows[0][1] : 61200,
+  }));
+
+  await updateProgress(jobId, 55);
 
   const serviceUp = await isServiceAvailable();
   if (!serviceUp) {
@@ -215,7 +248,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
     return executeVRPJob(jobId, input);
   }
 
-  await updateProgress(jobId, 50);
+  await updateProgress(jobId, 60);
 
   const orResult = await callOptimizationService({
     stops,
@@ -226,7 +259,7 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   await updateProgress(jobId, 90);
 
   const stopMap = new Map(stops.map(s => {
-    const order = filteredOrders.find(o => o.id === s.id);
+    const order = validOrders.find(o => o.id === s.id);
     return [s.id, {
       title: order?.orderTitle || s.id,
       lat: s.lat,
@@ -236,7 +269,15 @@ async function executeORToolsJob(jobId: string, input: VRPJobInput): Promise<VRP
   }));
   const vehicleMap = new Map(resources.map(r => [r.id, r.name]));
 
-  return convertORToolsToVRPResult(orResult, stopMap, vehicleMap);
+  const vrpResult = convertORToolsToVRPResult(orResult, stopMap, vehicleMap);
+  vrpResult.constraintsApplied = [
+    ...constraintResult.constraintsApplied.map(c => `OR-Tools + ${c}`),
+  ];
+  if (constraintResult.dependencySequences.length > 0) {
+    vrpResult.constraintsApplied.push(`${constraintResult.dependencySequences.length} beroenden`);
+  }
+
+  return vrpResult;
 }
 
 async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOptimizationResult> {

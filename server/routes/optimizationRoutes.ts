@@ -19,6 +19,7 @@ import {
   createOptimizationJob,
   getOptimizationJob,
 } from "../optimization-job-runner";
+import { enrichVRPRequestWithConstraints, type VRPConstraintOptions } from "../vrp-constraints";
 
 const stopSchema = z.object({
   id: z.string(),
@@ -50,7 +51,8 @@ const submitJobSchema = z.object({
 async function buildOptimizationPayload(
   date: string,
   tenantId: string,
-): Promise<{ stops: OptimizationStop[]; vehicles: OptimizationVehicle[] }> {
+  constraintOptions?: VRPConstraintOptions,
+): Promise<{ stops: OptimizationStop[]; vehicles: OptimizationVehicle[]; constraintsApplied: string[] }> {
   const [workOrders, resources, objects] = await Promise.all([
     storage.getWorkOrders(tenantId),
     storage.getResources(tenantId),
@@ -70,44 +72,72 @@ async function buildOptimizationPayload(
     return obj?.latitude && obj?.longitude;
   });
 
-  const stops: OptimizationStop[] = filteredOrders.map(o => {
+  const options: VRPConstraintOptions = constraintOptions || {
+    respectTimeWindows: true,
+    respectSkills: true,
+    respectCapacity: false,
+    respectDependencies: true,
+    tenantId,
+  };
+
+  const baseJobs = filteredOrders.map(o => {
     const obj = objectMap.get(o.objectId)!;
     const durationSec = (o.estimatedDuration || 30) * 60;
-
-    let timeWindow: [number, number] | undefined;
-    if (o.scheduledStartTime) {
-      const match = String(o.scheduledStartTime).match(/^(\d{1,2}):(\d{2})/);
-      if (match) {
-        const startSec = parseInt(match[1]) * 3600 + parseInt(match[2]) * 60;
-        timeWindow = [startSec, Math.min(startSec + 7200, 61200)];
-      }
-    }
-
     return {
-      id: o.id,
-      lat: obj.latitude!,
-      lng: obj.longitude!,
-      time_window: timeWindow,
+      location: [obj.longitude!, obj.latitude!] as [number, number],
       duration: durationSec,
-      required_skills: [],
-      demand: 1,
-      priority: o.priority === "hög" ? 3 : o.priority === "medel" ? 2 : 1,
+      priority: o.priority === "hög" ? 80 : o.priority === "medel" ? 50 : 30,
+      id: o.id,
+      description: o.orderTitle || o.id,
     };
   });
 
-  const vehicles: OptimizationVehicle[] = resources
+  const baseAgents = resources
     .filter(r => r.resourceType === "person" || r.resourceType === "vehicle" || !r.resourceType)
     .map(r => ({
+      start_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
+      end_location: [r.homeLongitude || 18.07, r.homeLatitude || 59.33] as [number, number],
+      time_windows: [[28800, 61200]] as [number, number][],
       id: r.id,
-      capacity: 100,
-      skills: [],
-      home_lat: r.homeLatitude || 59.33,
-      home_lng: r.homeLongitude || 18.07,
-      start_time: 28800,
-      end_time: 61200,
+      description: r.name,
     }));
 
-  return { stops, vehicles };
+  const constraintResult = await enrichVRPRequestWithConstraints(
+    baseJobs,
+    baseAgents,
+    filteredOrders,
+    resources,
+    objects,
+    options,
+  );
+
+  const stops: OptimizationStop[] = constraintResult.jobs.map(j => {
+    const tw = j.time_windows && j.time_windows.length > 0
+      ? j.time_windows[0] as [number, number]
+      : undefined;
+    return {
+      id: j.id,
+      lat: j.location[1],
+      lng: j.location[0],
+      time_window: tw,
+      duration: j.duration,
+      required_skills: j.required_skills?.map(String) || [],
+      demand: j.pickup && j.pickup.length > 0 ? j.pickup[0] : 1,
+      priority: j.priority,
+    };
+  });
+
+  const vehicles: OptimizationVehicle[] = constraintResult.agents.map(a => ({
+    id: a.id || "unknown",
+    capacity: a.capacity && a.capacity.length > 0 ? a.capacity[0] : 100,
+    skills: a.skills?.map(String) || [],
+    home_lat: a.start_location[1],
+    home_lng: a.start_location[0],
+    start_time: a.time_windows && a.time_windows.length > 0 ? a.time_windows[0][0] : 28800,
+    end_time: a.time_windows && a.time_windows.length > 0 ? a.time_windows[0][1] : 61200,
+  }));
+
+  return { stops, vehicles, constraintsApplied: constraintResult.constraintsApplied };
 }
 
 export async function registerOptimizationRoutes(app: Express) {
@@ -116,11 +146,21 @@ export async function registerOptimizationRoutes(app: Express) {
 
     let stops: OptimizationStop[];
     let vehicles: OptimizationVehicle[];
+    let constraintsApplied: string[] = [];
+
+    const constraints: VRPConstraintOptions = {
+      respectTimeWindows: req.body.constraints?.respectTimeWindows ?? true,
+      respectSkills: req.body.constraints?.respectSkills ?? true,
+      respectCapacity: req.body.constraints?.respectCapacity ?? false,
+      respectDependencies: req.body.constraints?.respectDependencies ?? true,
+      tenantId,
+    };
 
     if (req.body.date && !req.body.stops) {
-      const payload = await buildOptimizationPayload(req.body.date, tenantId);
+      const payload = await buildOptimizationPayload(req.body.date, tenantId, constraints);
       stops = payload.stops;
       vehicles = payload.vehicles;
+      constraintsApplied = payload.constraintsApplied;
     } else {
       const parsed = submitJobSchema.parse(req.body);
       stops = parsed.stops;
@@ -145,6 +185,7 @@ export async function registerOptimizationRoutes(app: Express) {
         }]));
         const vehicleMap = new Map(vehicles.map(v => [v.id, v.id]));
         const vrpResult = convertORToolsToVRPResult(result, stopMap, vehicleMap);
+        vrpResult.constraintsApplied = constraintsApplied.map(c => `OR-Tools + ${c}`);
 
         res.json(vrpResult);
         return;
@@ -155,13 +196,7 @@ export async function registerOptimizationRoutes(app: Express) {
         date: req.body.date,
         clusterId: undefined,
         breakConfig: {},
-        constraintOptions: {
-          respectTimeWindows: true,
-          respectSkills: true,
-          respectCapacity: false,
-          respectDependencies: true,
-          tenantId,
-        },
+        constraintOptions: constraints,
       });
 
       res.json({ jobId, status: "pending", orderCount: stops.length });
@@ -174,13 +209,7 @@ export async function registerOptimizationRoutes(app: Express) {
         date: req.body.date,
         clusterId: undefined,
         breakConfig: {},
-        constraintOptions: {
-          respectTimeWindows: true,
-          respectSkills: true,
-          respectCapacity: false,
-          respectDependencies: true,
-          tenantId,
-        },
+        constraintOptions: constraints,
       });
 
       res.json({ jobId, status: "pending", orderCount: stops.length });
@@ -209,13 +238,7 @@ export async function registerOptimizationRoutes(app: Express) {
       o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
 
-    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, DEFAULT_BREAK_CONFIG, {
-      respectTimeWindows: true,
-      respectSkills: true,
-      respectCapacity: false,
-      respectDependencies: true,
-      tenantId,
-    });
+    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, DEFAULT_BREAK_CONFIG, constraints);
 
     res.json(result);
   }));
