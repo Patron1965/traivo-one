@@ -54,6 +54,20 @@ router.post('/notifications/:id/read', async (req, res) => {
   }
 });
 
+router.get('/notifications/unread-count', async (req, res) => {
+  if (IS_MOCK_MODE) {
+    const unreadCount = MOCK_NOTIFICATIONS.filter(n => !n.read).length;
+    res.json({ success: true, unreadCount });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/mobile/notifications/unread-count', { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch (error: unknown) {
+    res.status(503).json({ error: 'Kunde inte hamta antal olasta.' });
+  }
+});
+
 router.post('/notifications/read-all', async (req, res) => {
   if (IS_MOCK_MODE) {
     MOCK_NOTIFICATIONS.forEach(n => { n.read = true; });

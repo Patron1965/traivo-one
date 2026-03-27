@@ -21,6 +21,8 @@ import { TeamScreen } from '../screens/TeamScreen';
 import { CustomerReportsScreen } from '../screens/CustomerReportsScreen';
 import { MyDeviationsScreen } from '../screens/MyDeviationsScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
+import { AIAssistantScreen } from '../screens/AIAssistantScreen';
+import { ProfileScreen } from '../screens/ProfileScreen';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 import { FIELD_APP_ALLOWED_ROLES } from '../types';
@@ -132,7 +134,7 @@ export function RootNavigator() {
             <Stack.Screen
               name="Settings"
               component={SettingsScreen}
-              options={{ headerTitle: 'Inställningar' }}
+              options={{ headerTitle: 'Installningar' }}
             />
             <Stack.Screen
               name="Statistics"
@@ -163,6 +165,25 @@ export function RootNavigator() {
               name="Notifications"
               component={NotificationsScreen}
               options={{ headerTitle: 'Aviseringar' }}
+            />
+            <Stack.Screen
+              name="AIAssistant"
+              options={{
+                headerTitle: 'Traivo Assist',
+                headerStyle: { backgroundColor: Colors.surface },
+                headerShadowVisible: true,
+              }}
+            >
+              {(props: any) => (
+                <ScreenErrorBoundary fallbackTitle="Assistenten kunde inte visas" fallbackIcon="cpu">
+                  <AIAssistantScreen {...props} />
+                </ScreenErrorBoundary>
+              )}
+            </Stack.Screen>
+            <Stack.Screen
+              name="Profile"
+              component={ProfileScreen}
+              options={{ headerTitle: 'Profil' }}
             />
           </>
         ) : (

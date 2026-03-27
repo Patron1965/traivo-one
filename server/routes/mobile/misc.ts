@@ -764,4 +764,119 @@ router.get('/eta-notification/config', async (req: Request, res: Response) => {
   } catch { res.status(503).json({ error: 'Kunde inte hämta konfiguration.' }); }
 });
 
+const mockUserPreferences: Record<string, any> = {};
+
+router.get('/user/preferences', async (req: Request, res: Response) => {
+  if (IS_MOCK_MODE) {
+    const driverId = String(MOCK_RESOURCE.id);
+    res.json({
+      success: true,
+      preferences: mockUserPreferences[driverId] || {
+        pushEnabled: true,
+        darkMode: false,
+        fontSize: 'medium',
+        hapticFeedback: true,
+        mapType: 'standard',
+        showTraffic: true,
+        autoNavigate: false,
+        breakReminders: true,
+        breakIntervalMinutes: 120,
+      },
+    });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/mobile/user/preferences', { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte hamta preferenser.' }); }
+});
+
+router.patch('/user/preferences', async (req: Request, res: Response) => {
+  if (IS_MOCK_MODE) {
+    const driverId = String(MOCK_RESOURCE.id);
+    if (!mockUserPreferences[driverId]) mockUserPreferences[driverId] = {};
+    Object.assign(mockUserPreferences[driverId], req.body);
+    res.json({ success: true, preferences: mockUserPreferences[driverId] });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/mobile/user/preferences', {
+      method: 'PATCH', headers: getAuthHeader(req), body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte spara preferenser.' }); }
+});
+
+router.get('/app/config', async (req: Request, res: Response) => {
+  res.json({
+    success: true,
+    config: {
+      features: {
+        hamburgerMenu: true,
+        aiAssistant: true,
+        teamFeature: true,
+        offlineMode: true,
+        darkMode: false,
+        haptics: true,
+      },
+      navigation: {
+        tabs: ['home', 'orders', 'map'],
+        menuItems: ['ai', 'notifications', 'team', 'statistics', 'customerReports', 'deviations', 'routeFeedback', 'profile', 'settings'],
+      },
+    },
+  });
+});
+
+router.get('/app/version-check', async (req: Request, res: Response) => {
+  const currentVersion = (req.query.currentVersion as string) || '1.0.0';
+  const latestVersion = '2.0.0';
+  res.json({
+    success: true,
+    currentVersion,
+    latestVersion,
+    needsUpdate: currentVersion < latestVersion,
+    forceUpdate: false,
+    updateUrl: {
+      ios: 'https://apps.apple.com/app/traivo-go',
+      android: 'https://play.google.com/store/apps/details?id=com.traivo.go',
+    },
+  });
+});
+
+router.get('/statistics/summary', async (req: Request, res: Response) => {
+  if (IS_MOCK_MODE) {
+    const today = new Date().toISOString().split('T')[0];
+    const todayOrders = (MOCK_ORDERS as MockOrder[]).filter(o => o.scheduledDate === today);
+    const completed = todayOrders.filter(o => o.status === 'completed' || o.status === 'utford').length;
+    const totalMinutes = todayOrders.reduce((sum, o) => sum + (o.estimatedDuration || 0), 0);
+
+    let totalDistance = 0;
+    const sorted = [...todayOrders].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      if (prev.latitude && prev.longitude && curr.latitude && curr.longitude) {
+        totalDistance += haversineDistance(prev.latitude, prev.longitude, curr.latitude, curr.longitude);
+      }
+    }
+
+    res.json({
+      success: true,
+      summary: {
+        today: {
+          completedOrders: completed,
+          totalOrders: todayOrders.length,
+          hoursWorked: Math.round(totalMinutes / 60 * 10) / 10,
+          kilometers: Math.round(totalDistance),
+        },
+      },
+    });
+    return;
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/mobile/statistics/summary', { headers: getAuthHeader(req) });
+    res.status(status).json(data);
+  } catch { res.status(503).json({ error: 'Kunde inte hamta statistik.' }); }
+});
+
 export { router as miscRouter };

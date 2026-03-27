@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { View, ScrollView, Pressable, StyleSheet, Modal, Linking, Platform } from 'react-native';
 import { useHeaderHeight } from '@react-navigation/elements';
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useQuery } from '@tanstack/react-query';
 import { Feather } from '@expo/vector-icons';
@@ -44,7 +44,7 @@ function getInitials(name?: string): string {
 export function ProfileScreen() {
   const navigation = useNavigation<any>();
   const headerHeight = useHeaderHeight();
-  const tabBarHeight = useBottomTabBarHeight();
+  const insets = useSafeAreaInsets();
   const { user, logout, isOnline, setIsOnline } = useAuth();
   const { profiles, isLoading: profilesLoading } = useResourceProfiles();
   const { team, partner, isLeader } = useTeam();
@@ -78,7 +78,7 @@ export function ProfileScreen() {
       style={styles.container}
       contentContainerStyle={[
         styles.content,
-        { paddingTop: headerHeight + Spacing.xl, paddingBottom: tabBarHeight + Spacing.xl },
+        { paddingTop: headerHeight + Spacing.xl, paddingBottom: insets.bottom + Spacing.xl },
       ]}
     >
       <View style={styles.avatarSection}>

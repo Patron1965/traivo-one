@@ -1,15 +1,15 @@
 import React from 'react';
-import { StyleSheet, View, Platform, Image } from 'react-native';
+import { StyleSheet, View, Platform, Image, Pressable } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Feather } from '@expo/vector-icons';
 import { HomeScreen } from '../screens/HomeScreen';
 import { OrdersScreen } from '../screens/OrdersScreen';
 import { MapScreen } from '../screens/MapScreen';
-import { AIAssistantScreen } from '../screens/AIAssistantScreen';
-import { ProfileScreen } from '../screens/ProfileScreen';
 import { ScreenErrorBoundary } from '../components/ScreenErrorBoundary';
+import { HamburgerMenuButton } from '../components/HamburgerMenu';
 import { useScreenOptions } from '../hooks/useScreenOptions';
 import { Colors, FontSize, Spacing, BorderRadius } from '../constants/theme';
+import { hapticLight } from '../utils/haptics';
 
 const Tab = createBottomTabNavigator();
 
@@ -26,7 +26,7 @@ function HeaderTitle() {
 function TabIcon({ name, color, focused }: { name: string; color: string; focused: boolean }) {
   return (
     <View style={[styles.tabIconWrap, focused ? styles.tabIconWrapActive : null]}>
-      <Feather name={name as any} size={22} color={color} />
+      <Feather name={name as any} size={24} color={color} />
     </View>
   );
 }
@@ -43,6 +43,17 @@ export function TabNavigator() {
         tabBarInactiveTintColor: Colors.textMuted,
         tabBarLabelStyle: styles.tabBarLabel,
         tabBarItemStyle: styles.tabBarItem,
+        headerRight: () => <HamburgerMenuButton />,
+        headerRightContainerStyle: { paddingRight: Spacing.md },
+        tabBarButton: (props) => (
+          <Pressable
+            {...props}
+            onPress={(e) => {
+              hapticLight();
+              props.onPress?.(e);
+            }}
+          />
+        ),
       }}
     >
       <Tab.Screen
@@ -83,53 +94,18 @@ export function TabNavigator() {
           </ScreenErrorBoundary>
         )}
       </Tab.Screen>
-      <Tab.Screen
-        name="AIAssistantTab"
-        options={{
-          headerTitle: 'Nordnav Assist',
-          headerStyle: { backgroundColor: Colors.surface },
-          headerShadowVisible: true,
-          headerTransparent: false,
-          tabBarLabel: 'Assist',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="cpu" color={color} focused={focused} />
-          ),
-        }}
-      >
-        {(props: any) => (
-          <ScreenErrorBoundary fallbackTitle="Assistenten kunde inte visas" fallbackIcon="cpu">
-            <AIAssistantScreen {...props} />
-          </ScreenErrorBoundary>
-        )}
-      </Tab.Screen>
-      <Tab.Screen
-        name="ProfileTab"
-        component={ProfileScreen}
-        options={{
-          headerTitle: 'Profil',
-          tabBarLabel: 'Profil',
-          tabBarIcon: ({ color, focused }) => (
-            <TabIcon name="user" color={color} focused={focused} />
-          ),
-        }}
-      />
     </Tab.Navigator>
   );
 }
 
 const styles = StyleSheet.create({
-  headerTitle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
   tabBar: {
     backgroundColor: Colors.surface,
     borderTopColor: Colors.border,
     borderTopWidth: 1,
-    height: Platform.OS === 'ios' ? 88 : 68,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    paddingTop: 6,
+    height: Platform.OS === 'ios' ? 92 : 72,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 10,
+    paddingTop: 8,
     elevation: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
@@ -137,17 +113,17 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
   },
   tabBarItem: {
-    paddingTop: 2,
+    paddingTop: 4,
     gap: 2,
   },
   tabBarLabel: {
     fontFamily: 'Inter_600SemiBold',
-    fontSize: FontSize.sm,
+    fontSize: FontSize.md,
     marginTop: 2,
   },
   tabIconWrap: {
-    width: 44,
-    height: 30,
+    width: 52,
+    height: 34,
     alignItems: 'center',
     justifyContent: 'center',
     borderRadius: BorderRadius.round,

@@ -7,6 +7,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../context/AuthContext';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useSettings, MapApp } from '../lib/settings';
+import { usePreferences } from '../hooks/usePreferences';
+import { triggerHaptic } from '../utils/haptics';
 import { ThemedText } from '../components/ThemedText';
 import { Card } from '../components/Card';
 import { Colors, Spacing, FontSize, BorderRadius } from '../constants/theme';
@@ -22,6 +24,7 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
   const { settings, updateSetting } = useSettings();
+  const { preferences, updatePreference } = usePreferences();
   const { isTracking, startTracking, stopTracking } = useGpsTracking();
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [clearingCache, setClearingCache] = useState(false);
@@ -36,7 +39,20 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
     }
   }, [settings.gpsTracking]);
 
+  const handleToggle = useCallback(async (
+    localKey: string,
+    serverKey: string | null,
+    value: boolean,
+    extraFn?: () => void
+  ) => {
+    triggerHaptic('light');
+    await updateSetting(localKey as any, value);
+    if (serverKey) updatePreference(serverKey as any, value);
+    if (extraFn) extraFn();
+  }, [updateSetting, updatePreference]);
+
   const handleGpsToggle = useCallback(async (value: boolean) => {
+    triggerHaptic('light');
     await updateSetting('gpsTracking', value);
     if (value) {
       startTracking();
@@ -116,7 +132,7 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
           </View>
           <Switch
             value={settings.notifications}
-            onValueChange={(v) => updateSetting('notifications', v)}
+            onValueChange={(v) => handleToggle('notifications', 'pushEnabled', v)}
             trackColor={{ false: Colors.border, true: Colors.primaryLight }}
             thumbColor={settings.notifications ? Colors.primary : Colors.textMuted}
             testID="switch-notifications"
@@ -142,7 +158,7 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
           </View>
           <Switch
             value={settings.hapticFeedback}
-            onValueChange={(v) => updateSetting('hapticFeedback', v)}
+            onValueChange={(v) => handleToggle('hapticFeedback', 'hapticFeedback', v)}
             trackColor={{ false: Colors.border, true: Colors.primaryLight }}
             thumbColor={settings.hapticFeedback ? Colors.primary : Colors.textMuted}
             testID="switch-haptic"
@@ -163,7 +179,7 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
           </View>
           <Switch
             value={settings.darkMode}
-            onValueChange={(v) => updateSetting('darkMode', v)}
+            onValueChange={(v) => handleToggle('darkMode', 'darkMode', v)}
             trackColor={{ false: Colors.border, true: Colors.primaryLight }}
             thumbColor={settings.darkMode ? Colors.primary : Colors.textMuted}
             testID="switch-darkmode"
@@ -227,7 +243,7 @@ export function SettingsScreen({ navigation }: { navigation: unknown }) {
           </View>
           <Switch
             value={settings.offlineMode}
-            onValueChange={(v) => updateSetting('offlineMode', v)}
+            onValueChange={(v) => handleToggle('offlineMode', null, v)}
             trackColor={{ false: Colors.border, true: Colors.primaryLight }}
             thumbColor={settings.offlineMode ? Colors.primary : Colors.textMuted}
             testID="switch-offline"
