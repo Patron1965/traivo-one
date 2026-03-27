@@ -65,6 +65,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Map Cluster Selection Tool:** Draw polygon on objects map to spatially select objects and bulk-assign them to a new or existing cluster.
 - **VRP Constraint Integration:** Enhanced VRP optimization with real constraint enrichment from database tables (time windows, competency, vehicle capacity, task dependencies, preferred times, resource efficiency factors).
 - **VRP Route Optimization UI (Fas 4):** Enhanced `RouteOptimizationPanel.tsx` with constraint toggles, async job progress, decision trace per order, multi-day planning mode, what-if simulation, and cluster visualization.
+- **Pop-out Kartövervakning:** Standalone fullscreen map monitoring window (`/monitor/popout`) with live driver positions via WebSocket, road-following route geometry, job markers, collapsible control panel with layer toggles and status filters. Launchable from both PlannerMapPage and RoutesPage.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

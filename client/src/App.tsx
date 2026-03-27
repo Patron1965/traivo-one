@@ -106,6 +106,7 @@ const AnnualPlanningPage = lazy(() => import("@/pages/AnnualPlanningPage"));
 const PredictiveMaintenancePage = lazy(() => import("@/pages/PredictiveMaintenancePage"));
 const ModuleUpgradePage = lazy(() => import("@/pages/ModuleUpgradePage"));
 const TelephonyPage = lazy(() => import("@/pages/TelephonyPage"));
+const MonitorPopoutPage = lazy(() => import("@/pages/MonitorPopoutPage"));
 
 function PageLoader() {
   return (
@@ -297,6 +298,40 @@ function AppContent() {
       <ErrorBoundary>
         <Suspense fallback={<PageLoader />}>
           <PublicReportPage />
+        </Suspense>
+      </ErrorBoundary>
+    );
+  }
+
+  if (location === "/monitor/popout") {
+    if (isLoading) {
+      return (
+        <div className="flex items-center justify-center min-h-screen bg-background">
+          <div className="flex flex-col items-center gap-4">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            <p className="text-muted-foreground">Laddar kartövervakning...</p>
+          </div>
+        </div>
+      );
+    }
+    if (!isAuthenticated) {
+      return (
+        <Suspense fallback={<PageLoader />}>
+          <LandingPage />
+        </Suspense>
+      );
+    }
+    if (!accessGranted) {
+      return (
+        <Suspense fallback={<PageLoader />}>
+          <AccessDeniedPage />
+        </Suspense>
+      );
+    }
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<PageLoader />}>
+          <MonitorPopoutPage />
         </Suspense>
       </ErrorBoundary>
     );

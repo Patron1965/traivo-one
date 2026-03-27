@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
-import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, Check, Map, Cloud, CloudRain, Wind, Thermometer, Lightbulb } from "lucide-react";
+import { Loader2, Sparkles, TrendingUp, Clock, MapPin, Route as RouteIcon, Truck, AlertCircle, Check, Map, Cloud, CloudRain, Wind, Thermometer, Lightbulb, Monitor } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -202,9 +202,25 @@ export default function RoutesPage() {
 
   return (
     <div className="h-full p-6 flex flex-col gap-4 overflow-auto">
-      <div>
-        <h1 className="text-2xl font-semibold">Ruttplanering</h1>
-        <p className="text-sm text-muted-foreground">Optimera dagens rutter och minimera körtid</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Ruttplanering</h1>
+          <p className="text-sm text-muted-foreground">Optimera dagens rutter och minimera körtid</p>
+        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.open("/monitor/popout", "traivo-monitor", "width=1200,height=800,menubar=no,toolbar=no,location=no,status=no")}
+              data-testid="button-popout-monitor"
+            >
+              <Monitor className="h-4 w-4 mr-2" />
+              Övervaka i eget fönster
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Öppna kartövervakning i ett separat fönster</TooltipContent>
+        </Tooltip>
       </div>
       
       {recommendations && (
