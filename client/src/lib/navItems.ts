@@ -56,12 +56,11 @@ export interface NavGroup {
 
 export function getGrunddataItems(t: (key: string, fallback: string) => string): NavItem[] {
   return [
-    { title: t("cluster_plural", "Kluster"), url: "/clusters", icon: Target, description: "Arbetsområden" },
-    { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
     { title: t("object_plural", "Objekt"), url: "/objects", icon: Building2, description: "Fastigheter och platser" },
     { title: t("resource_plural", "Resurser"), url: "/resources", icon: Users, description: "Personal" },
-    { title: "Arbetspass", url: "/work-sessions", icon: Clock, description: "Tidloggning och löneunderlag" },
     { title: t("vehicle_plural", "Fordon"), url: "/vehicles", icon: Truck, description: t("vehicle_plural", "Fordon") },
+    { title: t("cluster_plural", "Kluster"), url: "/clusters", icon: Target, description: "Arbetsområden" },
+    { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
     { title: t("article_plural", "Artiklar"), url: "/articles", icon: Package, description: "Produkter och tjänster" },
     { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
   ];
@@ -69,10 +68,10 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string):
 
 export function getOrdrarItems(t: (key: string, fallback: string) => string): NavItem[] {
   return [
-    { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
-    { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks, description: "Intelligenta ordergeneratorer" },
     { title: "Orderstock", url: "/order-stock", icon: ClipboardList, description: `Alla ${t("work_order_plural", "uppgifter").toLowerCase()}` },
     { title: "Uppdrag", url: "/assignments", icon: UserCheck, description: "Genererade uppgifter" },
+    { title: "Abonnemang", url: "/subscriptions", icon: RefreshCw, description: "Återkommande tjänster" },
+    { title: "Orderkoncept", url: "/order-concepts", icon: ListChecks, description: "Intelligenta ordergeneratorer" },
   ];
 }
 
@@ -90,6 +89,7 @@ export function getPlaneringItems(): NavItem[] {
 export function getFaltItems(t: (key: string, fallback: string) => string): NavItem[] {
   return [
     { title: "Mobilapp Fält", url: "/mobile", icon: Smartphone, description: "Fältarbete och protokoll" },
+    { title: "Arbetspass", url: "/work-sessions", icon: Clock, description: "Tidloggning och löneunderlag" },
     { title: t("inspection_singular", "Besiktning"), url: "/inspections", icon: ClipboardCheck, description: "Inspektionsprotokoll" },
     { title: "Kontrollmallar", url: "/checklist-templates", icon: ClipboardCheck, description: "Inspektionsfrågor per artikeltyp" },
     { title: "Kundportal", url: "/customer-portal", icon: Building, description: "Extern kundvy" },
@@ -102,15 +102,15 @@ export function getFaltItems(t: (key: string, fallback: string) => string): NavI
 
 export function getAnalysItems(): NavItem[] {
   return [
-    { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
     { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
-    { title: "Proaktiv försäljning", url: "/proactive-sales", icon: TrendingUp, description: "Inaktiva kunder & intäkter" },
     { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
     { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
+    { title: "Proaktiv försäljning", url: "/proactive-sales", icon: TrendingUp, description: "Inaktiva kunder & intäkter" },
+    { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp, description: "Avkastningsanalys per kund" },
     { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
+    { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
     { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
     { title: "Prediktivt Underhåll", url: "/predictive-maintenance", icon: Activity, description: "IoT-baserad serviceprognos" },
-    { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp, description: "Avkastningsanalys per kund" },
   ];
 }
 
@@ -130,11 +130,11 @@ export const adminItems: NavItem[] = [
 
 export function getNavGroups(t: (key: string, fallback: string) => string): NavGroup[] {
   return [
-    { key: "grunddata", label: "Grunddata", items: getGrunddataItems(t), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { key: "ordrar", label: "Ordrar", items: getOrdrarItems(t), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
     { key: "planering", label: "Planering & Karta", items: getPlaneringItems(), icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { key: "ordrar", label: "Ordrar", items: getOrdrarItems(t), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
     { key: "falt", label: "Fält & Utförande", items: getFaltItems(t), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
-    { key: "analys", label: "Analys", items: getAnalysItems(), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
+    { key: "grunddata", label: "Grunddata", items: getGrunddataItems(t), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
+    { key: "analys", label: "Analys & Ekonomi", items: getAnalysItems(), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
     { key: "admin", label: "Administration", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 }

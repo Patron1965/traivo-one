@@ -1,0 +1,170 @@
+Traivo One – Analys av menystruktur och arbetsflöde
+Datum: 2026-03-27
+Repository: https://github.com/Patron1965/traivo-one
+
+1. Översikt – Vad är Traivo One?
+Traivo One är en mobilapplikation för fältpersonal inom avfallshantering och transportlogistik (React Native / Expo). Appen riktar sig primärt till chaufförer som utför dagliga uppdrag (ordrar) såsom containerhantering, avfallshämtning och leveranser.
+
+Systemet hanterar hela kedjan från att chauffören loggar in, ser sina uppdrag, navigerar till platser, utför arbete (med inspektion, materialloggning, fotodokumentation, kundkvittering), rapporterar avvikelser och avslutar sin arbetsdag.
+
+2. Nuvarande menystruktur
+2.1 Bottenflikar (TabNavigator)
+Tre fasta flikar syns alltid längst ner i appen:
+
+#	Flik	Ikon	Skärm	Beskrivning
+1	Hem	home	HomeScreen	Dashboard med dagöversikt, nästa uppdrag, progress, arbetstid, väder, teaminfo
+2	Uppdrag	clipboard	OrdersScreen	Lista över alla tilldelade uppdrag med status, filtrering och drag-to-reorder
+3	Karta	map	MapScreen	Kartvy med alla uppdrag, ruttoptimering, GPS-spårning, teammedlemmars positioner
+2.2 Hamburgermeny (sidopanel, öppnas via ☰-knappen uppe till höger)
+Menyobjekten i nuvarande ordning:
+
+#	Menyval	Ikon	Skärm	Kategori
+1	AI-Assistent	cpu	AIAssistantScreen	Hjälpverktyg
+2	Aviseringar	bell	NotificationsScreen	Kommunikation
+3	Mitt team	users	TeamScreen	Samarbete
+—	separator			
+4	Statistik	bar-chart-2	StatisticsScreen	Rapportering
+5	Kundrapporter	file-text	CustomerReportsScreen	Rapportering
+6	Mina avvikelser	alert-triangle	MyDeviationsScreen	Rapportering
+7	Ruttbetyg	star	RouteFeedbackScreen	Feedback
+—	separator			
+8	Min profil	user	ProfileScreen	Konto
+9	Inställningar	settings	SettingsScreen	Konto
+10	Om Traivo One	info	SettingsScreen (samma skärm!)	Konto
+—	separator			
+11	Logga ut	log-out	—	Konto
+2.3 Underordnade skärmar (Stack-navigering, nås via uppdragsflödet)
+Dessa skärmar nås genom interaktion med ett uppdrag, inte via menyn direkt:
+
+Skärm	Headerrubrik	Nås via
+OrderDetailScreen	Uppdrag	Klick på uppdrag i lista/karta
+ReportDeviationScreen	Avvikelse	Knapp i uppdragsdetalj
+MaterialLogScreen	Material	Knapp i uppdragsdetalj
+CameraCaptureScreen	Foto	Knapp i uppdragsdetalj
+SignatureScreen	Signatur	Knapp i uppdragsdetalj
+CustomerSignOffScreen	Kundkvittering	Knapp i uppdragsdetalj
+InspectionScreen	Inspektion	Knapp i uppdragsdetalj
+3. Analys av användararbetsflödet
+3.1 Typiskt dagligt arbetsflöde för en chaufför
+1. STARTA DAGEN
+   └─ Logga in (PIN/e-post/lösenord)
+   └─ Se dagöversikt på Hem-skärmen
+   └─ Starta arbetssession (tidsspårning)
+
+2. PLANERA RUTTEN
+   └─ Se uppdragslistan (Uppdrag-fliken)
+   └─ Öppna kartan (Karta-fliken)
+   └─ Kontrollera ruttoptimering
+
+3. UTFÖRA UPPDRAG (loop för varje uppdrag)
+   └─ Välj uppdrag → OrderDetail
+   └─ Navigera till plats (extern kartapp)
+   └─ Utför arbete:
+       ├─ Inspektion
+       ├─ Materialloggning
+       ├─ Fotodokumentation
+       └─ Rapportera avvikelse (vid behov)
+   └─ Avsluta uppdrag:
+       ├─ Kundkvittering / Signatur
+       └─ Markera som slutfört
+
+4. ÖVERVAKA & KOMMUNICERA (löpande)
+   └─ Aviseringar
+   └─ Team-samarbete
+   └─ AI-Assistent (fråga om hjälp)
+
+5. AVSLUTA DAGEN
+   └─ Se statistik/progress
+   └─ Ge ruttbetyg
+   └─ Logga ut
+3.2 Identifierade problem med nuvarande menyordning
+❌ Problem 1: AI-Assistent ligger överst
+AI-assistenten är ett stödverktyg som inte används först. Att den ligger överst ger intrycket att den är det viktigaste – men en chaufför vill primärt se sina aviseringar eller snabbt nå teaminfo.
+
+❌ Problem 2: "Om Traivo One" pekar på samma skärm som Inställningar
+Om Traivo One navigerar till Settings-skärmen, dvs samma destination som Inställningar. Det skapar förvirring och bör antingen vara en separat sektion inom inställningar eller tas bort som eget menyval.
+
+❌ Problem 3: Rapporteringsfunktioner blandat
+Statistik, Kundrapporter, Mina avvikelser och Ruttbetyg ligger alla i samma grupp men har olika karaktär: Statistik och Kundrapporter är retrospektiva/analytiska, medan Mina avvikelser och Ruttbetyg är åtgärdsbaserade feedback-verktyg.
+
+❌ Problem 4: Aviseringar borde vara mer tillgängliga
+Aviseringar är kritisk information i realtid och borde ha en mer framträdande plats – eventuellt som en egen ikon i tab-baren eller allra överst i menyn.
+
+❌ Problem 5: Saknas tydlig gruppering efter arbetsmoment
+Menyn grupperar inte tydligt efter chaufförens dagliga arbetsmoment (planera → utföra → rapportera → konto).
+
+4. Rekommendationer för omorganisering
+4.1 Förslag på ny menystruktur i hamburgermenyn
+Organiserad efter logiskt arbetsflöde och användningsfrekvens:
+
+┌─────────────────────────────────────────┐
+│  [Avatar] Chaufförens namn              │
+│  Roll · Online/Offline                  │
+│                                         │
+│  ┌─ Snabbstatistik (klara/kvar) ──────┐ │
+│  └────────────────────────────────────┘ │
+│                                         │
+│  📋 DAGLIGT ARBETE                      │
+│  ─────────────────                      │
+│  🔔 Aviseringar          [badge]        │
+│  👥 Mitt team                           │
+│  🤖 AI-Assistent                        │
+│                                         │
+│  📊 UPPFÖLJNING & RAPPORTER            │
+│  ──────────────────────                 │
+│  📈 Statistik                           │
+│  📄 Kundrapporter                       │
+│  ⚠️ Mina avvikelser                     │
+│  ⭐ Ruttbetyg                           │
+│                                         │
+│  ⚙️ KONTO & INSTÄLLNINGAR              │
+│  ────────────────────                   │
+│  👤 Min profil                          │
+│  🔧 Inställningar                       │
+│                                         │
+│  ─────────────────                      │
+│  🚪 Logga ut                            │
+│                                         │
+│  Traivo One v2.0                         │
+└─────────────────────────────────────────┘
+4.2 Motivering
+Ändring	Motivering
+Aviseringar överst	Mest tidsbrådskande – chauffören behöver se viktiga meddelanden direkt
+Team efter aviseringar	Samarbete är viktigt under dagen, ofta kopplat till aviseringar
+AI-Assistent under dagligt arbete	Stödverktyg man använder vid behov, inte det första man söker
+Rapporter som egen grupp	Tydliggör att dessa är retrospektiva/analytiska funktioner
+Ta bort "Om Traivo One"	Dubblerar Inställningar-skärmen – flytta eventuell info till en sektion inom Inställningar
+Sektionsrubriker	Lägg till textrubriker (t.ex. "Dagligt arbete", "Uppföljning", "Konto") för bättre visuell gruppering
+4.3 Övriga förbättringsförslag
+A) Aviseringar som badge i tab-baren
+Överväg att lägga en aviseringsikon direkt i bottenfältet (tab-baren) istället för/utöver hamburgermenyn. Aviseringar är tidskritiska och bör vara max ett klick bort.
+
+B) Sektionsrubriker i hamburgermenyn
+Lägg till visuella sektionsrubriker (ThemedText med variant caption) ovanför varje grupp:
+
+Dagligt arbete
+Uppföljning & rapporter
+Konto & inställningar
+C) Fixa "Om Traivo One"-dubbletten
+Antingen:
+
+Gör en egen AboutScreen med appversion, licenser, kontaktinfo
+Eller integrera som en sektion i SettingsScreen och ta bort menyposten
+D) Kontextuell ordning
+Om möjligt, byt dynamiskt ordning baserat på tid på dagen:
+
+Morgon: Visa aviseringar och teaminfo först
+Under arbete: Lyft fram pågående uppdrag-relaterade verktyg
+Eftermiddag: Visa statistik och ruttbetyg mer framträdande
+E) Snabbåtgärder på Hem-skärmen
+Hem-skärmen har redan bra widgetar. Överväg att lägga snabbknappar direkt på Hem-skärmen för de vanligaste hamburgarmenyfunktionerna (Aviseringar, Statistik) för att minska navigeringsdjupet.
+
+5. Sammanfattning
+Aspekt	Nuvarande	Rekommendation
+Antal bottenflikar	3 (Hem, Uppdrag, Karta)	✅ Bra – behåll, överväg att lägga till Aviseringar
+Hamburgermenyposter	10 + Logga ut	Behåll 9 + Logga ut (ta bort dubbletten "Om Traivo One")
+Menygruppering	3 grupper med separatorer	3 namngivna grupper med rubriker
+Menyordning	AI först, profil sist	Aviseringar först, AI under dagligt arbete
+Underordnade skärmar	7 stycken (uppdragsflöde)	✅ Bra – logisk kedja inom uppdrag
+Arbetsflöde	Fungerande men menyn speglar det inte	Ordna menyn efter dagligt arbetsflöde
+Appens grundstruktur är välbyggd med en tydlig uppdelning mellan tab-navigation (kärnfunktioner) och hamburgermeny (sekundära funktioner). De föreslagna ändringarna handlar främst om att ordna om och gruppera menyposterna så att de bättre speglar chaufförens naturliga arbetsdag – från att börja dagen med aviseringar och teaminfo, via arbete med uppdrag, till att avsluta med rapporter och inställningar.
