@@ -63,6 +63,7 @@ export function getGrunddataItems(t: (key: string, fallback: string) => string):
     { title: "Auto-klustring", url: "/auto-cluster", icon: Layers, description: "Automatisk områdesindelning" },
     { title: t("article_plural", "Artiklar"), url: "/articles", icon: Package, description: "Produkter och tjänster" },
     { title: "Prislistor", url: "/price-lists", icon: Receipt, description: "Prissättning" },
+    { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
   ];
 }
 
@@ -79,10 +80,15 @@ export function getPlaneringItems(): NavItem[] {
   return [
     { title: "Veckoplanering", url: "/planner", icon: Calendar, description: "Planera veckans arbete" },
     { title: "Ruttplanering", url: "/routes", icon: Map, description: "Optimera körvägar" },
-    { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
-    { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
     { title: "Väderplanering", url: "/weather", icon: Cloud, description: "Planera efter väder" },
     { title: "Årsplanering", url: "/annual-planning", icon: Target, description: "Årsmål & uppföljning" },
+  ];
+}
+
+export function getOvervakningItems(): NavItem[] {
+  return [
+    { title: "Planerarvy Karta", url: "/planner-map", icon: MapPin, description: "Realtidskarta med förare och uppdrag" },
+    { title: "Historisk Kartvy", url: "/historical-map", icon: History, description: "Spela upp rörelsemönster" },
   ];
 }
 
@@ -100,14 +106,18 @@ export function getFaltItems(t: (key: string, fallback: string) => string): NavI
   ];
 }
 
-export function getAnalysItems(): NavItem[] {
+export function getEkonomiItems(): NavItem[] {
   return [
     { title: "Rapportering", url: "/reporting", icon: BarChart3, description: "KPI och rapporter" },
     { title: "Ekonomi", url: "/economics", icon: DollarSign, description: "Intäkter och kostnader" },
     { title: "Fakturering", url: "/invoicing", icon: Receipt, description: "Fakturahantering och Fortnox-export" },
     { title: "Proaktiv försäljning", url: "/proactive-sales", icon: TrendingUp, description: "Inaktiva kunder & intäkter" },
     { title: "ROI-rapport", url: "/roi-report", icon: TrendingUp, description: "Avkastningsanalys per kund" },
-    { title: "Fleethantering", url: "/fleet", icon: Fuel, description: "Fordonsöversikt, underhåll och bränsle" },
+  ];
+}
+
+export function getAIItems(): NavItem[] {
+  return [
     { title: "AI-Assistent", url: "/ai-assistant", icon: Brain, description: "AI-analys och optimering" },
     { title: "Prediktiv Planering", url: "/predictive-planning", icon: TrendingUp, description: "AI-prognoser" },
     { title: "Prediktivt Underhåll", url: "/predictive-maintenance", icon: Activity, description: "IoT-baserad serviceprognos" },
@@ -130,11 +140,13 @@ export const adminItems: NavItem[] = [
 
 export function getNavGroups(t: (key: string, fallback: string) => string): NavGroup[] {
   return [
-    { key: "planering", label: "Planering & Karta", items: getPlaneringItems(), icon: Calendar, group: "planering", colorClass: "text-green-500" },
-    { key: "ordrar", label: "Ordrar", items: getOrdrarItems(t), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
-    { key: "falt", label: "Fält & Utförande", items: getFaltItems(t), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
+    { key: "ordrar", label: "Ordrar & Uppdrag", items: getOrdrarItems(t), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
+    { key: "planering", label: "Planering", items: getPlaneringItems(), icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { key: "overvakning", label: "Övervakning & Karta", items: getOvervakningItems(), icon: MapPin, group: "planering", colorClass: "text-cyan-500" },
+    { key: "falt", label: "Fält & Kundkontakt", items: getFaltItems(t), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
+    { key: "ekonomi", label: "Ekonomi & Uppföljning", items: getEkonomiItems(), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
+    { key: "ai", label: "AI & Analys", items: getAIItems(), icon: Brain, group: "analys", colorClass: "text-violet-500" },
     { key: "grunddata", label: "Grunddata", items: getGrunddataItems(t), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { key: "analys", label: "Analys & Ekonomi", items: getAnalysItems(), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
     { key: "admin", label: "Administration", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 }
