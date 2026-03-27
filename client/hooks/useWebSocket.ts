@@ -18,7 +18,9 @@ type WSEvent =
   | { type: 'schedule_changed'; data: { orderId: string | number; data?: { oldDate: string; newDate: string; scheduledStartTime: string } } }
   | { type: 'priority_changed'; data: { orderId: string | number; data?: { oldPriority: string; newPriority: string } } }
   | { type: 'anomaly_alert'; data: { id: string | number; title: string; message: string } }
-  | { type: 'position_update'; data: { resourceId: string | number; latitude: number; longitude: number; speed: number; status: string } };
+  | { type: 'position_update'; data: { resourceId: string | number; latitude: number; longitude: number; speed: number; status: string } }
+  | { type: 'route:optimized'; data: { jobId: string; resourceId: string; timestamp: string } }
+  | { type: 'route:reoptimizing'; data: { reason: string; resourceId: string } };
 
 type EventHandler = (event: WSEvent) => void;
 
@@ -211,6 +213,16 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
       socket.on('team:invite', (data: any) => {
         emitEvent(connId, 'team:invite', data);
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/team-invites'] });
+      });
+
+      socket.on('route:optimized', (data: any) => {
+        emitEvent(connId, 'route:optimized', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/route'] });
+      });
+
+      socket.on('route:reoptimizing', (data: any) => {
+        emitEvent(connId, 'route:reoptimizing', data);
       });
 
       socket.on('pong', () => {});

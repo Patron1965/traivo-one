@@ -1,4 +1,6 @@
 import { Router, Request, Response } from 'express';
+import { pool } from '../../db';
+import { MOCK_RESOURCE } from './mockData';
 import {
   IS_MOCK_MODE, traivoFetch, getAuthHeader,
   haversineDistance, parseCoordPoints, simplifyCoordinates, buildFallbackResponse,
@@ -324,6 +326,115 @@ router.get('/route-optimized', async (req: Request, res: Response) => {
     const msg = error instanceof Error ? error.message : 'unknown';
     console.error('Geoapify planner fetch error:', msg);
     res.json(buildFallbackResponse(parsed));
+  }
+});
+
+const mockOptJobs = new Map<string, { status: string; progress: number; createdAt: number }>();
+
+router.post('/optimize-route', async (req: Request, res: Response) => {
+  if (IS_MOCK_MODE) {
+    const jobId = `opt-${Date.now()}`;
+    mockOptJobs.set(jobId, { status: 'completed', progress: 100, createdAt: Date.now() });
+    setTimeout(() => mockOptJobs.delete(jobId), 300000);
+    return res.json({ success: true, jobId, estimatedTime: 15 });
+  }
+  try {
+    const { status, data } = await traivoFetch('/api/optimization/submit', {
+      method: 'POST',
+      headers: getAuthHeader(req),
+      body: JSON.stringify(req.body),
+    });
+    res.status(status).json(data);
+  } catch {
+    res.status(503).json({ error: 'Kunde inte starta optimering' });
+  }
+});
+
+router.get('/optimize-route/:jobId/status', async (req: Request, res: Response) => {
+  if (IS_MOCK_MODE) {
+    const job = mockOptJobs.get(req.params.jobId);
+    return res.json(job || { status: 'completed', progress: 100 });
+  }
+  try {
+    const { status, data } = await traivoFetch(
+      `/api/optimization/jobs/${req.params.jobId}/status`,
+      { method: 'GET', headers: getAuthHeader(req) }
+    );
+    res.status(status).json(data);
+  } catch {
+    res.status(503).json({ error: 'Kunde inte hämta optimeringsstatus' });
+  }
+});
+
+router.get('/optimize-route/:jobId/result', async (req: Request, res: Response) => {
+  if (IS_MOCK_MODE) {
+    return res.json({ success: true, optimizedRoute: null });
+  }
+  try {
+    const { status, data } = await traivoFetch(
+      `/api/optimization/jobs/${req.params.jobId}/result`,
+      { method: 'GET', headers: getAuthHeader(req) }
+    );
+    res.status(status).json(data);
+  } catch {
+    res.status(503).json({ error: 'Kunde inte hämta optimeringsresultat' });
+  }
+});
+
+router.post('/position/batch', async (req: Request, res: Response) => {
+  const { positions } = req.body;
+  if (!Array.isArray(positions) || positions.length === 0) {
+    return res.status(400).json({ error: 'positions array required' });
+  }
+  const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : 'unknown';
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS driver_location_history (
+        id SERIAL PRIMARY KEY,
+        driver_id VARCHAR(255) NOT NULL,
+        latitude DOUBLE PRECISION NOT NULL,
+        longitude DOUBLE PRECISION NOT NULL,
+        speed DOUBLE PRECISION DEFAULT 0,
+        heading DOUBLE PRECISION DEFAULT 0,
+        accuracy DOUBLE PRECISION DEFAULT 0,
+        recorded_at TIMESTAMP DEFAULT NOW()
+      )
+    `);
+    for (const pos of positions.slice(-50)) {
+      await pool.query(
+        `INSERT INTO driver_location_history (driver_id, latitude, longitude, speed, heading, accuracy, recorded_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [driverId, pos.latitude, pos.longitude, pos.speed || 0, pos.heading || 0, pos.accuracy || 0,
+         pos.timestamp ? new Date(pos.timestamp) : new Date()]
+      );
+    }
+    res.json({ received: true, count: positions.length });
+  } catch (err: any) {
+    console.error('Batch position save error:', err.message);
+    res.json({ received: true, count: 0 });
+  }
+});
+
+router.get('/route-metrics/today', async (_req: Request, res: Response) => {
+  const driverId = IS_MOCK_MODE ? String(MOCK_RESOURCE.id) : 'unknown';
+  try {
+    const result = await pool.query(
+      `SELECT COUNT(*) as positions,
+        MIN(recorded_at) as first_pos, MAX(recorded_at) as last_pos
+       FROM driver_location_history
+       WHERE driver_id = $1 AND recorded_at::date = CURRENT_DATE`,
+      [driverId]
+    );
+    const row = result.rows[0] || {};
+    const posCount = parseInt(row.positions || '0');
+    res.json({
+      totalDistance: posCount > 0 ? Math.round(posCount * 0.3 * 10) / 10 : 0,
+      totalDuration: posCount > 0 ? Math.round((new Date(row.last_pos).getTime() - new Date(row.first_pos).getTime()) / 60000) : 0,
+      stopsCompleted: 0,
+      stopsReordered: 0,
+    });
+  } catch {
+    res.json({ totalDistance: 0, totalDuration: 0, stopsCompleted: 0, stopsReordered: 0 });
   }
 });
 

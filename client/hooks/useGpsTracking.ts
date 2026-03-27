@@ -4,8 +4,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { apiRequest } from '../lib/query-client';
 import type { GpsPosition } from '../types';
 
-const GPS_INTERVAL = 30000;
+const GPS_INTERVAL_MOVING = 15000;
+const GPS_INTERVAL_IDLE = 60000;
+const SPEED_THRESHOLD = 2;
 const GPS_ENABLED_KEY = '@gps_tracking_enabled';
+const POSITION_BUFFER_KEY = '@gps_position_buffer';
+const MAX_BUFFER_SIZE = 100;
 const MAX_SEND_RETRIES = 2;
 const RETRY_DELAY_MS = 3000;
 
@@ -28,6 +32,8 @@ let globalState: GpsState = {
 let globalIntervalId: ReturnType<typeof setInterval> | null = null;
 let globalListeners: Listener[] = [];
 let globalActiveCount = 0;
+let currentInterval = GPS_INTERVAL_MOVING;
+let globalCurrentOrderId: string | null = null;
 
 function notifyListeners() {
   const snapshot = { ...globalState };
@@ -123,6 +129,27 @@ async function getCurrentPositionGlobal(): Promise<GpsPosition | null> {
   }
 }
 
+async function bufferPosition(position: GpsPosition) {
+  try {
+    const raw = await AsyncStorage.getItem(POSITION_BUFFER_KEY);
+    const buffer: GpsPosition[] = raw ? JSON.parse(raw) : [];
+    buffer.push(position);
+    const trimmed = buffer.slice(-MAX_BUFFER_SIZE);
+    await AsyncStorage.setItem(POSITION_BUFFER_KEY, JSON.stringify(trimmed));
+  } catch {}
+}
+
+async function flushPositionBuffer() {
+  try {
+    const raw = await AsyncStorage.getItem(POSITION_BUFFER_KEY);
+    if (!raw) return;
+    const buffer: GpsPosition[] = JSON.parse(raw);
+    if (buffer.length === 0) return;
+    await apiRequest('POST', '/api/mobile/position/batch', { positions: buffer });
+    await AsyncStorage.removeItem(POSITION_BUFFER_KEY);
+  } catch {}
+}
+
 async function sendPositionGlobal(position: GpsPosition, retries = MAX_SEND_RETRIES) {
   try {
     await apiRequest('POST', '/api/mobile/position', {
@@ -132,8 +159,10 @@ async function sendPositionGlobal(position: GpsPosition, retries = MAX_SEND_RETR
       heading: position.heading,
       accuracy: position.accuracy,
       trackingStatus: globalState.trackingStatus || 'active',
+      currentOrderId: globalCurrentOrderId,
       lastPositionUpdate: new Date().toISOString(),
     });
+    await flushPositionBuffer();
   } catch (err) {
     console.error('[GPS] Failed to send position:', err);
     if (retries > 0) {
@@ -141,7 +170,8 @@ async function sendPositionGlobal(position: GpsPosition, retries = MAX_SEND_RETR
       await new Promise((resolve) => setTimeout(resolve, RETRY_DELAY_MS));
       return sendPositionGlobal(position, retries - 1);
     }
-    console.error('[GPS] All retries exhausted for position send');
+    console.error('[GPS] All retries exhausted — buffering position');
+    await bufferPosition(position);
   }
 }
 
@@ -160,11 +190,25 @@ async function startTrackingGlobal() {
   const pos = await getCurrentPositionGlobal();
   if (pos) sendPositionGlobal(pos);
 
-  if (globalIntervalId) clearInterval(globalIntervalId);
-  globalIntervalId = setInterval(async () => {
-    const p = await getCurrentPositionGlobal();
-    if (p) sendPositionGlobal(p);
-  }, GPS_INTERVAL);
+  currentInterval = GPS_INTERVAL_MOVING;
+
+  const startInterval = () => {
+    if (globalIntervalId) clearInterval(globalIntervalId);
+    globalIntervalId = setInterval(async () => {
+      const p = await getCurrentPositionGlobal();
+      if (p) {
+        sendPositionGlobal(p);
+        const isMoving = (p.speed || 0) > SPEED_THRESHOLD;
+        const desiredInterval = isMoving ? GPS_INTERVAL_MOVING : GPS_INTERVAL_IDLE;
+        if (desiredInterval !== currentInterval) {
+          currentInterval = desiredInterval;
+          startInterval();
+        }
+      }
+    }, currentInterval);
+  };
+
+  startInterval();
 }
 
 async function stopTrackingGlobal() {
@@ -216,6 +260,9 @@ export function useGpsTracking() {
   const updateTrackingStatus = useCallback((status: TrackingStatus) => {
     updateGlobalState({ trackingStatus: status });
   }, []);
+  const setCurrentOrderId = useCallback((orderId: string | null) => {
+    globalCurrentOrderId = orderId;
+  }, []);
 
   return {
     isTracking: state.isTracking,
@@ -227,5 +274,6 @@ export function useGpsTracking() {
     requestPermission,
     getCurrentPosition,
     updateTrackingStatus,
+    setCurrentOrderId,
   };
 }

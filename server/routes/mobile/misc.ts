@@ -367,17 +367,43 @@ router.get('/route-feedback/mine', async (_req: Request, res: Response) => {
 
 router.post('/route-feedback', async (req: Request, res: Response) => {
   const driverId = MOCK_RESOURCE.id;
-  const { rating, reasons, comment, date } = req.body;
+  const { rating, reasons, comment, date, optimizationJobId, actualMetrics } = req.body;
   if (!rating || rating < 1 || rating > 5) {
     return res.status(400).json({ error: 'Betyg (1-5) krävs' });
   }
   try {
+    await pool.query(`
+      ALTER TABLE route_feedback
+        ADD COLUMN IF NOT EXISTS optimization_job_id VARCHAR(255),
+        ADD COLUMN IF NOT EXISTS actual_distance_km DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS actual_duration_min DOUBLE PRECISION,
+        ADD COLUMN IF NOT EXISTS stops_completed INTEGER,
+        ADD COLUMN IF NOT EXISTS stops_reordered INTEGER
+    `).catch(() => {});
     const result = await pool.query(
-      `INSERT INTO route_feedback (driver_id, rating, reasons, comment, feedback_date, created_at)
-       VALUES ($1, $2, $3, $4, $5, NOW())
-       RETURNING *`,
-      [driverId, rating, JSON.stringify(reasons || []), comment || '', date || new Date().toISOString().split('T')[0]]
+      `INSERT INTO route_feedback (
+        driver_id, rating, reasons, comment, feedback_date,
+        optimization_job_id, actual_distance_km, actual_duration_min,
+        stops_completed, stops_reordered, created_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+      RETURNING *`,
+      [
+        driverId, rating, JSON.stringify(reasons || []), comment || '',
+        date || new Date().toISOString().split('T')[0],
+        optimizationJobId || null,
+        actualMetrics?.actualDistanceKm || null,
+        actualMetrics?.actualDurationMin || null,
+        actualMetrics?.stopsCompleted || null,
+        actualMetrics?.stopsReordered || null,
+      ]
     );
+    if (!IS_MOCK_MODE) {
+      traivoFetch('/api/optimization/feedback', {
+        method: 'POST',
+        headers: getAuthHeader(req),
+        body: JSON.stringify({ ...req.body, driverId }),
+      }).catch(() => {});
+    }
     res.json({ success: true, feedback: result.rows[0] });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'unknown';

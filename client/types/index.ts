@@ -552,6 +552,41 @@ export interface AppNotification {
   metadata?: Record<string, any>;
 }
 
+export interface OptimizationJob {
+  jobId: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: number;
+  submittedAt: string;
+  completedAt?: string;
+  result?: OptimizationResult;
+}
+
+export interface OptimizationResult {
+  optimizedOrder: number[];
+  totalDistance: number;
+  totalDuration: number;
+  savings: {
+    distanceSaved: number;
+    timeSaved: number;
+    percentImproved: number;
+  };
+  routeGeometry: {
+    type: 'LineString';
+    coordinates: number[][];
+  };
+  legs: RouteLeg[];
+  solver: string;
+  confidence: number;
+}
+
+export interface RouteLeg {
+  distance: number;
+  duration: number;
+  durationWithoutTraffic?: number;
+  fromOrderId?: string;
+  toOrderId?: string;
+}
+
 export const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, { icon: string; color: string; label: string }> = {
   order_assigned: { icon: 'plus-circle', color: '#2196F3', label: 'Nytt uppdrag' },
   status_change: { icon: 'refresh-cw', color: '#FF9800', label: 'Statusändring' },

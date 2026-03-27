@@ -12,6 +12,8 @@ import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useTeam } from '../hooks/useTeam';
 import { useAuth } from '../context/AuthContext';
 import { useOfflineSync } from '../hooks/useOfflineSync';
+import { useRouteOptimization } from '../hooks/useRouteOptimization';
+import { useWebSocket } from '../hooks/useWebSocket';
 import type { Order } from '../types';
 
 let MapView: any = null;
@@ -140,6 +142,19 @@ export function MapScreen({ navigation }: any) {
     queryKey: ['/api/mobile/break-config'],
   });
   const { cacheRouteData, getCachedRouteData, cacheOrderData, getCachedOrderData } = useOfflineSync();
+  const { status: optStatus, progress: optProgress, isOptimizing } = useRouteOptimization();
+  const { user } = useAuth();
+  const hasFittedForOptRef = useRef(false);
+  const { addHandler } = useWebSocket(user?.id, user?.tenantId);
+
+  useEffect(() => {
+    const removeHandler = addHandler((event) => {
+      if (event.type === 'route:optimized') {
+        hasFittedForOptRef.current = false;
+      }
+    });
+    return removeHandler;
+  }, [addHandler]);
 
   const routeOrigin = useMemo(() => {
     if (startPosition) {
@@ -466,6 +481,15 @@ export function MapScreen({ navigation }: any) {
         <View style={[styles.offlineBadge, { top: headerHeight + Spacing.md }]}>
           <Feather name="wifi-off" size={12} color={Colors.textInverse} />
           <Text style={styles.offlineBadgeText}>Offline - visar cachad data</Text>
+        </View>
+      ) : null}
+
+      {isOptimizing ? (
+        <View style={[styles.offlineBadge, { top: headerHeight + Spacing.md + (usingCachedData ? 36 : 0), backgroundColor: Colors.secondary }]}>
+          <ActivityIndicator size="small" color={Colors.textInverse} />
+          <Text style={styles.offlineBadgeText}>
+            Optimerar rutt...{optProgress > 0 ? ` ${optProgress}%` : ''}
+          </Text>
         </View>
       ) : null}
 

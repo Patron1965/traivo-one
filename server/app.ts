@@ -44,6 +44,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  socket.on('route:optimized', (data: any) => {
+    if (data.resourceId) {
+      socket.to(`resource:${data.resourceId}`).emit('route:optimized', data);
+    }
+  });
+
+  socket.on('route:reoptimizing', (data: any) => {
+    if (data.resourceId) {
+      socket.to(`resource:${data.resourceId}`).emit('route:reoptimizing', data);
+    }
+  });
+
   socket.on('disconnect', () => {
     console.log(`WebSocket client disconnected: ${socket.id}`);
   });

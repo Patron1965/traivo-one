@@ -23,6 +23,10 @@ const REASON_OPTIONS = [
   { key: 'illogical', label: 'Ologisk ordning', icon: 'shuffle' },
   { key: 'good', label: 'Bra rutt', icon: 'thumbs-up' },
   { key: 'traffic', label: 'Mycket trafik', icon: 'alert-triangle' },
+  { key: 'wrong_order', label: 'Fel besöksordning', icon: 'repeat' },
+  { key: 'missing_time_window', label: 'Tidsfönster ignorerat', icon: 'clock' },
+  { key: 'road_closed', label: 'Avstängd väg', icon: 'x-circle' },
+  { key: 'better_known_route', label: 'Jag vet en bättre väg', icon: 'navigation' },
 ] as const;
 
 export function RouteFeedbackScreen({ navigation }: any) {
@@ -52,11 +56,22 @@ export function RouteFeedbackScreen({ navigation }: any) {
     }
     setSubmitting(true);
     try {
+      let actualMetrics = null;
+      try {
+        actualMetrics = await apiRequest('GET', '/api/mobile/route-metrics/today', undefined, token);
+      } catch {}
+
       await apiRequest('POST', '/api/mobile/route-feedback', {
         rating,
         reasons: selectedReasons,
         comment,
         date: new Date().toISOString().split('T')[0],
+        actualMetrics: actualMetrics ? {
+          actualDistanceKm: actualMetrics.totalDistance,
+          actualDurationMin: actualMetrics.totalDuration,
+          stopsCompleted: actualMetrics.stopsCompleted,
+          stopsReordered: actualMetrics.stopsReordered,
+        } : undefined,
       }, token);
       setSubmitted(true);
     } catch (err: any) {
