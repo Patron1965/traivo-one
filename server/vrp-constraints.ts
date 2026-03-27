@@ -52,6 +52,7 @@ export interface ConstraintEnrichmentResult {
 
 const DEFAULT_WORK_HOURS: [number, number] = [8 * 3600, 17 * 3600];
 const PREFERRED_TIME_PRIORITY_BOOST = 15;
+const DEFAULT_JOB_DEMAND = 1;
 
 function parseTimeToSeconds(timeStr: string): number | null {
   const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
@@ -114,19 +115,24 @@ export async function enrichVRPRequestWithConstraints(
     constraintsApplied.push("time_windows");
   }
 
+  const skillIndexBase = applySkillConstraints(
+    jobs, agents, workOrders, resources,
+    options.respectSkills !== false,
+  );
   if (options.respectSkills !== false) {
-    const filtered = applySkillConstraints(jobs, agents, workOrders, resources);
-    preFilteredPairs = filtered;
+    preFilteredPairs = skillIndexBase.preFilteredCount;
     constraintsApplied.push("skills");
   }
 
   if (options.respectCapacity !== false) {
-    const applied = await applyCapacityConstraints(agents, resources, resourceVehicleLinks, options.tenantId);
+    const applied = await applyCapacityConstraints(agents, resources, resourceVehicleLinks, options.tenantId, jobs);
     if (applied) constraintsApplied.push("capacity");
   }
 
   if (options.respectDependencies !== false) {
-    const deps = applyDependencyConstraints(jobs, workOrders, dependencyInstances);
+    const deps = applyDependencyConstraints(
+      jobs, workOrders, dependencyInstances, agents, skillIndexBase.nextSkillIndex,
+    );
     dependencySequences.push(...deps);
     if (deps.length > 0) constraintsApplied.push("dependencies");
   }
@@ -247,7 +253,7 @@ async function loadSlotPreferences(
       result.set(r.objectId, list);
     }
   } catch {
-    // slot preferences are non-critical
+    // non-critical
   }
   return result;
 }
@@ -290,12 +296,18 @@ function applyPreferredTimesAsSoftConstraints(
   }
 }
 
+interface SkillResult {
+  preFilteredCount: number;
+  nextSkillIndex: number;
+}
+
 function applySkillConstraints(
   jobs: EnrichedGeoapifyJob[],
   agents: EnrichedGeoapifyAgent[],
   workOrders: WorkOrder[],
   resources: Resource[],
-): number {
+  enabled: boolean,
+): SkillResult {
   const executionCodesSet = new Set<string>();
 
   for (const order of workOrders) {
@@ -306,12 +318,14 @@ function applySkillConstraints(
     for (const code of codes) executionCodesSet.add(code);
   }
 
-  if (executionCodesSet.size === 0) return 0;
-
   const codeToIndex = new Map<string, number>();
   let idx = 0;
   for (const code of executionCodesSet) {
     codeToIndex.set(code, idx++);
+  }
+
+  if (!enabled || executionCodesSet.size === 0) {
+    return { preFilteredCount: 0, nextSkillIndex: idx };
   }
 
   for (const job of jobs) {
@@ -349,7 +363,7 @@ function applySkillConstraints(
     preFilteredCount += incompatibleJobs.length;
   }
 
-  return preFilteredCount;
+  return { preFilteredCount, nextSkillIndex: idx };
 }
 
 async function applyCapacityConstraints(
@@ -357,6 +371,7 @@ async function applyCapacityConstraints(
   resources: Resource[],
   resourceVehicleLinks: ResourceVehicle[],
   tenantId: string,
+  jobs: EnrichedGeoapifyJob[],
 ): Promise<boolean> {
   if (resourceVehicleLinks.length === 0) return false;
 
@@ -366,7 +381,7 @@ async function applyCapacityConstraints(
   const allVehicles = await storage.getVehicles(tenantId);
   const vehicleMap = new Map(allVehicles.map(v => [v.id, v]));
 
-  let applied = false;
+  let anyAgentHasCapacity = false;
 
   for (const agent of agents) {
     const resource = resources.find(r => r.id === agent.id);
@@ -389,27 +404,39 @@ async function applyCapacityConstraints(
         Math.round(capacityTons * 1000),
         Math.round(capacityVolume * 1000),
       ];
-      applied = true;
+      anyAgentHasCapacity = true;
     } else if (capacityTons > 0) {
       agent.capacity = [Math.round(capacityTons * 1000)];
-      applied = true;
+      anyAgentHasCapacity = true;
     } else if (capacityVolume > 0) {
       agent.capacity = [Math.round(capacityVolume * 1000)];
-      applied = true;
+      anyAgentHasCapacity = true;
     }
   }
 
-  return applied;
+  if (anyAgentHasCapacity) {
+    const capacityDims = Math.max(...agents.filter(a => a.capacity).map(a => a.capacity!.length));
+    for (const job of jobs) {
+      if (!job.pickup || job.pickup.length === 0) {
+        job.pickup = new Array(capacityDims).fill(DEFAULT_JOB_DEMAND);
+      }
+    }
+  }
+
+  return anyAgentHasCapacity;
 }
 
 function applyDependencyConstraints(
   jobs: EnrichedGeoapifyJob[],
   workOrders: WorkOrder[],
   dependencies: TaskDependencyInstance[],
+  agents: EnrichedGeoapifyAgent[],
+  nextSkillIndex: number,
 ): Array<{ beforeOrderId: string; afterOrderId: string }> {
   const sequences: Array<{ beforeOrderId: string; afterOrderId: string }> = [];
   const jobIdSet = new Set(jobs.map(j => j.id));
   const jobMap = new Map(jobs.map(j => [j.id, j]));
+  let syntheticSkillIdx = nextSkillIndex;
 
   for (const dep of dependencies) {
     const parentId = dep.parentWorkOrderId;
@@ -423,21 +450,35 @@ function applyDependencyConstraints(
       const parentJob = jobMap.get(parentId);
       const childJob = jobMap.get(childId);
 
-      if (parentJob && childJob) {
-        parentJob.priority = Math.min(100, Math.max(parentJob.priority || 0, (childJob.priority || 50) + 10));
+      if (!parentJob || !childJob) continue;
 
-        const parentEarliestEnd = getEarliestCompletionTime(parentJob);
-        const childMinStart = parentEarliestEnd;
+      parentJob.priority = Math.min(100, Math.max(parentJob.priority || 0, (childJob.priority || 50) + 10));
 
-        if (!childJob.time_windows || childJob.time_windows.length === 0) {
-          childJob.time_windows = [[childMinStart, DEFAULT_WORK_HOURS[1]]];
-        } else {
-          childJob.time_windows = childJob.time_windows
-            .map(([s, e]) => [Math.max(s, childMinStart), e] as [number, number])
-            .filter(([s, e]) => e > s);
-          if (childJob.time_windows.length === 0) {
-            childJob.time_windows = [[childMinStart, DEFAULT_WORK_HOURS[1]]];
-          }
+      const parentEarliestEnd = getEarliestCompletionTime(parentJob);
+
+      if (!childJob.time_windows || childJob.time_windows.length === 0) {
+        childJob.time_windows = [[parentEarliestEnd, DEFAULT_WORK_HOURS[1]]];
+      } else {
+        childJob.time_windows = childJob.time_windows
+          .map(([s, e]) => [Math.max(s, parentEarliestEnd), e] as [number, number])
+          .filter(([s, e]) => e > s);
+        if (childJob.time_windows.length === 0) {
+          childJob.time_windows = [[parentEarliestEnd, DEFAULT_WORK_HOURS[1]]];
+        }
+      }
+
+      if (dep.dependencyType === "sequential") {
+        const pairSkill = syntheticSkillIdx++;
+
+        if (!parentJob.required_skills) parentJob.required_skills = [];
+        parentJob.required_skills.push(pairSkill);
+
+        if (!childJob.required_skills) childJob.required_skills = [];
+        childJob.required_skills.push(pairSkill);
+
+        for (const agent of agents) {
+          if (!agent.skills) agent.skills = [];
+          agent.skills.push(pairSkill);
         }
       }
     }
@@ -508,24 +549,22 @@ function applyEfficiencyFactors(
   } else {
     for (const job of jobs) {
       const articleId = orderArticleMap.get(job.id);
-      let totalFactor = 0;
-      let count = 0;
+      let worstFactor = 1.0;
       for (const agent of agents) {
         if (!agent.id) continue;
         const baseEff = resourceBaseEfficiency.get(agent.id) || 1.0;
         const articleMap = articleEfficiencyByResource.get(agent.id);
         const articleEff = (articleId && articleMap?.get(articleId)) || 1.0;
-        totalFactor += baseEff * articleEff;
-        count++;
+        const combined = baseEff * articleEff;
+        if (combined > worstFactor) {
+          worstFactor = combined;
+        }
       }
-      if (count > 0) {
-        const avgFactor = totalFactor / count;
-        if (Math.abs(avgFactor - 1.0) > 0.01) {
-          const adjusted = Math.round(job.duration * avgFactor);
-          if (adjusted > 0) {
-            job.duration = adjusted;
-            anyAdjusted = true;
-          }
+      if (Math.abs(worstFactor - 1.0) > 0.01) {
+        const adjusted = Math.round(job.duration * worstFactor);
+        if (adjusted > 0) {
+          job.duration = adjusted;
+          anyAdjusted = true;
         }
       }
     }
