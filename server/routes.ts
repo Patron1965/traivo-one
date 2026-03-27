@@ -40,6 +40,8 @@ import { registerDisruptionRoutes } from "./routes/disruptionRoutes";
 import { registerFeedbackLoopRoutes } from "./routes/feedbackLoopRoutes";
 import { registerETANotificationRoutes } from "./routes/etaNotificationRoutes";
 import { registerFeatureRoutes } from "./routes/featureRoutes";
+import { registerOptimizationRoutes } from "./routes/optimizationRoutes";
+import { startOptimizationWorker } from "./services/optimizationQueue";
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
@@ -390,6 +392,14 @@ export async function registerRoutes(
   registerDisruptionRoutes(app);
   registerFeedbackLoopRoutes(app);
   registerETANotificationRoutes(app);
+  registerOptimizationRoutes(app);
+
+  // Start the BullMQ optimization worker (gracefully skips if Redis is down)
+  try {
+    startOptimizationWorker();
+  } catch (err) {
+    console.warn("[routes] Could not start optimization worker:", err);
+  }
 
   app.use((err: any, _req: ExpressRequest, res: ExpressResponse, _next: any) => {
     if (err instanceof z.ZodError) {

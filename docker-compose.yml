@@ -1,0 +1,56 @@
+version: "3.9"
+
+services:
+  # ---- Redis (used by BullMQ queue + distance-matrix cache) ----
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---- Python OR-Tools optimization micro-service ----
+  optimization-service:
+    build:
+      context: ./optimization-service
+      dockerfile: Dockerfile
+    ports:
+      - "8090:8090"
+    environment:
+      - PYTHONUNBUFFERED=1
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ---- Node.js / Express application ----
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - OPTIMIZATION_SERVICE_URL=http://optimization-service:8090
+      - DATABASE_URL=${DATABASE_URL}
+      - GEOAPIFY_API_KEY=${GEOAPIFY_API_KEY:-}
+      - AI_INTEGRATIONS_OPENAI_API_KEY=${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+      optimization-service:
+        condition: service_healthy
+
+volumes:
+  redis-data:
