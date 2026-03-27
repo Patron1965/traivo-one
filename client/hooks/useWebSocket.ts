@@ -150,6 +150,10 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
       });
 
       socket.on('job_assigned', (data: any) => {
+        if (data?.data?.isUrgent && data?.data?.job) {
+          emitEvent(connId, 'job:urgent:assigned', { job: data.data.job });
+          queryClient.invalidateQueries({ queryKey: ['/api/mobile/jobs/urgent/active'] });
+        }
         emitEvent(connId, 'job_assigned', data);
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
         queryClient.invalidateQueries({ queryKey: ['/api/mobile/summary'] });

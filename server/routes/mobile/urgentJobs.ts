@@ -5,8 +5,8 @@ const router = Router();
 
 interface UrgentJobRecord {
   id: string;
-  orderId: number;
-  resourceId: number;
+  orderId: string | number;
+  resourceId: string | number;
   status: 'pending' | 'accepted' | 'declined' | 'en_route' | 'arrived' | 'in_progress' | 'completed' | 'reassigned' | 'issue_reported';
   declineReason?: string;
   acceptedAt?: string;

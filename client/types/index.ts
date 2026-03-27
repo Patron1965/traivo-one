@@ -600,7 +600,7 @@ export type UrgentDeclineReasonId = typeof URGENT_DECLINE_REASONS[number]['id'];
 
 export interface UrgentJob {
   id: string;
-  orderId: number;
+  orderId: string | number;
   type: string;
   address: string;
   city?: string;
@@ -621,7 +621,7 @@ export interface UrgentJob {
 
 export interface UrgentJobAssignment {
   job: UrgentJob;
-  previousOrderId?: number;
+  previousOrderId?: string | number;
 }
 
 export const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, { icon: string; color: string; label: string }> = {

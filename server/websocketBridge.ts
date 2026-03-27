@@ -29,6 +29,7 @@ const BRIDGE_EVENTS = [
   'team:member_left',
   'team:invite',
   'position_update',
+  'job:urgent:assigned',
 ] as const;
 
 const INITIAL_BACKOFF_MS = 2000;

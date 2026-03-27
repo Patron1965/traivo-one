@@ -1,0 +1,294 @@
+Traivo One → Traivo Go: Integrationsrapport — Akut Jobbhantering
+Datum: 2026-03-27
+System: Traivo One (planerarsystem)
+Motpart: Traivo Go (mobilapp för fältpersonal)
+Status: Implementerad i Traivo One, redo för integration
+
+1. Sammanfattning
+Traivo One har nu fullt stöd för akut jobbhantering. Planeraren kan:
+
+Skapa akuta uppdrag via en dedikerad dialog i Planerarvy Karta och Kartövervakningen
+Söka efter närmaste tillgängliga tekniker baserat på GPS-position
+Tilldela akut jobb med ett klick, med avstånd och beräknad restid
+Se realtidsstatus på tilldelade jobb (accepterat, på väg, framme, pågår, klart)
+Få automatisk varning om tekniker inte svarar inom 60 sekunder
+Omtilldela till annan tekniker vid avböjning eller utebliven respons
+Traivo Go behöver:
+
+Ta emot WebSocket-notifikation när planeraren tilldelar ett akut jobb
+Visa en akut-modal för teknikern (acceptera/avböj)
+Skicka accept/decline-svar till Traivo One via REST API
+Skicka statusuppdateringar under jobbets livscykel
+Hantera offline-scenarion (recovery vid reconnect)
+2. WebSocket-notifikation: Akut jobb tilldelat
+När planeraren tilldelar ett akut jobb skickas en notifikation via det befintliga WebSocket-systemet (/ws/notifications).
+
+Notifikationstyp: job_assigned
+Identifiering: data.isUrgent === true
+
+Payload-exempel
+{
+  "id": "notif_1711576200000_abc123def",
+  "type": "job_assigned",
+  "title": "Akut uppdrag tilldelat",
+  "message": "Containerbyte: Solnavägen 42, Solna",
+  "resourceId": "res-tomas",
+  "timestamp": "2026-03-27T13:30:00.000Z",
+  "orderId": "order-9901",
+  "data": {
+    "urgentJobId": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8",
+    "isUrgent": true,
+    "job": {
+      "id": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8",
+      "orderId": "order-9901",
+      "type": "Containerbyte",
+      "address": "Solnavägen 42, Solna",
+      "latitude": 59.3600,
+      "longitude": 18.0000,
+      "distance": "1.2 km",
+      "estimatedMinutes": 2,
+      "deadline": null,
+      "customerName": "AB Bygg",
+      "customerPhone": null,
+      "notes": "Full container, arbete blockerat",
+      "articles": null,
+      "assignedBy": "Lisa Pettersson",
+      "assignedAt": "2026-03-27T13:30:00.000Z",
+      "priority": "urgent"
+    }
+  }
+}
+Fält i data.job
+Fält	Typ	Obligatoriskt	Beskrivning
+id	string (UUID)	Ja	Unikt ID för det akuta jobbet
+orderId	string | null	Nej	Kopplat order-ID (om det finns en befintlig order)
+type	string	Ja	Typ av jobb, t.ex. "Containerbyte", "Nödhämtning"
+address	string | null	Ja	Full adress
+latitude	number | null	Ja	GPS latitude
+longitude	number | null	Ja	GPS longitude
+distance	string | null	Nej	Beräknat avstånd från teknikern, t.ex. "1.2 km", "350 m"
+estimatedMinutes	number | null	Nej	Beräknad restid i minuter
+deadline	string (ISO) | null	Nej	Deadline som ISO 8601 timestamp
+customerName	string | null	Nej	Kundnamn
+customerPhone	string | null	Nej	Kundens telefonnummer
+notes	string | null	Nej	Planerarens notering
+articles	string | null	Nej	Artikelbeskrivning
+assignedBy	string | null	Nej	Planerarens namn
+assignedAt	string (ISO)	Ja	Tidpunkt för tilldelning
+priority	"urgent"	Ja	Alltid "urgent"
+Hur Go upptäcker att det är akut
+I Traivo Gos befintliga WebSocket-lyssnare, kontrollera:
+
+ws.onmessage = (event) => {
+  const notification = JSON.parse(event.data);
+  
+  if (notification.type === "job_assigned" && notification.data?.isUrgent) {
+    // Visa akut jobb-modal
+    showUrgentJobModal(notification.data.job);
+  }
+};
+3. REST API-endpoints som Go anropar
+3.1 Acceptera akut jobb
+POST /api/mobile/jobs/urgent/accept
+
+Request:
+
+{
+  "jobId": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8",
+  "startNavigation": true
+}
+Response (200):
+
+{
+  "success": true,
+  "status": "accepted",
+  "jobId": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8"
+}
+Fält	Typ	Beskrivning
+jobId	string	ID på det akuta jobbet
+startNavigation	boolean	Om teknikern vill starta GPS-navigering direkt
+3.2 Avböja akut jobb
+POST /api/mobile/jobs/urgent/decline
+
+Request:
+
+{
+  "jobId": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8",
+  "reason": "Fordon fullt/olämpligt"
+}
+Response (200):
+
+{
+  "success": true,
+  "status": "declined",
+  "jobId": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8"
+}
+Fördefinierade anledningar (rekommenderade):
+
+ID	Etikett
+cannot_interrupt	Kan inte avbryta nuvarande jobb
+vehicle_unsuitable	Fordon fullt/olämpligt
+personal_reason	Personligt skäl
+other	Annat: [fritext]
+Format för "Annat": "Annat: teknikerns egen text"
+
+3.3 Statusuppdatering under jobbets livscykel
+POST /api/mobile/jobs/urgent/:id/status
+
+Request:
+
+{
+  "status": "en_route"
+}
+Response (200):
+
+{
+  "success": true,
+  "jobId": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8",
+  "status": "en_route"
+}
+Giltiga statusvärden:
+
+Status	Beskrivning	Trigger
+en_route	Teknikern är på väg	Teknikern trycker "Starta" / efter accept
+arrived	Teknikern har anlänt	GPS-geofence 50m eller manuell knapp
+in_progress	Jobbet har påbörjats	Teknikern påbörjar arbete
+completed	Jobbet är slutfört	Teknikern avslutar
+issue_reported	Problem rapporterat	Teknikern rapporterar problem
+3.4 Hämta aktivt akut jobb (recovery)
+GET /api/mobile/jobs/urgent/active?resourceId=res-tomas
+
+Response (200):
+
+{
+  "success": true,
+  "activeJob": {
+    "id": "f7a2c3d4-e5b6-4789-a012-b3c4d5e6f7a8",
+    "orderId": "order-9901",
+    "resourceId": "res-tomas",
+    "tenantId": "default-tenant",
+    "status": "en_route",
+    "jobType": "Containerbyte",
+    "address": "Solnavägen 42, Solna",
+    "latitude": 59.36,
+    "longitude": 18.0,
+    "customerName": "AB Bygg",
+    "notes": "Full container",
+    "assignedBy": "Lisa Pettersson",
+    "assignedAt": "2026-03-27T13:30:00.000Z",
+    "acceptedAt": "2026-03-27T13:31:00.000Z",
+    "startNavigation": true,
+    "createdAt": "2026-03-27T13:30:00.000Z"
+  }
+}
+Returnerar "activeJob": null om inget aktivt akut jobb finns.
+
+Användning: Anropa vid app-start och vid WebSocket-reconnect för att återhämta eventuella missade akuta jobb.
+
+4. Statuslivscykel
+Planeraren tilldelar akut jobb
+        │
+        ▼
+    [pending] ──── Teknikern ser akut-modal ───┐
+        │                                      │
+    ┌───┴───┐                                  │
+    ▼       ▼                                  │
+[accepted] [declined]                          │
+    │           │                              │
+    ▼           ▼                              │
+[en_route]  Planeraren notifieras              │
+    │       → kan omtilldela till annan        │
+    ▼                                          │
+[arrived]  (GPS 50m auto / manuellt)           │
+    │                                          │
+    ▼                                          │
+[in_progress]                                  │
+    │                                          │
+    ├──────────────┐                           │
+    ▼              ▼                           │
+[completed]  [issue_reported]                  │
+    │              │                           │
+    ▼              ▼                           │
+  Klar!      Planeraren hanterar               │
+                                               │
+[reassigned] ◄─── Planeraren omtilldelar ──────┘
+  (vid decline / timeout 60 sek / tekniker offline)
+5. Rekommenderad implementation i Traivo Go
+5.1 Akut jobb-modal
+När data.isUrgent === true tas emot via WebSocket:
+
+Visa fullscreen-modal med hög prioritet (över allt annat)
+Pulsande röd varningsikon
+Visa: Jobbtyp, adress, avstånd, beräknad restid, kundnamn, planerares notering
+Stora knappar: Acceptera (grön) och Avböj (grå)
+Spela upp ljud/vibration (om aktiverat i inställningar)
+Vid Acceptera: anropa /accept, sätt status en_route, öppna navigation om startNavigation=true
+Vid Avböj: visa val av anledning, anropa /decline
+5.2 Statusuppdateringar
+Automatiska triggers:
+
+Status	Trigger
+en_route	Direkt efter accept (eller manuellt)
+arrived	GPS-geofence (50m från adress) eller manuell "Jag är framme"-knapp
+in_progress	Manuell "Starta arbete"-knapp
+completed	Manuell "Slutför"-knapp
+issue_reported	Manuell "Rapportera problem"-knapp
+5.3 Offline-hantering
+Om tekniker är offline när akut jobb tilldelas → jobbet sparas i Traivo One
+Vid reconnect: Traivo Go anropar GET /api/mobile/jobs/urgent/active?resourceId=X
+Om aktivt jobb finns med status pending → visa akut-modal
+Om aktivt jobb finns med annan status → återuppta jobbvyn
+5.4 Timeout-hantering
+Traivo One skickar en broadcast-varning efter 60 sekunder utan svar
+Planeraren kan då omtilldela till annan tekniker
+Det gamla jobbet sätts till reassigned
+Ny tilldelning skapas med nytt ID
+6. Autentisering
+Alla REST-anrop kräver autentisering. Traivo Go använder redan token-baserad WebSocket-auth via:
+
+POST /api/notifications/token
+Body: { "resourceId": "res-tomas" }
+Response: { "token": "abc123...", "expiresIn": 300 }
+REST-endpoints under /api/mobile/ bör använda samma autentiseringsmekanism som övriga mobil-API:er.
+
+7. TypeScript-typer (kopiera in i Traivo Go)
+interface UrgentJobPayload {
+  id: string;
+  orderId: string | null;
+  type: string;
+  address: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  distance?: string;
+  estimatedMinutes?: number;
+  deadline?: string;
+  customerName: string | null;
+  customerPhone?: string | null;
+  notes?: string | null;
+  articles?: string | null;
+  assignedBy?: string;
+  assignedAt: string;
+  priority: 'urgent';
+}
+type UrgentJobStatus =
+  | 'pending'
+  | 'accepted'
+  | 'en_route'
+  | 'arrived'
+  | 'in_progress'
+  | 'completed'
+  | 'declined'
+  | 'reassigned'
+  | 'issue_reported';
+const DECLINE_REASONS = [
+  { id: 'cannot_interrupt', label: 'Kan inte avbryta nuvarande jobb' },
+  { id: 'vehicle_unsuitable', label: 'Fordon fullt/olämpligt' },
+  { id: 'personal_reason', label: 'Personligt skäl' },
+  { id: 'other', label: 'Annat' },
+] as const;
+8. Sammanfattning: Vad Traivo Go behöver bygga
+Nr	Funktion	Prioritet	Beskrivning
+1	WebSocket-lyssning	🔴 Kritisk	Detektera data.isUrgent i job_assigned-notiser
+2	Akut jobb-modal	🔴 Kritisk	Fullscreen med acceptera/avböj-knappar
+3	Accept-anrop	🔴 Kritisk	POST /api/mobile/jobs/urgent/accept
+4	Decline-anrop	🔴 Kritisk	
