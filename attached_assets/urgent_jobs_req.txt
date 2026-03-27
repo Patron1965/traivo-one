@@ -1,0 +1,796 @@
+1
+
+TRAIVO GO – Akut Jobbhantering för
+Fältpersonal (Kravdokument för Replit)
+System: Traivo Go (mobilapp för fältpersonal/tekniker/chaufförer)
+Prioritet: 🔴 Hög
+Datum: 2026-03-27
+Mål: Implementera mottagning, accept och hantering av akuta jobb tilldelade från Traivo One-planer‐
+aren
+
+1. Användarscenario
+Vem är användaren?
+Tekniker/chaufför i fält som kör mellan uppdrag. Hen har Traivo Go-appen öppen på en monterad tele‐
+fon i fordonet. Under dagen kan planeraren tilldela akuta jobb som måste hanteras snabbt.
+
+Typisk situation
+• Teknikern kör mot sitt nästa planerade uppdrag
+• Planeraren ser att ett akut jobb har inkommit 1.2 km bort
+• Planeraren tilldelar jobbet till teknikern via Traivo One
+• Teknikern får en tydlig push-notis och måste snabbt kunna acceptera eller avböja
+• Vid accept: navigering startas, planerad rutt uppdateras automatiskt
+
+Huvudproblem att lösa
+• Teknikern måste kunna se och reagera på akut jobb medan hen kör (hands-free/minimal interak‐
+tion)
+• Accept/decline måste gå på maximalt 2 tryck
+• Jobbet måste prioriteras om i uppdragslistan automatiskt
+• Offline-stöd: Om teknikern tillfälligt tappar uppkoppling ska jobbet synkas när nätet kommer till‐
+baka
+
+2
+
+2. Funktionskrav
+2.1 Push-notis vid akut jobb
+Krav
+
+Beskrivning
+
+Typ
+
+High-priority push notification (heads-up /
+banner)
+
+Ljud
+
+Distinkt akutljud (ej samma som vanliga not‐
+iser)
+
+Vibration
+
+Lång vibration (500ms + 200ms + 500ms)
+
+Innehåll
+
+“🚨 AKUT JOBB: [Jobbtyp] – [Adress] – [Dead‐
+line]”
+
+Action buttons
+
+✅ Acceptera / ❌ Avböj (direkt i notisen)
+
+Persistent
+
+Försvinner INTE automatiskt – kräver an‐
+vändarinteraktion
+
+Repeat
+
+Om ingen respons inom 60 sek → ny notis +
+ljud
+
+2.2 In-app akut jobb-vy
+När appen är öppen ska ett akut jobb visas som en fullscreen overlay/modal:
+┌─────────────────────────────────────┐
+│
+│
+│ 🚨 AKUT JOBB TILLDELAT
+│
+│
+│
+│ ┌─────────────────────────────┐
+│
+│ │ 📍 Containerbyté
+│
+│
+│ │
+Solnavägen 42, Solna
+│
+│
+│ │
+1.2 km bort (~4 min)
+│
+│
+│ │
+│
+│
+│ │ ⏰ Deadline: 14:30 (om 1h) │
+│
+│ │ 📋 Container 6m³ → töm+byt │
+│
+│ │ 👤 Kund: AB Bygg
+│
+│
+│ │ 📞 08-123 456
+│
+│
+│ │
+│
+│
+│ │ 💬 "Full container,
+│
+│
+│ │
+arbete blockerat"
+│
+│
+│ └─────────────────────────────┘
+│
+│
+│
+│ ┌───────────┐ ┌───────────────┐
+│
+│ │
+│ │
+│
+│
+│ │ ❌ AVBÖJ │ │ ✅ ACCEPTERA │
+│
+│ │
+│ │
+│
+│
+│ └───────────┘ └───────────────┘
+│
+│
+│
+│ Tilldelad av: Lisa P. (planerare) │
+└─────────────────────────────────────┘
+
+3
+
+2.3 Accept-flöde
+[Tekniker trycker ✅ ACCEPTERA]
+│
+▼
+[Bekräftelsedialog: "Acceptera akut jobb Solnavägen 42?"]
+[Ja, starta navigering] / [Ja, utan navigering]
+│
+▼
+[Jobbstatus → "accepted" → skickas till backend via WebSocket]
+[Planeraren ser uppdateringen i Traivo One omedelbart]
+│
+▼
+[Jobbet läggs överst i uppdragslistan med 🔴 akut-markering]
+[Navigering startar automatiskt (om valt)]
+[Tidigare planerat uppdrag pausas / skjuts ner i listan]
+│
+▼
+[Tekniker anländer → svep/klick "Framme"]
+│
+▼
+[Normal jobbexekvering: inspektion, foto, material, signatur]
+│
+▼
+[Slutfört → tillbaka till ursprunglig rutt automatiskt]
+
+2.4 Decline-flöde
+[Tekniker trycker ❌ AVBÖJ]
+│
+▼
+[Obligatorisk anledning (snabbval):]
+○ Kan inte avbryta nuvarande jobb
+○ Fordon fullt/olämpligt
+○ Personligt skäl
+○ Annat: [fritext]
+│
+▼
+[Decline + anledning → skickas till backend]
+[Planeraren notifieras → kan tilldela annan tekniker]
+[Teknikern fortsätter sin planerade rutt]
+
+2.5 Statusuppdateringar
+Teknikern ska kunna uppdatera status med minimal interaktion:
+
+4
+
+Status
+
+Trigger
+
+Automatisk/Manuell
+
+accepted
+
+Tryck “Acceptera”
+
+Manuell
+
+en_route
+
+Navigering startar
+
+Automatisk
+
+arrived
+
+GPS-geofence (50m radie)
+
+Automatisk + manuell fall‐
+
+ELLER manuell knapp
+
+back
+
+in_progress
+
+Tryck “Påbörja jobb”
+
+Manuell
+
+completed
+
+Tryck “Slutför” (efter foto/sig‐
+
+Manuell
+
+natur)
+issue_reported
+
+Tryck “Rapportera problem”
+
+Varje statusändring skickas i realtid till Traivo One-planeraren.
+
+Manuell
+
+5
+
+3. Tekniska krav
+3.1 Push Notifications
+// notifications/urgentJob.ts
+import * as Notifications from 'expo-notifications';
+export async function setupUrgentJobChannel() {
+// Android: Skapa separat kanal med hög prioritet
+await Notifications.setNotificationChannelAsync('urgent-jobs', {
+name: 'Akuta jobb',
+importance: Notifications.AndroidImportance.MAX,
+sound: 'urgent_alarm.wav', // Egen ljudfil i assets
+vibrationPattern: [0, 500, 200, 500],
+enableLights: true,
+lightColor: '#EF4444',
+lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+});
+}
+export async function showUrgentJobNotification(job: UrgentJob) {
+await Notifications.scheduleNotificationAsync({
+content: {
+title: '🚨 AKUT JOBB TILLDELAT',
+body: `${job.type}: ${job.address} (${job.distance} bort)`,
+data: { jobId: job.id, type: 'urgent_job' },
+sound: 'urgent_alarm.wav',
+priority: Notifications.AndroidNotificationPriority.MAX,
+sticky: true, // Försvinner inte automatiskt
+categoryIdentifier: 'urgent-job-actions',
+},
+trigger: null, // Visa omedelbart
+});
+}
+// Registrera action-knappar
+Notifications.setNotificationCategoryAsync('urgent-job-actions', [
+{
+identifier: 'ACCEPT',
+buttonTitle: '✅ Acceptera',
+options: { opensAppToForeground: true },
+},
+{
+identifier: 'DECLINE',
+buttonTitle: '❌ Avböj',
+options: { opensAppToForeground: true },
+},
+]);
+
+6
+
+3.2 WebSocket – Realtidskommunikation
+// hooks/useUrgentJobSocket.ts
+import { useEffect, useCallback } from 'react';
+import { useSocket } from './useSocket';
+import { useUrgentJobStore } from '../stores/urgentJobStore';
+export function useUrgentJobSocket() {
+const socket = useSocket();
+const { setIncomingJob, clearIncomingJob } = useUrgentJobStore();
+useEffect(() => {
+// Lyssna på tilldelade akuta jobb
+socket.on('job:urgent:assigned', (data: UrgentJobAssignment) => {
+setIncomingJob(data);
+showUrgentJobNotification(data.job);
+playUrgentSound();
+triggerHapticFeedback('heavy');
+});
+// Bekräftelse att accept/decline mottogs
+socket.on('job:urgent:response:ack', (data: { jobId: string; status: string }) =>
+{
+console.log(`Akut jobb ${data.jobId} response bekräftad: ${data.status}`);
+});
+return () => {
+socket.off('job:urgent:assigned');
+socket.off('job:urgent:response:ack');
+};
+}, [socket]);
+const acceptJob = useCallback((jobId: string, startNavigation: boolean) => {
+socket.emit('job:urgent:accept', { jobId, startNavigation });
+clearIncomingJob();
+}, [socket]);
+const declineJob = useCallback((jobId: string, reason: string) => {
+socket.emit('job:urgent:decline', { jobId, reason });
+clearIncomingJob();
+}, [socket]);
+return { acceptJob, declineJob };
+}
+
+7
+
+3.3 Realtidspositionering (GPS)
+// hooks/useGpsReporting.ts
+import * as Location from 'expo-location';
+export function useGpsReporting() {
+useEffect(() => {
+let subscription: Location.LocationSubscription;
+const startTracking = async () => {
+const { status } = await Location.requestForegroundPermissionsAsync();
+if (status !== 'granted') return;
+// Bakgrundsposition för kontinuerlig rapportering
+await Location.requestBackgroundPermissionsAsync();
+subscription = await Location.watchPositionAsync(
+{
+accuracy: Location.Accuracy.High,
+distanceInterval: 50, // Minst 50m mellan uppdateringar
+timeInterval: 10000, // Max var 10:e sekund
+},
+(location) => {
+socket.emit('technician:position', {
+lat: location.coords.latitude,
+lng: location.coords.longitude,
+speed: location.coords.speed,
+heading: location.coords.heading,
+timestamp: location.timestamp,
+});
+}
+);
+};
+startTracking();
+return () => subscription?.remove();
+}, []);
+}
+
+8
+
+3.4 Offline-stöd
+
+9
+
+// services/offlineQueue.ts
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import NetInfo from '@react-native-community/netinfo';
+interface QueuedAction {
+id: string;
+type: 'accept' | 'decline' | 'status_update';
+payload: any;
+timestamp: number;
+retries: number;
+}
+class OfflineQueue {
+private queue: QueuedAction[] = [];
+private isOnline = true;
+constructor() {
+// Lyssna på nätverksstatus
+NetInfo.addEventListener(state => {
+const wasOffline = !this.isOnline;
+this.isOnline = state.isConnected ?? false;
+// Återfick uppkoppling → synka kö
+if (wasOffline && this.isOnline) {
+this.processQueue();
+}
+});
+// Ladda sparad kö vid start
+this.loadQueue();
+}
+async enqueue(action: Omit<QueuedAction, 'id' | 'timestamp' | 'retries'>) {
+const item: QueuedAction = {
+...action,
+id: generateId(),
+timestamp: Date.now(),
+retries: 0,
+};
+this.queue.push(item);
+await this.saveQueue();
+if (this.isOnline) {
+this.processQueue();
+}
+}
+private async processQueue() {
+while (this.queue.length > 0) {
+const item = this.queue[0];
+try {
+await this.sendToServer(item);
+this.queue.shift();
+await this.saveQueue();
+} catch (error) {
+item.retries++;
+if (item.retries > 5) {
+this.queue.shift(); // Ge upp efter 5 försök
+logError('Offline queue item failed permanently', item);
+}
+break; // Försök igen senare
+}
+
+10
+}
+}
+private async sendToServer(item: QueuedAction) {
+// Skicka via WebSocket eller REST API
+switch (item.type) {
+case 'accept':
+await api.post('/jobs/urgent/accept', item.payload);
+break;
+case 'decline':
+await api.post('/jobs/urgent/decline', item.payload);
+break;
+case 'status_update':
+await api.post('/jobs/status', item.payload);
+break;
+}
+}
+private async saveQueue() {
+await AsyncStorage.setItem('offline_queue', JSON.stringify(this.queue));
+}
+private async loadQueue() {
+const data = await AsyncStorage.getItem('offline_queue');
+if (data) this.queue = JSON.parse(data);
+}
+}
+export const offlineQueue = new OfflineQueue();
+
+11
+
+3.5 Geofence – Automatisk “Framme”-detektion
+// services/geofence.ts
+import * as Location from 'expo-location';
+import * as TaskManager from 'expo-task-manager';
+const GEOFENCE_TASK = 'ARRIVAL_GEOFENCE';
+const ARRIVAL_RADIUS = 50; // meter
+TaskManager.defineTask(GEOFENCE_TASK, ({ data, error }) => {
+if (error) return;
+const { eventType, region } = data as any;
+if (eventType === Location.GeofencingEventType.Enter) {
+// Teknikern har anlänt till jobbplatsen
+updateJobStatus(region.identifier, 'arrived');
+showLocalNotification('📍 Du har anlänt till jobbplatsen');
+}
+});
+export async function setArrivalGeofence(jobId: string, lat: number, lng: number) {
+await Location.startGeofencingAsync(GEOFENCE_TASK, [
+{
+identifier: jobId,
+latitude: lat,
+longitude: lng,
+radius: ARRIVAL_RADIUS,
+notifyOnEnter: true,
+},
+]);
+}
+
+12
+
+4. UI/UX-krav
+4.1 Akut jobb-notis (in-app modal)
+Element
+
+Krav
+
+Bakgrund
+
+Halvtransparent svart overlay
+(rgba(0,0,0,0.85))
+
+Kort
+
+Vit bakgrund med röd toppkant (4px
+#EF4444 )
+
+Ikon
+
+Blinkande 🚨 ikon (animation: scale 1.0 → 1.3,
+800ms loop)
+
+Text storlek
+
+Rubrik: 22px bold, Adress: 18px, Detaljer:
+16px
+
+Knappar
+
+Stora touch-targets: minst 56px höjd, 48%
+bredd vardera
+
+Acceptera-knapp
+
+Grön (#22C55E), vit text, bold
+
+Avböj-knapp
+
+Ljusgrå (#E5E7EB), mörk text
+
+Avstånd
+
+Visa dynamiskt: “X.X km bort (~Y min)”
+
+Haptic feedback
+
+Vid knapp-tryck: kraftig vibration
+
+4.2 Uppdragslistan – Akut jobb-markering
+När ett akut jobb accepterats ska det visas överst i uppdragslistan:
+┌─────────────────────────────────────┐
+│ 🔴 AKUT │ Containerbyte
+│
+│ Solnavägen 42 · 1.2 km · ~4 min
+│
+│ ⏰ Deadline: 14:30
+│
+│ Status: [På väg ▶]
+│
+├─────────────────────────────────────┤
+│ 🟡 Normal │ Hämtning
+│
+│ Kistavägen 8 · (pausat)
+│
+├─────────────────────────────────────┤
+│ ...
+│
+└─────────────────────────────────────┘
+
+← Röd bakgrund, pulserande
+
+← Gul kant (pausat/nedprioriterat)
+
+4.3 Statusindikering i appen
+Teknikern ska alltid se aktuell status för sitt akuta jobb:
+
+13
+
+Status
+
+Visuell indikation
+
+Nytt (väntar accept)
+
+Fullscreen modal, blinkande
+
+Accepterat
+
+Toast: “✅ Accepterat – navigering startar”
+
+På väg
+
+Navigeringsskärm med ETA, röd banner i top‐
+pen
+
+Framme
+
+Geofen-notis “📍 Framme!” + knapp “Påbörja
+jobb”
+
+Pågående
+
+Normal jobbvy med röd akut-badge i hörnet
+
+Slutfört
+
+Bekräftelse-animation + “Tillbaka till planerad
+rutt”
+
+4.4 Röstkommandon (tillval, Fas 2)
+För hands-free under körning:
+
+Kommando
+
+Åtgärd
+
+“Acceptera jobb”
+
+Samma som trycka ✅ Acceptera
+
+“Avböj jobb”
+
+Öppnar anledning-dialog
+
+“Jag är framme”
+
+Uppdaterar status till arrived
+
+“Jobb klart”
+
+Startar slutförande-flöde
+
+5. Implementationstips för Replit
+5.1 Snabbstart
+# Push notifications
+npx expo install expo-notifications
+# Location & geofencing
+npx expo install expo-location expo-task-manager
+# Offline-stöd
+npm install @react-native-async-storage/async-storage @react-native-community/netinfo
+# Realtidskommunikation
+npm install socket.io-client
+# Haptic feedback
+npx expo install expo-haptics
+
+14
+
+5.2 Filstruktur att skapa
+src/
+├── components/urgent/
+│
+├── UrgentJobModal.tsx
+← Fullscreen overlay vid nytt akut jobb
+│
+├── UrgentJobBanner.tsx
+← Röd banner i toppen under pågående akut jobb
+│
+├── DeclineReasonSheet.tsx
+← Bottomsheet för anledning vid avböjning
+│
+└── UrgentJobCard.tsx
+← Jobbliste-kort med akut-styling
+├── hooks/
+│
+├── useUrgentJobSocket.ts
+← WebSocket-lyssnare för akuta jobb
+│
+├── useUrgentJobNotification.ts ← Push-notis hantering
+│
+└── useArrivalGeofence.ts
+← Geofencing vid ankomst
+├── services/
+│
+├── offlineQueue.ts
+← Offline-kö för actions
+│
+├── urgentJobApi.ts
+← API-anrop (accept, decline, status)
+│
+└── geofence.ts
+← Geofence-konfiguration
+├── stores/
+│
+└── urgentJobStore.ts
+← Zustand/Context state för akuta jobb
+├── notifications/
+│
+├── urgentJob.ts
+← Notis-setup och visning
+│
+└── channels.ts
+← Android notification channels
+└── types/
+└── urgentJob.ts
+← TypeScript-typer
+
+5.3 Steg-för-steg med Replit AI
+Ge dessa instruktioner till Replit AI/Ghostwriter i ordning:
+1. “Skapa UrgentJobModal.tsx – en fullscreen modal som visas över all annan content. Den
+ska visa jobbtyp, adress, avstånd, deadline, kundinfo och planerare. Två stora knappar:
+grön ‘Acceptera’ och grå ‘Avböj’. Bakgrund ska vara mörk overlay. Akut-ikonen ska
+pulsera med animation.”
+2. “Skapa useUrgentJobSocket.ts hook som lyssnar på WebSocket-event
+job:urgent:assigned . När ett event kommer: spara i state, visa UrgentJobModal, spela
+
+upp akut-ljud (expo-haptics för vibration). Exponera acceptJob(jobId) och decline‐
+Job(jobId, reason) funktioner.”
+
+3. “Konfigurera push-notifikationer för akuta jobb med expo-notifications. Skapa en ‘ur‐
+gent-jobs’ kanal med MAX importance, custom ljud, och action-knappar (Acceptera/
+Avböj) direkt i notisen. Notisen ska vara sticky (inte försvinna automatiskt).”
+4. “Skapa DeclineReasonSheet.tsx – en bottom sheet som visas vid avböjning. Innehåll: 4
+snabbval-knappar (Kan inte avbryta, Fordon olämpligt, Personligt skäl, Annat) plus ett
+fritext-fält. Vid val → skicka decline via socket.”
+5. “Implementera offline-kö i offlineQueue.ts . Alla accept/decline/status-actions ska köas
+lokalt om offline. Lyssna på NetInfo, synka kö när nätet återkommer. Spara kö i
+AsyncStorage för persistens mellan app-omstarter.”
+6. “Skapa UrgentJobBanner.tsx – en röd banner som visas högst upp i appen under ett
+pågående akut jobb. Visa: jobbnamn, adress, status, ETA. Bandern ska vara synlig
+oavsett vilken skärm teknikern är på.”
+7. “Implementera geofencing med expo-location. När teknikern kommer inom 50 meter
+från akut jobbets adress: uppdatera status automatiskt till ‘arrived’, visa lokal notis ‘📍
+Du har anlänt’.”
+
+15
+8. “Uppdatera OrdersScreen/uppdragslistan: accepterade akuta jobb ska alltid visas
+överst med röd bakgrund och pulsande ram. Det pausade ordinarie uppdraget ska
+visas med gul markering ‘Pausat’.”
+
+5.4 Integration med befintlig app
+I App.tsx eller root-layout:
+// Lägg till UrgentJobModal som global overlay
+export default function App() {
+return (
+<>
+<NavigationContainer>
+{/* Befintlig navigation */}
+<TabNavigator />
+</NavigationContainer>
+{/* Global overlay – visas över allt */}
+<UrgentJobModal />
+<UrgentJobBanner />
+</>
+);
+}
+
+I useAppStartup eller liknande:
+// Initiera push-notis kanal och socket-lyssnare
+useEffect(() => {
+setupUrgentJobChannel();
+// Socket-lyssnaren startas via useUrgentJobSocket i root-level
+}, []);
+
+6. Konkreta användningsfall
+UC-1: Akut jobb – Happy path
+Aktör: Tekniker Anna
+Scenario: Kör mot planerat uppdrag, får akut containerbyte tilldelat
+Flöde:
+1. Anna kör på E4:an mot Kista
+2. 🔔 Push-notis: “🚨 AKUT JOBB: Containerbyte – Solnavägen 42”
+3. Anna ser in-app modalen med jobbdetaljer: 1.2 km bort, deadline 14:30
+4. Anna trycker ✅ Acceptera → väljer “Ja, starta navigering”
+5. Navigering startar mot Solnavägen 42, Kista-uppdraget pausas
+6. Planeraren ser i Traivo One: “Anna – på väg till akut jobb”
+7. Anna anländer → geofence: “📍 Framme!”
+8. Anna utför jobbet (inspektion, foto, signatur)
+9. Anna slutför → “Tillbaka till planerad rutt”
+10. Kista-uppdraget återaktiveras och navigering startar
+
+16
+
+UC-2: Akut jobb – Avböjt
+Aktör: Tekniker Björn
+Scenario: Mitt i ett jobb, kan inte avbryta
+Flöde:
+1. Björn håller på att lasta en container
+2. 🔔 Push-notis: “🚨 AKUT JOBB: Nödhämtning – Vasagatan 12”
+3. Björn ser modalen men kan inte avbryta lastningen
+4. Björn trycker ❌ Avböj → väljer “Kan inte avbryta nuvarande jobb”
+5. Decline skickas till planeraren
+6. Planeraren ser: “Björn avböjde – orsak: kan inte avbryta”
+7. Planeraren tilldelar till nästa närmaste tekniker
+
+UC-3: Akut jobb – Offline
+Aktör: Tekniker Carlos
+Scenario: I ett område med dålig täckning
+Flöde:
+1. Carlos tappar mobiltäckning i en industribyggnad
+2. Planeraren tilldelar akut jobb till Carlos
+3. Push-notis kan inte levereras (offline)
+4. Planeraren ser status: “Carlos – offline sedan 3 min”
+5. Carlos kommer ut och får täckning igen
+6. Push-notis levereras + offline-kö synkroniseras
+7. Carlos ser modalen och kan acceptera/avböja
+8. (Om > 5 min offline: planeraren har redan tilldelat annan tekniker, Carlos får notis: “Jobbet omtillde‐
+lat”)
+
+UC-4: Akut jobb – Röstkommando (Fas 2)
+Aktör: Tekniker Diana
+Scenario: Kör bil, händer på ratten
+Flöde:
+1. 🔔 Akut jobb-notis med ljud
+2. Diana säger: “Traivo, acceptera jobb”
+3. Röstbekräftelse: “Jobb accepterat. Navigering startar.”
+4. Navigering visas på skärmen utan att Diana rört telefonen
+
+7. Acceptanskriterier
+• [ ] Push-notis med akut-ljud och vibration visas inom 5 sekunder efter tilldelning
+• [ ] In-app modal visas som fullscreen overlay med all relevant jobbinfo
+• [ ] Accept kräver max 2 tryck (Acceptera → Bekräfta)
+• [ ] Decline kräver max 3 tryck (Avböj → Välj anledning → Bekräfta)
+• [ ] Statusuppdatering når Traivo One-planeraren inom 3 sekunder
+• [ ] Accepterat akut jobb visas överst i uppdragslistan med röd markering
+• [ ] Geofence-detektion fungerar inom 50m radie
+• [ ] Offline-kö sparar actions och synkar vid återanslutning
+• [ ] Notis försvinner INTE automatiskt – kräver användarinteraktion
+
+17
+• [ ] Vid ny notis utan respons inom 60 sek → påminnelsenotis
+• [ ] UrgentJobBanner visas globalt under pågående akut jobb
+• [ ] Normal rutt återupptas efter slutfört akut jobb
+
+

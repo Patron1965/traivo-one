@@ -19,6 +19,8 @@ const io = new SocketIOServer(server, {
   path: '/ws',
 });
 
+(global as any).__socketIO = io;
+
 io.on('connection', (socket) => {
   console.log(`WebSocket client connected: ${socket.id}`);
 

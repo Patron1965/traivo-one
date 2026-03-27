@@ -23,6 +23,10 @@ import { MyDeviationsScreen } from '../screens/MyDeviationsScreen';
 import { NotificationsScreen } from '../screens/NotificationsScreen';
 import { AIAssistantScreen } from '../screens/AIAssistantScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
+import { UrgentJobModal } from '../components/urgent/UrgentJobModal';
+import { UrgentJobBanner } from '../components/urgent/UrgentJobBanner';
+import { useUrgentJobSocket } from '../hooks/useUrgentJobSocket';
+import { useWebSocket } from '../hooks/useWebSocket';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import { Colors } from '../constants/theme';
 import { FIELD_APP_ALLOWED_ROLES } from '../types';
@@ -56,9 +60,25 @@ function useNotificationResponseListener() {
   }, [navigation]);
 }
 
+function UrgentJobSocketBridge() {
+  const { user } = useAuth();
+  const { addHandler } = useWebSocket(
+    user?.id,
+    user?.tenantId || 'traivo-demo',
+    undefined
+  );
+  useUrgentJobSocket(addHandler);
+  return null;
+}
+
 function AuthenticatedTabNavigator() {
   useNotificationResponseListener();
-  return <TabNavigator />;
+  return (
+    <>
+      <UrgentJobSocketBridge />
+      <TabNavigator />
+    </>
+  );
 }
 
 function isUserRoleAllowed(role?: string): boolean {
@@ -82,15 +102,16 @@ export function RootNavigator() {
   const hasAccess = user ? isUserRoleAllowed(user.role) : false;
 
   return (
-    <Stack.Navigator screenOptions={screenOptions}>
-      {user ? (
-        hasAccess ? (
-          <>
-            <Stack.Screen
-              name="MainTabs"
-              component={AuthenticatedTabNavigator}
-              options={{ headerShown: false }}
-            />
+    <View style={{ flex: 1 }}>
+      <Stack.Navigator screenOptions={screenOptions}>
+        {user ? (
+          hasAccess ? (
+            <>
+              <Stack.Screen
+                name="MainTabs"
+                component={AuthenticatedTabNavigator}
+                options={{ headerShown: false }}
+              />
             <Stack.Screen
               name="OrderDetail"
               component={OrderDetailScreen}
@@ -200,7 +221,10 @@ export function RootNavigator() {
           options={{ headerShown: false }}
         />
       )}
-    </Stack.Navigator>
+      </Stack.Navigator>
+      <UrgentJobBanner />
+      <UrgentJobModal />
+    </View>
   );
 }
 

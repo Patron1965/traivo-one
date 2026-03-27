@@ -14,6 +14,7 @@ import {
 import { KeyboardProvider } from 'react-native-keyboard-controller';
 import { ErrorBoundary } from './client/components/ErrorBoundary';
 import { AuthProvider } from './client/context/AuthContext';
+import { UrgentJobProvider } from './client/context/UrgentJobContext';
 import { RootNavigator } from './client/navigation/RootNavigator';
 import { queryClient } from './client/lib/query-client';
 
@@ -41,10 +42,12 @@ export default function App() {
           <KeyboardProvider>
             <QueryClientProvider client={queryClient}>
               <AuthProvider>
-                <NavigationContainer>
-                  <RootNavigator />
-                  <StatusBar style="auto" />
-                </NavigationContainer>
+                <UrgentJobProvider>
+                  <NavigationContainer>
+                    <RootNavigator />
+                    <StatusBar style="auto" />
+                  </NavigationContainer>
+                </UrgentJobProvider>
               </AuthProvider>
             </QueryClientProvider>
           </KeyboardProvider>

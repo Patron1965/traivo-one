@@ -587,6 +587,43 @@ export interface RouteLeg {
   toOrderId?: string;
 }
 
+export type UrgentJobStatus = 'pending' | 'accepted' | 'en_route' | 'arrived' | 'in_progress' | 'completed' | 'declined' | 'reassigned' | 'issue_reported';
+
+export const URGENT_DECLINE_REASONS = [
+  { id: 'cannot_interrupt', label: 'Kan inte avbryta nuvarande jobb' },
+  { id: 'vehicle_unsuitable', label: 'Fordon fullt/olämpligt' },
+  { id: 'personal_reason', label: 'Personligt skäl' },
+  { id: 'other', label: 'Annat' },
+] as const;
+
+export type UrgentDeclineReasonId = typeof URGENT_DECLINE_REASONS[number]['id'];
+
+export interface UrgentJob {
+  id: string;
+  orderId: number;
+  type: string;
+  address: string;
+  city?: string;
+  latitude: number;
+  longitude: number;
+  distance?: string;
+  estimatedMinutes?: number;
+  deadline?: string;
+  deadlineLabel?: string;
+  customerName: string;
+  customerPhone?: string;
+  notes?: string;
+  assignedBy?: string;
+  assignedAt: string;
+  priority: 'urgent';
+  articles?: string;
+}
+
+export interface UrgentJobAssignment {
+  job: UrgentJob;
+  previousOrderId?: number;
+}
+
 export const NOTIFICATION_TYPE_CONFIG: Record<NotificationType, { icon: string; color: string; label: string }> = {
   order_assigned: { icon: 'plus-circle', color: '#2196F3', label: 'Nytt uppdrag' },
   status_change: { icon: 'refresh-cw', color: '#FF9800', label: 'Statusändring' },

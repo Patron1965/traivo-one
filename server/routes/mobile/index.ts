@@ -9,6 +9,7 @@ import { notificationsRouter } from './notifications';
 import { syncRouter } from './sync';
 import { routingRouter } from './routing';
 import { miscRouter } from './misc';
+import { urgentJobsRouter } from './urgentJobs';
 
 const router = Router();
 
@@ -47,5 +48,6 @@ router.use(notificationsRouter);
 router.use(syncRouter);
 router.use(routingRouter);
 router.use(miscRouter);
+router.use(urgentJobsRouter);
 
 export { router as mobileRoutes, MOCK_ORDERS };

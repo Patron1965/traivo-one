@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { getApiUrl } from '../lib/query-client';
 import type { Notification } from '../types';
 
+import type { UrgentJobAssignment } from '../types';
+
 type WSEvent =
   | { type: 'order:updated'; data: { orderId: string | number; status: string; updatedAt: string } }
   | { type: 'order:assigned'; data: { orderId: string | number } }
@@ -20,7 +22,8 @@ type WSEvent =
   | { type: 'anomaly_alert'; data: { id: string | number; title: string; message: string } }
   | { type: 'position_update'; data: { resourceId: string | number; latitude: number; longitude: number; speed: number; status: string } }
   | { type: 'route:optimized'; data: { jobId: string; resourceId: string; timestamp: string } }
-  | { type: 'route:reoptimizing'; data: { reason: string; resourceId: string } };
+  | { type: 'route:reoptimizing'; data: { reason: string; resourceId: string } }
+  | { type: 'job:urgent:assigned'; data: UrgentJobAssignment };
 
 type EventHandler = (event: WSEvent) => void;
 
@@ -233,6 +236,16 @@ export function useWebSocket(resourceId?: string | number, tenantId?: string, te
 
       socket.on('route_reoptimizing', (data: any) => {
         emitEvent(connId, 'route:reoptimizing', data);
+      });
+
+      socket.on('job:urgent:assigned', (data: any) => {
+        emitEvent(connId, 'job:urgent:assigned', data);
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/my-orders'] });
+        queryClient.invalidateQueries({ queryKey: ['/api/mobile/jobs/urgent/active'] });
+      });
+
+      socket.on('job:urgent:response:ack', (data: any) => {
+        console.log(`[WebSocket] Urgent job response ack: ${data?.jobId} → ${data?.status}`);
       });
 
       socket.on('pong', () => {});
