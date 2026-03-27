@@ -1,0 +1,193 @@
+Replit AI Prompt — Traivo Go: Ruttoptimering i mobilappen
+Vad som redan har implementerats
+Jag har lagt till stöd för ruttoptimering och förbättrad GPS-spårning i traivo-go mobilappen. Här är vad som finns:
+
+Nya filer
+client/hooks/useRouteOptimization.ts — React hook som integrerar med traivo-one's asynkrona optimeringssystem:
+submitJob(payload) — POSTar till /api/optimization/jobs med stops[] och vehicles[]
+Pollar automatiskt /api/optimization/jobs/:id/status var 3:e sekund via useQuery med refetchInterval
+Hämtar resultat via /api/optimization/jobs/:id/result när status === 'completed'
+reset() — nollställer state och rensar queries
+Returnerar: { submitJob, status, jobId, jobStatusData, result, reset, isLoading }
+Status-typer: 'idle' | 'submitting' | 'polling' | 'completed' | 'failed'
+Interface OptimizationJobPayload med stops (id, lat, lng, timeWindow, duration, requiredSkills) och vehicles (id, driverId, capacity, skills, homeLat, homeLng)
+client/screens/RouteFeedbackScreen.tsx — Skärm där föraren betygsätter dagens rutt:
+1-5 stjärnor rating
+Fördefinierade anledningar: 'too_long', 'too_short', 'logical', 'illogical', 'good', 'traffic'
+Fritext-kommentar
+Fält för faktisk körtid (min) och avstånd (km)
+POSTar till /api/mobile/route-feedback
+Stöd för optimizationJobId att koppla feedback till specifikt optimeringsjobb
+client/types/index.ts — Nya typer (tillagda i botten av filen):
+typescript
+Copy
+export interface OptimizationJob {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  createdAt: string;
+  completedAt?: string;
+  error?: string;
+}
+
+export interface OptimizedStop {
+  orderId: string;
+  sequence: number;
+  estimatedArrival: string;
+  estimatedDeparture: string;
+  lat: number;
+  lng: number;
+}
+
+export interface OptimizedRoute {
+  vehicleId: string;
+  driverId: string;
+  stops: OptimizedStop[];
+  totalDistance: number;
+  estimatedDuration: number;
+}
+
+export interface OptimizationResult {
+  jobId: string;
+  routes: OptimizedRoute[];
+  totalDistance: number;
+  totalDuration: number;
+  unassignedStops: string[];
+}
+Modifierade filer
+client/hooks/useGpsTracking.ts — Förbättrad GPS-spårning:
+Adaptivt intervall: 15s vid hastighet >2 m/s (GPS_INTERVAL_FAST), 60s vid stillastående (GPS_INTERVAL_SLOW)
+Offline-buffring via AsyncStorage (GPS_OFFLINE_BUFFER_KEY = 'gps_offline_buffer')
+bufferPositionOffline() sparar positioner lokalt om API-anrop misslyckas
+flushOfflineBuffer() skickar buffrade positioner via POST /api/mobile/position/batch
+Retry-logik: MAX_SEND_RETRIES = 2, RETRY_DELAY_MS = 3000
+Global singleton-pattern med globalState, globalListeners, globalActiveCount
+Ny funktion updateTrackingStatus(status: TrackingStatus) där TrackingStatus = 'idle' | 'traveling' | 'on_site' | 'offline'
+Lyssnar på NetInfo för automatisk flush vid nätverksåterställning
+client/hooks/useWebSocket.ts — Nya WebSocket-events:
+route:optimized — sätter isReoptimizing = false, invaliderar ['/api/mobile/my-orders']
+route:reoptimizing — sätter isReoptimizing = true
+schedule_changed — invaliderar ['/api/mobile/my-orders'] (befintligt event, nu kopplat till optimering)
+Exporterar isReoptimizing boolean
+client/screens/MapScreen.tsx — Visar optimeringsbanderoll:
+Importerar useWebSocket och använder isReoptimizing
+Visar blå banner "Optimerar rutt..." med ActivityIndicator när isReoptimizing === true (rad 395-399)
+Stil: optimizationBanner (position absolute, top 0, backgroundColor #2563EB)
+server/routes/mobile.ts — Nya server-endpoints:
+POST /api/mobile/route-feedback — sparar ruttbetyg i DB (rating, reasons, comment, date, optimizationJobId, actualDuration, actualDistance)
+GET /api/mobile/route-feedback/mine — hämtar förarens egna betyg
+Proxy-endpoints till traivo-one:
+POST /api/mobile/optimization/jobs → proxar till TRAIVO_ONE_URL/api/optimization/jobs
+GET /api/mobile/optimization/jobs/:id/status → proxar till traivo-one
+GET /api/mobile/optimization/jobs/:id/result → proxar till traivo-one
+Använder process.env.TRAIVO_ONE_URL för proxy-adressen
+Vad Replit AI behöver göra
+1. Registrera RouteFeedbackScreen i navigationen
+Lägg till RouteFeedbackScreen i din navigator (troligen client/navigation/ eller App.tsx):
+
+typescript
+Copy
+import { RouteFeedbackScreen } from './screens/RouteFeedbackScreen';
+
+// I din Stack.Navigator:
+<Stack.Screen name="RouteFeedback" component={RouteFeedbackScreen} options={{ title: 'Betygsätt rutt' }} />
+Lägg till en knapp som navigerar dit, t.ex. i DaySummary eller efter sista orderns slutförande:
+
+typescript
+Copy
+navigation.navigate('RouteFeedback');
+2. Koppla useRouteOptimization till UI
+Hooken är skapad men inte kopplad till någon skärm ännu. Möjliga platser:
+
+MapScreen — knapp "Optimera min rutt" som anropar submitJob() med förarens ordrar
+Orderslistan — dropdown-meny med "Optimera ordning"
+Exempel:
+
+typescript
+Copy
+const { submitJob, status, result, isLoading } = useRouteOptimization();
+
+const handleOptimize = () => {
+  const stops = myOrders.map(o => ({
+    id: String(o.id),
+    lat: o.latitude,
+    lng: o.longitude,
+    duration: o.estimatedDuration * 60, // minuter → sekunder
+  }));
+  const vehicles = [{
+    id: String(myResource.id),
+    driverId: String(myResource.id),
+    capacity: 20,
+    skills: myResource.competencies || [],
+    homeLat: myResource.homeLatitude,
+    homeLng: myResource.homeLongitude,
+  }];
+  submitJob({ stops, vehicles });
+};
+OBS: useRouteOptimization anropar /api/optimization/jobs direkt men proxy-endpointen i mobile.ts är /api/mobile/optimization/jobs. Antingen:
+
+Ändra hooken att använda /api/mobile/optimization/jobs istället (rekommenderat — matchar mobilens routing)
+Eller lägg till en proxy i traivo-go som mappar /api/optimization/jobs → traivo-one
+3. Sortera ordrar efter scheduledStartTime
+När optimering har tillämpats i traivo-one uppdateras scheduledStartTime på varje work_order. Se till att orderlistan sorterar efter detta:
+
+typescript
+Copy
+// I useQuery för /api/mobile/my-orders, sortera:
+const sortedOrders = orders.sort((a, b) => {
+  if (a.scheduledStartTime && b.scheduledStartTime) {
+    return a.scheduledStartTime.localeCompare(b.scheduledStartTime);
+  }
+  return a.sortOrder - b.sortOrder;
+});
+I Order-typen finns redan scheduledStartTime?: string (rad 187 i types/index.ts).
+
+4. Verifiera WebSocket-events
+WebSocket-hanteraren lyssnar redan på route:optimized och route:reoptimizing (rad 217-224 i useWebSocket.ts), men traivo-one broadcastar eventet som route_optimized (med underscore, inte kolon). Kontrollera att event-namnen matchar:
+
+traivo-one skickar: route_optimized, schedule_changed
+traivo-go lyssnar på: route:optimized, schedule_changed
+Fix: Antingen ändra i useWebSocket.ts att lyssna på route_optimized (underscore) istället för route:optimized (kolon), ELLER uppdatera traivo-one att skicka route:optimized.
+
+5. Sätt TRAIVO_ONE_URL miljövariabel
+Proxy-endpointsen i server/routes/mobile.ts använder process.env.TRAIVO_ONE_URL för att nå traivo-one. Sätt denna i Replit Secrets:
+
+TRAIVO_ONE_URL=https://din-traivo-one-url.replit.app
+6. Skapa DB-tabell för route_feedback
+POST /api/mobile/route-feedback i mobile.ts sparar till en DB-tabell. Se till att den finns:
+
+sql
+Copy
+CREATE TABLE IF NOT EXISTS route_feedback (
+  id SERIAL PRIMARY KEY,
+  driver_id INTEGER NOT NULL,
+  rating INTEGER NOT NULL CHECK (rating >= 1 AND rating <= 5),
+  reasons TEXT[],
+  comment TEXT,
+  date DATE NOT NULL,
+  optimization_job_id TEXT,
+  actual_duration INTEGER,
+  actual_distance NUMERIC,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+7. Testa flödet end-to-end
+Starta appen, logga in
+Gå till kartan → verifiera att isReoptimizing-bannern INTE visas normalt
+Testa useRouteOptimization manuellt:
+Anropa submitJob med testdata
+Verifiera att proxy-endpointen /api/mobile/optimization/jobs når traivo-one
+Navigera till RouteFeedbackScreen och submita ett betyg
+Verifiera att GPS-tracking med offline-buffring fungerar:
+Stäng av wifi → positioner buffras i AsyncStorage
+Slå på wifi → flushOfflineBuffer() körs automatiskt
+Sammanfattning av filer att titta på
+Fil	Status	Syfte
+client/hooks/useRouteOptimization.ts	NY	Hook för optimerings-API
+client/screens/RouteFeedbackScreen.tsx	NY	Betygsätt dagens rutt
+client/types/index.ts	ÄNDRAD	OptimizationJob, OptimizedStop, OptimizedRoute, OptimizationResult
+client/hooks/useGpsTracking.ts	ÄNDRAD	Adaptiv GPS, offline-buffring, retry
+client/hooks/useWebSocket.ts	ÄNDRAD	route:optimized, route:reoptimizing events
+client/screens/MapScreen.tsx	ÄNDRAD	Optimeringsbanderoll med isReoptimizing
+server/routes/mobile.ts	ÄNDRAD	route-feedback + optimization proxy endpoints
+Branch: feat/optimization-mobile
+
+Viktigast att fixa först: Punkt 4 (WebSocket event-namn mismatch) och punkt 2 (koppla hooken till UI).
