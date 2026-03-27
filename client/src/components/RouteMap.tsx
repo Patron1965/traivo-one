@@ -108,7 +108,7 @@ interface RouteMapProps {
 interface RouteData {
   distance: number; // km
   duration: number; // minutes
-  geometry: GeoJSON.LineString | null;
+  geometry: GeoJSON.LineString | GeoJSON.MultiLineString | null;
 }
 
 type ColorMode = "setupTime" | "accessType";
@@ -207,7 +207,7 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
         return {
           distance: (props.distance || 0) / 1000,
           duration: Math.round((props.time || 0) / 60),
-          geometry: feature.geometry as GeoJSON.LineString,
+          geometry: feature.geometry as GeoJSON.LineString | GeoJSON.MultiLineString,
         };
       }
       return null;
@@ -659,12 +659,24 @@ export function RouteMap({ onNavigate }: RouteMapProps) {
             {jobPositions.length > 0 && <MapFitBounds positions={jobPositions} />}
             
             {routeData?.geometry && routeData.geometry.coordinates ? (
-              <Polyline 
-                positions={routeData.geometry.coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
-                color="#3b82f6"
-                weight={4}
-                opacity={0.8}
-              />
+              routeData.geometry.type === "MultiLineString" ? (
+                (routeData.geometry as GeoJSON.MultiLineString).coordinates.map((line, i) => (
+                  <Polyline
+                    key={`route-line-${i}`}
+                    positions={line.map(([lon, lat]) => [lat, lon] as [number, number])}
+                    color="#3b82f6"
+                    weight={4}
+                    opacity={0.8}
+                  />
+                ))
+              ) : (
+                <Polyline 
+                  positions={(routeData.geometry as GeoJSON.LineString).coordinates.map(([lon, lat]) => [lat, lon] as [number, number])}
+                  color="#3b82f6"
+                  weight={4}
+                  opacity={0.8}
+                />
+              )
             ) : jobPositions.length > 1 && (
               <Polyline 
                 positions={jobPositions} 
