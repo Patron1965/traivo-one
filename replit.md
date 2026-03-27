@@ -31,7 +31,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **Automatic Anomaly Monitoring:** Background job for detecting operational anomalies and broadcasting alerts.
 - **Customer Portal 2.0:** Enhanced self-service portal with token-based authentication, upcoming visits, order history, real-time chat, self-booking, and field documentation.
 - **Scheduling & Reporting:** Flexible scheduling with frequency metadata, dynamic structural articles, protocol/deviation report generation, Weekly Goal Progress Bars, Geoapify Routing API distance calculations with Haversine fallback, and Auto-Fill Week functionality with Geographic Day-Clustering.
-- **Distance Matrix Service:** Centralized caching for Geoapify Routing API calls with automatic Haversine fallback.
+- **Distance Matrix Service:** Two-level caching (L1 in-memory LRU + L2 PostgreSQL `distance_cache` table with 24h TTL) for Geoapify Routing API calls with automatic Haversine fallback. Includes `precomputeDistanceMatrix()` for N×N matrices and `geographicPreCluster()` for GPS-based k-means clustering with balanced group sizes. Admin endpoints: `GET/DELETE /api/admin/distance-cache`, `POST /api/admin/distance-cache/cleanup`.
 - **QR-code based Issue Reporting:** Public mobile web interface for anonymous issue reporting.
 - **Environmental Statistics & Certificates:** Tracking mileage, fuel, CO2, and generation of annual environmental certificates.
 - **SMS Infrastructure:** Unified multi-channel notification service supporting email and SMS.

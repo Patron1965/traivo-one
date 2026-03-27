@@ -581,6 +581,23 @@ export async function optimizeRoutesVRP(
     };
   }
 
+  const PRE_CLUSTER_THRESHOLD = 50;
+  if (validJobs.length > PRE_CLUSTER_THRESHOLD && agents.length > 1) {
+    try {
+      const { geographicPreCluster } = await import("./distance-matrix-service");
+      const stops = validJobs.map(j => ({
+        id: j.order.id,
+        lat: j.job.location[1],
+        lng: j.job.location[0],
+      }));
+      const clusterCount = Math.min(agents.length, Math.ceil(validJobs.length / 15));
+      const geoClusters = geographicPreCluster(stops, clusterCount);
+      console.log(`[VRP] Pre-clustering ${validJobs.length} jobs into ${geoClusters.length} geographic clusters`);
+    } catch (clErr) {
+      console.warn("[VRP] Pre-clustering failed, proceeding with single batch:", clErr instanceof Error ? clErr.message : clErr);
+    }
+  }
+
   let enrichedJobs = validJobs.map(j => j.job);
   let enrichedAgents: Record<string, unknown>[] = agents;
   let constraintsSummary: string[] = [];

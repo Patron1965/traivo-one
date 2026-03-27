@@ -1,24 +1,28 @@
 import { trackApiUsage } from "./api-usage-tracker";
+import { db } from "./db";
+import { distanceCache } from "@shared/schema";
+import { eq, lt } from "drizzle-orm";
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
 const ROUTING_URL = "https://api.geoapify.com/v1/routing";
 
-interface DistanceResult {
+export interface DistanceResult {
   distanceKm: number;
   durationMin: number;
   source: "geoapify" | "haversine";
 }
 
-interface CacheEntry {
+interface L1CacheEntry {
   result: DistanceResult;
   timestamp: number;
 }
 
-const distanceCache = new Map<string, CacheEntry>();
-const CACHE_TTL = 2 * 60 * 60 * 1000;
-const MAX_CACHE_SIZE = 5000;
+const l1Cache = new Map<string, L1CacheEntry>();
+const L1_TTL = 2 * 60 * 60 * 1000;
+const L1_MAX_SIZE = 5000;
+const L2_TTL_HOURS = 24;
 
-function cacheKey(lat1: number, lng1: number, lat2: number, lng2: number): string {
+function coordKey(lat1: number, lng1: number, lat2: number, lng2: number): string {
   return `${lat1.toFixed(4)},${lng1.toFixed(4)}|${lat2.toFixed(4)},${lng2.toFixed(4)}`;
 }
 
@@ -42,16 +46,62 @@ function haversineFallback(lat1: number, lng1: number, lat2: number, lng2: numbe
   };
 }
 
-function evictOldEntries() {
-  if (distanceCache.size <= MAX_CACHE_SIZE) return;
+function evictL1() {
+  if (l1Cache.size <= L1_MAX_SIZE) return;
   const now = Date.now();
-  for (const [key, entry] of distanceCache) {
-    if (now - entry.timestamp > CACHE_TTL) distanceCache.delete(key);
+  for (const [key, entry] of l1Cache) {
+    if (now - entry.timestamp > L1_TTL) l1Cache.delete(key);
   }
-  if (distanceCache.size > MAX_CACHE_SIZE) {
-    const entries = [...distanceCache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
-    const toRemove = entries.slice(0, entries.length - MAX_CACHE_SIZE + 500);
-    for (const [key] of toRemove) distanceCache.delete(key);
+  if (l1Cache.size > L1_MAX_SIZE) {
+    const entries = [...l1Cache.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toRemove = entries.slice(0, entries.length - L1_MAX_SIZE + 500);
+    for (const [key] of toRemove) l1Cache.delete(key);
+  }
+}
+
+function setL1(key: string, result: DistanceResult): void {
+  evictL1();
+  l1Cache.set(key, { result, timestamp: Date.now() });
+}
+
+async function getL2(key: string): Promise<DistanceResult | null> {
+  try {
+    const cutoff = new Date(Date.now() - L2_TTL_HOURS * 60 * 60 * 1000);
+    const rows = await db.select().from(distanceCache).where(eq(distanceCache.id, key)).limit(1);
+    if (rows.length === 0) return null;
+    const row = rows[0];
+    if (row.createdAt < cutoff) return null;
+    return {
+      distanceKm: row.distanceKm,
+      durationMin: row.durationMin,
+      source: row.source as "geoapify" | "haversine",
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function setL2(key: string, lat1: number, lng1: number, lat2: number, lng2: number, result: DistanceResult): Promise<void> {
+  try {
+    await db.insert(distanceCache).values({
+      id: key,
+      fromLat: lat1,
+      fromLng: lng1,
+      toLat: lat2,
+      toLng: lng2,
+      distanceKm: result.distanceKm,
+      durationMin: result.durationMin,
+      source: result.source,
+    }).onConflictDoUpdate({
+      target: distanceCache.id,
+      set: {
+        distanceKm: result.distanceKm,
+        durationMin: result.durationMin,
+        source: result.source,
+        createdAt: new Date(),
+      },
+    });
+  } catch {
   }
 }
 
@@ -59,14 +109,23 @@ export async function getRoutingDistance(
   lat1: number, lng1: number,
   lat2: number, lng2: number,
 ): Promise<DistanceResult> {
-  const key = cacheKey(lat1, lng1, lat2, lng2);
-  const cached = distanceCache.get(key);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.result;
+  const key = coordKey(lat1, lng1, lat2, lng2);
+
+  const l1Hit = l1Cache.get(key);
+  if (l1Hit && Date.now() - l1Hit.timestamp < L1_TTL) {
+    return l1Hit.result;
+  }
+
+  const l2Hit = await getL2(key);
+  if (l2Hit) {
+    setL1(key, l2Hit);
+    return l2Hit;
   }
 
   if (!GEOAPIFY_API_KEY) {
-    return haversineFallback(lat1, lng1, lat2, lng2);
+    const fb = haversineFallback(lat1, lng1, lat2, lng2);
+    setL1(key, fb);
+    return fb;
   }
 
   try {
@@ -87,7 +146,9 @@ export async function getRoutingDistance(
 
     if (!response.ok) {
       console.warn(`[distance-matrix] Geoapify error ${response.status}, falling back to haversine`);
-      return haversineFallback(lat1, lng1, lat2, lng2);
+      const fb = haversineFallback(lat1, lng1, lat2, lng2);
+      setL1(key, fb);
+      return fb;
     }
 
     const data = await response.json();
@@ -99,20 +160,18 @@ export async function getRoutingDistance(
         durationMin: Math.round(props.time / 60),
         source: "geoapify",
       };
-      evictOldEntries();
-      distanceCache.set(key, { result, timestamp: Date.now() });
+      setL1(key, result);
+      await setL2(key, lat1, lng1, lat2, lng2, result);
       return result;
     }
 
     const fb = haversineFallback(lat1, lng1, lat2, lng2);
-    evictOldEntries();
-    distanceCache.set(key, { result: fb, timestamp: Date.now() - CACHE_TTL + 15 * 60 * 1000 });
+    setL1(key, fb);
     return fb;
   } catch (error) {
     console.warn("[distance-matrix] Geoapify fetch failed, falling back to haversine:", error);
     const fb = haversineFallback(lat1, lng1, lat2, lng2);
-    evictOldEntries();
-    distanceCache.set(key, { result: fb, timestamp: Date.now() - CACHE_TTL + 15 * 60 * 1000 });
+    setL1(key, fb);
     return fb;
   }
 }
@@ -132,10 +191,10 @@ export async function getBatchDistances(
   const uncached: BatchPair[] = [];
 
   for (const pair of pairs) {
-    const key = cacheKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
-    const cached = distanceCache.get(key);
-    if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-      results.set(pair.id, cached.result);
+    const key = coordKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
+    const l1Hit = l1Cache.get(key);
+    if (l1Hit && Date.now() - l1Hit.timestamp < L1_TTL) {
+      results.set(pair.id, l1Hit.result);
     } else {
       uncached.push(pair);
     }
@@ -143,22 +202,39 @@ export async function getBatchDistances(
 
   if (uncached.length === 0) return results;
 
+  const l2Misses: BatchPair[] = [];
+  for (const pair of uncached) {
+    const key = coordKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
+    const l2Hit = await getL2(key);
+    if (l2Hit) {
+      results.set(pair.id, l2Hit);
+      setL1(key, l2Hit);
+    } else {
+      l2Misses.push(pair);
+    }
+  }
+
+  if (l2Misses.length === 0) return results;
+
   if (!GEOAPIFY_API_KEY) {
-    for (const pair of uncached) {
-      results.set(pair.id, haversineFallback(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng));
+    for (const pair of l2Misses) {
+      const fb = haversineFallback(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
+      results.set(pair.id, fb);
+      setL1(coordKey(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng), fb);
     }
     return results;
   }
 
   const BATCH_SIZE = 5;
-  for (let i = 0; i < uncached.length; i += BATCH_SIZE) {
-    const batch = uncached.slice(i, i + BATCH_SIZE);
+  for (let i = 0; i < l2Misses.length; i += BATCH_SIZE) {
+    const batch = l2Misses.slice(i, i + BATCH_SIZE);
     const batchPromises = batch.map(async (pair) => {
       try {
         const result = await getRoutingDistance(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
         results.set(pair.id, result);
       } catch {
-        results.set(pair.id, haversineFallback(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng));
+        const fb = haversineFallback(pair.fromLat, pair.fromLng, pair.toLat, pair.toLng);
+        results.set(pair.id, fb);
       }
     });
     await Promise.all(batchPromises);
@@ -167,6 +243,217 @@ export async function getBatchDistances(
   return results;
 }
 
-export function getDistanceCacheStats(): { size: number; maxSize: number } {
-  return { size: distanceCache.size, maxSize: MAX_CACHE_SIZE };
+export interface CoordStop {
+  id: string;
+  lat: number;
+  lng: number;
+}
+
+export interface DistanceMatrixEntry {
+  fromId: string;
+  toId: string;
+  distanceKm: number;
+  durationMin: number;
+}
+
+export async function precomputeDistanceMatrix(
+  stops: CoordStop[],
+): Promise<DistanceMatrixEntry[]> {
+  const pairs: BatchPair[] = [];
+  for (let i = 0; i < stops.length; i++) {
+    for (let j = 0; j < stops.length; j++) {
+      if (i === j) continue;
+      pairs.push({
+        fromLat: stops[i].lat,
+        fromLng: stops[i].lng,
+        toLat: stops[j].lat,
+        toLng: stops[j].lng,
+        id: `${stops[i].id}|${stops[j].id}`,
+      });
+    }
+  }
+
+  const results = await getBatchDistances(pairs);
+  const matrix: DistanceMatrixEntry[] = [];
+
+  for (const [pairId, result] of results) {
+    const [fromId, toId] = pairId.split("|");
+    matrix.push({ fromId, toId, distanceKm: result.distanceKm, durationMin: result.durationMin });
+  }
+
+  return matrix;
+}
+
+export interface GeoCluster {
+  centroid: { lat: number; lng: number };
+  stops: CoordStop[];
+}
+
+export function geographicPreCluster(
+  stops: CoordStop[],
+  numGroups: number,
+  maxRadiusKm = 25,
+): GeoCluster[] {
+  if (stops.length === 0) return [];
+  if (numGroups <= 0) numGroups = 1;
+  if (numGroups >= stops.length) {
+    return stops.map(s => ({
+      centroid: { lat: s.lat, lng: s.lng },
+      stops: [s],
+    }));
+  }
+
+  const k = Math.min(numGroups, stops.length);
+  const indices = [];
+  const step = Math.floor(stops.length / k);
+  for (let i = 0; i < k; i++) {
+    indices.push(Math.min(i * step, stops.length - 1));
+  }
+  let centroids = indices.map(i => ({ lat: stops[i].lat, lng: stops[i].lng }));
+
+  const maxIterations = 50;
+  let assignments = new Array(stops.length).fill(0);
+
+  for (let iter = 0; iter < maxIterations; iter++) {
+    const newAssignments = new Array(stops.length).fill(0);
+
+    for (let i = 0; i < stops.length; i++) {
+      let bestDist = Infinity;
+      let bestCluster = 0;
+      for (let c = 0; c < centroids.length; c++) {
+        const d = haversineDistanceKm(stops[i].lat, stops[i].lng, centroids[c].lat, centroids[c].lng);
+        if (d < bestDist) {
+          bestDist = d;
+          bestCluster = c;
+        }
+      }
+      newAssignments[i] = bestCluster;
+    }
+
+    const newCentroids = centroids.map(() => ({ lat: 0, lng: 0, count: 0 }));
+    for (let i = 0; i < stops.length; i++) {
+      const c = newAssignments[i];
+      newCentroids[c].lat += stops[i].lat;
+      newCentroids[c].lng += stops[i].lng;
+      newCentroids[c].count++;
+    }
+
+    const updatedCentroids = newCentroids.map((nc, idx) => {
+      if (nc.count === 0) return centroids[idx];
+      return { lat: nc.lat / nc.count, lng: nc.lng / nc.count };
+    });
+
+    const converged = updatedCentroids.every((uc, idx) =>
+      haversineDistanceKm(uc.lat, uc.lng, centroids[idx].lat, centroids[idx].lng) < 0.01
+    );
+
+    centroids = updatedCentroids;
+    assignments = newAssignments;
+    if (converged) break;
+  }
+
+  const targetSize = Math.ceil(stops.length / k);
+  const clusterSizes = new Array(k).fill(0);
+  for (const a of assignments) clusterSizes[a]++;
+
+  const overloaded = clusterSizes.some(s => s > targetSize * 1.5);
+  if (overloaded) {
+    const indexed = stops.map((s, i) => ({ stop: s, cluster: assignments[i] }));
+    indexed.sort((a, b) => {
+      if (a.cluster !== b.cluster) return a.cluster - b.cluster;
+      return haversineDistanceKm(a.stop.lat, a.stop.lng, centroids[a.cluster].lat, centroids[a.cluster].lng)
+        - haversineDistanceKm(b.stop.lat, b.stop.lng, centroids[b.cluster].lat, centroids[b.cluster].lng);
+    });
+
+    const balanced = new Array(k).fill(null).map(() => [] as CoordStop[]);
+    for (const item of indexed) {
+      let bestCluster = item.cluster;
+      if (balanced[bestCluster].length >= targetSize) {
+        let minSize = Infinity;
+        for (let c = 0; c < k; c++) {
+          if (balanced[c].length < minSize) {
+            minSize = balanced[c].length;
+            bestCluster = c;
+          }
+        }
+      }
+      balanced[bestCluster].push(item.stop);
+    }
+
+    return balanced.filter(g => g.length > 0).map(group => {
+      const lat = group.reduce((s, st) => s + st.lat, 0) / group.length;
+      const lng = group.reduce((s, st) => s + st.lng, 0) / group.length;
+      return { centroid: { lat, lng }, stops: group };
+    });
+  }
+
+  const clusterGroups = new Array(k).fill(null).map(() => [] as CoordStop[]);
+  for (let i = 0; i < stops.length; i++) {
+    clusterGroups[assignments[i]].push(stops[i]);
+  }
+
+  const result: GeoCluster[] = [];
+  for (let c = 0; c < k; c++) {
+    const group = clusterGroups[c];
+    if (group.length === 0) continue;
+
+    const tooFar = group.some(s =>
+      haversineDistanceKm(s.lat, s.lng, centroids[c].lat, centroids[c].lng) > maxRadiusKm
+    );
+
+    if (tooFar && group.length > 2) {
+      const sub = geographicPreCluster(group, 2, maxRadiusKm);
+      result.push(...sub);
+    } else {
+      result.push({ centroid: centroids[c], stops: group });
+    }
+  }
+
+  return result;
+}
+
+export function getDistanceCacheStats(): {
+  l1Size: number;
+  l1MaxSize: number;
+  l2TtlHours: number;
+} {
+  return {
+    l1Size: l1Cache.size,
+    l1MaxSize: L1_MAX_SIZE,
+    l2TtlHours: L2_TTL_HOURS,
+  };
+}
+
+export async function getL2CacheStats(): Promise<{ l2Count: number }> {
+  try {
+    const rows = await db.select().from(distanceCache).limit(1);
+    const countResult = await db.select().from(distanceCache);
+    return { l2Count: countResult.length };
+  } catch {
+    return { l2Count: 0 };
+  }
+}
+
+export async function clearDistanceCache(): Promise<{ l1Cleared: number; l2Cleared: number }> {
+  const l1Cleared = l1Cache.size;
+  l1Cache.clear();
+
+  let l2Cleared = 0;
+  try {
+    const result = await db.delete(distanceCache);
+    l2Cleared = (result as unknown as { rowCount?: number })?.rowCount ?? 0;
+  } catch {
+  }
+
+  return { l1Cleared, l2Cleared };
+}
+
+export async function cleanupExpiredL2(): Promise<number> {
+  try {
+    const cutoff = new Date(Date.now() - L2_TTL_HOURS * 60 * 60 * 1000);
+    const result = await db.delete(distanceCache).where(lt(distanceCache.createdAt, cutoff));
+    return (result as unknown as { rowCount?: number })?.rowCount ?? 0;
+  } catch {
+    return 0;
+  }
 }

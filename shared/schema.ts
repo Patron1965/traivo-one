@@ -4769,3 +4769,19 @@ export const pushTokens = pgTable("push_tokens", {
 export const insertPushTokenSchema = createInsertSchema(pushTokens).omit({ id: true, createdAt: true, updatedAt: true });
 export type PushToken = typeof pushTokens.$inferSelect;
 export type InsertPushToken = z.infer<typeof insertPushTokenSchema>;
+
+export const distanceCache = pgTable("distance_cache", {
+  id: varchar("id").primaryKey(),
+  fromLat: real("from_lat").notNull(),
+  fromLng: real("from_lng").notNull(),
+  toLat: real("to_lat").notNull(),
+  toLng: real("to_lng").notNull(),
+  distanceKm: real("distance_km").notNull(),
+  durationMin: real("duration_min").notNull(),
+  source: varchar("source", { length: 20 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_distance_cache_created").on(table.createdAt),
+]);
+
+export type DistanceCacheEntry = typeof distanceCache.$inferSelect;
