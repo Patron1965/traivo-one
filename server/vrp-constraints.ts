@@ -28,6 +28,7 @@ import type {
   ObjectTimeRestriction,
   TaskDesiredTimewindow,
   TaskDependencyInstance,
+  TaskDependency,
   ResourceArticle,
   ResourceVehicle,
   Vehicle,
@@ -108,6 +109,7 @@ export async function enrichVRPRequestWithConstraints(
     timeRestrictions,
     taskTimewindows,
     dependencyInstances,
+    taskDependencyBatch,
     resourceArticlesAll,
     resourceVehicleLinks,
     slotPreferences,
@@ -121,6 +123,9 @@ export async function enrichVRPRequestWithConstraints(
     options.respectDependencies !== false
       ? storage.getTaskDependencyInstances(options.tenantId)
       : Promise.resolve([] as TaskDependencyInstance[]),
+    options.respectDependencies !== false && workOrderIds.length > 0
+      ? storage.getTaskDependenciesBatch(workOrderIds)
+      : Promise.resolve({ dependencies: {} as Record<string, TaskDependency[]>, dependents: {} as Record<string, TaskDependency[]> }),
     resourceIds.length > 0
       ? storage.getResourceArticlesByResourceIds(resourceIds)
       : Promise.resolve([] as ResourceArticle[]),
@@ -151,7 +156,7 @@ export async function enrichVRPRequestWithConstraints(
   }
 
   if (options.respectDependencies !== false) {
-    const deps = applyDependencyConstraints(jobs, workOrders, dependencyInstances);
+    const deps = applyDependencyConstraints(jobs, workOrders, dependencyInstances, taskDependencyBatch);
     dependencySequences.push(...deps);
     if (deps.length > 0) constraintsApplied.push("dependencies");
   }
@@ -432,23 +437,40 @@ async function applyCapacityConstraints(
 function applyDependencyConstraints(
   jobs: EnrichedGeoapifyJob[],
   _workOrders: WorkOrder[],
-  dependencies: TaskDependencyInstance[],
+  dependencyInstances: TaskDependencyInstance[],
+  taskDependencyBatch: { dependencies: Record<string, TaskDependency[]>; dependents: Record<string, TaskDependency[]> },
 ): Array<{ beforeOrderId: string; afterOrderId: string }> {
   const sequences: Array<{ beforeOrderId: string; afterOrderId: string }> = [];
   const jobIdSet = new Set(jobs.map(j => j.id));
   const jobMap = new Map(jobs.map(j => [j.id, j]));
 
+  const edgeSet = new Set<string>();
   const edges: Array<{ firstId: string; secondId: string }> = [];
-  for (const dep of dependencies) {
+
+  function addEdge(firstId: string, secondId: string): void {
+    const key = `${firstId}->${secondId}`;
+    if (edgeSet.has(key)) return;
+    edgeSet.add(key);
+    edges.push({ firstId, secondId });
+  }
+
+  for (const dep of dependencyInstances) {
     const parentId = dep.parentWorkOrderId;
     const childId = dep.childWorkOrderId;
 
     if (!jobIdSet.has(parentId) || !jobIdSet.has(childId)) continue;
 
     if (dep.dependencyType === "before" || dep.dependencyType === "sequential") {
-      edges.push({ firstId: parentId, secondId: childId });
+      addEdge(parentId, childId);
     } else if (dep.dependencyType === "after") {
-      edges.push({ firstId: childId, secondId: parentId });
+      addEdge(childId, parentId);
+    }
+  }
+
+  for (const [workOrderId, deps] of Object.entries(taskDependencyBatch.dependencies)) {
+    for (const dep of deps) {
+      if (!jobIdSet.has(dep.workOrderId) || !jobIdSet.has(dep.dependsOnWorkOrderId)) continue;
+      addEdge(dep.dependsOnWorkOrderId, dep.workOrderId);
     }
   }
 
