@@ -1,5 +1,6 @@
 import type { WorkOrder, Resource, ServiceObject, Cluster } from "@shared/schema";
 import { trackApiUsage } from "./api-usage-tracker";
+import type { VRPConstraintOptions } from "./vrp-constraints";
 
 const GEOAPIFY_API_KEY = process.env.GEOAPIFY_API_KEY;
 
@@ -403,6 +404,7 @@ export interface VRPOptimizationResult {
     totalDistanceKm: number;
     avgEfficiency: number;
   };
+  constraintsApplied?: string[];
   error?: string;
 }
 
@@ -441,6 +443,7 @@ export async function optimizeRoutesVRP(
   objects: ServiceObject[],
   clusters: Cluster[],
   breakConfig?: BreakConfig,
+  constraintOptions?: VRPConstraintOptions,
 ): Promise<VRPOptimizationResult> {
   if (!GEOAPIFY_API_KEY) {
     return {
@@ -578,6 +581,35 @@ export async function optimizeRoutesVRP(
     };
   }
 
+  let enrichedJobs = validJobs.map(j => j.job);
+  let enrichedAgents: Record<string, unknown>[] = agents;
+  let constraintsSummary: string[] = [];
+
+  if (constraintOptions) {
+    try {
+      const { enrichVRPRequestWithConstraints } = await import("./vrp-constraints");
+      const enrichResult = await enrichVRPRequestWithConstraints(
+        validJobs.map(j => ({
+          ...j.job,
+          duration: j.job.duration || DEFAULT_SERVICE_TIME_SECONDS,
+          priority: j.job.priority || 50,
+          id: j.job.id || j.order.id,
+        })),
+        agents.map(a => ({ ...a })),
+        workOrders,
+        resources,
+        objects,
+        constraintOptions,
+      );
+      enrichedJobs = enrichResult.jobs;
+      enrichedAgents = enrichResult.agents;
+      constraintsSummary = enrichResult.constraintsApplied;
+      console.log(`[VRP] Constraints applied: ${constraintsSummary.join(", ")} | Pre-filtered pairs: ${enrichResult.preFilteredPairs} | Dependency sequences: ${enrichResult.dependencySequences.length}`);
+    } catch (enrichErr) {
+      console.warn("[VRP] Constraint enrichment failed, proceeding without:", enrichErr instanceof Error ? enrichErr.message : enrichErr);
+    }
+  }
+
   try {
     const startTime = Date.now();
     const response = await fetch(`${GEOAPIFY_ROUTE_PLANNER_URL}?apiKey=${GEOAPIFY_API_KEY}`, {
@@ -585,8 +617,8 @@ export async function optimizeRoutesVRP(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mode: "drive",
-        agents,
-        jobs: validJobs.map(j => j.job),
+        agents: enrichedAgents,
+        jobs: enrichedJobs,
       })
     });
 
@@ -697,7 +729,8 @@ export async function optimizeRoutesVRP(
         totalDurationMinutes: Math.round(totalTime / 60),
         totalDistanceKm: Math.round(totalDistance / 100) / 10,
         avgEfficiency: avgEff
-      }
+      },
+      constraintsApplied: constraintsSummary.length > 0 ? constraintsSummary : undefined,
     };
 
   } catch (error) {

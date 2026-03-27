@@ -1129,7 +1129,7 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
 // VRP-based route optimization using Geoapify Route Planner
 app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
-    const { date, clusterId, breakConfig: reqBreakConfig } = req.body;
+    const { date, clusterId, breakConfig: reqBreakConfig, constraints } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
     const [workOrders, resources, objects, clusters, tenant] = await Promise.all([
@@ -1160,10 +1160,24 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
       o.orderStatus !== "utford" && o.orderStatus !== "fakturerad"
     );
 
-    const tenantSettings = (tenant?.settings as Record<string, any>) || {};
+    const tenantSettings = (tenant?.settings as Record<string, unknown>) || {};
     const breakConfig = reqBreakConfig ?? tenantSettings.breakConfig ?? DEFAULT_BREAK_CONFIG;
     
-    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, breakConfig);
+    const constraintOptions = constraints ? {
+      respectTimeWindows: constraints.respectTimeWindows !== false,
+      respectSkills: constraints.respectSkills !== false,
+      respectCapacity: constraints.respectCapacity === true,
+      respectDependencies: constraints.respectDependencies !== false,
+      tenantId,
+    } : {
+      respectTimeWindows: true,
+      respectSkills: true,
+      respectCapacity: false,
+      respectDependencies: true,
+      tenantId,
+    };
+    
+    const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, breakConfig, constraintOptions);
     res.json(result);
 }));
 
