@@ -34,7 +34,7 @@ describe("VRP Constraint Enrichment", () => {
     },
   ];
 
-  it("enrichVRPRequestWithConstraints returns valid result with all constraints disabled", async () => {
+  it("returns valid result with all constraints disabled", async () => {
     const options: VRPConstraintOptions = {
       respectTimeWindows: false,
       respectSkills: false,
@@ -44,8 +44,8 @@ describe("VRP Constraint Enrichment", () => {
     };
 
     const result = await enrichVRPRequestWithConstraints(
-      [...mockJobs],
-      [...mockAgents],
+      [...mockJobs.map(j => ({ ...j }))],
+      [...mockAgents.map(a => ({ ...a }))],
       [],
       [],
       [],
@@ -60,18 +60,18 @@ describe("VRP Constraint Enrichment", () => {
     expect(result.dependencySequences).toHaveLength(0);
   });
 
-  it("enrichVRPRequestWithConstraints returns valid result with defaults", async () => {
+  it("returns valid result with all constraints enabled", async () => {
     const options: VRPConstraintOptions = {
       respectTimeWindows: true,
       respectSkills: true,
-      respectCapacity: false,
+      respectCapacity: true,
       respectDependencies: true,
       tenantId: "default-tenant",
     };
 
     const result = await enrichVRPRequestWithConstraints(
-      [...mockJobs],
-      [...mockAgents],
+      [...mockJobs.map(j => ({ ...j }))],
+      [...mockAgents.map(a => ({ ...a }))],
       [],
       [],
       [],
@@ -84,7 +84,7 @@ describe("VRP Constraint Enrichment", () => {
     expect(Array.isArray(result.constraintsApplied)).toBe(true);
   });
 
-  it("jobs retain their original properties after enrichment", async () => {
+  it("jobs retain original properties after enrichment", async () => {
     const options: VRPConstraintOptions = {
       respectTimeWindows: false,
       respectSkills: false,
@@ -94,8 +94,8 @@ describe("VRP Constraint Enrichment", () => {
     };
 
     const result = await enrichVRPRequestWithConstraints(
-      [...mockJobs],
-      [...mockAgents],
+      [...mockJobs.map(j => ({ ...j }))],
+      [...mockAgents.map(a => ({ ...a }))],
       [],
       [],
       [],
@@ -112,7 +112,7 @@ describe("VRP Constraint Enrichment", () => {
     expect(result.jobs[1].priority).toBe(75);
   });
 
-  it("agents retain their original properties after enrichment", async () => {
+  it("agents retain original properties after enrichment", async () => {
     const options: VRPConstraintOptions = {
       respectTimeWindows: false,
       respectSkills: false,
@@ -122,8 +122,8 @@ describe("VRP Constraint Enrichment", () => {
     };
 
     const result = await enrichVRPRequestWithConstraints(
-      [...mockJobs],
-      [...mockAgents],
+      [...mockJobs.map(j => ({ ...j }))],
+      [...mockAgents.map(a => ({ ...a }))],
       [],
       [],
       [],
@@ -133,6 +133,36 @@ describe("VRP Constraint Enrichment", () => {
     expect(result.agents[0].id).toBe("res-tomas");
     expect(result.agents[0].start_location).toEqual([20.263, 63.826]);
     expect(result.agents[0].time_windows).toEqual([[28800, 61200]]);
+  });
+
+  it("does not assign all skills to uncoded resources", async () => {
+    const options: VRPConstraintOptions = {
+      respectTimeWindows: false,
+      respectSkills: true,
+      respectCapacity: false,
+      respectDependencies: false,
+      tenantId: "default-tenant",
+    };
+
+    const jobsWithSkill: EnrichedGeoapifyJob[] = [
+      { location: [20.263, 63.826], duration: 1800, priority: 50, id: "wo-skill-1" },
+    ];
+    const agentsNoCode: EnrichedGeoapifyAgent[] = [
+      { start_location: [20.263, 63.826], time_windows: [[28800, 61200]], id: "res-nocodes" },
+    ];
+    const workOrders = [
+      { id: "wo-skill-1", executionCode: "RENGORING", objectId: "obj-1" },
+    ] as never[];
+    const resources = [
+      { id: "res-nocodes", executionCodes: [] },
+    ] as never[];
+
+    const result = await enrichVRPRequestWithConstraints(
+      jobsWithSkill, agentsNoCode, workOrders, resources, [], options,
+    );
+
+    const agent = result.agents[0];
+    expect(agent.skills).toBeUndefined();
   });
 });
 
@@ -148,7 +178,7 @@ describe("VRP Optimize Endpoint", () => {
         constraints: {
           respectTimeWindows: true,
           respectSkills: true,
-          respectCapacity: false,
+          respectCapacity: true,
           respectDependencies: true,
         },
       }),

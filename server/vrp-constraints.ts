@@ -444,42 +444,53 @@ function applyDependencyConstraints(
 
     if (!jobIdSet.has(parentId) || !jobIdSet.has(childId)) continue;
 
+    let firstJobId: string;
+    let secondJobId: string;
+
     if (dep.dependencyType === "before" || dep.dependencyType === "sequential") {
-      sequences.push({ beforeOrderId: parentId, afterOrderId: childId });
+      firstJobId = parentId;
+      secondJobId = childId;
+    } else if (dep.dependencyType === "after") {
+      firstJobId = childId;
+      secondJobId = parentId;
+    } else {
+      continue;
+    }
 
-      const parentJob = jobMap.get(parentId);
-      const childJob = jobMap.get(childId);
+    sequences.push({ beforeOrderId: firstJobId, afterOrderId: secondJobId });
 
-      if (!parentJob || !childJob) continue;
+    const firstJob = jobMap.get(firstJobId);
+    const secondJob = jobMap.get(secondJobId);
 
-      parentJob.priority = Math.min(100, Math.max(parentJob.priority || 0, (childJob.priority || 50) + 10));
+    if (!firstJob || !secondJob) continue;
 
-      const parentEarliestEnd = getEarliestCompletionTime(parentJob);
+    firstJob.priority = Math.min(100, Math.max(firstJob.priority || 0, (secondJob.priority || 50) + 10));
 
-      if (!childJob.time_windows || childJob.time_windows.length === 0) {
-        childJob.time_windows = [[parentEarliestEnd, DEFAULT_WORK_HOURS[1]]];
-      } else {
-        childJob.time_windows = childJob.time_windows
-          .map(([s, e]) => [Math.max(s, parentEarliestEnd), e] as [number, number])
-          .filter(([s, e]) => e > s);
-        if (childJob.time_windows.length === 0) {
-          childJob.time_windows = [[parentEarliestEnd, DEFAULT_WORK_HOURS[1]]];
-        }
+    const firstEarliestEnd = getEarliestCompletionTime(firstJob);
+
+    if (!secondJob.time_windows || secondJob.time_windows.length === 0) {
+      secondJob.time_windows = [[firstEarliestEnd, DEFAULT_WORK_HOURS[1]]];
+    } else {
+      secondJob.time_windows = secondJob.time_windows
+        .map(([s, e]) => [Math.max(s, firstEarliestEnd), e] as [number, number])
+        .filter(([s, e]) => e > s);
+      if (secondJob.time_windows.length === 0) {
+        secondJob.time_windows = [[firstEarliestEnd, DEFAULT_WORK_HOURS[1]]];
       }
+    }
 
-      if (dep.dependencyType === "sequential") {
-        const pairSkill = syntheticSkillIdx++;
+    if (dep.dependencyType === "sequential") {
+      const pairSkill = syntheticSkillIdx++;
 
-        if (!parentJob.required_skills) parentJob.required_skills = [];
-        parentJob.required_skills.push(pairSkill);
+      if (!firstJob.required_skills) firstJob.required_skills = [];
+      firstJob.required_skills.push(pairSkill);
 
-        if (!childJob.required_skills) childJob.required_skills = [];
-        childJob.required_skills.push(pairSkill);
+      if (!secondJob.required_skills) secondJob.required_skills = [];
+      secondJob.required_skills.push(pairSkill);
 
-        for (const agent of agents) {
-          if (!agent.skills) agent.skills = [];
-          agent.skills.push(pairSkill);
-        }
+      for (const agent of agents) {
+        if (!agent.skills) agent.skills = [];
+        agent.skills.push(pairSkill);
       }
     }
   }

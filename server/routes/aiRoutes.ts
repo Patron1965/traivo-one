@@ -1166,13 +1166,13 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     const constraintOptions = constraints ? {
       respectTimeWindows: constraints.respectTimeWindows !== false,
       respectSkills: constraints.respectSkills !== false,
-      respectCapacity: constraints.respectCapacity === true,
+      respectCapacity: constraints.respectCapacity !== false,
       respectDependencies: constraints.respectDependencies !== false,
       tenantId,
     } : {
       respectTimeWindows: true,
       respectSkills: true,
-      respectCapacity: false,
+      respectCapacity: true,
       respectDependencies: true,
       tenantId,
     };
