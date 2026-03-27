@@ -51,6 +51,7 @@ export interface ConstraintEnrichmentResult {
 }
 
 const DEFAULT_WORK_HOURS: [number, number] = [8 * 3600, 17 * 3600];
+const PREFERRED_TIME_PRIORITY_BOOST = 15;
 
 function parseTimeToSeconds(timeStr: string): number | null {
   const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
@@ -72,9 +73,7 @@ export async function enrichVRPRequestWithConstraints(
   const constraintsApplied: string[] = [];
   let preFilteredPairs = 0;
 
-  const orderMap = new Map(workOrders.map(o => [o.id, o]));
   const objectMap = new Map(objects.map(o => [o.id, o]));
-  const resourceMap = new Map(resources.map(r => [r.id, r]));
   const workOrderIds = workOrders.map(o => o.id);
   const resourceIds = resources.map(r => r.id);
   const objectIds = [...new Set(workOrders.map(o => o.objectId).filter(Boolean))];
@@ -86,6 +85,7 @@ export async function enrichVRPRequestWithConstraints(
     dependencyInstances,
     resourceArticlesAll,
     resourceVehicleLinks,
+    slotPreferences,
   ] = await Promise.all([
     options.respectTimeWindows !== false && objectIds.length > 0
       ? storage.getObjectTimeRestrictionsByObjectIds(options.tenantId, objectIds)
@@ -96,23 +96,26 @@ export async function enrichVRPRequestWithConstraints(
     options.respectDependencies !== false
       ? storage.getTaskDependencyInstances(options.tenantId)
       : Promise.resolve([] as TaskDependencyInstance[]),
-    options.respectSkills !== false && resourceIds.length > 0
+    resourceIds.length > 0
       ? storage.getResourceArticlesByResourceIds(resourceIds)
       : Promise.resolve([] as ResourceArticle[]),
     options.respectCapacity !== false && resourceIds.length > 0
       ? storage.getResourceVehiclesByResourceIds(resourceIds)
       : Promise.resolve([] as ResourceVehicle[]),
+    options.respectTimeWindows !== false && objectIds.length > 0
+      ? loadSlotPreferences(options.tenantId, objectIds)
+      : Promise.resolve(new Map<string, SlotPreferenceData[]>()),
   ]);
 
   if (options.respectTimeWindows !== false) {
     applyTimeRestrictions(jobs, workOrders, timeRestrictions, objectMap);
     applyTaskTimewindows(jobs, taskTimewindows);
-    applyObjectPreferredTimes(jobs, workOrders, objectMap);
+    applyPreferredTimesAsSoftConstraints(jobs, workOrders, objectMap, slotPreferences);
     constraintsApplied.push("time_windows");
   }
 
   if (options.respectSkills !== false) {
-    const filtered = applySkillConstraints(jobs, agents, workOrders, resources, resourceArticlesAll);
+    const filtered = applySkillConstraints(jobs, agents, workOrders, resources);
     preFilteredPairs = filtered;
     constraintsApplied.push("skills");
   }
@@ -128,8 +131,10 @@ export async function enrichVRPRequestWithConstraints(
     if (deps.length > 0) constraintsApplied.push("dependencies");
   }
 
-  applyEfficiencyFactors(jobs, agents, workOrders, resources, resourceArticlesAll);
-  if (resourceArticlesAll.length > 0) constraintsApplied.push("efficiency_factors");
+  if (resourceArticlesAll.length > 0) {
+    const applied = applyEfficiencyFactors(jobs, agents, workOrders, resources, resourceArticlesAll);
+    if (applied) constraintsApplied.push("efficiency_factors");
+  }
 
   return {
     jobs,
@@ -219,10 +224,39 @@ function applyTaskTimewindows(
   }
 }
 
-function applyObjectPreferredTimes(
+interface SlotPreferenceData {
+  preferredTime: string;
+  preference: string;
+}
+
+async function loadSlotPreferences(
+  tenantId: string,
+  objectIds: string[],
+): Promise<Map<string, SlotPreferenceData[]>> {
+  const result = new Map<string, SlotPreferenceData[]>();
+  try {
+    const restrictions = await storage.getObjectTimeRestrictionsByObjectIds(tenantId, objectIds);
+    for (const r of restrictions) {
+      if (!r.isActive || !r.preference || r.preference === "blocked") continue;
+      if (!r.startTime) continue;
+      const list = result.get(r.objectId) || [];
+      list.push({
+        preferredTime: r.startTime,
+        preference: r.preference,
+      });
+      result.set(r.objectId, list);
+    }
+  } catch {
+    // slot preferences are non-critical
+  }
+  return result;
+}
+
+function applyPreferredTimesAsSoftConstraints(
   jobs: EnrichedGeoapifyJob[],
   workOrders: WorkOrder[],
   objectMap: Map<string, ServiceObject>,
+  slotPreferences: Map<string, SlotPreferenceData[]>,
 ): void {
   for (const job of jobs) {
     if (job.time_windows && job.time_windows.length > 0) continue;
@@ -239,26 +273,19 @@ function applyObjectPreferredTimes(
     const pref2 = (objRecord.resolvedPreferredTime2 as string | null)
       || (objRecord.preferredTime2 as string | null);
 
-    const windows: [number, number][] = [];
+    let boosted = false;
 
-    if (pref1) {
-      const startSec = parseTimeToSeconds(pref1);
-      if (startSec !== null) {
-        const endSec = Math.min(startSec + 7200, DEFAULT_WORK_HOURS[1]);
-        if (endSec > startSec) windows.push([startSec, endSec]);
-      }
+    if (pref1 || pref2) {
+      job.priority = Math.min(100, (job.priority || 50) + PREFERRED_TIME_PRIORITY_BOOST);
+      boosted = true;
     }
 
-    if (pref2) {
-      const startSec = parseTimeToSeconds(pref2);
-      if (startSec !== null) {
-        const endSec = Math.min(startSec + 7200, DEFAULT_WORK_HOURS[1]);
-        if (endSec > startSec) windows.push([startSec, endSec]);
+    const objSlots = slotPreferences.get(order.objectId);
+    if (objSlots && objSlots.length > 0 && !boosted) {
+      const preferredSlots = objSlots.filter(s => s.preference === "preferred");
+      if (preferredSlots.length > 0) {
+        job.priority = Math.min(100, (job.priority || 50) + PREFERRED_TIME_PRIORITY_BOOST);
       }
-    }
-
-    if (windows.length > 0) {
-      job.time_windows = windows;
     }
   }
 }
@@ -268,7 +295,6 @@ function applySkillConstraints(
   agents: EnrichedGeoapifyAgent[],
   workOrders: WorkOrder[],
   resources: Resource[],
-  _resourceArticles: ResourceArticle[],
 ): number {
   const executionCodesSet = new Set<string>();
 
@@ -383,6 +409,7 @@ function applyDependencyConstraints(
 ): Array<{ beforeOrderId: string; afterOrderId: string }> {
   const sequences: Array<{ beforeOrderId: string; afterOrderId: string }> = [];
   const jobIdSet = new Set(jobs.map(j => j.id));
+  const jobMap = new Map(jobs.map(j => [j.id, j]));
 
   for (const dep of dependencies) {
     const parentId = dep.parentWorkOrderId;
@@ -393,24 +420,23 @@ function applyDependencyConstraints(
     if (dep.dependencyType === "before" || dep.dependencyType === "sequential") {
       sequences.push({ beforeOrderId: parentId, afterOrderId: childId });
 
-      const parentJob = jobs.find(j => j.id === parentId);
-      const childJob = jobs.find(j => j.id === childId);
+      const parentJob = jobMap.get(parentId);
+      const childJob = jobMap.get(childId);
 
       if (parentJob && childJob) {
-        parentJob.priority = Math.max(parentJob.priority || 0, (childJob.priority || 50) + 10);
+        parentJob.priority = Math.min(100, Math.max(parentJob.priority || 0, (childJob.priority || 50) + 10));
 
-        if (parentJob.time_windows && parentJob.time_windows.length > 0) {
-          const parentEnd = parentJob.time_windows[parentJob.time_windows.length - 1][1];
-          const childStart = parentEnd + parentJob.duration;
-          if (!childJob.time_windows || childJob.time_windows.length === 0) {
-            childJob.time_windows = [[childStart, DEFAULT_WORK_HOURS[1]]];
-          } else {
-            childJob.time_windows = childJob.time_windows
-              .map(([s, e]) => [Math.max(s, childStart), e] as [number, number])
-              .filter(([s, e]) => e > s);
-            if (childJob.time_windows.length === 0) {
-              childJob.time_windows = [[childStart, DEFAULT_WORK_HOURS[1]]];
-            }
+        const parentEarliestEnd = getEarliestCompletionTime(parentJob);
+        const childMinStart = parentEarliestEnd;
+
+        if (!childJob.time_windows || childJob.time_windows.length === 0) {
+          childJob.time_windows = [[childMinStart, DEFAULT_WORK_HOURS[1]]];
+        } else {
+          childJob.time_windows = childJob.time_windows
+            .map(([s, e]) => [Math.max(s, childMinStart), e] as [number, number])
+            .filter(([s, e]) => e > s);
+          if (childJob.time_windows.length === 0) {
+            childJob.time_windows = [[childMinStart, DEFAULT_WORK_HOURS[1]]];
           }
         }
       }
@@ -420,15 +446,23 @@ function applyDependencyConstraints(
   return sequences;
 }
 
+function getEarliestCompletionTime(job: EnrichedGeoapifyJob): number {
+  if (job.time_windows && job.time_windows.length > 0) {
+    const earliestStart = job.time_windows[0][0];
+    return earliestStart + job.duration;
+  }
+  return DEFAULT_WORK_HOURS[0] + job.duration;
+}
+
 function applyEfficiencyFactors(
   jobs: EnrichedGeoapifyJob[],
   agents: EnrichedGeoapifyAgent[],
   workOrders: WorkOrder[],
   resources: Resource[],
   resourceArticles: ResourceArticle[],
-): void {
-  if (resourceArticles.length === 0) return;
-  if (agents.length === 0) return;
+): boolean {
+  if (resourceArticles.length === 0) return false;
+  if (agents.length === 0) return false;
 
   const articleEfficiencyByResource = new Map<string, Map<string, number>>();
   for (const ra of resourceArticles) {
@@ -440,27 +474,23 @@ function applyEfficiencyFactors(
     articleEfficiencyByResource.set(ra.resourceId, map);
   }
 
-  if (articleEfficiencyByResource.size === 0) return;
-
   const orderArticleMap = new Map<string, string | null>();
   for (const order of workOrders) {
     orderArticleMap.set(order.id, order.articleId || null);
   }
 
-  const resourceEfficiencyMap = new Map<string, number>();
+  const resourceBaseEfficiency = new Map<string, number>();
   for (const resource of resources) {
     const baseEff = resource.efficiencyFactor || 1.0;
-    if (baseEff !== 1.0 || articleEfficiencyByResource.has(resource.id)) {
-      resourceEfficiencyMap.set(resource.id, baseEff);
-    }
+    resourceBaseEfficiency.set(resource.id, baseEff);
   }
 
-  if (resourceEfficiencyMap.size === 0) return;
+  let anyAdjusted = false;
 
   if (agents.length === 1) {
     const agentResourceId = agents[0].id;
-    if (!agentResourceId) return;
-    const baseEff = resourceEfficiencyMap.get(agentResourceId) || 1.0;
+    if (!agentResourceId) return false;
+    const baseEff = resourceBaseEfficiency.get(agentResourceId) || 1.0;
     const articleMap = articleEfficiencyByResource.get(agentResourceId);
 
     for (const job of jobs) {
@@ -469,7 +499,10 @@ function applyEfficiencyFactors(
       const combined = baseEff * articleEff;
       if (combined !== 1.0) {
         const adjusted = Math.round(job.duration * combined);
-        if (adjusted > 0) job.duration = adjusted;
+        if (adjusted > 0) {
+          job.duration = adjusted;
+          anyAdjusted = true;
+        }
       }
     }
   } else {
@@ -479,7 +512,7 @@ function applyEfficiencyFactors(
       let count = 0;
       for (const agent of agents) {
         if (!agent.id) continue;
-        const baseEff = resourceEfficiencyMap.get(agent.id) || 1.0;
+        const baseEff = resourceBaseEfficiency.get(agent.id) || 1.0;
         const articleMap = articleEfficiencyByResource.get(agent.id);
         const articleEff = (articleId && articleMap?.get(articleId)) || 1.0;
         totalFactor += baseEff * articleEff;
@@ -487,11 +520,16 @@ function applyEfficiencyFactors(
       }
       if (count > 0) {
         const avgFactor = totalFactor / count;
-        if (avgFactor !== 1.0) {
+        if (Math.abs(avgFactor - 1.0) > 0.01) {
           const adjusted = Math.round(job.duration * avgFactor);
-          if (adjusted > 0) job.duration = adjusted;
+          if (adjusted > 0) {
+            job.duration = adjusted;
+            anyAdjusted = true;
+          }
         }
       }
     }
   }
+
+  return anyAdjusted;
 }
