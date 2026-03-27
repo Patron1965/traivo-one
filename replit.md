@@ -66,6 +66,7 @@ The user interface includes a sticky TopNav, global search, mobile-friendly hamb
 - **VRP Constraint Integration:** Enhanced VRP optimization with real constraint enrichment from database tables (time windows, competency, vehicle capacity, task dependencies, preferred times, resource efficiency factors).
 - **VRP Route Optimization UI (Fas 4):** Enhanced `RouteOptimizationPanel.tsx` with constraint toggles, async job progress, decision trace per order, multi-day planning mode, what-if simulation, and cluster visualization.
 - **Pop-out Kartövervakning:** Standalone fullscreen map monitoring window (`/monitor/popout`) with live driver positions via WebSocket, road-following route geometry, job markers, collapsible control panel with layer toggles and status filters. Launchable from both PlannerMapPage and RoutesPage.
+- **Akut Jobbhantering:** Urgent job assignment system with `urgent_job_assignments` table, REST API endpoints (assign, accept, decline, status update, find-nearest, reassign), WebSocket notifications to field workers, and planner UI dialog accessible from MonitorPopoutPage and PlannerMapPage. Includes nearest-technician search with distance/ETA calculation and 60-second response timeout with auto-warning.
 
 ### System Design Choices
 - **AI-first approach:** AI integration is a core principle, with every function considered for AI enhancement.

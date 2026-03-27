@@ -4832,3 +4832,39 @@ export const mobileUserPreferences = pgTable("mobile_user_preferences", {
 export const insertMobileUserPreferencesSchema = createInsertSchema(mobileUserPreferences).omit({ id: true, updatedAt: true });
 export type MobileUserPreference = typeof mobileUserPreferences.$inferSelect;
 export type InsertMobileUserPreference = z.infer<typeof insertMobileUserPreferencesSchema>;
+
+export const urgentJobAssignments = pgTable("urgent_job_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  orderId: varchar("order_id").references(() => workOrders.id),
+  resourceId: varchar("resource_id").references(() => resources.id).notNull(),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  status: varchar("status", { length: 32 }).default("pending").notNull(),
+  jobType: text("job_type"),
+  address: text("address"),
+  latitude: real("latitude"),
+  longitude: real("longitude"),
+  customerName: text("customer_name"),
+  customerPhone: text("customer_phone"),
+  notes: text("notes"),
+  articles: text("articles"),
+  deadline: timestamp("deadline"),
+  declineReason: text("decline_reason"),
+  startNavigation: boolean("start_navigation").default(false),
+  assignedBy: varchar("assigned_by"),
+  assignedAt: timestamp("assigned_at").defaultNow().notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  declinedAt: timestamp("declined_at"),
+  arrivedAt: timestamp("arrived_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => [
+  index("idx_urgent_jobs_resource").on(table.resourceId, table.status),
+  index("idx_urgent_jobs_tenant").on(table.tenantId, table.status),
+]);
+
+export const insertUrgentJobAssignmentSchema = createInsertSchema(urgentJobAssignments).omit({ id: true, createdAt: true, updatedAt: true });
+export type UrgentJobAssignment = typeof urgentJobAssignments.$inferSelect;
+export type InsertUrgentJobAssignment = z.infer<typeof insertUrgentJobAssignmentSchema>;
+
+export type UrgentJobStatus = "pending" | "accepted" | "en_route" | "arrived" | "in_progress" | "completed" | "declined" | "reassigned" | "issue_reported";

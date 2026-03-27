@@ -41,6 +41,7 @@ import { registerDisruptionRoutes } from "./routes/disruptionRoutes";
 import { registerFeedbackLoopRoutes } from "./routes/feedbackLoopRoutes";
 import { registerETANotificationRoutes } from "./routes/etaNotificationRoutes";
 import { registerFeatureRoutes } from "./routes/featureRoutes";
+import { registerUrgentJobRoutes } from "./routes/urgentJobRoutes";
 
 async function ensureDefaultTenant() {
   return storage.ensureTenant(DEFAULT_TENANT_ID, {
@@ -392,6 +393,7 @@ export async function registerRoutes(
   registerDisruptionRoutes(app);
   registerFeedbackLoopRoutes(app);
   registerETANotificationRoutes(app);
+  registerUrgentJobRoutes(app);
 
   app.post("/api/route-geometry", async (req: ExpressRequest, res: ExpressResponse) => {
     try {

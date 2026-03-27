@@ -1,7 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { UrgentJobDialog } from "@/components/UrgentJobDialog";
 
 export default function PlannerMapPage() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
 
   useEffect(() => {
     document.title = "Traivo - Planerarvy Karta";
@@ -19,6 +21,14 @@ export default function PlannerMapPage() {
           <p className="text-sm text-muted-foreground">Realtidsöversikt av förare och uppdrag på karta</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => setUrgentDialogOpen(true)}
+            className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 transition-colors"
+            data-testid="button-urgent-job"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Akut jobb
+          </button>
           <button
             onClick={openPopout}
             className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border bg-background hover:bg-accent transition-colors"
@@ -45,6 +55,10 @@ export default function PlannerMapPage() {
         className="flex-1 w-full border-0"
         title="Planerarvy Karta"
         data-testid="iframe-planner-map"
+      />
+      <UrgentJobDialog
+        open={urgentDialogOpen}
+        onClose={() => setUrgentDialogOpen(false)}
       />
     </div>
   );

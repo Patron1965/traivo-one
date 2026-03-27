@@ -21,7 +21,9 @@ import {
   Eye,
   EyeOff,
   X,
+  AlertTriangle,
 } from "lucide-react";
+import { UrgentJobDialog } from "@/components/UrgentJobDialog";
 
 interface ActiveResource {
   id: string;
@@ -125,6 +127,7 @@ export default function MonitorPopoutPage() {
   const [showJobs, setShowJobs] = useState(true);
   const [selectedStatuses, setSelectedStatuses] = useState<Set<string>>(new Set(["on_job", "traveling", "idle", "break"]));
   const [routeGeometries, setRouteGeometries] = useState<RouteGeometry[]>([]);
+  const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
 
   const { data: resources, refetch: refetchResources } = useQuery<ActiveResource[]>({
     queryKey: ["/api/resources/active-positions"],
@@ -412,6 +415,14 @@ export default function MonitorPopoutPage() {
           </span>
         </div>
         <button
+          onClick={() => setUrgentDialogOpen(true)}
+          className="bg-red-600 text-white rounded-lg shadow-lg px-3 py-2 hover:bg-red-700 transition-colors flex items-center gap-1.5 text-xs font-medium"
+          data-testid="button-open-urgent-job"
+        >
+          <AlertTriangle className="h-4 w-4" />
+          Akut jobb
+        </button>
+        <button
           onClick={() => refetchResources()}
           className="bg-background/90 backdrop-blur-sm rounded-lg shadow-lg p-2 hover:bg-accent transition-colors"
           data-testid="button-refresh-monitor"
@@ -523,6 +534,11 @@ export default function MonitorPopoutPage() {
           </div>
         )}
       </div>
+
+      <UrgentJobDialog
+        open={urgentDialogOpen}
+        onClose={() => setUrgentDialogOpen(false)}
+      />
     </div>
   );
 }
