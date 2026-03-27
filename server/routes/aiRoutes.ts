@@ -40,6 +40,12 @@ async function aiBudgetGuard(req: Request, res: Response, useCase: "planning" | 
 }
 
 export async function registerAIRoutes(app: Express) {
+
+import("../optimization-job-runner").then(({ startJobCleanupScheduler, resetStaleJobs }) => {
+  resetStaleJobs();
+  startJobCleanupScheduler();
+}).catch(err => console.warn("[ai-routes] Failed to start optimization job scheduler:", err));
+
 // ============================================
 // AI FIELD ASSISTANT
 // ============================================
@@ -1129,6 +1135,7 @@ app.post("/api/ai/optimize-routes", asyncHandler(async (req, res) => {
 // VRP-based route optimization using Geoapify Route Planner
 app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
     const { optimizeRoutesVRP, DEFAULT_BREAK_CONFIG } = await import("../route-optimizer");
+    const { createOptimizationJob, ASYNC_THRESHOLD } = await import("../optimization-job-runner");
     const { date, clusterId, breakConfig: reqBreakConfig, constraints } = req.body;
     
     const tenantId = getTenantIdWithFallback(req);
@@ -1176,9 +1183,46 @@ app.post("/api/ai/optimize-vrp", asyncHandler(async (req, res) => {
       respectDependencies: true,
       tenantId,
     };
+
+    if (filteredOrders.length > ASYNC_THRESHOLD) {
+      const jobId = await createOptimizationJob(tenantId, "vrp", {
+        tenantId,
+        date,
+        clusterId,
+        breakConfig,
+        constraintOptions,
+      });
+      res.json({ jobId, status: "queued", orderCount: filteredOrders.length });
+      return;
+    }
     
     const result = await optimizeRoutesVRP(filteredOrders, resources, objects, clusters, breakConfig, constraintOptions);
     res.json(result);
+}));
+
+app.get("/api/ai/optimization-job/:jobId", asyncHandler(async (req, res) => {
+    const { getOptimizationJob } = await import("../optimization-job-runner");
+    const tenantId = getTenantIdWithFallback(req);
+    const { jobId } = req.params;
+
+    const job = await getOptimizationJob(jobId, tenantId);
+    if (!job) {
+      res.status(404).json({ error: "Optimeringsjobb hittades inte" });
+      return;
+    }
+
+    res.json({
+      id: job.id,
+      type: job.type,
+      status: job.status,
+      progress: job.progress,
+      result: job.status === "completed" ? job.result : undefined,
+      error: job.status === "failed" ? job.error : undefined,
+      attempts: job.attempts,
+      createdAt: job.createdAt,
+      startedAt: job.startedAt,
+      completedAt: job.completedAt,
+    });
 }));
 
 // AI Route Recommendations - weather and history based suggestions

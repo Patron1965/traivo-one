@@ -4785,3 +4785,26 @@ export const distanceCache = pgTable("distance_cache", {
 ]);
 
 export type DistanceCacheEntry = typeof distanceCache.$inferSelect;
+
+export const optimizationJobs = pgTable("optimization_jobs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  tenantId: varchar("tenant_id").references(() => tenants.id).notNull(),
+  type: varchar("type", { length: 50 }).notNull(),
+  status: varchar("status", { length: 20 }).default("queued").notNull(),
+  input: jsonb("input").notNull(),
+  result: jsonb("result"),
+  error: text("error"),
+  progress: integer("progress").default(0).notNull(),
+  attempts: integer("attempts").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+}, (table) => [
+  index("idx_optimization_jobs_tenant").on(table.tenantId),
+  index("idx_optimization_jobs_status").on(table.status),
+  index("idx_optimization_jobs_created").on(table.createdAt),
+]);
+
+export const insertOptimizationJobSchema = createInsertSchema(optimizationJobs).omit({ id: true, createdAt: true, startedAt: true, completedAt: true });
+export type OptimizationJob = typeof optimizationJobs.$inferSelect;
+export type InsertOptimizationJob = z.infer<typeof insertOptimizationJobSchema>;
