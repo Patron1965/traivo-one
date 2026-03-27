@@ -383,19 +383,21 @@ export interface VRPRouteStop {
   breakDurationMinutes?: number;
 }
 
+interface VRPRoute {
+  resourceId: string;
+  resourceName: string;
+  stops: VRPRouteStop[];
+  totalDurationMinutes: number;
+  totalDistanceKm: number;
+  totalServiceMinutes: number;
+  efficiency: number;
+  geometry?: string;
+  breakConfig?: BreakConfig;
+}
+
 export interface VRPOptimizationResult {
   success: boolean;
-  routes: Array<{
-    resourceId: string;
-    resourceName: string;
-    stops: VRPRouteStop[];
-    totalDurationMinutes: number;
-    totalDistanceKm: number;
-    totalServiceMinutes: number;
-    efficiency: number;
-    geometry?: string;
-    breakConfig?: BreakConfig;
-  }>;
+  routes: VRPRoute[];
   unassignedOrders: Array<{ orderId: string; reason: string }>;
   summary: {
     totalOrders: number;
@@ -581,23 +583,6 @@ export async function optimizeRoutesVRP(
     };
   }
 
-  const PRE_CLUSTER_THRESHOLD = 50;
-  if (validJobs.length > PRE_CLUSTER_THRESHOLD && agents.length > 1) {
-    try {
-      const { geographicPreCluster } = await import("./distance-matrix-service");
-      const stops = validJobs.map(j => ({
-        id: j.order.id,
-        lat: j.job.location[1],
-        lng: j.job.location[0],
-      }));
-      const clusterCount = Math.min(agents.length, Math.ceil(validJobs.length / 15));
-      const geoClusters = geographicPreCluster(stops, clusterCount);
-      console.log(`[VRP] Pre-clustering ${validJobs.length} jobs into ${geoClusters.length} geographic clusters`);
-    } catch (clErr) {
-      console.warn("[VRP] Pre-clustering failed, proceeding with single batch:", clErr instanceof Error ? clErr.message : clErr);
-    }
-  }
-
   let enrichedJobs = validJobs.map(j => j.job);
   let enrichedAgents: Record<string, unknown>[] = agents;
   let constraintsSummary: string[] = [];
@@ -624,6 +609,214 @@ export async function optimizeRoutesVRP(
       console.log(`[VRP] Constraints applied: ${constraintsSummary.join(", ")} | Pre-filtered pairs: ${enrichResult.preFilteredPairs} | Dependency sequences: ${enrichResult.dependencySequences.length}`);
     } catch (enrichErr) {
       console.warn("[VRP] Constraint enrichment failed, proceeding without:", enrichErr instanceof Error ? enrichErr.message : enrichErr);
+    }
+  }
+
+  const PRE_CLUSTER_THRESHOLD = 50;
+  if (enrichedJobs.length > PRE_CLUSTER_THRESHOLD && enrichedAgents.length > 1) {
+    try {
+      const { geographicPreCluster, haversineDistanceKm } = await import("./distance-matrix-service");
+      const stops = enrichedJobs.map(j => ({
+        id: j.id || "",
+        lat: j.location[1],
+        lng: j.location[0],
+      }));
+      const clusterCount = Math.min(enrichedAgents.length, Math.ceil(enrichedJobs.length / 15));
+      const geoClusters = geographicPreCluster(stops, clusterCount);
+      console.log(`[VRP] Pre-clustering ${enrichedJobs.length} jobs into ${geoClusters.length} geographic clusters`);
+
+      const jobMap = new Map(enrichedJobs.map(j => [j.id, j]));
+      const agentUsed = new Set<number>();
+      const clusterAgentAssignment: number[][] = [];
+
+      for (const gc of geoClusters) {
+        const agentsPerCluster = Math.max(1, Math.floor(enrichedAgents.length / geoClusters.length));
+        const assigned: number[] = [];
+        const agentDistances = enrichedAgents.map((a, idx) => {
+          const agentObj = a as { start_location?: [number, number] };
+          const loc = agentObj.start_location || [20.263, 63.826];
+          return {
+            idx,
+            dist: haversineDistanceKm(gc.centroid.lat, gc.centroid.lng, loc[1], loc[0]),
+          };
+        }).sort((a, b) => a.dist - b.dist);
+
+        for (const ad of agentDistances) {
+          if (assigned.length >= agentsPerCluster) break;
+          if (!agentUsed.has(ad.idx)) {
+            assigned.push(ad.idx);
+            agentUsed.add(ad.idx);
+          }
+        }
+
+        if (assigned.length === 0) {
+          assigned.push(agentDistances[0].idx);
+        }
+        clusterAgentAssignment.push(assigned);
+      }
+
+      const allRoutes: VRPRoute[] = [];
+      const allUnassigned: Array<{ orderId: string; reason: string }> = [];
+      let totalAssigned = 0;
+      let totalDistance = 0;
+      let totalTime = 0;
+      const orderMap = new Map(workOrders.map(o => [o.id, o]));
+
+      for (let ci = 0; ci < geoClusters.length; ci++) {
+        const gc = geoClusters[ci];
+        const clusterJobs = gc.stops.map(s => jobMap.get(s.id)).filter(Boolean) as GeoapifyJob[];
+        const clusterAgentIndices = clusterAgentAssignment[ci];
+        const clusterAgents = clusterAgentIndices.map(idx => enrichedAgents[idx]);
+        const clusterResources = clusterAgentIndices.map(idx => resources[idx]);
+
+        if (clusterJobs.length === 0) continue;
+
+        try {
+          const startTime = Date.now();
+          const response = await fetch(`${GEOAPIFY_ROUTE_PLANNER_URL}?apiKey=${GEOAPIFY_API_KEY}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              mode: "drive",
+              agents: clusterAgents,
+              jobs: clusterJobs,
+            })
+          });
+
+          trackApiUsage({
+            service: "geoapify",
+            method: "route-planner",
+            endpoint: "/v1/routeplanner",
+            units: 1,
+            statusCode: response.status,
+            durationMs: Date.now() - startTime,
+          });
+
+          if (!response.ok) {
+            console.warn(`[VRP] Cluster ${ci} API error ${response.status}`);
+            for (const job of clusterJobs) {
+              allUnassigned.push({ orderId: job.id || "", reason: "Kluster-optimering misslyckades" });
+            }
+            continue;
+          }
+
+          const data: GeoapifyRoutePlannerResponse = await response.json();
+          const clJobIndexToOrderId = new Map(clusterJobs.map((j, idx) => [idx, j.id || ""]));
+
+          for (const feature of data.features) {
+            const props = feature.properties;
+            const resource = clusterResources[props.agent_index];
+            const relevantActions = props.actions.filter(a => a.type === "job" || a.type === "break");
+            const stops: VRPRouteStop[] = [];
+            let seq = 1;
+
+            for (const action of relevantActions) {
+              if (action.type === "break") {
+                const prevStop = stops.length > 0 ? stops[stops.length - 1] : null;
+                stops.push({
+                  orderId: `break-${resource?.id || props.agent_index}`,
+                  orderTitle: "Rast",
+                  sequence: seq++,
+                  arrivalSeconds: action.start_time || 0,
+                  serviceMinutes: Math.round((action.duration || 0) / 60),
+                  waitingMinutes: 0,
+                  location: prevStop?.location || { lat: 0, lng: 0 },
+                  isBreak: true,
+                  breakDurationMinutes: Math.round((action.duration || 0) / 60),
+                });
+              } else {
+                const orderId = action.job_id || (action.job_index !== undefined ? clJobIndexToOrderId.get(action.job_index) : "") || "";
+                const order = orderMap.get(orderId);
+                const waypoint = action.waypoint_index !== undefined ? props.waypoints[action.waypoint_index] : null;
+                stops.push({
+                  orderId,
+                  orderTitle: order?.title || `Order ${orderId.slice(0, 8)}`,
+                  sequence: seq++,
+                  arrivalSeconds: action.start_time || 0,
+                  serviceMinutes: Math.round((action.duration || 0) / 60),
+                  waitingMinutes: 0,
+                  location: waypoint?.location
+                    ? { lat: waypoint.location[1], lng: waypoint.location[0] }
+                    : { lat: 0, lng: 0 },
+                });
+              }
+            }
+
+            const jobStops = stops.filter(s => !s.isBreak);
+            totalAssigned += jobStops.length;
+            const totalDur = Math.round(props.time / 60);
+            const totalSvc = jobStops.reduce((s, st) => s + st.serviceMinutes, 0);
+            const distKm = Math.round(props.distance / 100) / 10;
+            totalDistance += props.distance;
+            totalTime += props.time;
+
+            allRoutes.push({
+              resourceId: resource?.id || "",
+              resourceName: resource?.name || `Resurs`,
+              stops,
+              totalDurationMinutes: totalDur,
+              totalDistanceKm: distKm,
+              totalServiceMinutes: totalSvc,
+              efficiency: totalDur > 0 ? Math.round((totalSvc / totalDur) * 100) : 0,
+              geometry: feature.geometry,
+              breakConfig: effectiveBreak || undefined,
+            });
+          }
+
+          const unassignedIndices = data.properties?.issues?.unassignedJobs || [];
+          for (const idx of unassignedIndices) {
+            allUnassigned.push({
+              orderId: clJobIndexToOrderId.get(idx) || "",
+              reason: "Kunde inte tilldelas i kluster"
+            });
+          }
+        } catch (clusterErr) {
+          console.warn(`[VRP] Cluster ${ci} optimization failed:`, clusterErr);
+          for (const job of clusterJobs) {
+            allUnassigned.push({ orderId: job.id || "", reason: "Kluster-optimering kraschade" });
+          }
+        }
+      }
+
+      const mergedRoutes: Map<string, VRPRoute> = new Map();
+      for (const route of allRoutes) {
+        const existing = mergedRoutes.get(route.resourceId);
+        if (existing) {
+          const offset = existing.stops.length;
+          existing.stops.push(...route.stops.map(s => ({ ...s, sequence: s.sequence + offset })));
+          existing.totalDurationMinutes += route.totalDurationMinutes;
+          existing.totalDistanceKm += route.totalDistanceKm;
+          existing.totalServiceMinutes += route.totalServiceMinutes;
+        } else {
+          mergedRoutes.set(route.resourceId, { ...route });
+        }
+      }
+
+      for (const route of mergedRoutes.values()) {
+        route.efficiency = route.totalDurationMinutes > 0
+          ? Math.round((route.totalServiceMinutes / route.totalDurationMinutes) * 100) : 0;
+      }
+
+      const finalRoutes = [...mergedRoutes.values()];
+      const avgEff = finalRoutes.length > 0
+        ? Math.round(finalRoutes.reduce((s, r) => s + r.efficiency, 0) / finalRoutes.length)
+        : 0;
+
+      return {
+        success: true,
+        routes: finalRoutes,
+        unassignedOrders: allUnassigned,
+        summary: {
+          totalOrders: workOrders.length,
+          assignedOrders: totalAssigned,
+          totalDurationMinutes: Math.round(totalTime / 60),
+          totalDistanceKm: Math.round(totalDistance / 100) / 10,
+          avgEfficiency: avgEff
+        },
+        constraintsApplied: constraintsSummary.length > 0 ? constraintsSummary : undefined,
+      };
+    } catch (clErr) {
+      console.warn("[VRP] Pre-clustering failed, proceeding with single batch:", clErr instanceof Error ? clErr.message : clErr);
     }
   }
 

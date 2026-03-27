@@ -426,9 +426,10 @@ export function getDistanceCacheStats(): {
 
 export async function getL2CacheStats(): Promise<{ l2Count: number }> {
   try {
-    const rows = await db.select().from(distanceCache).limit(1);
-    const countResult = await db.select().from(distanceCache);
-    return { l2Count: countResult.length };
+    const { sql } = await import("drizzle-orm");
+    const result = await db.execute(sql`SELECT COUNT(*)::int AS count FROM distance_cache`);
+    const rows = result as unknown as Array<{ count: number }>;
+    return { l2Count: rows[0]?.count ?? 0 };
   } catch {
     return { l2Count: 0 };
   }
@@ -457,3 +458,23 @@ export async function cleanupExpiredL2(): Promise<number> {
     return 0;
   }
 }
+
+const L2_CLEANUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
+let cleanupTimer: ReturnType<typeof setInterval> | null = null;
+
+export function startScheduledL2Cleanup(): void {
+  if (cleanupTimer) return;
+  cleanupTimer = setInterval(async () => {
+    try {
+      const removed = await cleanupExpiredL2();
+      if (removed > 0) {
+        console.log(`[distance-cache] Scheduled cleanup removed ${removed} expired L2 entries`);
+      }
+    } catch (err) {
+      console.warn("[distance-cache] Scheduled cleanup error:", err);
+    }
+  }, L2_CLEANUP_INTERVAL_MS);
+  console.log("[distance-cache] Scheduled L2 cleanup every 6 hours");
+}
+
+startScheduledL2Cleanup();
