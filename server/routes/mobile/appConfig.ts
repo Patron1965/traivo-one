@@ -1,13 +1,14 @@
 import type { Express } from "express";
 import type { Response } from "express";
+import { lt, or } from "drizzle-orm";
 import {
   MobileAuthenticatedRequest,
-  storage, db, eq, and, gte,
+  storage, db, eq, and, gte, sql,
   isMobileAuthenticated,
   asyncHandler,
   NotFoundError,
 } from "./shared";
-import { workOrders, workEntries } from "@shared/schema";
+import { workOrders, workSessions, environmentalData } from "@shared/schema";
 
 const APP_MIN_VERSION = "1.0.0";
 const APP_RECOMMENDED_VERSION = "1.2.0";
@@ -105,34 +106,64 @@ export function registerAppConfigRoutes(app: Express) {
 
     const now = new Date();
     const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const tomorrowStart = new Date(todayStart);
+    tomorrowStart.setDate(tomorrowStart.getDate() + 1);
     const weekStart = new Date(todayStart);
     weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 1);
     if (weekStart > todayStart) weekStart.setDate(weekStart.getDate() - 7);
 
-    const [todayOrders, weekOrders, todayEntries, weekEntries] = await Promise.all([
+    const [todayOrders, weekOrders, todaySessions, weekSessions, envData] = await Promise.all([
       db.select().from(workOrders).where(and(
         eq(workOrders.resourceId, resourceId),
         gte(workOrders.scheduledDate, todayStart),
+        lt(workOrders.scheduledDate, tomorrowStart),
       )),
       db.select().from(workOrders).where(and(
         eq(workOrders.resourceId, resourceId),
         gte(workOrders.scheduledDate, weekStart),
+        lt(workOrders.scheduledDate, tomorrowStart),
       )),
-      db.select().from(workEntries).where(and(
-        eq(workEntries.resourceId, resourceId),
-        gte(workEntries.startTime, todayStart),
+      db.select().from(workSessions).where(and(
+        eq(workSessions.resourceId, resourceId),
+        gte(workSessions.date, todayStart),
+        lt(workSessions.date, tomorrowStart),
       )),
-      db.select().from(workEntries).where(and(
-        eq(workEntries.resourceId, resourceId),
-        gte(workEntries.startTime, weekStart),
+      db.select().from(workSessions).where(and(
+        eq(workSessions.resourceId, resourceId),
+        gte(workSessions.date, weekStart),
+        lt(workSessions.date, tomorrowStart),
+      )),
+      db.select().from(environmentalData).where(and(
+        eq(environmentalData.resourceId, resourceId),
+        gte(environmentalData.recordedAt, weekStart),
+        lt(environmentalData.recordedAt, tomorrowStart),
       )),
     ]);
 
     const todayCompleted = todayOrders.filter(o => o.orderStatus === "utford" || o.status === "completed");
     const weekCompleted = weekOrders.filter(o => o.orderStatus === "utford" || o.status === "completed");
 
-    const todayMinutes = todayEntries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0);
-    const weekMinutes = weekEntries.reduce((sum, e) => sum + (e.durationMinutes || 0), 0);
+    const calcSessionHours = (sessions: typeof todaySessions) => {
+      let totalMinutes = 0;
+      for (const s of sessions) {
+        if (s.startTime && s.endTime) {
+          totalMinutes += (new Date(s.endTime).getTime() - new Date(s.startTime).getTime()) / 60000;
+        } else if (s.startTime && s.status === "active") {
+          totalMinutes += (now.getTime() - new Date(s.startTime).getTime()) / 60000;
+        }
+      }
+      return Math.round(totalMinutes / 60 * 10) / 10;
+    };
+
+    let todayKm = 0;
+    let weekKm = 0;
+    for (const e of envData) {
+      const km = e.distanceKm || 0;
+      weekKm += km;
+      if (e.recordedAt && new Date(e.recordedAt) >= todayStart) {
+        todayKm += km;
+      }
+    }
 
     const streak = await calculateStreak(resourceId);
 
@@ -140,12 +171,14 @@ export function registerAppConfigRoutes(app: Express) {
       today: {
         completedOrders: todayCompleted.length,
         totalOrders: todayOrders.length,
-        hoursWorked: Math.round(todayMinutes / 60 * 10) / 10,
+        hoursWorked: calcSessionHours(todaySessions),
+        kmDriven: Math.round(todayKm * 10) / 10,
       },
       week: {
         completedOrders: weekCompleted.length,
         totalOrders: weekOrders.length,
-        hoursWorked: Math.round(weekMinutes / 60 * 10) / 10,
+        hoursWorked: calcSessionHours(weekSessions),
+        kmDriven: Math.round(weekKm * 10) / 10,
       },
       streak,
     });
@@ -155,31 +188,42 @@ export function registerAppConfigRoutes(app: Express) {
 async function calculateStreak(resourceId: string): Promise<number> {
   let streak = 0;
   const now = new Date();
-  const checkDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  const sixtyDaysAgo = new Date(today);
+  sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
+
+  const completedOrders = await db.select({
+    scheduledDate: workOrders.scheduledDate,
+  }).from(workOrders).where(and(
+    eq(workOrders.resourceId, resourceId),
+    gte(workOrders.scheduledDate, sixtyDaysAgo),
+    or(eq(workOrders.orderStatus, "utford"), eq(workOrders.status, "completed")),
+  ));
+
+  const completedDays = new Set<string>();
+  for (const o of completedOrders) {
+    if (o.scheduledDate) {
+      const d = new Date(o.scheduledDate);
+      completedDays.add(`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`);
+    }
+  }
 
   for (let i = 0; i < 60; i++) {
-    const dayStart = new Date(checkDate);
-    dayStart.setDate(dayStart.getDate() - i);
-    const dayEnd = new Date(dayStart);
-    dayEnd.setDate(dayEnd.getDate() + 1);
+    const checkDay = new Date(today);
+    checkDay.setDate(checkDay.getDate() - i);
 
-    if (dayStart.getDay() === 0 || dayStart.getDay() === 6) {
+    if (checkDay.getDay() === 0 || checkDay.getDay() === 6) {
       continue;
     }
 
-    const orders = await db.select().from(workOrders).where(and(
-      eq(workOrders.resourceId, resourceId),
-      gte(workOrders.scheduledDate, dayStart),
-    ));
-
-    const completed = orders.filter(o =>
-      (o.orderStatus === "utford" || o.status === "completed") &&
-      o.scheduledDate && new Date(o.scheduledDate) < dayEnd
-    );
-
-    if (completed.length > 0) {
+    const key = `${checkDay.getFullYear()}-${checkDay.getMonth()}-${checkDay.getDate()}`;
+    if (completedDays.has(key)) {
       streak++;
-    } else if (i > 0) {
+    } else {
+      if (i === 0) {
+        continue;
+      }
       break;
     }
   }
