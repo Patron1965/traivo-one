@@ -41,8 +41,10 @@ async function aiBudgetGuard(req: Request, res: Response, useCase: "planning" | 
 
 export async function registerAIRoutes(app: Express) {
 
-import("../optimization-job-runner").then(({ startJobCleanupScheduler, resetStaleJobs }) => {
-  resetStaleJobs();
+import("../optimization-job-runner").then(({ startJobCleanupScheduler, resetStaleJobs, scheduleProcessing }) => {
+  resetStaleJobs().then(() => {
+    scheduleProcessing();
+  });
   startJobCleanupScheduler();
 }).catch(err => console.warn("[ai-routes] Failed to start optimization job scheduler:", err));
 

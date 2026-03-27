@@ -1,8 +1,9 @@
 import { db } from "./db";
 import { optimizationJobs } from "@shared/schema";
-import { eq, and, lt, sql, inArray } from "drizzle-orm";
+import { eq, and, lt, inArray } from "drizzle-orm";
 import type { VRPOptimizationResult } from "./route-optimizer";
 import type { VRPConstraintOptions } from "./vrp-constraints";
+import type { BreakConfig } from "./route-optimizer";
 
 const MAX_ATTEMPTS = 2;
 const JOB_TIMEOUT_MS = 5 * 60 * 1000;
@@ -16,7 +17,7 @@ interface VRPJobInput {
   tenantId: string;
   date?: string;
   clusterId?: string;
-  breakConfig: any;
+  breakConfig: BreakConfig | Record<string, unknown>;
   constraintOptions: VRPConstraintOptions;
 }
 
@@ -31,7 +32,7 @@ export async function createOptimizationJob(
     tenantId,
     type,
     status: "queued",
-    input: input as any,
+    input: input as Record<string, unknown>,
     progress: 0,
     attempts: 0,
   }).returning();
@@ -47,7 +48,7 @@ export async function getOptimizationJob(jobId: string, tenantId: string) {
   return job ?? null;
 }
 
-function scheduleProcessing() {
+export function scheduleProcessing() {
   if (isProcessing) return;
   setImmediate(() => processNextJob());
 }
@@ -89,7 +90,7 @@ async function processNextJob() {
       await db.update(optimizationJobs)
         .set({
           status: "completed",
-          result: result as any,
+          result: result as unknown as Record<string, unknown>,
           progress: 100,
           completedAt: new Date(),
         })
@@ -174,7 +175,7 @@ async function executeVRPJob(jobId: string, input: VRPJobInput): Promise<VRPOpti
 
   await updateProgress(jobId, 40);
 
-  const breakConfig = input.breakConfig ?? DEFAULT_BREAK_CONFIG;
+  const breakConfig = (input.breakConfig ?? DEFAULT_BREAK_CONFIG) as BreakConfig;
 
   const result = await optimizeRoutesVRP(
     filteredOrders,
@@ -200,31 +201,29 @@ async function updateProgress(jobId: string, progress: number) {
 }
 
 function broadcastJobComplete(tenantId: string, jobId: string, result: VRPOptimizationResult) {
-  try {
-    const { notificationService } = require("./notifications");
-    notificationService.broadcastToAll({
+  import("./notifications").then(({ notificationService }) => {
+    notificationService.broadcastSystemAlert({
       type: "optimization_complete",
       title: "Ruttoptimering klar",
       message: `Optimering slutförd: ${result.summary.assignedOrders}/${result.summary.totalOrders} ordrar tilldelade`,
       data: { jobId, tenantId, summary: result.summary },
     });
-  } catch (err) {
+  }).catch(err => {
     console.warn("[optimization-job] WebSocket broadcast failed:", err instanceof Error ? err.message : err);
-  }
+  });
 }
 
 function broadcastJobFailed(tenantId: string, jobId: string, error: string) {
-  try {
-    const { notificationService } = require("./notifications");
-    notificationService.broadcastToAll({
+  import("./notifications").then(({ notificationService }) => {
+    notificationService.broadcastSystemAlert({
       type: "optimization_failed",
       title: "Ruttoptimering misslyckades",
       message: `Optimering kunde inte slutföras: ${error}`,
       data: { jobId, tenantId },
     });
-  } catch (err) {
+  }).catch(err => {
     console.warn("[optimization-job] WebSocket broadcast failed:", err instanceof Error ? err.message : err);
-  }
+  });
 }
 
 export async function cleanupOldJobs(): Promise<number> {
