@@ -434,9 +434,17 @@ export async function getL2CacheStats(): Promise<{ l2Count: number }> {
   try {
     const { sql } = await import("drizzle-orm");
     const result = await db.execute(sql`SELECT COUNT(*)::int AS count FROM distance_cache`);
-    const rows = result as unknown as Array<{ count: number }>;
-    return { l2Count: rows[0]?.count ?? 0 };
-  } catch {
+    const resultObj = result as unknown as { rows?: Array<Record<string, unknown>> };
+    if (resultObj.rows && resultObj.rows.length > 0) {
+      return { l2Count: Number(resultObj.rows[0].count) || 0 };
+    }
+    const resultArr = result as unknown as Array<Record<string, unknown>>;
+    if (Array.isArray(resultArr) && resultArr.length > 0) {
+      return { l2Count: Number(resultArr[0].count) || 0 };
+    }
+    return { l2Count: 0 };
+  } catch (err) {
+    console.warn("[distance-cache] L2 stats error:", err instanceof Error ? err.message : err);
     return { l2Count: 0 };
   }
 }
