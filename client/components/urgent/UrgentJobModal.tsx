@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUrgentJob } from '../../context/UrgentJobContext';
 import { URGENT_DECLINE_REASONS } from '../../types';
 
+const RESPONSE_TIMEOUT_SECONDS = 60;
+
 type ModalPhase = 'overview' | 'confirm_accept' | 'decline_reason';
 
 export function UrgentJobModal() {
@@ -24,13 +26,31 @@ export function UrgentJobModal() {
   const [phase, setPhase] = useState<ModalPhase>('overview');
   const [selectedReason, setSelectedReason] = useState<string | null>(null);
   const [freetext, setFreetext] = useState('');
+  const [countdown, setCountdown] = useState(RESPONSE_TIMEOUT_SECONDS);
   const pulseAnim = useRef(new Animated.Value(1)).current;
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (incomingJob) {
       setPhase('overview');
       setSelectedReason(null);
       setFreetext('');
+      const assignedTime = incomingJob.assignedAt ? new Date(incomingJob.assignedAt).getTime() : Date.now();
+      const elapsedSinceAssign = Math.floor((Date.now() - assignedTime) / 1000);
+      const initialRemaining = Math.max(0, RESPONSE_TIMEOUT_SECONDS - elapsedSinceAssign);
+      setCountdown(initialRemaining);
+
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      countdownRef.current = setInterval(() => {
+        const elapsed = Math.floor((Date.now() - assignedTime) / 1000);
+        const remaining = Math.max(0, RESPONSE_TIMEOUT_SECONDS - elapsed);
+        setCountdown(remaining);
+        if (remaining <= 0 && countdownRef.current) {
+          clearInterval(countdownRef.current);
+          countdownRef.current = null;
+        }
+      }, 1000);
+
       const anim = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, { toValue: 1.3, duration: 400, useNativeDriver: true }),
@@ -38,7 +58,15 @@ export function UrgentJobModal() {
         ])
       );
       anim.start();
-      return () => anim.stop();
+      return () => {
+        anim.stop();
+        if (countdownRef.current) clearInterval(countdownRef.current);
+      };
+    } else {
+      if (countdownRef.current) {
+        clearInterval(countdownRef.current);
+        countdownRef.current = null;
+      }
     }
   }, [incomingJob, pulseAnim]);
 
@@ -70,6 +98,16 @@ export function UrgentJobModal() {
                 <Feather name="alert-triangle" size={28} color="#EF4444" />
               </Animated.View>
               <Text style={styles.urgentTitle}>AKUT JOBB TILLDELAT</Text>
+            </View>
+
+            <View style={[styles.countdownBar, countdown <= 15 ? styles.countdownBarCritical : null]}>
+              <Feather name="clock" size={14} color={countdown <= 15 ? '#FFFFFF' : '#92400E'} />
+              <Text style={[styles.countdownText, countdown <= 15 ? styles.countdownTextCritical : null]}>
+                {countdown > 0 ? `Svara inom ${countdown}s` : 'Tiden har g\u00E5tt ut \u2014 kan omtilldelas'}
+              </Text>
+              <View style={styles.countdownTrack}>
+                <View style={[styles.countdownFill, { width: `${(countdown / RESPONSE_TIMEOUT_SECONDS) * 100}%` }, countdown <= 15 ? styles.countdownFillCritical : null]} />
+              </View>
             </View>
 
             <View style={styles.detailsContainer}>
@@ -126,24 +164,45 @@ export function UrgentJobModal() {
             </View>
 
             {phase === 'overview' ? (
-              <View style={styles.buttonRow}>
-                <Pressable
-                  style={styles.declineButton}
-                  onPress={() => setPhase('decline_reason')}
-                  testID="urgent-decline-btn"
-                >
-                  <Feather name="x" size={20} color="#374151" />
-                  <Text style={styles.declineButtonText}>AVB\u00D6J</Text>
-                </Pressable>
-                <Pressable
-                  style={styles.acceptButton}
-                  onPress={() => setPhase('confirm_accept')}
-                  testID="urgent-accept-btn"
-                >
-                  <Feather name="check" size={20} color="#FFFFFF" />
-                  <Text style={styles.acceptButtonText}>ACCEPTERA</Text>
-                </Pressable>
-              </View>
+              countdown > 0 ? (
+                <View style={styles.buttonRow}>
+                  <Pressable
+                    style={styles.declineButton}
+                    onPress={() => setPhase('decline_reason')}
+                    testID="urgent-decline-btn"
+                  >
+                    <Feather name="x" size={20} color="#374151" />
+                    <Text style={styles.declineButtonText}>AVB\u00D6J</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.acceptButton}
+                    onPress={() => setPhase('confirm_accept')}
+                    testID="urgent-accept-btn"
+                  >
+                    <Feather name="check" size={20} color="#FFFFFF" />
+                    <Text style={styles.acceptButtonText}>ACCEPTERA</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <View style={styles.timeoutSection}>
+                  <Text style={styles.timeoutText}>Svarstiden har g\u00E5tt ut. Jobbet kan omtilldelas av planeraren.</Text>
+                  <Pressable
+                    style={styles.acceptButton}
+                    onPress={() => setPhase('confirm_accept')}
+                    testID="urgent-accept-late-btn"
+                  >
+                    <Feather name="check" size={20} color="#FFFFFF" />
+                    <Text style={styles.acceptButtonText}>ACCEPTERA \u00C4ND\u00C5</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.backButton}
+                    onPress={dismissIncoming}
+                    testID="urgent-dismiss-btn"
+                  >
+                    <Text style={styles.backButtonText}>St\u00E4ng</Text>
+                  </Pressable>
+                </View>
+              )
             ) : null}
 
             {phase === 'confirm_accept' ? (
@@ -468,5 +527,52 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     textAlign: 'center',
     marginTop: 16,
+  },
+  countdownBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 10,
+    padding: 10,
+    marginBottom: 16,
+    flexWrap: 'wrap',
+  },
+  countdownBarCritical: {
+    backgroundColor: '#EF4444',
+  },
+  countdownText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#92400E',
+    flex: 1,
+  },
+  countdownTextCritical: {
+    color: '#FFFFFF',
+  },
+  countdownTrack: {
+    width: '100%',
+    height: 4,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    borderRadius: 2,
+    marginTop: 4,
+  },
+  countdownFill: {
+    height: 4,
+    backgroundColor: '#F59E0B',
+    borderRadius: 2,
+  },
+  countdownFillCritical: {
+    backgroundColor: '#FFFFFF',
+  },
+  timeoutSection: {
+    gap: 12,
+    alignItems: 'center',
+  },
+  timeoutText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#EF4444',
+    textAlign: 'center',
   },
 });

@@ -60,7 +60,7 @@ interface UrgentJobState {
   incomingJob: UrgentJob | null;
   activeJob: UrgentJob | null;
   activeJobStatus: UrgentJobStatus | null;
-  pausedOrderId: number | null;
+  pausedOrderId: string | number | null;
   showDeclineSheet: boolean;
 }
 

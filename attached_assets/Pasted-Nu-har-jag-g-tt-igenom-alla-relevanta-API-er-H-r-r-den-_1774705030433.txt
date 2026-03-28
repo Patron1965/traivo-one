@@ -1,0 +1,69 @@
+Nu har jag gått igenom alla relevanta API:er. Här är den kompletta synk-instruktionen för Traivo GO:
+
+Synkinstruktioner Traivo ONE → Traivo GO
+1. NYTT: Eskalerade akuta jobb från planeraren (Task #100)
+Planeraren i ONE kan nu eskalera befintliga arbetsordrar till akuta jobb direkt från veckoplaneraren. Det som ändras för GO:
+
+WebSocket-notisen som GO redan lyssnar på har ett nytt mönster:
+
+Tidigare kom akuta jobb bara från kartövervakning/ny dialog. Nu kan de också komma från ett befintligt schemalagt jobb som eskaleras. Skillnaden:
+
+data.job.orderId kan nu vara ett riktigt befintligt order-ID (inte bara null)
+data.job.type kan vara orderns titel (t.ex. "Tömning container") istället för generiskt "Akut uppdrag"
+Alla koordinater, kundinfo och adress är redan ifyllda från det eskalerade jobbet
+GO behöver inte ändra sin accept/decline-logik — samma endpoints gäller:
+
+POST /api/mobile/jobs/urgent/accept — { jobId, startNavigation }
+POST /api/mobile/jobs/urgent/decline — { jobId, reason }
+POST /api/mobile/jobs/urgent/:id/status — { status } (en_route, arrived, in_progress, completed, issue_reported)
+GET /api/mobile/jobs/urgent/active?resourceId=xxx
+Men GO bör ta hänsyn till att:
+
+Om orderId finns och pekar på ett riktigt jobb i dagens lista → markera det jobbet visuellt som "eskalerat/akut" i dagslistan och eventuellt flytta det överst
+notes kan komma ifyllda med planerarens instruktioner — visa dem tydligt
+2. Komplett API-referens för akuta jobb (oförändrade endpoints)
+Endpoint	Metod	Payload	Svar
+/api/mobile/jobs/urgent/accept	POST	{ jobId: string, startNavigation?: boolean }	{ success, status: "accepted", jobId }
+/api/mobile/jobs/urgent/decline	POST	{ jobId: string, reason?: string }	{ success, status: "declined", jobId }
+/api/mobile/jobs/urgent/:id/status	POST	{ status: "en_route" | "arrived" | "in_progress" | "completed" | "issue_reported" }	{ success, jobId, status }
+/api/mobile/jobs/urgent/active	GET	Query: ?resourceId=xxx	{ success, activeJob: {...} | null }
+3. WebSocket-notisformat (oförändrat men viktigare nu)
+GO lyssnar på type: "job_assigned" med data.isUrgent === true:
+
+{
+  "type": "job_assigned",
+  "title": "Akut uppdrag tilldelat",
+  "message": "Tömning container: Storgatan 15, Göteborg",
+  "orderId": "abc-123",
+  "data": {
+    "urgentJobId": "uuid",
+    "isUrgent": true,
+    "job": {
+      "id": "uuid",
+      "orderId": "abc-123",       // <-- kan nu vara ett riktigt befintligt order-ID
+      "type": "Tömning container", // <-- kan vara jobbets titel
+      "address": "Storgatan 15",
+      "latitude": 57.7089,
+      "longitude": 11.9746,
+      "distance": "3.2 km",
+      "estimatedMinutes": 5,
+      "customerName": "Stena Recycling",
+      "notes": "Planerarens instruktioner här",
+      "assignedBy": "Tomas Björnberg",
+      "assignedAt": "2026-03-28T12:00:00.000Z",
+      "priority": "urgent"
+    }
+  }
+}
+4. Timeout-notis (oförändrad)
+Om GO inte svarar inom 60 sekunder skickas en schedule_changed-notis med data.status: "no_response" till planeraren. GO bör visa en tydligare påminnelse om att svara.
+
+5. Rekommenderade GO-åtgärder
+Ingen API-ändring krävs — alla endpoints fungerar som förut
+UI-förbättring: Om orderId matchar ett jobb i dagens lista, visa en "Eskalerat"-badge på det kortet
+Offlinehantering: Buffra accept/decline i IndexedDB om offline, synka när uppkoppling återkommer (samma som idag)
+60-sekunders-timer: Visa countdown i GO:s akut-dialog så fältarbetaren ser hur lång tid som återstår att svara
+Sammanfattat: Inga breaking changes — GO:s befintliga akut-logik fungerar, men nu kan akuta jobb komma med rikare data (orderId, jobbtyp, kundinformation) tack vare eskaleringsfunktionen i planeraren.
+
+
+Scroll to latest

@@ -26,6 +26,7 @@ import { apiRequest } from '../lib/query-client';
 import { estimateTravelMinutes, formatTravelTime } from '../lib/travel-time';
 import { useGpsTracking } from '../hooks/useGpsTracking';
 import { useAuth } from '../context/AuthContext';
+import { useUrgentJob } from '../context/UrgentJobContext';
 import type { Order, OrderStatus } from '../types';
 
 function getStatusProgress(status: OrderStatus): number {
@@ -156,6 +157,7 @@ function SwipeableOrderCard({
   onDeviation,
   travelTime,
   isFirstSwipeable,
+  isEscalatedUrgent,
 }: {
   order: Order;
   onPress: () => void;
@@ -163,6 +165,7 @@ function SwipeableOrderCard({
   onDeviation: (orderId: number | string) => void;
   travelTime?: string | null;
   isFirstSwipeable?: boolean;
+  isEscalatedUrgent?: boolean;
 }) {
   const translateX = useSharedValue(0);
   const swipeable = canSwipe(order);
@@ -281,6 +284,7 @@ function SwipeableOrderCard({
                   stepProgress={stepProgress}
                   travelTime={travelTime}
                   isFirstSwipeable={isFirstSwipeable}
+                  isEscalatedUrgent={isEscalatedUrgent}
                 />
               </Pressable>
             </Animated.View>
@@ -295,6 +299,7 @@ function SwipeableOrderCard({
             stepProgress={stepProgress}
             travelTime={travelTime}
             isFirstSwipeable={false}
+            isEscalatedUrgent={isEscalatedUrgent}
           />
         </Pressable>
       )}
@@ -309,6 +314,7 @@ function OrderCardContent({
   stepProgress,
   travelTime,
   isFirstSwipeable,
+  isEscalatedUrgent,
 }: {
   order: Order;
   completedSteps: number;
@@ -316,6 +322,7 @@ function OrderCardContent({
   stepProgress: number;
   travelTime?: string | null;
   isFirstSwipeable?: boolean;
+  isEscalatedUrgent?: boolean;
 }) {
   const finished = isFinishedOrder(order.status);
   const terminalStatuses: OrderStatus[] = ['failed', 'cancelled', 'impossible'];
@@ -423,7 +430,14 @@ function OrderCardContent({
             ) : null}
 
             <View style={styles.badgeRow}>
-              {order.priority === 'urgent' ? (
+              {isEscalatedUrgent ? (
+                <View style={styles.escalatedTag}>
+                  <Feather name="alert-triangle" size={10} color="#FFFFFF" />
+                  <ThemedText variant="caption" color="#FFFFFF" style={styles.tagText}>
+                    ESKALERAT
+                  </ThemedText>
+                </View>
+              ) : order.priority === 'urgent' ? (
                 <View style={styles.urgentTag}>
                   <Feather name="alert-circle" size={10} color={Colors.danger} />
                   <ThemedText variant="caption" color={Colors.danger} style={styles.tagText}>
@@ -486,6 +500,8 @@ export function OrdersScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
   const { currentPosition } = useGpsTracking();
   const { startPosition } = useAuth();
+  const { activeJob, incomingJob } = useUrgentJob();
+  const escalatedOrderId = activeJob?.orderId || incomingJob?.orderId || null;
 
   const { data: orders, isLoading, refetch } = useQuery<Order[]>({
     queryKey: ['/api/mobile/my-orders'],
@@ -565,10 +581,18 @@ export function OrdersScreen({ navigation }: any) {
     setRefreshing(false);
   }, [refetch]);
 
-  const filteredOrders = orders?.filter(o => {
-    if (filter === 'all') return true;
-    return o.status === filter;
-  }) || [];
+  const filteredOrders = useMemo(() => {
+    const filtered = orders?.filter(o => {
+      if (filter === 'all') return true;
+      return o.status === filter;
+    }) || [];
+    if (escalatedOrderId == null) return filtered;
+    return [...filtered].sort((a, b) => {
+      const aEsc = String(a.id) === String(escalatedOrderId) ? 1 : 0;
+      const bEsc = String(b.id) === String(escalatedOrderId) ? 1 : 0;
+      return bEsc - aEsc;
+    });
+  }, [orders, filter, escalatedOrderId]);
 
   const handleAdvance = useCallback((orderId: number | string, nextStatus: OrderStatus) => {
     statusMutation.mutate({ orderId, status: nextStatus });
@@ -593,6 +617,7 @@ export function OrdersScreen({ navigation }: any) {
       );
       travelTime = formatTravelTime(travelMin);
     }
+    const isEscalated = escalatedOrderId != null && String(order.id) === String(escalatedOrderId);
     return (
       <SwipeableOrderCard
         order={order}
@@ -601,9 +626,10 @@ export function OrdersScreen({ navigation }: any) {
         onDeviation={handleDeviation}
         travelTime={travelTime}
         isFirstSwipeable={order.id === firstSwipeableId}
+        isEscalatedUrgent={isEscalated}
       />
     );
-  }, [currentPosition, navigation, handleAdvance, handleDeviation, firstSwipeableId, trafficLegMap]);
+  }, [currentPosition, navigation, handleAdvance, handleDeviation, firstSwipeableId, trafficLegMap, escalatedOrderId]);
 
   return (
     <View style={styles.container}>
@@ -810,6 +836,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
+  },
+  escalatedTag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
   },
   dependencyTag: {
     flexDirection: 'row',
