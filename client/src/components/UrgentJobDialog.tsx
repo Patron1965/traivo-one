@@ -64,6 +64,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
       setSelectedResourceId("");
       setSelectedResource(null);
       setAutoSearchTriggered(false);
+      setNotes("");
       if (preselectedOrder) {
         setJobType(preselectedOrder.title || "Akut uppdrag");
         setAddress(preselectedOrder.taskAddress || "");
