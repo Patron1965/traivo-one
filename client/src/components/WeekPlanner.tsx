@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -21,10 +21,24 @@ import { MonthView } from "./weekplanner/MonthView";
 import { RouteMapView } from "./weekplanner/RouteMapView";
 import { usePlannerData } from "./weekplanner/usePlannerData";
 import { usePlannerDnd } from "./weekplanner/usePlannerDnd";
+import { UrgentJobDialog } from "./UrgentJobDialog";
+import type { WorkOrderWithObject } from "@shared/schema";
 
 export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPanel }: WeekPlannerProps) {
   const d = usePlannerData();
   const zoom = zoomLevels[d.zoomLevel];
+  const [urgentDialogOpen, setUrgentDialogOpen] = useState(false);
+  const [urgentPreselectedOrder, setUrgentPreselectedOrder] = useState<WorkOrderWithObject | null>(null);
+
+  const handleEscalateUrgent = useCallback((job: WorkOrderWithObject) => {
+    setUrgentPreselectedOrder(job);
+    setUrgentDialogOpen(true);
+  }, []);
+
+  const handleOpenUrgentDialog = useCallback(() => {
+    setUrgentPreselectedOrder(null);
+    setUrgentDialogOpen(true);
+  }, []);
 
   const dnd = usePlannerDnd({
     workOrders: d.workOrders,
@@ -62,7 +76,8 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     onOpenDepChain: d.handleOpenDepChain,
     selectedJobIds: d.selectedJobIds,
     onToggleSelection: d.toggleJobSelection,
-  }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain, d.selectedJobIds, d.toggleJobSelection]);
+    onEscalateUrgent: handleEscalateUrgent,
+  }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain, d.selectedJobIds, d.toggleJobSelection, handleEscalateUrgent]);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -133,6 +148,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
             onAddJob={onAddJob} onAutoFill={() => { d.setAutoFillDialogOpen(true); }}
             onClearAll={() => d.setClearDialogOpen(true)}
             onCarryOver={d.handleCarryOver}
+            onUrgentJob={handleOpenUrgentDialog}
             showAIPanel={showAIPanel} onToggleAIPanel={onToggleAIPanel}
             weekGoals={d.weekGoals} weekTravelTotal={d.weekTravelTotal}
             visibleDates={d.visibleDates} getResourceDayHours={d.getResourceDayHours}
@@ -259,6 +275,7 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
       <ClearDialog open={d.clearDialogOpen} onOpenChange={d.setClearDialogOpen} viewMode={d.viewMode} jobCount={d.currentViewScheduledJobs.length} onConfirm={d.handleClearAllScheduled} loading={d.clearLoading} />
       <AutoFillDialog open={d.autoFillDialogOpen} onOpenChange={d.setAutoFillDialogOpen} overbooking={d.autoFillOverbooking} setOverbooking={d.setAutoFillOverbooking} geoClustering={d.autoFillGeoClustering} setGeoClustering={d.setAutoFillGeoClustering} geoSpread={d.autoFillGeoSpread} loading={d.autoFillLoading} applying={d.autoFillApplying} preview={d.autoFillPreview} skipped={d.autoFillSkipped} diag={d.autoFillDiag} resources={d.resources} viewMode={d.viewMode} currentWeekStart={d.currentWeekStart} currentDate={d.currentDate} onPreview={d.handleAutoFillPreview} onApply={d.handleAutoFillApply} />
       <DepChainDialog open={d.depChainDialogOpen} onOpenChange={(o) => { if (!o) { d.setDepChainDialogOpen(false); } }} depChainJobId={d.depChainJobId} workOrders={d.workOrders} depChainData={d.depChainData} />
+      <UrgentJobDialog open={urgentDialogOpen} onClose={() => setUrgentDialogOpen(false)} preselectedOrder={urgentPreselectedOrder} />
     </DndContext>
   );
 }

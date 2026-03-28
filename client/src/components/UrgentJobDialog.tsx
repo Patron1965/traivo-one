@@ -44,23 +44,7 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
   const [notes, setNotes] = useState("");
   const [selectedResource, setSelectedResource] = useState<NearestResource | null>(null);
 
-  useEffect(() => {
-    if (open) {
-      setStep("details");
-      setSelectedResourceId("");
-      setSelectedResource(null);
-      if (preselectedOrder) {
-        setJobType(preselectedOrder.title || "Akut uppdrag");
-        setAddress(preselectedOrder.taskAddress || "");
-        setLatitude(preselectedOrder.taskLatitude || 0);
-        setLongitude(preselectedOrder.taskLongitude || 0);
-        setCustomerName(preselectedOrder.customerName || "");
-      }
-      if (targetAddress) setAddress(targetAddress);
-      if (targetLatitude) setLatitude(targetLatitude);
-      if (targetLongitude) setLongitude(targetLongitude);
-    }
-  }, [open, preselectedOrder, targetAddress, targetLatitude, targetLongitude]);
+  const [autoSearchTriggered, setAutoSearchTriggered] = useState(false);
 
   const { data: nearestResources, isLoading: loadingNearest, refetch: searchNearest } = useQuery<NearestResource[]>({
     queryKey: ["/api/urgent-jobs/find-nearest", latitude, longitude],
@@ -74,6 +58,42 @@ export function UrgentJobDialog({ open, onClose, preselectedOrder, targetLatitud
     },
     enabled: false,
   });
+
+  useEffect(() => {
+    if (open) {
+      setSelectedResourceId("");
+      setSelectedResource(null);
+      setAutoSearchTriggered(false);
+      if (preselectedOrder) {
+        setJobType(preselectedOrder.title || "Akut uppdrag");
+        setAddress(preselectedOrder.taskAddress || "");
+        setLatitude(preselectedOrder.taskLatitude || 0);
+        setLongitude(preselectedOrder.taskLongitude || 0);
+        setCustomerName(preselectedOrder.customerName || "");
+        const hasCoords = (preselectedOrder.taskLatitude || 0) !== 0 && (preselectedOrder.taskLongitude || 0) !== 0;
+        if (hasCoords) {
+          setStep("select-resource");
+        } else {
+          setStep("details");
+        }
+      } else {
+        setStep("details");
+      }
+      if (targetAddress) setAddress(targetAddress);
+      if (targetLatitude) setLatitude(targetLatitude);
+      if (targetLongitude) setLongitude(targetLongitude);
+    }
+  }, [open, preselectedOrder, targetAddress, targetLatitude, targetLongitude]);
+
+  useEffect(() => {
+    if (open && step === "select-resource" && preselectedOrder && !autoSearchTriggered) {
+      const hasCoords = (preselectedOrder.taskLatitude || 0) !== 0 && (preselectedOrder.taskLongitude || 0) !== 0;
+      if (hasCoords) {
+        setAutoSearchTriggered(true);
+        searchNearest();
+      }
+    }
+  }, [open, step, preselectedOrder, autoSearchTriggered, searchNearest]);
 
   const assignMutation = useMutation({
     mutationFn: async () => {

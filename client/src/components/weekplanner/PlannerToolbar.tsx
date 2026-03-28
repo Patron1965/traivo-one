@@ -34,6 +34,7 @@ interface PlannerToolbarProps {
   onAutoFill: () => void;
   onClearAll: () => void;
   onCarryOver?: () => void;
+  onUrgentJob?: () => void;
   showAIPanel?: boolean;
   onToggleAIPanel?: () => void;
   weekGoals: {
@@ -68,7 +69,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     undoCount, redoCount, onUndo, onRedo,
     zoomLevel, setZoomLevel,
     resources, visibleResources, hiddenResourceIds, setHiddenResourceIds,
-    onAddJob, onAutoFill, onClearAll, onCarryOver, showAIPanel, onToggleAIPanel,
+    onAddJob, onAutoFill, onClearAll, onCarryOver, onUrgentJob, showAIPanel, onToggleAIPanel,
     weekGoals, weekTravelTotal,
     visibleDates, getResourceDayHours,
     jobConflictCount, filteredScheduledCount, unscheduledCount,
@@ -308,6 +309,16 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
             </TooltipTrigger>
             <TooltipContent>Rensa all planering</TooltipContent>
           </Tooltip>
+          {onUrgentJob && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 text-red-600 hover:bg-red-100 dark:hover:bg-red-900/30" onClick={onUrgentJob} data-testid="button-urgent-job">
+                  <AlertTriangle className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Akut jobb</TooltipContent>
+            </Tooltip>
+          )}
 
           <Separator orientation="vertical" className="h-6 mx-0.5" />
 

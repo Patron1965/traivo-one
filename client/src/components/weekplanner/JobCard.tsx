@@ -3,8 +3,9 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound } from "lucide-react";
+import { AlertTriangle, Clock, X, Link2, ArrowRight, Key, DoorOpen, UsersRound, MoreVertical, Zap, Info } from "lucide-react";
 import type { WorkOrderWithObject } from "@shared/schema";
 import { EXECUTION_CODE_LABELS, EXECUTION_CODE_ICONS } from "@shared/schema";
 import {
@@ -31,12 +32,13 @@ interface JobCardProps {
   onOpenDepChain: (jobId: string) => void;
   selectedJobIds?: Set<string>;
   onToggleSelection?: (jobId: string, shiftKey?: boolean) => void;
+  onEscalateUrgent?: (job: WorkOrderWithObject) => void;
 }
 
 export const JobCard = memo(function JobCard({
   job, compact = false, selectedJob, jobConflicts, dependenciesData,
   timewindowMap, expandedSubSteps, onJobClick, onUnschedule, onToggleSubStep, onOpenDepChain,
-  selectedJobIds, onToggleSelection,
+  selectedJobIds, onToggleSelection, onEscalateUrgent,
 }: JobCardProps) {
   const execStatus = (job as { executionStatus?: string }).executionStatus || "not_planned";
   const execIndex = executionStatusOrder.indexOf(execStatus);
@@ -240,20 +242,48 @@ export const JobCard = memo(function JobCard({
             )}
           </div>
           <div className="flex items-center gap-1 shrink-0">
-            <Tooltip>
-              <TooltipTrigger asChild>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                  onClick={(e) => onUnschedule(e, job.id)}
-                  data-testid={`button-unschedule-${job.id}`}
+                  className="h-6 w-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`button-job-menu-${job.id}`}
                 >
-                  <X className="h-4 w-4" />
+                  <MoreVertical className="h-3.5 w-3.5" />
                 </Button>
-              </TooltipTrigger>
-              <TooltipContent>Avschemalägg</TooltipContent>
-            </Tooltip>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                {onEscalateUrgent && (
+                  <>
+                    <DropdownMenuItem
+                      className="text-red-600 dark:text-red-400 focus:text-red-600 dark:focus:text-red-400"
+                      onClick={(e) => { e.stopPropagation(); onEscalateUrgent(job); }}
+                      data-testid={`menu-escalate-urgent-${job.id}`}
+                    >
+                      <Zap className="h-4 w-4 mr-2" />
+                      Eskalera till akut
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); onJobClick(job.id); }}
+                  data-testid={`menu-details-${job.id}`}
+                >
+                  <Info className="h-4 w-4 mr-2" />
+                  Detaljer
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={(e) => { e.stopPropagation(); onUnschedule(e, job.id); }}
+                  data-testid={`menu-unschedule-${job.id}`}
+                >
+                  <X className="h-4 w-4 mr-2" />
+                  Ta bort tilldelning
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <Badge variant={statusBadgeVariant[job.status] || "outline"} className="text-[10px]">
               {((job.estimatedDuration || 0) / 60).toFixed(1).replace(".", ",")} h
             </Badge>
