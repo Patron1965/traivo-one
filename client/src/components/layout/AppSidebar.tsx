@@ -280,15 +280,15 @@ export function AppSidebar() {
       </SidebarHeader>
       
       <SidebarContent>
-        {favoriteItems.length > 0 && (
-          <SidebarGroup>
-            <SidebarGroupLabel data-testid="nav-group-favoriter">
-              <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
-              Favoriter
-            </SidebarGroupLabel>
-            <SidebarGroupContent>
-              <SidebarMenu>
-                {favoriteItems.map((item) => {
+        <SidebarGroup>
+          <SidebarGroupLabel data-testid="nav-group-favoriter">
+            <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
+            Favoriter
+          </SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {favoriteItems.length > 0 ? (
+                favoriteItems.map((item) => {
                   const badgeKey = BADGE_URL_MAP[item.url];
                   const badgeCount = badgeKey ? badgeCounts[badgeKey] : undefined;
                   return (
@@ -301,11 +301,17 @@ export function AppSidebar() {
                       badgeCount={badgeCount}
                     />
                   );
-                })}
-              </SidebarMenu>
-            </SidebarGroupContent>
-          </SidebarGroup>
-        )}
+                })
+              ) : (
+                <SidebarMenuItem>
+                  <div className="px-3 py-2 text-xs text-muted-foreground" data-testid="text-no-favorites">
+                    Klicka på stjärnan bredvid en meny för att lägga till favoriter
+                  </div>
+                </SidebarMenuItem>
+              )}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
 
         <CollapsibleNavGroup
           label="Start"
