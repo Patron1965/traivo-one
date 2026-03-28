@@ -44,12 +44,18 @@ const BADGE_URL_MAP: Record<string, keyof BadgeCounts> = {
   "/portal-messages": "unreadMessages",
 };
 
-const FAVORITES_KEY = "traivo-topnav-favorites";
+const FAVORITES_KEY_PREFIX = "traivo-topnav-favorites";
 
-function useFavorites() {
+function getFavoritesKey(userId: string | undefined): string {
+  return userId ? `${FAVORITES_KEY_PREFIX}-${userId}` : FAVORITES_KEY_PREFIX;
+}
+
+function useFavorites(userId: string | undefined) {
+  const storageKey = getFavoritesKey(userId);
+
   const [favorites, setFavoritesState] = useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem(FAVORITES_KEY);
+      const stored = localStorage.getItem(storageKey);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -61,10 +67,10 @@ function useFavorites() {
       const next = prev.includes(url)
         ? prev.filter((u) => u !== url)
         : [...prev, url];
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify(next));
       return next;
     });
-  }, []);
+  }, [storageKey]);
 
   const isFavorite = useCallback(
     (url: string) => favorites.includes(url),
@@ -350,7 +356,7 @@ export function TopNav() {
   const userRole = user?.role || "user";
   const { t } = useTerminology();
   const { isNavItemEnabled } = useFeatures();
-  const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  const { favorites, toggleFavorite, isFavorite } = useFavorites(user?.id);
 
   const canSeeBadges = !!user && ["admin", "planner", "manager"].includes(userRole);
   const { data: badges } = useQuery<BadgeCounts>({

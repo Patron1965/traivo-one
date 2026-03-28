@@ -29,12 +29,14 @@ interface BadgeCounts {
   unreadMessages: number;
 }
 
-const FAVORITES_KEY = "traivo-sidebar-favorites";
+const FAVORITES_KEY_PREFIX = "traivo-sidebar-favorites";
 
-function useFavorites() {
+function useFavorites(userId: string | undefined) {
+  const storageKey = userId ? `${FAVORITES_KEY_PREFIX}-${userId}` : FAVORITES_KEY_PREFIX;
+
   const [favorites, setFavoritesState] = useState<string[]>(() => {
     try {
-      const stored = localStorage.getItem(FAVORITES_KEY);
+      const stored = localStorage.getItem(storageKey);
       return stored ? JSON.parse(stored) : [];
     } catch {
       return [];
@@ -46,10 +48,10 @@ function useFavorites() {
       const next = prev.includes(url)
         ? prev.filter((u) => u !== url)
         : [...prev, url];
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+      localStorage.setItem(storageKey, JSON.stringify(next));
       return next;
     });
-  }, []);
+  }, [storageKey]);
 
   const isFavorite = useCallback(
     (url: string) => favorites.includes(url),
@@ -221,8 +223,8 @@ export function AppSidebar() {
   const { t } = useTerminology();
   const { isNavItemEnabled } = useFeatures();
   const { user } = useAuth();
-  const userRole = (user as any)?.role || "planner";
-  const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  const userRole = user?.role || "planner";
+  const { favorites, toggleFavorite, isFavorite } = useFavorites(user?.id);
   const [location] = useLocation();
 
   const { data: badges } = useQuery<BadgeCounts>({

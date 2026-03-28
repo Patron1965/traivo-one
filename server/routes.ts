@@ -173,9 +173,9 @@ export async function registerRoutes(
         AND sender_type = 'customer'
         AND is_read = false
       `);
-      const getCount = (result: any) => {
-        const rows = result.rows || result;
-        const row = Array.isArray(rows) ? rows[0] : rows;
+      const getCount = (result: { rows: Record<string, unknown>[] }) => {
+        const rows = result.rows;
+        const row = Array.isArray(rows) ? rows[0] : undefined;
         return Number(row?.count || 0);
       };
       res.json({
