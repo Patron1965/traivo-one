@@ -152,6 +152,43 @@ export async function registerRoutes(
 
   app.use("/api/metadata", metadataRouter);
 
+  app.get("/api/nav-badges", async (req, res) => {
+    try {
+      const tenantId = getTenantIdWithFallback(req);
+      const unassignedRows = await db.execute(sql`
+        SELECT COUNT(*) AS count FROM work_orders
+        WHERE tenant_id = ${tenantId}
+        AND resource_id IS NULL
+        AND order_status NOT IN ('utford', 'fakturerad', 'omojlig', 'avbruten')
+      `);
+      const unplannedRows = await db.execute(sql`
+        SELECT COUNT(*) AS count FROM work_orders
+        WHERE tenant_id = ${tenantId}
+        AND scheduled_date IS NULL
+        AND order_status NOT IN ('utford', 'fakturerad', 'omojlig', 'avbruten')
+      `);
+      const unreadRows = await db.execute(sql`
+        SELECT COUNT(*) AS count FROM portal_messages
+        WHERE tenant_id = ${tenantId}
+        AND sender_type = 'customer'
+        AND is_read = false
+      `);
+      const getCount = (result: any) => {
+        const rows = result.rows || result;
+        const row = Array.isArray(rows) ? rows[0] : rows;
+        return Number(row?.count || 0);
+      };
+      res.json({
+        unassignedOrders: getCount(unassignedRows),
+        unplannedAssignments: getCount(unplannedRows),
+        unreadMessages: getCount(unreadRows),
+      });
+    } catch (error) {
+      console.error("Failed to fetch nav badges:", error);
+      res.json({ unassignedOrders: 0, unplannedAssignments: 0, unreadMessages: 0 });
+    }
+  });
+
   app.get("/api/dashboard/stats", async (req, res) => {
     try {
       const tenantId = getTenantIdWithFallback(req);

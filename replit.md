@@ -15,7 +15,7 @@ Traivo is an AI-driven platform designed to optimize field service operations fo
 The Traivo platform is a functional prototype built with a modern web stack, emphasizing a clean Nordic aesthetic and deep AI integration.
 
 ### UI/UX Decisions
-The user interface includes a sticky TopNav, global search, mobile-friendly hamburger menu, Floating Action Button, QuickStats, WeekPlanner with drag-and-drop, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Mobile interfaces feature a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help, progressive loading, white-label multi-tenancy, an AI Command Center, interactive Tour Guide, and role-based navigation filtering.
+The user interface includes a sticky TopNav with smart navigation (favorites with localStorage persistence, badge counts for unassigned orders/unplanned assignments/unread messages, role-based menu filtering), global search, mobile-friendly hamburger menu, Floating Action Button, QuickStats, WeekPlanner with drag-and-drop, RouteMap visualization, ObjectCards, and a comprehensive Dashboard. Mobile interfaces feature a MobileFieldApp with large buttons, SignatureCapture, MaterialLog, and a JobProtocolGenerator. The UI supports contextual help, progressive loading, white-label multi-tenancy, an AI Command Center, interactive Tour Guide, and role-based navigation filtering.
 
 ### Technical Implementations
 - **Frontend:** React, TypeScript, Vite.

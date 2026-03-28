@@ -15,11 +15,67 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useAuth } from "@/hooks/use-auth";
-import { LogOut } from "lucide-react";
+import { LogOut, Star, ChevronDown, ChevronRight } from "lucide-react";
 import { getNavGroups, sidebarStartItems, type NavItem } from "@/lib/navItems";
 import { useTerminology } from "@/hooks/use-terminology";
 import { useFeatures } from "@/lib/feature-context";
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { canAccessMenu, type NavMenuGroup } from "@/lib/role-config";
+
+interface BadgeCounts {
+  unassignedOrders: number;
+  unplannedAssignments: number;
+  unreadMessages: number;
+}
+
+const FAVORITES_KEY = "traivo-sidebar-favorites";
+
+function useFavorites() {
+  const [favorites, setFavoritesState] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(FAVORITES_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavorite = useCallback((url: string) => {
+    setFavoritesState((prev) => {
+      const next = prev.includes(url)
+        ? prev.filter((u) => u !== url)
+        : [...prev, url];
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const isFavorite = useCallback(
+    (url: string) => favorites.includes(url),
+    [favorites]
+  );
+
+  return { favorites, toggleFavorite, isFavorite };
+}
+
+const BADGE_URL_MAP: Record<string, keyof BadgeCounts> = {
+  "/order-stock": "unassignedOrders",
+  "/assignments": "unplannedAssignments",
+  "/portal-messages": "unreadMessages",
+};
+
+function Badge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span
+      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+      data-testid="badge-count"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 function UserFooter() {
   const { user } = useAuth();
@@ -60,25 +116,103 @@ function UserFooter() {
   );
 }
 
-function NavGroupSection({ label, items }: { label: string; items: NavItem[] }) {
+function NavItemRow({
+  item,
+  isActive,
+  isFav,
+  onToggleFavorite,
+  badgeCount,
+}: {
+  item: NavItem;
+  isActive: boolean;
+  isFav: boolean;
+  onToggleFavorite: (url: string) => void;
+  badgeCount?: number;
+}) {
+  return (
+    <SidebarMenuItem>
+      <div className="flex items-center group/fav">
+        <SidebarMenuButton asChild isActive={isActive} tooltip={item.title} className="flex-1">
+          <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
+            <item.icon className="h-4 w-4" />
+            <span className="flex-1">{item.title}</span>
+            {badgeCount !== undefined && badgeCount > 0 && <Badge count={badgeCount} />}
+          </Link>
+        </SidebarMenuButton>
+        <button
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onToggleFavorite(item.url);
+          }}
+          className={`p-1 rounded-sm transition-opacity ${
+            isFav
+              ? "opacity-100 text-yellow-500"
+              : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"
+          }`}
+          data-testid={`button-fav-${item.url.replace("/", "") || "home"}`}
+          aria-label={isFav ? "Ta bort favorit" : "Lägg till favorit"}
+        >
+          <Star className={`h-3.5 w-3.5 ${isFav ? "fill-yellow-500" : ""}`} />
+        </button>
+      </div>
+    </SidebarMenuItem>
+  );
+}
+
+function CollapsibleNavGroup({
+  label,
+  items,
+  defaultOpen,
+  isFavorite,
+  onToggleFavorite,
+  badges,
+}: {
+  label: string;
+  items: NavItem[];
+  defaultOpen: boolean;
+  isFavorite: (url: string) => boolean;
+  onToggleFavorite: (url: string) => void;
+  badges: BadgeCounts;
+}) {
   const [location] = useLocation();
+  const hasActiveItem = items.some((item) => location === item.url);
+  const [open, setOpen] = useState(defaultOpen || hasActiveItem);
+
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>{label}</SidebarGroupLabel>
-      <SidebarGroupContent>
-        <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.url}>
-              <SidebarMenuButton asChild isActive={location === item.url} tooltip={item.title}>
-                <Link href={item.url} data-testid={`nav-${item.url.replace("/", "") || "home"}`}>
-                  <item.icon className="h-4 w-4" />
-                  <span>{item.title}</span>
-                </Link>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          ))}
-        </SidebarMenu>
-      </SidebarGroupContent>
+      <SidebarGroupLabel
+        className="cursor-pointer select-none flex items-center gap-1"
+        onClick={() => setOpen(!open)}
+        data-testid={`nav-group-${label.toLowerCase().replace(/\s+/g, "-")}`}
+      >
+        {open ? (
+          <ChevronDown className="h-3 w-3 shrink-0" />
+        ) : (
+          <ChevronRight className="h-3 w-3 shrink-0" />
+        )}
+        {label}
+      </SidebarGroupLabel>
+      {open && (
+        <SidebarGroupContent>
+          <SidebarMenu>
+            {items.map((item) => {
+              const badgeKey = BADGE_URL_MAP[item.url];
+              const badgeCount = badgeKey ? badges[badgeKey] : undefined;
+              return (
+                <NavItemRow
+                  key={item.url}
+                  item={item}
+                  isActive={location === item.url}
+                  isFav={isFavorite(item.url)}
+                  onToggleFavorite={onToggleFavorite}
+                  badgeCount={badgeCount}
+                />
+              );
+            })}
+          </SidebarMenu>
+        </SidebarGroupContent>
+      )}
     </SidebarGroup>
   );
 }
@@ -86,12 +220,45 @@ function NavGroupSection({ label, items }: { label: string; items: NavItem[] }) 
 export function AppSidebar() {
   const { t } = useTerminology();
   const { isNavItemEnabled } = useFeatures();
+  const { user } = useAuth();
+  const userRole = (user as any)?.role || "planner";
+  const { favorites, toggleFavorite, isFavorite } = useFavorites();
+  const [location] = useLocation();
+
+  const { data: badges } = useQuery<BadgeCounts>({
+    queryKey: ["/api/nav-badges"],
+    refetchInterval: 30000,
+    enabled: !!user,
+  });
+  const badgeCounts: BadgeCounts = badges || {
+    unassignedOrders: 0,
+    unplannedAssignments: 0,
+    unreadMessages: 0,
+  };
+
   const navGroups = useMemo(() => {
-    return getNavGroups(t).map(g => ({
-      ...g,
-      items: g.items.filter(item => isNavItemEnabled(item.url)),
-    })).filter(g => g.items.length > 0);
-  }, [t, isNavItemEnabled]);
+    return getNavGroups(t)
+      .filter((g) => canAccessMenu(userRole, g.group as NavMenuGroup))
+      .map((g) => ({
+        ...g,
+        items: g.items.filter((item) => isNavItemEnabled(item.url)),
+      }))
+      .filter((g) => g.items.length > 0);
+  }, [t, isNavItemEnabled, userRole]);
+
+  const allItems = useMemo(() => {
+    const items = [...sidebarStartItems];
+    navGroups.forEach((g) => items.push(...g.items));
+    return items;
+  }, [navGroups]);
+
+  const favoriteItems = useMemo(
+    () =>
+      favorites
+        .map((url) => allItems.find((item) => item.url === url))
+        .filter((item): item is NavItem => !!item),
+    [favorites, allItems]
+  );
 
   return (
     <Sidebar>
@@ -107,9 +274,60 @@ export function AppSidebar() {
       </SidebarHeader>
       
       <SidebarContent>
-        <NavGroupSection label="Start" items={sidebarStartItems} />
+        {favoriteItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel data-testid="nav-group-favoriter">
+              <Star className="h-3 w-3 mr-1 fill-yellow-500 text-yellow-500" />
+              Favoriter
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {favoriteItems.map((item) => {
+                  const badgeKey = BADGE_URL_MAP[item.url];
+                  const badgeCount = badgeKey ? badgeCounts[badgeKey] : undefined;
+                  return (
+                    <NavItemRow
+                      key={`fav-${item.url}`}
+                      item={item}
+                      isActive={location === item.url}
+                      isFav={true}
+                      onToggleFavorite={toggleFavorite}
+                      badgeCount={badgeCount}
+                    />
+                  );
+                })}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Start</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {sidebarStartItems.map((item) => (
+                <NavItemRow
+                  key={item.url}
+                  item={item}
+                  isActive={location === item.url}
+                  isFav={isFavorite(item.url)}
+                  onToggleFavorite={toggleFavorite}
+                />
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {navGroups.map((group) => (
-          <NavGroupSection key={group.key} label={group.label} items={group.items} />
+          <CollapsibleNavGroup
+            key={group.key}
+            label={group.label}
+            items={group.items}
+            defaultOpen={false}
+            isFavorite={isFavorite}
+            onToggleFavorite={toggleFavorite}
+            badges={badgeCounts}
+          />
         ))}
       </SidebarContent>
 

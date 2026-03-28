@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTerminology } from "@/hooks/use-terminology";
@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TourMenu } from "@/components/TourMenu";
 import { getNavGroups, type NavItem } from "@/lib/navItems";
+import { useQuery } from "@tanstack/react-query";
 import {
   Settings,
   LogOut,
@@ -28,18 +29,93 @@ import {
   ChevronDown,
   Home,
   ArrowLeft,
+  Star,
 } from "lucide-react";
+
+interface BadgeCounts {
+  unassignedOrders: number;
+  unplannedAssignments: number;
+  unreadMessages: number;
+}
+
+const BADGE_URL_MAP: Record<string, keyof BadgeCounts> = {
+  "/order-stock": "unassignedOrders",
+  "/assignments": "unplannedAssignments",
+  "/portal-messages": "unreadMessages",
+};
+
+const FAVORITES_KEY = "traivo-topnav-favorites";
+
+function useFavorites() {
+  const [favorites, setFavoritesState] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(FAVORITES_KEY);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const toggleFavorite = useCallback((url: string) => {
+    setFavoritesState((prev) => {
+      const next = prev.includes(url)
+        ? prev.filter((u) => u !== url)
+        : [...prev, url];
+      localStorage.setItem(FAVORITES_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
+  const isFavorite = useCallback(
+    (url: string) => favorites.includes(url),
+    [favorites]
+  );
+
+  return { favorites, toggleFavorite, isFavorite };
+}
+
+function NavBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span
+      className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+      data-testid="badge-count"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+function DropdownBadge({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <span
+      className="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full bg-red-500 text-white text-[10px] font-semibold leading-none"
+      data-testid="badge-count"
+    >
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 interface NavDropdownProps {
   label: string;
   items: NavItem[];
   icon: React.ElementType;
   colorClass: string;
+  badges: BadgeCounts;
+  isFavorite: (url: string) => boolean;
+  onToggleFavorite: (url: string) => void;
 }
 
-function NavDropdown({ label, items, icon: Icon, colorClass }: NavDropdownProps) {
+function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite, onToggleFavorite }: NavDropdownProps) {
   const [location] = useLocation();
   const isActive = items.some((item) => item.url === location);
+
+  const groupBadgeTotal = items.reduce((sum, item) => {
+    const key = BADGE_URL_MAP[item.url];
+    return sum + (key ? badges[key] : 0);
+  }, 0);
 
   return (
     <DropdownMenu>
@@ -51,27 +127,122 @@ function NavDropdown({ label, items, icon: Icon, colorClass }: NavDropdownProps)
         >
           <Icon className={`h-4 w-4 ${colorClass}`} />
           <span className="hidden lg:inline">{label}</span>
+          {groupBadgeTotal > 0 && <NavBadge count={groupBadgeTotal} />}
+          <ChevronDown className="h-3 w-3 opacity-50" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-72">
+        {items.map((item) => {
+          const badgeKey = BADGE_URL_MAP[item.url];
+          const badgeCount = badgeKey ? badges[badgeKey] : 0;
+          const fav = isFavorite(item.url);
+          return (
+            <DropdownMenuItem key={item.url} asChild>
+              <Link
+                href={item.url}
+                className={`flex items-start gap-3 p-3 cursor-pointer group/fav ${
+                  location === item.url ? "bg-accent" : ""
+                }`}
+                data-testid={`nav-${item.url.replace("/", "") || "home"}`}
+              >
+                <item.icon className={`h-5 w-5 mt-0.5 ${colorClass}`} />
+                <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                  <span className="font-medium">{item.title}</span>
+                  <span className="text-xs text-muted-foreground">{item.description}</span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  {badgeCount > 0 && <DropdownBadge count={badgeCount} />}
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      onToggleFavorite(item.url);
+                    }}
+                    className={`p-0.5 rounded transition-opacity ${
+                      fav
+                        ? "opacity-100 text-yellow-500"
+                        : "opacity-0 group-hover/fav:opacity-60 text-muted-foreground hover:text-yellow-500"
+                    }`}
+                    data-testid={`button-fav-${item.url.replace("/", "") || "home"}`}
+                    aria-label={fav ? "Ta bort favorit" : "Lägg till favorit"}
+                  >
+                    <Star className={`h-3.5 w-3.5 ${fav ? "fill-yellow-500" : ""}`} />
+                  </button>
+                </div>
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+interface FavoritesDropdownProps {
+  allItems: NavItem[];
+  badges: BadgeCounts;
+  favorites: string[];
+  toggleFavorite: (url: string) => void;
+}
+
+function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: FavoritesDropdownProps) {
+  const [location] = useLocation();
+
+  const favoriteItems = useMemo(
+    () =>
+      favorites
+        .map((url) => allItems.find((item) => item.url === url))
+        .filter((item): item is NavItem => !!item),
+    [favorites, allItems]
+  );
+
+  if (favoriteItems.length === 0) return null;
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="gap-1.5"
+          data-testid="nav-dropdown-favoriter"
+        >
+          <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
+          <span className="hidden lg:inline">Favoriter</span>
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
-        {items.map((item) => (
-          <DropdownMenuItem key={item.url} asChild>
-            <Link
-              href={item.url}
-              className={`flex items-start gap-3 p-3 cursor-pointer ${
-                location === item.url ? "bg-accent" : ""
-              }`}
-              data-testid={`nav-${item.url.replace("/", "") || "home"}`}
-            >
-              <item.icon className={`h-5 w-5 mt-0.5 ${colorClass}`} />
-              <div className="flex flex-col gap-0.5">
-                <span className="font-medium">{item.title}</span>
-                <span className="text-xs text-muted-foreground">{item.description}</span>
-              </div>
-            </Link>
-          </DropdownMenuItem>
-        ))}
+        {favoriteItems.map((item) => {
+          const badgeKey = BADGE_URL_MAP[item.url];
+          const badgeCount = badgeKey ? badges[badgeKey] : 0;
+          return (
+            <DropdownMenuItem key={`fav-${item.url}`} asChild>
+              <Link
+                href={item.url}
+                className={`flex items-center gap-3 p-3 cursor-pointer ${
+                  location === item.url ? "bg-accent" : ""
+                }`}
+                data-testid={`nav-fav-${item.url.replace("/", "") || "home"}`}
+              >
+                <item.icon className="h-4 w-4" />
+                <span className="flex-1 font-medium">{item.title}</span>
+                {badgeCount > 0 && <DropdownBadge count={badgeCount} />}
+                <button
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleFavorite(item.url);
+                  }}
+                  className="p-0.5 rounded text-yellow-500"
+                  data-testid={`button-unfav-${item.url.replace("/", "") || "home"}`}
+                  aria-label="Ta bort favorit"
+                >
+                  <Star className="h-3.5 w-3.5 fill-yellow-500" />
+                </button>
+              </Link>
+            </DropdownMenuItem>
+          );
+        })}
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -179,6 +350,19 @@ export function TopNav() {
   const userRole = user?.role || "user";
   const { t } = useTerminology();
   const { isNavItemEnabled } = useFeatures();
+  const { favorites, toggleFavorite, isFavorite } = useFavorites();
+
+  const canSeeBadges = !!user && ["admin", "planner", "manager"].includes(userRole);
+  const { data: badges } = useQuery<BadgeCounts>({
+    queryKey: ["/api/nav-badges"],
+    refetchInterval: 30000,
+    enabled: canSeeBadges,
+  });
+  const badgeCounts: BadgeCounts = badges || {
+    unassignedOrders: 0,
+    unplannedAssignments: 0,
+    unreadMessages: 0,
+  };
 
   const menuGroups = useMemo(() => {
     const groups = getNavGroups(t);
@@ -187,6 +371,16 @@ export function TopNav() {
       items: g.items.filter(item => isNavItemEnabled(item.url)),
     }));
   }, [t, isNavItemEnabled]);
+
+  const roleFilteredItems = useMemo(() => {
+    const items: NavItem[] = [];
+    menuGroups.forEach((g) => {
+      if (canAccessMenu(userRole, g.group as NavMenuGroup)) {
+        items.push(...g.items);
+      }
+    });
+    return items;
+  }, [menuGroups, userRole]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -215,6 +409,7 @@ export function TopNav() {
                 <span className="hidden lg:inline">Start</span>
               </Button>
             </Link>
+            <FavoritesDropdown allItems={roleFilteredItems} badges={badgeCounts} favorites={favorites} toggleFavorite={toggleFavorite} />
             {menuGroups.map((menu) =>
               canAccessMenu(userRole, menu.group as NavMenuGroup) ? (
                 <NavDropdown
@@ -223,6 +418,9 @@ export function TopNav() {
                   items={menu.items}
                   icon={menu.icon}
                   colorClass={menu.colorClass}
+                  badges={badgeCounts}
+                  isFavorite={isFavorite}
+                  onToggleFavorite={toggleFavorite}
                 />
               ) : null
             )}
