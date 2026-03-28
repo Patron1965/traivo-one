@@ -154,7 +154,7 @@ const MENU_ACCESS: Record<NavMenuGroup, UserRole[]> = {
   grunddata: ["owner", "admin", "planner", "user", "viewer", "customer"],
   ordrar: ["owner", "admin", "planner"],
   planering: ["owner", "admin", "planner"],
-  falt: ["owner", "admin", "planner", "user"],
+  falt: ["owner", "admin", "user"],
   analys: ["owner", "admin", "planner"],
   admin: ["owner", "admin"],
 };
