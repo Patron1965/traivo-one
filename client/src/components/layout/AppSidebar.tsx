@@ -231,10 +231,11 @@ export function AppSidebar() {
   const { favorites, toggleFavorite, isFavorite } = useFavorites(user?.id);
   const [location] = useLocation();
 
+  const canSeeBadges = !!user && ["admin", "planner", "manager", "owner"].includes(userRole);
   const { data: badges } = useQuery<BadgeCounts>({
     queryKey: ["/api/nav-badges"],
     refetchInterval: 30000,
-    enabled: !!user,
+    enabled: canSeeBadges,
   });
   const badgeCounts: BadgeCounts = badges || {
     unassignedOrders: 0,
