@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 import { DndContext, DragOverlay } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -63,6 +63,38 @@ export function WeekPlanner({ onAddJob, onSelectJob, showAIPanel, onToggleAIPane
     selectedJobIds: d.selectedJobIds,
     onToggleSelection: d.toggleJobSelection,
   }), [d.selectedJob, d.jobConflicts, d.dependenciesData, d.timewindowMap, d.expandedSubSteps, handleJobClickWithCallback, d.handleUnschedule, d.handleToggleSubStep, d.handleOpenDepChain, d.selectedJobIds, d.toggleJobSelection]);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || e.target instanceof HTMLSelectElement) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+      switch (e.key.toLowerCase()) {
+        case "n":
+          e.preventDefault();
+          onAddJob?.();
+          break;
+        case "f":
+          e.preventDefault();
+          d.setAutoFillDialogOpen(true);
+          break;
+        case "1":
+          e.preventDefault();
+          d.handleViewModeChange("day");
+          break;
+        case "2":
+          e.preventDefault();
+          d.handleViewModeChange("week");
+          break;
+        case "3":
+          e.preventDefault();
+          d.handleViewModeChange("month");
+          break;
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [onAddJob, d.setAutoFillDialogOpen, d.handleViewModeChange]);
 
   const isLoading = d.resourcesLoading || d.workOrdersLoading;
   if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin text-muted-foreground" /></div>;

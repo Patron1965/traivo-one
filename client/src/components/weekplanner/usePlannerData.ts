@@ -81,7 +81,7 @@ export function usePlannerData() {
   const [autoFillDiag, setAutoFillDiag] = useState<{ totalUnscheduled: number; capacityPerDay: Record<string, number>; maxMinutesPerDay: number; resourceCount: number; clusterSkipped: number } | null>(null);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [clearLoading, setClearLoading] = useState(false);
-  const [zoomLevel, setZoomLevel] = useState<number>(saved?.zoomLevel ?? 1);
+  const [zoomLevel, setZoomLevel] = useState<number>(saved?.zoomLevel ?? 0);
   const [expandedSubSteps, setExpandedSubSteps] = useState<Record<string, boolean>>({});
   const [activeDragJob, setActiveDragJob] = useState<WorkOrderWithObject | null>(null);
   const { toast } = useToast();

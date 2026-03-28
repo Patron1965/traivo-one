@@ -56,10 +56,10 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
   const zoomGapClass = zoom.scale <= 0.5 ? "space-y-0" : zoom.scale >= 2 ? "space-y-3" : "space-y-1";
 
   return (
-    <div className="flex-1 overflow-y-auto overflow-x-hidden">
-      <div className="w-full">
-        <div className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] border-b sticky top-0 bg-background z-10">
-          <div className="p-2 font-medium text-sm text-muted-foreground border-r">Resurser</div>
+    <div className="flex-1 overflow-y-auto overflow-x-auto">
+      <div className="w-full min-w-[700px]">
+        <div className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] border-b sticky top-0 bg-background z-20">
+          <div className="p-2 font-medium text-sm text-muted-foreground border-r sticky left-0 bg-background z-30">Resurser</div>
           {visibleDates.map((day, i) => {
             const isToday = isSameDay(day, new Date());
             const dayStr = format(day, "yyyy-MM-dd");
@@ -105,7 +105,9 @@ export const WeekGridView = memo(function WeekGridView(props: WeekGridViewProps)
           const summary = resourceWeekSummary[resource.id];
           return (
             <div key={resource.id} className="grid grid-cols-[120px_repeat(5,minmax(0,1fr))] border-b">
-              <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} />
+              <div className="sticky left-0 bg-background z-10">
+                <ResourceColumn resource={resource} summary={summary} onResourceClick={onResourceClick} onSendSchedule={onSendSchedule} />
+              </div>
               {visibleDates.map((day, dayIndex) => {
                 const jobs = getJobsForResourceAndDay(resource.id, day);
                 const dayHours = getResourceDayHours(resource.id, day);

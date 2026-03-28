@@ -1,4 +1,4 @@
-import { memo } from "react";
+import { memo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode } from "./types";
 import { zoomLevels } from "./types";
@@ -74,6 +74,9 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
     jobConflictCount, filteredScheduledCount, unscheduledCount,
   } = props;
 
+  const [showCapacity, setShowCapacity] = useState(false);
+  const [showGoals, setShowGoals] = useState(false);
+
   const { data: profiles = [] } = useQuery<ResourceProfile[]>({ queryKey: ["/api/resource-profiles"] });
   const { data: profileAssignments = [] } = useQuery<ResourceProfileAssignment[]>({
     queryKey: ["/api/resource-profiles", "all-assignments"],
@@ -96,75 +99,95 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
 
   return (
     <>
-      <div className="flex items-center gap-2 p-3 border-b flex-wrap">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon" onClick={() => onNavigate("prev")} data-testid="button-nav-prev">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <Button variant="outline" size="sm" onClick={onGoToday} data-testid="button-today">Idag</Button>
-            <Button variant="outline" size="icon" onClick={() => onNavigate("next")} data-testid="button-nav-next">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </div>
-          <h2 className="text-lg font-semibold truncate" data-testid="text-header-label">{headerLabel}</h2>
-          <div className="flex items-center gap-1 ml-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={onUndo} disabled={undoCount === 0} data-testid="button-undo">
-                  <Undo2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent><p>Ångra (Ctrl+Z)</p></TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={onRedo} disabled={redoCount === 0} data-testid="button-redo">
-                  <Redo2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent><p>Gör om (Ctrl+Y)</p></TooltipContent>
-            </Tooltip>
-          </div>
+      <div className="flex items-center gap-1.5 px-2 py-1 border-b h-12" data-testid="planner-toolbar">
+        <div className="flex items-center gap-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onNavigate("prev")} data-testid="button-nav-prev">
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Föregående</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onGoToday} data-testid="button-today">
+                <Crosshair className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Idag</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onNavigate("next")} data-testid="button-nav-next">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Nästa</TooltipContent>
+          </Tooltip>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+
+        <h2 className="text-sm font-semibold truncate min-w-0" data-testid="text-header-label">{headerLabel}</h2>
+
+        <div className="flex items-center gap-0.5 ml-1">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onUndo} disabled={undoCount === 0} data-testid="button-undo">
+                <Undo2 className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Ångra (Ctrl+Z)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onRedo} disabled={redoCount === 0} data-testid="button-redo">
+                <Redo2 className="h-3.5 w-3.5" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Gör om (Ctrl+Y)</TooltipContent>
+          </Tooltip>
+        </div>
+
+        <Separator orientation="vertical" className="h-6 mx-1" />
+
+        <div className="flex items-center gap-1 shrink-0">
           {viewMode !== "route" && (
-            <div className="flex items-center gap-1 border rounded-md px-1" data-testid="zoom-controls">
+            <div className="flex items-center gap-0.5 border rounded px-0.5" data-testid="zoom-controls">
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7" disabled={zoomLevel === 0} onClick={() => setZoomLevel(Math.max(0, zoomLevel - 1))} data-testid="button-zoom-out">
-                    <ZoomOut className="h-3.5 w-3.5" />
+                  <Button size="icon" variant="ghost" className="h-6 w-6" disabled={zoomLevel === 0} onClick={() => setZoomLevel(Math.max(0, zoomLevel - 1))} data-testid="button-zoom-out">
+                    <ZoomOut className="h-3 w-3" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Zooma ut</TooltipContent>
               </Tooltip>
+              <span className="text-[10px] text-muted-foreground w-10 text-center cursor-pointer select-none" onClick={() => setZoomLevel(1)} data-testid="text-zoom-level">
+                {zoom.label}
+              </span>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <span className="text-[10px] text-muted-foreground w-12 text-center cursor-pointer select-none" onClick={() => setZoomLevel(1)} data-testid="text-zoom-level">
-                    {zoom.label}
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent>Klicka för att återställa zoom</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="icon" variant="ghost" className="h-7 w-7" disabled={zoomLevel === zoomLevels.length - 1} onClick={() => setZoomLevel(Math.min(zoomLevels.length - 1, zoomLevel + 1))} data-testid="button-zoom-in">
-                    <ZoomIn className="h-3.5 w-3.5" />
+                  <Button size="icon" variant="ghost" className="h-6 w-6" disabled={zoomLevel === zoomLevels.length - 1} onClick={() => setZoomLevel(Math.min(zoomLevels.length - 1, zoomLevel + 1))} data-testid="button-zoom-in">
+                    <ZoomIn className="h-3 w-3" />
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>Zooma in</TooltipContent>
               </Tooltip>
             </div>
           )}
+
           <Popover>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-8 gap-1.5" data-testid="button-resource-filter">
-                <UsersRound className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Resurser</span>
-                {hiddenResourceIds.size > 0 && (
-                  <Badge variant="secondary" className="h-4 px-1 text-[10px]">{visibleResources.length}/{resources.length}</Badge>
-                )}
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 relative" data-testid="button-resource-filter">
+                    <UsersRound className="h-4 w-4" />
+                    {hiddenResourceIds.size > 0 && (
+                      <span className="absolute -top-0.5 -right-0.5 h-4 min-w-4 rounded-full bg-primary text-[9px] text-primary-foreground flex items-center justify-center px-0.5">{visibleResources.length}/{resources.length}</span>
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Filtrera resurser</TooltipContent>
+              </Tooltip>
             </PopoverTrigger>
             <PopoverContent className="w-64 p-3" align="end" data-testid="popover-resource-filter">
               <div className="flex items-center justify-between mb-2">
@@ -213,54 +236,117 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
               </ScrollArea>
             </PopoverContent>
           </Popover>
-          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && onViewModeChange(v as ViewMode)} data-testid="toggle-view-mode">
-            <ToggleGroupItem value="day" aria-label="Dagvy" data-testid="toggle-day">
-              <CalendarDays className="h-4 w-4 mr-1" /><span className="hidden sm:inline">Dag</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem value="week" aria-label="Veckovy" data-testid="toggle-week">
-              <CalendarRange className="h-4 w-4 mr-1" /><span className="hidden sm:inline">Vecka</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem value="month" aria-label="Månadsvy" data-testid="toggle-month">
-              <Calendar className="h-4 w-4 mr-1" /><span className="hidden sm:inline">Månad</span>
-            </ToggleGroupItem>
-            <ToggleGroupItem value="route" aria-label="Ruttvy" data-testid="toggle-route">
-              <MapPin className="h-4 w-4 mr-1" /><span className="hidden sm:inline">Rutt</span>
-            </ToggleGroupItem>
+
+          <ToggleGroup type="single" value={viewMode} onValueChange={(v) => v && onViewModeChange(v as ViewMode)} className="h-8" data-testid="toggle-view-mode">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="day" aria-label="Dagvy (1)" className="h-7 w-7 p-0" data-testid="toggle-day">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent>Dagvy (1)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="week" aria-label="Veckovy (2)" className="h-7 w-7 p-0" data-testid="toggle-week">
+                  <CalendarRange className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent>Veckovy (2)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="month" aria-label="Månadsvy (3)" className="h-7 w-7 p-0" data-testid="toggle-month">
+                  <Calendar className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent>Månadsvy (3)</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <ToggleGroupItem value="route" aria-label="Ruttvy" className="h-7 w-7 p-0" data-testid="toggle-route">
+                  <MapPin className="h-3.5 w-3.5" />
+                </ToggleGroupItem>
+              </TooltipTrigger>
+              <TooltipContent>Ruttvy</TooltipContent>
+            </Tooltip>
           </ToggleGroup>
-          <Button onClick={() => onAddJob?.()} data-testid="button-add-job">
-            <Plus className="h-4 w-4 mr-2" />Nytt jobb
-          </Button>
-          <Button variant="outline" onClick={onAutoFill} data-testid="button-auto-fill-week">
-            <Wand2 className="h-4 w-4 mr-2" />Fyll veckan
-          </Button>
+
+          <Separator orientation="vertical" className="h-6 mx-0.5" />
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="default" size="icon" className="h-8 w-8" onClick={() => onAddJob?.()} data-testid="button-add-job">
+                <Plus className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Nytt jobb (N)</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={onAutoFill} data-testid="button-auto-fill-week">
+                <Wand2 className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Fyll veckan (F)</TooltipContent>
+          </Tooltip>
           {onCarryOver && (
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button variant="outline" onClick={onCarryOver} data-testid="button-carry-over">
-                  <ArrowRight className="h-4 w-4 mr-2" />Flytta oavslutade
+                <Button variant="outline" size="icon" className="h-8 w-8" onClick={onCarryOver} data-testid="button-carry-over">
+                  <ArrowRight className="h-4 w-4" />
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>Flytta gårdagens oavslutade jobb till idag</TooltipContent>
+              <TooltipContent>Flytta oavslutade</TooltipContent>
             </Tooltip>
           )}
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="outline" size="icon" className="text-destructive hover:bg-destructive/10" onClick={onClearAll} data-testid="button-clear-all-scheduled">
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive hover:bg-destructive/10" onClick={onClearAll} data-testid="button-clear-all-scheduled">
                 <Trash2 className="h-4 w-4" />
               </Button>
             </TooltipTrigger>
-            <TooltipContent>Rensa all planering för {viewMode === "month" ? "denna månad" : viewMode === "day" ? "denna dag" : "denna vecka"}</TooltipContent>
+            <TooltipContent>Rensa all planering</TooltipContent>
           </Tooltip>
+
+          <Separator orientation="vertical" className="h-6 mx-0.5" />
+
+          {viewMode === "week" && (
+            <>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className={`h-7 w-7 ${showCapacity ? "bg-accent" : ""}`} onClick={() => setShowCapacity(!showCapacity)} data-testid="button-toggle-capacity">
+                    <Activity className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Visa/dölj kapacitet</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className={`h-7 w-7 ${showGoals ? "bg-accent" : ""}`} onClick={() => setShowGoals(!showGoals)} data-testid="button-toggle-goals">
+                    <TrendingUp className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Visa/dölj veckomål</TooltipContent>
+              </Tooltip>
+            </>
+          )}
+
           {onToggleAIPanel && (
-            <Button variant={showAIPanel ? "default" : "ghost"} onClick={onToggleAIPanel} data-testid="button-toggle-ai-panel">
-              <Sparkles className="h-4 w-4 mr-2 text-purple-500" />AI stöd
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant={showAIPanel ? "default" : "ghost"} size="icon" className="h-8 w-8" onClick={onToggleAIPanel} data-testid="button-toggle-ai-panel">
+                  <Sparkles className="h-4 w-4 text-purple-500" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>AI-stöd</TooltipContent>
+            </Tooltip>
           )}
         </div>
       </div>
 
-      {viewMode === "week" && (
-        <div className="px-4 py-2 border-b bg-muted/20">
+      {showCapacity && viewMode === "week" && (
+        <div className="px-3 py-1.5 border-b bg-muted/20">
           <div className="flex items-center gap-3 text-xs flex-wrap">
             <div className="flex items-center gap-1.5">
               <Activity className="h-3.5 w-3.5 text-muted-foreground" />
@@ -273,7 +359,7 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
               const isOverbooked = utilization > 100;
               const isLow = utilization < 50;
               return (
-                <div key={resource.id} className="flex items-center gap-1.5 px-2 py-1 rounded bg-background border">
+                <div key={resource.id} className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-background border">
                   <span className="font-medium">{resource.initials || resource.name.split(" ")[0]}</span>
                   <div className="w-12 h-1.5 bg-muted rounded overflow-hidden">
                     <div className={`h-full transition-all ${isOverbooked ? "bg-red-500" : isLow ? "bg-yellow-500" : "bg-green-500"}`} style={{ width: `${Math.min(utilization, 100)}%` }} />
@@ -287,65 +373,67 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
         </div>
       )}
 
-      <div className="px-4 py-2 border-b bg-muted/10">
-        <div className="flex items-center gap-6 text-xs flex-wrap" data-testid="goal-bars">
-          <div className="flex items-center gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-            <span className="font-medium text-muted-foreground">Veckomål:</span>
-          </div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-2 min-w-[140px]" data-testid="goal-bar-time">
-                <Clock className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground w-6">Tid</span>
-                <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.time.pct)}`} style={{ width: `${Math.min(weekGoals.time.pct, 100)}%` }} />
-                </div>
-                <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.time.pct)}`}>{weekGoals.time.pct}%</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent><p>{weekGoals.time.current.toFixed(1)}h av {weekGoals.time.target}h planerat</p></TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-2 min-w-[140px]" data-testid="goal-bar-economy">
-                <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground w-10">Ekon.</span>
-                <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.economy.pct)}`} style={{ width: `${Math.min(weekGoals.economy.pct, 100)}%` }} />
-                </div>
-                <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.economy.pct)}`}>{weekGoals.economy.pct}%</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent><p>{(weekGoals.economy.current / 100).toLocaleString("sv-SE")} kr av {(weekGoals.economy.target / 100).toLocaleString("sv-SE")} kr budget</p></TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex items-center gap-2 min-w-[140px]" data-testid="goal-bar-count">
-                <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="text-muted-foreground w-8">Antal</span>
-                <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.count.pct)}`} style={{ width: `${Math.min(weekGoals.count.pct, 100)}%` }} />
-                </div>
-                <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.count.pct)}`}>{weekGoals.count.pct}%</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent><p>{weekGoals.count.current} av {weekGoals.count.target} stopp planerade</p></TooltipContent>
-          </Tooltip>
-          {weekTravelTotal.minutes > 0 && (
+      {showGoals && viewMode === "week" && (
+        <div className="px-3 py-1.5 border-b bg-muted/10">
+          <div className="flex items-center gap-4 text-xs flex-wrap" data-testid="goal-bars">
+            <div className="flex items-center gap-1.5">
+              <TrendingUp className="h-3.5 w-3.5 text-muted-foreground" />
+              <span className="font-medium text-muted-foreground">Veckomål:</span>
+            </div>
             <Tooltip>
               <TooltipTrigger asChild>
-                <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800" data-testid="goal-bar-travel">
-                  <Navigation className="h-3 w-3" />
-                  <span className="font-medium">{weekTravelTotal.hours}h</span>
-                  <span className="text-yellow-500">({weekTravelTotal.km} km)</span>
+                <div className="flex items-center gap-2 min-w-[120px]" data-testid="goal-bar-time">
+                  <Clock className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground w-5">Tid</span>
+                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.time.pct)}`} style={{ width: `${Math.min(weekGoals.time.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.time.pct)}`}>{weekGoals.time.pct}%</span>
                 </div>
               </TooltipTrigger>
-              <TooltipContent><p>Total restid veckan: {weekTravelTotal.minutes} min, {weekTravelTotal.km} km</p></TooltipContent>
+              <TooltipContent><p>{weekGoals.time.current.toFixed(1)}h av {weekGoals.time.target}h planerat</p></TooltipContent>
             </Tooltip>
-          )}
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[120px]" data-testid="goal-bar-economy">
+                  <TrendingUp className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground w-8">Ekon.</span>
+                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.economy.pct)}`} style={{ width: `${Math.min(weekGoals.economy.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.economy.pct)}`}>{weekGoals.economy.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent><p>{(weekGoals.economy.current / 100).toLocaleString("sv-SE")} kr av {(weekGoals.economy.target / 100).toLocaleString("sv-SE")} kr budget</p></TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-2 min-w-[120px]" data-testid="goal-bar-count">
+                  <MapPin className="h-3 w-3 text-muted-foreground" />
+                  <span className="text-muted-foreground w-7">Antal</span>
+                  <div className="w-16 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div className={`h-full transition-all rounded-full ${getGoalColor(weekGoals.count.pct)}`} style={{ width: `${Math.min(weekGoals.count.pct, 100)}%` }} />
+                  </div>
+                  <span className={`font-semibold tabular-nums ${getGoalTextColor(weekGoals.count.pct)}`}>{weekGoals.count.pct}%</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent><p>{weekGoals.count.current} av {weekGoals.count.target} stopp planerade</p></TooltipContent>
+            </Tooltip>
+            {weekTravelTotal.minutes > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border border-yellow-200 dark:border-yellow-800" data-testid="goal-bar-travel">
+                    <Navigation className="h-3 w-3" />
+                    <span className="font-medium">{weekTravelTotal.hours}h</span>
+                    <span className="text-yellow-500">({weekTravelTotal.km} km)</span>
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent><p>Total restid veckan: {weekTravelTotal.minutes} min, {weekTravelTotal.km} km</p></TooltipContent>
+              </Tooltip>
+            )}
+          </div>
         </div>
-      </div>
+      )}
     </>
   );
 });
@@ -360,20 +448,17 @@ export const PlannerFooter = memo(function PlannerFooter({
   unscheduledCount: number;
 }) {
   return (
-    <div className="p-3 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
-      <div className="flex items-center gap-4 text-xs" data-testid="legend-block-categories">
+    <div className="px-3 py-1.5 border-t bg-muted/50 flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex items-center gap-3 text-xs" data-testid="legend-block-categories">
         <span className="text-muted-foreground font-medium mr-1">Kategorier:</span>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-1.5 bg-green-500 rounded-sm"></span><span>Produktion</span></div>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-1.5 bg-yellow-400 rounded-sm"></span><span>Restid</span></div>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-1.5 bg-blue-400 rounded-sm"></span><span>Egentid</span></div>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-sm"></span><span>Ledig</span></div>
-        <span className="text-muted-foreground mx-1">|</span>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-3 bg-red-500 rounded-full"></span><span>Akut</span></div>
-        <div className="flex items-center gap-1.5"><span className="w-3 h-3 bg-orange-500 rounded-full"></span><span>Hög</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-green-500 rounded-sm"></span><span>Produktion</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-yellow-400 rounded-sm"></span><span>Restid</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-blue-400 rounded-sm"></span><span>Rast</span></div>
+        <div className="flex items-center gap-1"><span className="w-3 h-1.5 bg-gray-300 dark:bg-gray-600 rounded-sm"></span><span>Ledig</span></div>
         {jobConflictCount > 0 && (
           <>
-            <span className="text-muted-foreground mx-1">|</span>
-            <div className="flex items-center gap-1.5 text-red-600 dark:text-red-400">
+            <span className="text-muted-foreground">|</span>
+            <div className="flex items-center gap-1 text-red-600 dark:text-red-400">
               <AlertTriangle className="h-3 w-3" />
               <span>{jobConflictCount} konflikter</span>
             </div>
@@ -381,7 +466,7 @@ export const PlannerFooter = memo(function PlannerFooter({
         )}
       </div>
       <div className="text-xs text-muted-foreground">
-        {filteredScheduledCount} schemalagda | {unscheduledCount} oschemalagda | Dra jobb för att schemalägga
+        {filteredScheduledCount} schemalagda | {unscheduledCount} oschemalagda
       </div>
     </div>
   );

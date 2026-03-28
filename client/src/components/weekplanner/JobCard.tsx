@@ -53,7 +53,7 @@ export const JobCard = memo(function JobCard({
   return (
     <DraggableJobCard key={job.id} id={job.id}>
       <Card
-        className={`p-2 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-4 overflow-hidden ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-950/30" : ""} ${isMultiSelected ? "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-950/20" : ""} group touch-none`}
+        className={`p-1 cursor-grab active:cursor-grabbing hover-elevate active-elevate-2 border-l-2 overflow-hidden ${timeBlockBorders[category]} ${selectedJob === job.id ? "ring-2 ring-primary" : ""} ${hasConflict ? "ring-2 ring-red-500 bg-red-50 dark:bg-red-950/30" : ""} ${isMultiSelected ? "ring-2 ring-blue-500 bg-blue-50/50 dark:bg-blue-950/20" : ""} group touch-none`}
         onClick={() => onJobClick(job.id)}
         data-testid={`job-card-${job.id}`}
       >
