@@ -183,8 +183,7 @@ function CollapsibleNavGroup({
   badges: BadgeCounts;
 }) {
   const [location] = useLocation();
-  const hasActiveItem = items.some((item) => location === item.url);
-  const [open, setOpen] = useState(defaultOpen || hasActiveItem);
+  const [open, setOpen] = useState(defaultOpen);
 
   return (
     <SidebarGroup>
@@ -308,22 +307,14 @@ export function AppSidebar() {
           </SidebarGroup>
         )}
 
-        <SidebarGroup>
-          <SidebarGroupLabel>Start</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <SidebarMenu>
-              {sidebarStartItems.map((item) => (
-                <NavItemRow
-                  key={item.url}
-                  item={item}
-                  isActive={location === item.url}
-                  isFav={isFavorite(item.url)}
-                  onToggleFavorite={toggleFavorite}
-                />
-              ))}
-            </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
+        <CollapsibleNavGroup
+          label="Start"
+          items={sidebarStartItems}
+          defaultOpen={false}
+          isFavorite={isFavorite}
+          onToggleFavorite={toggleFavorite}
+          badges={badgeCounts}
+        />
 
         {navGroups.map((group) => (
           <CollapsibleNavGroup
