@@ -9,7 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, AlertTriangle, Sparkles, Undo2, Redo2, CalendarDays, Calendar, CalendarRange, Clock, MapPin, Navigation, Wand2, TrendingUp, Activity, UsersRound, ZoomIn, ZoomOut, Trash2, ArrowRight, ChevronDown, ChevronUp, Crosshair, ExternalLink } from "lucide-react";
 import type { Resource, ResourceProfile, ResourceProfileAssignment } from "@shared/schema";
 import type { ViewMode } from "./types";
 import { zoomLevels } from "./types";
@@ -342,6 +342,15 @@ export const PlannerToolbar = memo(function PlannerToolbar(props: PlannerToolbar
               </Tooltip>
             </>
           )}
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => window.open("/planering/popout", "traivo-planner", "width=1400,height=900,menubar=no,toolbar=no,location=no,status=no")} data-testid="button-popout-planner">
+                <ExternalLink className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Öppna i eget fönster</TooltipContent>
+          </Tooltip>
 
           {onToggleAIPanel && (
             <Tooltip>
