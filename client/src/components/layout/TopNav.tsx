@@ -133,13 +133,14 @@ function NavDropdown({ label, items, icon: Icon, colorClass, badges, isFavorite,
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className={`gap-2 ${isActive ? "bg-accent" : ""}`}
+          size="sm"
+          className={`gap-1 h-8 px-2 text-xs ${isActive ? "bg-accent" : ""}`}
           data-testid={`nav-dropdown-${label.toLowerCase()}`}
         >
-          <Icon className={`h-4 w-4 ${colorClass}`} />
-          <span className="hidden lg:inline">{label}</span>
+          <Icon className={`h-3.5 w-3.5 ${colorClass}`} />
+          <span className="hidden xl:inline">{label}</span>
           {groupBadgeTotal > 0 && <NavBadge count={groupBadgeTotal} />}
-          <ChevronDown className="h-3 w-3 opacity-50" />
+          <ChevronDown className="h-2.5 w-2.5 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-72">
@@ -214,12 +215,13 @@ function FavoritesDropdown({ allItems, badges, favorites, toggleFavorite }: Favo
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
-          className="gap-1.5"
+          size="sm"
+          className="gap-1 h-8 px-2 text-xs"
           data-testid="nav-dropdown-favoriter"
         >
-          <Star className="h-4 w-4 fill-yellow-500 text-yellow-500" />
-          <span className="hidden lg:inline">Favoriter</span>
-          <ChevronDown className="h-3 w-3 opacity-50" />
+          <Star className="h-3.5 w-3.5 fill-yellow-500 text-yellow-500" />
+          <span className="hidden xl:inline">Favoriter</span>
+          <ChevronDown className="h-2.5 w-2.5 opacity-50" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-64">
@@ -273,7 +275,8 @@ function GlobalSearch() {
   return (
     <Button
       variant="outline"
-      className="w-64 justify-start text-muted-foreground gap-2"
+      size="sm"
+      className="w-48 justify-start text-muted-foreground gap-1.5 h-8 text-xs"
       onClick={openCommandPalette}
       data-testid="button-global-search"
     >
@@ -302,8 +305,8 @@ function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="gap-2 pl-2 pr-3" data-testid="button-user-menu">
-          <Avatar className="h-8 w-8">
+        <Button variant="ghost" className="gap-1.5 pl-1.5 pr-2 h-8" data-testid="button-user-menu">
+          <Avatar className="h-7 w-7">
             {user?.profileImageUrl && (
               <AvatarImage src={user.profileImageUrl} alt={displayName} />
             )}
@@ -395,29 +398,30 @@ export function TopNav() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="flex h-16 items-center justify-between gap-4 px-4 md:px-6">
-        <div className="flex items-center gap-4 md:gap-6">
+      <div className="flex h-12 items-center justify-between gap-2 px-3 md:px-4">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0">
           <MobileNav />
           <TenantLogo />
 
-          <nav className="hidden md:flex items-center gap-1">
+          <nav className="hidden md:flex items-center gap-0.5">
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8"
+              className="h-7 w-7"
               data-testid="button-back"
               onClick={() => window.history.back()}
             >
-              <ArrowLeft className="h-4 w-4" />
+              <ArrowLeft className="h-3.5 w-3.5" />
             </Button>
             <Link href="/">
               <Button
                 variant="ghost"
-                className="gap-2"
+                size="sm"
+                className="gap-1 h-8 px-2 text-xs"
                 data-testid="nav-home"
               >
-                <Home className="h-4 w-4" />
-                <span className="hidden lg:inline">Start</span>
+                <Home className="h-3.5 w-3.5" />
+                <span className="hidden xl:inline">Start</span>
               </Button>
             </Link>
             <FavoritesDropdown allItems={roleFilteredItems} badges={badgeCounts} favorites={favorites} toggleFavorite={toggleFavorite} />
@@ -438,7 +442,7 @@ export function TopNav() {
           </nav>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
           <div className="hidden lg:block">
             <GlobalSearch />
           </div>
@@ -446,20 +450,20 @@ export function TopNav() {
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="lg:hidden h-8 w-8"
             data-testid="button-search-mobile"
           >
-            <Search className="h-5 w-5" />
+            <Search className="h-4 w-4" />
           </Button>
 
           <Button
             variant="ghost"
             size="icon"
-            className="relative"
+            className="relative h-8 w-8"
             data-testid="button-notifications"
           >
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
+            <Bell className="h-4 w-4" />
+            <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-destructive" />
           </Button>
 
           <TourMenu />

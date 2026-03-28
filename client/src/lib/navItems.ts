@@ -140,14 +140,13 @@ export const adminItems: NavItem[] = [
 
 export function getNavGroups(t: (key: string, fallback: string) => string): NavGroup[] {
   return [
-    { key: "ordrar", label: "Ordrar & Uppdrag", items: getOrdrarItems(t), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
-    { key: "planering", label: "Planering", items: getPlaneringItems(), icon: Calendar, group: "planering", colorClass: "text-green-500" },
-    { key: "overvakning", label: "Övervakning & Karta", items: getOvervakningItems(), icon: MapPin, group: "planering", colorClass: "text-cyan-500" },
-    { key: "falt", label: "Fält & Kundkontakt", items: getFaltItems(t), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
-    { key: "ekonomi", label: "Ekonomi & Uppföljning", items: getEkonomiItems(), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
-    { key: "ai", label: "AI & Analys", items: getAIItems(), icon: Brain, group: "analys", colorClass: "text-violet-500" },
+    { key: "ordrar", label: "Ordrar", items: getOrdrarItems(t), icon: ClipboardList, group: "ordrar", colorClass: "text-amber-500" },
+    { key: "planering", label: "Planering", items: [...getPlaneringItems(), ...getOvervakningItems()], icon: Calendar, group: "planering", colorClass: "text-green-500" },
+    { key: "falt", label: "Fält", items: getFaltItems(t), icon: Smartphone, group: "falt", colorClass: "text-teal-500" },
+    { key: "ekonomi", label: "Ekonomi", items: getEkonomiItems(), icon: BarChart3, group: "analys", colorClass: "text-purple-500" },
+    { key: "ai", label: "AI", items: getAIItems(), icon: Brain, group: "analys", colorClass: "text-violet-500" },
     { key: "grunddata", label: "Grunddata", items: getGrunddataItems(t), icon: Database, group: "grunddata", colorClass: "text-blue-500" },
-    { key: "admin", label: "Administration", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
+    { key: "admin", label: "Admin", items: adminItems, icon: Settings, group: "admin", colorClass: "text-orange-500" },
   ];
 }
 
