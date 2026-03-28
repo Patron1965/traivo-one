@@ -19,7 +19,7 @@ import { LogOut, Star, ChevronDown, ChevronRight } from "lucide-react";
 import { getNavGroups, sidebarStartItems, type NavItem } from "@/lib/navItems";
 import { useTerminology } from "@/hooks/use-terminology";
 import { useFeatures } from "@/lib/feature-context";
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { canAccessMenu, type NavMenuGroup } from "@/lib/role-config";
 
@@ -31,17 +31,22 @@ interface BadgeCounts {
 
 const FAVORITES_KEY_PREFIX = "traivo-sidebar-favorites";
 
+function loadFavorites(key: string): string[] {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
 function useFavorites(userId: string | undefined) {
   const storageKey = userId ? `${FAVORITES_KEY_PREFIX}-${userId}` : FAVORITES_KEY_PREFIX;
+  const [favorites, setFavoritesState] = useState<string[]>(() => loadFavorites(storageKey));
 
-  const [favorites, setFavoritesState] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  useEffect(() => {
+    setFavoritesState(loadFavorites(storageKey));
+  }, [storageKey]);
 
   const toggleFavorite = useCallback((url: string) => {
     setFavoritesState((prev) => {

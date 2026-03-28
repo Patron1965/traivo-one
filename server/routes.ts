@@ -173,10 +173,10 @@ export async function registerRoutes(
         AND sender_type = 'customer'
         AND is_read = false
       `);
-      const getCount = (result: { rows: Record<string, unknown>[] }) => {
-        const rows = result.rows;
-        const row = Array.isArray(rows) ? rows[0] : undefined;
-        return Number(row?.count || 0);
+      const getCount = (result: { rows: Record<string, unknown>[] } | Record<string, unknown>[]) => {
+        const rows = Array.isArray(result) ? result : result.rows;
+        if (!Array.isArray(rows) || rows.length === 0) return 0;
+        return Number(rows[0]?.count ?? 0);
       };
       res.json({
         unassignedOrders: getCount(unassignedRows),

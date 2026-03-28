@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useTerminology } from "@/hooks/use-terminology";
@@ -50,17 +50,22 @@ function getFavoritesKey(userId: string | undefined): string {
   return userId ? `${FAVORITES_KEY_PREFIX}-${userId}` : FAVORITES_KEY_PREFIX;
 }
 
+function loadFavorites(key: string): string[] {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
 function useFavorites(userId: string | undefined) {
   const storageKey = getFavoritesKey(userId);
+  const [favorites, setFavoritesState] = useState<string[]>(() => loadFavorites(storageKey));
 
-  const [favorites, setFavoritesState] = useState<string[]>(() => {
-    try {
-      const stored = localStorage.getItem(storageKey);
-      return stored ? JSON.parse(stored) : [];
-    } catch {
-      return [];
-    }
-  });
+  useEffect(() => {
+    setFavoritesState(loadFavorites(storageKey));
+  }, [storageKey]);
 
   const toggleFavorite = useCallback((url: string) => {
     setFavoritesState((prev) => {
