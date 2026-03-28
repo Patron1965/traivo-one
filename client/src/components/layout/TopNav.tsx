@@ -363,7 +363,7 @@ export function TopNav() {
   const { isNavItemEnabled } = useFeatures();
   const { favorites, toggleFavorite, isFavorite } = useFavorites(user?.id);
 
-  const canSeeBadges = !!user && ["admin", "planner", "manager"].includes(userRole);
+  const canSeeBadges = !!user && ["admin", "planner", "manager", "owner"].includes(userRole);
   const { data: badges } = useQuery<BadgeCounts>({
     queryKey: ["/api/nav-badges"],
     refetchInterval: 30000,

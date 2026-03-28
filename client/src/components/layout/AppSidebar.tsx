@@ -227,7 +227,7 @@ export function AppSidebar() {
   const { t } = useTerminology();
   const { isNavItemEnabled } = useFeatures();
   const { user } = useAuth();
-  const userRole = user?.role || "planner";
+  const userRole = user?.role || "user";
   const { favorites, toggleFavorite, isFavorite } = useFavorites(user?.id);
   const [location] = useLocation();
 
