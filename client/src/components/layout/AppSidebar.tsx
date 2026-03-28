@@ -29,7 +29,7 @@ interface BadgeCounts {
   unreadMessages: number;
 }
 
-const FAVORITES_KEY_PREFIX = "traivo-sidebar-favorites";
+const FAVORITES_KEY_PREFIX = "traivo-topnav-favorites";
 
 function loadFavorites(key: string): string[] {
   try {
