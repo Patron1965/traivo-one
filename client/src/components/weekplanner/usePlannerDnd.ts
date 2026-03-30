@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef } from "react";
-import { useSensor, useSensors, PointerSensor, KeyboardSensor, closestCenter, type DragStartEvent, type DragEndEvent, type DragOverEvent } from "@dnd-kit/core";
+import { useSensor, useSensors, PointerSensor, KeyboardSensor, pointerWithin, rectIntersection, type DragStartEvent, type DragEndEvent, type DragOverEvent, type CollisionDetection } from "@dnd-kit/core";
 import { arrayMove } from "@dnd-kit/sortable";
 import { format, isSameDay } from "date-fns";
 import { DAY_START_HOUR, DAY_END_HOUR } from "./types";
@@ -31,9 +31,15 @@ export function usePlannerDnd({
   selectedJobIds, clearSelection,
 }: UsePlannerDndOptions) {
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor)
   );
+
+  const customCollisionDetection: CollisionDetection = useCallback((args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) return pointerCollisions;
+    return rectIntersection(args);
+  }, []);
 
   const [dragOverConflicts, setDragOverConflicts] = useState<Record<string, string[]>>({});
   const lastOverIdRef = useRef<string | null>(null);
@@ -129,7 +135,7 @@ export function usePlannerDnd({
     lastOverIdRef.current = null;
     const { active, over } = event;
     if (!over) {
-      console.warn("[dnd] handleDragEnd: no drop target (over is null)");
+      toast({ title: "Släppte utanför", description: "Dra jobbet till en cell i schemat" });
       return;
     }
     const jobId = String(active.id);
@@ -225,7 +231,7 @@ export function usePlannerDnd({
 
   return {
     sensors,
-    collisionDetection: closestCenter,
+    collisionDetection: customCollisionDetection,
     handleDragStart,
     handleDragOver,
     handleDragEnd,
