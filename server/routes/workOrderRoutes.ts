@@ -220,8 +220,8 @@ app.patch("/api/work-orders/:id", asyncHandler(async (req, res) => {
   if (assignedResourceId && clusterId && (isResourceChange || clusterOverride)) {
     try {
       const normalize = (pc: string) => pc.replace(/\s/g, "").trim();
-      const cluster = await db.query.clusters.findFirst({ where: eq(clusters.id, clusterId) });
-      const resource = await db.query.resources.findFirst({ where: eq(resources.id, assignedResourceId) });
+      const cluster = await db.query.clusters.findFirst({ where: and(eq(clusters.id, clusterId), eq(clusters.tenantId, tenantId)) });
+      const resource = await db.query.resources.findFirst({ where: and(eq(resources.id, assignedResourceId), eq(resources.tenantId, tenantId)) });
       if (cluster && resource) {
         const cpc = (cluster.postalCodes || []).map(normalize).filter(Boolean);
         const rsa = (resource.serviceArea || []).map(normalize).filter(Boolean);
