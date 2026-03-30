@@ -169,7 +169,7 @@ export function usePlannerData() {
   const workOrdersQueryKey = ["/api/work-orders", "scheduled", dateRange.startDate, dateRange.endDate];
 
   const updateWorkOrderMutation = useMutation({
-    mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string }) => { const payload: Record<string, unknown> = { resourceId, scheduledDate, orderStatus: "planerad_resurs" }; if (scheduledStartTime) payload.scheduledStartTime = scheduledStartTime; return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>; },
+    mutationFn: async ({ id, resourceId, scheduledDate, scheduledStartTime, clusterOverride }: { id: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; clusterOverride?: boolean }) => { const payload: Record<string, unknown> = { resourceId, scheduledDate, orderStatus: "planerad_resurs" }; if (scheduledStartTime) payload.scheduledStartTime = scheduledStartTime; if (clusterOverride) payload.clusterOverride = "planner override"; return (await apiRequest("PATCH", `/api/work-orders/${id}`, payload)).json() as Promise<WorkOrderWithObject>; },
     onMutate: async ({ id, resourceId, scheduledDate, scheduledStartTime }) => {
       await queryClient.cancelQueries({ queryKey: workOrdersQueryKey });
       const prev = queryClient.getQueryData<WorkOrderWithObject[]>(workOrdersQueryKey);
@@ -350,11 +350,11 @@ export function usePlannerData() {
 
   const addToUndoStack = useCallback((action: PlannerAction) => { setUndoStack(prev => [...prev.slice(-19), action]); setRedoStack([]); }, []);
 
-  const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string) => {
+  const executeSchedule = useCallback((jobId: string, resourceId: string, scheduledDate: string, scheduledStartTime?: string, clusterOverride?: boolean) => {
     const job = workOrders.find(j => j.id === jobId);
     if (!job) return;
     addToUndoStack({ type: "schedule", jobId, previousState: { resourceId: job.resourceId || null, scheduledDate: job.scheduledDate ? format(new Date(job.scheduledDate), "yyyy-MM-dd") : null, scheduledStartTime: job.scheduledStartTime || null, orderStatus: job.orderStatus }, newState: { resourceId, scheduledDate, scheduledStartTime: scheduledStartTime || null, orderStatus: "planerad_resurs" } });
-    updateWorkOrderMutation.mutate({ id: jobId, resourceId, scheduledDate, scheduledStartTime });
+    updateWorkOrderMutation.mutate({ id: jobId, resourceId, scheduledDate, scheduledStartTime, clusterOverride });
   }, [workOrders, addToUndoStack, updateWorkOrderMutation]);
 
   const navigate = (direction: "prev" | "next") => {
@@ -389,17 +389,11 @@ export function usePlannerData() {
     const hasClusterConflict = pendingSchedule.conflicts.some(c => c.includes("Kluster"));
     if (pendingSchedule.bulkJobs && pendingSchedule.bulkJobs.length > 0) {
       for (const bj of pendingSchedule.bulkJobs) {
-        executeSchedule(bj.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, bj.startTime);
-        if (hasClusterConflict) {
-          apiRequest("PATCH", `/api/work-orders/${bj.jobId}`, { clusterOverride: "planner override", resourceId: pendingSchedule.resourceId }).catch(() => {});
-        }
+        executeSchedule(bj.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, bj.startTime, hasClusterConflict);
       }
       toast({ title: "Bulk-flytt klar trots varning", description: `${pendingSchedule.bulkJobs.length} order schemalagda trots konflikter.` });
     } else {
-      executeSchedule(pendingSchedule.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, pendingSchedule.scheduledStartTime);
-      if (hasClusterConflict) {
-        apiRequest("PATCH", `/api/work-orders/${pendingSchedule.jobId}`, { clusterOverride: "planner override", resourceId: pendingSchedule.resourceId }).catch(() => {});
-      }
+      executeSchedule(pendingSchedule.jobId, pendingSchedule.resourceId, pendingSchedule.scheduledDate, pendingSchedule.scheduledStartTime, hasClusterConflict);
       toast({ title: "Schemalagt trots varning", description: "Jobbet har schemalagts trots identifierade konflikter." });
     }
     setConflictDialogOpen(false);

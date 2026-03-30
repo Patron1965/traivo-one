@@ -18,7 +18,7 @@ interface UsePlannerDndOptions {
   detectConflictsForJob: (job: WorkOrderWithObject, resourceId: string, dateStr: string, startTime: string | null) => string[];
   setPendingSchedule: (schedule: { jobId: string; resourceId: string; scheduledDate: string; scheduledStartTime?: string; conflicts: string[] } | null) => void;
   setConflictDialogOpen: (open: boolean) => void;
-  executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string) => void;
+  executeSchedule: (jobId: string, resourceId: string, dateStr: string, startTime?: string, clusterOverride?: boolean) => void;
   toast: (opts: { title: string; description?: string }) => void;
   selectedJobIds?: Set<string>;
   clearSelection?: () => void;
